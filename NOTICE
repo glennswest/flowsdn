@@ -8,5 +8,19 @@ Apache License 2.0 (userspace) and GPL-2.0-only OR BSD-2-Clause (bpf/).
 No Cilium source code is included in this product unless explicitly marked in
 the file header together with the applicable license notice.
 
+Harvested test data (ADR-0005)
+-----------------------------
+
+This product includes test *data* copied verbatim from the Cilium project at
+commit 7d68cfb394 (tag v1.20.1), under the Apache License 2.0. No Cilium test
+code was copied; every harness is an independent Rust implementation.
+
+  tests/scripttest/corpus/**   168 .txtar scenario files and their embedded
+                               fixtures, from 29 testdata directories under
+                               pkg/, operator/, clustermesh-apiserver/ and
+                               contrib/. Each area directory carries a
+                               PROVENANCE file naming its exact upstream path,
+                               the commit, the license and the copy date.
+
 "Cilium" and "Hubble" are trademarks of The Linux Foundation. flowsdn is not
 affiliated with or endorsed by the Cilium project or The Linux Foundation.
