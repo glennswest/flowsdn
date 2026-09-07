@@ -286,3 +286,62 @@ named in the issue body.
 | [#270](https://github.com/glennswest/flowsdn/issues/270) | [bpf cases] Classify the 2 unresolved entrypoints in `l7_lb_local_backend_host.c` | `area/test` | `to-verify` | `tests/bpf/CASES.toml` |
 | [#271](https://github.com/glennswest/flowsdn/issues/271) | [bpf cases] Classify the 2 unresolved entrypoints in `l7_lb_local_backend_pod.c` | `area/test` | `to-verify` | `tests/bpf/CASES.toml` |
 | [#272](https://github.com/glennswest/flowsdn/issues/272) | [bpf cases] Classify the 8 unresolved entrypoints in `tc_nodeport_l3_wireguard.c` | `area/test` | `to-verify` | `tests/bpf/CASES.toml` |
+
+---
+
+## Summary
+
+**272 issues filed** from 272 distinct items recorded across the documentation (items appearing in several documents are filed once, with every source named in the issue body).
+
+### By type
+
+| Type | Issues |
+|---|---|
+| `open-decision` | 193 |
+| `to-verify` | 36 |
+| `spec-gap` | 23 |
+| `deferred` | 11 |
+| `upstream-bug` | 6 |
+| `blocked-on-code` | 3 |
+
+### By area
+
+| Area | Issues |
+|---|---|
+| `area/test` | 47 |
+| `area/datapath` | 22 |
+| `area/hubble` | 16 |
+| `area/packaging` | 15 |
+| `area/agent` | 14 |
+| `area/ipam` | 14 |
+| `area/encryption` | 13 |
+| `area/foundation` | 13 |
+| `area/l7` | 13 |
+| `area/loadbalancer` | 13 |
+| `area/policy` | 13 |
+| `area/identity` | 12 |
+| `area/node` | 12 |
+| `area/bgp` | 11 |
+| `area/k8s` | 9 |
+| `area/operator` | 9 |
+| `area/cni` | 8 |
+| `area/maps` | 8 |
+| `area/clustermesh` | 6 |
+| `area/gateway` | 4 |
+
+### Settle these first
+
+The ten whose resolution unblocks the most other work, in order.
+
+1. **#54 [spec 02] Fix the kernel floor: 5.10, 6.1 or 6.6?** - Every loader fallback (clsact vs tcx, `PROG_ATTACH`), netkit support, socket termination, managed neighbours, the CI kernel matrix and the Helm `validate.yaml` each carry a branch that disappears the moment this is fixed.
+2. **#53 [spec 02] Single BPF object per hook family, or a prebuilt matrix?** - Five documents ask it independently; it sets the build system, the image size budget, the bpftest config-group design and the loader's whole pruning strategy.
+3. **#55 [spec 02] Wire compatibility with Cilium nodes: identical encap encoding, or a flowsdn-private one?** - It fixes identity numbering in spec 03 and decides whether node-by-node migration of a live cluster - the stated adoption path - is possible at all; changing it later renumbers every identity.
+4. **#42 [spec 00] Per-key watches, or whole-table notifiers only?** - `flowsdn-table` is the first shared crate to write and everything mirroring Kubernetes or kernel state builds on its watch API, so its shape gates every reconciler in the agent.
+5. **#205 [spec 17] Add a `TableRender` trait to `flowsdn-table` for the scripttest table commands** - A spec 00 change that must be made before any table row type is written, because 478 harvested `.table` expectation files pin both the column order and the cell formatting.
+6. **#30 [inv 13] rustkube API-server feature matrix: which capabilities exist?** - Four separate spec 13 decisions - protobuf, dual served versions, strategic merge patch and client-side CEL - are all explicitly blocked on this one answer.
+7. **#20 [inv 08] Identity allocation mode: kvstore or CRD as the primary for flowsdn?** - It decides the identity backend, the operator's GC duties, whether the kvstore client is on the critical path, and the shape of the entire ClusterMesh design.
+8. **#156 [spec 12] Slim CES mode first, or default (CEP) mode first?** - It determines the operator's duty set, whether spec 08's CEP writer is dead code, the agent's RBAC, and whether a mixed Cilium/flowsdn cluster is possible at all.
+9. **#114 [spec 08] Read Cilium-written endpoint state directories for in-place migration?** - ADR-0001's drop-in-swap promise rests on it; it freezes the `ep_config.json` schema and pairs with the spec 00 `agent-runtime-config.json` decision, so both should be settled together.
+10. **#254 [spec 02] Verify the aya-ebpf helper coverage table against the pinned version** - Every row that turns out absent becomes a wrapper, a `core::arch::asm!` block or an upstream aya patch - and Phase 2 for the datapath cannot honestly start until the list is known.
+
+The first three are all in `docs/spec/02-datapath-programs.md` and are genuinely one sitting: the kernel floor decides which fallbacks exist, the object-matrix decision depends on verifier headroom on that floor, and the wire-compatibility decision constrains both. Nothing below them in the list is cheap to revisit once code exists.
