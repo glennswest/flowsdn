@@ -28,6 +28,7 @@ without following `docs/licensing.md`.
       05 policy-identity, 06 agent-endpoint-api, 07 ipam-cloud, 08 operator, 09 hubble-monitor,
       10 bgp, 11 l7-proxy-dns-auth-mesh, 12 clustermesh-kvstore, 13 crds-k8s,
       14 encryption-egress, 15 helm-images-ci-tests. Missing file = agent did not finish; rerun that area.
+- [x] ADR-0002 Rust only (BPF programs in aya-ebpf), ADR-0003 nftables residual
 - [ ] Roll-up scope table `docs/inventory/README.md` with sizes + keep/defer/replace
 - [ ] Kernel requirements: BPF features used by the datapath, per program
 
@@ -66,8 +67,8 @@ without following `docs/licensing.md`.
 
 ## Conventions
 
-- Rust 2021, MSRV tracks stable. `aya` for BPF loading, `aya-ebpf` for
-  programs unless a program needs C.
+- **Rust only. No C anywhere** (ADR-0002). `aya` for BPF loading, `aya-ebpf` for
+  the BPF programs. **No iptables** (ADR-0003): a small nftables residual over netlink.
 - Docs and specs are Markdown under `docs/`. One area per file.
 - Every inventory/spec file names the reference paths it was derived from
   and the reference commit.
