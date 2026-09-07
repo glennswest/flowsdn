@@ -1,0 +1,36 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : operator/pkg/gateway-api/testdata
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+604 YAML files under gamma/ and gateway/, one directory per scenario, each
+holding the input Kubernetes objects (Gateway, GatewayClass, HTTPRoute,
+GRPCRoute, TLSRoute, TCPRoute, UDPRoute, ReferenceGrant, Service, Secret,
+BackendTLSPolicy) and the expected reconciled Gateway/Route status conditions.
+This is the Gateway API conformance behaviour expressed as data: parentRef
+resolution, listener/hostname intersection, cross-namespace reference grants,
+route attachment counts and the exact Accepted/ResolvedRefs/Programmed
+condition reasons.
+
+Files             : 604
+Bytes             : 1353711
+
+Consumed by
+-----------
+docs/spec/12-operator.md — Gateway API reconciler (DEFERRED per
+docs/inventory/README.md area 08: 'defer Gateway API/Ingress until Envoy path
+exists'). Harvested now so the deferred work starts with its acceptance
+criteria already in the tree.
+
+Modifications
+-------------
+None. Byte-identical to the reference.

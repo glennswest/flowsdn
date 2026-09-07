@@ -1,0 +1,31 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : pkg/hubble/exporter/testdata
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+Five flow-log configuration YAML files: one valid multi-exporter config and
+four that must be rejected (empty, duplicate names, duplicate paths, malformed).
+Pins the flowlogs config schema and its validation rules.
+NOT harvested from this directory: testdata/scripts/*.txtar (4 files) — the
+txtar corpus belongs to tests/scripttest and is harvested separately.
+
+Files             : 5
+Bytes             : 2021
+
+Consumed by
+-----------
+docs/spec/11-hubble-monitor.md §6 (configuration) — dynamic flow-log exporter
+config file format and reload validation.
+
+Modifications
+-------------
+None. Byte-identical to the reference for the five YAML files.

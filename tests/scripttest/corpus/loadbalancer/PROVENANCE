@@ -1,0 +1,16 @@
+Reference path:   cilium/cilium pkg/loadbalancer/tests/testdata
+Reference commit: 7d68cfb394 (tag v1.20.1)
+Upstream license: Apache-2.0 (cilium/cilium, everything outside bpf/)
+Copied on:        2026-09-07
+flowsdn path:     tests/scripttest/corpus/loadbalancer/
+
+These files are unmodified verbatim copies of the upstream files at that path
+and commit. No content has been edited, reformatted or renamed; only the
+containing directory differs. Copying is permitted by docs/licensing.md
+("Direct copying is permitted where it is the sensible engineering choice ...
+test vectors") and mandated by ADR-0005 ("Harvest data verbatim; write every
+harness in Rust"). No upstream Go or C test *code* was copied.
+
+Contents: 51 .txtar script tests, plus non-txtar sibling files: .gitignore 
+
+Exercises: Service load balancing end to end: ClusterIP, NodePort, LoadBalancer, ExternalIPs, HostPort, DSR/hybrid modes, Maglev vs random, session affinity, source ranges, topology-aware and prefer-same-node/zone hints, graceful termination, quarantine, KPR transitions, restart/prune/resync, LB BPF map contents.

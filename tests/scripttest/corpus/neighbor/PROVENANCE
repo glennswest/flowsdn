@@ -1,0 +1,16 @@
+Reference path:   cilium/cilium pkg/datapath/neighbor/test/testdata
+Reference commit: 7d68cfb394 (tag v1.20.1)
+Upstream license: Apache-2.0 (cilium/cilium, everything outside bpf/)
+Copied on:        2026-09-07
+flowsdn path:     tests/scripttest/corpus/neighbor/
+
+These files are unmodified verbatim copies of the upstream files at that path
+and commit. No content has been edited, reformatted or renamed; only the
+containing directory differs. Copying is permitted by docs/licensing.md
+("Direct copying is permitted where it is the sensible engineering choice ...
+test vectors") and mandated by ADR-0005 ("Harvest data verbatim; write every
+harness in Rust"). No upstream Go or C test *code* was copied.
+
+Contents: 4 .txtar script tests
+
+Exercises: Forwardable-IP and neighbor-entry reconciliation into the kernel ARP/NDP table, including kernel-managed ARP ping mode and refresh-count metrics. PRIVILEGED.

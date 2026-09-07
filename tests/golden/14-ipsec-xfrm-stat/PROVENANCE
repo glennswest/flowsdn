@@ -1,0 +1,30 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : cilium-dbg/cmd/fixtures/proc/net
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+One file, proc/net/xfrm_stat: a 28-line capture of the Linux XFRM error
+counters with non-zero values in XfrmInError, XfrmInNoStates and
+XfrmInStateProtoError. Pins the parser and the mapping of counter names to the
+IPsec error classes flowsdn reports.
+
+Files             : 1
+Bytes             : 778
+
+Consumed by
+-----------
+docs/spec/14-encryption-egress.md §8 (observability) — IPsec XFRM error
+counters exposed via status and metrics.
+
+Modifications
+-------------
+None. Byte-identical to the reference.

@@ -1,0 +1,6434 @@
+# flowsdn — harvest of the reference BPF unit-test case inventory
+#
+# GENERATED FILE. Produced by tools/harvest-bpf-cases.py from a read-only
+# checkout of the reference. Do not edit by hand: re-run the tool.
+# Hand-maintained state lives in [[port]] entries in tests/bpf/PORTED.toml,
+# which is keyed on (file, name) from this file.
+#
+# PROVENANCE
+# ----------
+# Case names, packet shapes, feature flags and the three-stage structure
+# recorded here are derived from the reference implementation
+#   cilium/cilium, tag v1.20.1, commit 7d68cfb394, directory bpf/tests/.
+# That directory is licensed "GPL-2.0-only OR BSD-2-Clause"; flowsdn takes it
+# under BSD-2-Clause, as decided in docs/decisions/0005-test-strategy.md
+# (ADR-0005 §2) and permitted by docs/licensing.md. A matching entry exists in
+# NOTICE.
+#
+# NO C CODE WAS COPIED. This file contains only identifiers (test names,
+# preprocessor symbol names, ASSIGN_CONFIG variable names, include-graph
+# facts) and counts, mechanically extracted. No test body, assertion,
+# packet-builder call sequence or expected byte value from the reference has
+# been transcribed into flowsdn. flowsdn test bodies are written from
+# docs/spec/02-datapath-programs.md and docs/spec/18-bpf-test-harness.md,
+# per the clean-room protocol in docs/licensing.md.
+#
+# HOW IT WAS DERIVED
+# ------------------
+# tools/harvest-bpf-cases.py walks each bpf/tests/*.c with a small
+# #ifdef/#elif/#else-aware preprocessor, so the feature set, ASSIGN_CONFIG
+# set, included datapath object and PKTGEN/SETUP/CHECK section list recorded
+# below are the ones the compiler actually sees for that translation unit.
+# Cases contributed by a shared test header (e.g. encrypt_host.h) are
+# attributed to every .c that includes it, with `defined_in` naming the
+# header. `entrypoint` is resolved by following the SETUP stage to the
+# entry helper it tail-calls, through up to three levels of local helper or
+# macro indirection; "direct" means the CHECK stage calls the function under
+# test itself (a library unit test) and "unresolved" means the harvester
+# could not follow the indirection and a human must classify it.
+#
+# SUMMARY (reference v1.20.1 / 7d68cfb394)
+# ----------------------------------------
+#   translation units compiled upstream  141
+#   translation units present but dead   1
+#   CHECK sections written in .c files  397
+#   effective cases after header expansion 625
+#   by milestone   M1 279   M2 138   M3 208
+#   by file        M1 63    M2 42    M3 37
+#   by entrypoint  from_netdev 182  to_netdev 160  direct 109  from_container 63  xdp_entry 26  unresolved 23  from_host 22  from_overlay 21  to_container 13  lxc_policy 3  to_overlay 3
+#   by object      host 72  (library unit test) 23  lxc 20  xdp 13  overlay 8  sock 3  wireguard 2  sock_term 1
+#
+# FINDING: bpf/tests/encrypt_host_wireguard_tunnel is a C source file that is
+# missing its .c extension upstream, so the build never compiles it and its
+# 10 cases (from encrypt_host.h, TUNNEL_MODE + ENABLE_WIREGUARD) never run.
+# flowsdn ports the WireGuard-over-tunnel encrypt-host case set anyway; it is
+# listed here as file "encrypt_host_wireguard_tunnel.c" for symmetry with the
+# _strict variant and marked upstream_dead = true.
+
+[meta]
+reference_repo = "github.com/cilium/cilium"
+reference_tag = "v1.20.1"
+reference_commit = "7d68cfb394"
+reference_dir = "bpf/tests"
+reference_license = "GPL-2.0-only OR BSD-2-Clause; taken under BSD-2-Clause"
+harvested = "2026-09-07"
+harvester = "tools/harvest-bpf-cases.py"
+spec = "docs/spec/18-bpf-test-harness.md"
+translation_units = 142
+translation_units_compiled = 141
+check_sections_in_c = 397
+cases = 625
+cases_m1 = 279
+cases_m2 = 138
+cases_m3 = 208
+
+# ---------------------------------------------------------------------------
+# Key to [[file]] fields
+#   path        reference path of the translation unit
+#   ctx         BPF context the unit is compiled for: skb | xdp | unspec
+#   milestone   flowsdn milestone this file lands in (spec 02 §1.1)
+#   objects     datapath objects pulled in (spec 02 §1.1 "Object" column)
+#   units       datapath library modules exercised directly, if any
+#   seeds       map-seeding helper groups the file uses in its SETUP stage
+#   features    reference preprocessor symbols active in this unit; in flowsdn
+#               these are .rodata config booleans (spec 01 §3.7 layer 1)
+#   configs     ASSIGN_CONFIG globals set; in flowsdn these are set_global()
+#               calls on __config_<name> (spec 01 §3.7 layer 2)
+# Key to [[file.case]] fields
+#   name        the reference CHECK name; flowsdn keeps it verbatim as the
+#               #[test] fn name so the two suites can be diffed
+#   progtype    ELF section prefix: tc | xdp
+#   stages      which of PKTGEN / SETUP / CHECK the case defines
+#   entrypoint  flowsdn entrypoint under test (spec 02 §1.1) | direct |
+#               unresolved
+#   milestone   per-case milestone; may be lower than the file when the file
+#               is gated on a later-milestone feature that only some cases use
+# ---------------------------------------------------------------------------
+
+[[file]]
+path = "bpf/tests/_scapy_selftest.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+features = []
+configs = []
+shared_headers = ["scapy.h"]
+case_count = 3
+
+  [[file.case]]
+  name = "1_basic_test"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "1_test_large_pkts"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "2_test_xlarge_pkts"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/bpf_ct_tests.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["conntrack", "dbg"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT"]
+configs = []
+case_count = 1
+
+  [[file.case]]
+  name = "ct4"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/bpf_nat_tests.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["dbg", "eps", "nat", "nodeport"]
+features = ["ENABLE_IPV4", "ENABLE_MASQUERADE_IPV4", "ENABLE_NODEPORT", "ENABLE_SCTP", "SECLABEL"]
+configs = ["device_mtu", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["bpf_nat_tuples.h", "nodeport_defaults.h"]
+case_count = 12
+
+  [[file.case]]
+  name = "nat4_icmp_error_tcp"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "nat4_icmp_error_tcp_rfc1191"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "nat4_icmp_error_udp"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "nat4_icmp_error_icmp"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "nat4_icmp_error_sctp"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "nat4_icmp_error_tcp_egress"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "nat4_icmp_error_tcp_egress_rfc1191"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "nat4_icmp_error_udp_egress"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "nat4_icmp_error_icmp_egress"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "nat4_icmp_error_sctp_egress"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "nat4_port_allocation_tcp"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "nat4_port_allocation_udp"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/bpf_skb_255_tests.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["identity"]
+features = []
+configs = []
+case_count = 3
+
+  [[file.case]]
+  name = "set_and_get_identity"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "set_identity_mark_bits"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "set_and_get_cluster_id"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/bpf_skb_511_tests.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["identity"]
+features = []
+configs = []
+case_count = 2
+
+  [[file.case]]
+  name = "set_and_get_identity"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "set_and_get_cluster_id"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/builtins.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+features = []
+configs = []
+shared_headers = ["builtin_memcmp.h", "builtin_memcpy.h", "builtin_memmove.h", "builtin_memmove2.h", "builtin_memzero.h", "builtin_test.h"]
+case_count = 5
+
+  [[file.case]]
+  name = "builtin_memzero"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "builtin_memcpy"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "builtin_memcmp"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "builtin_memmove"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "builtin_memmove2"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/classifiers_l2_dev.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "spec-02 §9.3 M1 group"
+objects = ["host"]
+features = ["ENABLE_IPSEC", "ENABLE_IPV4", "ENABLE_IPV6", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["trace_payload_len", "trace_payload_len_overlay", "tunnel_protocol"]
+shared_headers = ["classifiers_common.h"]
+case_count = 3
+
+  [[file.case]]
+  name = "ctx_classify4"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+  defined_in = "bpf/tests/classifiers_common.h"
+
+  [[file.case]]
+  name = "ctx_classify6"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+  defined_in = "bpf/tests/classifiers_common.h"
+
+  [[file.case]]
+  name = "compute_capture_len"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+  defined_in = "bpf/tests/classifiers_common.h"
+
+[[file]]
+path = "bpf/tests/classifiers_l3_dev.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "spec-02 §9.3 M1 group"
+objects = ["wireguard"]
+features = ["ENABLE_IPSEC", "ENABLE_IPV4", "ENABLE_IPV6", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["trace_payload_len", "trace_payload_len_overlay", "tunnel_protocol"]
+shared_headers = ["classifiers_common.h"]
+case_count = 3
+
+  [[file.case]]
+  name = "ctx_classify4"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+  defined_in = "bpf/tests/classifiers_common.h"
+
+  [[file.case]]
+  name = "ctx_classify6"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+  defined_in = "bpf/tests/classifiers_common.h"
+
+  [[file.case]]
+  name = "compute_capture_len"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+  defined_in = "bpf/tests/classifiers_common.h"
+
+[[file]]
+path = "bpf/tests/conntrack_test.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["conntrack"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT"]
+configs = ["trace_payload_len"]
+case_count = 2
+
+  [[file.case]]
+  name = "conntrack"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "conntrack_svc"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/drop_notify_test.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["drop", "tailcall"]
+features = []
+configs = []
+case_count = 1
+
+  [[file.case]]
+  name = "send_drop_notify"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/fib_tests.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["dbg", "fib"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "SKIP_ICMPV6_HOPLIMIT_HANDLING"]
+configs = ["supports_fib_lookup_skip_neigh"]
+case_count = 2
+
+  [[file.case]]
+  name = "fib_do_redirect_happy_path"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "fib_redirect*_fib_lookup_flags"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/hairpin_sctp_flow.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_SCTP"]
+configs = ["enable_endpoint_routes", "endpoint_ipv4", "service_loopback_ipv4"]
+case_count = 4
+
+  [[file.case]]
+  name = "hairpin_sctp_flow_1_forward_v4"
+  progtype = "tc"
+  stages = "SETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "hairpin_sctp_flow_2_forward_ingress_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "hairpin_sctp_flow_3_reverse_v4"
+  progtype = "tc"
+  stages = "SETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "hairpin_sctp_flow_4_reverse_ingress_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/host_bpf_masq_native.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache"]
+seeds = ["endpoints", "ipcache"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT"]
+configs = ["enable_conntrack_accounting", "nat_ipv4_masquerade", "nat_ipv6_masquerade", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["host_bpf_masq.h", "nodeport_defaults.h"]
+case_count = 12
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_1_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_1_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_2_ipip"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_2_ipip"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_3_icmp_unhandled"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_3_icmp_unhandled"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_4_icmp_echo"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_4_icmp_echo"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_5_no_snat_ep_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_5_no_snat_ep_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_6_snat_ep_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_6_snat_ep_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+[[file]]
+path = "bpf/tests/host_bpf_masq_overlay.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache"]
+seeds = ["endpoints", "ipcache"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["enable_conntrack_accounting", "nat_ipv4_masquerade", "nat_ipv6_masquerade", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["host_bpf_masq.h", "nodeport_defaults.h"]
+case_count = 12
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_1_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_1_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_2_ipip"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_2_ipip"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_3_icmp_unhandled"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_3_icmp_unhandled"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_4_icmp_echo"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_4_icmp_echo"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_5_no_snat_ep_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_5_no_snat_ep_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v4_6_snat_ep_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+  [[file.case]]
+  name = "host_bpf_masq_v6_6_snat_ep_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/host_bpf_masq.h"
+
+[[file]]
+path = "bpf/tests/icmp_error_revnat.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "spec-02 §9.3 M1 group"
+objects = []
+units = ["dbg", "eps", "nat"]
+features = ["ENABLE_IPV4", "ENABLE_MASQUERADE_IPV4", "ENABLE_NODEPORT"]
+configs = ["nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["bpf_nat_tuples.h", "nodeport_defaults.h", "scapy.h"]
+case_count = 1
+
+  [[file.case]]
+  name = "nat4_icmp_error_tcp_snat_revnat"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/ipfrag.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["ipfrag", "ipv6"]
+features = []
+configs = []
+case_count = 3
+
+  [[file.case]]
+  name = "ipfrag_helpers_ipv4"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "ipfrag_helpers_ipv6_nofrag"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "ipfrag_helpers_ipv6"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/ipv6_ndp_from_netdev_test.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache"]
+seeds = ["endpoints", "ipcache"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["interface_mac"]
+shared_headers = ["scapy.h"]
+case_count = 8
+
+  [[file.case]]
+  name = "011_ipv6_from_netdev_ns_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "011_ipv6_from_netdev_ns_pod_noopt"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "012_ipv6_from_netdev_ns_pod_mcast"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "012_ipv6_from_netdev_ns_pod_mcast_noopt"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "0211_ipv6_from_netdev_ns_node_ip"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "0212_ipv6_from_netdev_ns_node_ip_noopt"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "022_ipv6_from_netdev_ns_node_ip_mcast"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "022_ipv6_from_netdev_ns_node_ip_mcast_noopt"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/ipv6_test.c"
+ctx = "xdp"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["ipv6"]
+features = []
+configs = []
+case_count = 4
+
+  [[file.case]]
+  name = "ipv6_without_extension_header"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 1
+
+  [[file.case]]
+  name = "ipv6_with_auth_hop_tcp"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 1
+
+  [[file.case]]
+  name = "ipv6"
+  progtype = "xdp"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "test_ipv6_sol_mc_helpers"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/lb_tests.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["lb"]
+seeds = ["services"]
+features = ["ENABLE_IPV4"]
+configs = []
+case_count = 8
+
+  [[file.case]]
+  name = "lb4_tcp_single_scope"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "lb4_tcp_dual_scope"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "lb4_udp_single_scope"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "lb4_udp_dual_scope"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "lb4_proto_mismatch_nowild_single_scope"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "lb4_proto_mismatch_nowild_dual_scope"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "lb4_proto_mismatch_wild_single_scope"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "lb4_proto_mismatch_wild_dual_scope"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/lxc_extended_protocols.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["ipcache", "policy"]
+seeds = ["endpoints", "ipcache", "policy"]
+features = ["ENABLE_IPV4"]
+configs = ["enable_conntrack_accounting", "enable_extended_ip_protocols", "endpoint_id", "endpoint_ipv4"]
+case_count = 3
+
+  [[file.case]]
+  name = "lxc_igmp_egress"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "lxc_igmp_egress_policy"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "lxc_igmp_egress_policy_deny"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/mock_skb_metadata.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["builtins"]
+features = []
+configs = []
+shared_headers = ["mock_skb_metadata.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "01_mock_skb_metadata"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+  [[file.case]]
+  name = "02_mock_skb_metadata"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/network_policy.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["policy"]
+seeds = ["policy"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = []
+shared_headers = ["network_policy_tuples.h"]
+case_count = 1
+
+  [[file.case]]
+  name = "network_policy_egress_allow"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/nodeport_overlay_nat_lb.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["overlay"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["nodeport_port_max", "nodeport_port_min", "tunnel_protocol"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "nodeport_overlay_nat_1_fwd"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 1
+
+  [[file.case]]
+  name = "nodeport_overlay_nat_2_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/overlay.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["overlay"]
+features = []
+configs = []
+case_count = 1
+
+  [[file.case]]
+  name = "overlay_neigh_resolver"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/ratelimit.c"
+ctx = "xdp"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["ratelimit"]
+features = []
+configs = []
+case_count = 1
+
+  [[file.case]]
+  name = "ratelimit"
+  progtype = "xdp"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/remote_node_masquerade_skip_test.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["conntrack", "dbg", "ipcache", "nat"]
+seeds = ["ipcache"]
+features = ["ENABLE_BPF_MASQUERADE", "ENABLE_IPV4", "ENABLE_MASQUERADE_IPV4", "ENABLE_NODEPORT", "ENABLE_SCTP", "IS_BPF_HOST"]
+configs = ["enable_extended_ip_protocols", "enable_remote_node_masquerade", "nat_ipv4_masquerade", "trace_payload_len"]
+shared_headers = ["bpf_nat_tuples.h"]
+case_count = 1
+
+  [[file.case]]
+  name = "nat4_remote_node_masquerade_skipped_test"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/remote_node_masquerade_test.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = []
+units = ["conntrack", "dbg", "ipcache", "nat"]
+seeds = ["ipcache"]
+features = ["ENABLE_BPF_MASQUERADE", "ENABLE_IPV4", "ENABLE_MASQUERADE_IPV4", "ENABLE_NODEPORT", "ENABLE_SCTP", "IS_BPF_HOST"]
+configs = ["enable_extended_ip_protocols", "enable_remote_node_masquerade", "nat_ipv4_masquerade", "trace_payload_len"]
+shared_headers = ["bpf_nat_tuples.h"]
+case_count = 1
+
+  [[file.case]]
+  name = "nat4_remote_node_masquerade_enabled_test"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/skip_tunnel_from_host.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache"]
+seeds = ["ipcache", "metrics", "subnets"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENCAP_IFINDEX", "TUNNEL_IPV4", "TUNNEL_IPV6", "TUNNEL_MODE"]
+configs = ["cilium_net_mac", "hybrid_routing_enabled"]
+case_count = 12
+
+  [[file.case]]
+  name = "01_ipv4_from_host_no_flags"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+  [[file.case]]
+  name = "02_ipv4_from_host_skip_tunnel"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+  [[file.case]]
+  name = "03_ipv6_from_host_no_flags"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+  [[file.case]]
+  name = "04_ipv6_from_host_skip_tunnel"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+  [[file.case]]
+  name = "05_ipv4_from_host_no_flags_same_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+  [[file.case]]
+  name = "06_ipv4_from_host_skip_tunnel_same_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+  [[file.case]]
+  name = "07_ipv4_from_host_no_flags_different_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+  [[file.case]]
+  name = "08_ipv4_from_host_skip_tunnel_different_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+  [[file.case]]
+  name = "09_ipv6_from_host_no_flags_same_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+  [[file.case]]
+  name = "10_ipv6_from_host_no_flags_different_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+  [[file.case]]
+  name = "11_ipv6_from_host_skip_tunnel_same_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+  [[file.case]]
+  name = "12_ipv6_from_host_skip_tunnel_different_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/skip_tunnel_from_lxc.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["ipcache", "policy"]
+seeds = ["ipcache", "metrics", "policy", "subnets"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENCAP_IFINDEX", "TUNNEL_IPV4", "TUNNEL_IPV6", "TUNNEL_MODE"]
+configs = ["hybrid_routing_enabled", "service_loopback_ipv4", "service_loopback_ipv6"]
+case_count = 12
+
+  [[file.case]]
+  name = "01_ipv4_from_lxc_no_flags_no_subnet_entries"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "02_ipv4_from_lxc_skip_tunnel_no_subnet_entries"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "03_ipv6_from_lxc_no_flags_no_subnet_entries"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "04_ipv6_from_lxc_skip_tunnel_no_subnet_entries"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "05_ipv4_from_lxc_no_flags_same_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "06_ipv4_from_lxc_no_flags_different_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "07_ipv4_from_lxc_skip_tunnel_same_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "08_ipv4_from_lxc_skip_tunnel_different_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "09_ipv6_from_lxc_no_flags_same_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "10_ipv6_from_lxc_no_flags_different_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "11_ipv6_from_lxc_skip_tunnel_same_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "12_ipv6_from_lxc_skip_tunnel_different_subnet"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/skip_tunnel_nodeport_masq.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache"]
+seeds = ["clear", "endpoints", "ipcache"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["nat_ipv6_masquerade", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "01_ipv4_nodeport_ingress_no_flags"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "02_ipv4_nodeport_ingress_skip_tunnel"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "03_ipv6_nodeport_ingress_no_flags"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "04_ipv6_nodeport_ingress_skip_tunnel"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/skip_tunnel_nodeport_nat.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["conntrack", "ipcache", "lb", "nat", "nodeport"]
+seeds = ["clear", "endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "01_ipv4_nodeport_egress_no_flags"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "02_ipv4_nodeport_egress_skip_tunnel"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "03_ipv6_nodeport_egress_no_flags"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "04_ipv6_nodeport_egress_skip_tunnel"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/skip_tunnel_nodeport_revnat.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["conntrack", "ipcache", "lb", "nat", "nodeport"]
+seeds = ["clear", "endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "01_ipv4_nodeport_ingress_no_flags"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "02_ipv4_nodeport_ingress_skip_tunnel"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "03_ipv6_nodeport_ingress_no_flags"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "04_ipv6_nodeport_ingress_skip_tunnel"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_lb_clusterip.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["lb"]
+seeds = ["endpoints", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT"]
+configs = ["enable_conntrack_accounting"]
+shared_headers = ["scapy.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "tc_lb4_nonroutable_clusterip"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lb4_routable_clusterip"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lb6_nonroutable_clusterip"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lb6_routable_clusterip"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_lb_external_ips_ew.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["lb", "policy"]
+seeds = ["endpoints", "policy", "services"]
+features = ["EAST_WEST_TEST", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENABLE_SOCKET_LB_HOST_ONLY"]
+configs = ["enable_conntrack_accounting", "service_loopback_ipv4", "service_loopback_ipv6"]
+shared_headers = ["scapy.h", "tc_lb_external_ips.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_lb4_external_ips"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+  defined_in = "bpf/tests/tc_lb_external_ips.h"
+
+  [[file.case]]
+  name = "tc_lb6_external_ips"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+  defined_in = "bpf/tests/tc_lb_external_ips.h"
+
+[[file]]
+path = "bpf/tests/tc_lb_external_ips_ns.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["lb", "policy"]
+seeds = ["endpoints", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "NORTH_SOUTH_TEST"]
+configs = ["enable_conntrack_accounting"]
+shared_headers = ["scapy.h", "tc_lb_external_ips.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_lb4_external_ips"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_lb_external_ips.h"
+
+  [[file.case]]
+  name = "tc_lb6_external_ips"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_lb_external_ips.h"
+
+[[file]]
+path = "bpf/tests/tc_lb_no_backend_nonroutable.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_IPV4"]
+configs = ["enable_endpoint_routes", "enable_no_service_endpoints_routable", "endpoint_ipv4", "service_loopback_ipv4"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_lb_no_backend_nonroutable"
+  progtype = "tc"
+  stages = "SETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lb_no_backend_nonroutable_etp"
+  progtype = "tc"
+  stages = "SETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_lxc_lb_hostport.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "HOST_NODE_IP", "HOST_NODE_IPV6"]
+configs = ["endpoint_ipv4", "endpoint_ipv6", "nodeport_port_max", "nodeport_port_min", "service_loopback_ipv4", "service_loopback_ipv6"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "tc_lxc_v4_host_hostport_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v4_hostport_nodeport_range_no_match"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v6_host_hostport_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v6_hostport_nodeport_range_no_match"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_lxc_lb_no_backend.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["enable_no_service_endpoints_routable", "service_loopback_ipv4", "service_loopback_ipv6"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_lxc4_no_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc6_no_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_lxc_policy_drop.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["policy"]
+seeds = ["policy"]
+features = ["ENABLE_IPV4"]
+configs = ["endpoint_ipv4", "service_loopback_ipv4"]
+case_count = 1
+
+  [[file.case]]
+  name = "tc_lxc_policy_drop"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_nodeport_icmp4_snat.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["dbg", "eps", "nat"]
+seeds = ["endpoints"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_NODEPORT"]
+configs = []
+shared_headers = ["bpf_nat_tuples.h", "tc_nodeport_icmp4_snat.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "nodeport_revsnat_icmp4_pmtu"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_icmp4_snat.h"
+
+  [[file.case]]
+  name = "nodeport_revsnat_icmp4_pmtu_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_icmp4_snat.h"
+
+[[file]]
+path = "bpf/tests/tc_nodeport_icmp4_snat_tunnel.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["dbg", "eps", "nat"]
+seeds = ["endpoints"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_NODEPORT", "ENABLE_TUNNEL"]
+configs = []
+shared_headers = ["bpf_nat_tuples.h", "tc_nodeport_icmp4_snat.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "nodeport_revsnat_icmp4_pmtu"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_icmp4_snat.h"
+
+  [[file.case]]
+  name = "nodeport_revsnat_icmp4_pmtu_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_icmp4_snat.h"
+
+[[file]]
+path = "bpf/tests/tc_nodeport_icmp6_snat.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["dbg", "eps", "nat"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT", "ENABLE_SCTP"]
+configs = []
+shared_headers = ["bpf_nat_icmp6.h", "bpf_nat_tuples.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "snat_v6_tcp_pmtu"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/bpf_nat_icmp6.h"
+
+  [[file.case]]
+  name = "snat_v6_udp_pmtu"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/bpf_nat_icmp6.h"
+
+[[file]]
+path = "bpf/tests/tc_nodeport_l3_dev.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "spec-02 §9.3 M1 group"
+objects = ["host"]
+seeds = ["endpoints", "metrics"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["enable_bpf_host_routing"]
+shared_headers = ["tc_nodeport_l3_dev.h"]
+case_count = 8
+
+  [[file.case]]
+  name = "ingress_ipv4_l3_to_l2_fast_redirect_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "ingress_ipv6_l3_to_l2_fast_redirect_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "egress_ipv4_l3_to_l2_fast_redirect_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "egress_ipv6_l3_to_l2_fast_redirect_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "ingress_ipv4_l3_to_l2_fast_redirect_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "ingress_ipv6_l3_to_l2_fast_redirect_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "egress_ipv4_l3_to_l2_fast_redirect_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "egress_ipv6_l3_to_l2_fast_redirect_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+[[file]]
+path = "bpf/tests/tc_nodeport_l3_dev_to_tunnel.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "spec-02 §9.3 M1 group"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = []
+case_count = 2
+
+  [[file.case]]
+  name = "ipv4_tc_nodeport_l3_to_remote_backend_via_tunnel"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "ipv6_tc_nodeport_l3_to_remote_backend_via_tunnel"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb4_nat_backend.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT"]
+configs = ["enable_bpf_host_routing"]
+case_count = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb4_nat_lb.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT"]
+configs = ["enable_bpf_host_routing", "interface_ifindex", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 16
+
+  [[file.case]]
+  name = "tc_nodeport_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_local_backend_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_local_backend_redirect"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_local_backend_redirect_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_udp_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_reply_no_fib"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_reply_punt"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_restore"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_restore_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_original_renated"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_restore_original_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_verify_restored_original_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_shared_backend_fwd"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_shared_backend_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb6_nat_lb.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV6", "ENABLE_NODEPORT"]
+configs = ["enable_bpf_host_routing", "interface_ifindex", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 16
+
+  [[file.case]]
+  name = "tc_nodeport_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_local_backend_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_local_backend_redirect"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_local_backend_redirect_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_udp_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_reply_no_fib"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_reply_punt"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_restore"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_restore_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_original_renated"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_restore_original_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_fwd_verify_restored_original_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_shared_backend_fwd"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_nat_shared_backend_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb_fragments_ew.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["lb", "policy"]
+seeds = ["endpoints", "policy", "services"]
+features = ["EAST_WEST_TEST", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENABLE_SOCKET_LB_HOST_ONLY"]
+configs = ["enable_conntrack_accounting", "enable_ipv4_fragments", "enable_ipv6_fragments", "service_loopback_ipv4", "service_loopback_ipv6"]
+shared_headers = ["scapy.h", "tc_nodeport_lb_fragments.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "tc_nodeport_lb4_fragments_1"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_lb_fragments.h"
+
+  [[file.case]]
+  name = "tc_nodeport_lb4_fragments_2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_lb_fragments.h"
+
+  [[file.case]]
+  name = "tc_nodeport_lb6_fragment1"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_lb_fragments.h"
+
+  [[file.case]]
+  name = "tc_nodeport_lb6_fragment2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_lb_fragments.h"
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb_fragments_ns.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["lb", "policy"]
+seeds = ["endpoints", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "NORTH_SOUTH_TEST"]
+configs = ["enable_conntrack_accounting", "enable_ipv4_fragments", "enable_ipv6_fragments"]
+shared_headers = ["scapy.h", "tc_nodeport_lb_fragments.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "tc_nodeport_lb4_fragments_1"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_lb_fragments.h"
+
+  [[file.case]]
+  name = "tc_nodeport_lb4_fragments_2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_lb_fragments.h"
+
+  [[file.case]]
+  name = "tc_nodeport_lb6_fragment1"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_lb_fragments.h"
+
+  [[file.case]]
+  name = "tc_nodeport_lb6_fragment2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_nodeport_lb_fragments.h"
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb_nat_lb_dynamic.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT"]
+configs = ["enable_bpf_host_routing", "enable_nodeport_source_lookup", "interface_ifindex", "nodeport_port_max", "nodeport_port_min", "supports_fib_lookup_src"]
+shared_headers = ["nodeport_defaults.h", "scapy.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_nodeport_lb4_nat_lb_dynamic"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_lb6_nat_lb_dynamic"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb_no_backend.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["icmp", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT"]
+configs = ["enable_no_service_endpoints_routable", "nat_ipv4_masquerade"]
+case_count = 4
+
+  [[file.case]]
+  name = "tc_nodeport_no_backend4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_no_backend4_2_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_no_backend6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_no_backend6_2_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb_terminating_backend.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT"]
+configs = ["enable_bpf_host_routing", "interface_ifindex"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_nodeport_lb_terminating_backend_0"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_lb_terminating_backend_1"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb_wildcard_drop.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT"]
+configs = ["enable_no_service_endpoints_routable"]
+case_count = 8
+
+  [[file.case]]
+  name = "tc_nodeport_lb4_wildcard_drop_unknown_dport"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_lb4_wildcard_drop_unknown_proto"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_lb4_wildcard_drop_not_unknown"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_lb4_wildcard_drop_not_unknown2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_lb6_wildcard_drop_unknown_dport"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_lb6_wildcard_drop_unknown_proto"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_lb6_wildcard_drop_not_unknown"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_lb6_wildcard_drop_not_unknown2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_nodeport_snat_conflict.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache"]
+seeds = ["endpoints", "ipcache"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT"]
+configs = []
+case_count = 6
+
+  [[file.case]]
+  name = "tc_nodeport_snat_conflict_host_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_snat_conflict_host_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_snat_conflict_egressproxy_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_snat_conflict_egressproxy_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_snat_conflict_pod_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_nodeport_snat_conflict_pod_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_nodeport_test.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["enable_endpoint_routes", "enable_no_service_endpoints_routable", "endpoint_ipv4", "endpoint_ipv6", "service_loopback_ipv4", "service_loopback_ipv6"]
+case_count = 10
+
+  [[file.case]]
+  name = "hairpin_flow_1_forward_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "hairpin_flow_2_forward_ingress_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "hairpin_flow_3_reverse_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "hairpin_flow_4_reverse_ingress_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_drop_no_backend"
+  progtype = "tc"
+  stages = "SETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "hairpin_flow_1_forward_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "hairpin_flow_2_forward_ingress_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "hairpin_flow_3_reverse_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "hairpin_flow_4_reverse_ingress_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_drop_no_backend_v6"
+  progtype = "tc"
+  stages = "SETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_redirect_host_netkit.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["enable_bpf_host_routing", "enable_endpoint_routes", "enable_netkit", "interface_ifindex"]
+shared_headers = ["scapy.h", "tc_redirect_host.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_redirect_host_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_host.h"
+
+  [[file.case]]
+  name = "tc_redirect_host_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_host.h"
+
+[[file]]
+path = "bpf/tests/tc_redirect_host_netkit_policy.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["enable_bpf_host_routing", "enable_endpoint_routes", "enable_netkit", "interface_ifindex"]
+shared_headers = ["scapy.h", "tc_redirect_host.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_redirect_host_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_host.h"
+
+  [[file.case]]
+  name = "tc_redirect_host_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_host.h"
+
+[[file]]
+path = "bpf/tests/tc_redirect_host_veth.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["enable_bpf_host_routing", "enable_endpoint_routes", "enable_netkit", "interface_ifindex"]
+shared_headers = ["scapy.h", "tc_redirect_host.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_redirect_host_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_host.h"
+
+  [[file.case]]
+  name = "tc_redirect_host_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_host.h"
+
+[[file]]
+path = "bpf/tests/tc_redirect_host_veth_policy.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["enable_bpf_host_routing", "enable_endpoint_routes", "enable_netkit", "interface_ifindex"]
+shared_headers = ["scapy.h", "tc_redirect_host.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_redirect_host_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_host.h"
+
+  [[file.case]]
+  name = "tc_redirect_host_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_host.h"
+
+[[file]]
+path = "bpf/tests/tc_redirect_lxc_netkit.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["enable_bpf_host_routing", "enable_netkit", "endpoint_ipv4", "endpoint_ipv6", "service_loopback_ipv4", "service_loopback_ipv6"]
+shared_headers = ["scapy.h", "tc_redirect_lxc.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_redirect_lxc_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_lxc.h"
+
+  [[file.case]]
+  name = "tc_redirect_lxc_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_lxc.h"
+
+[[file]]
+path = "bpf/tests/tc_redirect_lxc_veth.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["lxc"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["enable_bpf_host_routing", "enable_netkit", "endpoint_ipv4", "endpoint_ipv6", "service_loopback_ipv4", "service_loopback_ipv6"]
+shared_headers = ["scapy.h", "tc_redirect_lxc.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_redirect_lxc_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_lxc.h"
+
+  [[file.case]]
+  name = "tc_redirect_lxc_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_lxc.h"
+
+[[file]]
+path = "bpf/tests/tc_redirect_netdev_netkit.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["enable_bpf_host_routing", "enable_endpoint_routes", "enable_netkit", "interface_ifindex"]
+shared_headers = ["scapy.h", "tc_redirect_netdev.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "tc_redirect_netdev_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_netdev.h"
+
+  [[file.case]]
+  name = "tc_redirect_pod_egress_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_netdev.h"
+
+  [[file.case]]
+  name = "tc_redirect_netdev_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_netdev.h"
+
+  [[file.case]]
+  name = "tc_redirect_pod_egress_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_netdev.h"
+
+[[file]]
+path = "bpf/tests/tc_redirect_netdev_veth.c"
+ctx = "skb"
+milestone = 1
+milestone_reason = "M1 default"
+objects = ["host"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["enable_bpf_host_routing", "enable_endpoint_routes", "enable_netkit", "interface_ifindex"]
+shared_headers = ["scapy.h", "tc_redirect_netdev.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "tc_redirect_netdev_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_netdev.h"
+
+  [[file.case]]
+  name = "tc_redirect_pod_egress_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_netdev.h"
+
+  [[file.case]]
+  name = "tc_redirect_netdev_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_netdev.h"
+
+  [[file.case]]
+  name = "tc_redirect_pod_egress_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/tc_redirect_netdev.h"
+
+[[file]]
+path = "bpf/tests/host_hostfw_extended_protocols.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_HOST_FIREWALL"
+objects = ["host"]
+units = ["ipcache", "policy"]
+seeds = ["endpoints", "ipcache", "policy"]
+features = ["ENABLE_HOST_FIREWALL", "ENABLE_IPV4"]
+configs = ["enable_conntrack_accounting", "enable_extended_ip_protocols"]
+shared_headers = ["hostfw_igmp.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "hostfw_igmp_1_egress"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/hostfw_igmp.h"
+
+  [[file.case]]
+  name = "hostfw_igmp_2_ingress"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/hostfw_igmp.h"
+
+  [[file.case]]
+  name = "hostfw_igmp_3_egress_policy"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/hostfw_igmp.h"
+
+  [[file.case]]
+  name = "hostfw_igmp_4_ingress_policy"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/hostfw_igmp.h"
+
+[[file]]
+path = "bpf/tests/host_hostfw_igmp.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_HOST_FIREWALL"
+objects = ["host"]
+units = ["ipcache", "policy"]
+seeds = ["endpoints", "ipcache", "policy"]
+features = ["ENABLE_HOST_FIREWALL", "ENABLE_IPV4"]
+configs = ["enable_conntrack_accounting"]
+shared_headers = ["hostfw_igmp.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "hostfw_igmp_1_egress"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/hostfw_igmp.h"
+
+  [[file.case]]
+  name = "hostfw_igmp_2_ingress"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/hostfw_igmp.h"
+
+  [[file.case]]
+  name = "hostfw_igmp_3_egress_policy"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/hostfw_igmp.h"
+
+  [[file.case]]
+  name = "hostfw_igmp_4_ingress_policy"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/hostfw_igmp.h"
+
+[[file]]
+path = "bpf/tests/host_kpr_dsr_geneve_lb.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["DSR_ENCAP_GENEVE", "DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX"]
+configs = ["hash_init4_seed", "hash_init6_seed"]
+shared_headers = ["kpr_dsr_lb.h", "scapy.h"]
+case_count = 8
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb1_syn"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb1_synack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb2_data"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb2_data2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb1_syn"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb1_synack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb2_data"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb2_data2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+[[file]]
+path = "bpf/tests/host_kpr_dsr_option_lb.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["DSR_ENCAP_GENEVE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT"]
+configs = ["hash_init4_seed", "hash_init6_seed"]
+shared_headers = ["kpr_dsr_lb.h", "scapy.h"]
+case_count = 8
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb1_syn"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb1_synack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb2_data"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb2_data2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb1_syn"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb1_synack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb2_data"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb2_data2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+[[file]]
+path = "bpf/tests/host_kpr_dsr_option_remote_node.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+seeds = ["endpoints"]
+features = ["DSR_ENCAP_GENEVE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "NATIVE_IFINDEX"]
+configs = ["interface_ifindex"]
+shared_headers = ["kpr_dsr_remote_node.h", "scapy.h"]
+case_count = 12
+
+  [[file.case]]
+  name = "kpr_v4_dsr_remote_node_1syn"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_remote_node_2reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_remote_node_3synack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_remote_node_4reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_remote_node_5data_dsr_info"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_remote_node_6reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_remote_node_1syn"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_remote_node_2reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_remote_node_3synack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_remote_node_4reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_remote_node_5data_dsr_info"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_remote_node_6reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+[[file]]
+path = "bpf/tests/host_only_socket_lb_test.c"
+ctx = "unspec"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["sock"]
+features = ["ENABLE_IPV4", "ENABLE_SOCKET_LB_HOST_ONLY", "HOST_NETNS_COOKIE"]
+configs = []
+case_count = 1
+
+  [[file.case]]
+  name = "sock4_xlate_fwd_test"
+  progtype = "xdp"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/host_proxy.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["host"]
+units = ["ipcache", "policy"]
+seeds = ["endpoints", "ipcache", "policy"]
+features = ["ENABLE_HOST_FIREWALL", "ENABLE_IPV4"]
+configs = ["enable_conntrack_accounting"]
+case_count = 4
+
+  [[file.case]]
+  name = "proxy_v4_1_host_to_world"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "proxy_v4_2_proxy_to_world"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "proxy_v4_3_host_to_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 2
+
+  [[file.case]]
+  name = "proxy_v4_4_proxy_to_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_host"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/hostfw_bpf_masq.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["host"]
+units = ["ipcache", "policy"]
+seeds = ["endpoints", "ipcache", "policy"]
+features = ["ENABLE_HOST_FIREWALL", "ENABLE_IPV4", "ENABLE_MASQUERADE_IPV4"]
+configs = ["enable_conntrack_accounting"]
+case_count = 2
+
+  [[file.case]]
+  name = "hostfw_ipv4_bpf_masq_proxy_01"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "hostfw_ipv4_bpf_masq_proxy_02"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/hostfw_host_iptables.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["host"]
+units = ["ipcache", "policy"]
+seeds = ["endpoints", "ipcache", "policy"]
+features = ["ENABLE_HOST_FIREWALL", "ENABLE_IPV4"]
+configs = ["enable_conntrack_accounting"]
+case_count = 5
+
+  [[file.case]]
+  name = "hostfw_iptables_host_ipv4_01_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "hostfw_iptables_host_ipv4_02_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "hostfw_iptables_host_ipv4_03_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "hostfw_iptables_host_ipv4_04_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "hostfw_iptables_host_ipv4_05_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/jhash_test.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = []
+units = ["jhash"]
+features = []
+configs = []
+case_count = 1
+
+  [[file.case]]
+  name = "jhash"
+  progtype = "xdp"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/l7_lb_hairpin_netdev.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["clear", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_L7_LB", "ENABLE_NODEPORT", "ENCAP_IFINDEX"]
+configs = ["cilium_net_ifindex", "interface_ifindex", "nodeport_port_max", "nodeport_port_min", "proxy_redirect_via_cilium_net"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "l7_lb_hairpin_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "l7_lb_hairpin_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/l7_lb_local_backend_host.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["lxc"]
+units = ["policy"]
+seeds = ["policy"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_L7_LB", "ENABLE_NODEPORT", "ENABLE_ROUTING"]
+configs = ["cilium_host_ifindex", "cilium_net_ifindex", "interface_ifindex", "service_loopback_ipv4", "service_loopback_ipv6"]
+shared_headers = ["l7_lb_local_backend.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "l7_lb_local_backend_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 2
+  defined_in = "bpf/tests/l7_lb_local_backend.h"
+
+  [[file.case]]
+  name = "l7_lb_local_backend_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 2
+  defined_in = "bpf/tests/l7_lb_local_backend.h"
+
+[[file]]
+path = "bpf/tests/l7_lb_local_backend_pod.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["lxc"]
+units = ["policy"]
+seeds = ["policy"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_L7_LB", "ENABLE_NODEPORT"]
+configs = ["cilium_host_ifindex", "cilium_net_ifindex", "interface_ifindex", "service_loopback_ipv4", "service_loopback_ipv6"]
+shared_headers = ["l7_lb_local_backend.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "l7_lb_local_backend_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 2
+  defined_in = "bpf/tests/l7_lb_local_backend.h"
+
+  [[file.case]]
+  name = "l7_lb_local_backend_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 2
+  defined_in = "bpf/tests/l7_lb_local_backend.h"
+
+[[file]]
+path = "bpf/tests/nodeport_geneve_dsr_lb_xdp.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "feature ENABLE_NODEPORT_ACCELERATION"
+objects = ["xdp"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["DSR_ENCAP_GENEVE", "DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["enable_endpoint_routes", "tunnel_protocol"]
+case_count = 2
+
+  [[file.case]]
+  name = "nodeport_geneve_dsr_lb_xdp1_local_backend"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "nodeport_geneve_dsr_lb_xdp2_fwd"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/nodeport_hybrid_dsr_test.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+features = ["DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_DSR_BYUSER", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP4_IFINDEX", "ENCAP6_IFINDEX"]
+configs = ["enable_endpoint_routes"]
+case_count = 2
+
+  [[file.case]]
+  name = "test_nodeport_uses_dsr_ipv4_with_flag"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 2
+
+  [[file.case]]
+  name = "test_nodeport_uses_dsr_ipv6_with_flag"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/session_affinity_maglev_test.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["xdp"]
+units = ["lb"]
+seeds = ["services"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION", "LB_DEFAULT_ALG"]
+configs = ["enable_endpoint_routes", "hash_init4_seed", "hash_init6_seed", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 6
+
+  [[file.case]]
+  name = "session_affinity_maglev_client_1_port_1"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "session_affinity_maglev_client_1_port_2"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "session_affinity_maglev_client_1_port_3"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "session_affinity_maglev_client_2_port_1"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "session_affinity_maglev_client_2_port_2"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "session_affinity_maglev_client_2_port_3"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/session_affinity_test.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["xdp"]
+units = ["nodeport"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION", "LB_DEFAULT_ALG"]
+configs = []
+case_count = 1
+
+  [[file.case]]
+  name = "session_affinity"
+  progtype = "xdp"
+  stages = "SETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/skip_lb_xlate_lrp_per_packet_lb.c"
+ctx = "unspec"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["lxc"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_SOCKET_LB_HOST_ONLY"]
+configs = ["enable_lrp", "endpoint_netns_cookie", "service_loopback_ipv4", "service_loopback_ipv6"]
+case_count = 2
+
+  [[file.case]]
+  name = "v4_local_redirect"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 2
+
+  [[file.case]]
+  name = "v6_local_redirect"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/skip_lb_xlate_socket_lb.c"
+ctx = "unspec"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["sock"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "HOST_NETNS_COOKIE"]
+configs = ["enable_lrp"]
+case_count = 2
+
+  [[file.case]]
+  name = "sock4_xlate_fwd"
+  progtype = "xdp"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 2
+
+  [[file.case]]
+  name = "sock6_xlate_fwd"
+  progtype = "xdp"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/tc_geneve_dsr_legacy.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["overlay"]
+units = ["ipcache"]
+seeds = ["endpoints", "ipcache"]
+features = ["DSR_ENCAP_GENEVE", "DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["tunnel_protocol"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_geneve_dsr_v4_legacy"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_geneve_dsr_v6_legacy"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/tc_lxc_lb_nodeport.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["lxc"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["endpoints", "ipcache", "policy", "services"]
+features = ["ENABLE_DSR", "ENABLE_DSR_BYUSER", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "HOST_NODE_IP", "HOST_NODE_IPV6"]
+configs = ["endpoint_ipv4", "endpoint_ipv6", "nodeport_port_max", "nodeport_port_min", "service_loopback_ipv4", "service_loopback_ipv6"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 18
+
+  [[file.case]]
+  name = "tc_lxc_v4_remote_nodeport_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v4_remote_nodeport_local_backend_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v4_remote_nodeport_dsr_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_lxc_v4_remote_nodeport_dsr_local_backend_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_lxc_v4_remote_nodeport_hairpin"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v4_remote_nodeport_hairpin_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v4_existing_conn_udp_first"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v4_existing_conn_udp_second"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v4_host_nodeport_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v6_remote_nodeport_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v6_remote_nodeport_local_backend_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v6_remote_nodeport_dsr_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_lxc_v6_remote_nodeport_dsr_local_backend_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_lxc_v6_remote_nodeport_hairpin"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v6_remote_nodeport_hairpin_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v6_existing_conn_udp_first"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v6_existing_conn_udp_second"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+  [[file.case]]
+  name = "tc_lxc_v6_host_nodeport_local_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 1
+
+[[file]]
+path = "bpf/tests/tc_nodeport_icmp4_snat_hostfw.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_HOST_FIREWALL"
+objects = ["host"]
+units = ["dbg", "eps", "nat"]
+seeds = ["endpoints"]
+features = ["ENABLE_HOST_FIREWALL", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_NODEPORT"]
+configs = []
+shared_headers = ["bpf_nat_tuples.h", "tc_nodeport_icmp4_snat.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "nodeport_revsnat_icmp4_pmtu"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/tc_nodeport_icmp4_snat.h"
+
+  [[file.case]]
+  name = "nodeport_revsnat_icmp4_pmtu_udp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/tc_nodeport_icmp4_snat.h"
+
+[[file]]
+path = "bpf/tests/tc_nodeport_icmp6_snat_hostfw.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_HOST_FIREWALL"
+objects = ["host"]
+units = ["dbg", "eps", "nat"]
+features = ["ENABLE_HOST_FIREWALL", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT", "ENABLE_SCTP"]
+configs = []
+shared_headers = ["bpf_nat_icmp6.h", "bpf_nat_tuples.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "snat_v6_tcp_pmtu"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/bpf_nat_icmp6.h"
+
+  [[file.case]]
+  name = "snat_v6_udp_pmtu"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/bpf_nat_icmp6.h"
+
+[[file]]
+path = "bpf/tests/tc_nodeport_icmp6_snat_tunnel.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+units = ["dbg", "eps", "nat"]
+features = ["ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT", "ENABLE_SCTP", "ENCAP_IFINDEX"]
+configs = []
+shared_headers = ["bpf_nat_icmp6.h", "bpf_nat_tuples.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "snat_v6_tcp_pmtu"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/bpf_nat_icmp6.h"
+
+  [[file.case]]
+  name = "snat_v6_udp_pmtu"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 1
+  defined_in = "bpf/tests/bpf_nat_icmp6.h"
+
+[[file]]
+path = "bpf/tests/tc_nodeport_l3_dev_lb_dsr_geneve_lb.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["DSR_ENCAP_GENEVE", "DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX"]
+configs = []
+case_count = 2
+
+  [[file.case]]
+  name = "ipv4_tc_nodeport_l3_dev_dsr_geneve_fwd"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "ipv6_tc_nodeport_l3_dev_dsr_geneve_fwd"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb4_dsr_backend.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+units = ["ipcache"]
+seeds = ["endpoints", "ipcache"]
+features = ["DSR_ENCAP_GENEVE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_NODEPORT"]
+configs = ["enable_bpf_host_routing", "interface_ifindex"]
+case_count = 4
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_backend_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_backend_redirect"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_backend_redirect_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb4_dsr_ipip_local.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_NODEPORT", "ENCAP4_IFINDEX"]
+configs = ["enable_bpf_host_routing", "enable_netkit", "interface_ifindex"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_ipip_lb_local_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_ipip_lb_local_l7punt"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb6_dsr_backend.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+units = ["ipcache"]
+seeds = ["endpoints", "ipcache"]
+features = ["DSR_ENCAP_GENEVE", "ENABLE_DSR", "ENABLE_IPV6", "ENABLE_NODEPORT"]
+configs = ["enable_bpf_host_routing", "interface_ifindex"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_backend"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_backend_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb6_dsr_ipip_local.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP6_IFINDEX"]
+configs = ["enable_bpf_host_routing", "enable_netkit", "interface_ifindex"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_ipip_lb_local_pod_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_ipip_lb_local_l7punt_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb_dsr_ipip.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP4_IFINDEX", "ENCAP6_IFINDEX", "ENCAP_IFINDEX"]
+configs = ["enable_endpoint_routes"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_ipip4_fwd"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_ipip6_fwd"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb_dsr_lb.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "feature ENABLE_DSR"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["DSR_ENCAP_GENEVE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT"]
+configs = ["enable_endpoint_routes"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_fwd4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+  [[file.case]]
+  name = "tc_nodeport_dsr_fwd6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/tc_policy_reject_response_test.c"
+ctx = "skb"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["lxc"]
+units = ["ipcache", "policy"]
+seeds = ["endpoints", "icmp", "ipcache", "policy"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["policy_deny_response_enabled", "service_loopback_ipv4", "service_loopback_ipv6"]
+case_count = 3
+
+  [[file.case]]
+  name = "policy_reject_response_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 2
+
+  [[file.case]]
+  name = "policy_reject_response_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 2
+
+  [[file.case]]
+  name = "policy_reject_response_v6_ingress"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_container"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/wildcard_lookup.c"
+ctx = "unspec"
+milestone = 2
+milestone_reason = "spec-02 §9.3 M2 group"
+objects = ["sock"]
+units = ["ipcache"]
+seeds = ["ipcache"]
+features = ["ENABLE_HOST_SERVICES_TCP", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENABLE_SOCKET_LB_HOST_ONLY", "ENABLE_SOCKET_LB_TCP", "ENABLE_SOCKET_LB_UDP", "HOST_NETNS_COOKIE"]
+configs = ["nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "sock4_wildcard_lookup_test"
+  progtype = "xdp"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 2
+
+  [[file.case]]
+  name = "sock6_wildcard_lookup_test"
+  progtype = "xdp"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/xdp_kpr_dsr_geneve_lb.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "feature ENABLE_NODEPORT_ACCELERATION"
+objects = ["xdp"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["ATTACHMENT_XDP", "DSR_ENCAP_GENEVE", "DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION", "ENCAP_IFINDEX"]
+configs = ["hash_init4_seed", "hash_init6_seed"]
+shared_headers = ["kpr_dsr_lb.h", "scapy.h"]
+case_count = 8
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb1_syn"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb1_synack"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb2_data"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb2_data2"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb1_syn"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb1_synack"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb2_data"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb2_data2"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+[[file]]
+path = "bpf/tests/xdp_kpr_dsr_option_lb.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "feature ENABLE_NODEPORT_ACCELERATION"
+objects = ["xdp"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["ATTACHMENT_XDP", "DSR_ENCAP_GENEVE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION"]
+configs = ["hash_init4_seed", "hash_init6_seed"]
+shared_headers = ["kpr_dsr_lb.h", "scapy.h"]
+case_count = 8
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb1_syn"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb1_synack"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb2_data"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_lb2_data2"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb1_syn"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb1_synack"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb2_data"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_lb2_data2"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_lb.h"
+
+[[file]]
+path = "bpf/tests/xdp_kpr_dsr_option_remote_node.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "feature ENABLE_NODEPORT_ACCELERATION"
+objects = ["xdp"]
+seeds = ["endpoints"]
+features = ["ATTACHMENT_XDP", "DSR_ENCAP_GENEVE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION", "NATIVE_IFINDEX"]
+configs = ["interface_ifindex"]
+shared_headers = ["kpr_dsr_remote_node.h", "scapy.h"]
+case_count = 6
+
+  [[file.case]]
+  name = "kpr_v4_dsr_remote_node_1syn"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_remote_node_3synack"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v4_dsr_remote_node_5data_dsr_info"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_remote_node_1syn"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_remote_node_3synack"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+  [[file.case]]
+  name = "kpr_v6_dsr_remote_node_5data_dsr_info"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 2
+  defined_in = "bpf/tests/kpr_dsr_remote_node.h"
+
+[[file]]
+path = "bpf/tests/xdp_nodeport_lb4_nat_backend.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "feature ENABLE_NODEPORT_ACCELERATION"
+objects = ["xdp"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION"]
+configs = ["enable_endpoint_routes"]
+case_count = 1
+
+  [[file.case]]
+  name = "xdp_nodeport_nat_backend"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/xdp_nodeport_lb4_nat_lb.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "feature ENABLE_NODEPORT_ACCELERATION"
+objects = ["xdp"]
+units = ["ipcache", "lb"]
+seeds = ["devices", "endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION"]
+configs = ["enable_endpoint_routes", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 7
+
+  [[file.case]]
+  name = "xdp_nodeport_local_backend"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "xdp_nodeport_etp_local"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "xdp_nodeport_nat_fwd"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "xdp_nodeport_nat_fwd_reply"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "xdp_nodeport_nat_fwd_reply_no_fib"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "xdp_nodeport_l7delegate_local"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "xdp_nodeport_l7delegate_remote"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/xdp_nodeport_lb4_nat_lb_tun_dynamic.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "feature ENABLE_NODEPORT_ACCELERATION"
+objects = ["xdp"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION", "ENCAP_IFINDEX", "TUNNEL_MODE", "TUNNEL_SOURCE"]
+configs = ["enable_bpf_host_routing", "interface_ifindex", "nodeport_port_max", "nodeport_port_min", "supports_fib_lookup_src", "tunnel_port", "tunnel_protocol"]
+shared_headers = ["nodeport_defaults.h", "scapy.h"]
+case_count = 1
+
+  [[file.case]]
+  name = "xdp_nodeport_lb4_nat_lb_tun_dynamic"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/xdp_nodeport_lb4_test.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "feature ENABLE_NODEPORT_ACCELERATION"
+objects = ["xdp"]
+units = ["lb", "nodeport"]
+seeds = ["services"]
+features = ["ENABLE_IPV4", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION"]
+configs = ["enable_no_service_endpoints_routable", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "xdp_lb4_forward_to_other_node"
+  progtype = "xdp"
+  stages = "SETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "xdp_lb4_drop_no_backend"
+  progtype = "xdp"
+  stages = "SETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/xdp_nodeport_lb_dsr_ipip.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "feature ENABLE_NODEPORT_ACCELERATION"
+objects = ["xdp"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION"]
+configs = ["enable_endpoint_routes"]
+case_count = 2
+
+  [[file.case]]
+  name = "xdp_nodeport_dsr_ipip4_fwd"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "xdp_nodeport_dsr_ipip6_fwd"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/xdp_nodeport_lb_dsr_lb.c"
+ctx = "xdp"
+milestone = 2
+milestone_reason = "feature ENABLE_NODEPORT_ACCELERATION"
+objects = ["xdp"]
+units = ["ipcache", "lb"]
+seeds = ["ipcache", "services"]
+features = ["ENABLE_DSR", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION"]
+configs = ["enable_endpoint_routes"]
+case_count = 2
+
+  [[file.case]]
+  name = "xdp_nodeport_dsr_fwd4"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+  [[file.case]]
+  name = "xdp_nodeport_dsr_fwd6"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 2
+
+[[file]]
+path = "bpf/tests/decrypt_host_ipsec.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_IPSEC"
+objects = ["host"]
+units = ["ipcache"]
+seeds = ["ipcache", "nodes"]
+features = ["ENABLE_IPSEC", "ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["wg_port"]
+shared_headers = ["decrypt_host.h", "scapy.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "encrypted_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/decrypt_host.h"
+
+  [[file.case]]
+  name = "encrypted_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/decrypt_host.h"
+
+[[file]]
+path = "bpf/tests/decrypt_host_wireguard.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_WIREGUARD"
+objects = ["host"]
+units = ["ipcache"]
+seeds = ["ipcache", "nodes"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_WIREGUARD"]
+configs = ["wg_port"]
+shared_headers = ["decrypt_host.h", "scapy.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "encrypted_v4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/decrypt_host.h"
+
+  [[file.case]]
+  name = "encrypted_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/decrypt_host.h"
+
+[[file]]
+path = "bpf/tests/decrypt_host_wireguard_strict.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_WIREGUARD"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENABLE_WIREGUARD"]
+configs = ["encryption_strict_ingress", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 3
+
+  [[file.case]]
+  name = "ipv4_strict_ingress_from_netdev"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "ipv6_strict_ingress_from_netdev"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "ipv4_strict_ingress_hostport_from_netdev"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/decrypt_overlay_wireguard.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_WIREGUARD"
+objects = ["overlay"]
+seeds = ["endpoints"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_WIREGUARD", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["enable_identity_mark", "encryption_strict_ingress"]
+shared_headers = ["scapy.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "ipv4_wireguard_no_mark_from_overlay"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "ipv4_wireguard_mark_from_overlay"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/destroy_sock_socket_lb.c"
+ctx = "unspec"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = ["sock_term"]
+units = ["builtins"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = []
+case_count = 1
+
+  [[file.case]]
+  name = "sock_terminate"
+  progtype = "xdp"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/encrypt_host_ipsec.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_IPSEC,ENCRYPT_KEY"
+objects = ["host"]
+units = ["ipcache", "ipsec"]
+seeds = ["ipcache", "ipsec_state", "nodes"]
+features = ["ENABLE_IPSEC", "ENABLE_IPV4", "ENABLE_IPV6", "ENCRYPT_KEY"]
+configs = ["cilium_net_mac", "enable_identity_mark", "wg_ifindex"]
+shared_headers = ["encrypt_host.h"]
+case_count = 8
+
+  [[file.case]]
+  name = "encrypt_v4_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+[[file]]
+path = "bpf/tests/encrypt_host_ipsec_strict.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_IPSEC,ENCRYPTION_STRICT_MODE_EGRESS,ENCRYPT_KEY"
+objects = ["host"]
+units = ["ipcache", "ipsec"]
+seeds = ["ipcache", "ipsec_state", "nodes"]
+features = ["ENABLE_IPSEC", "ENABLE_IPV4", "ENABLE_IPV6", "ENCRYPTION_STRICT_MODE_EGRESS", "ENCRYPT_KEY"]
+configs = ["cilium_net_mac", "enable_identity_mark", "wg_ifindex"]
+shared_headers = ["encrypt_host.h"]
+case_count = 8
+
+  [[file.case]]
+  name = "encrypt_v4_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+[[file]]
+path = "bpf/tests/encrypt_host_ipsec_tunnel.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_IPSEC,ENCRYPT_KEY"
+objects = ["host"]
+units = ["ipcache", "ipsec"]
+seeds = ["ipcache", "ipsec_state", "nodes"]
+features = ["ENABLE_IPSEC", "ENABLE_IPV4", "ENABLE_IPV6", "ENCAP_IFINDEX", "ENCRYPT_KEY", "TUNNEL_MODE"]
+configs = ["cilium_net_mac", "enable_identity_mark", "wg_ifindex"]
+shared_headers = ["encrypt_host.h"]
+case_count = 10
+
+  [[file.case]]
+  name = "encrypt_v4_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_vxlan"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_vxlan"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+[[file]]
+path = "bpf/tests/encrypt_host_ipsec_tunnel_strict.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_IPSEC,ENCRYPTION_STRICT_MODE_EGRESS,ENCRYPT_KEY"
+objects = ["host"]
+units = ["ipcache", "ipsec"]
+seeds = ["ipcache", "ipsec_state", "nodes"]
+features = ["ENABLE_IPSEC", "ENABLE_IPV4", "ENABLE_IPV6", "ENCAP_IFINDEX", "ENCRYPTION_STRICT_MODE_EGRESS", "ENCRYPT_KEY", "TUNNEL_MODE"]
+configs = ["cilium_net_mac", "enable_identity_mark", "wg_ifindex"]
+shared_headers = ["encrypt_host.h"]
+case_count = 10
+
+  [[file.case]]
+  name = "encrypt_v4_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_vxlan"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_vxlan"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+[[file]]
+path = "bpf/tests/encrypt_host_wireguard.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_WIREGUARD,ENCRYPT_KEY"
+objects = ["host"]
+units = ["ipcache", "ipsec"]
+seeds = ["ipcache", "ipsec_state", "nodes"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_WIREGUARD", "ENCRYPT_KEY"]
+configs = ["cilium_net_mac", "enable_identity_mark", "wg_ifindex"]
+shared_headers = ["encrypt_host.h"]
+case_count = 8
+
+  [[file.case]]
+  name = "encrypt_v4_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+[[file]]
+path = "bpf/tests/encrypt_host_wireguard_strict.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_WIREGUARD,ENCRYPTION_STRICT_MODE_EGRESS,ENCRYPT_KEY"
+objects = ["host"]
+units = ["ipcache", "ipsec"]
+seeds = ["ipcache", "ipsec_state", "nodes"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_WIREGUARD", "ENCRYPTION_STRICT_MODE_EGRESS", "ENCRYPT_KEY"]
+configs = ["cilium_net_mac", "enable_identity_mark", "wg_ifindex"]
+shared_headers = ["encrypt_host.h"]
+case_count = 8
+
+  [[file.case]]
+  name = "encrypt_v4_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+[[file]]
+path = "bpf/tests/encrypt_host_wireguard_tunnel.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_WIREGUARD,ENCRYPT_KEY"
+upstream_dead = true
+objects = ["host"]
+units = ["ipcache", "ipsec"]
+seeds = ["ipcache", "ipsec_state", "nodes"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_WIREGUARD", "ENCAP_IFINDEX", "ENCRYPT_KEY", "TUNNEL_MODE"]
+configs = ["cilium_net_mac", "enable_identity_mark", "wg_ifindex"]
+shared_headers = ["encrypt_host.h"]
+case_count = 10
+
+  [[file.case]]
+  name = "encrypt_v4_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_vxlan"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_vxlan"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+[[file]]
+path = "bpf/tests/encrypt_host_wireguard_tunnel_strict.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_WIREGUARD,ENCRYPTION_STRICT_MODE_EGRESS,ENCRYPT_KEY"
+objects = ["host"]
+units = ["ipcache", "ipsec"]
+seeds = ["ipcache", "ipsec_state", "nodes"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_WIREGUARD", "ENCAP_IFINDEX", "ENCRYPTION_STRICT_MODE_EGRESS", "ENCRYPT_KEY", "TUNNEL_MODE"]
+configs = ["cilium_net_mac", "enable_identity_mark", "wg_ifindex"]
+shared_headers = ["encrypt_host.h"]
+case_count = 10
+
+  [[file.case]]
+  name = "encrypt_v4_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_1_missing_dst"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_2_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_3_no_src_mark"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_4_no_src_mark_with_src_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v4_vxlan"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+  [[file.case]]
+  name = "encrypt_v6_vxlan"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+  defined_in = "bpf/tests/encrypt_host.h"
+
+[[file]]
+path = "bpf/tests/encryption_helpers_ipsec.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_IPSEC"
+objects = ["host"]
+features = ["ENABLE_IPSEC", "ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["cilium_host_ifindex"]
+shared_headers = ["encryption_helpers_ipsec.h", "scapy.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "do_decrypt4"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "do_decrypt6"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ctx_is_encrypt_success"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ctx_is_decrypt_success"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/encryption_helpers_ipsec_native.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_IPSEC"
+objects = ["host"]
+features = ["ENABLE_IPSEC", "ENABLE_IPV4", "ENABLE_IPV6"]
+configs = []
+shared_headers = ["encryption_helpers_ipsec.h"]
+case_count = 6
+
+  [[file.case]]
+  name = "ipsec_redirect4"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ipsec_redirect4_over6"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ipsec_redirect6"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ipsec_redirect6_over6"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ipsec_redirect_bad_identities4"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ipsec_redirect_bad_identities6"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/encryption_helpers_ipsec_tunnel.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_IPSEC"
+objects = []
+features = ["ENABLE_IPSEC", "ENABLE_IPV4", "ENABLE_IPV6", "HAVE_ENCAP", "TUNNEL_MODE"]
+configs = []
+shared_headers = ["encryption_helpers_ipsec.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "ipsec_redirect_tunnel4_v4"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ipsec_redirect_tunnel4_v6"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ipsec_redirect_tunnel6_v4"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ipsec_redirect_tunnel6_v6"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/encryption_helpers_wireguard.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_NODE_ENCRYPTION,ENABLE_WIREGUARD"
+objects = []
+units = ["eps", "ipcache", "wireguard"]
+seeds = ["ipcache"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODE_ENCRYPTION", "ENABLE_WIREGUARD"]
+configs = ["wg_ifindex", "wg_port"]
+case_count = 4
+
+  [[file.case]]
+  name = "ctx_is_wireguard_success"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ctx_is_encrypt_success"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "ctx_is_decrypt_success"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "wireguard_icmpv6_na_skip"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/eni_nlb_symetric_routing_host.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = ["host"]
+units = ["ipcache"]
+seeds = ["endpoints", "ipcache"]
+features = ["ENABLE_IPV4", "ENABLE_MASQUERADE_IPV4", "ENABLE_NODEPORT", "ENABLE_ROUTING"]
+configs = ["interface_ifindex"]
+case_count = 2
+
+  [[file.case]]
+  name = "eni_nlb_symetric_routing_egress_v4_setup"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "eni_nlb_symetric_routing_egress_v4_setup_icmp"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/inter_cluster_snat_clusterip_backend_lxc.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_CLUSTER_AWARE_ADDRESSING"
+objects = ["lxc"]
+units = ["ipcache", "policy"]
+seeds = ["ipcache", "policy"]
+features = ["ENABLE_CLUSTER_AWARE_ADDRESSING", "ENABLE_IPV4", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["cluster_id", "enable_conntrack_accounting", "endpoint_ipv4", "service_loopback_ipv4"]
+case_count = 3
+
+  [[file.case]]
+  name = "01_overlay_to_lxc_syn"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "lxc_policy"
+  milestone = 3
+
+  [[file.case]]
+  name = "02_lxc_to_overlay_synack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 3
+
+  [[file.case]]
+  name = "03_overlay_to_lxc_ack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "lxc_policy"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/inter_cluster_snat_clusterip_backend_overlay.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_CLUSTER_AWARE_ADDRESSING,ENABLE_INTER_CLUSTER_SNAT"
+objects = ["overlay"]
+units = ["drop"]
+seeds = ["endpoints"]
+features = ["ENABLE_CLUSTER_AWARE_ADDRESSING", "ENABLE_INTER_CLUSTER_SNAT", "ENABLE_IPV4", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["cluster_id", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["mock_skb_metadata.h", "nodeport_defaults.h"]
+case_count = 3
+
+  [[file.case]]
+  name = "01_from_overlay_syn"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "02_to_overlay_synack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "03_from_overlay_ack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/inter_cluster_snat_clusterip_client_lxc.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_CLUSTER_AWARE_ADDRESSING"
+objects = ["lxc"]
+units = ["ipcache", "lb", "policy"]
+seeds = ["ipcache", "policy", "services"]
+features = ["ENABLE_CLUSTER_AWARE_ADDRESSING", "ENABLE_IPV4", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["cluster_id", "enable_conntrack_accounting", "endpoint_ipv4", "security_label", "service_loopback_ipv4"]
+case_count = 3
+
+  [[file.case]]
+  name = "01_lxc_to_overlay_syn"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 3
+
+  [[file.case]]
+  name = "02_overlay_to_lxc_synack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "lxc_policy"
+  milestone = 3
+
+  [[file.case]]
+  name = "03_lxc_to_overlay_ack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/inter_cluster_snat_clusterip_client_overlay.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_CLUSTER_AWARE_ADDRESSING,ENABLE_INTER_CLUSTER_SNAT"
+objects = ["overlay"]
+units = ["drop"]
+seeds = ["endpoints"]
+features = ["ENABLE_CLUSTER_AWARE_ADDRESSING", "ENABLE_INTER_CLUSTER_SNAT", "ENABLE_IPV4", "ENABLE_NODEPORT", "ENCAP_IFINDEX", "TUNNEL_MODE"]
+configs = ["cluster_id", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["mock_skb_metadata.h", "nodeport_defaults.h"]
+case_count = 3
+
+  [[file.case]]
+  name = "01_to_overlay_syn"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "02_from_overlay_synack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "03_to_overlay_ack"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_overlay"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/ip_options_trace_id.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = []
+units = ["ip_options"]
+features = []
+configs = []
+case_count = 24
+
+  [[file.case]]
+  name = "extract_trace_id_with_no_l3_header_error"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_with_no_eth_header_no_family"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_no_ipv6_options"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_solo"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_no_ipv4_options"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_after_ipopt_end_not_found"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_after_loop_limit_not_found"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_first_of_three"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_middle_of_three"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_last_of_three"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_after_ipopt_noop"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_not_found_with_other_options"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_wrong_len_invalid"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_negative"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_different_option_type"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_read_trace_id_wrong_option_type"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_4_bytes_valid"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_negative_4_bytes"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_4_bytes_wrong_length"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_4_bytes_before_end"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_8_bytes_valid"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_8_bytes_with_padding"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_8_bytes_negative"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+  [[file.case]]
+  name = "extract_trace_id_8_bytes_invalid_length"
+  progtype = "tc"
+  stages = "PKTGENCHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/l4lb_ipip_health_check_host.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = ["host"]
+features = ["DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_HEALTH_CHECK", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENCAP4_IFINDEX", "ENCAP6_IFINDEX", "ENCAP_IFINDEX"]
+configs = []
+case_count = 1
+
+  [[file.case]]
+  name = "l4lb_health_check_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/mcast_tests.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = []
+units = ["mcast"]
+features = ["ENABLE_IPV4", "ENABLE_MULTICAST", "ENCAP_IFINDEX"]
+configs = []
+case_count = 1
+
+  [[file.case]]
+  name = "mcast_tests"
+  progtype = "tc"
+  stages = "CHECK"
+  entrypoint = "direct"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/tc_egressgw_redirect_from_host.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_EGRESS_GATEWAY"
+objects = ["host"]
+units = ["egressgw", "ipcache"]
+seeds = ["endpoints", "ipcache", "metrics"]
+features = ["ENABLE_EGRESS_GATEWAY", "ENABLE_HOST_FIREWALL", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX"]
+configs = ["interface_ifindex"]
+case_count = 14
+
+  [[file.case]]
+  name = "tc_egressgw_egress1"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_egress2_ifindex"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_egress3_rt_info"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_redirect"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_skip_excluded_cidr_redirect"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_skip_no_gateway_redirect"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_drop_no_egress_ip"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_v6_egress1"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_v6_egress2_ifindex"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_v6_egress3_rt_info"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_redirect_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_skip_excluded_cidr_redirect_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_skip_no_gateway_redirect_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_drop_no_egress_ip_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/tc_egressgw_redirect_from_overlay.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_EGRESS_GATEWAY"
+objects = ["overlay"]
+units = ["egressgw", "ipcache"]
+seeds = ["ipcache"]
+features = ["ENABLE_EGRESS_GATEWAY", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX"]
+configs = []
+case_count = 10
+
+  [[file.case]]
+  name = "tc_egressgw_redirect_from_overlay"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_redirect_from_overlay_with_ifindex"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_skip_excluded_cidr_redirect_from_overlay"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_skip_no_gateway_redirect_from_overlay"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_drop_no_egress_ip_from_overlay"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_v6_redirect_from_overlay"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_v6_redirect_from_overlay_with_ifindex"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_skip_excluded_cidr_redirect_from_overlay_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_skip_no_gateway_redirect_from_overlay_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_drop_no_egress_ip_from_overlay_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/tc_egressgw_redirect_from_overlay_with_rt_info.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_EGRESS_GATEWAY"
+objects = ["overlay"]
+units = ["egressgw", "ipcache"]
+seeds = ["ipcache"]
+features = ["ENABLE_EGRESS_GATEWAY", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX"]
+configs = []
+case_count = 2
+
+  [[file.case]]
+  name = "tc_egressgw_redirect_from_overlay_with_rt_info"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_redirect_from_overlay_with_rt_info_v6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_overlay"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/tc_egressgw_snat.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "feature ENABLE_EGRESS_GATEWAY"
+objects = ["host"]
+units = ["egressgw", "ipcache"]
+seeds = ["ipcache"]
+features = ["ENABLE_EGRESS_GATEWAY", "ENABLE_HOST_FIREWALL", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT", "ENCAP_IFINDEX"]
+configs = ["enable_conntrack_accounting", "nodeport_port_max", "nodeport_port_min"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 14
+
+  [[file.case]]
+  name = "tc_egressgw_snat1"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_snat1_2_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_snat2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_tuple_collision1"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_tuple_collision2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_tuple_collision2_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_egressgw_skip_excluded_cidr_snat"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_v6_egressgw_snat1"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_v6_egressgw_snat1_2_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_v6_egressgw_snat2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_v6_egressgw_tuple_collision1"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_v6_egressgw_tuple_collision2"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_v6_egressgw_tuple_collision2_reply"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_v6_egressgw_skip_excluded_cidr_snat"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "to_netdev"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/tc_l2_announcement.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = ["host"]
+features = ["ENABLE_IPV4"]
+configs = ["enable_l2_announcements", "interface_mac", "l2_announcements_max_liveness"]
+shared_headers = ["scapy.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "0_no_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "1_happy_path"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/tc_l2_announcement6.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = ["host"]
+features = ["ENABLE_IPV6"]
+configs = ["enable_l2_announcements", "interface_mac", "l2_announcements_max_liveness"]
+shared_headers = ["scapy.h"]
+case_count = 4
+
+  [[file.case]]
+  name = "0_no_entry"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "0_no_entry_targeted"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "1_ok"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "1_ok_targeted"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/tc_nodeport_l3_wireguard.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = ["wireguard"]
+seeds = ["endpoints", "metrics"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6"]
+configs = ["cilium_host_mac", "enable_bpf_host_routing", "interface_mac"]
+shared_headers = ["tc_nodeport_l3_dev.h"]
+case_count = 8
+
+  [[file.case]]
+  name = "ingress_ipv4_l3_to_l2_fast_redirect_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 3
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "ingress_ipv6_l3_to_l2_fast_redirect_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 3
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "egress_ipv4_l3_to_l2_fast_redirect_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 3
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "egress_ipv6_l3_to_l2_fast_redirect_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 3
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "ingress_ipv4_l3_to_l2_fast_redirect_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 3
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "ingress_ipv6_l3_to_l2_fast_redirect_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 3
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "egress_ipv4_l3_to_l2_fast_redirect_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 3
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+  [[file.case]]
+  name = "egress_ipv6_l3_to_l2_fast_redirect_host"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "unresolved"
+  milestone = 3
+  defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb4_ipip_termination.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_IPV4", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION", "ENCAP4_IFINDEX"]
+configs = ["enable_bpf_host_routing", "enable_endpoint_routes", "enable_ipip_termination", "enable_netkit", "interface_ifindex"]
+case_count = 3
+
+  [[file.case]]
+  name = "tc_nodeport_ipip_term_v4_local_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_nodeport_ipip_term_v4_l7_punt_proxy"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_nodeport_ipip_term_v4_xdp_handoff"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/tc_nodeport_lb6_ipip_termination.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["DSR_ENCAP_IPIP", "DSR_ENCAP_MODE", "ENABLE_DSR", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION", "ENCAP6_IFINDEX"]
+configs = ["enable_bpf_host_routing", "enable_endpoint_routes", "enable_ipip_termination", "enable_netkit", "interface_ifindex"]
+case_count = 3
+
+  [[file.case]]
+  name = "tc_nodeport_ipip_term_v6_local_pod"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_nodeport_ipip_term_v6_l7_punt_proxy"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_nodeport_ipip_term_v6_xdp_handoff"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/tc_srv6_decap.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = ["host"]
+units = ["ipcache", "lb"]
+seeds = ["endpoints", "ipcache", "services"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_NODEPORT", "ENABLE_SRV6", "ENABLE_SRV6_SRH_ENCAP"]
+configs = ["enable_bpf_host_routing"]
+case_count = 4
+
+  [[file.case]]
+  name = "tc_srv6_decap_to_pod_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_srv6_decap_to_pod_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_srv6_decap_to_service_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_srv6_decap_to_service_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_netdev"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/tc_srv6_encap.c"
+ctx = "skb"
+milestone = 3
+milestone_reason = "spec-02 §9.3 long-tail/encryption group"
+objects = ["lxc"]
+units = ["ipcache", "policy"]
+seeds = ["ipcache", "policy"]
+features = ["ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_SRV6", "ENABLE_SRV6_SRH_ENCAP"]
+configs = ["service_loopback_ipv4", "service_loopback_ipv6"]
+case_count = 2
+
+  [[file.case]]
+  name = "tc_srv6_encap_from_pod_ipv4"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 3
+
+  [[file.case]]
+  name = "tc_srv6_encap_from_pod_ipv6"
+  progtype = "tc"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "from_container"
+  milestone = 3
+
+[[file]]
+path = "bpf/tests/xdp_egressgw_reply.c"
+ctx = "xdp"
+milestone = 3
+milestone_reason = "feature ENABLE_EGRESS_GATEWAY"
+objects = ["xdp"]
+units = ["egressgw", "ipcache"]
+seeds = ["ipcache"]
+features = ["ENABLE_EGRESS_GATEWAY", "ENABLE_IPV4", "ENABLE_IPV6", "ENABLE_MASQUERADE_IPV4", "ENABLE_MASQUERADE_IPV6", "ENABLE_NODEPORT", "ENABLE_NODEPORT_ACCELERATION", "ENCAP_IFINDEX"]
+configs = ["enable_endpoint_routes", "nodeport_port_max", "nodeport_port_min", "tunnel_protocol"]
+shared_headers = ["nodeport_defaults.h"]
+case_count = 2
+
+  [[file.case]]
+  name = "xdp_egressgw_reply"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 3
+
+  [[file.case]]
+  name = "xdp_egressgw_reply_v6"
+  progtype = "xdp"
+  stages = "PKTGENSETUPCHECK"
+  entrypoint = "xdp_entry"
+  milestone = 3
+

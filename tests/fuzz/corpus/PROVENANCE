@@ -1,0 +1,54 @@
+Harvested fuzz seed corpora — flowsdn
+=====================================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md ("fuzz seeds ... are
+                    data. Copying them verbatim is the sensible engineering
+                    choice already permitted by docs/licensing.md.")
+
+Only two of the reference's 19 fuzz targets carry a checked-in seed corpus.
+Everything else is generated at run time by go-fuzz-headers, so there is no
+file to copy — see ../SEEDS.md for the per-target detail.
+
+  FuzzDistillPolicy/  27 files
+    Reference path : pkg/policy/testdata/fuzz/FuzzDistillPolicy
+    Target         : pkg/policy/simulate_fuzz_test.go FuzzDistillPolicy
+    Shape          : Go `testing.F` corpus format — a "go test fuzz v1" header
+                     line followed by one `[]byte("...")` literal. The byte
+                     string is consumed by makeFuzzEntries() as a packed
+                     sequence of policy-rule descriptors (direction, default
+                     deny, selector, port range, protocol, deny flag), so each
+                     file is a regression-captured *rule set* that once made
+                     the compiled map state and the reference simulator
+                     disagree.
+    Value          : these are crash/differential regressions, i.e. the exact
+                     rule combinations where deny precedence, wildcard
+                     shadowing or port-range merging went wrong once already.
+                     They are the highest-value 27 files in the whole harvest.
+
+  FuzzUint8/  3 files
+    Reference path : pkg/container/bitlpm/testdata/fuzz/FuzzUint8
+    Target         : pkg/container/bitlpm/fuzz_test.go FuzzUint8
+    Shape          : same "go test fuzz v1" + `[]byte("...")` format. The bytes
+                     are read as (value, prefix-length) pairs and inserted into
+                     a uint8 LPM trie; the invariants checked are Len(),
+                     Ancestors() returning the longest-prefix entry, and Len()
+                     decrementing correctly on Delete().
+    Value          : LPM trie edge cases (prefix 0, duplicate prefixes after
+                     masking, delete of an interior node).
+
+Format conversion
+-----------------
+The Go corpus format is not cargo-fuzz's. A converter lives at
+tools/fuzz-corpus-convert (to be written): it strips the "go test fuzz v1"
+line, unquotes the Go byte-string literal, and writes the raw bytes as one
+file per seed into fuzz/corpus/<target>/. Keep the originals here verbatim so
+a re-harvest at a newer reference tag stays a diff.
+
+Modifications
+-------------
+None. All 30 files are byte-identical to the reference.

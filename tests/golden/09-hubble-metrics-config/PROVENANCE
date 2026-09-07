@@ -1,0 +1,30 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : pkg/hubble/metrics/testdata
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+Eight metric-handler configuration YAML files: valid flow/drop metric configs
+with contextOptions (labelsContext, destinationContext), a fewer-labels variant,
+a filtered variant, an empty config, and one invalid config missing a metric
+name. Pins the Hubble metrics config schema and which shapes must be refused.
+
+Files             : 8
+Bytes             : 1390
+
+Consumed by
+-----------
+docs/spec/11-hubble-monitor.md §6 and §8 — Hubble metrics handler config and
+the label/context dimensions of the exported Prometheus series.
+
+Modifications
+-------------
+None. Byte-identical to the reference.

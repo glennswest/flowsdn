@@ -1,0 +1,38 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : test/controlplane
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+The control-plane golden suite's Kubernetes object sets:
+  node/ciliumnodes/v1.24|v1.25|v1.26/{init,state1..state4}.yaml — 15 files, an
+    identical four-step scenario captured against three API-server versions:
+    a Node is created, then its labels are added, removed, added again and
+    changed, and the agent must keep the derived CiliumNode's labels in step.
+  node/ciliumnodes/manifests/kind-config-1.2{4,5,6}.yaml — 3 files, the kind
+    cluster shapes the captures were taken from.
+  k8s_versions.txt — the supported API-server version list the suite runs
+    against.
+The suite's own Go harness (suite/, *.go) is NOT copied; flowsdn writes
+flowsdn-cptest in Rust per ADR-0005.
+
+Files             : 19
+Bytes             : 151308
+
+Consumed by
+-----------
+docs/spec/13-crds-k8s-client.md (Node -> CiliumNode derivation) and
+docs/spec/10-node-routing-nftables.md (local node model). Driven by the
+flowsdn-cptest harness in docs/spec/17-test-harness.md.
+
+Modifications
+-------------
+None. Byte-identical to the reference for all 19 files.

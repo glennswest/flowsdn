@@ -1,0 +1,34 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : operator/pkg/model/translation/gateway-api/testdata
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+207 YAML files, one directory per scenario, each holding an input model and
+the expected CiliumEnvoyConfig (listener, filter chains, HTTP connection
+manager, route configuration, clusters, endpoints). Pins the second half of the
+Gateway API pipeline: model -> CEC. Covers host-network mode, external traffic
+policy, NodePort/LoadBalancer service shapes, TLS SNI listeners, external
+authorization (HTTP and gRPC, with and without TLS), server-header policy,
+gRPC-Web translation and XFF trusted hops.
+
+Files             : 207
+Bytes             : 352128
+
+Consumed by
+-----------
+docs/spec/12-operator.md and docs/spec/16-l7-envoy-dns.md — the CEC output is
+the flowsdn/Envoy contract, so these are golden files for the xDS driver, not
+only for the operator.
+
+Modifications
+-------------
+None. Byte-identical to the reference.

@@ -1,0 +1,29 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : operator/pkg/model/translation/ingress/testdata
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+14 YAML files: seven scenarios, each an input.yaml (the internal model) and
+an output-cec.yaml (the expected CiliumEnvoyConfig). Ingress-specific
+translation: path rules, host rules, default backend, host-network mode, proxy
+protocol, force-HTTPS on/off, complex NodePort ingress.
+
+Files             : 14
+Bytes             : 55687
+
+Consumed by
+-----------
+docs/spec/12-operator.md (Ingress reconciler) and docs/spec/16-l7-envoy-dns.md.
+
+Modifications
+-------------
+None. Byte-identical to the reference.

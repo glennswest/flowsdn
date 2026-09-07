@@ -1,0 +1,28 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : pkg/loadbalancer/benchmark/testdata
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+Service and EndpointSlice objects used to seed the load-balancer control-plane
+benchmark (many-frontend / many-backend scaling).
+
+Files             : 2
+Bytes             : 840
+
+Consumed by
+-----------
+docs/spec/05-service-loadbalancing.md §9 (test plan) — LB control-plane
+throughput benchmark and reconciler scaling.
+
+Modifications
+-------------
+None. Byte-identical to the reference.

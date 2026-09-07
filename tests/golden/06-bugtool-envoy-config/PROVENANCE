@@ -1,0 +1,46 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : bugtool/cmd/testdata
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+envoy-config-input.json  — a full Envoy admin /config_dump (bootstrap,
+                             listeners, clusters, secrets, endpoints) as
+                             produced by a running cilium-envoy.
+envoy-config-output.json — the same dump after bugtool's redaction pass, in
+                             which every TLS certificate_chain, private_key and
+                             trusted_ca value has been replaced by
+                             "[redacted]".
+Together these pin the redaction contract: which JSON paths must be scrubbed
+before a bug report leaves the cluster, and that nothing else is altered.
+
+Files             : 2
+Bytes             : 1022767
+
+Consumed by
+-----------
+docs/spec/08-endpoint-agent-api.md (bugtool / support bundle) and
+docs/spec/16-l7-envoy-dns.md (Envoy config-dump shape).
+
+Modifications
+-------------
+MODIFIED. The four EC private-key PEM blobs in envoy-config-input.json were
+replaced with the literal placeholder
+
+    -----BEGIN EC PRIVATE KEY-----
+    REDACTED-BY-FLOWSDN-HARVEST-NOT-A-KEY
+    -----END EC PRIVATE KEY-----
+
+so that no PEM private key (even a synthetic upstream test key) is committed to
+this repository. The JSON structure, key paths, byte offsets of every other
+field and the expected output file are unchanged, so the redaction assertion the
+fixture exists to make is unaffected. Certificate (public) blobs are unchanged.
+envoy-config-output.json is byte-identical to the reference.

@@ -1,0 +1,33 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : operator/pkg/model/ingestion/testdata
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+324 YAML files under gamma/, gateway/ and ingress/, one directory per
+scenario, each holding the input k8s objects and the expected internal
+'model' (the operator's intermediate representation between Gateway
+API/Ingress objects and CiliumEnvoyConfig). Pins the ingestion step:
+which listeners, routes, header/query matchers, redirects, rewrites,
+mirrors, timeouts, weights and backend refs are derived from which input
+fields, and how conflicts and invalid input are dropped.
+
+Files             : 324
+Bytes             : 234234
+
+Consumed by
+-----------
+docs/spec/12-operator.md (Gateway API / Ingress ingestion) and
+docs/spec/16-l7-envoy-dns.md (the model that becomes an xDS config).
+
+Modifications
+-------------
+None. Byte-identical to the reference.

@@ -1,0 +1,30 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : pkg/k8s/testutils/testdata
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+Two captured Kubernetes objects as served by a real API server:
+ciliumnode.yaml (a CiliumNode with spec.ipam, addresses, encryption and health
+fields populated) and service.yaml (a core/v1 Service with annotations). Used
+as decode/round-trip fixtures for the slim scheme and the CRD types.
+
+Files             : 2
+Bytes             : 1804
+
+Consumed by
+-----------
+docs/spec/13-crds-k8s-client.md §2 (compatibility contract) — CRD field decode
+and the kube-derive-vs-upstream-YAML diff test.
+
+Modifications
+-------------
+None. Byte-identical to the reference.

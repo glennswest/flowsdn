@@ -1,0 +1,30 @@
+Harvested fixture set — flowsdn
+===============================
+
+Reference project : cilium/cilium
+Reference tag     : v1.20.1
+Reference commit  : 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+Reference path    : pkg/health/client/testdata
+License           : Apache-2.0 (Copyright Authors of Cilium)
+Copy date         : 2026-09-07
+Copied by         : docs/decisions/0005-test-strategy.md (harvest data verbatim,
+                    write every harness in Rust)
+
+Contents
+--------
+Eight .golden files: the exact rendered text of `cilium-health status` for
+combinations of {all healthy, one unhealthy, eleven unhealthy} x {default,
+--all-nodes, --verbose}. These pin the CLI's table layout, column order,
+ordering of nodes and endpoints, and the wording of health verdicts.
+
+Files             : 8
+Bytes             : 4550
+
+Consumed by
+-----------
+docs/spec/08-endpoint-agent-api.md §8 (observability) — flowsdn-dbg health
+output must stay byte-compatible where operators script against it.
+
+Modifications
+-------------
+None. Byte-identical to the reference.
