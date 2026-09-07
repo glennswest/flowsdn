@@ -6,7 +6,10 @@ build on dev never on the Mac, cargo target dirs under `/build/cargo/flowsdn`).
 
 ## Reference source
 
-Cilium is cloned read-only at `../cilium` (sibling directory, Mac). It is a
+Cilium is cloned read-only at `../cilium` (sibling directory, Mac), checked out at
+**v1.20.1, commit 7d68cfb394**. All inventory and spec documents cite that commit.
+Reference sizes at that tag: pkg/ 359k non-test Go lines, operator/ 48k, api/ 97k
+(mostly generated), bpf/ 91k lines of C. It is a
 reference for reading. Never edit it, never build from it, never copy from it
 without following `docs/licensing.md`.
 
@@ -20,7 +23,11 @@ without following `docs/licensing.md`.
 ### Phase 0 — Inventory (IN PROGRESS, 2026-09-07)
 - [x] Repo, license, NOTICE, clean-room protocol, ADR-0001 scope
 - [x] Name check: flowsdn clear on GitHub, crates.io, npm, PyPI, .com/.io/.net/.org
-- [ ] Per-area inventory of the reference in `docs/inventory/` (parallel agents)
+- [ ] Per-area inventory of the reference in `docs/inventory/` — 15 areas, files 01..15, running as parallel agents (started 2026-09-07):
+      01 bpf-programs, 02 bpf-maps-loader, 03 datapath-userspace-node, 04 loadbalancer,
+      05 policy-identity, 06 agent-endpoint-api, 07 ipam-cloud, 08 operator, 09 hubble-monitor,
+      10 bgp, 11 l7-proxy-dns-auth-mesh, 12 clustermesh-kvstore, 13 crds-k8s,
+      14 encryption-egress, 15 helm-images-ci-tests. Missing file = agent did not finish; rerun that area.
 - [ ] Roll-up scope table `docs/inventory/README.md` with sizes + keep/defer/replace
 - [ ] Kernel requirements: BPF features used by the datapath, per program
 
