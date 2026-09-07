@@ -27,7 +27,9 @@ without following `docs/licensing.md`.
       01 bpf-programs, 02 bpf-maps-loader, 03 datapath-userspace-node, 04 loadbalancer,
       05 policy-identity, 06 agent-endpoint-api, 07 ipam-cloud, 08 operator, 09 hubble-monitor,
       10 bgp, 11 l7-proxy-dns-auth-mesh, 12 clustermesh-kvstore, 13 crds-k8s,
-      14 encryption-egress, 15 helm-images-ci-tests. Missing file = agent did not finish; rerun that area.
+      14 encryption-egress, 15 helm-images-ci-tests.
+      Done + committed: 01 02 03 04 05 06 08 09 10 12 14 15. In flight (resumed after a
+      rate-limit stop): 07 11 13. Missing file = agent did not finish; rerun that area.
 - [x] ADR-0002 Rust only (BPF programs in aya-ebpf), ADR-0003 nftables residual
 - [ ] Roll-up scope table `docs/inventory/README.md` with sizes + keep/defer/replace
 - [ ] Kernel requirements: BPF features used by the datapath, per program
