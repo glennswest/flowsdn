@@ -41,8 +41,9 @@ Spec template: `docs/spec/TEMPLATE.md`. Wave 1 running as parallel agents:
 Wave 1 complete: 00 01 02 03 04 + kernel-requirements (~7.6k lines).
 Wave 2 complete (2026-09-07): `05-service-loadbalancing`, `06-policy-engine`,
 `07-ipam`, `08-endpoint-agent-api`, `09-cni-plugin`, `10-node-routing-nftables`.
-Wave 3 to launch: Hubble/monitor, operator core, CRDs + k8s client, encryption,
-egress gateway, BGP, L7/Envoy + DNS proxy, ClusterMesh, packaging/Helm/CI.
+Wave 3 running (launched 2026-09-07): `11-hubble-monitor`, `12-operator`,
+`13-crds-k8s-client`, `14-encryption-egress`, `15-bgp`, `16-l7-envoy-dns`.
+Wave 4 to launch: ClusterMesh, Gateway API/Ingress, packaging/Helm/CI, workspace scaffold.
 Missing file = agent did not finish; rerun that spec.
 - [ ] BPF map catalogue: every map, key/value layout, pinning, sizing
 - [ ] Datapath programs: from-container, to-container, from-netdev, to-netdev,
