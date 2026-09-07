@@ -707,6 +707,56 @@ Not owned here (their specs own them) but used to validate the design:
 | `dynamic-config` | `(name, source)` | `name` (non-unique) | this spec |
 | `health` | `id` string | — | this spec |
 
+### 4.3a `TableRender` — the text rendering contract
+
+**Added 2026-09-07 by amendment.** Resolves open decision 12.1 of
+`17-scripttest-harness.md`. The reference has a `TableWritable` interface that
+`db/cmp` uses to render a table as aligned text; spec 17's harvested corpus
+contains **478 `.table` expectation files** that pin both the column order and
+the per-cell formatting of that rendering. Without an equivalent, those files
+cannot be compared against and the corpus is worthless. The design therefore
+carries a rendering trait from the start, not as a test-only afterthought.
+
+Every table type registered with `flowsdn-table` MUST implement:
+
+```text
+trait TableRender {
+    /// Column names, in the order they are rendered. Stable across releases:
+    /// a rename or reorder is a breaking change to the test corpus and MUST
+    /// be accompanied by a corpus update in the same commit.
+    fn header() -> &'static [&'static str];
+
+    /// One rendered cell per header column, same order, same length.
+    fn row(&self) -> Vec<String>;
+}
+```
+
+Normative requirements:
+
+1. `row()` MUST return exactly `header().len()` cells.
+2. Cell text MUST NOT contain a tab or a newline. Spec 17 verified that no
+   harvested `.table` section contains a tab, so the renderer emits
+   space-aligned columns only; the tab-splitting path exists in the *parser*
+   for `--update` round-trips, never in the writer.
+3. Formatting MUST be deterministic and locale-independent: no map iteration
+   order, no floating-point default formatting, no timestamps rendered as
+   relative durations unless the reference does so for that column.
+4. Columns are separated by at least three spaces, and each column is padded
+   to the width of the widest cell including the header. This is what makes
+   the reference's character-offset column splitting work, which spec 17
+   documents as the matching mechanism.
+5. Rendering is a pure function of the row. It MUST NOT consult other tables,
+   the clock, or the environment.
+
+The `db/cmp` command matches rows **positionally and in order**, so a table's
+default iteration order is part of its contract: it MUST be the primary-key
+order unless the owning spec states otherwise and the corpus agrees.
+
+**Consequence for every table-owning spec (04, 05, 07, 08, 10, 11, 12, 14,
+15, 20):** each MUST state its tables' column list and per-column formatting,
+and MUST cross-check it against the harvested `.table` files for its area
+before its crate is written. A mismatch found later is a corpus-wide churn.
+
 ### 4.4 Configuration registry
 
 ```
