@@ -616,9 +616,13 @@ identical, at the socket, to one that went through the tunnel.
 1. Before a scenario's probes run, the suite opens one `Observer.GetFlows`
    stream per node — direct to each agent's `:4244` through the pod proxy
    subresource of that node's agent pod, or a single stream to `hubble-relay`
-   `:4245` when relay is deployed (`--hubble-mode=relay|per-node`, default
-   `relay` when present). `follow = true`, `number = 0`, `since` = the moment
-   the stream opened.
+   `:4245` when relay is deployed (`--hubble-mode=relay|per-node`). `follow =
+   true` (**field 3** on `GetFlowsRequest`, not field 2 — spec 11 §4.15),
+   `number = 0`, `since` = the moment the stream opened. `first` is never set:
+   spec 11 rejects `first` together with `follow` with `InvalidArgument`.
+   Node enumeration comes from `Observer.GetNodes`, which is served by
+   **relay only** — the agent returns `Unimplemented` — so in `per-node` mode
+   the node list comes from the Kubernetes API instead.
 2. The stream carries a `whitelist` of `FlowFilter`s narrowed to the scenario's
    pods (`source_pod`/`destination_pod` as `ns/name`, namespace exact and name
    prefix — the semantics in `11-hubble-monitor.md` §3.16). Narrowing at the
@@ -637,19 +641,44 @@ cardinality:
 
 ```
 assert exists  >= 1 flow where
-    verdict                 == FORWARDED
-  & event_type.type         == 4                 // trace
-  & trace_observation_point == TO_OVERLAY (4)
+    verdict                 == FORWARDED         // Verdict 1
+  & event_type.type         == 4                 // CILIUM_NOTIFY_TRACE
+  & trace_observation_point == TO_OVERLAY        // 4
   & source.identity         == identity_of(client)
   & destination.identity    == identity_of(echo-other-node)
-  & node_name               == node_A
+  & node_name               == "<cluster>/<node A>"
 ```
 
 The fields available and their exact semantics are `11-hubble-monitor.md` §3.16
-(the 25 filter fields) and §4 (the flow schema). The assertion evaluator uses
-the **same filter code** as the agent's server-side filter — one crate,
-`flowsdn-hubble-filter`, shared between the agent and the suite — so an
-assertion cannot be satisfied by a filter bug that the agent does not have.
+(the 25 filter fields, with their frozen field numbers) and §4 (the flow
+schema). The assertion evaluator uses the **same filter code** as the agent's
+server-side filter — one crate, `flowsdn-hubble-filter`, shared between the
+agent and the suite — so an assertion cannot be satisfied by a filter bug that
+the agent does not have.
+
+The enum values assertions are written against, all frozen by spec 11:
+
+| Enum | Values used here |
+|---|---|
+| `Verdict` | `1 FORWARDED`, `2 DROPPED`, `3 ERROR`, `4 AUDIT`, `5 REDIRECTED`, `6 TRACED`, `7 TRANSLATED` |
+| `event_type.type` | `1` drop, `2` debug, `3` debug capture, `4` trace, `5` policy verdict, `7` trace-sock, `129` L7, `130` agent |
+| `TraceObservationPoint` | `1 TO_PROXY`, `2 TO_HOST`, `3 TO_STACK`, `4 TO_OVERLAY`, `5 FROM_ENDPOINT`, `6 FROM_PROXY`, `7 FROM_HOST`, `8 FROM_STACK`, `9 FROM_OVERLAY`, `10 FROM_NETWORK`, `11 TO_NETWORK`, `12 FROM_CRYPTO`, `13 TO_CRYPTO`, **`101 TO_ENDPOINT`**. There is deliberately no `FROM_NETDEV`/`TO_NETDEV`; `0` is `UNKNOWN_POINT` and never carries meaning. |
+| `TraceReason` | `1 NEW`, `2 ESTABLISHED`, `3 REPLY`, `4 RELATED`, `6 SRV6_ENCAP`, `7 SRV6_DECAP`; the `0x80` mask on the datapath value is what sets `IP.encrypted` |
+| `DropReason` | the codes an assertion names explicitly: `133 POLICY_DENIED`, `140 MISSED_TAIL_CALL`, `147 NO_TUNNEL_KEY`, `160 NO_TUNNEL_ENDPOINT`, `171 INVALID_IDENTITY`, `181 POLICY_DENY`, `189 AUTH_REQUIRED`, `195 UNENCRYPTED_TRAFFIC`, `203 EP_NOT_READY` |
+| reserved identities | `1 host`, `2 world`, `3 unmanaged`, `4 health`, `5 init`, `6 remote-node`, `7 kube-apiserver`, `8 ingress`, `9 world-ipv4`, `10 world-ipv6` |
+| `Tunnel.Protocol` | `1 VXLAN`, `2 GENEVE`; `Tunnel.vni` carries the outer VNI while `IP`/`l4` describe the **inner** packet |
+
+Three flow fields deserve naming because they are what make a path assertion
+possible at all and are easy to overlook: `IP.encrypted` (derived from the trace
+reason's `0x80` bit, not from configuration), `IP.source_xlated` (the pre-SNAT
+source, which is how a masquerade assertion is made from a flow rather than from
+a capture), and `flow.file{name,line}` (set on drops only, naming the datapath
+source site — the single most useful field in a drop nobody expected).
+
+`is_reply` is a `BoolValue` whose **absence means unknown**, not false. An
+assertion on `is_reply == false` must therefore be written as "present and
+false"; writing it as "not true" silently matches every drop, since drops carry
+no `is_reply`.
 
 **The assertions that carry the most weight**, and what each catches:
 
@@ -702,9 +731,28 @@ the fixed-position cookie the testpod emits).
 
 ### 3.5 Interoperability with upstream Cilium
 
-Spec 02 states the wire contract flowsdn keeps so that a flowsdn node and an
-upstream Cilium node can be members of the same cluster. That decision is only
-worth anything if it is tested; an untested compatibility claim is a wish.
+Spec 02 §2.5 decides that **wire compatibility with Cilium nodes is a goal**:
+"a mixed cluster during migration MUST forward pod traffic in both directions
+with correct identities", and its §9.5 already carries the acceptance item this
+section implements — one Cilium v1.20.1 node and one flowsdn node in the same
+VXLAN cluster, pod-to-pod and NodePort across the two, with correct identities
+in Hubble. That decision is only worth anything if it is tested; an untested
+compatibility claim is a wish.
+
+The concrete contract the scenarios below exercise, all from spec 02 §2.5:
+
+| Element | Value that must match |
+|---|---|
+| VXLAN / Geneve UDP port | 8472 / 6081 (`tunnel_port`), protocol selector `1 = VXLAN`, `2 = Geneve` |
+| VNI | `VNI = security identity << 8` as a 24-bit field; recovery `identity = ntohl(vni) >> 8`. This is why spec 03 keeps identity numbering inside 24 bits. |
+| Identity rewrites on the wire | `WORLD_IPV4 (9)` and `WORLD_IPV6 (10)` collapse to `WORLD (2)` and are re-split by ethertype on decap; `HOST (1)` is rewritten to `REMOTE_NODE (6)` before encap, and a received VNI decoding to `HOST` is dropped (`DROP_INVALID_IDENTITY`, 171) |
+| Geneve DSR option | class `0x014B`, type `0x81` (critical), length 2 for IPv4 (`{addr be32, port be16, pad}`), length 5 for IPv6 |
+| IPv4 DSR IP option | type `IPOPT_COPY \| 0x1a`, total 8 bytes `{type, len, port be16, addr be32}` |
+| IPv6 DSR | 24-byte Destination Options header, option type `0x1B`, option length 20 |
+| IPsec mark | `MARK_MAGIC_ENCRYPT 0x0E00`, node id in bits 16..31, key index (= SPI) in bits 12..15; `MARK_MAGIC_DECRYPT 0x0D00` |
+| Node ids | `cilium_node_map_v2`, 20-byte key / 4-byte value `{id u16, spi u8, pad}` |
+| Program symbol prefix | `cil_`, so each implementation cleans up the other's tc filters and links on takeover (spec 01 §2.1) |
+| `Flow.emitter.name` | flowsdn emits `"flowsdn"` where the reference emits `"cilium"` — a deliberate **DEVIATION**, and the field the interop run uses to tell whose datapath produced a flow |
 
 **Setup (`flowsdn-connectivity interop`).** A 4-node cluster: nodes A and B run
 the flowsdn agent, nodes C and D run upstream `cilium/cilium` at a pinned
@@ -726,6 +774,7 @@ plane is shared by construction; there is no gateway or translation layer.
 | `interop-pod-to-pod-f2c` | pod on A → pod on C | flowsdn's encapsulation is parsed by Cilium's datapath: tunnel protocol, port, VNI framing |
 | `interop-pod-to-pod-c2f` | pod on C → pod on A | the reverse, which is a genuinely different code path |
 | `interop-identity-preserved` | either direction, with a policy on the receiving side selecting the sender's labels | the **security identity survived the wire**. This is the sharpest assertion in the whole spec: it can only pass if flowsdn's identity numbering, the identity's placement in the VNI/mark, and the identity allocation (same `CiliumIdentity` objects, same numbering) all agree with upstream. A policy that allows and one that denies are both run — an allow that passes because policy is not enforced at all is not evidence. |
+| `interop-identity-rewrites` | host-network pod on a flowsdn node → pod on a Cilium node, and a pod→world flow crossing the tunnel in each direction | the two `HOST → REMOTE_NODE (6)` and `WORLD_IPV4/6 → WORLD (2)` rewrites are applied identically by both. Asserted in Hubble on the *receiving* side: the source identity seen after decap is `remote-node (6)` (never `host (1)`), and a dual-stack world flow is re-split back to `9`/`10` by ethertype. These two rewrites are the least obvious part of the VNI contract and the most likely to be got wrong on a reimplementation. |
 | `interop-ipcache-agreement` | dump `cilium_ipcache_v2` on a flowsdn node and on a Cilium node | the two maps agree on every remote endpoint: same identity, same tunnel endpoint, same encryption key id. Compared as sets, tolerating ordering and propagation lag (retry window `--interop-settle`, default 30 s). |
 | `interop-service-both-ways` | pod on A → ClusterIP with backends on C; pod on C → ClusterIP with backends on A | both agents produced compatible service/backend map contents from the same `EndpointSlice`s, and reverse-NAT works across the boundary |
 | `interop-nodeport-cross` | world → node A NodePort with the backend on node C | NodePort's second hop crosses implementations; SNAT/DSR framing must match. In DSR mode this asserts the **DSR option encoding** (Geneve TLV class/type, or the IPv4 IP option) is byte-compatible, which is the finest-grained wire assertion available. |
@@ -791,22 +840,38 @@ outlives the process that started it:
    | agent restart counts increased by exactly the expected number | the upgrade actually happened; a "no disruption" result on an upgrade that did not occur is the classic false pass |
    | zero `DROPPED` Hubble flows for those 5-tuples, or only drops on the allowlist | the datapath did not drop and recover |
    | for IPsec: XFRM error counters within the allowlist | no window where the SA was missing |
-   | CT entry for each surviving flow still exists after the swap, with its original creation timestamp | the conntrack map was **reused, not recreated** — the direct assertion on the pin-replace protocol |
+   | the CT entry for each surviving flow still exists after the swap, with its original creation timestamp | the conntrack map was **reused, not recreated** — the direct assertion on spec 01 §3.2 step 2 |
+   | the `cilium_calls_*` pin's map id **changed exactly once**, at commit | the tail-call map was replaced wholesale rather than rewritten in place — the direct assertion on the pin-replace protocol |
+   | zero `DROP_MISSED_TAIL_CALL` (140) and zero `DROP_EP_NOT_READY` (203) flows during the roll | no packet ever saw a half-populated tail-call graph or an empty `cilium_call_policy` slot |
 
-**What the protocol is being tested against.** Per spec 01: on a version change
-where a map's layout is unchanged, the new agent MUST reuse the existing pinned
-map (open by pin path, verify key/value size and max entries, adopt); where the
-layout changed, it MUST create the new map under the new name/version, migrate
-entries it can migrate, and swap the pin, with programs replaced by
-`BPF_LINK_UPDATE` so there is no unattached window. The suite tests both cases:
+**What the protocol is being tested against.** Spec 01 defines three distinct
+behaviours and the suite must not conflate them:
+
+1. **Compatible pinned map** (same type, key size, value size, max entries,
+   flags): the new agent reuses it and **contents are preserved** (§3.2 step 2).
+   This is the normal path for the CT and NAT maps, which are agent-owned, and
+   it is why an upgrade does not break connections.
+2. **Incompatible agent-owned map** (a layout or `max_entries` change on
+   `cilium_ct4_global`, `cilium_snat_v4_external`, …): the map is unpinned and
+   **recreated empty. There is no content migration — the connections in it are
+   lost, by design**, and the agent logs old versus new attributes (§3.2 step 5,
+   §7). Anyone expecting migration here is expecting something the spec does not
+   promise.
+3. **Loader-owned maps** (`cilium_calls_*`, per-object policy maps): never
+   reused. Every load creates a fresh map; the pin is swapped only after every
+   entrypoint of the object is attached (`PIN_REPLACE` + commit), with programs
+   swapped by `BPF_LINK_UPDATE` so no packet sees "no program".
+
+The suite therefore tests three cases, with three *different* expectations:
 
 | ID | What | Expect |
 |---|---|---|
-| `upgrade-same-abi` | roll to a build with an identical map ABI | all `must-survive` flows survive; CT creation timestamps preserved |
-| `upgrade-abi-bump` | roll to a build with a deliberately bumped CT or service map version (a CI-only image built with `--force-map-version-bump`) | all `must-survive` flows survive; CT entries were **migrated** (present, timestamps preserved) or the flow re-established within one keepalive interval and that is recorded as a documented consequence, not a pass |
+| `upgrade-same-abi` | roll to a build with an identical map ABI | all `must-survive` flows survive; CT creation timestamps preserved; the `cilium_calls_*` map id changes exactly once per object |
+| `upgrade-calls-replace` | any roll | during the whole roll, no flow observes `DROP_MISSED_TAIL_CALL`; the policy program is present in `cilium_call_policy[epid]` **before** the ingress link exists (checked by sampling the map during the roll) |
+| `upgrade-ct-abi-bump` | roll to a CI-only build with a deliberately bumped CT map layout (`--force-map-abi-bump=ct`) | the flows **break and re-establish** within one keepalive interval, the agent logged the old and new map attributes, and the CT map's id changed. This asserts the *documented* consequence. A run where the flows survive a CT layout change means something silently kept the old map, which is a bug in the other direction. |
 | `upgrade-agent-restart` | restart the agent without changing the image | flows survive; this is the cheap variant that runs per-PR |
 | `upgrade-agent-crash` | `SIGKILL` the agent | flows survive (the datapath is in the kernel and keeps running); the agent recovers endpoint state from `/var/run/cilium/state`. Gated on `--include-unsafe-tests`. |
-| `downgrade` | roll **back** to the previous version | flows survive; and the previous version starts successfully against maps the newer one wrote — which is the assertion that says the ABI bump was backward-tolerant, or that it correctly refused and recreated |
+| `downgrade` | roll **back** to the previous version | the previous version starts successfully against the maps the newer one wrote, and connectivity is fully restored. Flow survival is asserted only when the two versions share the map ABI; where they do not, the assertion is that the older agent **recreated the map cleanly and logged it**, per spec 01 §3.2 steps 4–5, rather than crashing or silently mis-reading a newer layout. Attach-mechanism downgrade is asserted too: after a roll back from a tcx-capable to a clsact build, no orphan tcx link pin remains (spec 01 §3.9 step 3). |
 | `upgrade-policy-during` | apply and remove policy during the roll | no drops beyond the allowlist |
 | `upgrade-cni-conflist` | during the roll | no pod fails to start; the CNI configuration file is never absent (spec 09's install/uninstall ordering) |
 
