@@ -123,9 +123,14 @@ Per ADR-0005 §2 and `docs/licensing.md`, flowsdn takes it under
 C code. Concretely:
 
 - `tests/bpf/CASES.toml` contains only identifiers and counts, mechanically
-  extracted by `tools/harvest-bpf-cases.py`. It carries a `PROVENANCE` block
-  naming the repository, tag `v1.20.1`, commit `7d68cfb394`, directory
-  `bpf/tests`, and the license election. A matching `NOTICE` entry MUST exist.
+  extracted by `tools/harvest-bpf-cases.py`. It carries a `PROVENANCE` block in
+  its header naming the repository, tag `v1.20.1`, commit `7d68cfb394`,
+  directory `bpf/tests`, and the license election; `tests/bpf/PROVENANCE`
+  carries the full BSD-2-Clause text and the taken/not-taken inventory. The
+  top-level `NOTICE` MUST carry a roll-up line for this directory alongside the
+  existing ADR-0005 harvested-test-data block (the scripttest half of that
+  harvest elects Apache-2.0; this half elects BSD-2-Clause, so the two are
+  listed separately).
 - No reference test body, assertion expression, packet-builder call sequence
   or expected byte value is transcribed. flowsdn case bodies are written from
   spec 02 (the behaviour) and this spec (the harness), with the harvested name
