@@ -38,7 +38,7 @@ without following `docs/licensing.md`.
 Spec template: `docs/spec/TEMPLATE.md`. Wave 1 running as parallel agents:
 `00-foundation-table-config`, `01-bpf-map-abi-loader`, `02-datapath-programs`,
 `03-identity-ipcache`, `04-conntrack-nat`, plus `docs/kernel-requirements.md`.
-Wave 1 landed: 00 01 03 04 + kernel-requirements. 02-datapath-programs still in flight.
+Wave 1 complete: 00 01 02 03 04 + kernel-requirements (~7.6k lines).
 Wave 2 running (launched 2026-09-07): `05-service-loadbalancing`, `06-policy-engine`,
 `07-ipam`, `08-endpoint-agent-api`, `09-cni-plugin`, `10-node-routing-nftables`.
 Missing file = agent did not finish; rerun that spec.

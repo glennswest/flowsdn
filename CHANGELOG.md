@@ -12,3 +12,4 @@
 - **docs:** Inventory complete: 15 areas, ~12.7k lines. Roll-up finalized (full-scope estimate 200–260k Rust lines).
 - **docs:** Specs 00 foundation, 03 identity/ipcache, 04 conntrack/NAT. Kernel requirements roll-up: stormcos 6.12 line, general minimum 6.6, CONFIG fragment, verifier-risk analysis, test matrix.
 - **docs:** Spec 01 BPF map ABI + loader. Spec wave 2 launched (05–10).
+- **docs:** Spec 02 datapath programs (milestones M1/M2/M3, mark/VNI wire contract, 141-file test checklist). Spec wave 1 complete.
