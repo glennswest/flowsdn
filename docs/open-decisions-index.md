@@ -12,6 +12,14 @@ named in the issue body.
 
 **Do not edit by hand while the harvest is running.**
 
+`docs/spec/20-clustermesh-kvstore.md` and `docs/spec/21-gateway-api-ingress.md`
+were still being written when the harvest ran and were filed as placeholders
+#251 and #252. Both specs completed on 2026-09-07 and were re-harvested the same
+day into #273-#290; #251 and #252 are closed as superseded. Six earlier issues
+(#20, #26, #27, #28, #29, #159) already carried the same decision from another
+document and were updated in place with the new source and the recommendation
+the finished spec supplies, rather than duplicated.
+
 | Issue | Title | Area | Type | Source document |
 |---|---|---|---|---|
 | [#1](https://github.com/glennswest/flowsdn/issues/1) | [inv 01] Which parts of the `skb->mark` contract must stay bit-compatible? | `area/datapath` | `to-verify` | `docs/inventory/01-bpf-programs.md` |
@@ -286,23 +294,41 @@ named in the issue body.
 | [#270](https://github.com/glennswest/flowsdn/issues/270) | [bpf cases] Classify the 2 unresolved entrypoints in `l7_lb_local_backend_host.c` | `area/test` | `to-verify` | `tests/bpf/CASES.toml` |
 | [#271](https://github.com/glennswest/flowsdn/issues/271) | [bpf cases] Classify the 2 unresolved entrypoints in `l7_lb_local_backend_pod.c` | `area/test` | `to-verify` | `tests/bpf/CASES.toml` |
 | [#272](https://github.com/glennswest/flowsdn/issues/272) | [bpf cases] Classify the 8 unresolved entrypoints in `tc_nodeport_l3_wireguard.c` | `area/test` | `to-verify` | `tests/bpf/CASES.toml` |
+| [#273](https://github.com/glennswest/flowsdn/issues/273) | [spec 20] `kvstore-resync-interval` default: keep 5 m, drop to 0 after fastetcd F10, or make it adaptive? | `area/clustermesh` | `open-decision` | `docs/spec/20-clustermesh-kvstore.md` |
+| [#274](https://github.com/glennswest/flowsdn/issues/274) | [spec 20] Double-write identity allocation modes: leave them unimplemented? | `area/clustermesh` | `deferred` | `docs/spec/20-clustermesh-kvstore.md` |
+| [#275](https://github.com/glennswest/flowsdn/issues/275) | [spec 20] fastetcd peer TLS (F21): accept the shared identity, or require separate peer certificates? | `area/clustermesh` | `open-decision` | `docs/spec/20-clustermesh-kvstore.md` |
+| [#276](https://github.com/glennswest/flowsdn/issues/276) | [spec 20] Cluster-name collision detection: leave it, or stamp a per-cluster instance UUID in the cluster config? | `area/clustermesh` | `open-decision` | `docs/spec/20-clustermesh-kvstore.md` |
+| [#277](https://github.com/glennswest/flowsdn/issues/277) | [spec 20] Where the prefix-scoping front lives: inside the apiserver process, or a separate sidecar? | `area/clustermesh` | `open-decision` | `docs/spec/20-clustermesh-kvstore.md` |
+| [#278](https://github.com/glennswest/flowsdn/issues/278) | [spec 20] File the fastetcd conformance gaps F6, F7, F10, F14 and F17 on the fastetcd repo | `area/clustermesh` | `blocked-on-code` | `docs/spec/20-clustermesh-kvstore.md` |
+| [#279](https://github.com/glennswest/flowsdn/issues/279) | [spec 20] MCS-API and operator-side EndpointSlice mirroring are deferred but §12 records no decision | `area/clustermesh` | `spec-gap` | `docs/spec/20-clustermesh-kvstore.md` |
+| [#280](https://github.com/glennswest/flowsdn/issues/280) | [spec 21] Ship Ingress at all, or Gateway API only? | `area/gateway` | `open-decision` | `docs/spec/21-gateway-api-ingress.md` |
+| [#281](https://github.com/glennswest/flowsdn/issues/281) | [spec 21] The reference's HTTPS-redirect matcher argument-order bug: reproduce it, or fix it? | `area/gateway` | `upstream-bug` | `docs/spec/21-gateway-api-ingress.md` |
+| [#282](https://github.com/glennswest/flowsdn/issues/282) | [spec 21] Shared Ingress mode's cluster-wide CEC: keep one CEC, or split per Ingress? | `area/gateway` | `open-decision` | `docs/spec/21-gateway-api-ingress.md` |
+| [#283](https://github.com/glennswest/flowsdn/issues/283) | [spec 21] Ingress class precedence: keep the reference's annotation-over-field order? | `area/gateway` | `open-decision` | `docs/spec/21-gateway-api-ingress.md` |
+| [#284](https://github.com/glennswest/flowsdn/issues/284) | [spec 21] The force-HTTPS redirect status code: 301 or 308? | `area/gateway` | `open-decision` | `docs/spec/21-gateway-api-ingress.md` |
+| [#285](https://github.com/glennswest/flowsdn/issues/285) | [spec 21] Non-standard status reason strings: keep for fixture compatibility, or emit the upstream constants? | `area/gateway` | `open-decision` | `docs/spec/21-gateway-api-ingress.md` |
+| [#286](https://github.com/glennswest/flowsdn/issues/286) | [spec 21] `XListenerSet` at all: implement it in stage 2, or defer to a stage 3? | `area/gateway` | `deferred` | `docs/spec/21-gateway-api-ingress.md` |
+| [#287](https://github.com/glennswest/flowsdn/issues/287) | [spec 21] Access-log configuration surface: vendor the reference's default format strings verbatim? | `area/gateway` | `open-decision` | `docs/spec/21-gateway-api-ingress.md` |
+| [#288](https://github.com/glennswest/flowsdn/issues/288) | [spec 21] Where GAMMA lives: this spec, or spec 16 with the rest of the mesh story? | `area/gateway` | `open-decision` | `docs/spec/21-gateway-api-ingress.md` |
+| [#289](https://github.com/glennswest/flowsdn/issues/289) | [spec 21] §12 does not track the two conformance skips and the exempt-feature list that §2.4 and §9.5 require it to | `area/gateway` | `spec-gap` | `docs/spec/21-gateway-api-ingress.md` |
+| [#290](https://github.com/glennswest/flowsdn/issues/290) | [spec 21] Amend ADR-0005 to record the external Go conformance suites as a permitted exception | `area/gateway` | `spec-gap` | `docs/spec/21-gateway-api-ingress.md` |
 
 ---
 
 ## Summary
 
-**272 issues filed** from 272 distinct items recorded across the documentation (items appearing in several documents are filed once, with every source named in the issue body).
+**290 issues filed** from 290 distinct items recorded across the documentation (items appearing in several documents are filed once, with every source named in the issue body).
 
 ### By type
 
 | Type | Issues |
 |---|---|
-| `open-decision` | 193 |
+| `open-decision` | 204 |
 | `to-verify` | 36 |
-| `spec-gap` | 23 |
-| `deferred` | 11 |
-| `upstream-bug` | 6 |
-| `blocked-on-code` | 3 |
+| `spec-gap` | 26 |
+| `deferred` | 13 |
+| `upstream-bug` | 7 |
+| `blocked-on-code` | 4 |
 
 ### By area
 
@@ -311,9 +337,11 @@ named in the issue body.
 | `area/test` | 47 |
 | `area/datapath` | 22 |
 | `area/hubble` | 16 |
+| `area/gateway` | 15 |
 | `area/packaging` | 15 |
 | `area/agent` | 14 |
 | `area/ipam` | 14 |
+| `area/clustermesh` | 13 |
 | `area/encryption` | 13 |
 | `area/foundation` | 13 |
 | `area/l7` | 13 |
@@ -326,8 +354,6 @@ named in the issue body.
 | `area/operator` | 9 |
 | `area/cni` | 8 |
 | `area/maps` | 8 |
-| `area/clustermesh` | 6 |
-| `area/gateway` | 4 |
 
 ### Settle these first
 
@@ -345,3 +371,15 @@ The ten whose resolution unblocks the most other work, in order.
 10. **#254 [spec 02] Verify the aya-ebpf helper coverage table against the pinned version** - Every row that turns out absent becomes a wrapper, a `core::arch::asm!` block or an upstream aya patch - and Phase 2 for the datapath cannot honestly start until the list is known.
 
 The first three are all in `docs/spec/02-datapath-programs.md` and are genuinely one sitting: the kernel floor decides which fallbacks exist, the object-matrix decision depends on verifier headroom on that floor, and the wire-compatibility decision constrains both. Nothing below them in the list is cheap to revisit once code exists.
+
+The spec 20 and spec 21 re-harvest (#273-#290) does not displace anything on this
+list. Its two strongest candidates are #278 (fastetcd rows F10 and F17 are marked
+blocking for production, and F10 dictates the kvstore client's whole watch-and-resync
+model) and #276 (a wire-format addition to `CiliumClusterConfig`, so it must land
+before that schema is frozen), but both sit inside one area that the build order puts
+after the datapath, whereas every entry in the list already gates several areas at once.
+Spec 21's items rank lower still: the whole area is deferred behind six hard
+prerequisites in spec 16, spec 12 and spec 05 (§1.3), so none of them blocks work that
+could otherwise start. What did change is entry 7: spec 20 §12.1 now supplies a
+recommendation for #20 - CRD allocation as the default, kvstore supported and tested -
+so settling it is a review rather than a design task.
