@@ -17,13 +17,13 @@ are in `../decisions/` and noted in the last column.
 | 08 | [Operator](08-operator.md) | 48k (38k excl. IPAM/LB IPAM) | keep core; defer Gateway API/Ingress until Envoy path exists | M core, L→XL with Gateway API | Drop SPIRE (deprecated 1.20), ztunnel, four cloud binary variants → one binary. |
 | 09 | [Hubble + monitor](09-hubble-monitor.md) | 18k + monitor 4.5k + relay | keep server/parser/metrics/exporter; relay separate binary | L (+M relay) | Recorder gone upstream: not ported. Parser lives in-agent (needs six internal tables). gob monitor socket: implement subset. |
 | 10 | [BGP](10-bgp.md) | 13.6k + operator 1.4k | keep; **replace GoBGP with own minimal speaker** + RouterOS advertiser backend | L | Export-only, small RFC surface. No usable embeddable Rust speaker exists. Defer BFD, ADD-PATH, v2alpha1. |
-| 11 | L7 proxy, DNS, auth, mesh | envoy 12k + proxy 2.7k + fqdn 7.6k + auth 2.2k + ztunnel 6.2k | — | — | **pending — agent in flight**. ADR-0001: Envoy consumed as external image initially. |
+| 11 | [L7 proxy, DNS, auth, mesh](11-l7-proxy-dns-auth-mesh.md) | envoy 12k + proxy 2.7k + fqdn 7.6k + auth 2.2k + ztunnel 6.2k | keep xDS driver + DNS proxy; defer mutual auth (deprecated); ztunnel defer-then-keep | L + L + M | Only HTTP and DNS L7 rules remain (Kafka/proxylib gone). Envoy reads the pinned ipcache map directly, so the ipcache ABI is part of the Envoy contract. Envoy stays an external image (ADR-0001). |
 | 12 | [ClusterMesh + kvstore](12-clustermesh-kvstore.md) | kvstore 6.9k + clustermesh 11.9k + apiserver 3k | keep client/store/schema/agent import + kvstoremesh; replace etcd sidecar with fastetcd | M+M+M (~14k) | Defer MCS-API, EndpointSlice v2. fastetcd compatibility checklist in file. |
 | 13 | CRDs + k8s integration | k8s 66k (mostly generated/slim types) | — | — | **pending — agent in flight** |
 | 14 | [Encryption + egress](14-encryption-egress.md) | 7.4k + 2.3k BPF | keep WireGuard, IPsec (staged), egress gateway, ip-masq-agent; defer VTEP, SRv6 | M | IPsec XFRM + rotation is the risk. Egress gateway HA/status is a candidate improvement. |
 | 15 | [Helm, images, CI, tests](15-helm-images-ci-tests.md) | chart + Dockerfiles + workflows | keep as contract, replace as implementation | M ×5 | Single static binary with init subcommands; reuse upstream Envoy/Hubble UI/relay images; adopt cilium-cli connectivity test + verifier matrix as gates. |
 
-## Totals (13 of 15 areas)
+## Totals (14 of 15 areas)
 
 Rough Rust estimate from the per-area numbers: **180–240k lines** including
 tests for full scope, of which the datapath (01+02), policy (05) and agent
