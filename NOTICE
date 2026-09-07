@@ -46,5 +46,16 @@ code was copied; every harness is an independent Rust implementation.
                                (3), in Go's "go test fuzz v1" corpus format.
                                PROVENANCE in tests/fuzz/corpus/.
 
+  tests/bpf/**                 BPF test-case inventory (CASES.toml, 142 files /
+                               625 cases) derived from cilium/cilium bpf/tests
+                               at commit 7d68cfb394. That directory is licensed
+                               GPL-2.0-only OR BSD-2-Clause; flowsdn elects
+                               **BSD-2-Clause**. Only case names, section kinds,
+                               packet shapes, feature gates and assertions were
+                               derived; no C source was copied. Full election
+                               statement, the BSD-2-Clause text and a
+                               taken/not-taken inventory are in
+                               tests/bpf/PROVENANCE.
+
 "Cilium" and "Hubble" are trademarks of The Linux Foundation. flowsdn is not
 affiliated with or endorsed by the Cilium project or The Linux Foundation.
