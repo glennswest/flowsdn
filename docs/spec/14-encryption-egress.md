@@ -72,11 +72,11 @@ Sibling specs, referenced rather than duplicated:
 | Node ID allocator mechanics, table 200 routes, ip rules, MTU table, nftables residual | spec 10 |
 | The masquerade decision that consults the egress and ip-masq maps | spec 04 §3.12 |
 | Identity allocation and ipcache writes | specs 03, 06 |
-| CRD client/watch plumbing and CRD registration | spec 13 (wave 3) |
-| Helm chart rendering | spec 15 (wave 3) |
+| CRD client/watch plumbing and CRD registration | `13-crds-k8s-client.md` |
+| Helm chart rendering and image packaging | packaging spec (wave 4); inventory 15 |
 | **VTEP** integration | **deferred** (inventory 14 recommendation: beta, IPv4-only, niche). The `cilium_vtep_map` ABI is reserved in spec 01; no control plane is written. |
-| **SRv6** | **deferred** (inventory 14: OSS ships maps and BPF only, with no control plane to mirror). Revisit with spec 10-BGP. |
-| **ztunnel** (`encryption.type=ztunnel`) | area 11 (L7/mesh); it is not transparent encryption in the sense of this spec. |
+| **SRv6** | **deferred** (inventory 14: OSS ships maps and BPF only, with no control plane to mirror). Revisit with `15-bgp.md` if a BGP/VRF integration lands. |
+| **ztunnel** (`encryption.type=ztunnel`) | `16-l7-envoy-dns.md` (L7/mesh); it is a per-node L4 mTLS proxy, not transparent encryption in the sense of this spec. |
 
 ### 1.3 Milestone placement
 
@@ -126,7 +126,7 @@ depends on each. Everything not listed is free.
 | `cilium_egress_gw_policy_v4` (v1, deferred) | `egress_gw_policy_key`(12) → `egress_gw_policy_entry`(8) | egress gateway (§3.4) |
 | `cilium_egress_gw_policy_v4_v2` | `egress_gw_policy_key`(12) → `egress_gw_policy_entry_v2`(28) | egress gateway |
 | `cilium_egress_gw_policy_v6` | `egress_gw_policy_key6`(36) → `egress_gw_policy_entry6`(40) | egress gateway |
-| `cilium_ipmasq_v4` / `_v6` | `{prefixlen u32, addr}` → `{pad u8}`, LPM, 16384, `NO_PREALLOC|RDONLY_PROG` | ip-masq-agent (§3.5) |
+| `cilium_ipmasq_v4` / `_v6` | `{prefixlen u32, addr}` → `{pad u8}`, LPM, 16384, `NO_PREALLOC` + `RDONLY_PROG` | ip-masq-agent (§3.5) |
 
 ### 2.4 Packet marks, masks and route tables
 
@@ -1578,3 +1578,573 @@ element or an unparseable prefix all abort the update **before** any in-memory
 state changes. The error is logged at warn, the **BPF map keeps its previous
 contents**, the agent does not exit and does not fall back to the defaults, and
 the next event retries.
+
+## 4. Data model
+
+### 4.1 BPF maps written by this spec
+
+Layouts and pinning are normative in spec 01 §4; repeated here only as the
+writer's contract.
+
+| Map | Type | Key | Value | Entries | Writer |
+|---|---|---|---|---|---|
+| `cilium_encrypt_state` | ARRAY | `u32` (always 0), 4 B | `{encrypt_key u8}`, 1 B | 1 | IPsec agent only |
+| `cilium_node_map_v2` | HASH | `{pad1 u16, pad2 u8, family u8, ip [16]}`, 20 B | `{node_id u16, spi u8, pad u8}`, 4 B | `bpf-node-map-max`, ≥ 16384 | node ID allocator (spec 10) |
+| `cilium_egress_gw_policy_v4` | LPM | `{prefixlen u32, saddr be32, daddr be32}`, 12 B | `{egress_ip be32, gateway_ip be32}`, 8 B | `egress-gateway-policy-map-max` | egress gateway |
+| `cilium_egress_gw_policy_v4_v2` | LPM | same 12 B | `{egress_ip, gateway_ip, reserved[3] u32, egress_ifindex u32, reserved2 u32}`, 28 B | same | egress gateway |
+| `cilium_egress_gw_policy_v6` | LPM | `{prefixlen u32, saddr v6, daddr v6}`, 36 B | `{egress_ip v6, gateway_ip be32, reserved[3], egress_ifindex, reserved2}`, 40 B | same | egress gateway |
+| `cilium_ipmasq_v4` / `_v6` | LPM | `{prefixlen u32, addr}`, 8 / 20 B | `{pad u8}`, 1 B | 16384 | ip-masq-agent |
+
+IPv4 addresses in a 16-byte field occupy the **low four bytes**, the rest zero.
+`EGRESS_POLICY_MAP_SIZE` is emitted as a datapath constant **unconditionally**,
+even when the feature is off.
+
+### 4.2 Kernel objects
+
+| Object | Family | Owner |
+|---|---|---|
+| link `cilium_wg0`, kind `wireguard`, MTU, up | rtnetlink | §3.1.1 |
+| WireGuard device config: private key, listen port 51871, fwmark `0x0E00`, peers, allowed IPs | generic netlink, family `wireguard` | §3.1.4–5 |
+| XFRM states and policies (§3.2.5), with mark, output-mark, ESN, replay window, templates | `NETLINK_XFRM` | §3.2 |
+| ip rule prio 1 `fwmark 0x0D00/0x0F00 → table 200`; routes in table 200 | rtnetlink | spec 10, contract in §3.2.6 |
+| `net.ipv4.conf.cilium_wg0.rp_filter = 0`; `net.ipv4.conf.<egress-iface>.rp_filter = 2` | procfs | §3.1.1, §3.4.4 |
+| `notrack` on the encrypt/decrypt marks and on UDP 51871 | nftables (ADR-0003) | spec 10 §3.10 |
+
+### 4.3 Files
+
+| Path | Format | Mode |
+|---|---|---|
+| `<state-dir>/cilium_wg0.key` | 32 raw bytes | `0600` |
+| `--ipsec-key-file` (Helm: `/etc/ipsec/keys`) | §3.2.1 | mounted secret |
+| `<--ip-masq-agent-config-path>` | YAML or JSON, §3.5 | mounted ConfigMap |
+| `/proc/sys/kernel/random/boot_id` | UUID text | read |
+| `/proc/net/xfrm_stat` | procfs counters | read |
+
+### 4.4 In-memory state
+
+| Type | Contents |
+|---|---|
+| `WgPeer` | public key, endpoint, node IPv4/IPv6, `allowed`, `pending_insert`, `pending_remove` prefix sets |
+| `WgPeerTable` | by node name, by public key, by node IP — all three updated only after a successful kernel write |
+| `IpsecKey` | SPI, `KeyLen`, reqid, and one of AEAD or (auth, crypt) algorithm plus key material |
+| `KeyRemovalTimes` | SPI → the instant it was superseded (§3.2.8) |
+| `XfrmPlan` | the pure function `(local node, remote node, config) → desired states, policies, routes` |
+| `XfrmStateCache` | the dump plus its 1-minute deadline (§3.2.10) |
+| `PolicyConfig` | policy name, endpoint selectors, the flat node-selector list, destination and excluded CIDRs, gateway configs, matched endpoints, families needed |
+| `GatewayConfig` | interface name, ifindex, egress IPv4/IPv6, gateway IPv4, whether the local node is this gateway |
+| `EndpointMetadata` | UID, identity labels, IPs, node IP |
+| `IpMasqState` | the config's CIDR set and the set believed to be in the map |
+
+### 4.5 Node object fields consumed and produced
+
+`spec.encryption.key` (`0xFF` for WireGuard, the advertised SPI for IPsec, `0`
+when off or opted out); `spec.bootid`; annotation
+`network.cilium.io/wg-pub-key`; annotation
+`network.cilium.io/encryption-key`. Spec 10 §3.3 owns publication; §3.1.3 and
+§3.2.8 own the values.
+
+## 5. Algorithms
+
+Each is stated once here as the interoperability contract; the surrounding
+behavior is in §3.
+
+**5.1 IPsec per-node-pair key** — §3.2.3. Two implementations interoperate only
+if they agree on: concatenation order, IPv4 canonicalized to 4 bytes, boot IDs
+as 36 raw ASCII bytes, SHA-256 below or at a 32-byte global key and SHA-512
+above, and truncation to the global key's length.
+
+**5.2 Minimum-SPI negotiation** — §3.2.7. Note it is not `min`: the two
+wraparound cases return 15 when the other side is at 1.
+
+**5.3 Rotation predicate** — `current == (active % 15) + 1`. Not "greater than".
+
+**5.4 Stale-key reclaim eligibility** — §3.2.8: not current, has a recorded
+replacement time (an SPI first seen this pass gets its clock started and is not
+reclaimed), and that time is at least one rotation duration old.
+
+**5.5 XFRM conflict identification** — §3.2.9: same SPI, both marked or both
+unmarked, `new.value & new.mask & existing.mask == existing.value`, destination
+equal, **source not compared**.
+
+**5.6 WireGuard AllowedIPs diff** — §3.1.5: queue with mutual cancellation,
+apply additions first, then removals via the all-zero dummy peer, then commit
+the queues.
+
+**5.7 Egress-gateway single selection** — nodes sorted by **name**, first label
+match whose internal IPv4 converts.
+
+**5.8 Egress-gateway multi selection** — gateways sorted by **IP**, then
+`FNV-1a-32(endpoint UID bytes) mod n` over the *resolved* gateways only.
+
+**5.9 Egress map key** — `prefixlen = static (32 or 128) + destination bits`,
+source exact, destination longest-prefix; exclusions win by being longer.
+
+**5.10 Full-diff reconciliation** — §3.4.6, with the two deviations: abort on a
+dump error, and iterate policies in name order.
+
+**5.11 Key-load jitter** — uniform over `[0, ipsec-key-rotation-duration / 10)`.
+
+**5.12 Reconciler backoff** — the WireGuard MTU reconciler and the peer-GC task
+use exponential backoff from 100 ms to 1 min; the CiliumEndpoint stream uses
+20 ms to 20 min, matching the identity allocator.
+
+## 6. Configuration
+
+### 6.1 WireGuard
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `enable-wireguard` | bool | `false` | Master switch. Mutually exclusive with `enable-ipsec` |
+| `encrypt-node` | bool | `false` | Node-to-node encryption (beta), §3.1.7 |
+| `node-encryption-opt-out-labels` | label selector | `node-role.kubernetes.io/control-plane` | §3.1.7. Parse failure is fatal. Empty forces control-plane nodes in |
+| `wireguard-persistent-keepalive` | duration | `0` (off) | Set on every peer |
+| `wireguard-track-all-ips-fallback` | bool | `false`, **hidden** | Force ipcache-derived AllowedIPs in tunnel mode |
+
+### 6.2 IPsec
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `enable-ipsec` | bool | `false` | Master switch |
+| `ipsec-key-file` | string | `""` | Key file path; Helm renders `/etc/ipsec/keys` |
+| `enable-ipsec-key-watcher` | bool | `true` | When false a rotation needs an agent restart |
+| `ipsec-key-rotation-duration` | duration | `5m` | Stale-key reclaim age, and (÷10) the jitter bound |
+| `enable-ipsec-xfrm-state-caching` | bool | `true`, **hidden** | The 1-minute state-list cache |
+| `use-cilium-internal-ip-for-ipsec` | bool | `false`, **hidden** | Subnet-encryption OUT tunnel endpoints |
+| `dnsproxy-insecure-skip-transparent-mode-check` | bool | `false`, **hidden** | Bypasses a fatal check; proxied DNS then leaves the node in clear |
+| `bpf-node-map-max` | u32 | `16384` | `cilium_node_map_v2` size; values below 16384 are refused |
+
+### 6.3 Strict mode (both encryption types where noted)
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `enable-encryption-strict-mode-egress` | bool | `false` | §3.1.12; applies to IPsec too |
+| `encryption-strict-egress-cidr` | CIDR | `""` | IPv4 only; a bad or non-IPv4 value is fatal |
+| `encryption-strict-egress-allow-remote-node-identities` | bool | `false` | Required when the node IP is inside the strict CIDR |
+| `enable-encryption-strict-mode-ingress` | bool | `false` | WireGuard only; with IPsec it is fatal |
+
+### 6.4 Egress gateway and ip-masq-agent
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `enable-egress-gateway` | bool | `false` | Master switch; forces tunnel-device creation |
+| `egress-gateway-reconciliation-trigger-interval` | duration | `1s` | Debounce |
+| `egress-gateway-policy-map-max` | int | `16384` | Sizes all three maps |
+| `enable-ip-masq-agent` | bool | `false` | Master switch |
+| `ip-masq-agent-config-path` | string | `/etc/config/ip-masq-agent` | The **directory** of this path is watched |
+
+### 6.5 Helm mapping
+
+| Helm value | Agent key |
+|---|---|
+| `encryption.enabled` + `encryption.type=wireguard\|ipsec` | `enable-wireguard` / `enable-ipsec` |
+| `encryption.nodeEncryption` | `encrypt-node` |
+| `encryption.wireguard.persistentKeepalive` | `wireguard-persistent-keepalive` |
+| `encryption.ipsec.{secretName,keyFile,mountPath}` | mount + `ipsec-key-file` |
+| `encryption.ipsec.keyWatcher` | `enable-ipsec-key-watcher` |
+| `encryption.ipsec.keyRotationDuration` | `ipsec-key-rotation-duration` |
+| `encryption.strictMode.egress.{enabled,cidr,allowRemoteNodeIdentities}` | the three egress strict keys |
+| `encryption.strictMode.ingress.enabled` | `enable-encryption-strict-mode-ingress` |
+| `egressGateway.{enabled,reconciliationTriggerInterval,maxPolicyEntries}` | the three egress-gateway keys |
+| `ipMasqAgent.{enabled,config.*}` | `enable-ip-masq-agent` + the mounted ConfigMap |
+
+### 6.6 Accepted and ignored, or rejected
+
+| Key | Disposition |
+|---|---|
+| `encryption.ipsec.interface` (Helm) | **Accepted and ignored**, with a warning. It was already a no-op in the reference and its agent flag is gone (§3.2.6) |
+| `--encrypt-interface` | **Rejected**: unknown flag. It does not exist at this tag |
+| `--enable-ipsec-encrypted-overlay` | **Rejected**: encrypted overlay is unconditional in tunnel mode |
+| `--enable-encryption-strict-mode`, `--encryption-strict-mode-cidr`, `--encryption-strict-mode-allow-remote-node-identities` | **Rejected**: the pre-1.18 names. The error names the `-egress` replacement |
+| `--install-egress-gateway-routes` | **Rejected**: removed |
+| `encryption.type=ztunnel` | Out of scope here (`16-l7-envoy-dns.md`) |
+| `--enable-vtep`, `--enable-srv6` and their companions | **Rejected** while deferred (§1.2), with a message saying so |
+
+### 6.7 Mutually exclusive and fatal combinations
+
+WireGuard + IPsec. IPsec + strict **ingress**. IPsec + host firewall. IPsec + a
+pinned local router IP. IPsec + L7 proxy without DNS-proxy transparent mode
+(overridable only by the hidden insecure flag). IPsec or WireGuard without the
+CiliumNode CRD. IPsec + tunneling on a kernel without XFRM output-mark masks.
+Egress gateway without CRD identities, without BPF+IPv4 masquerade, without
+kube-proxy replacement, without an IPv4 underlay, or with CiliumEndpointSlice.
+Strict egress with the node IP inside the strict CIDR and remote-node
+identities disallowed.
+
+## 7. Failure modes
+
+| # | Failure | Behavior |
+|---|---|---|
+| F1 | **Key rotation mid-flight** — the file changes while nodes are at mixed SPIs | Both keys are installed simultaneously (key count doubles). Each pair uses the minimum SPI (§3.2.7), so a node still on the old key is still reachable. The old key is removed only one full `ipsec-key-rotation-duration` after it was superseded. Failure to complete inside that window is the documented cause of `XfrmInNoStates`; the remedy is a longer duration, not a faster reclaim |
+| F2 | **Agent restarts mid-rotation** | The active SPI is recovered from `cilium_encrypt_state`; if the file's SPI is its successor, publication is **deferred** until the datapath is up and the old SPI keeps being advertised. Every SPI whose replacement time is unknown gets a fresh clock, so nothing is reclaimed for a full rotation period |
+| F3 | **Key length changes during rotation** | The load is refused, the old key stays in use, and only an agent restart adopts the new one. This is deliberate: swapping key lengths live breaks IPv6 pod-to-pod |
+| F4 | **Key file malformed** | At start: fatal. In the watcher: logged, health degraded, previous key retained, datapath unaffected |
+| F5 | **XFRM state divergence** (kvstore lease expiry, kvstore recreated, CiliumNode deleted then agent restarted) | Anti-replay counters go out of sync and the node pair is permanently broken. Detected as sustained `cilium_ipsec_xfrm_error{error="state_protocol"}` or `no_state`. The **only** documented remedy is a key rotation, which re-derives and reinstalls every state. flowsdn MUST keep that property and SHOULD surface it in the status message |
+| F6 | **Node ID missing for a peer** | Drop 197 at the source. Expected during churn (a CiliumNode not yet seen, a deleted node, a changed node IP) and self-clearing. Sustained drops mean the node watch is broken, not the encryption |
+| F7 | **Node ID pool exhausted** (> 65535 nodes) | The node gets no ID and no XFRM configuration, and an error is reported. flowsdn MUST NOT map an address to ID 0 — that would be read as "local node" |
+| F8 | **WireGuard peer churn** | AllowedIPs move via the dummy peer (§3.1.5) with a two-message window during which a moving prefix can drop packets (GH-33159). A failed apply leaves the queue intact and the periodic node validation retries; no separate retry loop exists |
+| F9 | **Duplicate WireGuard public key across two nodes** | The second is refused with an error naming both nodes and no state changes. A cluster in this condition needs one node to regenerate its key |
+| F10 | **WireGuard key file corrupt** | Fatal. Regenerating would silently change the node's public key and, under node encryption, could lock the node out of the API server |
+| F11 | **Node encryption bootstrap lock-out** | Prevented by the opt-out label (§3.1.7). If an operator empties the selector and a control-plane node's key changes, that key must be written into the CiliumNode by hand |
+| F12 | **Gateway node down** | Nothing happens. Selection has no liveness input; traffic keeps being encapsulated to a dead node and is lost. Removing the label or the CiliumNode fails over — and reshuffles every multi-gateway assignment. §3.4.10 specifies the optional fix |
+| F13 | **Gateway selector matches nothing** | Map entries are still written with `gateway_ip = 0.0.0.0` and traffic is **dropped** (194), not leaked out of the node's own address |
+| F14 | **Gateway egress IP cannot be derived** | The gateway drops with 204. Only the gateway is affected; the sentinel is indistinguishable from "not the gateway" in the map, which is why the check lives on the SNAT path |
+| F15 | **Egress map full** | Writes fail and are logged; the pass continues and retries next interval. Visible as `cilium_bpf_map_pressure` approaching 1 |
+| F16 | **Egress map dump fails** | flowsdn aborts the pass and retries. The reference would treat every entry as stale and delete the map (§3.4.6) |
+| F17 | **Gateway address changes** | Nothing re-derives until the policy is re-applied or a node event arrives. Documented, not automatic |
+| F18 | **SNAT ports exhausted at the gateway** | Old NAT entries are evicted, then allocation fails. §3.4.9 |
+| F19 | **ip-masq-agent config malformed** | Update aborts before any state changes; the map keeps its contents; retried on the next event |
+| F20 | **ip-masq-agent BPF write fails** | flowsdn does not record the entry as programmed and retries. The reference records it regardless and never re-attempts |
+| F21 | **Restart with a layout change in an egress or node map** | Spec 01 §3 owns map-version migration; this spec requires only that node IDs be restored **before** any new allocation, or in-flight encrypted traffic breaks |
+| F22 | **Kernel lacks WireGuard, or XFRM output-mark masks** | Fatal at startup with a message naming the kernel requirement (ADR-0001: refuse to run, no adaptive fallback) |
+
+## 8. Observability
+
+### 8.1 Metrics
+
+Reference-compatible names; dashboards depend on them.
+
+| Metric | Type | Labels | Source |
+|---|---|---|---|
+| `cilium_ipsec_xfrm_error` | gauge | `type` ∈ {`inbound`,`outbound`}, `error` | `/proc/net/xfrm_stat` |
+| `cilium_ipsec_keys` | gauge | — | count of distinct SA key material |
+| `cilium_ipsec_xfrm_states` | gauge | `direction` ∈ {`in`,`out`} | mark magic of each state |
+| `cilium_ipsec_xfrm_policies` | gauge | `direction` ∈ {`in`,`out`,`fwd`} | policy direction |
+| `cilium_bpf_map_pressure` | gauge | `map_name` for the three egress maps and both ip-masq maps | spec 01 |
+| `cilium_drop_count_total` | counter | `reason` 160, 169, 194, 195, 197, 204 | datapath |
+| `cilium_feature_adv_connect_and_lb_transparent_encryption` | gauge | mode (`wireguard`/`ipsec`), node-to-node, strict | set once at start |
+| `cilium_feature_adv_connect_and_lb_egress_gateway_enabled` | gauge | — | set once at start |
+
+`error` values: `other`, `no_buffer`, `header`, `no_state`, `state_protocol`,
+`state_mode`, `state_sequence`, `state_expired`, `state_mismatched`,
+`state_invalid`, `template_mismatched`, `no_policy`, `policy_blocked`, `policy`,
+`forward_header`, `acquire` (inbound); `other`, `bundle_generation`,
+`bundle_check`, `no_state`, `state_protocol`, `state_mode`, `state_sequence`,
+`state_expired`, `policy_blocked`, `policy_dead`, `policy`, `state_invalid`
+(outbound). Note `forward_header` and `acquire` are labelled `inbound` in the
+reference even though they are not inbound errors; flowsdn keeps the labelling
+for dashboard compatibility.
+
+The two operationally load-bearing series: `policy_blocked` **outbound** counts
+packets the default drop policy stopped from leaving in plaintext — a non-zero
+value is the encryption working, not a fault; `no_state` **inbound** rising
+means a key was reclaimed before every peer installed the new one.
+
+**DEVIATION**, additions (no reference name to collide with):
+`flowsdn_wireguard_peers`, `flowsdn_wireguard_peer_last_handshake_seconds`,
+`flowsdn_egressgw_map_entries`, `flowsdn_egressgw_reconciliations_total`,
+`flowsdn_egressgw_gateway_selected{policy,node}`. The last two make F12 and F16
+observable without a CRD status.
+
+### 8.2 Status and CLI
+
+`GET /healthz` field `encryption`, refreshed every 5 s:
+`{mode: Disabled|IPsec|Wireguard, msg, ipsec{…}, wireguard{…}}`, with
+`WireguardStatus` as in §2.6. `cilium-dbg status` renders
+`Encryption: Wireguard [NodeEncryption: Disabled, cilium_wg0 (Pubkey: …, Port: 51871, Peers: N)]`.
+
+`cilium-dbg encrypt status` reports the mode, the **decryption interfaces**
+(every link carrying the host ingress program), `Keys in use`, the maximum
+sequence number (or `N/A`), and the total plus a per-field breakdown of the
+XFRM error counters. `Keys in use` is the primary rotation signal: it doubles
+at the start of a rotation and halves when reclaim completes.
+
+`cilium-dbg encrypt flush` deletes XFRM objects, filtered by SPI, node id, or
+`--stale` (everything whose encoded node id is non-zero and absent from
+`cilium_node_map_v2`); `--stale` cannot be combined with the other filters.
+Unfiltered it flushes everything and MUST prompt.
+
+`cilium-dbg bpf egress list` renders the three maps with `gateway_ip` `0.0.0.0`
+shown as **`Not Found`** and `0.0.0.1` as **`Excluded CIDR`**, reading v4_v2
+first and falling back to the legacy map. `cilium-dbg bpf ipmasq list` and
+`cilium-dbg bpf nodeid list` dump their maps.
+
+### 8.3 Trace and drop events
+
+`TRACE_FROM_CRYPTO` and `TRACE_TO_CRYPTO` observation points; the `ENCRYPTED`
+flag in the trace reason. Hubble labels a flow WireGuard-encrypted from UDP with
+source port == destination port == 51871 from a remote-node identity. Drop
+reasons 160, 169, 194, 195, 197, 204.
+
+### 8.4 Health entries
+
+`encryption/wireguard-device`, `encryption/wireguard-mtu` (reporting the
+applied MTU), `encryption/wireguard-peer-gc`, `encryption/ipsec-keyfile`,
+`encryption/ipsec-xfrm`, `egressgw/reconciler`, `ipmasq/config`. Each degrades
+with the underlying error and recovers on the next successful pass.
+
+## 9. Test plan
+
+Legend: **U** unit (no privileges), **P** privileged (netns, real kernel
+objects), **E** end-to-end (cluster).
+
+### 9.1 WireGuard
+
+- U: key file — absent generates; 32 bytes loads; wrong length is an error, not a regeneration.
+- U: endpoint selection across all four branches of §3.1.4 step 8, including tunnel + IPv6 underlay preferring IPv6.
+- U: duplicate public key rejected, both node names in the error, no state change.
+- U: changed public key removes the old peer first and rebuilds.
+- U: the all-zero key is rejected as a node key.
+- U: AllowedIPs queue — insert cancels a pending remove and vice versa; a failed apply leaves the queue intact.
+- U: `needsIPCache` truth table over routing mode × the fallback flag.
+- U: MTU formula and the 1280 clamp, with and without IPv6.
+- U: opt-out selector matching, and that the endpoint encrypt key stays `0xFF` for an opted-out node.
+- P: real `cilium_wg0` — creation, fwmark, listen port, `rp_filter`, deletion when disabled, `EOPNOTSUPP` surfaced as the kernel message.
+- P: the dummy-peer removal path — prefix moves off the real peer and the dummy is gone afterwards; additions precede removals.
+- P: peer GC removes an unknown peer and an unexpected AllowedIP, and does **not** run before every sync signal has fired.
+- P: MTU reconciler follows the MTU table and issues no netlink call when the MTU already matches.
+- E: pod-to-pod encryption; node-to-node encryption; the opt-out node; strict egress; strict ingress; ClusterMesh across two WireGuard clusters.
+- E: **plaintext-leak detection** — a probe on the transmit path asserting no cluster-internal pod traffic leaves unencrypted, with the documented exemptions (ICMPv6 NA, the G1 propagation window, same-node traffic). This is the single highest-value test in the area; the reference runs its equivalent before and after every key rotation.
+
+### 9.2 IPsec
+
+- U: key file grammar — 4-field and 5-field forms; 3 fields is an **error, not a panic**; 6 fields rejected; SPI 0, 16 and non-numeric rejected; `+` stripped and ignored; `0x` accepted; `""` yields a zero-length key; ICV outside {96,128,256} rejected; an AEAD name not starting with `rfc` rejected.
+- U: `KeyLen` — `icv/8` for AEAD, hex-character count for the pair form.
+- U: last line wins; two lines with the same SPI fail; a failed load leaves the previous key in force (and, for flowsdn, leaves **nothing** partially applied).
+- U: rotation predicate across 1→2, 15→1, 2→1, 1→1, 1→3, and zero on either side.
+- U: key-length change refused; SPI unchanged refused.
+- U: key derivation vectors — IPv4 as 4 bytes; boot IDs as 36 ASCII bytes; SHA-256 at 32 bytes and SHA-512 above; truncation; OUT on A equals IN on B for the same pair. **Cross-implementation vectors MUST be committed to the repository.**
+- U: a short boot ID is an error, not a panic; an empty remote boot ID yields no XFRM objects.
+- U: `XfrmPlan` golden output for every variant in §3.2.5 — native, tunnel with encrypted overlay, subnet encryption, endpoint routes — asserting every mark, mask, priority, ESN, replay window, reqid and template.
+- U: minimum-SPI negotiation, all 15×15 pairs plus zeros.
+- U: stale-reclaim eligibility, including the first-seen-gets-a-fresh-clock rule and the default-drop exemption.
+- U: conflict identification — same SPI and destination with a differing source **does** conflict.
+- P: state upsert is idempotent; an identical state is a no-op; `RemoteRebooted` forces delete-then-add.
+- P: `EEXIST` recovery deletes the conflicting state and retries exactly once.
+- P: the general-vs-specific IN state workaround — the specific state is deleted and the general one survives.
+- P: the default drop policy exists before any OUT policy is installed.
+- P: `DeleteXFRM` removes only Cilium-owned objects and leaves a foreign SA untouched.
+- P: the output-mark probe passes on a supported kernel and its failure is fatal.
+- P: the state cache — a repeated no-op validation issues one dump per TTL, and every mutation invalidates first.
+- E: pod-to-pod over IPsec, native and tunnel (encrypted overlay); key rotation with a plaintext-leak probe **before and after**, asserting `Keys in use` doubles then halves; a node reboot re-keying via the boot ID; node churn leaving no XFRM leak.
+
+### 9.3 Egress gateway
+
+- U: every rejection in §3.4.2, and that parsing does **not** mutate the input object.
+- U: the full family cross-product — v6 egress IP with v4 destinations, v4 with v6, dual-stack destinations with each of a v4 egress IP, a v6 egress IP and an interface — all six succeed.
+- U: namespace-selector translation, including the empty-selector catch-all and the `k8s:` prefixing.
+- U: the flattened node-selector cross-product of §3.4.2.
+- U: gateway selection — name ordering; no match yields the drop sentinel; a node whose IPv4 does not convert is skipped.
+- U: multi-gateway — sorted by IP, `FNV-1a-32(UID) mod n`, with vectors committed; only resolved gateways occupy slots.
+- U: map key construction — prefix lengths 32+bits and 128+bits; the destination stored unmasked.
+- U: sentinels — no gateway, excluded CIDR, no egress IP; and that excluded entries carry the real egress IP.
+- U: exclusion wins by prefix length; a non-subset exclusion has no effect.
+- U: full-diff — unchanged entries are not rewritten, stale entries are deleted, and a **dump error aborts the pass** (flowsdn's deviation).
+- U: policies iterate in a deterministic order across repeated passes.
+- P: end-to-end map contents through node, endpoint and policy add and delete; `egress_ip` and `egress_ifindex` are zero on non-gateway nodes; the `egressIP` case leaves the ifindex at 0.
+- P: node-selector filtering by node IP, with both event orders around an endpoint IP change leaving no stale entries.
+- P: `rp_filter = 2` is applied per gateway interface and accumulates across a policy change.
+- P: each requirement in §3.4.7 aborts startup with its own message.
+- E: connectivity through a gateway; excluded CIDRs; egress gateway with an L7 policy; multi-gateway assignment stability; egress gateway under WireGuard (and the documented XDP reply gap); upgrade with an egress-gateway policy in place.
+
+### 9.4 ip-masq-agent
+
+- U: masking (`2.2.2.2/16` → `2.2.0.0/16`); YAML and JSON both accepted; unknown fields ignored.
+- U: the empty-vs-null distinction — a missing or zero-byte file yields the 11 defaults plus link-local; a file with a null `nonMasqueradeCIDRs` yields **only** link-local.
+- U: `masqLinkLocal` and `masqLinkLocalIPv6` each suppress their prefix; there are no IPv6 defaults.
+- U: diff sync — additions before removals; a failed write is **not** recorded as programmed (flowsdn's deviation).
+- U: every malformed-config case leaves the previous state untouched.
+- P: restore from a pre-populated pinned map writes nothing when the config is unchanged.
+- P: a ConfigMap-style symlink swap in the watched directory triggers a reload.
+- P: map key prefix length is the plain mask length, with no static offset.
+
+### 9.5 Node IDs
+
+- U: allocation, reuse across a node's addresses, and the SPI refresh.
+- U: exhaustion returns an error and maps **nothing** to ID 0.
+- U: an address mapped to a different ID triggers a full unmap and retry.
+- P: restore rebuilds both indexes, removes restored IDs from the pool, deletes ID-0 entries, and reports if it ran after an allocation.
+
+## 10. Kernel and platform requirements
+
+Per `docs/kernel-requirements.md`: general minimum **6.6 LTS**, supported line
+**6.12** (stormcos). Everything here works on both. ADR-0001 applies — a missing
+requirement is a **startup refusal**, never an adaptive fallback.
+
+| Feature | Requirement |
+|---|---|
+| WireGuard | `CONFIG_WIREGUARD` (in-tree from 5.6) and its crypto selects; the generic-netlink `wireguard` family; tcx ingress on `cilium_wg0`, and egress only when §3.1.9 requires it. **XDP is never attached to `cilium_wg0`.** ChaCha20-Poly1305 has NEON paths on arm64 — throughput only |
+| IPsec | `XFRM=y XFRM_USER=m XFRM_ALGO=m XFRM_STATISTICS=y` (the last for `/proc/net/xfrm_stat`), `INET_ESP`/`INET6_ESP`, the XFRM tunnel and IPCOMP modules, and `CRYPTO_{AEAD,AEAD2,GCM,SEQIV,CBC,HMAC,SHA256,AES}`. `NETLINK_XFRM`. **XFRM output-mark masks require ≥ 4.19** and are probed (§3.2.10). `XFRM_OFFLOAD=y` optional. AES-GCM uses AES-NI on x86-64 and ARMv8-CE on arm64 — throughput only. **Decryption is single-core per SA on both architectures** |
+| Egress gateway | LPM tries with `NO_PREALLOC` and `RDONLY_PROG`; `bpf_fib_lookup` and `bpf_redirect_neigh` (5.10); `BPF_FIB_LOOKUP_TBID` (6.4+) used only when a routing table id is present; `IP_MULTIPLE_TABLES`; a tunnel device (VXLAN or Geneve); optional XDP for the reply path |
+| ip-masq-agent | LPM tries only |
+| Node IDs / encrypt map | HASH and ARRAY maps; nothing beyond core BPF |
+
+`/proc/sys/kernel/random/boot_id` MUST be readable when IPsec is enabled.
+Sysctls written: `net.ipv4.conf.cilium_wg0.rp_filter = 0` and
+`net.ipv4.conf.<egress-iface>.rp_filter = 2` (see `kernel-requirements.md` §4.3
+for the persistence problem — `systemd-networkd` re-applies `rp_filter=1` on
+hotplug). Netlink families: `NETLINK_ROUTE`, `NETLINK_XFRM`,
+`NETLINK_GENERIC` (`wireguard`), `NETLINK_NETFILTER` (ADR-0003 residual).
+
+No architecture-specific behavior. Both architectures are little-endian, so
+the `#[repr(C)]` map layouts in §4.1 are byte-identical.
+
+## 11. Rust design notes
+
+### 11.1 `flowsdn-wireguard`
+
+`rtnetlink` for the link (create, MTU, up) and procfs for the sysctl. For the
+device configuration, generic netlink on the `wireguard` family. Two dependency
+options:
+
+- **`wireguard-control`** — a userspace wrapper that also supports the
+  `wg`-userspace backend. Convenient, but it brings a backend flowsdn does not
+  want and its key types would leak into the peer table.
+- **`netlink-packet-wireguard` + `genetlink` + `netlink-sys`** — the
+  lower-level path and the **recommended default**. The three operations
+  needed (set device, set peer without replacing peers, remove peer) are a
+  small, stable subset, and the dummy-peer trick (§3.1.5) needs precise control
+  over the per-peer flags — in particular the ability to **not** set
+  replace-allowed-ips, which is the whole point of the workaround.
+
+**Honest gap assessment.** `netlink-packet-wireguard` covers the attribute set,
+but two things must be verified against the pinned version at Phase 2 and
+hand-encoded if absent: (a) the per-peer flags as a *bitfield the caller
+controls*, rather than an API that always replaces; and (b) **message
+fragmentation** — a peer with thousands of AllowedIPs exceeds one netlink
+message and the kernel expects the peer to be continued across messages with
+the same public key. A cluster with large pod CIDRs in native routing will hit
+this; a naive encoder silently truncates. flowsdn MUST test a peer with more
+AllowedIPs than fit one message.
+
+Key generation with `x25519-dalek`; the private key is 32 raw bytes and the
+public key is base64 for publication.
+
+Types: `Device` (the link and its parameters), `PeerTable` (the three indexes),
+`Peer` (`allowed`, `pending_insert`, `pending_remove` as `HashSet<IpNet>`),
+`AllowedIpDiff`. Two subscribers — node events and ipcache events — feed the
+queues; one `MtuReconciler` task follows the MTU table; one `PeerGc` one-shot
+awaits the sync fences (spec 00 `Fence`).
+
+### 11.2 `flowsdn-ipsec`
+
+**This is the crate with the real netlink gap.** `netlink-packet-xfrm` exists in
+the rust-netlink organization and covers SA and SP add, delete, get and dump
+including mark, output-mark, ESN, replay window, AEAD and templates — but there
+is **no `rtnetlink`-style high-level async API for XFRM**, so a thin async
+wrapper over `netlink-sys` is required regardless. Specific items to verify at
+Phase 2 and hand-encode if missing:
+
+| Item | Risk |
+|---|---|
+| `XFRMA_OUTPUT_MARK` **with a mask** | The mask is the 4.19 addition and the whole probe in §3.2.10 exists to check it. If the crate emits the value-only form, every IN state is wrong |
+| `XFRMA_REPLAY_ESN_VAL` | ESN + window 1024 must produce a 32-word bitmap and a **zero** legacy replay window. A read-back reports window 0; comparison logic must not treat that as a diff |
+| `XFRMA_MARK` on **policies** as well as states | The OUT policy's mark is what binds it to a node and SPI |
+| `XFRMA_TMPL` with `optional`, and with reqid and SPI blanked | The blanked optional template is the *identity* of the catch-all IN and FWD policies (§3.2.9) |
+| `XFRM_POLICY_BLOCK` as an action | The default drop policy. Without it there is no plaintext guard |
+| Policy `priority` | 0, 100 and 2975 must all be settable |
+| `XFRM_MSG_FLUSHSA` / `FLUSHPOLICY` | `encrypt flush` |
+| IPv4-mapped IPv6 canonicalization | The kernel returns an unset IPv6 address as a nil IPv4; comparison MUST treat two unspecified addresses as equal |
+
+Recommendation: wrap `netlink-packet-xfrm` behind a `Xfrm` trait with a
+hand-encoded fallback per attribute, and upstream the gaps. Budget for
+hand-encoding the ESN and output-mark attributes.
+
+Structure: `KeyFile` (parse-then-commit, §3.2.1), `NodePairKeys` (`sha2`),
+`XfrmPlan` — a **pure function** from `(local node, remote node, config)` to the
+desired object set, which makes §9.2's golden tests possible without a kernel —
+`XfrmReconciler` (diff against the cached dump), `StateCache`, `KeyWatcher`
+(`notify` on the directory plus a periodic re-stat), `StaleReclaimer`, and a
+`/proc/net/xfrm_stat` reader via `procfs`.
+
+### 11.3 `flowsdn-egressgw`
+
+Pure control plane. `kube` watchers for the three resources (the generated
+types of `13-crds-k8s-client.md`); `ipnet`/`std::net::IpAddr` for CIDR math; `fnv` for the endpoint hash —
+pinned, because the hash is an interoperability contract with every other agent
+in the cluster; `aya` LPM handles for the three maps. Device and address lookup
+reuses spec 10's device and node-address tables rather than issuing its own
+netlink calls; the `rp_filter` write goes through spec 10's sysctl reconciler.
+
+Types: `PolicyConfig`, `GatewayConfig`, `EndpointMetadata`, `EgressKey`/`Value`
+(three `#[repr(C)]` pairs), `Reconciler` (debounced, full-diff). Policies are
+kept in a `BTreeMap` keyed by name so iteration is deterministic (§3.4.6).
+
+### 11.4 Shared
+
+`flowsdn-ipmasq` is small enough to live inside the agent crate: `notify`,
+`serde_yaml` through a JSON value, and two `aya` LPM handles.
+
+Node IDs and the encrypt map belong to `flowsdn-node` (spec 10); this area
+consumes them through a trait so `XfrmPlan` stays pure.
+
+Concurrency: one task per reconciler consuming a table watch (spec 00), each
+holding its own netlink socket. XFRM writes are serialized behind one handle —
+the EEXIST recovery in §3.2.9 is a read-modify-write and is not safe to run
+concurrently with itself.
+
+## 12. Open decisions
+
+1. **Fixed WireGuard port and fixed IPsec reqid.** Port 51871 and reqid 1 are
+   hard-coded in the reference. Options: (a) keep both fixed; (b) make the port
+   configurable; (c) make both configurable. **Recommendation: (a).** Both are
+   interoperability constants — a peer running the reference will not find a
+   flowsdn node on another port, and reqid 1 is what `cilium-dbg` and every
+   runbook filter on. Revisit only if a second XFRM consumer needs to coexist.
+
+2. **The legacy `cilium_egress_gw_policy_v4` map.** It exists only so an older
+   loaded program keeps working across an upgrade. Options: (a) write it in
+   lock-step as the reference does; (b) write only `_v4_v2` and `_v6`.
+   **Recommendation: (b), with (a) available behind a flag.** flowsdn never
+   loads a program that reads the legacy map, so writing it is pure cost; the
+   flag exists for a cluster migrating from the reference in place. Spec 01
+   already marks it deferred.
+
+3. **Strict ingress with IPsec.** The reference refuses the combination, but the
+   IPsec decrypt mark is available and the check is mark-based. Options:
+   (a) keep the refusal; (b) allow it, testing the decrypt mark from either
+   source. **Recommendation: (b), deferred past the first IPsec milestone.** It
+   is a genuine security improvement and the mechanism already exists, but it
+   needs its own leak testing and should not ride along with the initial IPsec
+   work.
+
+4. **Zero-output-mark plumbing.** The reference honours `enable-endpoint-routes`
+   for the IN state's output mark only on the subnet-encryption paths.
+   Options: (a) reproduce exactly; (b) plumb it through both paths.
+   **Recommendation: (b)** (§3.2.5). The single-CIDR path with endpoint routes
+   is otherwise inconsistent with the datapath's own endpoint-routes branch,
+   which hands the decrypted packet to the stack expecting a clean mark.
+
+5. **Node ID width.** `u16` caps a cluster at 65535 nodes (limitation L3), and
+   the width is fixed by the mark layout shared with the whole datapath.
+   Options: (a) keep it; (b) widen with a different mark scheme.
+   **Recommendation: (a).** Changing it means changing spec 02's mark contract
+   and breaking every peer; the cap is far above any plausible deployment.
+
+6. **Egress-gateway assignment stability.** The multi-gateway modulo reshuffles
+   every endpoint whenever the gateway set changes (GH-39245), and health-based
+   failover (§3.4.10) makes that worse by making the set change more often.
+   Options: (a) keep the modulo; (b) replace it with a **rendezvous hash**
+   (highest `H(endpoint_uid ‖ gateway_ip)` wins), which moves only the
+   endpoints assigned to a departing gateway. **Recommendation: (b), behind a
+   flag defaulting to (a).** It is strictly better and it is what makes health
+   failover safe to enable — but it is not wire-compatible with a cluster
+   running a mix of flowsdn and the reference, because two agents disagreeing
+   on an endpoint's gateway is a black hole. Enable it only when every agent
+   in the cluster is flowsdn.
+
+7. **Per-entry vs flattened node selectors.** §3.4.2's cross-product is
+   surprising and is arguably a reference bug. Options: (a) reproduce it;
+   (b) pair each `nodeSelector` with its own entry's pod and namespace
+   selectors. **Recommendation: (a) for the CRD as specified, and raise (b)
+   upstream.** A policy written against the reference must mean the same thing
+   here; changing it silently changes which pods egress through a gateway.
+
+8. **Ownership of table 200 and `cilium_node_map_v2`.** In the reference both
+   live in the node handler, not the encryption code. Options: (a) mirror that
+   (spec 10 owns them, this spec states the contract); (b) move them here.
+   **Recommendation: (a)** — already the arrangement in §3.2.6 and §3.3. Routes
+   and node IDs have non-encryption consumers, and the node handler is where
+   node lifecycle already lives.
+
+9. **VTEP and SRv6.** Both deferred (§1.2). Options: (a) leave them out;
+   (b) implement VTEP; (c) implement SRv6 maps with no control plane.
+   **Recommendation: (a).** VTEP is beta, IPv4-only and niche; SRv6 has no
+   open-source control plane to mirror, so implementing the maps would produce
+   an untestable feature. Revisit SRv6 if a BGP/VRF integration lands.
+
+10. **Which key file forms to accept.** The reference accepts both the AEAD and
+    the auth+crypt forms and ignores `+`. Options: (a) accept both;
+    (b) accept AEAD only. **Recommendation: (a).** The pair form is what
+    FIPS-constrained deployments use, and rejecting it would break an existing
+    `cilium-ipsec-keys` secret on migration. flowsdn SHOULD warn when a key
+    file uses a form or algorithm that is slower than `rfc4106(gcm(aes))`.
