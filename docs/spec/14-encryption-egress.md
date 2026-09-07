@@ -589,3 +589,992 @@ variant.
 
 Legitimate decrypted traffic never trips either check because `from_wireguard`
 sets the decrypt mark before delivery (§3.1.9).
+
+### 3.2 IPsec
+
+IPsec and WireGuard are mutually exclusive; enabling both MUST be refused at
+startup.
+
+#### 3.2.1 The key file
+
+One key per line. Lines are trimmed and split on runs of whitespace. There is
+**no comment syntax and no blank-line tolerance**. The form is chosen by field
+count alone:
+
+```
+AEAD      (4 fields): <spi> <aead-algo> <hex-key> <icv-len>
+non-AEAD  (5 fields): <spi> <auth-algo> <hex-key> <enc-algo> <hex-key>
+```
+
+| Field count | Result |
+|---|---|
+| < 3 | error: missing key or invalid format |
+| 3 | **error.** The reference indexes past the end and panics here; flowsdn MUST return an error. **DEVIATION** (bug fix) |
+| 4 | AEAD |
+| 5 | non-AEAD |
+| > 5 | error: too many fields |
+
+The historical trailing `[IP]` field of the 5-field form is **rejected** at this
+tag (6 fields trips "too many fields").
+
+**SPI.** A trailing `+` is stripped and then **entirely ignored**: per-node-pair
+derivation is unconditional at this tag, so `+` is a documentation convention,
+not a switch. The remainder MUST parse as a decimal integer (no `0x`), and MUST
+be in **1..15**; `0` and `>15` are distinct errors.
+
+**Keys.** A key of exactly `""` (two literal quote characters) decodes to a
+zero-length key — this is how the null cipher/digest is expressed. Otherwise an
+optional `0x` prefix is stripped and the remainder hex-decoded; odd length or
+non-hex is an error.
+
+**Algorithms.** The AEAD algorithm name MUST begin with `rfc`
+(e.g. `rfc4106(gcm(aes))`). The 5-field form validates **nothing** about its
+algorithm names; a bad name surfaces later as a netlink error.
+
+**ICV length** MUST be 96, 128 or 256; anything else is an error.
+
+**`KeyLen`** — the value that drives the rotation invariant and the MTU
+calculation — is computed differently per form and flowsdn MUST reproduce the
+asymmetry:
+
+| Form | `KeyLen` |
+|---|---|
+| AEAD | `icv_len / 8` → 12, 16 or 32 |
+| non-AEAD | the number of **hex characters** in the *auth* key after stripping `0x` |
+
+MTU overhead is `EncryptionIPsecOverhead (77) + (KeyLen − 16)` (spec 10 §3.5).
+
+**Which line wins.** Lines are applied **sequentially**; each is treated as a
+full rotation against the accumulated in-memory key, and the last one that
+parses wins. Two lines with the same SPI therefore fail on the second.
+
+**Aborted loads.** There is no transaction and no rollback: lines before a
+failure stay applied, and a superseded SPI's removal timestamp has already been
+recorded. flowsdn MUST reproduce the *effect* — the previously loaded key stays
+in force and the datapath keeps running — and SHOULD implement it as a
+two-phase parse (parse all lines, then commit) so a partially applied file is
+impossible. **DEVIATION** (robustness): parse-then-commit; the observable
+behavior on a bad file is identical.
+
+Failure disposition: at agent **start** a load error is fatal. In the **watcher**
+it is logged, sets the health entry degraded, and the loop continues.
+
+#### 3.2.2 Rotation detection and the SPI invariants
+
+```
+ongoing_rotation(active, current) =
+    active != 0 && current != 0 && current == (active % 15) + 1
+```
+
+`active` is the SPI in `cilium_encrypt_state` (which survives an agent
+restart); `current` is the SPI just loaded. The predicate is **successor with
+15→1 wrap**, not "greater than". Any other relationship means "not a rotation",
+and the new SPI is adopted and advertised immediately.
+
+Two load-time invariants:
+
+| Invariant | Violation |
+|---|---|
+| `KeyLen` MUST NOT change | error; the load aborts and the **old key stays in use until the agent restarts**. This is what the documentation calls "delaying the new key", and it exists to keep IPv6 pod-to-pod connectivity unbroken |
+| SPI MUST change | error: rotation requires incrementing the key id |
+
+The successor rule is **not** enforced at load time; only equality is checked.
+A non-successor SPI loads fine and is adopted immediately, which is the
+observable difference between a correct rotation and a botched one.
+
+#### 3.2.3 Per-node-pair key derivation
+
+```
+derived = H( global_key ‖ src_node_ip ‖ dst_node_ip ‖ src_boot_id[0..36] ‖ dst_boot_id[0..36] )
+          truncated to len(global_key)
+H = SHA-256 when len(global_key) <= 32, else SHA-512
+```
+
+- IPs are canonicalized first: an IPv4 address contributes **4 bytes**, never
+  the 16-byte v4-mapped form. Getting this wrong produces a silent key
+  mismatch with any peer running the reference.
+- Boot IDs enter as the **raw ASCII bytes of the UUID text, exactly 36 bytes**.
+  They are not parsed to binary. A boot ID shorter than 36 bytes MUST be an
+  error, not a panic.
+- The OUT state on node A uses `(a, b, boot_a, boot_b)`; the IN state on A uses
+  `(b, a, boot_b, boot_a)`. Note the IPs are **not** swapped for IN — for an IN
+  state the source tunnel IP is already the remote. On B the pair is exactly
+  mirrored, so each direction's SA key matches, and either node's reboot
+  rekeys both directions automatically.
+
+**Empty remote boot ID.** A node whose `spec.bootid` is empty MUST get **no
+XFRM configuration at all** (checked after the default-drop policy and after
+the local-node short-circuit). Deriving from an empty boot ID would produce
+mismatched IN and OUT keys cluster-wide and a storm of
+`XfrmInStateProtoError` drops.
+
+**Reboot handling.** When a node update carries a different boot ID than the
+previous one, the node is marked `RemoteRebooted` until an update completes
+with every state successfully installed. `RemoteRebooted` changes exactly one
+thing: a state that already exists byte-identically is **deleted and re-added**
+instead of being left alone, because the boot-ID-dependent key must actually
+reach the kernel. That swap is non-atomic; it is safe because the IN direction
+can only lose a few encrypted packets, and the OUT direction is covered by the
+surviving OUT policy plus the default-drop policy (§3.2.5f).
+
+#### 3.2.4 XFRM objects: the common template
+
+Every state, both directions, both families, overlay and not:
+
+| Field | Value |
+|---|---|
+| Mode | tunnel |
+| Proto | ESP |
+| ESN | **true** |
+| Replay window | **1024** |
+| SPI | the current key SPI, 1..15 — the same small integer visible on the wire |
+| Reqid | **1** (`DefaultReqID`), hard-coded |
+
+Because ESN is on, the kernel message carries the ESN replay attribute with
+window 1024 and a 32-word bitmap, and the **legacy replay-window field is 0**.
+A read-back therefore reports replay window 0. flowsdn's state-comparison
+logic MUST NOT treat that as a mismatch.
+
+Mark construction:
+
+```
+encrypt_mark(spi, node_id) = { value: 0x0E00 | (spi << 12) | (node_id << 16), mask: 0xFFFFFF00 }
+decrypt_mark(node_id)      = { value: 0x0D00 |                (node_id << 16), mask: 0xFFFF0F00 }
+```
+
+The IN mark deliberately carries **no SPI**: one IN state per (node id, tunnel
+IP pair) serves every SPI. That is why only OUT objects are SPI-scoped and only
+OUT policies are eligible for stale-SPI reclamation (§3.2.8).
+
+#### 3.2.5 XFRM objects: the complete set per remote node, per family
+
+Selectors named "wildcard" are `0.0.0.0/0` or `::/0`. "Tunnel IPs" are the
+Cilium internal IPs unless stated.
+
+| # | Object | Dir | Src / Dst selector | Mark (value / mask) | Output-mark (value / mask) | Prio | Action | Template |
+|---|---|---|---|---|---|---|---|---|
+| a | OUT state | out | local tunnel IP → remote tunnel IP (plain IPs) | `0x0E00\|spi<<12\|nid<<16` / `0xFFFFFF00` | `0x0E00` / `0xFFFFFF00` | — | — | — |
+| b | IN state | in | remote tunnel IP → local tunnel IP | `0x0D00\|nid<<16` / `0xFFFF0F00` | `0x0D00`, or **`0` when zero-output-mark** / `0xFFFFFF00` | — | — | — |
+| c | OUT policy, one per remote pod CIDR | out | wildcard → remote pod CIDR | `0x0E00\|spi<<12\|nid<<16` / `0xFFFFFF00` | — | **0** | allow | 1, **required**: ESP/tunnel, src=local tunnel IP, dst=remote tunnel IP, reqid 1, spi=current |
+| d | IN policy | in | wildcard → wildcard | **none** | — | **0** | allow | 1, **optional**, with reqid, spi, src and dst all blanked |
+| e | FWD policy | fwd | wildcard → wildcard | **none** | — | **0x0B9F (2975)** | allow | same blanked optional template as (d) |
+| f | Default drop policy, once per family | out | wildcard → wildcard | **`0x0E00` / `0x0F00`** | — | **100** | **block** | — |
+| g | Encrypted-overlay OUT, tunnel mode only | out | local **underlay** IP/32 → remote **underlay** IP/32 | as (c) | — | 0 | allow | as (c), with underlay IPs |
+| h | Encrypted-overlay IN, tunnel mode only | in | wildcard → wildcard | as (b) | as (b) | 0 | allow | as (d) |
+
+Notes that carry consequences:
+
+- **(f) is installed first**, at the top of the per-family path, on **every**
+  node update including the local node, before any boot-ID check or subnet
+  branching. Lower XFRM priority number wins, so the per-node OUT policies
+  (priority 0) always take precedence; the drop policy only catches
+  encrypt-marked traffic that momentarily has no matching per-node policy. It
+  matches on the mark specifically so unmarked host traffic is not blocked. It
+  is the single thing standing between a policy-churn window and plaintext on
+  the wire, and it is exempt from stale reclamation. flowsdn MUST install it
+  before touching any OUT policy.
+- **Zero output mark** on (b) is set from `enable-endpoint-routes`: the
+  decrypted packet then emerges with `skb->mark == 0` so netfilter and
+  conntrack are not confused and the stack routes it. In the reference it is
+  only plumbed through the *subnet-encryption* paths; the single-CIDR paths
+  hard-code false. flowsdn SHOULD plumb it through both — the single-CIDR path
+  with endpoint routes is otherwise inconsistent with the datapath's
+  endpoint-routes branch (§3.2.7). **DEVIATION**, recorded as open decision 4.
+- **(g)/(h) use the underlay node IPs**, not the Cilium internal IPs; this is
+  what encrypts the VXLAN/Geneve packet so the identity in the VNI is not on
+  the wire in clear. Installed only when encapsulation is on and
+  subnet-encryption is off; skipped with a warning if either underlay IP is
+  missing.
+- Two reference bugs flowsdn MUST **fix, not reproduce** (**DEVIATION**, both
+  are latent IPv6 correctness faults, neither is observable by a peer):
+  1. the IPv6 "exact match" mask used for (g) is an all-zero mask, making the
+     selector `::/0` rather than `/128`;
+  2. the IPv6 overlay IN policy uses the IPv4 wildcard CIDR as its selector.
+- `UpsertIPsecEndpoint` MUST do nothing when the source and destination tunnel
+  IPs are equal — the "never encrypt to yourself" rule.
+- Policy install errors that mean "already exists" are ignored; state errors
+  are always fatal to that upsert.
+
+**Subnet-encryption variant** (ENI / Azure, selected when pod-subnet lists are
+non-empty; auto-populated from the router info in those IPAM modes):
+
+- N OUT state/policy pairs, one per **configured pod subnet** (not per remote
+  alloc CIDR), with selector wildcard → pod subnet.
+- **Two** IN state/policy pairs, not one: the first with the Cilium internal IP
+  pair as tunnel endpoints, the second with the node internal IP pair (taken as
+  the first address of the encryption interface). Both are installed regardless
+  of `use-cilium-internal-ip-for-ipsec`, which selects only which pair the
+  **OUT** side uses.
+- No encrypted-overlay pair; the local node is skipped entirely.
+
+#### 3.2.6 Routes, rules and the encryption interface
+
+Spec 10 §3.2.4 and §3.3 own the netlink objects; this spec states the contract.
+
+**ip rule**: priority **1**, `fwmark 0x0D00/0x0F00`, lookup table **200**,
+proto `RTPROT_KERNEL` (2). The kernel protocol number is chosen so
+`systemd-networkd`'s foreign-rule management does not garbage-collect it.
+IPv4 is installed only when `enable-endpoint-routes` is **false**; IPv6 always.
+
+**Table 200**:
+
+| Route | Prefix | Device | Type | MTU |
+|---|---|---|---|---|
+| IN, one per **local** pod alloc CIDR | local CIDR | the encryption interface | `RTN_LOCAL` (scope host) | — |
+| OUT, one per **remote** pod CIDR | remote CIDR | `cilium_host` | unicast | `RoutePostEncryptMTU` |
+
+`RoutePostEncryptMTU` is the *undiminished* device MTU: at that point the packet
+is already encrypted. OUT routes are installed only when subnet encryption is
+off. In subnet-encryption mode the IN routes are one per configured pod subnet,
+with the IPv4 ones skipped under `enable-endpoint-routes`.
+
+**Teardown** when IPsec is disabled: delete the priority-1 rules for both
+families (tolerating "not found", and "family unsupported" for IPv6), flush
+table 200, and delete all Cilium XFRM objects (§3.2.9).
+
+**Encryption interface selection.** There is no configuration knob:
+
+1. the tunnel device when encapsulation is on;
+2. otherwise `devices[0]` — the first detected device, deliberately, "any
+   interface would work";
+3. otherwise none.
+
+The Helm value `encryption.ipsec.interface` and the agent flag
+`--encrypt-interface` behind it are **gone** at this tag (the flag was a no-op
+since 1.18 and has been removed; no template references the value). flowsdn
+MUST NOT accept `--encrypt-interface`, and its Helm mapping MUST document
+`encryption.ipsec.interface` as removed. The reference's own troubleshooting
+documentation still recommends it and is stale.
+
+#### 3.2.7 What the datapath does (summary; normative text in spec 02)
+
+**SPI negotiation.** The peer's SPI comes from `cilium_node_map_v2`; the local
+SPI from `cilium_encrypt_state`. Pick the **smaller**, because key ids increase
+monotonically and the smaller one is certainly installed on both ends, with two
+mirrored wrap cases resting on the assumption that two nodes are never more
+than one key version apart:
+
+```
+if peer  == 15: return local == 1 ? 15 : local
+if local == 15: return peer  == 1 ? 15 : peer
+return min(local, peer)
+```
+
+A zero on either side propagates and means "no encryption".
+
+**Encrypt.** Look up the peer's node entry by the ipcache tunnel endpoint. A
+**missing node id is a hard drop**, code 197 (`DROP_NO_NODE_ID`) — expected
+under normal churn (a new node whose CiliumNode has not arrived, a deleted
+node, a node whose IP changed) and it stops once the CiliumNode propagates.
+Build the mark `0x0E00 | spi<<12 | node_id<<16`, stash the source identity in
+`cb[]` (and the mark too, because some kernels do not preserve `skb->mark`
+across a same-netns redirect), rewrite the destination MAC and redirect to
+**`cilium_net` ingress** so the XFRM output hook encrypts and recirculates.
+
+**Decrypt**, in `from_netdev`:
+
+| Case | Action |
+|---|---|
+| not yet decrypted, protocol is **not** ESP | pass through untouched |
+| not yet decrypted, ESP, no node id for the **source** address | drop 197 |
+| not yet decrypted, ESP | set `0x0D00 \| node_id<<16`, force `PACKET_HOST` (the frame may have been labelled other-host, which the IP stack would drop before XFRM ran), pass to the stack |
+| already decrypted (mark `0x0D00` left by the IN state's output-mark) | clear the mark; **with endpoint routes** pass to the stack (which has per-endpoint routes); otherwise redirect into `cilium_host` |
+
+The recirculation is why both the outer ESP packet and the decrypted inner
+packet are visible on the same interface — expected, not a fault.
+
+#### 3.2.8 Key rotation
+
+**At start**, in order: read the active SPI from the BPF map (a lookup error is
+fatal); load the key file (an error is fatal); then
+
+- **not** a rotation → write the map and advertise the new SPI;
+- **rotation across a restart** → **defer** the map write and keep advertising
+  the **old** SPI. A one-shot task waits for the datapath to be initialized,
+  then runs the publication sequence below and only then starts the key
+  watcher. Publishing before the datapath is up would let peers send under the
+  new key before the local IN states exist.
+
+**Publication sequence** — this order is the whole correctness argument and
+MUST NOT be reordered:
+
+1. Re-validate **every** known node, installing states and policies for the new
+   SPI. **IN states for all nodes exist first.**
+2. Publish `EncryptionKey = new SPI` on `LocalNode` → CiliumNode / kvstore.
+   Peers now start using the new SPI towards this node.
+3. Write the new SPI into `cilium_encrypt_state`. Only now does this node's own
+   datapath start emitting under it.
+
+**Watcher.** Controlled by `enable-ipsec-key-watcher` (default true); when
+false a rotation needs an agent restart. The **single key file path** is
+watched; the reference uses a 5 s **polling** watcher that follows symlinks
+(necessary for Kubernetes projected-secret symlink layouts) and compares size
+plus a content checksum. flowsdn SHOULD use inotify on the containing
+**directory** with the same symlink-following stat, because a projected secret
+update replaces the symlink target rather than writing the file, and MUST
+retain a periodic re-stat as a backstop. **DEVIATION** (mechanism only;
+observable behavior identical).
+
+On a create-or-write event: **sleep a jitter drawn uniformly from
+`[0, ipsec-key-rotation-duration / 10)`** (30 s at the 5 m default), then load
+and publish. The jitter exists to stop every agent in a large cluster
+rewriting its CiliumNode at the same instant and overwhelming the API server.
+Remove events are ignored. Errors degrade health and continue.
+
+**Stale-key reclaim**, a timer every **1 minute**. Snapshot one timestamp for
+the whole pass so results are consistent. An SPI is reclaimable when:
+
+1. it is not the current SPI; **and**
+2. it has a recorded replacement time — an SPI **first seen** in this pass gets
+   its clock started **now** and is **not** reclaimed, so after an agent
+   restart every unknown SPI gets a full rotation period; **and**
+3. that replacement time is at least `ipsec-key-rotation-duration` old.
+
+What is deleted:
+
+| Object | Rule |
+|---|---|
+| States (IN and OUT) | any whose SPI is reclaimable |
+| Policies | only `dir == out`, and **not** the default drop policy |
+
+IN and FWD policies carry no mark, so their extracted SPI is 0 and they would
+nominally qualify — the direction filter is what excludes them. The default
+drop policy *is* an OUT policy with an encrypt mark whose SPI nibble is 0, so
+it needs its own explicit exemption, matched on priority, action, direction,
+mark value and mask, and both selectors.
+
+Expected steady-state key count: **2 per remote node per enabled IP family**,
+doubling to 4 during a rotation. A three-node dual-stack cluster has 8 keys per
+node at rest.
+
+#### 3.2.9 XFRM cleanup and stale-state handling
+
+**State replace.** Scan for an exact match on source, destination, mark,
+output-mark and SPI:
+
+- match and **not** rebooted → **no-op**. This is the hot path: the periodic
+  background sync validates every node's XFRM without changing anything, which
+  is why the state-list cache (§3.2.10) matters.
+- match and rebooted → delete, then add.
+- no match → add. On **"already exists"**, delete every conflicting state, and
+  retry the add **once**; if nothing was deleted, return the original error
+  rather than retrying pointlessly.
+
+**Conflict identification** MUST replicate the kernel's SA lookup, which hashes
+on `(mark, dst, spi, proto, encap)` and therefore collides even when the
+*source* differs. A state conflicts when:
+
+```
+same SPI
+&& both marked or both unmarked
+&& (unmarked || (new.value & new.mask & existing.mask) == existing.value)
+&& dst addresses equal          # source is deliberately NOT compared
+```
+
+Address comparison MUST treat two unspecified addresses as equal regardless of
+family, because netlink returns an unset IPv6 address as a nil IPv4 address.
+
+The consequence is structural, and flowsdn's data model MUST respect it: the
+kernel's hash keys force **one state per destination address**, i.e. per node
+per direction.
+
+**The general-vs-specific IN state problem.** When a node-scoped IN state
+(mark `0xXXXX0D00/0xFFFF0F00`) coexists with a legacy general IN state (mark
+`0x0D00/0x0F00`), a delete naming the specific state causes the kernel to
+delete the **general** one. The workaround, required whenever deleting an
+ingress state with a non-zero node id while a matching general state exists:
+
+1. record the `XfrmInNoStates` counter and a timestamp; delete the general
+   state;
+2. delete the intended specific state;
+3. re-add the general state, and log the elapsed time and the delta in
+   `XfrmInNoStates` as the number of packets this cost.
+
+If step 1 fails, do not attempt the delete. The counters are used **only** as a
+delta-based drop measurement for observability; nothing branches on them.
+
+**Per-node delete** (node deletion): delete every state and policy whose mark
+mask covers the node-id field and whose encoded node id matches, states via the
+safe-delete path above. Policies are always listed live, never from the cache.
+
+**Bulk delete by request id.** Ownership is decided by: an unmarked policy is
+Cilium's iff it is the FWD policy at priority 2975 or an IN policy with exactly
+one blanked optional template; a marked policy or state is Cilium's iff its
+mark value intersects `0x0D00` or `0x0E00`. This is a deliberately loose filter
+and flowsdn MUST keep it loose, or a partial cleanup will leave objects behind
+that a later add then collides with.
+
+**When cleanup runs**: only on the configuration transition to IPsec-disabled —
+which at agent startup is the initial config application, so it doubles as the
+startup purge. It does **not** run on node delete (that is the per-node path)
+and **not** on key rotation. A narrow variant deletes just the OUT policy for
+one (node id, destination CIDR) and is used when a remote node loses an
+alloc CIDR.
+
+**Documented causes of stale state**, all of which leave out-of-sync
+anti-replay counters and a permanent pod-to-pod disruption: kvstore lease
+expiry after prolonged agent downtime; a manually recreated kvstore that the
+agent joins too late to see the node delete/create events; and, in CRD mode,
+deleting a CiliumNode and restarting the DaemonSet. The documented mitigation
+is a **key rotation**, and flowsdn MUST keep that property: a rotation
+re-derives and reinstalls every state.
+
+#### 3.2.10 State-list cache and the output-mark probe
+
+A **1-minute TTL cache** over the full XFRM state dump, controlled by
+`enable-ipsec-xfrm-state-caching` (default true, hidden). Only *states* are
+cached; policies are always dumped live. Every state mutation MUST invalidate
+the cache **before** issuing the netlink call, and all state mutations MUST go
+through the caching wrapper. Its purpose is the no-op path in the periodic
+per-node validation, which would otherwise dump the whole SA database once per
+node per sync.
+
+**Output-mark probe.** Before starting, when IPsec **and** tunneling are both
+enabled, add a throwaway XFRM state carrying both a mark and an output mark
+with a non-trivial mask, read it back, and verify the output mark's mask
+survived; delete it either way. Failure is **fatal**: XFRM output-mark masks
+require Linux ≥ 4.19. In direct-routing mode the probe is not run.
+
+Other startup gates, all fatal (§6 lists the flags):
+
+| Combination | Why |
+|---|---|
+| IPsec + WireGuard | mutually exclusive |
+| IPsec + L7 proxy without DNS-proxy transparent mode | proxied DNS would leave the node in clear; overridable only by a hidden insecure flag |
+| IPsec + strict ingress mode | unsupported |
+| IPsec + host firewall | unsupported |
+| IPsec + a pinned local router IP | unsupported |
+| IPsec (or WireGuard) without the CiliumNode CRD | boot IDs and keys travel on it |
+
+#### 3.2.11 Known limitations
+
+| # | Limitation |
+|---|---|
+| L1 | No CNI chaining (GH-15596) |
+| L2 | Host policies are unsupported with IPsec |
+| L3 | ≤ 65535 nodes per cluster or clustermesh — the node id is a `u16` |
+| L4 | Decryption is limited to **one CPU core per SA**; high node-pair throughput is bounded by it |
+| L5 | Same-node traffic is never encrypted |
+| L6 | Key rotations MUST NOT overlap an upgrade or downgrade |
+| L7 | Changing to an algorithm with a different auth key length during a rotation is refused; the old key stays until restart |
+| L8 | Since encryption now happens **after** encapsulation, operators see ESP between nodes and MUST open ESP in cloud security groups and VPC firewall rules |
+| L9 | Strict **ingress** mode is unavailable (§3.1.12); the egress variant works |
+| L10 | Stale XFRM state (§3.2.9) is recoverable only by a key rotation |
+
+### 3.3 Node IDs and the encrypt map
+
+Spec 10 §3.3.5 owns the allocator; this section states what encryption requires
+of it and what encryption writes.
+
+**Range**: 1..65535. **ID 0 is reserved for the local node** and is never in the
+map — a lookup of a local node IP returns 0 with "found". This is why a missing
+node id and the local node are distinguishable in the datapath.
+
+**Allocation** per remote node:
+
+1. Look for an existing id across all of the node's addresses.
+2. Compute "SPI changed" = no previous node, or the previous node's
+   `EncryptionKey` differs. When the SPI is unchanged and an address already
+   maps to the right id, the map write is skipped — an opportunistic refresh
+   that also repairs a stale entry left by a missed delete.
+3. If no id was found, allocate one. **Exhaustion MUST return an error and MUST
+   NOT map any address to id 0** — doing so would later be misread as "this is
+   the local node".
+4. If some address is already mapped to a *different* id (a node deleted while
+   the agent was down whose addresses were reused), unmap **all** of the node's
+   addresses and retry allocation from scratch.
+5. For each address write `cilium_node_map_v2`: `(family, ip) → {node_id, spi}`
+   where `spi` is the **remote node's advertised `spec.encryption.key`**. Write
+   the BPF map **first**; update the in-memory indexes only after it succeeds.
+
+**Restore.** At startup, before any new allocation, iterate the pinned map,
+rebuild both indexes, and remove each restored id from the free pool. Any entry
+with **node id 0 is invalid** and MUST be deleted from the map. Restore is
+mandatory, not an optimisation: XFRM marks encode the node id, and in-flight
+encrypted traffic depends on ids being stable across an agent restart. If the
+in-memory index is non-empty when restore runs, restore ran too late — that is
+a startup-ordering bug and MUST be reported as one.
+
+**Deallocation.** Verify every address of the node carries the same id (report
+otherwise), unmap each address recorded under that id (reporting any address
+that does not belong to the node), and return the id to the pool.
+
+**How the datapath resolves a peer to a key.**
+
+```
+ipcache(dst).tunnel_endpoint  ─→  cilium_node_map_v2  ─→  {node_id, peer_spi}
+                                                            │
+cilium_encrypt_state[0].encrypt_key  ─→  local_spi   ───────┤
+                                                            ▼
+                                       spi = min-with-wrap(local_spi, peer_spi)
+                                       mark = 0x0E00 | spi<<12 | node_id<<16
+```
+
+For **WireGuard** the chain stops at the ipcache: `remote_endpoint_info.key`
+is the static `0xFF` and its only role is being non-zero.
+
+`cilium_encrypt_state` is an array of exactly one entry, key 0, value one byte.
+Its sole writer is the IPsec agent; it is the restart-surviving record of the
+locally active SPI and therefore the input to rotation detection (§3.2.2).
+
+### 3.4 Egress gateway
+
+#### 3.4.1 The CRD
+
+`CiliumEgressGatewayPolicy`, `cilium.io/v2`, **cluster-scoped**, kind
+`CiliumEgressGatewayPolicy`, plural `ciliumegressgatewaypolicies`, singular
+`ciliumegressgatewaypolicy`, short name `cegp`, categories `cilium` and
+`ciliumpolicy`, printer column `Age` from `.metadata.creationTimestamp`,
+**no status subresource** and no `status` field. `metadata` is the only required
+top-level field; `spec` is optional at the schema level.
+
+`spec` requires `destinationCIDRs`, `egressGateway` and `selectors`.
+
+| Field | Type | Required | Validation | Meaning |
+|---|---|---|---|---|
+| `spec.selectors` | list of objects | **yes** | no `maxItems` | Source-pod selection rules, OR-ed |
+| `spec.selectors[].podSelector` | label selector | no | `x-kubernetes-map-type: atomic` | Selects pods. Present but empty = all pods |
+| `spec.selectors[].namespaceSelector` | label selector | no | atomic | Selects namespaces by cluster-scoped labels. Present but empty = all namespaces |
+| `spec.selectors[].nodeSelector` | label selector | no | atomic | Restricts source pods to those on matching nodes. **Cannot be used alone** |
+| `spec.destinationCIDRs` | list of strings | **yes** | CIDR pattern | Destinations the policy applies to; any match selects. IPv4 and IPv6 |
+| `spec.excludedCIDRs` | list of strings | no | CIDR pattern | Destinations excluded from redirect and SNAT. Should be a subset of `destinationCIDRs`; one that is not simply never wins an LPM race and has no effect |
+| `spec.egressGateway` | object | **yes** | — | Single gateway. **Ignored entirely when `egressGateways` is non-empty** |
+| `spec.egressGateways` | list of objects | no | **`maxItems: 64`**, default `[]` | Multi-gateway list, same element shape |
+| `…egressGateway.nodeSelector` | label selector | **yes** | atomic | Selects the gateway node |
+| `…egressGateway.interface` | string | no | — | Egress interface name; its first address per family becomes the egress IP |
+| `…egressGateway.egressIP` | string | no | `maxLength: 39`, CEL `self == '' \|\| isIP(self)` | Explicit SNAT source address, IPv4 or IPv6 |
+
+Every label selector uses the standard `matchLabels` / `matchExpressions`
+shape with the operator enum `In`, `NotIn`, `Exists`, `DoesNotExist`.
+
+`interface` and `egressIP` are **not** mutually excluded by the schema; the
+exclusion is enforced at parse time (§3.4.2).
+
+The reference's CIDR `pattern` is one regex alternation whose IPv6 branch
+contains transcription errors (`^s*` and `d` where `\s*` and `\d` were meant,
+and unescaped dots), making it far more permissive than it appears. flowsdn
+MUST publish a CRD whose IPv4 branch is equivalent and MUST validate with a
+real prefix parser rather than the regex. **DEVIATION** (correctness): the
+published IPv6 pattern is corrected. Any manifest the reference accepts and
+that is a genuine prefix is still accepted.
+
+#### 3.4.2 Parsing and validation
+
+Rejections, in order, each dropping the **whole** policy (logged at warn and
+retried through the workqueue rate limiter — never partially applied):
+
+| Condition | Error |
+|---|---|
+| empty name | must have a name |
+| `destinationCIDRs` is **null** | destination CIDRs can't be empty. A non-nil **empty list passes** — flowsdn reproduces this |
+| a gateway entry is null | egress gateway can't be empty |
+| a gateway sets both `interface` and `egressIP` | cannot specify both |
+| an egress IP does not parse | failed to parse egress IP |
+| a destination or excluded CIDR does not parse | failed to parse …CIDR |
+| a `selectors[]` entry has **both** `namespaceSelector` and `podSelector` null | cannot have both nil namespace selector and nil pod selector |
+
+`egressGateways` is parsed first; only if it yields nothing is `egressGateway`
+parsed. An **invalid** entry in `egressGateways` still fails the whole policy.
+
+**Namespace-selector translation.** Each `namespaceSelector` key `k` — in both
+`matchLabels` and `matchExpressions` — becomes
+`io.cilium.k8s.namespace.labels.<k>`. A **completely empty** namespace selector
+becomes the single requirement `io.kubernetes.pod.namespace Exists`, i.e. all
+namespaces. The translated namespace selector and the pod selector are then
+**AND-ed into one endpoint selector** with every key carrying the `k8s:` source
+prefix. Translation MUST operate on a copy: the input object MUST NOT be
+mutated.
+
+**Node selectors are flattened globally.** All non-null
+`selectors[].nodeSelector` entries are collected into **one flat list**, and an
+endpoint matches when (any endpoint selector matches its labels) **and** (the
+node list is empty, or any node selector matches its node's labels). With
+`selectors: [{pod: A, node: N}, {pod: B}]` a B-pod on an N-node is selected and
+a B-pod elsewhere is **not**. This is a cross-product, not the per-entry pairing
+the schema suggests. flowsdn MUST reproduce it deliberately; §12 records the
+option of changing it.
+
+**Which labels match.** Only the **security identity's** label set. Labels
+excluded from identity (via `--labels`) can never match a policy.
+
+**Endpoint eligibility.** An endpoint is skipped when its UID is empty (which is
+what happens under CiliumEndpointSlice — hence the incompatibility), when it has
+no networking metadata, or when it has no parseable addresses. A missing
+identity is skipped without retry; an identity **lookup failure** is retried
+under an exponential rate limiter (20 ms → 20 min) mirroring the identity
+allocator's own backoff.
+
+#### 3.4.3 Gateway selection
+
+The node list is kept sorted ascending by **node name**, so every agent in the
+cluster selects the same gateway.
+
+**Single gateway:** walk nodes in name order; the first whose labels match the
+`nodeSelector` and whose **internal IPv4** converts successfully becomes the
+gateway (a node whose IPv4 does not convert is skipped, not fatal). If that node
+is the local node, derive the egress IP and interface (§3.4.4); a derivation
+error is logged and selection continues with the sentinel values. Stop at the
+first match.
+
+If no node matched, a sentinel config with `gateway_ip = 0.0.0.0` is still
+emitted. **Map entries are still written and matching traffic is dropped, not
+passed through.** This is deliberate: a policy whose gateway has vanished must
+not silently leak pod traffic out of the node's own IP.
+
+**Multi-gateway:** on every reconciliation pass, sort the resolved gateway
+configs by **gateway IP** (`netip.Addr` ordering — not by node name), then
+
+```
+index = FNV-1a-32( CiliumEndpoint UID as raw bytes ) % number_of_resolved_gateways
+```
+
+The hash input is the CiliumEndpoint's UID **string** (e.g.
+`c57b0909-b567-48a3-865a-c1d1a17b545d`) — not the pod name, not the pod IP.
+Only gateway entries that actually resolved a node occupy a slot; an entry whose
+`nodeSelector` matched nothing is dropped before the modulo.
+
+Stability: assignment is stable for an endpoint's lifetime while the resolved
+gateway set is unchanged. It is **not** stable when a `nodeSelector` is
+added, removed or edited, when a matching node joins or leaves, **or when a
+gateway node's internal IP changes** (the sort key moves). Because this is a
+plain modulo and not consistent hashing, any such change reshuffles every
+endpoint and **breaks existing connections** — upstream **GH-39245**. §3.4.8
+specifies the optional improvement.
+
+#### 3.4.4 Egress IP and interface derivation
+
+Runs **only on the node that was selected as gateway**. Which families are
+needed is derived from `destinationCIDRs` alone; `excludedCIDRs` do not
+contribute. Start from `egress_ip4 = 0.0.0.0`, `egress_ip6 = ::`,
+`egress_ifindex = 0`, not-configured.
+
+| Case | Interface | Ifindex | Addresses |
+|---|---|---|---|
+| `interface` given | the named device | **set** | the device's *primary* address per needed family; a missing one is an error |
+| `egressIP` given | the device that owns that address | **left at 0** | the given IP for its own family; the device's primary address for the other family when needed |
+| neither | the device with the default route, per family | **set** | the device's first address per family. If the IPv6 default-route device differs from the IPv4 one, that is an error |
+
+The `egressIP` case leaving the ifindex at 0 is not an oversight to fix: it is
+what makes the datapath perform a **per-packet FIB lookup** and choose the
+outgoing interface dynamically, which is the documented behavior of that
+configuration. flowsdn MUST reproduce it.
+
+On **any** error the function returns early, leaving the sentinels in place and
+the node not marked as a configured gateway. The caller logs and proceeds; the
+gateway then programs `egress_ip = 0` and **drops** matching traffic with code
+204. Note the sentinel is the same value as "this node is not the gateway";
+that is benign because only the gateway reaches the SNAT hook.
+
+**No re-derivation on address changes.** Derivation runs only on policy, node
+and initial-sync events — never on an endpoint event and never on a device or
+address change. Changing a gateway's addressing requires re-applying the policy.
+flowsdn MUST document this; §12 records the option of watching the device table.
+
+**`rp_filter`.** For each interface that this node is a configured gateway on,
+set `net.ipv4.conf.<iface>.rp_filter = 2` (loose). Failure is logged, not fatal.
+There is no IPv6 equivalent, and the settings are **never removed** when a node
+stops being a gateway.
+
+#### 3.4.5 Map compilation
+
+Three LPM tries, all `NO_PREALLOC | RDONLY_PROG`, all sized by
+`egress-gateway-policy-map-max` (default 16384):
+
+| Map | Key | Value |
+|---|---|---|
+| `cilium_egress_gw_policy_v4` (legacy) | `{prefixlen u32, saddr be32, daddr be32}` | `{egress_ip be32, gateway_ip be32}` |
+| `cilium_egress_gw_policy_v4_v2` | same 12-byte key | `{egress_ip, gateway_ip, reserved[3] u32, egress_ifindex u32, reserved2 u32}` |
+| `cilium_egress_gw_policy_v6` | `{prefixlen u32, saddr v6, daddr v6}` | `{egress_ip v6, gateway_ip **be32**, reserved[3], egress_ifindex, reserved2}` |
+
+**`gateway_ip` is IPv4 in all three maps**, including the v6 one — the gateway
+is always addressed by its internal IPv4, which is what makes the IPv4-underlay
+requirement load-bearing. The `reserved[3]` hole exists so a v6 gateway IP can
+be added later without an ABI break.
+
+**Key construction.** One entry per (matched endpoint IP × CIDR):
+
+```
+prefixlen = 32  + destination_prefix.bits()      (v4)
+prefixlen = 128 + destination_prefix.bits()      (v6)
+saddr     = the endpoint IP, matched exactly
+daddr     = the destination prefix address as written
+```
+
+The static prefix makes the source IP an exact match and the destination a
+longest-prefix match; lookups always present the full length (64 or 256). The
+destination address is stored **as written, not re-masked**, so a policy naming
+`1.1.1.1/24` stores `1.1.1.1` with prefix length 24 — harmless for matching,
+visible in dumps.
+
+**Sentinels**, all in the `0.0.0.0/8` range:
+
+| Field | Value | Meaning |
+|---|---|---|
+| `gateway_ip` | `0.0.0.0` | no gateway resolved → **drop 194** |
+| `gateway_ip` | **`0.0.0.1`** | excluded CIDR → pass, bypass the gateway entirely |
+| `egress_ip` | `0.0.0.0` / `::` | on the gateway: no egress IP → **drop 204**. On every other node: simply "not me" |
+
+**How exclusions win.** For each endpoint IP, destination CIDRs are emitted
+first, then excluded CIDRs with `gateway_ip = 0.0.0.1`. Because an excluded CIDR
+is a subset of a destination CIDR, it is a **longer prefix on the same source
+key**, and LPM selects it. `egress_ip` is still written with the real value on
+an excluded entry; the datapath checks `gateway_ip` first, so it is irrelevant.
+
+`egress_ip` and `egress_ifindex` are `0` on every node that is not the selected
+gateway.
+
+#### 3.4.6 Reconciliation
+
+Three inputs and nothing else: `CiliumEgressGatewayPolicy`, `CiliumNode` and
+`CiliumEndpoint`. There is no Pod, Namespace, Service or device watch; identity
+labels are pulled synchronously at endpoint-upsert time.
+
+Reconciliation MUST NOT run until **all three** streams have completed their
+initial sync. Events are coalesced by a trigger with a minimum interval of
+`egress-gateway-reconciliation-trigger-interval` (default **1 s**), and each
+pass consumes an accumulated event bitmap:
+
+| Event class | Work |
+|---|---|
+| endpoint update/delete, node update/delete, initial sync | rebuild every policy's matched-endpoint set **from scratch** |
+| initial sync, policy add/delete, node update/delete | re-select gateways, re-derive the local egress IP and interface, re-apply `rp_filter` |
+| always | write all three maps |
+
+**Full diff, per map, independently:**
+
+1. Dump the whole map into memory.
+2. Treat every present key as stale.
+3. Compute the desired set by walking every policy × matched endpoint ×
+   CIDR, filtering by family (an entry is written to a v4 map only when both
+   the endpoint IP and the destination are IPv4, and to the v6 map only when
+   both are IPv6).
+4. For each desired key: un-mark it stale, and write it **only if absent or
+   different**. Comparison is `(egress_ip, gateway_ip)` for the legacy map and
+   `(egress_ip, gateway_ip, egress_ifindex)` for the other two.
+5. Delete everything still marked stale.
+
+Write errors are logged and reconciliation continues. All three maps are written
+on **every** pass, in the order legacy-v4 → v4_v2 → v6, so the two v4 maps
+always carry the same key set and the same address pair; only v4_v2 carries the
+ifindex. The datapath reads **v4_v2 first and falls back to the legacy map**;
+the legacy map exists only so an older loaded program keeps working across an
+upgrade.
+
+Two reference behaviors flowsdn MUST **not** reproduce (**DEVIATION**, both are
+latent correctness faults with no compatibility consequence):
+
+1. the map-dump error is discarded, which would make every present entry look
+   stale and delete the whole map — flowsdn MUST abort the pass on a dump
+   error and retry;
+2. policies are iterated in nondeterministic map order, so two policies
+   producing the same key resolve arbitrarily and can flap between passes —
+   flowsdn MUST iterate policies in a **deterministic order** (by name) so a
+   collision resolves the same way every pass.
+
+#### 3.4.7 Requirements and what happens when they are unmet
+
+Checked at construction; each failure MUST **abort agent startup**, not
+silently disable the feature:
+
+| Requirement | On violation |
+|---|---|
+| `identity-allocation-mode = crd` | fatal: egress gateway is not supported in `<mode>` identity allocation mode |
+| CiliumEndpointSlice **disabled** | fatal: not supported in combination with CiliumEndpointSlice (GH-24833) — CES endpoints carry no UID, which both the matcher and the multi-gateway hash need |
+| `enable-ipv4-masquerade` **and** `enable-bpf-masquerade` | fatal, naming both flags |
+| IPv4 tunnel underlay | fatal: egress gateway requires an IPv4 underlay |
+| `enable-ipv6-masquerade` for IPv6 policies | **informational log only**, not fatal |
+| kube-proxy replacement | documented as required; **not validated** in the reference. flowsdn MUST validate it and refuse to start. **DEVIATION** (the dependency is real — BPF masquerade implies the NodePort datapath, and the SNAT port arithmetic in §3.4.9 is defined against `--node-port-range`) |
+| gateway in the same cluster (no ClusterMesh gateway) | documented; **not validated**. flowsdn SHOULD warn when a policy's gateway selector matches only remote-cluster nodes |
+
+Note that a v6-only deployment still hard-requires IPv4 masquerade. That is a
+consequence of `gateway_ip` being IPv4, not an oversight.
+
+**Enabling the feature forces the tunnel device to be created and the MTU to be
+adapted, even in native routing**, because a source node always encapsulates
+redirected traffic to the gateway.
+
+#### 3.4.8 What the datapath does (summary; normative text in spec 02)
+
+**Source side**, in `to_netdev` on the host's native device — there is **no**
+egress-gateway hook in the pod program:
+
+1. Skip if the packet already carries `MARK_MAGIC_EGW_DONE` (`0x0500`), which
+   means it arrived via the overlay already steered. That mark also carries the
+   source identity, which is recovered here.
+2. Skip if the source is `HOST_ID`.
+3. Extract the connection tuple; skip replies — only outbound connections are
+   redirected.
+4. Refine the source and destination identities from the endpoint map and
+   ipcache.
+5. **Skip cluster destinations.** "Cluster" here means anything that is not
+   `world` or a CIDR identity, so host, remote-node, kube-apiserver, health and
+   every pod identity are excluded. This is what makes an in-cluster IP that
+   happens to fall inside a destination CIDR not get redirected.
+6. Look up the policy (v4_v2, then legacy). Miss → pass.
+   `gateway_ip == 0.0.0.0` → **drop 194**. `gateway_ip == 0.0.0.1` → pass.
+7. If the gateway is **this node**, fall through to the SNAT path on the same
+   program without encapsulating.
+8. Otherwise **encapsulate to the gateway's internal IPv4** with VXLAN or
+   Geneve, carrying the source security identity in the tunnel header. This is
+   why identity survives the hop and policy still applies at the far end, and
+   it is why the tunnel device is mandatory.
+
+**Gateway side**, in the masquerade decision (spec 04 §3.12 step 3), which sits
+**before** the SNAT-exclusion CIDR check and before the ip-masq-agent lookup —
+so **an egress-gateway policy overrides an ip-masq-agent non-masquerade CIDR**:
+
+1. Skip when the destination resolves to a cluster identity: only traffic
+   leaving the cluster is masqueraded with an egress IP.
+2. Look up the policy; `egress_ip == 0` → **drop 204**. Otherwise SNAT to it.
+3. Egress-gateway traffic is never skipped by the low-source-port heuristic.
+4. Interface selection: if the packet is already marked done, or the policy's
+   ifindex is the current interface, SNAT here. Otherwise use `redirect_neigh`
+   when an ifindex is known, no custom routing table is needed and the device
+   has an L2 header; else a FIB lookup, with `BPF_FIB_LOOKUP_DIRECT |
+   BPF_FIB_LOOKUP_TBID` when a table id is present (from the endpoint's route
+   info). A FIB result other than success or no-neighbour is **drop 169**.
+
+On the **overlay ingress** at the gateway, a matching packet has its TTL
+decremented, is stamped `MARK_MAGIC_EGW_DONE` with the source identity, has its
+interface chosen, and is left for `to_netdev` to SNAT.
+
+**Reply path**, compiled into both the tc host program and the XDP program:
+reverse-tuple the policy lookup; if it matches and the destination has a tunnel
+endpoint, re-encapsulate the reply back to the pod's node with the source
+identity set to `world`. Without this the reply would leave the gateway
+unencapsulated and be dropped or wrongly SNATed. Note the XDP variant is the
+reason egress-gateway replies are **not encrypted** under XDP acceleration
+(§3.1.11 gap G5).
+
+Drop codes: 134 invalid, 169 no FIB, **194** no egress gateway, **204** no
+egress IP.
+
+#### 3.4.9 SNAT port limit
+
+For a fixed `(egress IP, remote address, remote port)` tuple every connection
+needs a distinct source port, drawn from above the NodePort range:
+
+```
+limit = 65535 − (upper bound of --node-port-range)   ≈ 32768 by default
+```
+
+Exceeding it evicts old NAT entries and eventually fails to allocate a port.
+Widening it means **lowering** the NodePort range's upper bound. There is no
+other workaround than fewer connections, more egress IPs, or more remote
+addresses. Spec 04 §3.11 owns the allocator.
+
+#### 3.4.10 Health-based failover and CRD status — **DEVIATION**, optional
+
+Neither exists in the reference: gateway selection is label match plus lexical
+node ordering (or an FNV modulo), with no liveness input, and the CRD has no
+status subresource, so nothing in the API says which node was selected, whether
+its egress IP resolved, or that a policy was rejected — a rejected policy is a
+warn-level agent log. A gateway node that Kubernetes still reports as ready but
+that cannot forward keeps being selected; the only failover is removing its
+label or its CiliumNode, which reshuffles every multi-gateway assignment.
+
+flowsdn SHOULD add both, behind flags defaulting to the reference behavior:
+
+**(a) `egress-gateway-health-check` (default `off`).** When `on`, a gateway
+candidate is eligible only while its node is reachable, reusing the existing
+node health probe (`cilium-health`, spec 08) rather than adding a new one, with
+a failure threshold and a hold-down so a single missed probe does not move
+traffic. Selection then filters the candidate list before sorting, so the single
+gateway falls to the next node in name order and the multi-gateway modulo runs
+over the healthy subset.
+
+**Recommendation: implement it, default it off.** It fixes a real
+availability gap, and the cost is bounded because the probe already exists. It
+must default off because turning it on changes the modulo denominator and thus
+reshuffles multi-gateway assignments the moment any node is briefly unhealthy —
+strictly worse than the static behavior for a cluster whose gateways are stable.
+Pairing it with a rendezvous hash (§12 decision 6) removes that objection and
+is the combination worth building.
+
+**(b) A `status` subresource** on flowsdn's own CRD, written by the agent
+running on the selected gateway (and by any agent for a parse failure), with:
+observed generation; the selected gateway node name and IP per gateway entry;
+the resolved egress IP, interface and ifindex; the number of matched endpoints;
+the number of programmed map entries; and a `conditions` list carrying
+`Accepted` (false with a reason for every rejection in §3.4.2) and, when health
+checking is on, `GatewayReady`.
+
+**Recommendation: implement it.** Adding a status subresource is backward
+compatible — the reference's schema declares no subresources, and a client that
+ignores `status` is unaffected — and it converts the area's worst operational
+property, a silently dropped policy, into an observable one. The write must be
+throttled and confined to the gateway node to avoid every agent contending on
+the same object.
+
+### 3.5 BPF ip-masq-agent
+
+`enable-ip-masq-agent` (default false) and `ip-masq-agent-config-path`
+(default `/etc/config/ip-masq-agent`). Requires BPF masquerade. When disabled
+nothing is created.
+
+**Config file**, YAML or JSON (JSON being a strict subset — the file is
+converted to JSON and then decoded, and unknown fields are ignored):
+
+```yaml
+nonMasqueradeCIDRs: ["10.0.0.0/8", "fd00::/8"]
+masqLinkLocal: false
+masqLinkLocalIPv6: false
+```
+
+Exactly three field names. Each CIDR is parsed as a prefix and **masked**, so
+`2.2.2.2/16` is stored and programmed as `2.2.0.0/16`, and the masked canonical
+string is the diffing key. Both families may appear in one list.
+
+**Defaults** apply only when the file is **absent** or **zero bytes**:
+
+```
+10.0.0.0/8       172.16.0.0/12   192.168.0.0/16   100.64.0.0/10
+192.0.0.0/24     192.0.2.0/24    192.88.99.0/24   198.18.0.0/15
+198.51.100.0/24  203.0.113.0/24  240.0.0.0/4
+```
+
+Eleven IPv4 prefixes; there are **no IPv6 defaults**. A file that parses but
+whose `nonMasqueradeCIDRs` is null or empty is **not** "empty": the defaults do
+**not** apply, and the result is the link-local entries alone. flowsdn MUST
+reproduce this distinction — it is the difference between "no config" and
+"config that masquerades everything".
+
+**Link-local.** `169.254.0.0/16` is added unless `masqLinkLocal` is true;
+`fe80::/10` unless `masqLinkLocalIPv6` is true. Both default false, so
+link-local is non-masqueraded by default. They are added after the defaults and
+regardless of whether any user CIDR was listed.
+
+**Maps.** `cilium_ipmasq_v4` (key `{prefixlen u32, addr[4]}`) and
+`cilium_ipmasq_v6` (key `{prefixlen u32, addr[16]}`), LPM, 16384 entries,
+`NO_PREALLOC | RDONLY_PROG`, value one padding byte. The prefix length is the
+**plain mask length with no static offset** — unlike the egress maps. Each map
+is created only when its family's masquerade is enabled. The datapath looks the
+destination up with a full-length key and, on a hit, does not SNAT (spec 04
+§3.12 step 6) — after the egress-gateway hook, which therefore overrides it.
+
+**Watch and reload.** Watch the **containing directory**, not the file: a
+Kubernetes ConfigMap update swaps a symlinked `..data` directory and never
+touches the file inode, so a file watch sees nothing. Create, write, chmod,
+remove and rename all trigger a full re-read and diff. There is **no periodic
+resync** in the reference; flowsdn SHOULD add a low-frequency re-read as a
+backstop against a missed event. A watcher that cannot be created is a **fatal**
+startup error.
+
+**Startup restore.** Dump the pinned map into the in-memory "currently
+programmed" view **before** the first update. Because the map is pinned and
+survives an agent restart, this makes the first diff a no-op when the config is
+unchanged, so masquerade behavior does not flap across a restart. A dump failure
+is logged and startup continues with an empty view (producing redundant but
+harmless writes).
+
+**Diff sync**: additions first, then removals, keyed by the masked canonical
+string. flowsdn MUST check the BPF write result and MUST NOT record an entry as
+programmed when the write failed — the reference discards both results and can
+therefore believe the map is correct forever after one failed write.
+**DEVIATION** (correctness).
+
+**Malformed config**: bad YAML, a wrong-shaped document, a non-string list
+element or an unparseable prefix all abort the update **before** any in-memory
+state changes. The error is logged at warn, the **BPF map keeps its previous
+contents**, the agent does not exit and does not fall back to the defaults, and
+the next event retries.

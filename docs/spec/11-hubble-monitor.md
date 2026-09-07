@@ -1515,3 +1515,937 @@ flowsdn MUST populate `Summary` for L7 flows. For L3/L4 flows it is the last
 decoded layer's description (§3.9) and SHOULD also be populated, because
 `hubble observe -o compact` falls back to it. See §12.4.
 
+---
+
+## 3 (continued). Behavior — storage and the gRPC surface
+
+### 3.13 The ring buffer
+
+**Capacity.** `--hubble-event-buffer-capacity` MUST be one less than a power of
+two and at most 65535 (`1, 3, 7, …, 4095, …, 65535`); default **4095**.
+Validation is the bit test `n > 0 && n <= 65535 && (n & (n+1)) == 0`, and an
+invalid value MUST be a startup error naming the accepted values.
+
+Derived quantities, given `n`:
+
+```
+mask       = n
+data_len   = n + 1                    // the allocated slot count
+cycle_exp  = log2(data_len)           // 12 for n = 4095
+cycle_mask = u64::MAX >> cycle_exp
+half_cycle = (u64::MAX >> cycle_exp) >> 1
+cap        = data_len - 1             // == n; one slot is permanently unreadable
+```
+
+`Cap()` is `data_len − 1`, so a requested capacity of 4095 allocates a
+4096-entry array and one slot is always reserved for the in-flight write.
+`Len()` is `write` while `write < data_len`, then `Cap()`.
+
+**Writer** (single writer, many readers):
+
+```
+lock(notify);
+write   = write_counter.fetch_add(1) + 1;      // counter first
+slot    = (write - 1) & mask;
+store(slot, entry);                            // pointer store second
+close_and_replace(notify_ch);                  // wake all followers
+unlock(notify);
+```
+
+The counter is bumped **before** the pointer is stored. That ordering is why:
+
+```
+last_write()          = write - 1
+last_write_parallel() = write - 2   // the slot at write-1 may be mid-store
+oldest_write()        = if write > data_len { write - data_len } else { 0 }
+```
+
+An entry MUST never be null; null is the sentinel for "never written".
+
+**Reader — the overwrite detection (normative):**
+
+```
+read_idx       = read & mask
+event          = load(read_idx)
+last_write     = write_counter.load() - 1
+last_write_idx = last_write & mask
+read_cycle     = read >> cycle_exp
+write_cycle    = last_write >> cycle_exp
+prev_cycle     = (write_cycle - 1) & cycle_mask
+max_cycle      = (write_cycle + half_cycle) & cycle_mask
+
+match {
+  // in the current cycle, behind the writer
+  read_cycle == write_cycle && read_idx < last_write_idx =>
+      if event.is_none() { Eof } else { Ok(event) },
+
+  // in the previous cycle, ahead of the writer's index
+  read_cycle == prev_cycle && read_idx > last_write_idx =>
+      if event.is_none() { Ok(lost_event()) }   // ring not yet full: about to be overwritten
+      else               { Ok(event) },
+
+  // reader ahead of writer: nothing to read yet
+  read_cycle >= write_cycle && read_cycle < max_cycle => Eof,
+
+  // reader lapped by writer
+  _ => Ok(lost_event()),
+}
+```
+
+Three properties that MUST be preserved:
+
+1. The slot at `last_write_idx` is **never** readable (`<` and `>`, never `==`).
+2. `half_cycle` is what disambiguates "reader ahead" from "reader lapped" in
+   modular arithmetic; without it a wrapped counter produces silent
+   mis-reads.
+3. **Overwrite is signalled in band, as a value, not as an error.** The only
+   error `read` returns is end-of-stream. A lapped reader gets
+
+   ```
+   Event { timestamp: now, inner: LostEvent {
+       source: HUBBLE_RING_BUFFER, num_events_lost: 1, cpu: None } }
+   ```
+
+   with `num_events_lost = 1` per detection — **not** the size of the gap —
+   and the `hubble_lost_events_total{source="hubble_ring_buffer"}` counter is
+   incremented. Callers (`GetFlows` positioning, the flow-rate calculation)
+   check for a lost event *before* checking for end-of-stream, so modelling
+   overwrite as an error changes their behavior.
+
+**Follow mode.** `read_from(read)` loops with the same classification and, when
+the reader has caught the writer, sleeps on the notify channel. The sleep MUST
+be race-protected: after deciding to sleep, re-read the write counter while
+holding the notify lock and retry the same position if it changed; otherwise
+install/observe the notify channel and await it. Missing this loses a wake-up
+and stalls a follower until the next write.
+
+**RingReader** holds a ring handle and an index:
+
+| Operation | Effect |
+|---|---|
+| `next()` | read at `idx`; on success `idx += 1`; on end-of-stream `idx` is **not** advanced, so the reader can be retried |
+| `previous()` | read at `idx`; on success `idx -= 1` |
+| `next_follow(ctx)` | lazily spawn a `read_from` task feeding a channel of capacity **1000**; return the next event, `idx += 1`; `None` on cancellation |
+
+**What a slow reader observes.** A reader that falls more than `cap` events
+behind gets one synthetic `LostEvent` per overwritten slot, interleaved in
+position order with the events it can still read. It does **not** get an error
+and its stream does not terminate. In `GetFlows` those per-slot lost events are
+coalesced (§3.14) into one `LostEvent` per `--hubble-lost-event-send-interval`
+with a real count and a first/last timestamp range.
+
+### 3.14 `Observer.GetFlows`
+
+**Validation.** `first && follow` MUST be rejected with `InvalidArgument`
+("first cannot be specified with follow"). That is the *only* request
+validation; it applies identically to `GetAgentEvents` and `GetDebugEvents`.
+
+**Filter construction.** `whitelist` and `blacklist` are each built from the
+request's repeated `FlowFilter`s (§3.16). An unparseable filter is an error
+returned to the client before any event is sent.
+
+**Positioning (normative).** In precedence order:
+
+| Condition | Start index |
+|---|---|
+| `first && since == None` | `oldest_write()` — the beginning of the ring |
+| `follow && number == 0 && since == None` | `last_write_parallel()` — live tail only, no history |
+| otherwise | the rewind scan below |
+
+The rewind scan walks **backwards** from `last_write_parallel()` for at most
+`ring.len()` steps:
+
+```
+for i in (0..ring.len()).rev() {
+    e = reader.previous();
+    if e is a LostEvent with source == HUBBLE_RING_BUFFER {
+        idx += 1;            // we went one too far — that slot is gone
+        break;
+    }
+    if e is an error { return the error }
+    if e is any LostEvent || !filters.apply(whitelist, blacklist, e) { continue }
+    event_count += 1;
+    if since.is_some() {
+        if e.timestamp < since { idx += 1; break }   // one too far
+    } else if event_count == number {
+        break;
+    }
+    idx -= 1;
+}
+```
+
+Consequences that MUST be preserved:
+
+- `since` takes precedence over `number`: a request with both walks back until
+  the timestamp boundary, not until `number` matches.
+- The scan applies the filters, so `--last N` returns N *matching* flows, not
+  the last N flows of which some match.
+- Lost events are skipped by the scan and never counted.
+- Hitting the overwrite boundary stops the scan; a request for more history
+  than the ring holds silently returns what exists.
+- `until` plays **no** role in positioning. It is only a stop condition.
+- An empty ring makes the first `previous()` return end-of-stream; the RPC then
+  returns cleanly with an empty stream, not an error.
+
+**Streaming.** For each event, in order:
+
+1. If the lost-event coalescer has elapsed, emit a `LostEvent` response first
+   (see below).
+2. Get the next event:
+   - in follow mode, from the follow channel (unbounded in time; note that
+     `--follow --number N` streams **unbounded** after the initial rewind — the
+     `number` cap applies only to the non-follow path);
+   - otherwise, stop with end-of-stream once `number` events have been sent.
+3. A `LostEvent` is **exempt** from the time range and from all filters
+   (ring-buffer timestamps are only monotonic for real events).
+4. `until != None && ts > until` terminates the whole stream (relying on
+   monotonic timestamps). `since != None && ts < since` skips the event.
+5. Apply `whitelist.match_one() && blacklist.match_none()`.
+6. For a `Flow`: run the delivery hooks — **an error here aborts the RPC**,
+   unlike the decode-loop hooks which only log. Then, if the request carries a
+   field mask, copy the masked paths into one **per-stream reusable** `Flow`
+   and send that.
+7. Send `GetFlowsResponse { flow | lost_events | node_status, node_name, time }`.
+
+**Counting.** Only `Flow` responses increment the `number` counter. Lost events
+explicitly do not, so `--last 20` returns 20 flows regardless of loss.
+
+**Lost-event coalescing.** Ring-buffer lost events are accumulated into
+`{count, first, last}`; the accumulator is considered elapsed when
+`now − first >= lost_event_send_interval` (default 1 s). The window therefore
+starts at the **first** lost event, not at the last flush. On flush, one
+response is emitted with `source = HUBBLE_RING_BUFFER`, the accumulated count
+and the first/last timestamps, and the accumulator is cleared. Lost events from
+any other source are forwarded immediately, uncoalesced.
+
+A zero interval disables coalescing (every lost event is sent immediately);
+the flag validation MUST reject values `<= 0` so this cannot happen by
+accident.
+
+**Field mask.** `field_mask` is a `google.protobuf.FieldMask` over `Flow`.
+Validation requires **every** path to resolve against the `Flow` descriptor; a
+single bad path rejects the whole mask with `invalid fieldmask`. The mask is
+normalized (sorted, redundant sub-paths removed, so `["source.ID","source"]`
+collapses to `["source"]`) and stored as a path tree. Application:
+
+- leaf: set the field from the source, or clear it if the source does not have
+  it;
+- **oneof member**: recurse only when the source's active oneof arm is that
+  same field. Without this rule, masking `l4.TCP` on a UDP flow materializes an
+  empty `TCP` message.
+- other message field: recurse, allocating the destination sub-message on first
+  use.
+- Fields absent from the mask are left untouched in the destination, which is
+  why the destination is a pre-allocated, reused message.
+
+**Metadata.** The server MUST attach `hubble-server-version` to responses.
+
+### 3.15 The other Observer RPCs
+
+| RPC | Local server | Relay |
+|---|---|---|
+| `GetFlows` | full | fan-out (§3.17) |
+| `GetAgentEvents` | full | `Unimplemented` |
+| `GetDebugEvents` | full | `Unimplemented` |
+| `GetNodes` | **`Unimplemented`** | full |
+| `GetNamespaces` | full | merged across peers |
+| `ServerStatus` | full | aggregated |
+
+`GetAgentEvents` / `GetDebugEvents` share `GetFlows`' positioning and time
+range but support **no filtering at all** (no `whitelist`/`blacklist` fields
+exist), no field mask, no delivery hooks and no lost-event coalescing. Events
+of the wrong kind are skipped without counting.
+
+`GetNamespaces` returns the namespaces the node has observed, sorted by
+`(cluster, namespace)`. The tracker records `{cluster, namespace}` for the
+source and destination of every decoded flow whose namespace is non-empty,
+**refreshing the timestamp on every sighting**, and evicts entries not seen for
+`namespace_ttl = 1 h`, sweeping every `cleanup_interval = 5 min`.
+
+`ServerStatus`:
+
+| Field | Value |
+|---|---|
+| `version` | the flowsdn server version |
+| `max_flows` | `ring.cap()` |
+| `num_flows` | `ring.len()` |
+| `seen_flows` | lifetime count of decoded flows (incremented only after all decode hooks pass) |
+| `uptime_ns` | since the observer started |
+| `flows_rate` | flows per second over the trailing minute (below) |
+
+`flows_rate` walks backwards from `last_write_parallel()`, counting `Flow`
+events newer than `now − 60 s`, and stops at the first ring-buffer lost event
+or at end-of-stream. If it stopped early, the denominator shrinks to the actual
+observed span (`now − oldest counted timestamp`) rather than staying 60 s, so a
+ring holding ten seconds of traffic reports the true rate. An error computing
+the rate MUST be logged and reported as 0, not returned.
+
+### 3.16 Filters
+
+**Composition (normative, three levels):**
+
+```
+apply(whitelist, blacklist, ev) = whitelist.match_one(ev) && blacklist.match_none(ev)
+
+match_all(fs, ev)  = fs.iter().all(|f| f(ev))     // empty => true
+match_one(fs, ev)  = fs.is_empty() || fs.iter().any(|f| f(ev))
+match_none(fs, ev) = fs.is_empty() || !fs.iter().any(|f| f(ev))
+```
+
+1. **Within one field** (`source_pod: [a, b]`): OR.
+2. **Across fields inside one `FlowFilter`**: AND — one closure per
+   `FlowFilter` that requires every per-field predicate to hold.
+3. **Across the `whitelist` list**: OR. **Across the `blacklist` list**: NOR.
+   An empty list is vacuously true in both cases, so an empty whitelist means
+   "everything" and an empty blacklist means "nothing excluded".
+
+**The 25 filter fields.** Builder order matters only for cost; CEL is placed
+last deliberately.
+
+| Field(s) | # | Semantics |
+|---|---|---|
+| `uuid` | 29 | exact string |
+| `event_type` | 6 | `EventTypeFilter{type, match_sub_type, sub_type}`. `type == 0` means "any type". `sub_type` is compared **only** when `match_sub_type` is set, because 0 is a legitimate sub-type. Agent events match `type == 130` with `sub_type = AgentEventType`; debug events `type == 2` with `sub_type = DebugEventType`. A **`LostEvent` always matches** — there is no way to filter lost events out. |
+| `verdict` | 5 | enum membership |
+| `drop_reason_desc` | 33 | requires `verdict == DROPPED` **and** enum membership |
+| `reply` | 15 | `[]bool`. An `is_reply` of "unknown" on a `DROPPED` flow is treated as `false`; unknown on any other verdict never matches. Empty list ⇒ match. |
+| `encrypted` | 40 | `[]bool` against `IP.encrypted`; empty list ⇒ match |
+| `source_identity`, `destination_identity` | 19, 20 | numeric `u32` exact |
+| `protocol` | 12 | lowercased name. L4: `icmp` (matches v4 **or** v6), `icmpv4`, `icmpv6`, `tcp`, `udp`, `sctp`, `vrrp`, `igmp`. L7: `dns`, `http`. Anything else is a build error. |
+| `source_ip`, `destination_ip`, `source_ip_xlated` | 1, 3, 34 | each entry is either a plain address or a CIDR. Plain addresses are compared as **strings** against the flow's rendered address; CIDRs are parsed and tested with prefix containment. (The string comparison means a non-canonical spelling of an IPv6 address does not match; kept for compatibility, noted in §12.8.) |
+| `ip_version` | 25 | enum membership; a flow with no IP layer has version `IP_NOT_USED (0)` and therefore matches a filter listing `IP_NOT_USED` |
+| `source_pod`, `destination_pod`, `source_service`, `destination_service` | 2, 4, 16, 17 | `ns/name` split (below), namespace **exact**, name **prefix** |
+| `source_workload`, `destination_workload` | 26, 27 | per entry: `(name empty ∨ name == w.name) ∧ (kind empty ∨ kind == w.kind)` over the endpoint's workloads |
+| `source_fqdn`, `destination_fqdn` | 7, 8 | glob (below) against `source_names` / `destination_names` |
+| `dns_query` | 18 | unanchored RE2 against `l7.dns.query` |
+| `source_label`, `destination_label`, `node_labels` | 10, 11, 36 | Kubernetes label-selector syntax with Cilium source-prefix translation (below); OR across the list |
+| `source_port`, `destination_port` | 13, 14 | **exact u16 values only — there is no range syntax.** A non-numeric or out-of-range entry is a build error. The port is taken from TCP, then UDP, then SCTP; a flow with any other L4 (or none) never matches. |
+| `http_status_code` | 9 | either a full 3-digit code matching `^[1-5][0-9]{2}$`, or a 1–2 digit prefix followed by `+` matching `^[1-5][0-9]?\+$` (`4+`, `40+`). Anything else is a build error. A flow with no HTTP record, or `code == 0`, never matches. |
+| `http_method` | 21 | case-insensitive exact |
+| `http_path` | 22 | unanchored RE2 against the parsed URL's path; an unparseable URL never matches |
+| `http_url` | 31 | unanchored RE2 against the raw URL |
+| `http_header` | 32 | matches if any flow header equals a filter header on **both** key and value, case-sensitively |
+| `tcp_flags` | 23 | **subset test**: every flag set in a filter entry must be set in the flow (extra flags in the flow are fine) — AND within an entry, OR across entries. An all-false entry matches any TCP flow that has a flags field. |
+| `node_name` | 24 | `cluster/node` glob (below) |
+| `source_cluster_name`, `destination_cluster_name` | 37, 38 | exact; an empty string in the list is a build error |
+| `traffic_direction` | 30 | enum membership |
+| `trace_id` | 28 | exact string against `trace_context.parent.trace_id` |
+| `ip_trace_id` | 39 | exact `u64` |
+| `interface` | 35 | per entry: `(index == 0 ∨ index == iface.index) ∧ (name empty ∨ name == iface.name)` |
+| `experimental.cel_expression` | 999.1 | **deferred** (§12.5) |
+
+The five HTTP sub-filters are gated: if an `event_type` filter is present, at
+least one entry must have `type == 129`, otherwise the build fails with
+"filtering by http status code requires the event type filter to only match
+'l7' events". This MUST be reproduced — it turns a silently-empty result into a
+clear error.
+
+**`ns/name` splitting** (used by pod and service filters):
+
+| Input | `(namespace, name)` |
+|---|---|
+| `xwing` | `("default", "xwing")` — **an unqualified name means the `default` namespace** |
+| `kube-system/` | `("kube-system", "")` — namespace only |
+| `/xwing` | `("", "xwing")` — any namespace |
+| `a/b/c` | `("a", "b")` — extra segments silently dropped |
+| `""` | build error |
+
+Namespace comparison is exact; the name is a prefix match. A flow whose
+endpoint has neither namespace nor name never matches.
+
+**FQDN and node-name globs.** Patterns are trimmed, one trailing dot is
+stripped, and the result is lowercased, then compiled into a single anchored
+alternation. Within a pattern, `.` is a literal dot, `*` expands to
+`[-.0-9a-z]*`, and `[-0-9_a-z]` pass through; **any other character is a build
+error**. An empty pattern, or a second trailing dot, is a build error.
+
+Node-name patterns additionally split on `/`: one element means "node pattern,
+any cluster"; two mean `cluster/node`; three or more is an error. An empty
+element on either side is a wildcard. At match time a flow's node name without
+a `/` is first qualified with the local cluster name.
+
+**Label selectors.** Labels are parsed into `source:key=value` form. Each
+selector string is rewritten before parsing: a key carrying a source prefix
+(`k8s:foo`) becomes `k8s.foo` (only the **first** colon is replaced), and a key
+with no prefix (`example.com`) becomes `any.example.com`. The full Kubernetes
+selector grammar is then supported (`=`, `!=`, `in`, `notin`, `!key`, comma-
+separated conjunctions). OR across the list.
+
+### 3.17 Peer service and relay fan-out
+
+#### 3.17.1 `Peer.Notify`
+
+A stream of `ChangeNotification{name, address, type, tls}`. On connect the
+server replays every known node as `PEER_ADDED`; the subscription to the node
+manager MUST be established only *after* the streaming task is running, because
+the subscribe call synchronously replays all existing nodes into an unbuffered
+channel.
+
+| Node event | Notifications |
+|---|---|
+| add | `PEER_ADDED` |
+| delete | `PEER_DELETED` |
+| update, same full name, same address | none |
+| update, same full name, different address | `PEER_UPDATED` |
+| update, different full name | `PEER_DELETED(old)` then `PEER_ADDED(new)` |
+
+`name` is the cluster-qualified node name. `address` is `<node ip>:<hubble
+port>`, with the family chosen by the preference order (`--prefer-ipv6` swaps
+IPv6 ahead of IPv4); the check is strict (an IPv4-mapped IPv6 address is not
+accepted as IPv6). An empty address is legal and means "no reachable address".
+`tls` is present iff the Hubble server has TLS enabled, and carries the derived
+server name (§3.17.4).
+
+**Backpressure.** Each stream has a send buffer capped at
+`max_send_buffer_size` (default **65536** notifications). On overflow the
+stream is **terminated** with "server stream send was blocked for too long" —
+it is not throttled and notifications are not dropped silently. A relay that
+cannot keep up therefore reconnects and gets a fresh full replay, which is the
+correct recovery.
+
+#### 3.17.2 Peer discovery and connection management (relay)
+
+The relay connects to `--peer-service` (default the agent's unix socket) and
+consumes `Peer.Notify`. Three concurrent tasks:
+
+1. **Notification watcher.** On any failure — building the client, opening the
+   stream, or receiving — close the client, mark the peer service
+   disconnected, wait `--retry-timeout` (30 s) and retry. `PEER_ADDED` and
+   `PEER_UPDATED` upsert; `PEER_DELETED` removes.
+2. **Connection manager.** Connects a peer immediately when it is upserted
+   (ignoring backoff), and re-checks every peer every `conn_check_interval`
+   (**2 minutes**).
+3. **Status reporter.** Every `conn_status_interval` (5 s), tallies peers by
+   connection state into `hubble_relay_pool_peer_connection_status{status}`.
+
+Upsert is a no-op when the peer is unchanged (name, TLS enabled, TLS server
+name and address all equal) — this MUST be checked, or every notification
+would tear down and rebuild a working connection.
+
+**Backoff.** Exponential with `min = 1 s`, `max = 1 min`, `factor = 2.0`, plus
+jitter, counted per peer. A successful connection resets the attempt counter
+and clears the next-attempt time. Because gRPC channel creation is lazy, a
+"successful" connect only means the channel was constructed; actual
+reachability is judged from the channel state.
+
+**Availability** for fan-out purposes: a peer is available when it has a
+channel whose state is neither transient-failure nor shutdown.
+
+#### 3.17.3 `GetFlows` fan-out
+
+```
+peers → per-peer GetFlows streams → merged channel
+      → error aggregation (10 s window)
+      → sort buffer (min-heap, drain 1 s)
+      → client
+```
+
+1. Before any flow, send a `NODE_CONNECTED` status event naming the peers that
+   were reached, then a `NODE_UNAVAILABLE` status event naming those that were
+   not.
+2. Open a `GetFlows` stream to every available peer with the **same** request;
+   incoming gRPC metadata is forwarded to the peers.
+3. In follow mode, re-scan the peer list every `peer_update_interval` (**2 s**)
+   and join newly-arrived peers. A set of already-connected nodes prevents
+   duplicate dials; a peer whose stream errors is removed from the set so a
+   later scan retries it, and an error status event is pushed into the stream.
+4. `EOF`, cancellation and gRPC `Canceled` from a peer are clean terminations,
+   not errors.
+
+**Sort buffer.** A min-heap keyed on the response timestamp, sized
+
+```
+qlen = if number * peer_count in 1..sort_buffer_max_len { number * peer_count }
+       else { sort_buffer_max_len }          // sort_buffer_max_len = 100
+```
+
+- When the heap is full, the **oldest** entry is popped and emitted to make
+  room. The buffer is therefore lossy-in-order under load — it emits before the
+  sort window has elapsed rather than dropping or blocking.
+- When no new response arrives for `--sort-buffer-drain-timeout` (**1 s**),
+  every entry older than `now − drain_timeout` is flushed in timestamp order.
+  The timer is re-armed each loop iteration, so it measures inter-arrival
+  idleness, not wall-clock periods.
+- On upstream close the heap is fully drained.
+
+This is why the agent's `--hubble-lost-event-send-interval` also defaults to
+1 s: the two windows are meant to match.
+
+**Error aggregation.** At most one `NODE_ERROR` status is pending at a time.
+A new error with an **identical message** merges its node names into the
+pending one; an error with a different message flushes the pending one
+immediately and starts a fresh `--error-aggregation-window` (**10 s**) timer.
+The timer is armed once per pending response and is not extended by merges.
+Non-error status events are forwarded immediately. Channel close flushes.
+
+The message of a `NODE_ERROR` is the error string, except that a gRPC status
+with code `Unknown` is unwrapped to its message.
+
+**`GetNodes`.** One `Node` per peer. Unavailable peers get
+`NODE_UNAVAILABLE` and are not queried. Available peers get `NODE_CONNECTED`
+and are queried concurrently for `ServerStatus` to fill `version`,
+`uptime_ns`, `max_flows`, `num_flows`, `seen_flows`; a peer whose RPC fails is
+downgraded to `NODE_ERROR` and **does not fail the call**.
+
+**`ServerStatus` aggregation:**
+
+| Field | Rule |
+|---|---|
+| `max_flows`, `num_flows`, `seen_flows`, `flows_rate` | summed across peers |
+| `uptime_ns` | the **maximum** (the oldest node) — deliberately not summed |
+| `num_connected_nodes` | `peers − unavailable` |
+| `num_unavailable_nodes` | peers never connected **plus** peers whose status RPC failed |
+| `unavailable_nodes` | the names, **capped at 10** |
+| `version` | the relay version |
+
+**`GetNamespaces`** queries every peer, merges into a fresh tracker, and
+returns the sorted de-duplicated union. Partial results are returned on peer
+failure rather than failing the call.
+
+**Metadata.** The relay attaches `hubble-relay-version` on outgoing calls and
+forwards incoming metadata to the peers.
+
+**Health.** A separate gRPC health server on `:4222` reports `SERVING` for both
+the empty service name and `hubble.server.Observer` iff the peer service is
+connected **and** at least one peer is available; it is re-evaluated every 5 s
+and starts as `NOT_SERVING`.
+
+#### 3.17.4 TLS and server-name derivation
+
+Minimum TLS version is **1.3** on the agent's TCP listener, the relay's server
+listener, and both client sides.
+
+| Endpoint | Server cert | Client CA (⇒ mTLS) |
+|---|---|---|
+| agent unix socket | never TLS | — |
+| agent TCP `:4244` | `--hubble-tls-cert-file` / `--hubble-tls-key-file` unless `--hubble-disable-tls` | `--hubble-tls-client-ca-files` |
+| agent metrics | `--hubble-metrics-server-tls-*` when `--hubble-metrics-server-enable-tls` | `--hubble-metrics-server-tls-client-ca-files` |
+| relay server `:4245` | `--tls-relay-server-cert-file` / `-key-file` unless `--disable-server-tls` | `--tls-relay-client-ca-files` |
+| relay → agent | client cert `--tls-hubble-client-cert-file` / `-key-file` unless `--disable-client-tls` | verifies against `--tls-hubble-server-ca-files` |
+
+Presence of a client-CA list is what enables mTLS; there is no separate switch.
+
+**Certificate reloading.** The TLS config MUST re-read the key pair and CA pool
+**per handshake**, so rotated certificates take effect without a restart. On
+the client side the credentials are re-derived on every handshake for the same
+reason. At startup, when TLS is enabled but the files do not exist yet, the
+server MUST wait for them (logging every 30 s) rather than failing — this is
+what makes Helm's certificate-generating Job work regardless of ordering.
+
+**Server name per node:**
+
+```
+tls_server_name(node_name, cluster_name):
+    if node_name.is_empty() { return "" }
+    nn = node_name.replace('.', '-')
+    cn = (if cluster_name.is_empty() { "default" } else { cluster_name }).replace('.', '-')
+    format!("{nn}.{cn}.hubble-grpc.cilium.io")
+```
+
+Dots are replaced with hyphens so that every node's server name sits at the
+same DNS domain level (Kubernetes permits dots in node names). Example:
+`moseisley.tatooine.hubble-grpc.cilium.io`.
+
+The relay uses the same function with the literal node name `hubble-peer` when
+its peer target is remote rather than a unix socket, so the peer Service's
+certificate must be issued for `hubble-peer.<cluster>.hubble-grpc.cilium.io`.
+
+The domain `cilium.io` is retained because it is baked into issued
+certificates and into the Helm chart; changing it would break every existing
+deployment's certificates. This is nominative use, consistent with
+`docs/licensing.md`.
+
+`GRPCClientConnBuilder` MUST reject the two inconsistent combinations up front:
+a TLS config with no server name, and a server name with no TLS config.
+
+### 3.18 Metrics pipeline
+
+The metrics subsystem is a set of **handlers**, each registering its own
+Prometheus collectors at init and consuming every decoded flow. It is inert
+unless `--hubble-metrics-server` is set.
+
+- `--hubble-metrics` and `--hubble-dynamic-metrics-config-path` are **mutually
+  exclusive**; setting both MUST be a startup error.
+- `--hubble-metrics` is one string split on **any whitespace** into specs of
+  the form `name[:opt[=val][;opt[=val]]…]`. Only the **first** colon splits the
+  name from the options, so later colons belong to the options.
+- Each option splits on the first `=`. With no `=`, the value list is a single
+  empty string — this is what makes bare flags like `any-drop` "present". For
+  `labelsContext` the value splits on `,`; for every other option it splits on
+  `|`. Empty items are dropped in both splits.
+- **Presence, not truth, enables most flags**: `port=false` still enables the
+  `port` label. The sole exception is `exemplars`, which requires the literal
+  value `true`.
+- An **unknown handler name is not fatal** — it is logged and skipped.
+- `http` and `httpV2` **conflict**; enabling both MUST be a hard error.
+- Include/exclude filters are **YAML-only**; there is no command-line syntax
+  for them.
+
+Per flow, each handler applies its own protocol/verdict gate and its allow/deny
+filters (built exactly as in §3.16) before emitting.
+
+**Dynamic configuration** is polled every **10 s**; the file's raw bytes are
+hashed (first 8 bytes of the MD5, little-endian) and the callback runs only on
+change. Read, parse and validation errors leave the running configuration
+untouched.
+
+Validation, all of which reject the **entire** config:
+
+1. an empty `name` at any index;
+2. a duplicate `name`;
+3. a change to a previously-seen metric's `contextOptions`. **Label sets cannot
+   change at runtime** — Prometheus collectors are registered with a fixed
+   label list. Only filters may change live.
+
+Reload reconciliation, in order:
+
+1. **Remove** handlers absent from the new config, unregistering their
+   collectors. This happens first so that a `http` → `httpV2` swap in one
+   reload succeeds.
+2. For each entry in the new config: unchanged → no-op; same name, changed
+   filters → rebuild the filter lists only (registration untouched); new name →
+   create and register. A failure to create one handler is logged and skipped,
+   not fatal.
+
+**Pod-deletion cleanup.** On endpoint deletion, after a **1 minute** grace
+period, series carrying that pod are deleted from every handler's collectors:
+
+| Condition | Deleted by partial label match |
+|---|---|
+| any source context identifier is exactly `pod` | `source = "<ns>/<name>"` |
+| any destination context identifier is exactly `pod` | `destination = "<ns>/<name>"` |
+| `labelsContext` contains **both** `source_pod` and `source_namespace` | `{source_namespace, source_pod}` |
+| `labelsContext` contains **both** `destination_pod` and `destination_namespace` | `{destination_namespace, destination_pod}` |
+
+Only the exact `pod` identifier triggers cleanup; `pod-name`, `workload`,
+`identity`, `app`, `dns` and `ip` series are never reaped, and the
+`labelsContext` path needs both the pod and namespace labels.
+
+**DEVIATION**: in the reference, cleanup is wired only on the *static* metrics
+path — the dynamic path starts the reaper but never populates the handler list
+it reads, so dynamically-configured pod-labelled metrics leak unboundedly.
+flowsdn wires cleanup on **both** paths. Reason: it is an unbounded memory leak
+and a cardinality explosion in exactly the configuration operators are steered
+towards; no consumer depends on the leak. (ADR-0001 — compatibility is at the
+metric names and labels, not at the leak.)
+
+### 3.19 Export
+
+#### 3.19.1 Export pipeline
+
+Per event, in order:
+
+1. Apply the exporter's allow/deny filter lists (§3.16 composition).
+2. Run the export hooks. A hook error is **logged, not fatal**; a hook
+   returning "stop" ends processing for that event. (This is how the dynamic
+   exporter's `end` time is enforced — see §3.19.4.)
+3. If aggregation is active **and** the event is a `Flow`, add it to the
+   aggregator and return; every other event type bypasses aggregation.
+4. Convert to `observer.ExportEvent` and encode one line.
+
+#### 3.19.2 Line format
+
+Each line is a compact JSON object followed by `\n`, produced by **protojson
+with `UseProtoNames: true`**:
+
+- field names are the **proto** names (`IP`, `Type`, `Summary`, `l4`,
+  `source_names`, `trace_observation_point`), not lowerCamelCase JSON names;
+- enums are their **names** (`"FORWARDED"`, `"POLICY_DENIED"`), not numbers;
+- `Timestamp` is an RFC3339 string;
+- 64-bit integers are strings;
+- `Any` is expanded with `@type`;
+- unset fields are omitted.
+
+The output is compacted, so protojson's deliberate whitespace randomisation
+does not appear on the wire. This is the format log shippers parse and
+`hubble observe -o jsonpb` produces; it MUST be byte-compatible. §9.1 requires
+a golden-line test against a captured reference export.
+
+`ExportEvent` carries `flow | node_status | lost_events | agent_event |
+debug_event` plus `node_name` (1000) and `time` (1001).
+
+**Note on `node_name`:** the reference sets `node_name` from the *flow* for
+flow events but from the bare node name for lost/agent/debug events, whereas
+the Observer API uses the cluster-qualified name everywhere.
+**DEVIATION**: flowsdn uses the cluster-qualified name (`<cluster>/<node>`)
+consistently in the exporter. Reason: an inconsistent `node_name` within one
+log file cannot be correlated by a log shipper, and the qualified form is a
+superset. Recorded as a behavior change in §12.9.
+
+#### 3.19.3 Rotation
+
+Size-based rotation with `fileMaxSizeMb` (default 10), `fileMaxBackups`
+(default 5) and `fileCompress` (default false); rotated files are named
+`<base>-<timestamp><ext>` with `.gz` appended when compressed.
+`--hubble-export-file-path stdout` writes to stdout with a no-op close instead
+of a file, and is the default when no path is set.
+
+#### 3.19.4 Dynamic flow logs
+
+`--hubble-flowlogs-config-path` is polled every **5 s**, with one synchronous
+initial load at startup. Schema:
+
+```yaml
+flowLogs:
+  - name: all                                     # required, unique
+    filePath: /var/run/cilium/hubble/events.log   # required, unique; "stdout" allowed
+    fieldMask: [time, source.namespace]
+    fieldAggregate: [source.namespace, destination.namespace]
+    aggregationInterval: 30s
+    includeFilters: [ <FlowFilter as protobuf JSON> ]
+    excludeFilters: [ ... ]
+    fileMaxSizeMb: 10
+    fileMaxBackups: 5
+    fileCompress: false
+    end: "2026-12-31T00:00:00Z"
+```
+
+Validation rejects: a null entry, an empty `name`, a duplicate `name`, an empty
+`filePath`, a duplicate `filePath`. `fileMaxSizeMb` and `fileMaxBackups` of 0
+fall back to the defaults.
+
+Reconciliation compares each named exporter's effective configuration
+(everything except `name`; filter lists compare as sets, so order and
+duplicates are irrelevant) and rebuilds only the ones that changed, stopping
+the old instance first. Names absent from the new config are removed.
+
+**`end` semantics.** An expired exporter is **not** removed and its file handle
+stays open; instead every event is silently dropped by an export hook, and its
+`up` gauge reads 0. This MUST be preserved — operators watch the gauge, and
+removing the exporter would also remove the gauge.
+
+#### 3.19.5 Aggregation
+
+Active only when `fieldAggregate` is non-empty **and** the interval is `> 0`; a
+non-empty aggregate with a zero interval MUST log a warning and export raw
+events.
+
+For each flow:
+
+1. Project the flow through the `fieldAggregate` mask into a fresh message.
+2. The aggregation key is a **canonical serialization of the projected
+   message** — the timestamp is deliberately added *after* key computation so
+   it does not participate in the key.
+3. Create or update the group, incrementing the ingress, egress or
+   unknown-direction counter according to the flow's traffic direction.
+
+The stored representative flow keeps the timestamp of the **first** flow in the
+group. On each interval tick (and once more on shutdown) every group is emitted
+as one `ExportEvent` whose flow carries
+`aggregate {ingress_flow_count, egress_flow_count, unknown_direction_flow_count}`,
+and the map is replaced. Encoder errors are logged and the map is cleared
+regardless, so a transient write failure loses one interval rather than
+accumulating unboundedly.
+
+**DEVIATION**: the reference keys on `proto.Marshal` output, which protobuf
+explicitly does not guarantee to be canonical. flowsdn MUST use a deterministic
+encoding (fields in tag order, no unknown fields) or an explicit key struct.
+Reason: a non-canonical key silently splits one group into several. No wire
+format changes.
+
+#### 3.19.6 Allow/deny lists on the command line
+
+`--hubble-export-allowlist` and `--hubble-export-denylist` take **whitespace-
+separated, concatenated JSON objects**, not a JSON array:
+
+```
+--hubble-export-allowlist '{"source_pod":["default/"]} {"verdict":["DROPPED"]}'
+```
+
+Each object is one `FlowFilter`; allow is OR across the list, deny is NOR,
+exactly as in §3.16.
+
+---
+
+## 4 (continued). Data model — the protobuf contract
+
+### 4.13 `flow.Flow` field by field (frozen)
+
+Field numbers are the compatibility contract with the `hubble` CLI, the Hubble
+UI, hubble-relay and every third-party Observer client. They MUST NOT change.
+The number ordering below is the declaration order in the reference `.proto`,
+which is not numeric order; keep it, because generated Rust field order follows
+it and diffs stay readable.
+
+| # | Field | Type | Set by / meaning |
+|---|---|---|---|
+| 1 | `time` | `Timestamp` | monitor event timestamp, set by the dispatcher |
+| 34 | `uuid` | string | per-node event uuid |
+| 41 | `emitter` | `Emitter{name=1, version=2}` | `"flowsdn"` + version (**DEVIATION**, §3.8) |
+| 2 | `verdict` | `Verdict` | §3.12 |
+| 3 | `drop_reason` | uint32 *(deprecated)* | raw drop code |
+| 35 | `auth_type` | `AuthType` | policy verdict only |
+| 4 | `ethernet` | `Ethernet{source=1, destination=2}` | MAC strings; absent for L3 devices |
+| 5 | `IP` | `IP{source=1, destination=2, ipVersion=3, encrypted=4, source_xlated=5}` | inner addresses when tunnelled |
+| 6 | `l4` | `Layer4` oneof | see §4.14 |
+| 39 | `tunnel` | `Tunnel{protocol=1, IP=2, l4=3, vni=4}` | outer headers when overlay-classified |
+| 7 | *reserved* | | removed upstream; MUST stay reserved |
+| 8 | `source` | `Endpoint` | |
+| 9 | `destination` | `Endpoint` | |
+| 10 | `Type` | `FlowType` | 0 `UNKNOWN_TYPE`, 1 `L3_L4`, 2 `L7`, 3 `SOCK` |
+| 11 | `node_name` | string | `<cluster>/<node>` |
+| 37 | `node_labels` | repeated string | `key=value` |
+| 12 | *reserved* | | |
+| 13 | `source_names` | repeated string | DNS names of the source, from the **destination** endpoint's history |
+| 14 | `destination_names` | repeated string | mirror of the above |
+| 15 | `l7` | `Layer7` | set iff `Type == L7` |
+| 16 | `reply` | bool *(deprecated)* | `is_reply` with unknown ⇒ false |
+| 17, 18 | *reserved* | | |
+| 19 | `event_type` | `CiliumEventType{type=1, sub_type=2}` | raw monitor type and subtype |
+| 20 | `source_service` | `Service{name=1, namespace=2}` | |
+| 21 | `destination_service` | `Service` | |
+| 22 | `traffic_direction` | `TrafficDirection` | 0 unknown, 1 `INGRESS`, 2 `EGRESS` |
+| 23 | `policy_match_type` | uint32 | §4.5 |
+| 24 | `trace_observation_point` | `TraceObservationPoint` | §4.3 |
+| 36 | `trace_reason` | `TraceReason` | §4.3 |
+| 38 | `file` | `FileInfo{name=1, line=2}` | drop site; drops only |
+| 40 | `ip_trace_id` | `IPTraceID{trace_id=1, ip_option_type=2}` | absent when the id is 0 |
+| 25 | `drop_reason_desc` | `DropReason` | the enum form of field 3 |
+| 26 | `is_reply` | `BoolValue` | **absent when unknown** — distinct from false |
+| 27 | `debug_capture_point` | `DebugCapturePoint` | debug captures only |
+| 28 | `interface` | `NetworkInterface{index=1, name=2}` | §3.12 |
+| 29 | `proxy_port` | uint32 | §3.12 |
+| 30 | `trace_context` | `TraceContext{parent=1 TraceParent{trace_id=1}}` | W3C traceparent from L7 |
+| 31 | `sock_xlate_point` | `SocketTranslationPoint` | sock flows only |
+| 32 | `socket_cookie` | uint64 | sock flows only |
+| 33 | `cgroup_id` | uint64 | sock flows only |
+| 100000 | `Summary` | string *(deprecated)* | human summary; the CLI's compact output still prefers it |
+| 150000 | `extensions` | `Any` | |
+| 21001 | `egress_allowed_by` | repeated `Policy` | §3.12.1 |
+| 21002 | `ingress_allowed_by` | repeated `Policy` | §3.12.1 |
+| 21004 | `egress_denied_by` | repeated `Policy` | §3.12.1 (also set for AUDIT) |
+| 21005 | `ingress_denied_by` | repeated `Policy` | §3.12.1 (also set for AUDIT) |
+| 21006 | `policy_log` | repeated string | de-duplicated log values of matched rules |
+| 21007 | `aggregate` | `Aggregate{ingress_flow_count=1, egress_flow_count=2, unknown_direction_flow_count=3}` | exporter aggregation only |
+
+Field 21003 is unused and MUST stay unused.
+
+### 4.14 Supporting messages and enums (frozen)
+
+```
+Endpoint      { ID=1, identity=2, namespace=3, labels=4, pod_name=5,
+                workloads=6 (Workload{name=1, kind=2}), cluster_name=7 }
+Ethernet      { source=1, destination=2 }
+IP            { source=1, destination=2, ipVersion=3, encrypted=4, source_xlated=5 }
+Layer4 oneof  { TCP=1, UDP=2, ICMPv4=3, ICMPv6=4, SCTP=5, VRRP=6, IGMP=7 }
+TCP           { source_port=1, destination_port=2, flags=3 }
+UDP           { source_port=1, destination_port=2 }
+SCTP          { source_port=1, destination_port=2, chunk_type=3 }
+ICMPv4/v6     { type=1, code=2 }
+VRRP          { type=1, vrid=2, priority=3 }
+IGMP          { type=1, group_address=2 }
+TCPFlags      { FIN=1, SYN=2, RST=3, PSH=4, ACK=5, URG=6, ECE=7, CWR=8, NS=9 }
+Tunnel        { protocol=1, IP=2, l4=3, vni=4 }
+Layer7        { type=1, latency_ns=2, oneof record { dns=100, http=101, kafka=102 (dep) } }
+DNS           { query=1, ips=2, ttl=3, cnames=4, observation_source=5,
+                rcode=6, qtypes=7, rrtypes=8 }
+HTTP          { code=1, method=2, url=3, protocol=4, headers=5 (HTTPHeader{key=1,value=2}) }
+Service       { name=1, namespace=2 }
+Policy        { name=1, namespace=2, labels=3, revision=4, kind=5 }
+FileInfo      { name=1, line=2 }
+IPTraceID     { trace_id=1, ip_option_type=2 }
+NetworkInterface { index=1, name=2 }
+CiliumEventType  { type=1, sub_type=2 }
+EventTypeFilter  { type=1, match_sub_type=2, sub_type=3 }
+LostEvent     { source=1, num_events_lost=2, cpu=3, first=4, last=5 }
+DebugEvent    { type=1, source=2, hash=3, arg1=4, arg2=5, arg3=6, message=7, cpu=8 }
+AgentEvent    { type=1, oneof notification {
+                  unknown=100 (AgentEventUnknown{type=1, notification=2}),
+                  agent_start=101, policy_update=102, endpoint_regenerate=103,
+                  endpoint_update=104, ipcache_update=105,
+                  service_upsert=106 (dep), service_delete=107 (dep) } }
+Aggregate     { ingress_flow_count=1, egress_flow_count=2,
+                unknown_direction_flow_count=3 }
+```
+
+Enums:
+
+| Enum | Values |
+|---|---|
+| `Verdict` | 0 `VERDICT_UNKNOWN`, 1 `FORWARDED`, 2 `DROPPED`, 3 `ERROR`, 4 `AUDIT`, 5 `REDIRECTED`, 6 `TRACED`, 7 `TRANSLATED` |
+| `FlowType` | 0 `UNKNOWN_TYPE`, 1 `L3_L4`, 2 `L7`, 3 `SOCK` |
+| `AuthType` | 0 `DISABLED`, 1 `SPIRE`, 2 `TEST_ALWAYS_FAIL` |
+| `IPVersion` | 0 `IP_NOT_USED`, 1 `IPv4`, 2 `IPv6` |
+| `TrafficDirection` | 0 unknown, 1 `INGRESS`, 2 `EGRESS` |
+| `L7FlowType` | 0 unknown, 1 `REQUEST`, 2 `RESPONSE`, 3 `SAMPLE` |
+| `SCTPChunkType` | 0 `UNSUPPORTED`, 1 `INIT`, 2 `INIT_ACK`, 3 `SHUTDOWN`, 4 `SHUTDOWN_ACK`, 5 `SHUTDOWN_COMPLETE`, 6 `ABORT` |
+| `Tunnel.Protocol` | 0 `UNKNOWN`, 1 `VXLAN`, 2 `GENEVE` |
+| `SocketTranslationPoint` | 0 unknown, 1 `PRE_DIRECTION_FWD`, 2 `POST_DIRECTION_FWD`, 3 `PRE_DIRECTION_REV`, 4 `POST_DIRECTION_REV` |
+| `LostEventSource` | 0 unknown, 1 `PERF_EVENT_RING_BUFFER`, 2 `OBSERVER_EVENTS_QUEUE`, 3 `HUBBLE_RING_BUFFER` |
+| `EventType` | 0 `UNKNOWN`, 2 `RecordLost`, 9 `EventSample` (the perf record types) |
+| `TraceObservationPoint`, `TraceReason`, `DropReason`, `DebugEventType`, `DebugCapturePoint`, `AgentEventType` | §4.3, §4.6, §4.8, §4.10 |
+
+### 4.15 `observer.proto`, `peer.proto`, `relay.proto` (frozen)
+
+```
+service Observer {
+  GetFlows(GetFlowsRequest)            returns (stream GetFlowsResponse)
+  GetAgentEvents(GetAgentEventsRequest) returns (stream GetAgentEventsResponse)
+  GetDebugEvents(GetDebugEventsRequest) returns (stream GetDebugEventsResponse)
+  GetNodes(GetNodesRequest)            returns (GetNodesResponse)
+  GetNamespaces(GetNamespacesRequest)  returns (GetNamespacesResponse)
+  ServerStatus(ServerStatusRequest)    returns (ServerStatusResponse)
+}
+
+GetFlowsRequest  { number=1, follow=3, blacklist=5, whitelist=6, since=7,
+                   until=8, first=9, field_mask=10, experimental=999,
+                   extensions=150000 }   // field 2 reserved
+GetFlowsResponse { oneof { flow=1, node_status=2, lost_events=3 },
+                   node_name=1000, time=1001 }
+GetAgentEventsRequest  { number=1, follow=2, since=7, until=8, first=9 }
+GetAgentEventsResponse { agent_event=1, node_name=1000, time=1001 }
+GetDebugEventsRequest  { number=1, follow=2, since=7, until=8, first=9 }
+GetDebugEventsResponse { debug_event=1, node_name=1000, time=1001 }
+GetNodesResponse { nodes=1 }
+Node  { name=1, version=2, address=3, state=4, tls=5, uptime_ns=6,
+        num_flows=7, max_flows=8, seen_flows=9 }
+TLS   { enabled=1, server_name=2 }
+GetNamespacesResponse { namespaces=1 }
+Namespace { cluster=1, namespace=2 }
+ServerStatusResponse { num_flows=1, max_flows=2, seen_flows=3, uptime_ns=4,
+                       num_connected_nodes=5, num_unavailable_nodes=6,
+                       unavailable_nodes=7, version=8, flows_rate=9 }
+ExportEvent { oneof { flow=1, node_status=2, lost_events=3, agent_event=4,
+                      debug_event=5 }, node_name=1000, time=1001 }
+
+service Peer { Notify(NotifyRequest) returns (stream ChangeNotification) }
+ChangeNotification { name=1, address=2, type=3, tls=4 }
+ChangeNotificationType { 0 UNKNOWN, 1 PEER_ADDED, 2 PEER_DELETED, 3 PEER_UPDATED }
+peer.TLS { server_name=1 }
+
+NodeStatusEvent { state_change=1, node_names=2, message=3 }
+NodeState { 0 UNKNOWN_NODE_STATE, 1 NODE_CONNECTED, 2 NODE_UNAVAILABLE,
+            3 NODE_GONE, 4 NODE_ERROR }
+```
+
+Note `GetFlowsRequest.follow` is field **3** but `GetAgentEventsRequest.follow`
+and `GetDebugEventsRequest.follow` are field **2**. This asymmetry is real and
+MUST be preserved.
+
+The gRPC health service (`grpc.health.v1.Health`) and server reflection MUST be
+registered on every listener; `hubble status` and `grpcurl` depend on them. The
+health service name for the observer is `hubble.server.Observer`.
+
+### 4.16 Dynamic metrics YAML
+
+```yaml
+metrics:
+  - name: drop                       # handler name; required, unique
+    contextOptions:
+      - name: sourceContext
+        values: [pod, namespace]     # a list; "|" and "," are NOT re-split here
+      - name: labelsContext
+        values: [source_namespace, destination_namespace]
+    includeFilters: [ <FlowFilter as protobuf JSON> ]
+    excludeFilters: [ ... ]
+```
+
+Parsed as YAML→JSON, so nested `FlowFilter`s use protobuf JSON field names
+(`source_pod`, `destination_pod`). Unlike the command-line form, `values` is
+already a list and is not split further; a presence-only flag is expressed as
+`values: [""]` or by omitting `values` entirely.
+
+### 4.17 Dynamic flow-log YAML
+
+Schema and semantics in §3.19.4.
+
