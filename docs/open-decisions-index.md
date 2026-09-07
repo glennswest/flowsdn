@@ -164,3 +164,28 @@ named in the issue body.
 | [#148](https://github.com/glennswest/flowsdn/issues/148) | [spec 11] Hubble IP filters compare strings, not addresses | `area/hubble` | `upstream-bug` | `docs/spec/11-hubble-monitor.md` |
 | [#149](https://github.com/glennswest/flowsdn/issues/149) | [spec 11] Exporter `node_name`: match the reference's mix, or always cluster-qualified? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
 | [#150](https://github.com/glennswest/flowsdn/issues/150) | [spec 11] `hubble-prefer-ipv6` vs the global `prefer-ipv6`: which wins? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
+| [#151](https://github.com/glennswest/flowsdn/issues/151) | [spec 11] Ring persistence across an agent restart? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
+| [#152](https://github.com/glennswest/flowsdn/issues/152) | [spec 11] Who generates Hubble certificates? | `area/hubble` | `spec-gap` | `docs/spec/11-hubble-monitor.md` |
+| [#153](https://github.com/glennswest/flowsdn/issues/153) | [spec 11] Kubernetes `PacketDrop` event emitter | `area/hubble` | `deferred` | `docs/spec/11-hubble-monitor.md` |
+| [#154](https://github.com/glennswest/flowsdn/issues/154) | [spec 11] Hubble emitter name: `flowsdn`, `cilium`, or configurable? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
+| [#155](https://github.com/glennswest/flowsdn/issues/155) | [spec 12] Graceful demotion on lost operator leadership, or keep the fatal exit? | `area/operator` | `open-decision` | `docs/spec/12-operator.md` |
+| [#156](https://github.com/glennswest/flowsdn/issues/156) | [spec 12] Slim CES mode first, or default (CEP) mode first? | `area/operator` | `open-decision` | `docs/spec/12-operator.md` |
+| [#157](https://github.com/glennswest/flowsdn/issues/157) | [spec 12] Continue the `io.cilium.k8s.crd.schema.version` 1.33.x line, or fork the label? | `area/operator` | `open-decision` | `docs/spec/12-operator.md` |
+| [#158](https://github.com/glennswest/flowsdn/issues/158) | [spec 12] Keep the `node.cilium.io/agent-not-ready` taint key? | `area/operator` | `open-decision` | `docs/spec/12-operator.md` |
+| [#159](https://github.com/glennswest/flowsdn/issues/159) | [spec 12] Keep `io.cilium/gateway-controller` as the Gateway API controller name? | `area/gateway` | `open-decision` | `docs/spec/12-operator.md` |
+| [#160](https://github.com/glennswest/flowsdn/issues/160) | [spec 12] Operator REST API surface: keep all three routes, or only `/healthz`? | `area/operator` | `open-decision` | `docs/spec/12-operator.md` |
+| [#161](https://github.com/glennswest/flowsdn/issues/161) | [spec 12] `identity-management-mode` default: `agent` or `operator`? | `area/operator` | `open-decision` | `docs/spec/12-operator.md` |
+| [#162](https://github.com/glennswest/flowsdn/issues/162) | [spec 12] Keep the stepped CES dynamic rate-limit table for small clusters? | `area/operator` | `open-decision` | `docs/spec/12-operator.md` |
+| [#163](https://github.com/glennswest/flowsdn/issues/163) | [spec 12] Omit Prometheus `go_*` metrics, or emit Rust equivalents under Go names? | `area/operator` | `open-decision` | `docs/spec/12-operator.md` |
+| [#164](https://github.com/glennswest/flowsdn/issues/164) | [spec 12] `--skip-crd-creation`: fail readiness or fail startup when a CRD is missing? | `area/operator` | `open-decision` | `docs/spec/12-operator.md` |
+| [#165](https://github.com/glennswest/flowsdn/issues/165) | [spec 13] Protobuf for built-in Kubernetes types, or JSON only? | `area/k8s` | `open-decision` | `docs/spec/13-crds-k8s-client.md` |
+| [#166](https://github.com/glennswest/flowsdn/issues/166) | [spec 13] Serve `v2alpha1` alongside `v2` for the six graduated CRDs? | `area/k8s` | `open-decision` | `docs/spec/13-crds-k8s-client.md` |
+| [#167](https://github.com/glennswest/flowsdn/issues/167) | [spec 13] Strategic merge patch, or JSON patch, for node annotations and conditions? | `area/k8s` | `open-decision` | `docs/spec/13-crds-k8s-client.md` |
+| [#168](https://github.com/glennswest/flowsdn/issues/168) | [spec 13] Ship a client-side CEL evaluator when the server has no CEL? | `area/k8s` | `open-decision` | `docs/spec/13-crds-k8s-client.md` |
+| [#169](https://github.com/glennswest/flowsdn/issues/169) | [spec 13] Register `ciliumgatewayclassconfigs` even though Gateway API is deferred? | `area/k8s` | `open-decision` | `docs/spec/13-crds-k8s-client.md` |
+| [#170](https://github.com/glennswest/flowsdn/issues/170) | [spec 13] `CiliumEndpoint` per pod, or `CiliumEndpointSlice` only? | `area/k8s` | `open-decision` | `docs/spec/13-crds-k8s-client.md` |
+| [#171](https://github.com/glennswest/flowsdn/issues/171) | [spec 13] Namespace scope for the operator's namespaced CRD listing | `area/k8s` | `open-decision` | `docs/spec/13-crds-k8s-client.md` |
+| [#172](https://github.com/glennswest/flowsdn/issues/172) | [spec 13] Kubernetes version floor: 1.26, 1.21 or 1.29? | `area/k8s` | `open-decision` | `docs/spec/13-crds-k8s-client.md` |
+| [#173](https://github.com/glennswest/flowsdn/issues/173) | [spec 14] Keep the fixed WireGuard port 51871 and IPsec reqid 1? | `area/encryption` | `open-decision` | `docs/spec/14-encryption-egress.md` |
+| [#174](https://github.com/glennswest/flowsdn/issues/174) | [spec 14] Write the legacy `cilium_egress_gw_policy_v4` map in lock-step? | `area/encryption` | `open-decision` | `docs/spec/14-encryption-egress.md` |
+| [#175](https://github.com/glennswest/flowsdn/issues/175) | [spec 14] Allow strict ingress with IPsec, which the reference refuses? | `area/encryption` | `open-decision` | `docs/spec/14-encryption-egress.md` |
