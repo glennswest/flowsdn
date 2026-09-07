@@ -139,3 +139,28 @@ named in the issue body.
 | [#123](https://github.com/glennswest/flowsdn/issues/123) | [spec 09] CNI binary name: `cilium-cni`, `flowsdn-cni`, or both? | `area/cni` | `open-decision` | `docs/spec/09-cni-plugin.md` |
 | [#124](https://github.com/glennswest/flowsdn/issues/124) | [spec 09] `loopback` plugin: ship the upstream Go binary, or write the Rust equivalent? | `area/cni` | `open-decision` | `docs/spec/09-cni-plugin.md` |
 | [#125](https://github.com/glennswest/flowsdn/issues/125) | [spec 09] Implement the CNI GC verb? | `area/cni` | `deferred` | `docs/spec/09-cni-plugin.md` |
+| [#126](https://github.com/glennswest/flowsdn/issues/126) | [spec 09] How deep should CNI CHECK go? | `area/cni` | `open-decision` | `docs/spec/09-cni-plugin.md` |
+| [#127](https://github.com/glennswest/flowsdn/issues/127) | [spec 09] Duplicate ADD for an existing `cid:ifname`: keep the 400, or make ADD idempotent? | `area/cni` | `open-decision` | `docs/spec/09-cni-plugin.md` |
+| [#128](https://github.com/glennswest/flowsdn/issues/128) | [spec 09] Fix the CNI log rotation size threshold | `area/cni` | `open-decision` | `docs/spec/09-cni-plugin.md` |
+| [#129](https://github.com/glennswest/flowsdn/issues/129) | [spec 09] Confirm with spec 08 that rollback's `DELETE /endpoint` has no cross-endpoint side effect | `area/cni` | `to-verify` | `docs/spec/09-cni-plugin.md` |
+| [#130](https://github.com/glennswest/flowsdn/issues/130) | [spec 09] Decide `container-netns-path` semantics with spec 08 | `area/cni` | `spec-gap` | `docs/spec/09-cni-plugin.md` |
+| [#131](https://github.com/glennswest/flowsdn/issues/131) | [spec 10] Amend ADR-0003's wording on nftables accept rules | `area/node` | `spec-gap` | `docs/spec/10-node-routing-nftables.md` |
+| [#132](https://github.com/glennswest/flowsdn/issues/132) | [spec 10] Managed neighbors only: accept the deviation and drop the `NTF_USE` refresher? | `area/node` | `open-decision` | `docs/spec/10-node-routing-nftables.md` |
+| [#133](https://github.com/glennswest/flowsdn/issues/133) | [spec 10] Host mark rule: always install, or gate it on features? | `area/node` | `open-decision` | `docs/spec/10-node-routing-nftables.md` |
+| [#134](https://github.com/glennswest/flowsdn/issues/134) | [spec 10] Clean up the reference's `CILIUM_*` iptables chains on upgrade? | `area/node` | `open-decision` | `docs/spec/10-node-routing-nftables.md` |
+| [#135](https://github.com/glennswest/flowsdn/issues/135) | [spec 10] Node ID persistence: pinned map only, or also a state-dir checkpoint? | `area/node` | `open-decision` | `docs/spec/10-node-routing-nftables.md` |
+| [#136](https://github.com/glennswest/flowsdn/issues/136) | [spec 10] Pin the numeric `address-scope-max` default | `area/node` | `to-verify` | `docs/spec/10-node-routing-nftables.md` |
+| [#137](https://github.com/glennswest/flowsdn/issues/137) | [spec 10] Are runtime `devices` changes honoured, and what is the `--devices` grammar? | `area/node` | `open-decision` | `docs/spec/10-node-routing-nftables.md` |
+| [#138](https://github.com/glennswest/flowsdn/issues/138) | [spec 10] Support endpoint-routes mode at all? | `area/node` | `open-decision` | `docs/spec/10-node-routing-nftables.md` |
+| [#139](https://github.com/glennswest/flowsdn/issues/139) | [spec 10] Subscribe to `RTNLGRP_*_RULE` events for faster recovery? | `area/node` | `open-decision` | `docs/spec/10-node-routing-nftables.md` |
+| [#140](https://github.com/glennswest/flowsdn/issues/140) | [spec 10] `rustables` or a hand-written nftables encoder? | `area/node` | `open-decision` | `docs/spec/10-node-routing-nftables.md` |
+| [#141](https://github.com/glennswest/flowsdn/issues/141) | [spec 11] Ship a `monitor1_2` client, a gob decoder, or a thin Observer client? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
+| [#142](https://github.com/glennswest/flowsdn/issues/142) | [spec 11] Perf reader wakeup policy: wake on every sample, or batch? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
+| [#143](https://github.com/glennswest/flowsdn/issues/143) | [spec 11] Decode-task scaling: one task, shard by CPU, or shard with a sequencer? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
+| [#144](https://github.com/glennswest/flowsdn/issues/144) | [spec 11] Populate the deprecated `Summary` field for L3/L4 flows? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
+| [#145](https://github.com/glennswest/flowsdn/issues/145) | [spec 11] CEL filters: reject, implement behind a flag, or implement and enable? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
+| [#146](https://github.com/glennswest/flowsdn/issues/146) | [spec 11] The two mismatched drop-reason proto names (136, 161) | `area/hubble` | `upstream-bug` | `docs/spec/11-hubble-monitor.md` |
+| [#147](https://github.com/glennswest/flowsdn/issues/147) | [spec 11] Populate `drop_notify.ifindex` into `Flow.interface` for drops? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
+| [#148](https://github.com/glennswest/flowsdn/issues/148) | [spec 11] Hubble IP filters compare strings, not addresses | `area/hubble` | `upstream-bug` | `docs/spec/11-hubble-monitor.md` |
+| [#149](https://github.com/glennswest/flowsdn/issues/149) | [spec 11] Exporter `node_name`: match the reference's mix, or always cluster-qualified? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
+| [#150](https://github.com/glennswest/flowsdn/issues/150) | [spec 11] `hubble-prefer-ipv6` vs the global `prefer-ipv6`: which wins? | `area/hubble` | `open-decision` | `docs/spec/11-hubble-monitor.md` |
