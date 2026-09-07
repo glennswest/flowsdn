@@ -20,19 +20,18 @@ without following `docs/licensing.md`.
 
 ## Work plan
 
-### Phase 0 — Inventory (IN PROGRESS, 2026-09-07)
+### Phase 0 — Inventory (COMPLETE 2026-09-07, except kernel-requirements roll-up)
 - [x] Repo, license, NOTICE, clean-room protocol, ADR-0001 scope
 - [x] Name check: flowsdn clear on GitHub, crates.io, npm, PyPI, .com/.io/.net/.org
-- [ ] Per-area inventory of the reference in `docs/inventory/` — 15 areas, files 01..15, running as parallel agents (started 2026-09-07):
+- [x] Per-area inventory of the reference in `docs/inventory/` — 15 areas, files 01..15, running as parallel agents (started 2026-09-07):
       01 bpf-programs, 02 bpf-maps-loader, 03 datapath-userspace-node, 04 loadbalancer,
       05 policy-identity, 06 agent-endpoint-api, 07 ipam-cloud, 08 operator, 09 hubble-monitor,
       10 bgp, 11 l7-proxy-dns-auth-mesh, 12 clustermesh-kvstore, 13 crds-k8s,
       14 encryption-egress, 15 helm-images-ci-tests.
-      Done + committed: 01 02 03 04 05 06 08 09 10 12 14 15. In flight (resumed after a
-      rate-limit stop): 07 11 13. Missing file = agent did not finish; rerun that area.
+      All 15 done and committed 2026-09-07 (~12.7k lines).
 - [x] ADR-0002 Rust only (BPF programs in aya-ebpf), ADR-0003 nftables residual
 - [x] ADR-0004 no Hive / no StateDB
-- [~] Roll-up scope table `docs/inventory/README.md` — drafted from 12 areas; fill 07/11/13 when they land
+- [x] Roll-up scope table `docs/inventory/README.md` with sizes + keep/defer/replace + build order
 - [ ] Kernel requirements: BPF features used by the datapath, per program
 
 ### Phase 1 — Specs (datapath first)
