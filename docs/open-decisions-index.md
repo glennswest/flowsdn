@@ -114,3 +114,28 @@ named in the issue body.
 | [#98](https://github.com/glennswest/flowsdn/issues/98) | [spec 06] Port ranges starting at 0: fix the prefix encoding, or reject at validation? | `area/policy` | `upstream-bug` | `docs/spec/06-policy-engine.md` |
 | [#99](https://github.com/glennswest/flowsdn/issues/99) | [spec 06] Wire policy log cookies now, or keep cookie 0? | `area/policy` | `open-decision` | `docs/spec/06-policy-engine.md` |
 | [#100](https://github.com/glennswest/flowsdn/issues/100) | [spec 06] Reserved flag bits 1-2 of `policy_entry`: never reclaim before 1.0 | `area/policy` | `open-decision` | `docs/spec/06-policy-engine.md` |
+| [#101](https://github.com/glennswest/flowsdn/issues/101) | [spec 06] Keep `GET /policy` returning 404 on empty? | `area/agent` | `open-decision` | `docs/spec/06-policy-engine.md` |
+| [#102](https://github.com/glennswest/flowsdn/issues/102) | [spec 06] Endpoint lockdown on policy-map overflow: keep the fail-open default? | `area/policy` | `open-decision` | `docs/spec/06-policy-engine.md` |
+| [#103](https://github.com/glennswest/flowsdn/issues/103) | [spec 06] Port the brute-force policy simulator as the mapstate oracle? | `area/policy` | `open-decision` | `docs/spec/06-policy-engine.md` |
+| [#104](https://github.com/glennswest/flowsdn/issues/104) | [spec 07] Keep writing `spec.ipam.pool` in ENI mode? | `area/ipam` | `open-decision` | `docs/spec/07-ipam.md` |
+| [#105](https://github.com/glennswest/flowsdn/issues/105) | [spec 07] Azure: generated management crates, or direct ARM REST over `azure_core`? | `area/ipam` | `open-decision` | `docs/spec/07-ipam.md` |
+| [#106](https://github.com/glennswest/flowsdn/issues/106) | [spec 07] Azure deprecated mirror fields: read and write, or read only? | `area/ipam` | `open-decision` | `docs/spec/07-ipam.md` |
+| [#107](https://github.com/glennswest/flowsdn/issues/107) | [spec 07] Serialize VMSS updates across nodes of one scale set? | `area/ipam` | `open-decision` | `docs/spec/07-ipam.md` |
+| [#108](https://github.com/glennswest/flowsdn/issues/108) | [spec 07] Keep the `--aws-max-results-per-call` auto-switch to 1000? | `area/ipam` | `open-decision` | `docs/spec/07-ipam.md` |
+| [#109](https://github.com/glennswest/flowsdn/issues/109) | [spec 07] Build a real GKE integration (alias IP ranges), or stay on `ipam=kubernetes`? | `area/ipam` | `deferred` | `docs/spec/07-ipam.md` |
+| [#110](https://github.com/glennswest/flowsdn/issues/110) | [spec 07] ENI IPv6: parity with the reference's one-/80-prefix model, or a per-ENI prefix model? | `area/ipam` | `open-decision` | `docs/spec/07-ipam.md` |
+| [#111](https://github.com/glennswest/flowsdn/issues/111) | [spec 07] Alibaba `PrepareIPRelease` ENI choice: most-free in sorted id order | `area/ipam` | `open-decision` | `docs/spec/07-ipam.md` |
+| [#112](https://github.com/glennswest/flowsdn/issues/112) | [spec 07] Alibaba credential chain: include RRSA (OIDC) from day one? | `area/ipam` | `open-decision` | `docs/spec/07-ipam.md` |
+| [#113](https://github.com/glennswest/flowsdn/issues/113) | [spec 07] `status.ipam.pod-cidrs`: never write, but keep the type? | `area/ipam` | `open-decision` | `docs/spec/07-ipam.md` |
+| [#114](https://github.com/glennswest/flowsdn/issues/114) | [spec 08] Read Cilium-written endpoint state directories for in-place migration? | `area/agent` | `open-decision` | `docs/spec/08-endpoint-agent-api.md` |
+| [#115](https://github.com/glennswest/flowsdn/issues/115) | [spec 08] Widen the endpoint id pool to 1..65535? | `area/agent` | `open-decision` | `docs/spec/08-endpoint-agent-api.md` |
+| [#116](https://github.com/glennswest/flowsdn/issues/116) | [spec 08] 409 or 400 for a duplicate endpoint PUT? | `area/agent` | `open-decision` | `docs/spec/08-endpoint-agent-api.md` |
+| [#117](https://github.com/glennswest/flowsdn/issues/117) | [spec 08] Health responder: in-process thread with `setns`, or a separate binary? | `area/agent` | `open-decision` | `docs/spec/08-endpoint-agent-api.md` |
+| [#118](https://github.com/glennswest/flowsdn/issues/118) | [spec 08] Deferred REST routes: return 501, or leave them unregistered? | `area/agent` | `open-decision` | `docs/spec/08-endpoint-agent-api.md` |
+| [#119](https://github.com/glennswest/flowsdn/issues/119) | [spec 08] Implement the adaptive API rate limiter, or use fixed limits? | `area/agent` | `open-decision` | `docs/spec/08-endpoint-agent-api.md` |
+| [#120](https://github.com/glennswest/flowsdn/issues/120) | [spec 08] Endpoint-hash scope: does a changed embedded BPF object force a rewrite+load? | `area/agent` | `spec-gap` | `docs/spec/08-endpoint-agent-api.md` |
+| [#121](https://github.com/glennswest/flowsdn/issues/121) | [spec 08] Status verdict for "not all probes executed": Warning or Failure? | `area/agent` | `spec-gap` | `docs/spec/08-endpoint-agent-api.md` |
+| [#122](https://github.com/glennswest/flowsdn/issues/122) | [spec 08] Resolve the `flowsdn-health` crate name clash between spec 00 and spec 08 | `area/agent` | `spec-gap` | `docs/spec/08-endpoint-agent-api.md` |
+| [#123](https://github.com/glennswest/flowsdn/issues/123) | [spec 09] CNI binary name: `cilium-cni`, `flowsdn-cni`, or both? | `area/cni` | `open-decision` | `docs/spec/09-cni-plugin.md` |
+| [#124](https://github.com/glennswest/flowsdn/issues/124) | [spec 09] `loopback` plugin: ship the upstream Go binary, or write the Rust equivalent? | `area/cni` | `open-decision` | `docs/spec/09-cni-plugin.md` |
+| [#125](https://github.com/glennswest/flowsdn/issues/125) | [spec 09] Implement the CNI GC verb? | `area/cni` | `deferred` | `docs/spec/09-cni-plugin.md` |
