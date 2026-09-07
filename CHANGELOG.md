@@ -11,3 +11,4 @@
 - **docs:** ADR-0004 no Hive/StateDB; explicit composition + `flowsdn-table` crate. Inventory roll-up drafted (12/15 areas) with build order.
 - **docs:** Inventory complete: 15 areas, ~12.7k lines. Roll-up finalized (full-scope estimate 200–260k Rust lines).
 - **docs:** Specs 00 foundation, 03 identity/ipcache, 04 conntrack/NAT. Kernel requirements roll-up: stormcos 6.12 line, general minimum 6.6, CONFIG fragment, verifier-risk analysis, test matrix.
+- **docs:** Spec 01 BPF map ABI + loader. Spec wave 2 launched (05–10).
