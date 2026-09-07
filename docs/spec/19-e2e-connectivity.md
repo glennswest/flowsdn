@@ -18,6 +18,11 @@ Normative language: MUST / SHOULD / MAY as in RFC 2119. This spec describes
 makes and the exact CI that runs it. Deviations from the reference's approach
 are marked **DEVIATION** with the reason and the ADR.
 
+**Amendments.** 2026-09-07 — §11 gap 9 (cloud-provider scenarios) narrowed for
+**ADR-0007**: recorded-response cloud fakes close the gap for the cloud IPAM
+control plane; end-to-end *datapath* testing on a cloud provider remains out of
+scope and the gap is restated to say only that.
+
 ---
 
 ## 1. Scope
@@ -1711,8 +1716,19 @@ initially.** Naming these so nobody discovers them by being surprised:
    Noting it here because it is easy to forget that it is part of what "the
    connectivity test passed" means upstream.
 9. **Cloud-provider scenarios** (EKS/ENI, GKE, AKS): no flowsdn CI runs against
-   a cloud provider yet. The IPAM specs' cloud modes are therefore untested
-   end-to-end, and that is a known and stated gap, not an oversight.
+   a cloud provider. **Narrowed 2026-09-07 by ADR-0007**, which closes the half
+   of this gap that mattered most: the cloud IPAM *control plane* — every mode
+   of spec 07 §3.9–3.12, including the error and exhaustion paths — is now a
+   pull-request gate, tested against recorded provider responses replayed at the
+   HTTP layer (spec 07 §9.1), with a weekly live-cloud drift check as the only
+   credentialed job. What remains out of scope is genuinely end-to-end
+   *datapath* testing on a cloud provider: no job runs this suite's §3.2 matrix
+   on EKS, AKS or GKE, so ENI/Azure-attached pod interfaces, cloud-provider
+   LoadBalancer Services, cloud-native routing MTUs and the per-endpoint policy
+   routing of spec 07 §3.20 are exercised only in the `E` lane, which is
+   manual. The gap therefore narrows rather than disappears, and the residual
+   is stated precisely: **flowsdn proves that it asks the cloud for the right
+   addresses, not yet that packets flow once it has them.**
 
 ---
 

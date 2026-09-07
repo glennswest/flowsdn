@@ -28,6 +28,11 @@ is named (cilium-dbg, CNI plugin, Helm, a Cilium operator or agent of the other
 implementation during migration, Hubble). Where flowsdn deviates the paragraph
 is marked **DEVIATION** with the reason and the ADR.
 
+**Amendments.** 2026-09-07 — §9 rewritten for **ADR-0007** (recorded-response
+cloud fakes): the `F` lane is redefined from hand-written in-memory API servers
+to replayed real provider responses, and §9.1 states the fixture layout,
+scrubbing rule, replay layer and mandatory scenario list.
+
 ## 1. Scope
 
 In scope:
@@ -1383,9 +1388,10 @@ Operation names are the API action names (e.g. `DescribeNetworkInterfaces`,
 
 ## 9. Test plan
 
-Unit (U), privileged/kernel (P), end-to-end with cloud fakes (F: in-memory EC2 /
-ARM / ECS servers implementing the call set of 3.9–3.11 with configurable
-errors), real-cloud e2e (E).
+Unit (U), privileged/kernel (P), cloud modes against **recorded-response fakes**
+(F: real EC2 / ARM / ECS / OpenAPI responses captured once, scrubbed, committed
+and replayed at the HTTP layer — ADR-0007, detailed in §9.1; this supersedes the
+earlier plan of hand-written in-memory API servers), real-cloud e2e (E).
 
 Agent core and pool selection (U): allocate/release/owner bookkeeping;
 `allocate_next(family="")` releases IPv6 on IPv4 failure; excluded IP retry;
@@ -1491,6 +1497,67 @@ GKE with `ipv4NativeRoutingCIDR`; multi-pool with auto-created pools,
 `ipMasqAgent`, endpoint routes; delegated IPAM on kind with `host-local`;
 cluster-pool manager on EKS. Alibaba has no CI in the reference; flowsdn adds
 an F suite only.
+
+### 9.1 The `F` lane: recorded-response cloud fakes (ADR-0007)
+
+**Added 2026-09-07 by amendment.** Every cloud mode specified normatively above
+— `eni` (3.9), `azure` (3.10), `alibabacloud` (3.11) and GKE (3.12, which makes
+no cloud API call and is therefore covered by an IMDS-only scenario set) — MUST
+be tested in CI against recorded provider responses. No `F` test may reach a
+live provider, and no `F` job may hold cloud credentials.
+
+**Fixtures.** One directory per scenario:
+`tests/cloud/<provider>/<scenario>/`, containing the ordered interactions as
+`NNN-<operation>.json` plus a `scenario.toml` naming the scenario, provider,
+region, the flowsdn operations performed and the capture date. Capture is a
+manual, human-run `flowsdn-cloud-record` xtask against a throwaway account; it
+is never part of CI. Because the fixtures *are* the contract, a change to how
+flowsdn calls a provider API MUST land with a re-capture in the same commit.
+
+**Scrubbing.** Capture writes through a scrubber that MUST replace,
+deterministically and reversibly within a scenario, every account ID, ARN and
+resource ID (ENI, subnet, VPC, security group, instance, image), subscription
+and tenant ID, resource-group and VMSS name, Alibaba UID and vSwitch/VPC ID,
+public IP, DNS name, `Authorization` / `x-amz-security-token` / MSI-token
+header, bearer token and request signature. Private IPs and CIDRs inside the
+test VPC are **kept** — they are the substance of the allocation assertions. A
+committed fixture MUST NOT contain a credential, a real account identifier or a
+signature; a pattern scan over `tests/cloud/**` runs *before* any fixture is
+read and fails the build on a hit.
+
+**Replay is at the HTTP layer, not at the SDK trait.** AWS uses
+`aws-smithy-runtime`'s replay client where it fits and otherwise the shared
+local replay server with `--ec2-api-endpoint` pointed at it; Azure and Alibaba
+use the shared replay server with the SDK endpoint and credential source
+overridden to a static test credential; IMDS and the Azure instance-metadata
+endpoint are served by the same server. This is deliberate: it keeps the SDKs'
+own **request signing, retry/backoff, pagination and error mapping** inside the
+tested path, which stubbing the Rust traits would skip — and those are exactly
+the layers 3.9–3.11 depend on (the `OperationNotPermitted` pagination switch of
+the AWS paragraph above, the throttling backoff of `pkg/api/helpers/rate_limit`,
+and Alibaba's own signed REST client, which has no vendor SDK to trust).
+Matching is by method, path and canonicalized body, in scenario order. An
+unmatched request fails the test and prints it beside the closest recorded
+interaction; strict mode (the CI default) additionally fails on recorded
+interactions never used, so a fixture set cannot silently rot.
+
+**Scenarios every provider MUST carry** (ADR-0007 §4): happy-path node
+bring-up; pre-allocation watermark growth (5.1); excess-IP release (3.13);
+ENI creation, attach and tag; subnet selection with several candidates (5.8);
+prefix delegation and the `InsufficientCidrBlocks` fallback (AWS); instance-type
+limits lookup (5.10); API throttling with backoff; ENI-or-IP limit reached;
+subnet exhausted; IMDS unavailable at startup; credential expiry mid-run;
+operator restart mid-allocation; node deleted during allocation. The
+provider-specific `F` lists earlier in this section are additional to, not a
+substitute for, those fourteen.
+
+**Drift detection.** Recorded fixtures go stale silently when a provider changes
+its API, so a **weekly scheduled** job re-runs the capture xtask against the
+live account and diffs the normalized result against the committed fixtures,
+opening an issue on a difference. It gates nothing, runs on a schedule rather
+than on a pull request, and is the **only** job in the repository that holds
+cloud credentials — read-only where the provider supports it. The `E` lane
+above is likewise never a pull-request gate.
 
 ## 10. Kernel and platform requirements
 

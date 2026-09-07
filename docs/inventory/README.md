@@ -5,6 +5,10 @@ summary and the scope decision. Effort is Rust lines to write: S < 2k,
 M 2–8k, L 8–20k, XL > 20k. Decisions that override an area recommendation
 are in `../decisions/` and noted in the last column.
 
+**Amendments.** 2026-09-07 — build order clarified for **ADR-0006** (one
+repository, one Cargo workspace): the ordering below is a crate dependency
+order, not a repository or release split.
+
 | # | Area | Reference size (non-test Go / BPF C) | Decision | Effort | Notes |
 |---|---|---|---|---|---|
 | 01 | [BPF datapath programs](01-bpf-programs.md) | 8k program + 23k lib C | keep | XL | ADR-0002 overrides: Rust (aya-ebpf), no C. First milestone (lxc/host/overlay, v4/v6, CT, policy, ClusterIP/NodePort SNAT, VXLAN, monitor) is L. |
@@ -41,6 +45,14 @@ the largest deferrable blocks.
 - Open: identity management mode default, CES slim-mode-first (08).
 
 ## Build order (dependency-driven)
+
+The order in which crates are *written*, inside the single workspace of
+ADR-0006. It is not a repository split and not a release sequence: every crate
+below lives in the same tree and is versioned once, so a step here can be
+revisited without a cross-repository migration. `flowsdn-bgp-proto` (step 10)
+and `flowsdn-scripttest` (built ahead of step 5, per ADR-0005) are the only two
+crates ADR-0006 names as candidates for later extraction and publication, and
+only once their APIs have stopped moving.
 
 1. `flowsdn-table` (ADR-0004), config/flag registry, netlink layer.
 2. BPF map ABI crate + loader (02), then datapath programs first milestone (01).

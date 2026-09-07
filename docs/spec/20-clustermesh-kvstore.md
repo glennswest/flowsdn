@@ -232,3 +232,1268 @@ It is the acceptance gate for a fastetcd release and for any alternative
 backend. Rows F6, F7, F10, F11, F14, F17, F19, F21 are the currently failing
 ones; F10 and F17 are blocking, the rest are accepted with the stated
 mitigation.
+
+## 3. Behavior
+
+### 3.1 The kvstore client trait
+
+flowsdn's kvstore surface is deliberately narrower than the reference's
+`BackendOperations`. The reference exposes 20 methods; several exist only to
+serve one caller, and three (`GetIfLocked`, `ListPrefixIfLocked`,
+`CreateOnlyIfLocked`, `UpdateIfLocked`, `UpdateIfDifferentIfLocked`,
+`DeleteIfLocked`) are the same operation with a lock-ownership compare bolted
+on. flowsdn expresses the lock compare as an optional argument instead.
+
+The trait MUST be exactly this, and MUST NOT grow without an entry in §12:
+
+| Operation | Signature (semantics, not Rust) | Notes |
+|---|---|---|
+| `get` | `(key, guard?) -> Option<Value>` | `Value = { data, mod_revision, lease_id }`; missing key is `None`, not an error |
+| `put` | `(key, value, lease: Lease, guard?) -> ()` | `Lease ∈ { None, Attached }`; `Attached` binds the key to the client's current lease (§3.3.1) |
+| `put_if_absent` | `(key, value, lease, guard?) -> bool` | one `Txn` with `Compare(Version(key) == 0)`; `false` = key existed |
+| `put_if_different` | `(key, value, lease, guard?) -> bool` | read-compare-write; MUST also rewrite when the stored key's lease id differs from the client's current lease, otherwise the key silently outlives its writer's lease generation |
+| `delete` | `(key, guard?) -> ()` | idempotent; deleting a missing key is success |
+| `delete_prefix` | `(prefix) -> ()` | one `DeleteRange`; also releases every lease binding under the prefix |
+| `list_prefix` | `(prefix, guard?) -> Map<key, Value>` | paginated internally (§5.3); returns the whole prefix |
+| `watch` | `(prefix) -> Stream<Event>` | list-then-watch; `Event ∈ { Create, Modify, Delete, ListDone }` (§5.4) |
+| `lock` | `(path) -> Guard` | distributed lock; `Guard` yields the compare used by the `guard?` arguments (§3.3.2) |
+| `lease_expired` | `(prefix, callback)` / `(prefix, None)` | register/unregister the observer fired per key when a lease is lost (§3.3.1) |
+| `status` | `() -> Status` | the human-readable state + message of §3.2.5 |
+| `status_errors` | `() -> Stream<Error>` | bounded (128) channel of status-check errors; the connection watchdog consumes it |
+| `close` | `()` | closes the connection and waits for lease keepalive tasks |
+
+Rules:
+
+1. A backend MUST implement all of it or fail construction; there is no
+   capability negotiation between flowsdn and its store.
+2. `guard?` is `Option<&Guard>`. When present, the operation MUST be executed
+   as one transaction whose compare is the guard's ownership compare, and MUST
+   fail with a distinguishable `LockLeaseExpired` error when the compare fails.
+   This preserves the reference's `*IfLocked` semantics and its error.
+3. Every operation except `lock`, `status` and the lease keepalive path MUST
+   pass through the rate limiter (§3.2.4). `lock` is deliberately unlimited so
+   that a saturated limiter cannot deadlock the quorum probe.
+4. **DEVIATION (ADR-0001).** The reference's user-management methods
+   (`UserEnforcePresence`, `UserEnforceAbsence`) are not part of the trait.
+   flowsdn does not use etcd Auth (§2.7 F19, §3.8.5).
+5. **DEVIATION (ADR-0004).** There is no `Client` cell, no hive script
+   commands and no statedb-backed in-memory backend. Tests use an in-process
+   backend implementing the same trait (§11.1); the scripttest harness drives
+   it through the same commands the reference's `kvstore/list|update|delete`
+   scripts use, so the harvested `.txtar` files run unmodified.
+
+### 3.2 The etcd backend
+
+#### 3.2.1 Configuration and endpoints
+
+The backend is selected by `kvstore` (`""` = disabled, `etcd` = enabled) and
+configured by repeated `kvstore-opt` key/value pairs. Exactly one of
+`etcd.address` and `etcd.config` MUST be given; both missing is fatal. An
+`etcd.config` path that does not yet exist is retried every 5 s with the log
+`Waiting for all kvstore configuration files to be available` rather than
+being fatal, because Helm mounts the secret asynchronously.
+
+`etcd.config` names a YAML file in the etcd client format (§2.3). Its
+`endpoints` list is **shuffled** before use; the reference does this to work
+around an etcd client failover defect, and flowsdn keeps it because it also
+spreads read load across apiserver replicas.
+
+#### 3.2.2 TLS
+
+TLS is configured entirely from the client YAML: `trusted-ca-file`,
+`cert-file`, `key-file`. When both `cert-file` and `key-file` are set, the
+client MUST install a **certificate resolver that re-reads both files on every
+TLS handshake**. This is the reference's rotation mechanism and it is
+load-bearing: the Helm CronJob and cert-manager rotate the secret in place, and
+nothing signals the process. A resolver that caches the parsed certificate
+breaks a mesh silently, hours after rotation.
+
+Server certificate verification MUST use `trusted-ca-file` when present and
+the system roots otherwise. Hostname verification is against the endpoint
+host — including when `cilium-host-aliases` redirected the connection to a
+different IP (§3.2.3), which is the entire point of the alias mechanism.
+
+#### 3.2.3 Dialing
+
+Three resolution layers, applied in order, before a TCP connect:
+
+1. **Static host aliases.** If the endpoint host appears in
+   `cilium-host-aliases`, its IP list is used directly. The last IP that
+   connected successfully is tried first; the rest are shuffled. Dial deadline
+   is split across candidates with a 2 s per-candidate minimum.
+2. **Kubernetes Service resolution.** A host of the form `<name>.<namespace>`
+   or `<name>.<namespace>.svc` is resolved to the Service's ClusterIP (agent:
+   from the LB frontend table; operator: from the Service informer). This lets
+   an agent reach the local apiserver without DNS.
+3. **DNS**, the normal path.
+
+Connection parameters: dial timeout is **not** set (connection establishment is
+asynchronous and bounded by §3.2.6 instead), gRPC keepalive time
+`etcd.keepaliveHeartbeat` (15 s), keepalive timeout `etcd.keepaliveTimeout`
+(25 s). A single value MUST NOT exceed 4 MiB on write (§2.7 F24).
+
+#### 3.2.4 Rate limit and inflight cap
+
+One limiter per client instance, named `etcd` for the local store and
+`etcd-<cluster>` for each remote.
+
+| Parameter | Source | Default | Meaning |
+|---|---|---|---|
+| steady-state rate | `etcd.qps` | 20 | requests per second, token bucket |
+| burst | `etcd.qps` | 20 | bucket depth; equals the steady rate even during bootstrap |
+| bootstrap rate | `etcd.bootstrapQps` | 0 (disabled) | rate applied until the bootstrap signal fires; the apiserver uses 10000 |
+| inflight cap | `etcd.maxInflight` | `etcd.qps` | maximum concurrent in-flight operations |
+
+The bootstrap rate exists so that a cold apiserver can flush its initial
+Kubernetes list into the store in seconds instead of minutes. It is raised to
+the steady rate exactly once, when the owning component signals that its
+initial synchronization finished.
+
+A request that cannot get a token or an inflight slot **waits**; it MUST NOT
+fail. There is no maximum wait: the caller's cancellation is the bound.
+
+The paginated list of §5.3 consumes **one** token for the whole list, not one
+per page. Watch creation consumes one token per attempt.
+
+#### 3.2.5 Status, quorum and reconnection
+
+A background status checker runs continuously and is the only writer of the
+client's status. One iteration:
+
+1. **Quorum probe** (skipped for remote-cluster clients, see below): acquire and
+   immediately release a distributed lock on
+   `cilium/.initlock/<random-u64-hex>` under a 10 s deadline, retrying with
+   exponential backoff. Success means the store can serve a linearizable write,
+   i.e. it has quorum. Failure records a `lock timeout` quorum error.
+2. **Heartbeat probe** (remote-cluster clients only): if no heartbeat watch
+   event has arrived for more than **2 minutes** (twice the write interval),
+   record a `no event received` quorum error. A remote client deliberately does
+   *not* take the init lock — it has no write permission on a peer's store —
+   so the heartbeat is its only liveness signal.
+3. **Endpoint status** (skipped for remote-cluster clients): for each endpoint,
+   a `Maintenance.Status` RPC under a 10 s deadline yields
+   `<endpoint> - <version>`, with ` (Leader)` appended when that member is the
+   leader, or `<endpoint> - <error>` on failure.
+4. **Verdict:**
+
+| Condition | State | Message |
+|---|---|---|
+| consecutive quorum errors > `kvstore-max-consecutive-quorum-errors` (2) | `Failure` | `Err: quorum check failed <n> times in a row: <err>` |
+| endpoints exist and none responded | `Failure` | `Err: not able to connect to any etcd endpoints` |
+| otherwise | `Ok` | `etcd: <ok>/<total> connected, leases=<n>, lock leases=<n>, has-quorum=<true\|err>: <per-endpoint strings joined by "; ">` |
+
+The message format is rendered verbatim by `cilium-dbg status` and by the
+per-remote-cluster status line, so it is frozen.
+
+5. **Interval**: 30 s when every endpoint responded, 5 s otherwise, scaled by
+   cluster size on the reference's curve (1 node → 20 s/3 s; 128 → 2 m 25 s/24 s;
+   8192 → 4 m 30 s/45 s). Errors are pushed into a bounded channel of 128; when
+   it is full the error is dropped with a warning rather than blocking.
+
+**Reconnection.** The client itself does not reconnect: gRPC does, per
+endpoint. What reconnects is the *consumer*. A status error, or the cluster-ID
+interceptor firing (§3.7.4), causes the owner of the connection to tear the
+client down and build a new one. For remote clusters that owner is the
+per-cluster connection controller (§3.7.3). For the local store it is the
+agent's kvstore module, which reports `Degraded` and retries with backoff.
+
+#### 3.2.6 Initial connection
+
+Establishing the first connection is bounded at **15 minutes**. Two things must
+happen: the lock lease session must be created (skipped for remote clients),
+and the heartbeat watcher must complete its initial list. Timeout produces
+`timed out while waiting for kvstore connection` or `timed out while starting
+the heartbeat watcher`, naming the endpoints.
+
+Because 15 minutes is far longer than a pod start budget, the agent and the
+operator wait only **5 seconds** synchronously (a circuit breaker) and then
+continue starting while the connection completes in the background. If it
+ultimately fails, the process exits. **DEVIATION (ADR-0004):** the reference
+implements this with a hive job with shutdown semantics; flowsdn implements it
+as a fence waiter (`kvstore-connected`) with a non-fatal 5 s bound and a task
+that terminates the process on definitive failure (spec `00` §3.4.1).
+
+### 3.3 Leases and locks
+
+#### 3.3.1 Leases
+
+Two lease managers per client:
+
+| Manager | TTL | Used by |
+|---|---|---|
+| key lease | `kvstore-lease-ttl` (15 m; valid range 25 s..24 h) | every leased data key and every synced canary |
+| lock lease | 25 s (fixed) | distributed locks, including the quorum probe |
+
+A manager grants a lease, starts its keepalive stream, and binds keys to it
+until it holds **1000 keys**, then grants another. Bindings are tracked
+in-process (`key → lease id`) so that:
+
+- `delete` / `delete_prefix` release the binding and decrement the lease's key
+  count;
+- `put_if_different` can detect that a key's *server-side* lease no longer
+  matches the client's current lease and force a rewrite (§3.1 row 4);
+- a lost lease can be reported per key.
+
+**Lease loss.** When a keepalive stream ends for any reason other than client
+shutdown, the manager MUST log at warning level, drop the lease and its
+bindings, and invoke every registered expiry observer whose prefix matches each
+bound key. Observers are registered by prefix; a `SyncStore` registers one for
+its data prefix and one for its canary key, and re-enqueues the affected keys
+for rewrite (§3.4.2). Without this, a lease loss silently deletes a cluster's
+entire exported state from every peer's view and it never comes back.
+
+The manager MUST NOT check lease validity client-side before handing a lease
+out. A stale lease is handed out, the operation fails at the server, and the
+caller retries — this is simpler and has no race window. On a
+`lease not found` error the manager orphans the session, which triggers the
+loss path above.
+
+#### 3.3.2 Distributed locks
+
+Locks are implemented **client-side** over `Txn` and `Watch`, not with the
+`v3lock` gRPC service (§2.7 F26). The key layout MUST be the reference's, since
+the reference's lock sweeper and any Cilium peer share it:
+
+```
+<path>/<lease-id-in-lowercase-hex>
+```
+
+Acquire: create `<path>/<hex>` with the lock lease, `put_if_absent`; read the
+prefix `<path>/` ordered by creation revision; if this client's key has the
+lowest creation revision it owns the lock, otherwise watch the immediately
+preceding key until it disappears and re-evaluate. Release: delete the key.
+The ownership compare handed to `guard?` arguments is
+`Compare(CreateRevision(<path>/<hex>) == <the revision we created it at>)`.
+
+Two bounds: acquisition is capped at **1 minute**; the lock lease is 25 s, so a
+crashed holder's key disappears within 25 s regardless.
+
+**Process-local locks.** Before taking the distributed lock, a caller takes an
+in-process lock on the same path, so that concurrent tasks in one agent do not
+contend over the network. A local lock held longer than **30 s** is
+force-released by a GC timer running every 30 s, with an error log naming the
+path: it means a task leaked, and blocking identity allocation forever is worse
+than the leak.
+
+### 3.4 Store synchronizers
+
+Three patterns over the client, plus the manager that gates them.
+
+#### 3.4.1 `SharedStore` — owned keys, round-tripped
+
+Used only for node records. The store owns a set of local keys, writes them
+leased, and simultaneously watches the whole prefix to learn about other
+writers' keys.
+
+- Initial list must complete within **3 minutes** or the join fails.
+- A `Delete` event for a key this store owns is an anomaly (someone else, or a
+  lease loss) and MUST cause an immediate re-create, logged at warning level.
+- A `Delete` event for a foreign key is **deferred** by
+  `SharedKeyDeleteDelay` (30 s for nodes) before being reported: if the key
+  reappears inside the window the delete is suppressed, with a warning. This
+  absorbs a peer agent restarting and re-writing its own node key.
+- Optional periodic resync (30 minutes for nodes) rewrites every owned key,
+  repairing any drift.
+
+#### 3.4.2 `SyncStore` — one-way export
+
+Used by the apiserver and the operator to push Kubernetes state into the store.
+A work queue with per-item exponential retry (5 ms → 1000 s) plus a global
+10 qps / burst 100 bucket, one worker by default.
+
+- `upsert(key, value)` is a no-op when the marshalled value is byte-identical
+  to what was last written. This is what keeps a resync from rewriting the
+  world.
+- Every write is leased unless the store was built without a lease.
+- When the source signals that its initial listing is complete, the store
+  enqueues a **synced canary**: it is written only once the pending set is
+  empty, so the canary means "everything from the initial list is durably in
+  the store". If the pending set is not empty the canary is re-queued through
+  the rate limiter.
+- On lease expiry (§3.3.1): the canary key expiring re-enqueues the canary
+  *without* re-running the completion callbacks; a data key expiring re-enqueues
+  that key.
+
+#### 3.4.3 `WatchStore` — one-way import
+
+Used for every remote resource. `watch(prefix)` appends a trailing `/` to the
+prefix if absent, so a watch on `.../nodes/v1/c1` never sees `.../nodes/v1/c11`.
+
+- **Restartable.** On every (re)start, all currently held entries are marked
+  stale. When the initial list completes, entries still marked stale are
+  emitted as synthetic deletes and dropped. This is what makes a reconnection
+  converge without a full drain, and it is why the reference can survive a
+  compaction (§5.4).
+- Starting a watch on a store that is already watching, or draining one that
+  is, is a programming error.
+- `drain()` emits deletes for every entry and clears the store: used on
+  permanent disconnect, cluster-ID change, and cache revocation.
+- On-sync callbacks run once and are then cleared, so a reconnection does not
+  re-signal readiness.
+
+#### 3.4.4 `WatchStoreManager` — canary gating
+
+Callers `register(prefix, start_fn)` before the manager runs; registration
+after start is a programming error. Two implementations:
+
+- **Canary-gated** (peer advertises `syncedCanaries`): the manager watches
+  `cilium/synced/<cluster>/` and starts `start_fn` for a registered prefix only
+  when the canary for that prefix appears. Each prefix starts at most once.
+- **Immediate** (peer does not advertise it): everything starts at once, and
+  the local caches may transiently miss entries the peer has not written yet.
+
+### 3.5 Heartbeat and cluster config
+
+#### 3.5.1 Heartbeat
+
+A single writer per cluster (the operator, or the apiserver, or kvstoremesh)
+writes `cilium/.heartbeat` = RFC3339 timestamp, leased, **every 60 s**, each
+write bounded at 25 s. Readers never parse the value: the *arrival of the watch
+event* is the signal, so no clock synchronisation between clusters is required.
+Two missed writes (§3.2.5 step 2) declare the peer's control plane dead.
+
+#### 3.5.2 Cluster config enforcement
+
+Each cluster writes exactly one `cilium/cluster-config/<own-name>` key holding
+its `CiliumClusterConfig` (§4.2), leased. The writer:
+
+1. establishes its own watch on the key first, and waits **5 s** for it to be
+   established before the first write, so it cannot race itself;
+2. writes with `put_if_different`, so a steady state is silent;
+3. re-writes whenever the watch reports a foreign modification or a deletion;
+4. refreshes every **5 minutes** regardless.
+
+The key is the only thing peers exchange about each other's configuration.
+
+### 3.6 Identity allocation in kvstore mode
+
+Spec `03` owns the identity model, the numbering and the CRD backend. This
+section specifies the kvstore backend that sits behind the same
+`IdentityBackend` trait (spec `03` §11), so that the allocation protocol above
+the trait — reference counting, local caches, the identity manager, GC
+scheduling — is shared and unchanged.
+
+#### 3.6.1 Keys
+
+| Key | Value | Lease | Meaning |
+|---|---|---|---|
+| `cilium/state/identities/v1/id/<decimal id>` | the canonical label string (spec `03` §4.1) | **none** | *master key*: this id is taken, and this is what it means |
+| `cilium/state/identities/v1/value/<label string>/<node suffix>` | the decimal id | key lease | *slave key*: this node is using this id |
+| `cilium/state/identities/v1/locks/<label string>/<lease hex>` | (lock) | lock lease | serialises allocate/release/GC for one label set |
+
+`<node suffix>` is the node's identifier — its IPv4 address when it has one,
+otherwise its IPv6 address. It appears in the key, not the value, so that a
+node's slave keys vanish with its lease.
+
+The master key is deliberately **unleased**: an identity must outlive the agent
+that first allocated it, or every agent restart would renumber the cluster.
+Reclaiming it is GC's job (§5.6).
+
+The trailing `;` of the canonical label string is what makes the `value/`
+prefix listing sound: without it, `value/k8s:app=foo;` would also match
+`value/k8s:app=foobar;/...`. A listing therefore additionally checks that the
+**last** `/` in the returned key sits exactly at the end of the requested
+prefix.
+
+#### 3.6.2 ID range per cluster
+
+`shift = 24 - log2(max-connected-clusters + 1)` (16 or 15). The allocator is
+constructed with:
+
+- `min = cluster-id == 0 ? 256 : cluster-id << shift`
+- `max = ((cluster-id + 1) << shift) - 1`
+- prefix mask `cluster-id << shift`
+
+so cluster 1 with `max-connected-clusters = 255` allocates `65536..131071`,
+cluster 2 `131072..196607`, and a cluster with id 0 (not meshed) allocates
+`256..65535`. Reserved identities (`< 256`) are global and never allocated.
+Spec `03` §4.5 is normative for the arithmetic; this section is normative for
+the fact that the allocator applies it.
+
+#### 3.6.3 Allocation
+
+1. Take the lock on `locks/<label string>`.
+2. `list_prefix("value/<label string>/")` under the lock. If any entry's key
+   matches the prefix exactly at its last `/`, that entry's value is the id —
+   go to step 5.
+3. Pick a free id from the local id pool within `[min, max]`.
+4. `put_if_absent("id/<id>", label string, lease = None)` under the lock. If it
+   returns `false`, another cluster member took that id between steps 3 and 4;
+   return the id to the pool and retry from step 3.
+5. `put_if_different("value/<label string>/<node suffix>", <id>, lease = key
+   lease)` under the lock.
+6. Release the lock.
+
+Release is the mirror and does **not** take the lock (it is serialised by the
+in-process slave-key mutex): delete `value/<label string>/<node suffix>`. The
+master key is left for GC.
+
+**Refresh.** Every entry the local cache still holds is periodically
+re-asserted: the master key is re-created with `put_if_absent` (never
+overwritten — a warning is logged if it had gone missing), and the slave key is
+re-created or updated. This repairs a lease loss and a master key deleted by an
+over-eager GC.
+
+#### 3.6.4 Coexistence with CRD mode
+
+`identity-allocation-mode` selects the backend:
+
+| Value | Backend | Status in flowsdn |
+|---|---|---|
+| `crd` | `CiliumIdentity` objects (spec `03` §3.3) | supported; the default |
+| `kvstore` | this section | supported when `kvstore` is set; otherwise fatal |
+| `doublewrite-readkvstore`, `doublewrite-readcrd` | both, one authoritative | **not implemented**; rejected at startup with a message naming the two supported values |
+
+Everything above the trait is identical in both modes, including the numbering,
+the cluster-ID range, the label-string key, the local (`0x01`) and remote-node
+(`0x02`) scopes, and the identity change stream the policy engine consumes.
+A cluster MUST NOT change modes while running; the migration path the
+double-write modes exist to serve is out of scope (§12 decision 3).
+
+In CRD mode, a mesh still needs identities visible to peers: the
+clustermesh-apiserver mirrors `CiliumIdentity` objects into
+`cilium/state/identities/v1/id/<id>` (§3.8.2). Peers cannot tell the two modes
+apart, which is exactly the intent.
+
+### 3.7 ClusterMesh: the agent side
+
+ClusterMesh is enabled when `cluster-id != 0` **and** `clustermesh-config` names
+a directory. Either alone disables it silently.
+
+#### 3.7.1 The config directory
+
+Every regular file in the directory whose **content contains the substring
+`endpoints:`** is a remote-cluster config; its **file name is the cluster
+name**. Directories are skipped. This test is intentionally crude — it is what
+lets a Kubernetes Secret projection, whose directory also contains `..data`
+symlinks and per-cluster certificate files, be watched directly.
+
+Two file-system watchers are required: one on the directory, one added
+explicitly per config file. A Secret projection replaces a symlink rather than
+writing the file, so a watcher on the directory alone misses content changes,
+and a watcher on the file alone is broken by the symlink swap. On adding a
+per-file watch the implementation MUST immediately re-read the file, closing
+the window between the read and the watch registration.
+
+Each tracked file's SHA-256 is remembered. A notification whose content hash is
+unchanged MUST be ignored — Secret projections generate many spurious events.
+
+Lifecycle events: a new or changed file is an `add` (add and update are the
+same event; the connection layer distinguishes them); a file that stops being a
+config, or disappears, is a `remove`. A file whose name equals the local cluster
+name is ignored. A file whose name is not a valid cluster name is refused with
+an error log and no connection.
+
+The config file MAY carry a `cilium-host-aliases` list (§2.3). It is parsed
+from the same YAML and validated: empty hostname, empty IP list, or a duplicate
+hostname is a parse error that fails the connection attempt.
+
+#### 3.7.2 Cluster-ID reservation
+
+The agent keeps a set of cluster IDs in use by remote clusters. Reserving fails
+when the ID is `0` (`clusterID 0 is reserved`), equals the local cluster's ID
+(`clusterID <n> is assigned to the local cluster`), or is already held by a
+different remote (`clusterID <n> is already used`). Two peers advertising the
+same ID is a misconfiguration that MUST be refused rather than merged: their
+identity ranges and ipcache cluster-ids would collide.
+
+#### 3.7.3 Connection lifecycle
+
+One controller per remote cluster, named `remote-etcd-<cluster>`, restarted on
+every failure with linear backoff (1 s, 2 s, 3 s, …, reset on success). One
+attempt:
+
+| Step | Action | Failure |
+|---|---|---|
+| 1 | Arm the cache-TTL timer if it is not already armed (§3.7.7) | — |
+| 2 | Release the previous connection: wait for all child tasks, drop the client, clear the pinned store id, close the old client | — |
+| 3 | Create a fresh cluster-ID pin (§3.7.4) and parse `cilium-host-aliases` | parse error → retry |
+| 4 | Build a kvstore client for this peer with the forced options below | — |
+| 5 | Wait for *either* the client's initial-connection signal or a pin error | error → close client, retry |
+| 6 | Record the peer store's id (lower-case hex) and start the watchdog (§3.7.6) | — |
+| 7 | Fetch `cilium/cluster-config/<cluster>` (§3.7.5) | error → cancel, retry |
+| 8 | Disarm the cache-TTL timer | — |
+| 9 | Run the import registration (§3.7.8) in a child task and wait for its readiness signal | error → retry |
+| 10 | Mark the remote cluster ready | — |
+
+**Forced client options** for a remote peer, which MUST NOT be overridable:
+quorum lock check **off** (the client has no write permission on a peer's
+store), endpoint status checks **off**, cluster name set for the rate-limiter
+name, plus the cluster-ID interceptors and the dialer. Consequently the only
+liveness signal for a remote peer is the heartbeat (§3.2.5 step 2).
+
+**Propagated options.** Exactly five keys from the local `kvstore-opt` reach a
+remote client: `etcd.qps`, `etcd.maxInflight`, `etcd.limit`,
+`etcd.keepaliveHeartbeat`, `etcd.keepaliveTimeout`. `kvstore-lease-ttl` and
+`kvstore-max-consecutive-quorum-errors` are inherited. Everything else — in
+particular `etcd.address` and `etcd.bootstrapQps` — MUST be dropped: the
+endpoint comes from the per-cluster config file, and a shared bootstrap rate
+would let one peer's cold start starve the others.
+
+#### 3.7.4 The cluster-ID interceptor pin
+
+Every response and every watch message from a remote store carries the store's
+own cluster id in its header. The first non-zero id observed on a connection is
+**latched**; every later response MUST match it. A mismatch, or a response with
+no header at all, pushes an error onto a one-slot channel that both the initial
+connect and the watchdog select on, and the in-flight operation fails with a
+distinguishable "aborted by interceptor" error so the watch loop treats it as a
+relist trigger rather than a data error.
+
+This exists because an endpoint address can start pointing at a different store
+— a DNS change, a Service reused for a rebuilt cluster, a load balancer
+fronting two apiservers. Without the pin the agent would silently merge two
+clusters' state under one name. A fresh pin is created on every reconnect, so a
+deliberate rebuild recovers after one connection cycle.
+
+**fastetcd note (§2.7 F17).** The pin is only as good as the store's cluster
+id. fastetcd defaults it to `1` for every deployment, so §6.6 makes a distinct
+`--cluster-id` mandatory in the flowsdn apiserver manifest.
+
+#### 3.7.5 Cluster config retrieval
+
+A sub-controller polls `cilium/cluster-config/<cluster>` for up to **3 minutes**
+with retries capped at 30 s. Retrying here rather than in the outer controller
+is deliberate: a missing config is a normal state on a peer that has not
+finished starting, and tearing down the connection each time would be much
+slower to converge.
+
+A missing key is reported with the hint *"If KVStoreMesh is enabled, check
+whether it is connected to the target cluster. Additionally, ensure that the
+cluster name is correct"* — the two overwhelmingly common causes.
+
+The status fields `config.required` (always true once retrieval starts) and
+`config.retrieved` come from this step, as do the reported `cluster-id`,
+`kvstoremesh`, `sync-canaries`, `service-exports-enabled` and
+`endpoint-slices-export-mode`.
+
+#### 3.7.6 The watchdog
+
+One task per connection selects on the client's status-error stream and the
+pin's error channel. On either, it increments the failure counter, stamps the
+last-failure time, updates the readiness metric, and restarts the connection
+controller. It is the only thing that turns a *detected* fault into a
+*reconnect*; the client itself never reconnects on its own.
+
+#### 3.7.7 Cache TTL and revocation
+
+`clustermesh-cache-ttl` (default `0` = never) bounds how long a disconnected
+peer's imported data stays usable. The timer is armed on the first failed
+connection attempt and disarmed on the first successful config retrieval. On
+expiry the agent performs a **partial** revocation: it drains remote
+**services** (and any observer that supports revocation), and leaves remote
+nodes, ipcache entries and identities in place.
+
+The asymmetry is deliberate and MUST be preserved. Stale service backends cause
+active mis-routing to a cluster that may be gone. Stale nodes and ipcache
+entries cause, at worst, tunnel and policy state for endpoints that no longer
+answer — and dropping them tears down working IPsec associations and forces a
+full policy recomputation on a peer that is very likely to come back.
+
+#### 3.7.8 Import registration and ordering
+
+Once the config is validated (§3.10) and the cluster ID reserved, the agent
+registers imports on a watch-store manager — canary-gated when the peer
+advertises `syncedCanaries`, immediate otherwise — and, when the peer
+advertises `cached`, rewrites every prefix from `cilium/state` to
+`cilium/cache`.
+
+| Import | Prefix watched | Validators | Consumer |
+|---|---|---|---|
+| nodes | `<p>/nodes/v1/<cluster>` | cluster name matches the file name; node name matches the key; `ClusterID` matches the reserved ID | node manager, source `clustermesh` |
+| services | `<p>/services/v1/<cluster>` | cluster name; `<ns>/<name>` matches the key; `clusterID` matches | global service cache → LB merge (§3.7.9) |
+| ipcache | `<p>/ip/v1/default` (or `<cache>/ip/v1/<cluster>`) | identity in the peer's range **or** reserved (`< 256`) | ipcache, source `clustermesh` |
+| identities | `<p>/identities/v1` (or `<cache>/identities/v1/<cluster>`) | identity in the peer's range; labels contain `k8s:io.cilium.k8s.policy.cluster=<cluster>` — checked on upsert only, never on delete | remote identity cache |
+| endpoint slices | `<p>/endpointslices/v1/<cluster>` | cluster name; namespaced name; `clusterID` | counted only at this reference tag (§3.7.9) |
+
+The cluster-name label check is skipped for deletions on purpose: labels may not
+have propagated, and refusing a delete leaves a stale identity forever.
+
+**Ordering constraints as fences (spec `00` §3.4.1).** Registration order does
+not impose ordering — the manager may start all prefixes at once. Ordering is
+expressed by what the rest of the agent *waits for*:
+
+| Waiter | Waits for, per remote cluster | Released to |
+|---|---|---|
+| `clustermesh-nodes` | nodes synced | node manager's mesh-sync signal, ipset initializer |
+| `clustermesh-ip-identities` | ipcache **and** identities **and** nodes synced | the `clustermesh-sync` fence, hence the first endpoint regeneration |
+| `clustermesh-services` | services synced (or endpoint slices, per §3.7.9) | the `lb-init` fence's `clustermesh` initializer |
+
+Nodes are included in the ip-identities waiter because node records themselves
+insert ipcache entries (node addresses, health IPs, ingress IPs); waiting only
+on the ipcache prefix would release the fence before those exist.
+
+All three are bounded by `clustermesh-sync-timeout` (1 minute). On expiry the
+waiter logs *once* at warning level and **returns success**: this is a circuit
+breaker, not a failure. Blocking endpoint regeneration forever because one peer
+is unreachable is strictly worse than starting with incomplete remote state.
+A cluster that disconnects while a waiter is pending releases that waiter
+immediately with a distinguishable "disconnected" outcome, which the aggregate
+waiter ignores.
+
+#### 3.7.9 Global services
+
+A remote `ClusterService` becomes LB backends:
+
+1. For each backend IP in the record (which may carry an `@<cluster-id>`
+   suffix), for each named port, construct a backend at
+   `(protocol, addr, port)` with weight 100, **no node name**, state `Active`,
+   the record's `clusterID`, external scope, and the zone from the record's
+   `zones` map if present.
+2. **De-duplicate by L4 address within one IP**: several port names sharing one
+   `(protocol, port)` collapse into a single backend carrying all of those port
+   names. The exporting side writes one entry per port name; the LB model wants
+   one backend with several names.
+3. Sort each backend's port names, so the result is deterministic.
+4. Replace the whole backend set for `(service name, source = clustermesh,
+   cluster id)` in one write transaction. A delete removes the whole set for
+   that `(service, cluster id)`.
+
+**Affinity.** `service.cilium.io/affinity` overrides backend selection for
+global services only. Let `L` = local backends, `R` = remote backends
+(source `clustermesh`); "healthy" = state `Active` or `Terminating` and not
+marked unhealthy; `L_active` = healthy locals in state `Active`.
+
+| Value | Locals used | Remotes used |
+|---|---|---|
+| service is not global | yes | **no** |
+| `none`, absent, or unparseable | yes | yes |
+| `local` | **always**, even when unhealthy | only when `L_active == 0` and there is at least one healthy remote |
+| `remote` | only when there are no healthy remotes and at least one healthy local | **always** |
+
+An unparseable value logs a warning and behaves as `none`. Terminating local
+backends do not keep remotes out (`L_active` counts only `Active`), while
+terminating remote backends do count as present for the `local` fallback test —
+this asymmetry is the reference's and is preserved, because it biases towards
+keeping traffic local during a rolling update.
+
+**Endpoint-slice sync mode.** `clustermesh-service-v2` selects between the
+legacy `services/v1` import and the `endpointslices/v1` import. At the reference
+tag the endpoint-slice import store **has no consumer**: entries are counted for
+status and metrics and then discarded. Selecting `prefer-endpointslice` or
+`only-endpointslice` therefore stops importing service backends *without
+replacing them*, and every global service loses its remote backends.
+
+**DEVIATION.** flowsdn accepts only `prefer-legacy` and rejects the other two
+values at startup, rather than shipping a mode that silently breaks global
+services. The key schema, the export path and the `endpointSlicesExportMode`
+capability are still implemented and advertised, so a peer in a v2 mode
+interoperates; only the local *selection* is restricted. §12 decision 4 revisits
+this when the consumer exists.
+
+#### 3.7.10 Status
+
+`ready` for a remote cluster is the conjunction of: a live connection; the
+cluster config retrieved; nodes, services, identities and ipcache all synced;
+the import registration completed; and every *enabled* observer synced.
+`services` is forced true when legacy services are not being watched, and the
+`endpoint-slices` / `service-exports` fields are null when the corresponding
+import is not enabled — nullability is how "not applicable" is distinguished
+from "not yet synced".
+
+`status` is the client's status message (§3.2.5), with `, ID: <store id hex>`
+appended once the pin has latched, or the literal `Waiting for initial
+connection to be established` before the first connection.
+
+`cilium-dbg status` renders (clusters sorted by name; by default only
+not-ready clusters get the detail block, `--all-clusters` shows all):
+
+```
+ClusterMesh:    <ready>/<total> remote clusters ready
+   <name>: <ready|not-ready>, N nodes, N endpoints, N identities, N services, N endpoint slices, N MCS-API service exports, N reconnections (last: <since>)
+   └  <status string>
+   └  remote configuration: expected=<bool>, retrieved=<bool>[, cluster-id=N, kvstoremesh=<bool>, sync-canaries=<bool>, service-exports=<enabled|disabled|unsupported>, endpoint-slice-export-mode=<mode|services-only>]
+   └  synchronization status: nodes=<bool>, endpoints=<bool>, identities=<bool>, services=<bool>[, endpoint-slices=<bool>][, service-exports=<bool>]
+```
+
+The bracketed part of the configuration line appears only when `retrieved` is
+true; when the config is absent entirely the line reads
+`expected=unknown, retrieved=unknown`. An empty export mode renders as the
+literal `services-only`.
+
+### 3.8 `flowsdn-clustermesh-apiserver`
+
+One Deployment per cluster. It is the cluster's *publisher*: it watches
+Kubernetes and writes this cluster's state into a store that peers read.
+
+#### 3.8.1 Process shape
+
+**DEVIATION (§6.6).** The reference pod is four containers: an `etcd-init` job
+that wipes a data dir, starts a localhost etcd, creates users/roles and enables
+auth; an `etcd` sidecar; the `apiserver`; and optionally `kvstoremesh`. flowsdn
+ships **two**: `fastetcd` and `flowsdn-clustermesh-apiserver` (with kvstoremesh
+as a mode of the same binary). There is no init container, because there is no
+etcd Auth bootstrap to perform (§3.8.5).
+
+#### 3.8.2 Synchronizers
+
+Each synchronizer watches one Kubernetes resource, writes one kvstore prefix
+through a `SyncStore` (§3.4.2), and publishes one synced canary. Readiness
+(§3.8.7) is the conjunction of all enabled synchronizers having published
+theirs.
+
+| Synchronizer | Watches | Prefix written | Key | Value | Canary |
+|---|---|---|---|---|---|
+| nodes | `CiliumNode` | `cilium/state/nodes/v1` | `<cluster>/<node name>` | node JSON (§4.3), with `Cluster` and `ClusterID` overwritten with this cluster's | `cilium/synced/<cluster>/cilium/state/nodes/v1` |
+| identities | `CiliumIdentity` | `cilium/state/identities/v1/id` | `<numeric id>` | the canonical label string built from `security-labels` (§4.5) | `cilium/synced/<cluster>/cilium/state/identities/v1` (**note: the canary drops the `/id` segment**) |
+| ipcache | `CiliumEndpoint`, or `CiliumEndpointSlice` when CES is enabled | `cilium/state/ip/v1/default` | the IP (or `ip/len`) | `IPIdentityPair` JSON (§4.4) | `cilium/synced/<cluster>/cilium/state/ip/v1` (**drops `/default`**) |
+| services | `Service` + `EndpointSlice` + `Namespace` | `cilium/state/services/v1` | `<cluster>/<ns>/<name>` | `ClusterService` JSON (§4.6) | `cilium/synced/<cluster>/cilium/state/services/v1` |
+| endpoint slices | `EndpointSlice` + `Service` + `Namespace` | `cilium/state/endpointslices/v1` | `<cluster>/<ns>/<slice>` | zstd(protobuf) (§4.7) | `cilium/synced/<cluster>/cilium/state/endpointslices/v1` |
+| service exports (deferred) | `ServiceExport` | `cilium/state/serviceexports/v1` | `<cluster>/<ns>/<name>` | `MCSAPIServiceSpec` JSON (§4.8) | `cilium/synced/<cluster>/cilium/state/serviceexports/v1` |
+
+The two canary overrides are load-bearing: readers register their watch on
+`cilium/state/identities/v1` and `cilium/state/ip/v1`, not on the `/id` and
+`/default` sub-prefixes, so the canary must name what the reader registered.
+
+**Identity values are not JSON.** The identity key's value is the bare
+canonical label string. An identity with no security labels is skipped
+entirely — neither written nor deleted — with a warning.
+
+**IP ownership arbitration.** Two Kubernetes objects can claim the same IP
+(a pod recreated with the same address, or a CEP and a CES entry overlapping).
+Each IP key has one primary owner and a FIFO of pending owners: only the
+primary's value is written; when the primary releases, the next pending owner's
+value is written; the key is deleted only when the last owner releases. Without
+this, a pod deletion racing a pod creation on a reused IP deletes the new pod's
+ipcache entry.
+
+**Global namespaces.** `clustermesh-default-global-namespace` (default `true`)
+and the `clustermesh.cilium.io/global` namespace annotation decide whether a
+namespace's identities, endpoints, services and endpoint slices are exported.
+A resource in a non-global namespace is **converted to a delete**, not dropped:
+that is what makes flipping a namespace from global to local remove the already
+published state. A namespace event re-evaluates every object of every namespaced
+synchronizer in that namespace. Delete events bypass the namespace check
+entirely, so a delete is never suppressed.
+
+#### 3.8.3 Cluster config publication
+
+The apiserver publishes `cilium/cluster-config/<own name>` with
+`syncedCanaries: true`, its cluster ID, `maxConnectedClusters`,
+`serviceExportsEnabled` (a pointer: absent means "does not support the concept")
+and `endpointSlicesExportMode`. Enforcement follows §3.5.2: watch first, write
+after a 5 s establishment wait, re-write on foreign modification or deletion,
+refresh every 5 minutes. The initial write is retried three times with 2 s→30 s
+backoff and, on final failure, terminates the process — a cluster whose config
+is unpublished is invisible to the mesh and should fail loudly.
+
+#### 3.8.4 The local etcd
+
+The apiserver's own connection to the store uses `etcd.qps=50` and
+`etcd.bootstrapQps=10000`; kvstoremesh uses `etcd.qps=100` and
+`etcd.maxInflight=10`. The bootstrap rate applies until the last synchronizer
+publishes its canary.
+
+#### 3.8.5 Users, roles and ACL ranges
+
+The reference creates etcd users and roles at init time and relies on
+`--client-cert-auth` mapping a client certificate's CN to an etcd user:
+
+| User | Role | Read ranges granted |
+|---|---|---|
+| `root` | `root` (built-in) | everything |
+| `admin-<cluster>` | `root` | everything; used by the apiserver itself |
+| `local-<cluster>` | `local` | `cilium/.heartbeat`; prefixes `cilium/cache/`, `cilium/cluster-config/`, `cilium/synced/` |
+| `remote` (and per-cluster `remote-<peer>`) | `remote` | `cilium/.heartbeat`; prefix `cilium/state/`; the single key `cilium/cluster-config/<own cluster>`; prefix `cilium/synced/<own cluster>/` |
+
+All grants are **read-only**; no role is ever granted write. Range ends are the
+prefix successor (`cilium/state/` → `cilium/state0`), and the heartbeat is
+granted as a prefix *without* a trailing slash, so `cilium/.heartbeat` →
+`cilium/.heartbeau`. The three auth modes are `legacy` (one `remote` user with
+the `root` role), `migration` (default: shared `remote` user plus per-cluster
+users) and `cluster` (per-cluster users only).
+
+**DEVIATION (§2.7 F19).** fastetcd has no CN→user mapping, so etcd Auth cannot
+authenticate anyone in this deployment model; enabling it would either lock the
+apiserver out or leave every client unauthenticated. flowsdn therefore does not
+use etcd Auth at all. Instead:
+
+1. Authentication is mTLS: the store requires a client certificate signed by
+   the cluster's CA. This is unchanged from the reference.
+2. Authorization is **prefix scoping enforced by the flowsdn apiserver front**,
+   not by the store. A peer connects to the apiserver's gRPC listener, which
+   maps the presented certificate CN to one of the role sets above and rejects
+   any `Range`/`Watch` outside its allowed ranges and every mutating RPC.
+3. The table above is therefore still normative: it is the front's policy
+   table, expressed in exactly the reference's ranges, so a Cilium peer using a
+   `remote` certificate sees exactly what it expects.
+4. `cluster-users-enabled`, `cluster-users-config-path`, the `users.yaml` file
+   and the `clustermesh-remote-users` ConfigMap are accepted and ignored, with
+   one startup warning naming this section.
+
+§12 decision 5 records the alternative (implement CN→user mapping and RBAC in
+fastetcd and keep the reference model) and why it is not the first cut.
+
+#### 3.8.6 TLS layout
+
+Four certificates, one CA (`Cilium CA`), all with the reference's common names
+because a Cilium peer's certificate must be accepted and vice versa.
+
+| Certificate | CN | SANs | Where used |
+|---|---|---|---|
+| server | `clustermesh-apiserver.<namespace>.svc` | that name, `*.mesh.cilium.io`, `127.0.0.1`, `::1`, plus configured extras | the store's listener |
+| admin | `admin-<cluster>` | — | apiserver and kvstoremesh → local store |
+| remote | `remote`, or `remote-<cluster>` in `cluster` auth mode | — | this cluster's agents and kvstoremesh → **peer** stores |
+| local | `local-<cluster>` | — | this cluster's agents → **local** store, when kvstoremesh is on |
+
+Agent-side file names are frozen because the config files reference them:
+`common-etcd-client{-ca.crt,.crt,.key}` (remote cert),
+`local-etcd-client{-ca.crt,.crt,.key}` (local cert), and the per-cluster
+`<cluster>.etcd-client{-ca.crt,.crt,.key}` form. All mounted mode `0400`.
+
+Which one an agent uses is decided by whether kvstoremesh is enabled: with
+kvstoremesh the agent dials its **own** apiserver at
+`https://clustermesh-apiserver.<ns>.svc:2379` with the `local-` files; without
+it, each peer directly with the `common-` files.
+
+#### 3.8.7 Health and metrics
+
+`GET /readyz` on `agent-health-port`-style flag `health-port` (9880 for the
+apiserver, 9881 for kvstoremesh), all interfaces, plain HTTP: `200 Ready` once
+every registered synchronizer has completed its initial sync, `500 NotReady`
+otherwise. `GET /metrics` on `prometheus-serve-addr` (disabled by default;
+9962 / 9964 in the manifests). Metric namespaces are
+`cilium_clustermesh_apiserver` and `cilium_kvstoremesh` (§8).
+
+### 3.9 kvstoremesh
+
+kvstoremesh mirrors every remote cluster's exported state into the **local**
+store under `cilium/cache/`, so that every agent in the cluster dials one
+endpoint instead of N, and one component absorbs the N connections.
+
+It reuses the entire agent-side connection lifecycle of §3.7.1–§3.7.7
+unchanged. What differs is what it does once connected.
+
+#### 3.9.1 Reflectors
+
+Six reflectors, each a `WatchStore` on the remote feeding a `SyncStore` on the
+local store, passing values through **byte-for-byte** with no re-encoding.
+
+| Reflector | Remote prefix | Local prefix written | Local canary |
+|---|---|---|---|
+| `nodes` | `cilium/state/nodes/v1/<cluster>` | `cilium/cache/nodes/v1/<cluster>` | `cilium/synced/<cluster>/cilium/cache/nodes/v1` |
+| `identities` | `cilium/state/identities/v1/id` | `cilium/cache/identities/v1/<cluster>/id` | `cilium/synced/<cluster>/cilium/cache/identities/v1` |
+| `endpoints` | `cilium/state/ip/v1/default` | `cilium/cache/ip/v1/<cluster>` | `cilium/synced/<cluster>/cilium/cache/ip/v1` |
+| `services` | `cilium/state/services/v1/<cluster>` | `cilium/cache/services/v1/<cluster>` | `cilium/synced/<cluster>/cilium/cache/services/v1` |
+| `endpoint slices` | `cilium/state/endpointslices/v1/<cluster>` | `cilium/cache/endpointslices/v1/<cluster>` | `cilium/synced/<cluster>/cilium/cache/endpointslices/v1` |
+| `service exports` | `cilium/state/serviceexports/v1/<cluster>` | `cilium/cache/serviceexports/v1/<cluster>` | `cilium/synced/<cluster>/cilium/cache/serviceexports/v1` |
+
+Identities and ipcache are the two irregular ones: their source prefixes are
+not cluster-scoped (a cluster publishes identities under a flat `id/`), so the
+mirror **inserts** the cluster name — which is exactly why the `cached`
+capability changes the reader's prefix shape as well as its root.
+
+When a remote peer is itself `cached`, the reflector reads the peer's
+`cilium/cache/...` instead. A disabled reflector still drains its store and
+publishes its canary, so it never blocks readiness.
+
+Only `services`, `endpoint slices` and `service exports` participate in
+cache-TTL revocation, matching the agent's partial-revocation rule (§3.7.7).
+
+#### 3.9.2 Cluster config rewrite
+
+kvstoremesh republishes each peer's config into the **local** store at
+`cilium/cluster-config/<peer>`, copying every field and overriding exactly two:
+`syncedCanaries = true` and `cached = true`. Local agents then read the peer's
+real ID and capabilities but look for its data under `cilium/cache/`.
+
+This write happens **before** any reflector is registered, so an agent that
+sees the config can rely on the canaries appearing.
+
+#### 3.9.3 Drain on disconnection
+
+When a peer's config file is removed, its mirrored data MUST be removed, or
+agents would keep serving it forever with no writer to expire it. The sequence,
+in this exact order:
+
+1. Delete `cilium/cluster-config/<peer>`. **First**, so an agent starting
+   during the drain does not connect to a half-deleted cache.
+2. Wait a **3 minute grace period** — first attempt only — so running agents
+   observe the config deletion and disconnect on their own before their data
+   disappears underneath them.
+3. Delete the prefix `cilium/synced/<peer>/`.
+4. Delete each reflector's `cilium/cache/<resource>/<peer>/`, reflectors taken
+   in a deterministic (name-sorted) order.
+
+The whole sequence is retried up to 5 times (6 attempts) with 2 s doubling
+backoff (2, 4, 8, 16, 32 s); the grace period is skipped on retries. Failure
+after the last attempt is logged as an error naming the inconsistency risk.
+
+A hidden `disable-drain-on-disconnection` skips the drain entirely; it MUST log
+that reconnecting to the same cluster without restarting kvstoremesh can leave
+inconsistent state.
+
+#### 3.9.4 Leader election and readiness
+
+Exactly one kvstoremesh instance may write the cache. Leadership is a
+distributed lock on `cilium/kvstoremesh-lock` held under the lock lease; losing
+the lock's lease MUST terminate the process rather than continue writing. The
+first acquisition attempt is bounded at 10 s; on timeout the component signals
+readiness anyway and then retries without a bound, so a stuck lock does not
+gate the pod's readiness forever.
+
+Readiness: a peer that does not connect within `per-cluster-ready-timeout`
+(15 s) is dropped from the readiness computation with a log line; the whole
+sync is bounded by `global-ready-timeout` (10 m), after which kvstoremesh
+declares itself ready and serves possibly-incomplete data, logging that it did.
+
+### 3.10 Version skew
+
+The only thing peers exchange about each other is
+`cilium/cluster-config/<name>`. Everything below is derived from it.
+
+| Capability | Absent / false | True | Gates |
+|---|---|---|---|
+| `id` | invalid — connection refused | 1..max | cluster-ID reservation, identity-range and ipcache validators |
+| `syncedCanaries` | watches start immediately; caches may transiently miss entries | watches wait for `cilium/synced/<cluster>/<prefix>` | watch start ordering |
+| `cached` | data under `cilium/state/...` | data under `cilium/cache/<...>/<cluster>`, cluster-scoped | prefix rewriting for every import |
+| `maxConnectedClusters` | treated as 255 | 255 or 511 | refuse connection when the **local** cluster is in extended mode and the values differ |
+| `serviceExportsEnabled` (nullable) | `null` = peer predates MCS-API → service-export import disabled | bool | the service-exports reflector/observer |
+| `endpointSlicesExportMode` | `""` = services only | `services-and-endpointslices`, `endpointslices-only` | which of services / endpoint slices are imported; an **unknown** value refuses the connection |
+
+Rules:
+
+1. **Missing config key** is not an error; it is "the peer has not started yet".
+   The agent retries for 3 minutes per connection attempt and then reconnects,
+   forever. A pre-1.13 Cilium peer that never writes the key therefore never
+   becomes ready, and says so in status, which is the correct outcome.
+2. **Unknown fields** in the JSON MUST be ignored. Every field is
+   `omitempty`-equivalent, so a newer peer's additions are invisible to an older
+   reader and an older peer's omissions read as zero.
+3. **New capabilities MUST be additive and default-off.** A capability whose
+   absence changes behavior cannot be added without breaking every existing
+   peer.
+4. `maxConnectedClusters` asymmetry is the reference's: a cluster at the default
+   255 accepts a peer advertising anything, while a cluster at 511 refuses a
+   mismatch. flowsdn preserves it — tightening it would refuse connections that
+   Cilium accepts — but logs a warning at 255 when a peer advertises 511,
+   because the identity ranges then genuinely disagree.
+5. flowsdn advertises `syncedCanaries: true` always, `cached` only from
+   kvstoremesh, `serviceExportsEnabled: false` (present, not null) while MCS-API
+   is deferred, and `endpointSlicesExportMode: services-and-endpointslices`
+   because it exports both.
+6. Cilium documents a **one-minor-version** skew limit across a mesh. flowsdn
+   inherits it as a support statement, not an enforced check: nothing in the
+   protocol carries a version, and refusing to connect on version grounds would
+   be a new failure mode the reference does not have.
+
+## 4. Data model
+
+### 4.1 Complete key schema
+
+All keys live under `cilium/`. `<C>` is the writing cluster's name. Keys are
+built by joining elements with `/`, collapsing any `//`, and trimming a trailing
+`/` (§5.1). Every path below is **frozen**: it is read by peer clusters.
+
+| Key | Value encoding | Leased | Writer | Reader |
+|---|---|---|---|---|
+| `cilium/.initlock/<rand-u64-hex>/<lease-hex>` | lock marker | lock lease (25 s) | any client with the quorum probe enabled | itself only |
+| `cilium/.heartbeat` | RFC3339 timestamp | key lease | operator, apiserver, kvstoremesh (`enable-heartbeat`) | every client, as a liveness watch |
+| `cilium/kvstoremesh-lock/<lease-hex>` | lock marker | lock lease | kvstoremesh candidates | themselves |
+| `cilium/cluster-config/<C>` | `CiliumClusterConfig` JSON (§4.2) | key lease | the cluster's own enforcer; kvstoremesh for a mirrored peer | every peer agent on connect |
+| `cilium/synced/<C>/cilium/state/nodes/v1` | RFC3339 timestamp | key lease | nodes `SyncStore` | peers' watch manager |
+| `cilium/synced/<C>/cilium/state/identities/v1` | RFC3339 | key lease | identities `SyncStore` (override: keys live under `.../id`) | idem |
+| `cilium/synced/<C>/cilium/state/ip/v1` | RFC3339 | key lease | ipcache `SyncStore` (override: keys live under `.../default`) | idem |
+| `cilium/synced/<C>/cilium/state/services/v1` | RFC3339 | key lease | services `SyncStore` | idem |
+| `cilium/synced/<C>/cilium/state/endpointslices/v1` | RFC3339 | key lease | endpoint-slice `SyncStore` | idem |
+| `cilium/synced/<C>/cilium/state/serviceexports/v1` | RFC3339 | key lease | service-export `SyncStore` (deferred) | idem |
+| `cilium/synced/<C>/cilium/cache/<resource>/v1` | RFC3339 | key lease | kvstoremesh reflectors | local agents |
+| `cilium/state/nodes/v1/<C>/<node>` | node JSON (§4.3) | key lease | agent node registrar (kvstore mode) or apiserver | peers' node manager |
+| `cilium/state/identities/v1/id/<decimal id>` | canonical label string (§4.5) | **none** | agent allocator (kvstore mode) or apiserver | peers, local allocator |
+| `cilium/state/identities/v1/value/<label string>/<node suffix>` | decimal id | key lease | agent allocator only | local allocator, GC |
+| `cilium/state/identities/v1/locks/<label string>/<lease-hex>` | lock marker | lock lease | agent allocator, GC | themselves |
+| `cilium/state/ip/v1/default/<ip or ip/len>` | `IPIdentityPair` JSON (§4.4) | key lease | agent (kvstore mode) or apiserver | peers' ipcache |
+| `cilium/state/services/v1/<C>/<ns>/<name>` | `ClusterService` JSON (§4.6) | key lease | apiserver / operator | peers' LB |
+| `cilium/state/endpointslices/v1/<C>/<ns>/<slice>` | zstd(protobuf) (§4.7) | key lease | apiserver | peers (counted at this tag) |
+| `cilium/state/serviceexports/v1/<C>/<ns>/<name>` | `MCSAPIServiceSpec` JSON (§4.8) | key lease | apiserver (deferred) | peers' operator |
+| `cilium/cache/nodes/v1/<C>/<node>` | verbatim copy | key lease | kvstoremesh | local agents |
+| `cilium/cache/identities/v1/<C>/id/<id>` | verbatim copy | key lease | kvstoremesh | local agents |
+| `cilium/cache/ip/v1/<C>/<ip>` | verbatim copy | key lease | kvstoremesh | local agents |
+| `cilium/cache/services/v1/<C>/<ns>/<name>` | verbatim copy | key lease | kvstoremesh | local agents |
+| `cilium/cache/endpointslices/v1/<C>/<ns>/<slice>` | verbatim copy | key lease | kvstoremesh | local agents |
+| `cilium/cache/serviceexports/v1/<C>/<ns>/<name>` | verbatim copy | key lease | kvstoremesh | local operator |
+
+Note the two irregular cache shapes: `identities` gains a `<C>` segment *before*
+`id/` (the source has no cluster segment), and `ip` replaces `default` with
+`<C>`.
+
+### 4.2 `CiliumClusterConfig`
+
+JSON, every field omitted when empty:
+
+```json
+{ "id": 3,
+  "capabilities": {
+    "syncedCanaries": true,
+    "cached": false,
+    "maxConnectedClusters": 255,
+    "serviceExportsEnabled": false,
+    "endpointSlicesExportMode": "services-and-endpointslices" } }
+```
+
+`id` is `u32`. `serviceExportsEnabled` is **nullable**: absent means the peer
+does not know the concept, `false` means it knows it and has it off.
+`endpointSlicesExportMode` is one of `""` (services only),
+`"services-and-endpointslices"`, `"endpointslices-only"`; any other value
+refuses the connection.
+
+### 4.3 Node record
+
+The reference type carries **no JSON tags**, so the Go field names are the wire
+names. Preserving them exactly is mandatory.
+
+`Name`, `Cluster`, `IPAddresses` (array of `{Type, IP}` where `Type` ∈
+`InternalIP`, `ExternalIP`, `CiliumInternalIP`), `IPv4AllocCIDR`,
+`IPv4SecondaryAllocCIDRs`, `IPv6AllocCIDR`, `IPv6SecondaryAllocCIDRs`,
+`IPv4HealthIP`, `IPv6HealthIP`, `IPv4IngressIP`, `IPv6IngressIP`, `ClusterID`,
+`Source`, `EncryptionKey` (u8 IPsec key index), `Labels`, `Annotations`,
+`WireguardPubKey`, `BootID`.
+
+Key name is `<Cluster>/<Name>`. On unmarshal: `Cluster` and `Name` MUST be
+non-empty. Readers additionally check the cluster name against the config file
+name, the node name against the key, and `ClusterID` against the reserved ID.
+
+**PodCIDR stripping.** In IPAM modes that do not use pod CIDRs (ENI, Azure,
+GCP, Alibaba) the alloc-CIDR fields are auto-generated and meaningless to a
+peer; a writer MUST clear all four before publishing.
+
+### 4.4 `IPIdentityPair`
+
+Capitalised field names (Go defaults):
+
+```json
+{ "IP": "10.0.1.5", "Mask": null, "HostIP": "192.168.1.10", "ID": 65538,
+  "Key": 0, "Metadata": "", "K8sNamespace": "ns", "K8sPodName": "pod",
+  "K8sServiceAccount": "sa",
+  "NamedPorts": [{"Name": "http", "Port": 8080, "Protocol": "TCP"}] }
+```
+
+Key name is the IP, or `ip/len` when `Mask` is set. `HostIP` is the node the
+endpoint lives on and becomes the ipcache tunnel endpoint. `Key` is the IPsec
+key index. `K8sNamespace`, `K8sPodName`, `K8sServiceAccount` and `NamedPorts`
+are omitted when empty.
+
+### 4.5 Identity master-key value
+
+The canonical label string of spec `03` §4.1: labels sorted by key, each
+rendered `<source>:<key>=<value>;`, concatenated with no separator beyond each
+element's trailing `;`. Example:
+
+```
+k8s:app=foo;k8s:io.cilium.k8s.policy.cluster=cluster3;k8s:io.kubernetes.pod.namespace=default;
+```
+
+The trailing `;` is what makes `value/`-prefix listings unambiguous (§3.6.1).
+When the apiserver derives this string from a `CiliumIdentity`, the source of
+each label comes from the `security-labels` map key (`source:key`), and an
+identity with an empty `security-labels` map is skipped entirely.
+
+### 4.6 `ClusterService`
+
+Lower-camel JSON:
+
+```json
+{ "cluster": "c1", "namespace": "ns", "name": "svc",
+  "frontends": { "10.96.0.10": { "http": {"Protocol":"TCP","Port":80} } },
+  "backends":  { "10.0.1.5":   { "http": {"Protocol":"TCP","Port":8080} } },
+  "hostnames": { "10.0.1.5": "pod-1" },
+  "zones": { "10.0.1.5": {"zone":"a","forZones":[{"name":"a"}]} },
+  "labels": {}, "selector": {},
+  "includeExternal": true, "shared": true, "clusterID": 1 }
+```
+
+Port maps are keyed by port name; the inner object uses **capitalised**
+`Protocol`/`Port` (it is a nested tag-less Go type). `hostnames` and `zones` are
+omitted when empty. Key name is `<cluster>/<namespace>/<name>`.
+
+Writer rules: `shared` and `includeExternal` are always `true` on a published
+record — an unshared service is *deleted*, not published with `shared: false`.
+Headless services publish no frontends. Backends come from EndpointSlices,
+skipping addresses that are neither ready nor serving.
+
+Reader validators: cluster name equals the config file name, `<ns>/<name>`
+equals the key suffix, `clusterID` equals the reserved ID.
+
+### 4.7 `ClusterEndpointSlice`
+
+Protocol buffers, then **zstd**. Decoder memory capped at 16 MiB. Fields, with
+their frozen numbers: `cluster` 1, `clusterID` 2, `namespace` 3, `name` 4,
+`labels` 5 (map), `annotations` 6 (map), `addressType` 7, `endpoints` 8
+(repeated, the slim `discovery/v1` Endpoint), `ports` 9 (repeated, slim
+EndpointPort). Key name `<cluster>/<namespace>/<slice>`. A JSON rendering exists
+for debug output only and is not a wire format.
+
+### 4.8 `MCSAPIServiceSpec` (deferred)
+
+Lower-camel: `cluster`, `name`, `namespace`, `annotations`, `labels`,
+`exportCreationTimestamp`, `ports`, `type` (`ClusterSetIP` | `Headless`),
+`sessionAffinity`, `sessionAffinityConfig`, `ipFamilies`,
+`internalTrafficPolicy`, `trafficDistribution`, plus the two **capitalised
+duplicates** `Labels` and `Annotations` written for older readers. A flowsdn
+writer, when this ships, MUST write both spellings.
+
+### 4.9 Status models
+
+`RemoteCluster`: `name`, `ready`, `connected`, `status`, `config`, `synced`,
+`num-nodes`, `num-shared-services`, `num-endpoints`, `num-identities`,
+`num-endpoint-slices`, `num-service-exports`, `num-failures`, `last-failure`.
+`RemoteClusterSynced`: `nodes`, `services`, `identities`, `endpoints`,
+`endpoint-slices` (nullable), `service-exports` (nullable).
+`RemoteClusterConfig`: `required`, `retrieved`, `cluster-id`, `kvstoremesh`,
+`sync-canaries`, `service-exports-enabled` (nullable),
+`endpoint-slices-export-mode`. All fields omitted when empty.
+
+## 5. Algorithms
+
+### 5.1 Key joining
+
+Join elements with `/`; repeatedly replace `//` with `/`; trim trailing `/`.
+Empty elements therefore vanish. `.` and `..` have **no** special meaning and
+MUST NOT be normalized away — they are legal key bytes.
+`state → cache` rewriting replaces only the **first** occurrence of the literal
+`cilium/state` at the start of a prefix; a prefix not starting with it is
+returned unchanged.
+
+### 5.2 Metric scope derivation
+
+Operation metrics are labelled by a `scope` derived from the key: split on `/`
+into at most 5 parts; if there are fewer than 4, use the first 12 bytes of the
+key; otherwise use `<part 3>/<part 4>`. So
+`cilium/state/identities/v1/id/1` → `identities/v1`. This keeps cardinality
+bounded regardless of how many identities or IPs exist, and is the reason the
+schema's version segment sits where it does.
+
+### 5.3 Paginated list
+
+```
+start := prefix
+end   := prefix with its last byte incremented        (prefix range end)
+rev   := 0
+loop:
+  page := range(start, end, limit = etcd.limit, revision = rev)
+  if rev == 0 { rev = page.header.revision }          // pin on the FIRST page only
+  append page.kvs
+  if !page.more || page.kvs is empty { return kvs, rev }
+  start = last key of page ++ "\x00"
+```
+
+Pinning the revision on the first page is mandatory: without it, later pages
+are read at a higher revision and any key modified in between is either seen
+twice or missed entirely, and the watch that follows starts from the wrong
+place. The returned revision is what the watch resumes from.
+
+### 5.4 Watch, relist and compaction
+
+#### 5.4.1 The loop
+
+```
+relist:
+  kvs, rev := paginated_list(prefix)          // on error: exponential backoff
+                                              // 50 ms → 1 m, retry
+  for each kv:
+      emit Create if not in local cache else Modify;  mark in-use
+  emit synthetic Delete for every cache entry still marked for deletion
+  emit ListDone (once per watcher lifetime, never on a relist)
+recreate:
+  w := watch(prefix, from = rev + 1, require_leader)
+  for each batch in w:
+      if batch.error:
+          mark ALL cache entries for deletion
+          goto relist
+      for each event: emit Create / Modify / Delete; update the cache
+      rev = batch.header.revision
+  // channel closed without an error
+  sleep 50 ms; goto recreate
+```
+
+#### 5.4.2 Why the local cache exists
+
+The watcher keeps a set of keys it has told its consumer about. On a relist it
+marks them all, clears the mark for every key the list returned, and then emits
+a delete for the remainder. This is the **only** mechanism that tells a consumer
+about keys deleted while the watch was broken. Without it, a compaction or a
+network partition leaves permanently stale remote state.
+
+#### 5.4.3 Compaction
+
+A watch cancelled because its start revision was compacted is not a special
+case: it takes the same path as any watch error — mark all, relist. flowsdn
+MUST NOT attempt to be clever here (e.g. resuming from the compaction
+revision); the relist is correct and the cost is bounded by the prefix size.
+
+#### 5.4.4 Periodic resync (**DEVIATION**, fastetcd F10)
+
+Because fastetcd can currently drop watch events silently under load without
+cancelling the watch (§2.7 F10), flowsdn adds a periodic relist every
+`kvstore-resync-interval` (default 5 m, `0` disables). It runs the same relist
+path, so it converges the same way, and its cost is one paginated list per
+prefix per interval. When F10 is fixed the default becomes `0` and this becomes
+a diagnostic tool. The reference has no equivalent.
+
+### 5.5 Lease bookkeeping
+
+```
+get_lease(key):
+  if key already bound      -> return its lease
+  if current lease has < 1000 keys -> bind, count++, return
+  scan other leases for one with < 1000 keys -> make current, bind, return
+  otherwise: grant a new lease (single-flight: concurrent callers wait on the
+             in-progress grant and then re-enter), make it current, start its
+             keepalive, then re-enter to bind the key
+```
+
+Never validate a lease client-side before returning it: a stale lease produces
+a server error the caller retries, which is simpler and race-free. On a
+`lease not found` error, orphan the session so the loss path (§3.3.1) runs.
+
+### 5.6 Identity GC (kvstore mode)
+
+Runs in the operator, on the operator's identity-GC schedule (spec `12`), with
+a rate limiter shared with CRD-mode GC. It is a **two-round** algorithm keyed on
+each master key's modification revision.
+
+```
+for each master key `id/<n>` in the local cluster's range:
+    if <n> outside [min(local cluster), max(local cluster)]: skip
+    take the lock on locks/<the key's label string>
+    users := list_prefix("value/<label string>/") under the lock
+    in_use := any user whose key matches the prefix exactly at its last '/'
+              AND whose value equals <n>
+    if in_use:                 forget the key
+    else if key in previous round's stale set:
+        if its mod_revision is UNCHANGED since that round:
+            delete the master key under the lock          -> counted deleted
+        else:
+            the identity was reused between rounds: drop it from the stale set
+            entirely (it will be re-evaluated from scratch next round)
+    else:
+        record (key -> mod_revision) in this round's stale set
+    release the lock
+    if anything was deleted this iteration, wait for a rate-limiter token
+```
+
+Two properties matter and MUST be preserved: (a) an identity is only deleted if
+it had **no users in two consecutive rounds and was not modified in between**,
+which is what makes the unleased master key safe; (b) the rate-limiter wait
+happens **after** releasing the lock, so a slow GC never blocks allocation.
+Keys outside the local cluster's range are skipped, so GC never touches another
+cluster's identities even if they are visible.
+
+**Lock GC** is the same shape over `locks/`: a lock key is force-deleted only
+when both its modification revision **and** its lease id are unchanged since the
+previous round, proving the same client still holds it and has been stuck.
+Deleting a live lock would corrupt allocation, so the double check is required.
+
+### 5.7 Reconnection and drain matrix
+
+| Trigger | Nodes | Services | ipcache | Identities | Observers | Cluster ID |
+|---|---|---|---|---|---|---|
+| watch error / status error | relist (§5.4) | relist | relist | relist | relist | kept |
+| peer cluster ID changed | drain | drain | drain | drain | drain | released, then re-reserved |
+| cache TTL expired | keep | **drain** | keep | keep | revoke | kept |
+| config file removed | drain | drain | drain | drain | drain | released |
+| agent shutting down | **keep** | keep | keep | keep | keep | kept |
+
+The last row is the important one: on shutdown nothing is drained, because a
+drain would delete every remote endpoint from the datapath and break every
+established cross-cluster connection for the duration of the restart.
