@@ -189,3 +189,28 @@ named in the issue body.
 | [#173](https://github.com/glennswest/flowsdn/issues/173) | [spec 14] Keep the fixed WireGuard port 51871 and IPsec reqid 1? | `area/encryption` | `open-decision` | `docs/spec/14-encryption-egress.md` |
 | [#174](https://github.com/glennswest/flowsdn/issues/174) | [spec 14] Write the legacy `cilium_egress_gw_policy_v4` map in lock-step? | `area/encryption` | `open-decision` | `docs/spec/14-encryption-egress.md` |
 | [#175](https://github.com/glennswest/flowsdn/issues/175) | [spec 14] Allow strict ingress with IPsec, which the reference refuses? | `area/encryption` | `open-decision` | `docs/spec/14-encryption-egress.md` |
+| [#176](https://github.com/glennswest/flowsdn/issues/176) | [spec 14] Plumb the zero output mark through both IPsec IN paths? | `area/encryption` | `open-decision` | `docs/spec/14-encryption-egress.md` |
+| [#177](https://github.com/glennswest/flowsdn/issues/177) | [spec 14] Keep the u16 node ID (65535-node cap)? | `area/encryption` | `open-decision` | `docs/spec/14-encryption-egress.md` |
+| [#178](https://github.com/glennswest/flowsdn/issues/178) | [spec 14] Replace the egress-gateway modulo with a rendezvous hash? | `area/encryption` | `open-decision` | `docs/spec/14-encryption-egress.md` |
+| [#179](https://github.com/glennswest/flowsdn/issues/179) | [spec 14] Egress-gateway per-entry vs flattened node selectors | `area/encryption` | `upstream-bug` | `docs/spec/14-encryption-egress.md` |
+| [#180](https://github.com/glennswest/flowsdn/issues/180) | [spec 14] Confirm spec 10 owns table 200 and `cilium_node_map_v2` | `area/encryption` | `to-verify` | `docs/spec/14-encryption-egress.md` |
+| [#181](https://github.com/glennswest/flowsdn/issues/181) | [spec 14] VTEP and SRv6: leave both out? | `area/encryption` | `deferred` | `docs/spec/14-encryption-egress.md` |
+| [#182](https://github.com/glennswest/flowsdn/issues/182) | [spec 14] Which IPsec key file forms to accept? | `area/encryption` | `open-decision` | `docs/spec/14-encryption-egress.md` |
+| [#183](https://github.com/glennswest/flowsdn/issues/183) | [spec 15] Which BGP backend ships first: RouterOS or the in-tree speaker? | `area/bgp` | `open-decision` | `docs/spec/15-bgp.md` |
+| [#184](https://github.com/glennswest/flowsdn/issues/184) | [spec 15] Serve `v2alpha1` for the BGP CRDs? | `area/bgp` | `open-decision` | `docs/spec/15-bgp.md` |
+| [#185](https://github.com/glennswest/flowsdn/issues/185) | [spec 15] TCP-AO (RFC 5925) as a flowsdn extension beyond the reference's MD5? | `area/bgp` | `deferred` | `docs/spec/15-bgp.md` |
+| [#186](https://github.com/glennswest/flowsdn/issues/186) | [spec 15] Add `spec.transport.passiveMode` for routers that insist on initiating? | `area/bgp` | `open-decision` | `docs/spec/15-bgp.md` |
+| [#187](https://github.com/glennswest/flowsdn/issues/187) | [spec 15] Expose advertised prefixes and policies in `CiliumBGPNodeConfig.status`? | `area/bgp` | `open-decision` | `docs/spec/15-bgp.md` |
+| [#188](https://github.com/glennswest/flowsdn/issues/188) | [spec 15] Preserve the reference's BGP policy naming exactly? | `area/bgp` | `open-decision` | `docs/spec/15-bgp.md` |
+| [#189](https://github.com/glennswest/flowsdn/issues/189) | [spec 15] `CiliumBGPNodeConfigOverride.peers[].localPort`: keep the dead field? | `area/bgp` | `open-decision` | `docs/spec/15-bgp.md` |
+| [#190](https://github.com/glennswest/flowsdn/issues/190) | [spec 15] ClusterIP advertisement when `bpf.lbExternalClusterIP` is off | `area/bgp` | `open-decision` | `docs/spec/15-bgp.md` |
+| [#191](https://github.com/glennswest/flowsdn/issues/191) | [spec 15] Survive a malformed BGP UPDATE instead of resetting the session? | `area/bgp` | `open-decision` | `docs/spec/15-bgp.md` |
+| [#192](https://github.com/glennswest/flowsdn/issues/192) | [spec 15] Per-peer BGP backend selection, or node-level only? | `area/bgp` | `open-decision` | `docs/spec/15-bgp.md` |
+| [#193](https://github.com/glennswest/flowsdn/issues/193) | [spec 16] xDS: split mode only, or implement ADS now? | `area/l7` | `open-decision` | `docs/spec/16-l7-envoy-dns.md` |
+| [#194](https://github.com/glennswest/flowsdn/issues/194) | [spec 16] Pin the Envoy image by digest, or track a tag? | `area/l7` | `open-decision` | `docs/spec/16-l7-envoy-dns.md` |
+| [#195](https://github.com/glennswest/flowsdn/issues/195) | [spec 16] Support embedded Envoy, or DaemonSet only? | `area/l7` | `open-decision` | `docs/spec/16-l7-envoy-dns.md` |
+| [#196](https://github.com/glennswest/flowsdn/issues/196) | [spec 16] `enable-bpf-tproxy`: keep both modes, default on, or BPF only? | `area/l7` | `open-decision` | `docs/spec/16-l7-envoy-dns.md` |
+| [#197](https://github.com/glennswest/flowsdn/issues/197) | [spec 16] DNS proxy transparent mode: default off, on with the SDP, or always on? | `area/l7` | `open-decision` | `docs/spec/16-l7-envoy-dns.md` |
+| [#198](https://github.com/glennswest/flowsdn/issues/198) | [spec 16] Support all three inline TLS secret modes, or SDS with secret sync only? | `area/l7` | `open-decision` | `docs/spec/16-l7-envoy-dns.md` |
+| [#199](https://github.com/glennswest/flowsdn/issues/199) | [spec 16] Raise the access log buffer default from 4096 to 16384 bytes? | `area/l7` | `open-decision` | `docs/spec/16-l7-envoy-dns.md` |
+| [#200](https://github.com/glennswest/flowsdn/issues/200) | [spec 16] NPHDS: keep serving it, or rely on Envoy reading the ipcache? | `area/l7` | `open-decision` | `docs/spec/16-l7-envoy-dns.md` |
