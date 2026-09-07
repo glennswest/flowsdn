@@ -790,9 +790,9 @@ error mode is a quiet leak rather than a fault.
 | 19 | `pkg/bgp/manager/reconciler` | 24 | 7,884 | What is advertised and when it is withdrawn, incl. VIP sharing, peer-IP change, route-policy soft reset. | A withdrawn prefix stays advertised; traffic is blackholed at the fabric, not at the node. |
 | 20 | `pkg/datapath/linux/ipsec` | 17 | 1,281 | XFRM state/policy construction, state cache, SPI handling, key rotation. Inventory 14 names this the area's risk. | Rotation leaves a stale SA; traffic silently falls back to cleartext or is dropped. |
 
-Together these 20 rows are **459 test functions and 69,614 Go test lines** —
-25% of the reference's test estate covering, by the argument above, most of what
-can go wrong without anyone noticing.
+Together these 20 rows (22 packages) are **655 test functions and 69,816 Go
+test lines** — 25.3% of the reference's test estate, covering by the argument
+above most of what can go wrong without anyone noticing.
 
 ### Correctness-critical specifics called out
 
@@ -858,10 +858,10 @@ Against `docs/inventory/README.md`'s build order:
 
 | Build-order step | Port these first | Rust test lines |
 |---|---|---:|
-| 1. table/config/netlink | `pkg/option`, `pkg/ip`, `pkg/cidr`, `pkg/container/bitlpm`, `pkg/labels` | ~3,400 |
-| 2. BPF map ABI + loader, datapath M1 | `pkg/maps/ctmap`, `pkg/maps/nat`, alignment gate; `bpf/tests` checklist (sibling) | ~900 |
-| 3. agent skeleton, IPAM, CNI | `pkg/ipam`, `pkg/ipam/cidrset`, `pkg/ipam/metadata`, `pkg/datapath/connector`, `pkg/endpoint`, `pkg/endpointmanager` | ~6,500 |
-| 4. identity + ipcache + policy | `pkg/policy`, `pkg/ipcache`, `pkg/policy/api`, `pkg/identity*`, `pkg/allocator`, `pkg/maps/policymap` | ~17,000 |
+| 1. table/config/netlink | `pkg/option`, `pkg/ip`, `pkg/cidr`, `pkg/container/bitlpm`, `pkg/labels` | ~3,000 |
+| 2. BPF map ABI + loader, datapath M1 | `pkg/maps/ctmap`, `pkg/maps/nat`, alignment gate; `bpf/tests` checklist (sibling) | ~700 |
+| 3. agent skeleton, IPAM, CNI | `pkg/ipam`, `pkg/ipam/cidrset`, `pkg/ipam/metadata`, `pkg/datapath/connector`, `pkg/endpoint`, `pkg/endpointmanager` | ~5,600 |
+| 4. identity + ipcache + policy | `pkg/policy`, `pkg/ipcache`, `pkg/policy/api`, `pkg/identity*`, `pkg/allocator`, `pkg/kvstore/allocator`, `pkg/maps/policymap` | ~14,400 |
 | 5. service LB | `pkg/loadbalancer*`, `pkg/maglev`, `operator/pkg/lbipam` + the 51 txtar scenarios | ~5,000 |
 | 6. node model, routes, nftables | `pkg/node*`, `pkg/datapath/linux*`, **new** nftables assertions replacing the dropped iptables tests | ~6,400 |
 | 7. monitor + Hubble | `pkg/hubble/parser/threefour`, `pkg/hubble/filters`, `pkg/monitor` | ~12,900 |
@@ -870,6 +870,10 @@ Against `docs/inventory/README.md`'s build order:
 | 10. BGP | `pkg/bgp/manager/reconciler` + 20 txtar scenarios + **new** speaker state-machine tests | ~4,500 |
 | 11. Envoy, DNS proxy | `pkg/envoy` (NPDS), `pkg/fqdn*` | ~9,700 |
 | 12. ClusterMesh | `pkg/kvstore` (**run against fastetcd before writing ClusterMesh code**), `pkg/clustermesh*` | ~4,100 |
+
+The right-hand column is the effort for the packages *named on that row*, not
+the area total, so it sums to ~82,400 rather than ~102,600; the remainder is the
+long tail and the `replace` work that follows the code it tests.
 
 The one out-of-order recommendation: **port `pkg/kvstore`'s 28 tests against
 fastetcd at step 1, not step 12.** They are 2,280 Go test lines that answer

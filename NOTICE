@@ -22,5 +22,29 @@ code was copied; every harness is an independent Rust implementation.
                                PROVENANCE file naming its exact upstream path,
                                the commit, the license and the copy date.
 
+  tests/golden/**              1,196 data fixtures from 12 testdata/golden/
+                               fixtures directories: Gateway API and Ingress
+                               golden YAML (operator/pkg/gateway-api,
+                               operator/pkg/model/{ingestion,translation}),
+                               Hubble metrics and flow-log config YAML,
+                               cilium-health .golden CLI output, captured
+                               CiliumNode/Service objects, an Envoy config-dump
+                               redaction pair, a /proc/net/xfrm_stat capture,
+                               load-balancer benchmark seeds, and the
+                               control-plane suite's k8s object sets from
+                               test/controlplane. Each area directory carries a
+                               PROVENANCE file naming its exact upstream path,
+                               the commit, the license, the copy date and any
+                               modification. One file is modified: the four EC
+                               private-key PEM blobs in the Envoy config-dump
+                               input were replaced with a placeholder so no key
+                               material is redistributed.
+
+  tests/fuzz/corpus/**         30 fuzz seed files from
+                               pkg/policy/testdata/fuzz/FuzzDistillPolicy (27)
+                               and pkg/container/bitlpm/testdata/fuzz/FuzzUint8
+                               (3), in Go's "go test fuzz v1" corpus format.
+                               PROVENANCE in tests/fuzz/corpus/.
+
 "Cilium" and "Hubble" are trademarks of The Linux Foundation. flowsdn is not
 affiliated with or endorsed by the Cilium project or The Linux Foundation.
