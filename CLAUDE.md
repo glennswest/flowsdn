@@ -44,6 +44,14 @@ Wave 2 complete (2026-09-07): `05-service-loadbalancing`, `06-policy-engine`,
 Wave 3 running (launched 2026-09-07): `11-hubble-monitor`, `12-operator`,
 `13-crds-k8s-client`, `14-encryption-egress`, `15-bgp`, `16-l7-envoy-dns`.
 Wave 4 to launch: ClusterMesh, Gateway API/Ingress, packaging/Helm/CI, workspace scaffold.
+
+### Phase 1b — Test harvest (ADR-0005), IN PROGRESS 2026-09-07
+All harnesses in Rust; upstream test DATA harvested verbatim with provenance.
+Running as parallel agents:
+- `17-scripttest-harness` + harvest of 168 upstream `.txtar` scenarios -> `tests/scripttest/`
+- `18-bpf-test-harness` + case harvest of 141 files / 397 CHECKs -> `tests/bpf/`
+- `docs/test-port-plan.md` + `tests/golden/` + `tests/fuzz/` (3040 Go tests surveyed)
+- `19-e2e-connectivity` (own Rust suite; cilium-cli is out-of-tree at v1.20.1)
 Missing file = agent did not finish; rerun that spec.
 - [ ] BPF map catalogue: every map, key/value layout, pinning, sizing
 - [ ] Datapath programs: from-container, to-container, from-netdev, to-netdev,
