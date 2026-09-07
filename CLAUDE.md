@@ -32,7 +32,7 @@ without following `docs/licensing.md`.
 - [x] ADR-0002 Rust only (BPF programs in aya-ebpf), ADR-0003 nftables residual
 - [x] ADR-0004 no Hive / no StateDB
 - [x] Roll-up scope table `docs/inventory/README.md` with sizes + keep/defer/replace + build order
-- [~] Kernel requirements roll-up `docs/kernel-requirements.md` (agent in flight)
+- [x] Kernel requirements roll-up `docs/kernel-requirements.md` — stormcos line 6.12 (Rocky 10 kernel, both arches), general minimum 6.6 LTS
 
 ### Phase 1 — Specs (datapath first) — IN PROGRESS 2026-09-07
 Spec template: `docs/spec/TEMPLATE.md`. Wave 1 running as parallel agents:
