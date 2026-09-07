@@ -56,10 +56,11 @@ cluster.
 | Operator IPAM: cluster-pool / multi-pool podCIDR handout, cloud providers, node manager, `CiliumNode` IPAM fields, the CiliumNode-GC ↔ pool-release coupling | `07-ipam.md` §3.5, §3.6, §3.9–§3.15, §3.19, §4.1, §6.2, §11.4 |
 | LB IPAM (`CiliumLoadBalancerIPPool`), node IPAM, L2 announcement policy handling | `05-service-loadbalancing.md` §3.10, §3.11, §4.7, §4.8 |
 | Policy CRD semantics that the validator checks (`Sanitize`) | `06-policy-engine.md` |
-| kvstore key schema, `ClusterService` JSON, cluster-config, heartbeat cadence, remote-cluster connection manager | ClusterMesh + kvstore spec (pending; inventory `12-clustermesh-kvstore.md`) |
-| BGP CRD fan-out (`CiliumBGPClusterConfig` → `CiliumBGPNodeConfig`), router-ID allocation, BGP status conditions | BGP spec (pending; inventory `10-bgp.md`) |
-| Gateway API and Ingress: ingestion, model, Envoy translation, status conditions, GAMMA | Gateway API spec (pending). **Only** the trigger conditions and required CRDs are specified here (§3.15) |
-| `CiliumEnvoyConfig` semantics and the agent's Envoy integration | L7/Envoy spec (pending) |
+| kvstore key schema, `ClusterService` JSON, cluster-config, heartbeat cadence, remote-cluster connection manager | ClusterMesh + kvstore spec (wave 4; inventory `12-clustermesh-kvstore.md`) |
+| BGP CRD fan-out (`CiliumBGPClusterConfig` → `CiliumBGPNodeConfig`), router-ID allocation, BGP status conditions | `15-bgp.md` (in flight; inventory `10-bgp.md`) |
+| Gateway API and Ingress: ingestion, model, Envoy translation, status conditions, GAMMA | Gateway API spec (wave 4). **Only** the trigger conditions and required CRDs are specified here (§3.15) |
+| CRD OpenAPI schemas field by field, the shared k8s client, informer plumbing | `13-crds-k8s-client.md` (in flight; inventory `13-crds-k8s.md`) |
+| `CiliumEnvoyConfig` semantics and the agent's Envoy integration | `16-l7-envoy-dns.md` (in flight; inventory `11-l7-proxy-dns-auth-mesh.md`) |
 | Config registry mechanism (sources, precedence, `--config-dir`, typed kinds, validation) | `00-foundation-table-config.md` §3.3, §5.5. This spec lists the operator's *keys*, not the loader |
 | Module health registry, fences | `00-foundation-table-config.md` §3.4 |
 | Table store and generic reconciler | `00-foundation-table-config.md` §3.1, §3.2 |
@@ -1644,7 +1645,24 @@ Per spec `00` §3.4.3, identifiers `operator.<component>[.<sub>]`:
 ## 9. Test plan
 
 Unit unless marked. There is no privileged/kernel test in this area — the
-operator touches no BPF, no netlink, no kernel interface.
+operator touches no BPF, no netlink, no kernel interface, so every case below
+runs on a fake apiserver and a fake kvstore.
+
+**Harvested corpus (ADR-0005).** The reference's operator tests include four
+txtar script files that are pure data and MUST be harvested verbatim and run
+under `flowsdn-scripttest`:
+
+| File | Reference path | Covers |
+|---|---|---|
+| `servicesync.txtar` | `operator/watchers/testdata/` | §3.13 service → kvstore sync |
+| `endpointslice-export-sync.txtar` | `operator/watchers/testdata/` | §3.13 EndpointSlice export |
+| `globalnamespace-services.txtar` | `operator/watchers/testdata/` | global-namespace selection |
+| `enabled.txtar`, `disabled.txtar` | `operator/pkg/kvstore/nodesgc/testdata/` | §3.13 kvstore node GC, both flag states |
+
+These need the scripttest command registry to grow `k8s/add`, `k8s/delete`,
+`kvstore/cmp` and `kvstore/list` verbs; no per-file work beyond that. The
+remaining checklist is hand-written because the reference's coverage for it is
+Go code, not data.
 
 **Leader election**
 
@@ -1784,7 +1802,8 @@ operator touches no BPF, no netlink, no kernel interface.
 
 - [ ] Node GC does not run when the `Node` informer's initial list failed.
 - [ ] Node GC deletes only keys for the local cluster whose `Node` is absent.
-- [ ] Service sync exports only shared services; unsharing removes the key. (Reference has txtar script tests for these; port them as fixtures.)
+- [ ] Service sync exports only shared services; unsharing removes the key.
+- [ ] The five harvested txtar scenarios above pass unmodified except for mechanical renames.
 
 **Configuration**
 
