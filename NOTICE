@@ -1,0 +1,12 @@
+flowsdn
+Copyright 2026 Glenn West
+
+This product is an independent implementation. Its design specifications were
+derived from study of publicly available documentation and source code of the
+Cilium project (https://github.com/cilium/cilium), which is licensed under the
+Apache License 2.0 (userspace) and GPL-2.0-only OR BSD-2-Clause (bpf/).
+No Cilium source code is included in this product unless explicitly marked in
+the file header together with the applicable license notice.
+
+"Cilium" and "Hubble" are trademarks of The Linux Foundation. flowsdn is not
+affiliated with or endorsed by the Cilium project or The Linux Foundation.
