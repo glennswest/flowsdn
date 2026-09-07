@@ -32,9 +32,13 @@ without following `docs/licensing.md`.
 - [x] ADR-0002 Rust only (BPF programs in aya-ebpf), ADR-0003 nftables residual
 - [x] ADR-0004 no Hive / no StateDB
 - [x] Roll-up scope table `docs/inventory/README.md` with sizes + keep/defer/replace + build order
-- [ ] Kernel requirements: BPF features used by the datapath, per program
+- [~] Kernel requirements roll-up `docs/kernel-requirements.md` (agent in flight)
 
-### Phase 1 — Specs (datapath first)
+### Phase 1 — Specs (datapath first) — IN PROGRESS 2026-09-07
+Spec template: `docs/spec/TEMPLATE.md`. Wave 1 running as parallel agents:
+`00-foundation-table-config`, `01-bpf-map-abi-loader`, `02-datapath-programs`,
+`03-identity-ipcache`, `04-conntrack-nat`, plus `docs/kernel-requirements.md`.
+Missing file = agent did not finish; rerun that spec.
 - [ ] BPF map catalogue: every map, key/value layout, pinning, sizing
 - [ ] Datapath programs: from-container, to-container, from-netdev, to-netdev,
       overlay, host, xdp, cgroup socket LB, sock ops
