@@ -115,7 +115,7 @@ of Gateway API is written.
 - The full status surface (§3.11) — this is the bulk of the work, and it is
   where the 604 harvested fixtures are spent.
 - Exit criterion: the upstream Gateway API conformance suite passes for the
-  profiles in §2.5.
+  profiles in §2.4.
 
 **Stage 2 MUST NOT begin before stage 1's translator is golden-clean.** Both
 front ends share one translator; a translator bug found during Gateway API
@@ -1676,3 +1676,516 @@ missed sort here fail *intermittently* rather than consistently. flowsdn
 therefore uses `BTreeMap`/`BTreeSet` throughout ingestion and translation, and
 a lint forbids `HashMap` in the `flowsdn-gateway` model and translation
 modules.
+
+---
+
+## 6. Configuration
+
+All keys are reference-compatible names in the `cilium-config` ConfigMap.
+Spec 12 §6.8 lists the same keys as the operator's trigger surface; this
+section is the authority on what each one *does*.
+
+### 6.1 Gateway API
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `enable-gateway-api` | bool | `false` | master switch. Requires `kube-proxy-replacement`; without it, log one warning and disable (spec 12 §3.15) |
+| `enable-gateway-api-secrets-sync` | bool | `true` | register Gateway/ListenerSet certificateRefs and BackendTLSPolicy CA ConfigMaps with the sync controller |
+| `enable-gateway-api-proxy-protocol` | bool | `false` | prepend a PROXY-protocol listener filter to **every** Gateway listener. Once on, only PROXY-protocol traffic is accepted |
+| `enable-gateway-api-app-protocol` | bool | `false` | honour the backend Service port's `appProtocol` (GEP-1911) when choosing the upstream protocol (§5.6) |
+| `enable-gateway-api-alpn` | bool | `false` | advertise ALPN on every TLS filter chain. **Also implies app-protocol handling**: a backend that wants HTTP/2 must say so via `appProtocol` |
+| `gateway-api-secrets-namespace` | string | `cilium-secrets` | where synced TLS material lands; agent RBAC is scoped to it |
+| `gateway-api-service-externaltrafficpolicy` | string | `Cluster` | `Cluster` \| `Local` for generated Services. **Invalid value is fatal** — it is a configuration typo, not a cluster state. Ignored (with a warning) when host network is on |
+| `gateway-api-use-remote-address` | bool | `true` | Envoy `use_remote_address` on every HCM |
+| `gateway-api-xff-num-trusted-hops` | u32 | `0` | Envoy `xff_num_trusted_hops`; only emitted when > 0 |
+| `gateway-api-hostnetwork-enabled` | bool | `false` | §3.10 |
+| `gateway-api-hostnetwork-nodelabelselector` | string | `""` | comma-separated `k=v` list → `matchLabels`. Malformed pairs are skipped silently; empty means all nodes |
+
+### 6.2 Ingress
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `enable-ingress-controller` | bool | `false` | master switch; also requires `kube-proxy-replacement` |
+| `enable-ingress-secrets-sync` | bool | `true` | |
+| `enable-ingress-proxy-protocol` | bool | `false` | as above, for Ingress listeners |
+| `enforce-ingress-https` | bool | `true` | emit an HTTP→HTTPS redirect for hosts that appear in `spec.tls[].hosts`. **Emits 301, not 308** (§5.7) |
+| `ingress-default-lb-mode` | string | `dedicated` | `dedicated` \| `shared` |
+| `ingress-shared-lb-service-name` | string | `cilium-ingress` | name of the shared CEC, and of the Helm-created shared Service |
+| `ingress-secrets-namespace` | string | `cilium-secrets` | |
+| `ingress-default-secret-namespace` / `-name` | string | `""` | fallback TLS secret for `spec.tls[]` entries with no `secretName`. Used **only when both are non-empty** |
+| `ingress-default-request-timeout` | duration | `0` | route request timeout; per-Ingress annotation overrides |
+| `ingress-default-xff-num-trusted-hops` | u32 | `0` | |
+| `ingress-use-remote-address` | bool | `true` | |
+| `ingress-lb-annotation-prefixes` | list | `lbipam.cilium.io`, `nodeipam.cilium.io`, `service.beta.kubernetes.io`, `service.kubernetes.io`, `cloud.google.com` | prefixes of Ingress annotations **and labels** copied onto the dedicated Service |
+| `ingress-hostnetwork-enabled` | bool | `false` | |
+| `ingress-hostnetwork-shared-listener-port` | u32 | `8080` | fallback for all three per-protocol ports |
+| `ingress-hostnetwork-http-listener-port` | u32 | `0` | 0 ⇒ use the shared port |
+| `ingress-hostnetwork-https-listener-port` | u32 | `0` | 0 ⇒ use the shared port |
+| `ingress-hostnetwork-tls-passthrough-listener-port` | u32 | `0` | 0 ⇒ use the shared port |
+| `ingress-hostnetwork-nodelabelselector` | string | `""` | |
+
+> The reference's compiled-in default for `ingress-lb-annotation-prefixes`
+> omits `nodeipam.cilium.io` while its Helm chart includes it, so an operator
+> started without the ConfigMap key behaves differently from one started by
+> Helm. flowsdn adopts the **Helm** list as the compiled-in default, so the two
+> agree. **DEVIATION**, additive: the only effect is that one more annotation
+> prefix propagates by default.
+
+### 6.3 Shared with the L7 proxy (spec 16 §6.1)
+
+| Key | Default | Use here |
+|---|---|---|
+| `proxy-idle-timeout-seconds` | `60` | Envoy cluster `idle_timeout` |
+| `proxy-stream-idle-timeout-seconds` | `300` | HCM `stream_idle_timeout` |
+| `enable-ipv4` / `enable-ipv6` | | generated Service `ipFamilies`, host-network bind addresses, HCM internal-address CIDRs |
+| `enable-envoy-config` | | implied true whenever either front end is on |
+
+### 6.4 Fixed, not configurable
+
+Values the reference hard-codes per front end. flowsdn keeps them fixed and
+records them so nobody looks for a key:
+
+| Behavior | Gateway API | Ingress |
+|---|---|---|
+| `host_name_suffix_match` (§5.5) | `true` | `false` |
+| `use_app_protocol` | from `enable-gateway-api-app-protocol` | always `false` |
+| TCP keep-alive on listeners | enabled, idle 10 s, interval 5 s, 10 probes | same |
+| HCM `common_http_protocol_options.max_stream_duration` | `0s` (disables Envoy's default 15 s route timeout) | same |
+| websocket upgrade | enabled | enabled |
+| HCM internal-address CIDRs | `10/8`, `172.16/12`, `192.168/16`, `127.0.0.1/32`, `::1/128` | same |
+| HTTP filter chain order | grpc_web (if enabled), grpc_stats, ext_authz…, cors (if used), router | same |
+
+### 6.5 Ingress annotations
+
+Canonical prefix `ingress.cilium.io/`; the legacy prefix `io.cilium.ingress/`
+is accepted as an alias where noted, and the canonical key wins when both are
+present.
+
+| Annotation | Legacy alias | Values | Default | Effect |
+|---|---|---|---|---|
+| `loadbalancer-mode` | yes | `dedicated`, `shared` | `ingress-default-lb-mode` | §3.9. Any other value falls back to the default |
+| `service-type` | yes | `LoadBalancer`, `NodePort` | `LoadBalancer` | dedicated Service type; anything else warns and defaults |
+| `loadbalancer-class` | no | any string | unset | `spec.loadBalancerClass`, only when the type is `LoadBalancer` |
+| `service-external-traffic-policy` | no | `Cluster`, `Local` | unset | dedicated Service `externalTrafficPolicy` |
+| `insecure-node-port` | yes | int32 | unset | NodePort for the `:80` port |
+| `secure-node-port` | yes | int32 | unset | NodePort for the `:443` port |
+| `host-listener-port` | no | int | `8080` | host-network dedicated mode: sets all three listener ports |
+| `tls-passthrough` | yes | `enabled`, or a bool | `false` | route via SNI passthrough instead of HTTP |
+| `force-https` | no | `enabled`, `disabled`, or a bool | `enforce-ingress-https` | per-Ingress override, authoritative in **both** directions |
+| `request-timeout` | no | Go duration (`30s`, `1m30s`) | `ingress-default-request-timeout` | route request timeout; an unparseable value warns and falls back |
+| `kubernetes.io/ingress.class` | — | `cilium` | — | legacy class selector, §3.9 |
+
+**Passthrough constraints.** A passthrough Ingress rule MUST set `host`; its
+paths MUST be exactly `/`; `spec.defaultBackend` is ignored. Each violation is
+logged and skipped, and a host left with no valid rules drops its listener.
+These are not arbitrary: SNI routing has no path visibility, so a path rule
+would be silently ineffective.
+
+**Class resolution order** is: the legacy annotation first, then
+`spec.ingressClassName`. That inverts the usual Kubernetes precedence, where
+the field wins over the deprecated annotation. flowsdn keeps the reference's
+order for compatibility and flags it in Open decision 4.
+
+---
+
+## 7. Failure modes
+
+| Failure | Behavior |
+|---|---|
+| **Gateway API CRDs missing** | controllers do not start; health module `degraded`; the operator keeps running (spec 12 §3.15). A user who has not installed the CRDs is not a broken operator |
+| **API server unreachable at startup** | retry with backoff, `degraded`; fatal after 30 s so the pod restarts |
+| **`kube-proxy-replacement` false** | one warning, feature disabled, operator healthy |
+| **Two listeners conflict** | both marked `Conflicted`, both drop out; the rest of the Gateway still programs. A conflict never takes down a whole Gateway |
+| **Cross-source listener conflict** | the later source loses; the Gateway's own listeners always win over a ListenerSet's |
+| **All listeners invalid** | `Accepted: False, ListenersNotValid`; the CEC is **deleted**, the Service is kept so the address is stable |
+| **Backend Service missing** | `ResolvedRefs: False, BackendNotFound`; the rule emits a 500 `direct_response` if *all* its backends failed, otherwise the survivors carry the traffic. Never a silent fall-through to a broader route |
+| **Backend port not exposed** | as above, `Service port <n> could not be resolved` |
+| **Cross-namespace ref with no grant** | `RefNotPermitted`; the reference is dropped **and the object is not read**. Deleting a grant revokes the config and removes the synced Secret |
+| **Certificate Secret missing, wrong type, or malformed PEM** | `ResolvedRefs: False, InvalidCertificateRef`; the listener does not program. flowsdn MUST NOT fall back to a plaintext listener on the same port — that would downgrade TLS silently |
+| **BackendTLSPolicy invalid** | the backend is **dropped**, not downgraded to plaintext (§3.11.7) |
+| **Secret sync disabled but certificateRefs present** | translation still emits the synced SDS name; one `warn` per Gateway; the administrator owns the secrets namespace |
+| **Synced-secret name collision with a hand-made object** | the sync controller refuses to overwrite an object with no ownership labels or with labels naming a different source, and logs the refusal (spec 12 §3.14) |
+| **CEC apply rejected by the apiserver** | `Accepted`/`Programmed` both `False`, `NoResources`; retried with the controller's backoff. The previous CEC is left in place — a rejected update must not leave the data path empty |
+| **Envoy NACKs the pushed config** | invisible to this spec; spec 16 §7 owns NACK handling. flowsdn's obligation here is that a NACK is *possible* to diagnose, which is why every generated resource name is deterministic |
+| **Generated Service gets no address** | `Programmed: False, AddressNotAssigned`. Not an error, not a retry loop: the Service watch retriggers when LB IPAM or the cloud controller assigns one |
+| **Ingress mode flip** | the other mode's objects are deleted in the same reconcile and the shared CEC is rebuilt; §9.2 tests it explicitly |
+| **Ingress class removed** | all generated objects deleted; `status.loadBalancer` left alone, because another controller may now own the object |
+| **Operator restart mid-apply** | every apply is idempotent and every generated name is a pure function of the source, so the next reconcile converges. No finalizers are used anywhere in this area |
+| **Sweep before cache sync** | forbidden (§3.13). A sweep against an unsynced informer deletes live configuration |
+| **Host-network port collision** | `Accepted: False, PortUnavailable` on the younger Gateway (§3.10, DEVIATION) |
+| **Route attached to a Gateway that never programs** | `Accepted: False, GatewayNotProgrammed` so the route's owner sees why traffic never arrives |
+| **Namespace terminating** | a `Forbidden` with cause `NamespaceTerminating` on create is treated as **success**, not an error: the namespace is going away and retrying is noise |
+
+---
+
+## 8. Observability
+
+### 8.1 Metrics
+
+Namespace `flowsdn_operator_`, reference-compatible where the reference has an
+equivalent. New metrics carry the `gateway_` / `ingress_` prefix.
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `gateway_api_reconcile_total` | counter | `controller`, `result` (`success`\|`error`) | reconciles per controller |
+| `gateway_api_reconcile_duration_seconds` | histogram | `controller` | |
+| `gateway_api_gateways` | gauge | `accepted`, `programmed` | Gateways by condition state |
+| `gateway_api_listeners` | gauge | `state` (`accepted`\|`conflicted`\|`invalid`) | |
+| `gateway_api_routes` | gauge | `kind`, `state` (`accepted`\|`rejected`) | |
+| `gateway_api_translation_duration_seconds` | histogram | `frontend` (`gateway`\|`ingress`\|`gamma`) | ingestion + translation, excluding I/O |
+| `gateway_api_generated_resources` | gauge | `kind` (`cec`\|`service`\|`endpointslice`) | operator-owned objects |
+| `ingress_reconcile_total` | counter | `mode` (`dedicated`\|`shared`), `result` | |
+| `ingress_shared_model_size` | gauge | — | Ingresses merged into the shared model |
+| `gateway_api_status_writes_total` | counter | `kind` | status updates actually written |
+| `gateway_api_status_writes_skipped_total` | counter | `kind` | status computations that matched and were not written |
+
+The last pair is the one that matters operationally. A healthy cluster shows
+`skipped` growing and `writes` flat; `writes` growing at steady state means
+something in ingestion or translation is non-deterministic (§5.11), and this
+is the cheapest place to see it.
+
+### 8.2 Logging
+
+Structured fields on every log line from this area: `controller`, `resource`
+(`<namespace>/<name>`), `kind`, and where relevant `gateway`, `listener`,
+`route`, `backend`, `secret`.
+
+Levels: `info` for reconcile start/finish per object; `warn` for
+user-correctable problems that also produce a condition (invalid annotation,
+missing backend, ungranted reference) — the log is a convenience, the
+condition is the contract; `error` only for genuine operator faults (apply
+failed, apiserver error). A user typo MUST NOT log at `error`.
+
+Kubernetes `Event`s are emitted on the source object for every condition
+transition to a `False` state, and for Ingress — which has no conditions —
+this is the *only* user-visible signal.
+
+### 8.3 Health and debug
+
+- One health module per controller, reporting `ok` / `degraded` with the
+  reason, surfaced through the operator's `/healthz` (spec 12 §3.16).
+- A debug endpoint dumps, for one Gateway or Ingress: the gathered input set,
+  the serialized model, and the generated CEC/Service/EndpointSlice. Because
+  the model is a serializable type with a stable wire form (§4), this dump is
+  the same YAML the golden fixtures use — so a production problem can be
+  turned into a regression test by copying the dump into `tests/golden/`.
+  That property is worth the endpoint on its own.
+
+---
+
+## 9. Test plan
+
+### 9.1 Harvested fixtures (ADR-0005)
+
+Already in the tree at `tests/golden/`, harvested verbatim from the reference
+at 7d68cfb394 with `PROVENANCE` files:
+
+| Directory | Files | What it drives |
+|---|---|---|
+| `08-operator-gateway-api/` | 604 | end-to-end reconcile: input Kubernetes objects → expected Gateway/route/ListenerSet/BackendTLSPolicy status **and** expected CEC |
+| `08-operator-model-ingestion/` | 324 | Kubernetes objects → serialized model |
+| `08-operator-model-translation-gateway-api/` | 207 | model + config → CEC + Service |
+| `08-operator-model-translation-ingress/` | 14 | model → CEC (Ingress shapes) |
+
+**Layout and consumption.**
+
+*Reconcile fixtures* (`08-operator-gateway-api/{gateway,gamma}/`): a `base/`
+directory loaded into every scenario, then one directory per scenario holding
+`input/` (Kubernetes YAML, possibly multi-document) and `output/` (one golden
+file per expected object). The golden file name encodes the object:
+`<gatewayName>.yaml`, `cec-<gw>.yaml`, `endpointslice-<name>.yaml`,
+`httproute-<name>.yaml`, `tlsroute-`, `grpcroute-`, `tcproute-`, `udproute-`,
+`backendtlspolicy-`, `listenerset-`.
+
+*Ingestion fixtures*: `input-<kind>.yaml` files (gateway, gatewayclass,
+gatewayclassconfig, httproute, service, serviceimport, backendtlspolicy,
+namespace, …) plus `output-listeners.yaml`.
+
+*Translation fixtures*: `input.yaml` (a model), optional `config-input.yaml`
+(a translation config), and `cec-output.yaml` + `service-output.yaml`, or
+`output-cec.yaml` in the Ingress tree.
+
+**Harness rules**, in the Rust `flowsdn-gateway-golden` harness:
+
+1. A missing `input-*.yaml` or `config-input.yaml` means "zero value", not an
+   error. Most scenarios omit most inputs.
+2. Comparison is **round-tripped**: the golden is deserialized into the typed
+   object and re-serialized before comparing, so key order and formatting
+   differences do not fail a test. Only semantic differences fail.
+3. An empty or whitespace-only golden means "expect no such object".
+4. Scenarios are discovered from the directory tree; adding a fixture
+   directory adds a test with no code change. A scenario directory with no
+   corresponding test MUST fail the suite, so a fixture cannot be silently
+   orphaned.
+5. Deliberate divergences (§12) are annotated in a single
+   `EXPECTED-DIVERGENCE` file per fixture directory naming the scenario and
+   the reason, never by editing the fixture. A re-harvest at a newer reference
+   tag then stays a mechanical copy.
+
+Anticipated divergences from flowsdn's own decisions: the `PortUnavailable`
+host-network collision condition (§3.10), the reachable
+`CiliumGatewayClassConfig` validation branch (§3.11.8), the corrected
+HTTPS-redirect matcher (Open decision 2), and the `nodeipam.cilium.io`
+default prefix (§6.2). Each MUST be annotated before the suite is declared
+green.
+
+### 9.2 Unit tests
+
+Ingestion: path type mapping including the `Prefix: /` special case and the
+trailing-slash trim; GRPC method → path match for all seven shapes; hostname
+intersection (§5.1) against a table covering listener isolation, both-wildcard
+"more labels wins", and the empty-route-hostnames case; redirect port
+defaulting; mirror fraction arithmetic; rule-identity retention (§5.4) with
+one rule and with two rules producing the same match; default-backend and
+default-secret handling; the TLS-host listener copy.
+
+Translation: route precedence (§5.3) as a table, including the redirect-guard
+exclusion; path/header/query matcher selection; the authority regex for both
+`host_name_suffix_match` settings; cluster naming and protocol selection for
+all four cases; weights including absent, zero, negative and a single backend;
+the combined-vs-per-port listener decision for every combination in
+`needs_per_port_listeners()`; `server_names` omission when `*` is present;
+route-configuration port key ordering (`insecure`, `1443`, `443`).
+
+Controllers: conflict detection over the six-row predicate; cross-source
+precedence; ListenerSet allow/deny including all the unset cases;
+condition merge (no write when unchanged, `lastTransitionTime` stability);
+route parent status pruning with a foreign controller's entry present;
+name shortening at 62/63/64 characters.
+
+Ingress: class resolution for all six combinations of field, annotation and
+default-class; **mode flip** dedicated→shared→dedicated leaving no orphans;
+shared-model merge order; passthrough rule rejection cases.
+
+### 9.3 Property tests
+
+- Translation is idempotent: `translate(m) == translate(m)` across processes
+  (this is the §5.11 determinism check, and it MUST run with a randomized hash
+  seed).
+- Round-trip: `model → yaml → model` is the identity for arbitrary models.
+- Route order is a total order: the §5.3 comparator is antisymmetric and
+  transitive over generated route sets.
+- Hostname intersection is symmetric where it should be:
+  `sni_intersect(a,b) == sni_intersect(b,a)`.
+
+### 9.4 Ingress conformance (stage 1 gate)
+
+Run `ingress-controller-conformance` with `-ingress-class cilium` against a
+live cluster in CI. This is an external Go binary. **DEVIATION** from
+ADR-0005's "all harnesses in Rust": the suite is a *conformance* definition
+owned by upstream, not a test flowsdn writes, and reimplementing it would
+prove compatibility with our reading of the spec rather than with the spec.
+The same reasoning applies to §9.5. flowsdn writes no Go; it runs a published
+binary.
+
+### 9.5 Gateway API conformance (stage 2 gate, recommended)
+
+**flowsdn SHOULD run the upstream Gateway API conformance suite in CI**, at the
+pinned version, for the profiles in §2.4, and SHOULD publish the conformance
+report. The recommendation is strong for three reasons:
+
+1. The 604 harvested fixtures pin *the reference's* behavior at one commit.
+   Conformance pins *the specification's* behavior, and where the two disagree
+   the specification is right. Only one of these two suites can tell flowsdn
+   that the reference had a bug.
+2. Conformance is the only credible external claim that flowsdn implements the
+   Gateway API. Without a report, "Gateway API support" is an assertion.
+3. It is a fixed cost: a kind cluster, the pinned suite, and the profile list.
+   Everything expensive — the behavior — is already being built.
+
+The suite is run with the flags in §2.4. The two skips and the exempt-feature
+list are the only permitted deviations, and both are tracked in §12.
+
+### 9.6 End-to-end
+
+Against a live cluster with Envoy: HTTP and HTTPS through a Gateway;
+host-based and path-based Ingress; TLS passthrough; a weighted split verified
+statistically; a mirror verified by counting requests at the mirror backend;
+a redirect and a rewrite; a request timeout and a retry; CORS preflight;
+cross-namespace backend with and without a grant; a certificate rotation
+observed to take effect without a connection reset for existing streams; an
+operator restart with no traffic interruption; Gateway deletion removing every
+generated object.
+
+---
+
+## 10. Kernel and platform requirements
+
+None of its own. This area runs in the operator, in userspace, and produces
+Kubernetes objects. Its requirements are inherited:
+
+- **Kubernetes** ≥ 1.26 (spec 13 §10.2), with the Gateway API CRDs at v1.6.1
+  installed by the administrator, and `EndpointSlice` (`discovery.k8s.io/v1`).
+- **Datapath**: `kube-proxy-replacement` enabled, which is what makes an L7
+  proxy redirect on a service frontend possible (spec 05).
+- **Envoy**: the external `cilium/proxy` DaemonSet (ADR-0001), reachable by
+  the agent's xDS server (spec 16). The Envoy version determines which
+  extension types the generated protobufs may use; flowsdn pins the Envoy
+  image digest and the vendored `data-plane-api` protos together, and a
+  mismatch is a build failure, not a runtime NACK.
+- **x86-64 and arm64** are both first class; nothing here is architecture
+  dependent.
+
+---
+
+## 11. Rust design notes
+
+### 11.1 Crate `flowsdn-gateway`
+
+One crate, four modules, with a strict dependency direction —
+`model ← ingest`, `model ← translate`, and `controller` depending on all
+three. `model` depends on nothing but `serde` and the k8s API types.
+
+| Module | Contents |
+|---|---|
+| `model` | §4 types, the derived queries, hostname intersection and ordering (§5.1, §5.2). **No I/O, no k8s client, no Envoy types.** |
+| `ingest` | `gateway.rs`, `ingress.rs`, `gamma.rs`, each a pure `fn(Input) -> (Model, Vec<StatusUpdate>)` |
+| `translate` | `cec.rs`, `listener.rs`, `hcm.rs`, `route_config.rs`, `virtual_host.rs`, `cluster.rs`, plus `frontend/gateway.rs` and `frontend/ingress.rs` for the Service/EndpointSlice wrappers. Pure `fn(&Model, &Config) -> Output` |
+| `controller` | kube-rs controllers, indexes, watch mappers, apply and status writing. The only module that touches the network |
+
+`flowsdn-gateway` depends on `flowsdn-k8s` (spec 13) for the client and
+CRD types, and on `flowsdn-envoy-proto` (spec 16 §11.1) for the generated
+Envoy v3 message types — it does **not** define its own.
+
+### 11.2 Types
+
+- Model types are plain `#[derive(Clone, Debug, PartialEq, Serialize,
+  Deserialize)]` structs with `#[serde(default, skip_serializing_if)]` matching
+  §4's serde column exactly. `Duration` fields serialize as the Go duration
+  string form the fixtures use.
+- `StringMatch` is a struct with three `String`s rather than an enum, matching
+  the wire form. A constructor enforces "at most one non-empty" and a
+  `Display` impl produces the canonical rendering (§4.6). Modelling it as an
+  enum would be nicer Rust and would break every fixture.
+- `L4Protocol`, `ServerHeaderTransformation`, `ExternalAuthProtocol`,
+  `AccessLogsFormat`, `AccessLogsTarget` are `#[serde(rename_all)]` enums with
+  an explicit `Unknown(String)` variant, so an unrecognized value from a newer
+  CRD round-trips instead of failing the whole object (spec 13 §5.5).
+- `BTreeMap`/`BTreeSet` everywhere in `model`, `ingest` and `translate`; a
+  clippy lint denies `std::collections::HashMap` in those modules (§5.11).
+
+### 11.3 Controllers
+
+- `kube-rs` `Controller` per §3.2, one per primary kind, all inside the
+  operator's leader-elected scope (spec 12 §3.2). No `controller-runtime`
+  equivalent is needed beyond what `kube-rs` provides; ADR-0004's "explicit
+  composition" applies — controllers are constructed in the operator's
+  `build()` and handed their clients and shared caches.
+- Indexes (§3.2) are built over the reflector stores as
+  `BTreeMap<String, BTreeSet<ObjectRef>>` maintained by a store subscriber,
+  not by re-listing. Every index function is `fn(&Object) -> Vec<String>` with
+  **no client access**, which is what makes them unit-testable against a
+  synthetic store.
+- Apply uses server-side apply with a per-controller field manager
+  (`flowsdn-operator-gateway`, `flowsdn-operator-ingress`), except for the
+  label/annotation merge and `loadBalancerClass` preservation in §5.8, which
+  need a read-modify-write.
+- Status writes go through one helper that computes the merged condition set,
+  compares it to the live one ignoring `lastTransitionTime`, and skips the
+  write when equal — incrementing the skipped counter of §8.1.
+
+### 11.4 Envoy protobuf emission
+
+- `prost` types generated from the vendored `data-plane-api` protos, pinned
+  alongside the Envoy image digest (spec 16 §11.2). No dependency on
+  `envoy-types` or `envoy-control-plane`.
+- Each resource is built, encoded with `prost::Message::encode`, and wrapped
+  in an `Any` with the correct `type_url`. The CEC's `resources[]` is a list of
+  those. **The encoded bytes must be canonical**: `prost` orders fields by tag
+  and does not emit defaults, which is deterministic, but map fields are not —
+  flowsdn therefore avoids protobuf `map` fields in generated config, using
+  the repeated-entry forms Envoy also accepts, and where a map is unavoidable
+  (`typed_per_filter_config`) it is populated from a `BTreeMap`.
+- The goldens are YAML of the *JSON* projection of these protos. The harness
+  therefore encodes to protobuf, decodes to `serde_json::Value` through the
+  well-known JSON mapping, and compares that — which is also what catches a
+  wrong `type_url`, since the JSON form carries `@type`.
+
+### 11.5 Effort
+
+Roughly 12–16k lines of Rust: model ~1k, ingestion ~3.5k, translation ~4.5k,
+controllers ~4k, plus the golden harness ~800. The reference's 18k Go lines
+compress somewhat — no DI framework, no generated deepcopy — but the status
+surface does not compress at all, and it is the majority of the controller
+half. Budget the status work as the schedule risk, not the Envoy work.
+
+---
+
+## 12. Open decisions
+
+1. **Ship Ingress at all?** Gateway API supersedes Ingress; the Ingress API is
+   frozen upstream and its controller here is ~1.4k reference lines plus a
+   share of the model, the annotation surface, two LB modes, and a second
+   conformance suite in CI. Options: (a) ship both, as the reference does;
+   (b) ship Gateway API only and document Ingress as unsupported; (c) ship
+   Ingress first as the staging vehicle (§1.3) and then keep it.
+   **Recommendation: (c), which is what §1.3 specifies.** Ingress is the
+   cheapest possible end-to-end proof of the translator, and it is the API
+   that existing manifests in real clusters actually use — dropping it means
+   every migrating user must rewrite their manifests before flowsdn can serve
+   any HTTP at all. Revisit at 1.0: if the Gateway API conformance report is
+   green and no user is on Ingress, deprecating it is a small, clean removal
+   because everything but the front end is shared.
+2. **The HTTPS-redirect matcher bug.** In the reference, the code path that
+   builds routes for a force-HTTPS virtual host passes the header and query
+   matcher lists in the wrong argument order, so query parameters are emitted
+   as header matchers and vice versa. Options: reproduce it for fixture
+   compatibility, or fix it and annotate the affected goldens.
+   **Recommendation: fix it**, annotate the goldens as expected divergences,
+   and file the bug upstream (cross-project rule 11). Reproducing a matcher
+   bug means a user's query-parameter match silently does not work on exactly
+   the routes that redirect.
+3. **Shared Ingress mode's cluster-wide CEC.** One CEC built from every shared
+   Ingress means any one Ingress can break the config for all of them, and a
+   single reconcile rebuilds the whole thing. Options: keep it (compatible);
+   or split into one CEC per Ingress that all reference the same shared
+   Service. **Recommendation: keep it for now** — the shared Service's
+   listeners genuinely are one Envoy listener set, and splitting would need
+   per-CEC listener merging in the agent, which is spec 16's contract to
+   change. Revisit if shared mode sees real use at scale.
+4. **Ingress class precedence.** The reference lets the deprecated
+   `kubernetes.io/ingress.class` annotation override `spec.ingressClassName`,
+   which is backwards relative to Kubernetes' own rule. Options: keep, or
+   invert and accept the annotation only when the field is unset.
+   **Recommendation: keep the reference's order**, because inverting it
+   silently changes which controller serves an Ingress that has both — the
+   worst possible failure for a migration. Document it loudly.
+5. **The force-HTTPS status code.** 301 is emitted; 308 is documented (§5.7).
+   Options: (a) fix the documentation; (b) change to 308; (c) add a config key
+   defaulting to 301. **Recommendation: (a) now, (c) later if asked.** 308
+   preserves the request method where 301 historically does not, so 308 is the
+   better default — but changing it changes what every browser and CDN has
+   cached, and that is not a change to make on a spec's initiative.
+6. **Non-standard reason strings.** `Invalid<Kind>` on route `Accepted`, and
+   the GAMMA conditions whose reason does not vary with status (§3.11.5,
+   §3.11.6). Options: keep for fixture compatibility; or emit the upstream
+   constants (`NoMatchingParent`, `Accepted`/`NotAccepted`) and annotate the
+   goldens. **Recommendation: keep them**, because they are what users' tooling
+   and the harvested fixtures both expect, and revisit if the Gateway API adds
+   a conformance assertion on the reason.
+7. **`XListenerSet` at all.** It is an experimental Gateway API resource,
+   ~13 fixture scenarios, and it complicates conflict detection, status
+   ownership and secret grants materially. Options: implement in stage 2 as
+   specified; or defer to a stage 3. **Recommendation: defer to stage 3.**
+   Nothing else depends on it, the `ListenerSet` feature is simply not
+   advertised while it is absent, and the conflict machinery is easier to get
+   right for one source before it is generalized to many.
+8. **Controller and object names.** `io.cilium/gateway-controller`,
+   `cilium-gateway-*`, `cilium-ingress-*`, `cilium-secrets`. Keeping them means
+   existing manifests work unchanged; changing them to `flowsdn` equivalents is
+   honest but breaks every `GatewayClass` in the world.
+   **Recommendation: keep, and make the controller name a config key** so a
+   cluster running both implementations can disambiguate. Defer the key until
+   that need is real (this matches spec 12 Open decision 5).
+9. **Access-log configuration surface.** `CiliumGatewayClassConfig.telemetry`
+   ships large default format strings that become part of the CRD schema.
+   Options: vendor them verbatim (spec 13's rule); or ship a smaller default
+   and document the difference. **Recommendation: vendor verbatim** — a
+   different default access-log format is a silent, invisible incompatibility
+   for anyone parsing those logs.
+10. **Where GAMMA lives.** GAMMA is service-mesh behavior in a spec about
+    ingress. It shares the model and translator, which is why it is here.
+    Options: keep it here; or move it into spec 16 alongside the rest of the
+    mesh story once ztunnel is specified. **Recommendation: keep it here**
+    while its only implementation is "an HTTPRoute translated to a CEC", and
+    move it when it grows a data path of its own.
