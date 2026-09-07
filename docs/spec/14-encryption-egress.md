@@ -1358,7 +1358,8 @@ on **every** pass, in the order legacy-v4 → v4_v2 → v6, so the two v4 maps
 always carry the same key set and the same address pair; only v4_v2 carries the
 ifindex. The datapath reads **v4_v2 first and falls back to the legacy map**;
 the legacy map exists only so an older loaded program keeps working across an
-upgrade.
+upgrade. flowsdn never loads such a program, so whether to write it at all is
+open decision 2 — spec 01 §2.2 already marks it deferred.
 
 Two reference behaviors flowsdn MUST **not** reproduce (**DEVIATION**, both are
 latent correctness faults with no compatibility consequence):
