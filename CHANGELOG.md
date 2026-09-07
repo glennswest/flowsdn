@@ -8,3 +8,4 @@
 - **docs:** Scope decision (ADR-0001): full Cilium feature scope, boundary compatibility.
 - **docs:** Reference pinned to Cilium v1.20.1 (7d68cfb394); inventory split into 15 areas.
 - **docs:** ADR-0002 everything in Rust including BPF programs (aya-ebpf), no C. ADR-0003 no iptables; small nftables residual over netlink.
+- **docs:** ADR-0004 no Hive/StateDB; explicit composition + `flowsdn-table` crate. Inventory roll-up drafted (12/15 areas) with build order.

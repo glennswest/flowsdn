@@ -31,7 +31,8 @@ without following `docs/licensing.md`.
       Done + committed: 01 02 03 04 05 06 08 09 10 12 14 15. In flight (resumed after a
       rate-limit stop): 07 11 13. Missing file = agent did not finish; rerun that area.
 - [x] ADR-0002 Rust only (BPF programs in aya-ebpf), ADR-0003 nftables residual
-- [ ] Roll-up scope table `docs/inventory/README.md` with sizes + keep/defer/replace
+- [x] ADR-0004 no Hive / no StateDB
+- [~] Roll-up scope table `docs/inventory/README.md` — drafted from 12 areas; fill 07/11/13 when they land
 - [ ] Kernel requirements: BPF features used by the datapath, per program
 
 ### Phase 1 — Specs (datapath first)
