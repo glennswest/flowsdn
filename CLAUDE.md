@@ -73,6 +73,14 @@ Missing file = agent did not finish; rerun that spec.
 - [ ] ClusterMesh
 - [ ] Gateway API / Ingress
 
+### Phase 1c — Backlog (COMPLETE 2026-09-07)
+- [x] 290 issues filed from every open decision / to-verify / deferred item;
+      index at `docs/open-decisions-index.md` with a "settle these first" ten
+- [x] 8 fastetcd compatibility gaps filed on glennswest/fastetcd (#16-#23);
+      #16 and #17 are blocking for ClusterMesh in production
+- [ ] DECISION NEEDED FROM USER: whether to file the ~15 upstream Cilium defects
+      found while reading (public repo, not ours) — listed across the specs
+
 ### Phase 2 — Code (dependency order)
 - [ ] Workspace, CI (build on dev, x86-64 + arm64), cargo deny
 - [ ] BPF maps + datapath crate (Aya)
