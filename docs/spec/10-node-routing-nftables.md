@@ -23,6 +23,12 @@ compatibility the consumer is named (kernel, operator, cilium-dbg, Envoy,
 clustermesh peers, other nodes running the reference). Where flowsdn deviates the
 paragraph is marked **DEVIATION** with the reason and the ADR.
 
+**Amendments.** 2026-09-07 — §9 gained **§9.1**, the enumerated nftables test
+cases that replace the coverage ADR-0003 drops with the reference's
+`pkg/datapath/iptables` and `pkg/datapath/iptables/ipset` packages (25 tests,
+2,592 Go test lines). Written before the nftables code, as
+`docs/test-port-plan.md` §6 item 2 requires.
+
 Sibling specs: `00-foundation-table-config.md` (tables, reconciler helper,
 config registry, fences), `01-bpf-map-abi-loader.md` (map layouts incl.
 `cilium_node_map_v2`, attach mechanics incl. cgroup socket programs),
@@ -1489,9 +1495,7 @@ Unit (no root):
 - [ ] `Node` JSON compatibility vectors (bytes from the reference test fixtures).
 - [ ] KPR initializer decisions (§3.9 items 1–11) with expected error/warning texts.
 - [ ] BIG TCP size computation (limits, min over devices, legacy reset).
-- [ ] nft rendering golden files for: none, tunnel only, tunnel+proxy (2 ports), IPsec, WireGuard, host firewall, ENI, per-pod no-track (v4+v6), host ports set, pod-CIDR notrack, `enable-bpf-tproxy` — compared as decoded netlink batches and as an `nft list table` text rendering.
-- [ ] nft netlink encoder: every expression type round-trips through a decoder; batch splitting.
-- [ ] Ignored-key warning text.
+- [ ] The nftables residual — rendering per feature gate, golden rulesets, the netlink encoder round-trip, determinism and the ignored-key warnings: **enumerated case by case in §9.1** (N1–N22, N38–N45), which replaces the coverage ADR-0003 drops.
 
 Privileged (fresh netns, run on dev per cross-project rules; the reference's
 `TestPrivileged*` list is the checklist):
@@ -1509,7 +1513,7 @@ Privileged (fresh netns, run on dev per cross-project rules; the reference's
 - [ ] BIG TCP: set/restore sizes on a dummy device; failure rollback.
 - [ ] Sysctl reconciler: write/read/timeout, `ignore_err` semantics.
 - [ ] Socket LB cgroup: mount detection, mount, wrong-fs fatal.
-- [ ] nftables: transaction install/replace/empty-delete; atomicity (poll `nft list` equivalent via GETRULE during replace and never see a partial set); external flush detection and re-install; module autoload for `ct`, `tproxy`, `socket`; behavior with a second table containing `policy drop` (verifies §3.10.6 claims: notrack/tproxy still effective, accept not).
+- [ ] nftables against a live kernel — transaction install/replace/empty-delete, atomicity under a concurrent GETRULE poller, external flush detection and re-install, module autoload, coexistence with a foreign default-drop table, and teardown: **enumerated as §9.1 cases N23–N37**.
 - [ ] TPROXY end-to-end: transparent listener in the netns, marked packet redirected; `socket transparent` re-mark on the reply path.
 - [ ] Per-pod notrack: verify no conntrack entry is created (`nf_conntrack` count via `NETLINK_NETFILTER` `IPCTNL_MSG_CT_GET_STATS`).
 
@@ -1517,6 +1521,348 @@ e2e (kind matrix, spec 15): `routingMode` × `tunnelProtocol` × `bpf.masquerade
 × `kubeProxyReplacement` × `bandwidthManager` × BIG TCP × IPv6 underlay;
 firewalld-enabled node image (default-drop) to exercise §3.10.6 diagnostics;
 upgrade-from-reference with leftover iptables chains.
+
+### 9.1 The nftables residual: the enumerated replacement for the dropped iptables coverage
+
+**Added 2026-09-07 by amendment.** `docs/test-port-plan.md` §6 item 2 records
+that ADR-0003 drops the reference's `pkg/datapath/iptables` and
+`pkg/datapath/iptables/ipset` packages — measured at v1.20.1 as
+`iptables_test.go` 1,303 lines / 18 tests, `reconciler_test.go` 605 lines /
+1 test and `ipset/ipset_test.go` 684 lines / 6 tests, **25 tests and 2,592 test
+lines** — with no automatic replacement, and warns that unless the equivalent
+assertions are enumerated *before* the nftables code is written the residual
+becomes an untested surface by default. This subsection is that enumeration. It
+is normative for `flowsdn-nft` and `nft-residual`: an implementation is not
+complete until every case below exists.
+
+Three facts about the reference tests shape what follows.
+
+- **They are all unprivileged.** No test file in either package carries a
+  `//go:build linux` tag; every one drives a mock that records the argv it was
+  handed, or a closure over a `map[string]AddrSet` standing in for the kernel.
+  Nothing runs `iptables`, and nothing needs root. flowsdn keeps that property
+  for everything that is a question about *what we decided to install* — which
+  is most of it — and pays for a network namespace only where the question is
+  about the kernel's behavior.
+- **There are no golden files upstream.** Every expected ruleset is an inline
+  Go literal, which is why the reference has 478 lines of expectation inside
+  one 199-line test function and why a rule can be changed without anyone
+  seeing the diff. flowsdn inverts this: expectations live in
+  `crates/flowsdn-nft/tests/golden/<case>.nft` and are reviewed as a diff.
+  `--update-golden` regenerates them; regenerating is a reviewed commit.
+- **The reference's central mechanism is a strict, ordered, exhaustive command
+  transcript** (`mockIptables.expectations`): an unexpected command fails, and
+  an unconsumed expectation fails. flowsdn's equivalent is `NftRecorder`, a
+  `Client` implementation that captures each batch as a decoded `NftTable` plus
+  the ordered message list, with the same two failure modes — an unexpected
+  transaction fails, and a transaction that never arrives fails. Case IDs below
+  are `N<n>`; **U** = unit, no privileges, **P** = privileged, fresh netns.
+
+#### 9.1.1 Rule presence and absence per feature gate (U)
+
+Over `render(ResidualInputs) → NftTable` (§5.6) — a pure function, so these are
+ordinary `#[test]`s. Each case asserts both halves: the rules that MUST appear,
+and that **nothing else does**. Absence is the half the reference tests get
+right (`TestTunnelRulesTunnelingDisabled` asserts an empty command list) and
+the half that rots first.
+
+- [ ] **N1 `residual-empty`** — default config, no feature on. The rendered
+      table has **zero chains and zero rules**, and §3.10.1's empty-set rule
+      applies: the transaction is `NEWTABLE, DELTABLE`, so an idle node carries
+      no nftables state at all. This is flowsdn's counterpart to
+      `TestTunnelRulesTunnelingDisabled` and is stronger, because the reference
+      still installs its chain skeleton when every feature is off.
+- [ ] **N2 tunnel** — `routing-mode=tunnel`, `tunnel-protocol` ∈ {`vxlan`
+      (8472), `geneve` (6081)}, and an explicit `tunnel-port` override. Exactly
+      two rules, `udp dport <tp> notrack` in `raw_prerouting` and `raw_output`.
+      Replaces `TestTunnelVxlankRulesTunnelingEnabled` /
+      `TestTunnelGeneveRulesTunnelingEnabled`, minus their third command
+      (`filter CILIUM_OUTPUT … -j ACCEPT`), which §3.10.5 drops as a
+      cross-table no-op — the case MUST assert that no `accept` rule is
+      emitted, so the deviation is pinned rather than assumed.
+- [ ] **N3 tunnel off** — `routing-mode=native` with no feature that creates a
+      tunnel device: no tunnel rules, and `tunnel-port` set to a non-zero value
+      does not resurrect them.
+- [ ] **N4 WireGuard** — `encryption.type=wireguard`: `udp dport 51871 notrack`
+      in both raw chains, and no `accept`.
+- [ ] **N5 encryption marks** — IPsec, WireGuard, and both: four `notrack`
+      rules on `meta mark & 0xf00 == 0xd00` and `== 0xe00` across the two raw
+      chains, emitted **once** when both are on. Replaces the NOTRACK half of
+      `TestEncryptionRules`. The reference's twelve-and-eight `ACCEPT` rules in
+      `filter`/`nat` are dropped by §3.10.5; assert their absence.
+- [ ] **N6 IPsec-vs-WireGuard precedence** — the reference lets WireGuard
+      *replace* the IPsec ruleset (`addCiliumAcceptEncryptionRules` early-returns
+      into the WireGuard variant). flowsdn's rules are mark-based and additive,
+      so with both enabled the mark rules appear once and the WireGuard port
+      rule appears too. Assert the union, and record it here as a **DEVIATION**
+      the case exists to pin.
+- [ ] **N7 proxy, static** — L7 proxy on, `enable-bpf-tproxy=false`: the
+      `socket transparent` rule with its two mark exclusions, and the four/five
+      `notrack` rules of §3.10.3 including the IPsec-only `0xb00` one. The
+      reference has **no test for `installStaticProxyRules` at all** — its
+      largest rule-emitting function — so this case is new coverage, not a port.
+- [ ] **N8 proxy per port** — two redirects (`(dns-egress, 37379)`,
+      `(http-ingress, 37380)`) × {tcp, udp} × {ip, ip6} = 8 `tproxy` rules.
+      Assert the **full 32-bit** mark equality `0x200 | (port_be << 16)` — the
+      reference's own vectors are usable as arithmetic fixtures: port 37379 ⇒
+      `0x3920200`, 37380 ⇒ `0x4920200`, 43477 ⇒ `0xd5a90200`, 43479 ⇒
+      `0xd7a90200`. Assert the non-terminal `tproxy` is followed by
+      `meta mark set 0x200` and `accept`, and that the `socket transparent`
+      rule precedes every `tproxy` rule in the chain.
+- [ ] **N9 proxy with `enable-bpf-tproxy=true`** — the `tproxy` and `socket`
+      rules disappear, the `notrack` rules remain. The reference cannot test
+      this: all five of its proxy tests hardcode `haveBPFSocketAssign: false`,
+      so its ~478 lines of proxy-rule tests describe a path that does not run
+      when `bpf_sk_assign` is available. flowsdn's default is the BPF path, so
+      **this case, not N7/N8, is the one that guards the shipped default.**
+- [ ] **N10 delivery interface** — `enable-endpoint-routes` on ⇒ the
+      `oifname "lxc*"` proxy-return rules are emitted *in addition to* the
+      `cilium_host` ones; off ⇒ only `cilium_host` (§3.10.4).
+- [ ] **N11 host mark `0xC00`** — `enable-host-firewall=true`, legacy host
+      routing, and `kube-proxy-replacement=false` each independently produce
+      the `filter_output` rule with all five negative mark matches
+      (`0xd00`, `0xe00`, `0x400` on mask `0xf00`; `0xa00`, `0x800` on mask
+      `0xe00`) and the `mark set (mark & 0xfffff0ff) | 0xc00` result; with none
+      of the three, the rule is absent (§12.3 is the open decision this case
+      pins either way). **The reference has no test for this rule** — a
+      five-negative-match rule with no coverage is exactly the kind that rots,
+      so this case is new coverage.
+- [ ] **N12 ENI ct-mark `0x80`** — `ipam=eni` and `ipam=alibabacloud` each
+      produce the two `mangle_prerouting` rules of §3.10.3; every other IPAM
+      mode produces neither. **Also new coverage**: the reference's
+      `addCiliumENIRules` is untestable as written because it calls
+      `route.NodeDeviceWithDefaultRoute()` directly. flowsdn MUST take the
+      default-route device as an input to `render()` rather than looking it up
+      inside, which is what makes this a unit test at all — recorded here as a
+      design requirement, not just a test.
+- [ ] **N13 per-pod no-track ports** — one pod, two pods sharing a port, a pod
+      with both an IPv4 and an IPv6 address, `tcp` default and explicit
+      `/udp`, and pod deletion. Assert the four rules per (ip, port, proto) and
+      the family dependency (`meta nfproto`) that `ip`/`ip6` payloads require
+      in the `inet` family (§4.5). Replaces the per-pod half of the reference's
+      `TestNoTrackHostPorts` bookkeeping.
+- [ ] **N14 host no-track ports** — union across pods, grouped by protocol,
+      rendered as an **anonymous set** with ports sorted ascending. The
+      reference's `TestNoTrackHostPorts` sub-cases are the vectors: adding the
+      same port for a second pod changes nothing (the set is refcounted by port,
+      not by pod); `{443} → {443, 999}` renders one rule with `{ 443, 999 }`;
+      an empty annotation value behaves as a removal; removing the last pod
+      empties the set and the rule disappears. flowsdn's version is
+      *simpler than the reference's and must be asserted as such*: because the
+      whole table is replaced atomically there is no add-before-delete ordering
+      to test, which is what four of the reference's five sub-cases are about.
+- [ ] **N15 pod-CIDR no-track** — `install-no-conntrack-iptables-rules=true`
+      with one and with two local IPv4 alloc CIDRs ⇒ four rules per CIDR;
+      IPv6 CIDRs produce nothing (IPv4-only, as in the reference); the key
+      false ⇒ nothing. Replaces `TestAddNoTrackPodTrafficRules`.
+- [ ] **N16 rule ordering** — with every feature above enabled at once, the
+      chain contents are in the fixed order of §3.10.3 (pod-CIDR, proxy,
+      encryption, tunnel, WireGuard, per-pod, host-ports), ports sorted
+      ascending and pods sorted by IP. Correctness does not depend on this —
+      they are all `notrack` — but the golden files do, and a renderer that is
+      order-stable only by accident produces diff noise that trains reviewers
+      to skim.
+
+#### 9.1.2 Golden expected rulesets per feature combination (U)
+
+Each case renders, encodes to a netlink batch, decodes it back, and compares
+**both** representations against a committed golden: the decoded `NftTable`
+(structural) and an `nft list table`-style text rendering (reviewable). Encoding
+through the wire and back is what makes this a test of the encoder rather than
+of a `Debug` impl, and it is why §11 says the decoder makes golden tests
+possible without root.
+
+- [ ] **N17** goldens for: `none`, `tunnel-vxlan`, `tunnel-geneve`,
+      `tunnel+proxy-2-ports`, `proxy-bpf-tproxy`, `ipsec`, `wireguard`,
+      `ipsec+wireguard`, `host-firewall`, `eni`, `per-pod-notrack-v4v6`,
+      `host-ports-set`, `pod-cidr-notrack`, `endpoint-routes`, and
+      **`all-features`** — the combination no single reference test covers.
+- [ ] **N18** the text rendering is byte-stable across runs and across
+      `BTreeMap`/`HashMap` changes (render twice in one process, compare).
+- [ ] **N19** every `Expr` variant of §4.5 round-trips encode→decode
+      unchanged, including `Bitwise` mask/xor pairs, anonymous `Set` elements,
+      `Tproxy` with both families, `Socket`, `Ct{MARK}` get and set, and `Fib`.
+- [ ] **N20** batch splitting: a per-pod set large enough to exceed one 64 KiB
+      netlink message splits across messages **within one batch**, and the
+      decoded result is identical to the unsplit render.
+
+#### 9.1.3 Determinism and idempotent re-apply (U, then P)
+
+- [ ] **N21 (U)** `render()` called twice on equal inputs produces an equal
+      table and an equal hash; called on inputs differing only in the iteration
+      order of the pod and port collections, likewise. This is the property
+      §5.6 relies on to skip a transaction.
+- [ ] **N22 (U)** an unchanged desired set produces **no transaction at all**
+      (the recorder sees zero batches), which is the flowsdn analogue of the
+      reference's idempotency assertions in `TestAddProxyRulesv4` scenario 2
+      and `TestNoTrackHostPorts` — and stronger, because those assert "no
+      mutating command", while flowsdn asserts "no netlink write whatsoever".
+- [ ] **N23 (P)** apply the same table twice against a real kernel: the second
+      apply leaves the generation ID unchanged if skipped by the hash, and if
+      forced (resync) leaves an identical ruleset, with no rule duplication.
+- [ ] **N24 (P)** the 30-minute full resync re-derives and re-applies the whole
+      table even with no event, and converges after the table is corrupted
+      out-of-band. This is the counterpart of `TestReconciliationLoop`'s final
+      block, the reference's only self-heal assertion, and it is worth keeping:
+      it is the difference between "we react to events" and "we are eventually
+      correct". Drive it with a mock clock, never a sleep.
+
+#### 9.1.4 Transaction atomicity (P)
+
+The reference has **no atomicity test, because it has no atomicity**: its
+update model is rename → reinstall → delete, with a window in which both the
+old and the new chains are live, and `TestRenameCustomChain` covers only the
+`-E` rename in isolation. flowsdn replaces the whole model with one netlink
+batch (§3.10.1), so this is not a port but a stronger claim that needs its own
+proof.
+
+- [ ] **N25** during a replace that changes the whole rule set, a concurrent
+      poller issuing `NFT_MSG_GETRULE` in a tight loop **never observes a
+      partial set**: every dump it collects equals either the old table or the
+      new one, never a mixture. Run for a fixed number of replaces, not a fixed
+      duration, so the case cannot pass by not racing.
+- [ ] **N26** a batch containing one invalid expression is rejected **whole**:
+      the previous table is still present and byte-identical afterwards, the
+      health entry is `Degraded` with the netlink error and the offending
+      message index (§7), and the retry backoff is armed.
+- [ ] **N27** `EOPNOTSUPP`/`ENOENT` for a missing expression module (`tproxy`,
+      `socket`, `ct`) fails the transaction with the **expression name** in the
+      health message, not a bare errno — §5.6 requires the name and it is the
+      difference between a one-minute and a one-day diagnosis.
+- [ ] **N28** module autoload: in a fresh netns with the modules not loaded,
+      the first transaction that references `ct`, `tproxy` and `socket` loads
+      them without `CAP_SYS_MODULE`.
+- [ ] **N29** the empty case: with every feature off, the transaction is
+      `NEWTABLE, DELTABLE` and `inet flowsdn` does not exist afterwards.
+
+#### 9.1.5 Coexistence with a foreign table (P)
+
+The reference's coexistence coverage is incidental — `KUBE-KUBELET-CANARY` and
+`KUBE-PROXY-CANARY` sit in the `iptables -S` dumps of seven tests and are
+asserted untouched, and `TestManagerNodeIpsetNotNeeded` asserts a set named
+`unmanaged-ipset` survives. flowsdn makes it explicit, because §3.10.1's
+ownership rule ("exactly one table, never touch another") is a promise to the
+host's own firewall.
+
+- [ ] **N30** with `inet firewalld`, `ip filter` (iptables-nft) and a bare
+      `inet foo` table present, a full install/replace/delete cycle leaves all
+      three **byte-identical** (compare full `NFT_MSG_GETTABLE`/`GETCHAIN`/
+      `GETRULE` dumps before and after), and no message in any batch names a
+      table other than `flowsdn`.
+- [ ] **N31** with a second table whose `forward` chain has `policy drop`, the
+      §3.10.6 claims hold on live traffic: `notrack` still takes effect (no
+      conntrack entry is created), `tproxy` still redirects, `meta mark set`
+      still marks — and an `accept` in `inet flowsdn` does **not** override the
+      drop. The last half is the one that justifies installing no accept rules
+      at all; assert it by temporarily adding one and showing it changes
+      nothing.
+- [ ] **N32** the §3.10.6 detection path: a foreign default-drop `forward` or
+      `input` chain, and the legacy `ip filter FORWARD` with policy drop, each
+      set health `Degraded` with the table and chain named, and log the
+      allow-list exactly once (not once per resync).
+- [ ] **N33** external interference: another process flushes or deletes
+      `inet flowsdn`; the `NFNLGRP_NFTABLES` subscription fires, the table is
+      re-installed, and `flowsdn_nft_external_changes_total` increments once.
+- [ ] **N34** leftover reference state: with `CILIUM_*` chains and feeder rules
+      present in `ip filter`/`nat`/`raw`/`mangle`, flowsdn installs its table
+      and **does not remove or modify any of them** (§7 upgrade row). The
+      documented removal is the Helm job's, not the agent's.
+
+#### 9.1.6 Teardown (P)
+
+- [ ] **N35** `flowsdn-agent --cleanup` deletes `inet flowsdn` entirely — table,
+      chains, rules and anonymous sets — and leaves every other table
+      untouched. Replaces `TestRemoveCiliumRulesv4`/`v6`, whose real content is
+      "delete exactly our feeder rules and nothing else"; with one owned table
+      the flowsdn version is a single `DELTABLE`, and the assertion that
+      matters moves entirely to "nothing else changed".
+- [ ] **N36** cleanup is idempotent and succeeds when the table is already
+      absent (the reference's `remove` silently no-ops on a missing ipset; the
+      same tolerance is required here).
+- [ ] **N37** normal shutdown leaves the table **in place** (§3.11: restart is
+      non-disruptive), and a restarted agent replaces it wholesale on its first
+      transaction without a window in which the node has no rules — N25's
+      poller, applied across a process restart.
+
+#### 9.1.7 Accepted-and-ignored iptables configuration keys (U)
+
+The reference has **no coverage of these at all** — a repo-wide grep for
+`DisableIptablesFeederRules` or `PrependIptablesChains` in any `*_test.go`
+returns nothing — so this is entirely new. It is also the surface a user meets
+first when migrating a values file, which makes an untested warning string a
+poor trade.
+
+- [ ] **N38** each of `install-iptables-rules`, `iptables-lock-timeout`,
+      `iptables-random-fully`, `prepend-iptables-chains`,
+      `disable-iptables-feeder-rules` and `enable-xt-socket-fallback`, when set
+      to a non-default value, produces **exactly one** `warn` line matching §6's
+      text verbatim, naming the key and citing ADR-0003 — and the rendered table
+      is bit-identical to the run without the key, which is what "no effect"
+      actually means.
+- [ ] **N39** `egress-masquerade-interfaces` with a non-empty value produces the
+      same warning with the `"; use --devices to restrict masquerading devices"`
+      suffix; empty produces no warning at all.
+- [ ] **N40** the warning is emitted **once at startup**, not per reconcile —
+      assert over a run with several resyncs.
+- [ ] **N41** `enable-ipv4-masquerade=true` with `enable-bpf-masquerade=false`
+      is **rejected**, not warned: startup fails with spec 04's exact message.
+      This is the one iptables-shaped key that is an error rather than a
+      no-op, and conflating the two would be a silent loss of masquerading.
+- [ ] **N42** the registry classifies all of the above as `Ignored{adr: 0003}`
+      (spec 00 §6.5), so a future key added to the list inherits the behavior
+      without a new code path — assert the class, not just the message.
+
+#### 9.1.8 Reconciler convergence (U)
+
+`TestReconciliationLoop` is the single largest test in either reference package
+(605 lines) and asserts *desired-state convergence*, never rule text — the one
+reference test whose shape survives ADR-0003 unchanged.
+
+- [ ] **N43** a nine-step sequence mirroring its rows — initial state, device
+      added, local node IP and alloc-CIDR change, first proxy port, second proxy
+      port, two no-track pods, one removed, host no-track port added, changed
+      protocol, deleted — drives the `nft-desired` row (§4.1) to the expected
+      table at each step, with a mock clock stepping the 200 ms debounce. No
+      kernel, no privileges.
+- [ ] **N44** coalescing: N changes inside one debounce window produce **one**
+      transaction whose content equals the render of the final state.
+- [ ] **N45** the reconciler task exits cleanly on shutdown with no leaked
+      task and no pending timer (the reference asserts this with `goleak`; the
+      Rust equivalent is a `tokio` runtime that shuts down within a bounded time).
+
+#### 9.1.9 What has no nftables equivalent, because BPF does the job
+
+These reference assertions are deliberately **not** replaced. Each names what
+proves the flowsdn path instead, so "dropped" never has to be re-litigated
+from scratch.
+
+| Reference test(s) | Lines | Why there is no nftables case | What proves flowsdn's path |
+|---|---|---|---|
+| the entire `ipset` package — `TestManager`, `TestManagerNodeIpsetNotNeeded`, `TestOpsPruneEnabled`, `TestOpsRetry`, `TestIPSetList`, `TestIPSetListInexistentIPSet` | 684 (6 tests) | `cilium_node_set_v{4,6}` exists **only** to let the iptables masquerade path exclude node-destined traffic; its gate is `!tunneling && !bpf-masquerade`. flowsdn has no iptables masquerade (ADR-0001/0003), so the set is never created and nothing references it. The `ipset restore` batching protocol it spends most of its lines on is an artifact of shelling out to a CLI, which §3.10.1 forbids outright | the datapath's remote-node identity check: spec 04 §3.12 decision step 7 and its BPF cases `remote_node_masquerade{,_skip}_test` (spec 04 §9), over the ipcache entries spec 03 writes |
+| `TestNodeIpsetNATCmds` | 69 | same gate; the rule it renders (`-m set --match-set … dst -j ACCEPT` in `CILIUM_POST_nat`) is `dropped-because-BPF` in §3.10.5 | as above |
+| `TestAllEgressMasqueradeCmds`, `TestAllEgressMasqueradeCmdsRandomFully` | 137 | BPF masquerade is the only masquerade path. `--random-fully` is a netfilter NAT-engine concern with no BPF analogue — the BPF SNAT engine chooses ports itself | spec 04 §3.12 decision order and its cases `host_bpf_masq_{native,overlay}`, `hostfw_bpf_masq`, `skip_tunnel_nodeport_{masq,nat,revnat}` (spec 04 §9); port selection by spec 04's SNAT port-allocation cases |
+| `TestInstallMasqueradeRouteSourceRules` | 25 | `enable-masquerade-to-route-source` is iptables-only upstream; the key is kept and reimplemented in BPF (§6, spec 04) | spec 04's `BPF_FIB_LOOKUP_SRC` source-selection cases |
+| the hairpin and loopback SNAT rules (untested upstream, but part of the dropped surface) | — | kube-proxy DNAT hairpin does not exist under KPR; loopback-source hairpin is a datapath concern | spec 02 §3.19 pipeline 8 (hairpin/loopback), spec 04's `hairpin_sctp_flow` |
+| `TestGetProxyPorts` | 51 | it recovers proxy ports by **parsing the live ruleset** on restart — the ruleset used as a persistence store. §3.10.3 makes this a **DEVIATION**: flowsdn regenerates the rule set from `<state-dir>/proxy-ports.json` and never parses it back | spec 16's proxy-port persistence and restore cases |
+| `TestCopyProxyRulesv4`/`v6`, and the `haveBPFSocketAssign:false` half of `TestAddProxyRulesv4`/`v6` | ~430 of ~478 | the copy-on-first-init dance exists to carry rules across the rename→reinstall→delete update model, which one atomic transaction removes; and all five reference proxy tests describe the path that does **not** run when `bpf_sk_assign` is available | N7/N8 cover the static-rule path that remains; **N9** covers the shipped default; N25 covers the property the copy dance was working around |
+| `TestRenameCustomChain` | 28 | there are no custom chains to rename and no `OLD_` generation | N25 (atomicity), N29 (empty delete) |
+
+One reference behavior in this class is worth recording even though it produces
+no test: upstream `installMasqueradeRules` hard-errors when the iptables backend
+is `nft` and the exclusion CIDR is `0.0.0.0/0` or `::/0`, because nftables
+cannot express that negation in its NAT path. flowsdn never hits it — there is
+no nftables masquerade — and spec 04's BPF exclusion-CIDR check has no such
+limit. It is noted so the absence is a known consequence rather than an
+oversight.
+
+Finally, the four rules the reference emits and **never tests** — the `0xC00`
+host mark, the ENI `0x80` ct-mark, the `cilium_host`/`cilium_net` forward
+accepts and the whole of `installStaticProxyRules` — are covered here by N11,
+N12, N7 and, for the forward accepts, by N1's "nothing else is emitted" plus
+§3.10.6's detection cases N31/N32, since flowsdn deliberately installs no accept
+rules. Net of the ADR-0003 drops, flowsdn's nftables coverage is **broader**
+than the reference's, not merely different: 45 enumerated cases against 25,
+with the four highest-risk rules covered for the first time.
 
 ## 10. Kernel and platform requirements
 

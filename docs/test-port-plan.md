@@ -10,6 +10,11 @@ Companion deliverables produced with this plan:
 `tests/golden/` (1,196 harvested data fixtures) and
 `tests/fuzz/SEEDS.md` (the 19 fuzz targets).
 
+**Amendments.** 2026-09-07 — §3 area 03 and §6 open question 2 updated: the
+2,592-line iptables/ipset coverage gap is closed by
+`docs/spec/10-node-routing-nftables.md` §9.1, written before the nftables code
+as this plan required.
+
 ---
 
 ## 1. The measurements
@@ -210,7 +215,9 @@ behaviours those tests protect — masquerade exclusion, no-track for host ports
 proxy redirect rules, encryption bypass, ordering against the reconciliation
 loop — must be re-derived as nftables assertions in
 `docs/spec/10-node-routing-nftables.md` §9. Do not treat "drop" here as "not
-needed".
+needed". **Done 2026-09-07**: that spec's §9.1 enumerates the 45 replacement
+cases (N1–N45), marks each unit or netns, and tabulates which reference
+assertions have no equivalent because BPF does the job.
 
 `pkg/datapath/tables` is **replace** for ADR-0004 (no StateDB): the node-address
 derivation rules are worth keeping exactly, but the test's shape is a StateDB
@@ -903,10 +910,16 @@ fastetcd at step 1, not step 12.** They are 2,280 Go test lines that answer
    ADR-0005 does not say where they run. Recommendation: a `vmtest`-style lane on
    `dev.g8.lo` gating merge, matching the kernel floor in
    `docs/kernel-requirements.md`, with the unprivileged lane on every push.
-2. **The dropped iptables coverage.** 2,592 Go test lines vanish under ADR-0003
-   with no automatic replacement. Recommendation: `docs/spec/10-node-routing-nftables.md`
-   §9 must enumerate the equivalent nftables assertions *before* the nftables
-   code is written, or this becomes an untested surface by default.
+2. **The dropped iptables coverage.** ~~2,592 Go test lines vanish under ADR-0003
+   with no automatic replacement.~~ **Resolved 2026-09-07.**
+   `docs/spec/10-node-routing-nftables.md` §9.1 now enumerates the replacement
+   before any nftables code exists: 45 cases (N1–N45) across feature-gate
+   presence/absence, golden rulesets, determinism and idempotent re-apply,
+   transaction atomicity, foreign-table coexistence, teardown, the
+   accepted-and-ignored iptables keys, and reconciler convergence — plus a table
+   of the reference assertions with no equivalent because BPF does the job
+   (the whole `ipset` package, the masquerade/SNAT/hairpin rules, ruleset-as-
+   proxy-port-store) naming what proves each of those instead.
 3. **`pkg/policy` port granularity.** 21,034 lines in one package. Port it as one
    unit, or file by file with the deny files first? Recommendation: file by
    file, deny first (`mapstate`, `distillery_precedence`, `repository_deny`,

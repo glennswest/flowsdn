@@ -17,6 +17,12 @@ target dirs under `/build/cargo/flowsdn`, nothing persists on the SSD).
 Normative language: MUST / SHOULD / MAY as in RFC 2119. **DEVIATION** marks a
 deliberate difference from the reference with its reason and ADR.
 
+**Amendments.** 2026-09-07 — §3.8.1 states the **ADR-0006** single-repository /
+single-workspace decision explicitly and names its two later extraction
+candidates; §3.10.2 gains the **ADR-0007** cloud-fake pull-request jobs and the
+weekly live-cloud drift-detection job, and the "cloud conformance jobs are
+deferred" note is corrected, since ADR-0007 supersedes it.
+
 ## 1. Scope
 
 In scope: the set of binaries flowsdn ships and how each is targeted, sized and
@@ -685,9 +691,33 @@ the layout-change handling of spec `01` §3.2, links are replaced with
 
 #### 3.8.1 Workspace layout
 
-One Cargo workspace, one `Cargo.lock`, `resolver = "2"`. Members under
+**One private repository, one Cargo workspace** — ADR-0006, and it is a
+decision rather than a default: `flowsdn-bpf-abi` is compiled into both the
+aya-ebpf programs and the agent, so a `#[repr(C)]` change is only correct if
+both sides move in the same commit, and a split would put version skew exactly
+there. The ordinary change here is cross-crate (a conntrack field touches the
+ABI crate, the programs, the loader, the GC task, the dbg dump format and the
+harvested `.table` expectations), the harvested corpora cut across every
+boundary a split could draw, and the deliverable is one sealed image, not a set
+of independently versioned libraries. flowsdn therefore ships **one version, one
+lockfile, one `deny.toml`, one MSRV**, all configured at the workspace root
+(§3.8.8), and CI pays for this with per-crate caching and change detection
+(§3.10.6) so a documentation edit does not rebuild the BPF programs.
+
+Two crates in §3.8.2 have a plausible audience outside flowsdn and are the
+**only** ones ADR-0006 names as candidates for later extraction and publication
+— `flowsdn-bgp-proto` (a BGP message codec and FSM with no flowsdn types in its
+interface; nothing comparable exists in Rust today) and `flowsdn-scripttest` (a
+txtar-driven script test engine useful to any project that wants the
+reference's testing style). Extraction is a deliberate, later decision taken
+when a crate has external users and its API has stopped moving; until then both
+live in the workspace like everything else, and no spec may assume they are
+separately versioned.
+
+One `Cargo.lock`, `resolver = "2"`. Members under
 `crates/`; the BPF package is a workspace *exclusion* with its own lock and
-toolchain (§3.8.3).
+toolchain (§3.8.3) — the one exception, forced by the second toolchain, not a
+repository boundary.
 
 ```
 flowsdn/
@@ -701,6 +731,7 @@ flowsdn/
   install/kubernetes/flowsdn/
   images/{agent,operator,relay,dnsproxy,connectivity}/Containerfile
   tests/{scripttest,bpf,golden,fuzz}/     harvested corpora (ADR-0005)
+  tests/cloud/<provider>/<scenario>/      recorded cloud responses (ADR-0007)
   tools/                                  re-harvest and rewrite scripts
   docs/
 ```
@@ -1069,7 +1100,7 @@ the review artefact.
 | Class | Runner | Why |
 |---|---|---|
 | lint, fmt, clippy, `cargo deny`, `xtask notice`, `xtask version check`, `helm lint`, `xtask chart check`, `xtask helm-diff`, doc link check | GitHub hosted `ubuntu-latest` | cheap, no kernel needed |
-| userspace unit tests (x86-64), scripttest, cptest, golden tests | GitHub hosted | no kernel needed (fakes per ADR-0005) |
+| userspace unit tests (x86-64), scripttest, cptest, golden tests, **cloud-fake replay** | GitHub hosted | no kernel needed (fakes per ADR-0005; recorded cloud responses per ADR-0007, replayed against a local server — no network egress, no credentials) |
 | **BPF build, verifier gate, privileged BPF tests, privileged netlink tests, image builds, cross arm64, kind e2e** | **self-hosted runner on `dev.g8.lo`**, labels `[self-hosted, linux, x64, dev-g8]` | needs KVM (LVH/QEMU VMs), needs podman, needs the pinned nightly + `bpf-linker`, and needs `/build` — per `../CLAUDE.md` heavy builds run on dev, never on the Mac and not on an ephemeral hosted runner where a 30-minute cold `cargo build` is the norm |
 | arm64 e2e, arm64 privileged tests | **Rose cluster node**, nightly, label `[self-hosted, linux, arm64, rose]` | real arm64 hardware and real NIC drivers; LVH publishes no arm64 kernels (`docs/kernel-requirements.md` §5.3) |
 | arm64 verifier + BPF unit tests | `dev.g8.lo` under QEMU TCG | CPU-light; the verifier is arch-independent, so this row guards only JIT-support gates |
@@ -1094,6 +1125,8 @@ Every `dev.g8.lo` job MUST:
 | `bpf-tests` | PR (dev-g8) | `flowsdn-bpf-tests` under `BPF_PROG_RUN` in an LVH 6.12 VM (ADR-0005 corpus, `tests/bpf/CASES.toml`) | 18 min |
 | `privileged` | PR (dev-g8) | `cargo test --features privileged -- --ignored` in a 6.12 VM: map open/create, tcx/netkit/XDP/cgroup attach, netlink, nftables residual, netns | 15 min |
 | `scripttest` | PR | `cargo test -p flowsdn-scripttest` over the 168 harvested txtar scenarios (unprivileged, fakes) | 7 min |
+| `cloud-fixture-scan` | **PR** | pattern scan over `tests/cloud/**` for credentials, real account identifiers, ARNs, subscription/tenant IDs, tokens and signatures (ADR-0007 §2). Runs **before** any job reads a fixture and blocks them on failure, so a leak is caught at the gate rather than replayed | 1 min |
+| `cloud-fakes` | **PR** | `cargo test -p flowsdn-ipam-aws -p flowsdn-ipam-azure -p flowsdn-ipam-alibaba -p flowsdn-operator-ipam --features cloud-replay`, one matrix leg per provider, against the recorded fixtures in `tests/cloud/<provider>/<scenario>/` replayed at the **HTTP layer** so each SDK's signing, retry, pagination and error mapping stay in the tested path (ADR-0007 §3; spec `07` §9.1). Strict mode: an unmatched request *or* an unused recorded interaction fails. Hosted runner — no kernel, no cluster, **no credentials** | 8 min |
 | `images` | PR (dev-g8) | build all five images for both arches, assemble the manifest lists, **do not push**; `xtask size-check`; assert the image has exactly the expected file list and no shell | 16 min |
 | `e2e-smoke` | PR (dev-g8) | kind on LVH 6.12 x86-64, 2 nodes, `helm install` the built chart, `flowsdn-connectivity` M1 subset per spec `19` (pod-to-pod same/other node, ClusterIP, NodePort, pod-to-world, host-to-pod, DNS, policy allow/deny), plus `check-log-errors` and `no-unexpected-packet-drops` | 22 min |
 | `e2e-matrix` | **nightly** (dev-g8) | the reduced config set from `docs/kernel-requirements.md` §5.3: {vxlan+KPR, native+KPR+DSR, geneve+DSR-geneve, WireGuard, IPsec, egress gateway, host firewall, IPv6-only, netkit} on 6.12; 6.6 and 6.18 rows with the vxlan+KPR config | 3 h |
@@ -1105,14 +1138,31 @@ Every `dev.g8.lo` job MUST:
 | `fuzz` | **nightly** | `cargo fuzz run` for each target (BGP codec, policy distill, CNI netconf, gob encoder) for 15 min each against the harvested seeds | 60 min |
 | `release` | tag `v*` (dev-g8) | everything the PR gates run, then: build+push images to `sbregistry:5100` (+ GHCR when public), `podman save` archives, package the chart, generate SBOMs, create the GitHub release with all assets, verify `xtask version check` against the tag | 55 min |
 | `chart-publish` | push to `main` | publish a `-dev.<sha>` chart to the CI chart repo so `cilium install --chart-directory` equivalents work off main | 4 min |
+| `cloud-drift` | **weekly**, scheduled | re-run `cargo xtask cloud-record` against the live throwaway account for each provider and diff the normalized result against the committed `tests/cloud/**` fixtures; open or update one issue per provider on a difference. **Gates nothing.** ADR-0007 §5 | 20 min |
+
+`cloud-fixture-scan` and `cloud-fakes` are **required checks**: under ADR-0007
+the cloud IPAM modes of spec `07` §3.9–3.12 are a pull-request gate rather than
+an untested surface, and `cloud-fakes` MUST fail rather than fall back to a live
+endpoint when a fixture is missing.
+
+**`cloud-drift` is the only job in this repository that holds cloud
+credentials**, and they are read-only where the provider supports it. No
+pull-request job, no nightly job and no release job may be given a cloud
+credential; a workflow that requests one fails review. This is why the drift
+check is scheduled rather than triggered: a fixture set goes stale silently when
+a provider changes its API, and detecting that is worth one credentialed job a
+week, while making it block merges would put a third party's availability on the
+critical path of every change.
 
 Deliberately **not** ported from the reference: the ginkgo suites (7k lines of
 Go harness; ADR-0005 keeps them as a behaviour checklist), `conformance-race`
 (Rust has no data races to detect in safe code; `loom` tests cover the few
 `unsafe` spots), `codeql` (replaced by clippy + `cargo deny` + `cargo audit`),
-the cloud conformance jobs (deferred with cloud IPAM; the credentials and cost
-are not justified until spec `07`'s providers land), and `lint-images-base`
-(there is no base image).
+the reference's **live** cloud conformance jobs (EKS/AKS/GKE clusters per PR —
+superseded by ADR-0007: the control plane those jobs guarded is covered by
+`cloud-fakes` at a fraction of the cost and with no credentials, and what they
+additionally covered — datapath on a real cloud — remains an acknowledged gap,
+spec `19` §11 item 9), and `lint-images-base` (there is no base image).
 
 #### 3.10.3 Kernel and architecture matrix
 
