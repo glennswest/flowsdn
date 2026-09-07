@@ -13,3 +13,4 @@
 - **docs:** Specs 00 foundation, 03 identity/ipcache, 04 conntrack/NAT. Kernel requirements roll-up: stormcos 6.12 line, general minimum 6.6, CONFIG fragment, verifier-risk analysis, test matrix.
 - **docs:** Spec 01 BPF map ABI + loader. Spec wave 2 launched (05–10).
 - **docs:** Spec 02 datapath programs (milestones M1/M2/M3, mark/VNI wire contract, 141-file test checklist). Spec wave 1 complete.
+- **docs:** Spec wave 2 complete: 05 service load balancing, 06 policy engine, 07 IPAM, 08 endpoint + agent API, 09 CNI plugin, 10 node routing + nftables residual.
