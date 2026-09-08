@@ -62,7 +62,6 @@ fn graph(metadata: &Value) -> Result<BTreeMap<String, Package>, Box<dyn Error>> 
             .and_then(Value::as_array)
             .ok_or("missing dependencies")?
             .iter()
-            .filter(|d| d.get("path").and_then(Value::as_str).is_some())
             .filter_map(|d| d.get("name").and_then(Value::as_str).map(str::to_owned))
             .collect();
         packages.insert(
@@ -251,4 +250,12 @@ mod tests {
         );
         Ok(())
     }
+    #[test]
+    fn version_dependencies_patched_to_workspace_are_included() -> Result<(), Box<dyn Error>> {
+        let value = serde_json::json!({"workspace_root":"/project","workspace_members":["one","two"],"packages":[{"id":"one","name":"base","manifest_path":"/project/crates/base/Cargo.toml","dependencies":[]},{"id":"two","name":"app","manifest_path":"/project/app/Cargo.toml","dependencies":[{"name":"base","kind":null}]}]});
+        let g = graph(&value)?;
+        assert_eq!(select(&g, &["crates/base/src/lib.rs".to_owned()]), BTreeSet::from(["app".to_owned(), "base".to_owned()]));
+        Ok(())
+    }
+
 }
