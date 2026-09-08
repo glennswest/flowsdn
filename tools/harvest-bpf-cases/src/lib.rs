@@ -223,7 +223,10 @@ pub fn harvest(files: &BTreeMap<String, Vec<String>>, date: &str) -> Result<Valu
         walk.run(file, files, &patterns, 0);
         let mut corpus = lines.join("\n");
         for include in &walk.includes {
-            if let Some(lines) = files.get(include.rsplit('/').next().unwrap_or(include)) {
+            if let Some(lines) = files
+                .get(include)
+                .or_else(|| files.get(include.rsplit('/').next().unwrap_or(include)))
+            {
                 corpus.push('\n');
                 corpus.push_str(&lines.join("\n"));
             }
@@ -465,6 +468,36 @@ mod tests {
             case.get("defined_in").and_then(Value::as_str),
             Some("bpf/tests/shared.h")
         );
+    }
+    #[test]
+    fn library_helper_resolution_prefers_full_include_path() {
+        let source = "#include \"lib/wrapper.h\"\nSETUP(\"tc\", \"sample\")\nreturn wrapper(ctx);\nCHECK(\"tc\", \"sample\")";
+        let library = "int wrapper(void *ctx) { return pod_send_packet(ctx); }";
+        let unrelated = "int wrapper(void *ctx) { return pod_receive_packet(ctx); }";
+        let mut files = BTreeMap::from([
+            (
+                "unit.c".to_owned(),
+                source.lines().map(str::to_owned).collect(),
+            ),
+            (
+                "lib/wrapper.h".to_owned(),
+                library.lines().map(str::to_owned).collect(),
+            ),
+        ]);
+        for with_basename_collision in [false, true] {
+            if with_basename_collision {
+                files.insert(
+                    "wrapper.h".to_owned(),
+                    unrelated.lines().map(str::to_owned).collect(),
+                );
+            }
+            let value = harvest(&files, "2026-09-07").unwrap();
+            assert_eq!(
+                value["file"][0]["case"][0]["entrypoint"].as_str(),
+                Some("from_container"),
+                "basename collision: {with_basename_collision}"
+            );
+        }
     }
     #[test]
     fn expression_rules_and_conservative_unknowns() {
