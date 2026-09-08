@@ -7,6 +7,8 @@
 
 mod parse;
 pub mod sources;
+pub mod validation;
+pub mod immutable;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -53,6 +55,8 @@ pub enum Kind {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Class {
     Active,
+    /// Compared with the previous run before restoring existing endpoints.
+    Immutable,
     Ignored,
     Script,
 }
@@ -287,7 +291,7 @@ impl Registry {
                 continue;
             };
             self.apply(&mut resolved, spec, entry.source, &entry.value)?;
-            if spec.class != Class::Active && ignored.insert(key.clone()) {
+            if matches!(spec.class, Class::Ignored | Class::Script) && ignored.insert(key.clone()) {
                 resolved.warnings.push(Warning::IgnoredKey {
                     key,
                     source: entry.source,

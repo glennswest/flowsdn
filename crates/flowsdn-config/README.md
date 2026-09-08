@@ -33,7 +33,24 @@ textual comma-separated forms. Environment loading excludes the process-only
 variables listed in the specification and accepts caller-supplied legacy aliases;
 a canonical variable wins even when its value is empty.
 
-This initial core does not yet include the complete 539-key agent catalogue,
-CLI argument parsing, area-specific map validators,
-cross-key validation, derived settings, runtime persistence or dynamic config
-reflection. Legacy alias definitions are supplied by the owning area's schema.
+`validation::foundation` checks registered foundation settings and the
+dependencies of enabled features: address families and NDP, routing and localhost
+modes, route metrics, IPv6 allocation prefixes, cluster naming and ID bounds,
+dynamic map ratios, policy-map bounds, delegated IPAM, VTEP mask parsing and
+identity backend selection. A required dependency missing from the schema is an
+error. `validation::map_sizes` accepts additional bounds from map owners.
+Native-routing CIDR derivation and its automatic-range exceptions remain with
+the IPAM/routing integration; this validator does not yet enforce that rule.
+Validation of a VTEP mask does not enable the deferred VTEP feature.
+
+Keys marked `Class::Immutable` are compared across parsed snapshots using
+`immutable::check`. Changes refuse startup when restoration is enabled and
+endpoint state exists; other changes are reported for diagnostics. Missing
+previous state is accepted, and an unparseable previous snapshot produces a
+warning. The caller provides decoded snapshots and actual endpoint-state
+presence; this module does not read or rotate runtime files.
+
+This core does not yet include the complete 539-key agent catalogue,
+CLI argument parsing, area-specific map validators, all cross-key rules,
+derived settings, runtime persistence or dynamic config reflection. Legacy alias
+definitions are supplied by the owning area's schema.
