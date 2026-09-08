@@ -493,7 +493,13 @@ mod tests {
             }
             let value = harvest(&files, "2026-09-07").unwrap();
             assert_eq!(
-                value["file"][0]["case"][0]["entrypoint"].as_str(),
+                value
+                    .get("file")
+                    .and_then(|v| v.get(0))
+                    .and_then(|v| v.get("case"))
+                    .and_then(|v| v.get(0))
+                    .and_then(|v| v.get("entrypoint"))
+                    .and_then(Value::as_str),
                 Some("from_container"),
                 "basename collision: {with_basename_collision}"
             );
