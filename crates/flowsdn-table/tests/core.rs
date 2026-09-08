@@ -311,8 +311,12 @@ fn key_encodings_and_render_contract() {
 #[tokio::test]
 async fn replacement_deletion_and_late_multikey_collision_preserve_revision_index() {
     let table = Table::new(vec![Index::new("labels", true, |item: &Item| {
-        item.labels.iter().map(|label| label.as_bytes().to_vec()).collect()
-    })]).unwrap();
+        item.labels
+            .iter()
+            .map(|label| label.as_bytes().to_vec())
+            .collect()
+    })])
+    .unwrap();
     table.insert(row(1, "one", &["a", "z"])).await.unwrap();
     table.insert(row(2, "two", &["b"])).await.unwrap();
     // "c" validates before "z" collides. Neither new nor old indexes may move.
@@ -320,11 +324,30 @@ async fn replacement_deletion_and_late_multikey_collision_preserve_revision_inde
     let snapshot = table.snapshot();
     assert_eq!(snapshot.get("labels", b"b").unwrap().unwrap().0.name, "two");
     assert!(snapshot.get("labels", b"c").unwrap().is_none());
-    assert_eq!(snapshot.by_revision(0).map(|(r, rev)| (r.id, rev)).collect::<Vec<_>>(), [(1, 1), (2, 2)]);
+    assert_eq!(
+        snapshot
+            .by_revision(0)
+            .map(|(r, rev)| (r.id, rev))
+            .collect::<Vec<_>>(),
+        [(1, 1), (2, 2)]
+    );
     table.insert(row(1, "replacement", &["d"])).await.unwrap();
     table.delete(&key::u32be(2)).await.unwrap();
-    assert_eq!(table.snapshot().by_revision(0).map(|(r, rev)| (r.id, rev)).collect::<Vec<_>>(), [(1, 3)]);
-    assert_eq!(snapshot.by_revision(0).map(|(r, rev)| (r.id, rev)).collect::<Vec<_>>(), [(1, 1), (2, 2)]);
+    assert_eq!(
+        table
+            .snapshot()
+            .by_revision(0)
+            .map(|(r, rev)| (r.id, rev))
+            .collect::<Vec<_>>(),
+        [(1, 3)]
+    );
+    assert_eq!(
+        snapshot
+            .by_revision(0)
+            .map(|(r, rev)| (r.id, rev))
+            .collect::<Vec<_>>(),
+        [(1, 1), (2, 2)]
+    );
 }
 
 #[tokio::test]
@@ -332,7 +355,9 @@ async fn empty_binary_primary_and_secondary_keys_are_valid() {
     #[derive(Clone)]
     struct Binary(Key);
     impl Keyed for Binary {
-        fn primary_key(&self) -> Key { self.0.clone() }
+        fn primary_key(&self) -> Key {
+            self.0.clone()
+        }
     }
     let table = Table::new(vec![Index::new("empty", false, |_: &Binary| vec![vec![]])]).unwrap();
     table.insert(Binary(vec![])).await.unwrap();

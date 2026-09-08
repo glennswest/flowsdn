@@ -25,11 +25,19 @@ impl Default for StreamOptions {
 /// Changes describe current desired state, not an event log.
 #[derive(Clone, Debug)]
 pub enum Change<T> {
-    Insert { row: Arc<T>, revision: Revision },
-    Delete { key: Key, revision: Revision },
+    Insert {
+        row: Arc<T>,
+        revision: Revision,
+    },
+    Delete {
+        key: Key,
+        revision: Revision,
+    },
     /// Discard the old mirror and reconcile the following full population.
     /// Its rows retain their original revisions, possibly below this revision.
-    Resync { revision: Revision },
+    Resync {
+        revision: Revision,
+    },
 }
 
 impl<T> Change<T> {
@@ -92,7 +100,10 @@ impl StreamState {
             let mut progress = progress.lock().expect("stream progress poisoned");
             let backlog = self
                 .tombstones
-                .range((std::ops::Bound::Excluded(progress.acked), std::ops::Bound::Unbounded))
+                .range((
+                    std::ops::Bound::Excluded(progress.acked),
+                    std::ops::Bound::Unbounded,
+                ))
                 .take(self.options.tombstone_max_count.saturating_add(1))
                 .count();
             if progress.acked < revision
@@ -157,8 +168,7 @@ impl<T: Keyed> Table<T> {
             acked: from_revision.min(version.revision),
             last_ack: Instant::now(),
             resync: from_revision != 0
-                && (from_revision < registry.discarded_through
-                    || from_revision > version.revision),
+                && (from_revision < registry.discarded_through || from_revision > version.revision),
         }));
         registry.subscribers.push(Arc::downgrade(&progress));
         let mut stream = ChangeStream {
@@ -188,12 +198,13 @@ impl<T: Keyed> Table<T> {
 impl<T: Keyed> ChangeStream<'_, T> {
     fn populate(&mut self, version: &crate::Version<T>) {
         self.cursor = version.revision;
-        self.pending.extend(version.revisions.values().filter_map(|key| {
-            version.rows.get(key).map(|(row, revision)| Change::Insert {
-                row: row.clone(),
-                revision: *revision,
-            })
-        }));
+        self.pending
+            .extend(version.revisions.values().filter_map(|key| {
+                version.rows.get(key).map(|(row, revision)| Change::Insert {
+                    row: row.clone(),
+                    revision: *revision,
+                })
+            }));
     }
 
     /// Largest checkpoint fully delivered, including gaps with no changes.
@@ -245,18 +256,22 @@ impl<T: Keyed> ChangeStream<'_, T> {
         if self.pending.is_empty() {
             let lower = std::ops::Bound::Excluded(self.cursor);
             let upper = std::ops::Bound::Unbounded;
-            let deletes = registry.tombstones.range((lower, upper)).map(|(revision, key)| {
-                Change::Delete {
+            let deletes = registry
+                .tombstones
+                .range((lower, upper))
+                .map(|(revision, key)| Change::Delete {
                     key: key.clone(),
                     revision: *revision,
-                }
-            });
-            let inserts = version.revisions.range((lower, upper)).filter_map(|(revision, key)| {
-                version.rows.get(key).map(|(row, _)| Change::Insert {
-                    row: row.clone(),
-                    revision: *revision,
-                })
-            });
+                });
+            let inserts = version
+                .revisions
+                .range((lower, upper))
+                .filter_map(|(revision, key)| {
+                    version.rows.get(key).map(|(row, _)| Change::Insert {
+                        row: row.clone(),
+                        revision: *revision,
+                    })
+                });
             let mut changes: Vec<_> = deletes.chain(inserts).collect();
             changes.sort_by_key(Change::revision);
             // Only snapshot populations need buffering. Live updates can be
@@ -292,7 +307,9 @@ impl<T: Keyed> ChangeStream<'_, T> {
 impl<T: Keyed> Drop for ChangeStream<'_, T> {
     fn drop(&mut self) {
         let mut registry = self.table.streams.lock().expect("stream registry poisoned");
-        registry.subscribers.retain(|weak| !Weak::ptr_eq(weak, &Arc::downgrade(&self.progress)));
+        registry
+            .subscribers
+            .retain(|weak| !Weak::ptr_eq(weak, &Arc::downgrade(&self.progress)));
         registry.maintain(self.table.published.load().revision, Instant::now());
     }
 }
@@ -305,7 +322,9 @@ mod tests {
     #[derive(Clone)]
     struct Item(u8);
     impl Keyed for Item {
-        fn primary_key(&self) -> Key { vec![self.0] }
+        fn primary_key(&self) -> Key {
+            vec![self.0]
+        }
     }
 
     #[tokio::test]
@@ -340,15 +359,26 @@ mod tests {
 
     #[tokio::test]
     async fn elapsed_ack_limit_forces_resync_without_count_overflow() {
-        let table = Table::with_stream_options(vec![], StreamOptions {
-            tombstone_max_age: Duration::from_secs(10),
-            ..StreamOptions::default()
-        }).unwrap();
+        let table = Table::with_stream_options(
+            vec![],
+            StreamOptions {
+                tombstone_max_age: Duration::from_secs(10),
+                ..StreamOptions::default()
+            },
+        )
+        .unwrap();
         table.insert(Item(1)).await.unwrap();
         let mut stream = table.watch(1);
         table.delete(&[1]).await.unwrap();
-        table.streams.lock().unwrap().maintain(2, Instant::now() + Duration::from_secs(11));
-        assert!(matches!(stream.drain(10).as_slice(), [Change::Resync { revision: 2 }]));
+        table
+            .streams
+            .lock()
+            .unwrap()
+            .maintain(2, Instant::now() + Duration::from_secs(11));
+        assert!(matches!(
+            stream.drain(10).as_slice(),
+            [Change::Resync { revision: 2 }]
+        ));
         assert_eq!(table.tombstone_count(), 0);
     }
 
@@ -361,6 +391,9 @@ mod tests {
         }
         table.delete(&[1]).await.unwrap();
         let mut stream = table.watch(1);
-        assert!(matches!(stream.drain(10).as_slice(), [Change::Delete { revision: 21, .. }]));
+        assert!(matches!(
+            stream.drain(10).as_slice(),
+            [Change::Delete { revision: 21, .. }]
+        ));
     }
 }

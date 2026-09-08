@@ -9,8 +9,8 @@ use std::{collections::BTreeSet, error::Error, fmt, sync::Arc};
 use tokio::sync::{Mutex, watch};
 
 mod streams;
-pub use streams::{Change, ChangeStream, StreamOptions};
 use streams::StreamState;
+pub use streams::{Change, ChangeStream, StreamOptions};
 
 pub type Key = Vec<u8>;
 pub type Revision = u64;
