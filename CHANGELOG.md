@@ -7,6 +7,7 @@
 - Add the dependency-free flowsdn-scripttest parsing front end: exact txtar
   reconstruction, flag extraction, quoted fragments, conditions, status prefixes,
   section boundaries, background syntax and line-numbered errors.
+- Disable compiler-probe caching after a reproducible Clippy-to-test cache failure on dev.
 - Reject CRLF per the spec recommendation for #210; preserve LF fixture bytes.
 - Add synthetic parser regressions and a static check of all 168 harvested
   scenarios. Commands are parsed, not executed; the runtime engine is next.
