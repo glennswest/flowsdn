@@ -42,9 +42,6 @@ this assessment.
 - #30, #20, #156 and #114 gate Kubernetes capabilities, identity backend,
   CEP/CES rollout and endpoint migration respectively. They do not block the
   first foundation crates.
-- The referenced ../CLAUDE.md does not exist in this checkout. Build-host rules
-  are restated in this repository and spec 22; AGENTS.md records the user rule
-  that all transfers and results go through GitHub.
 
 ## First-slice scope
 
@@ -90,3 +87,22 @@ On Linux with Rust 1.95.0 and normal compiler caching:
 Parsing does not execute assertions, validate command registrations or
 condition capabilities, expand variables, or materialize archive files.
 The runtime engine and adapters remain unimplemented. No harvested file changed.
+
+## Version 0.3.0 validation
+
+The indexed table core adds immutable snapshots, revisions, serialized writes,
+unique/multikey indexes and atomic batch publication. Watches, retained
+change streams, initialization tracking and reconciliation are not implemented.
+
+Validated on Linux with Rust 1.95.0:
+- `cargo xtask check`: formatting, Clippy with warnings denied, 28 native
+  tests and all-target compile checks for x86_64/aarch64 Linux musl passed.
+- `cargo test --workspace --release --locked`: the same 28 tests passed.
+- `cargo xtask deny`: advisories, bans, licenses and sources passed.
+- Rust BPF harvester: all 142 translation units and 625 effective cases match
+  the pinned reference inventory, including feature/configuration, entrypoint
+  and milestone fields. Generated TOML passed a second comparison.
+
+The 28 tests comprise 7 fence, 8 parser, 10 table and 3 harvester tests.
+No Python executable source remains tracked. These checks do not exercise
+BPF programs or the networking assertions in the harvested corpus.

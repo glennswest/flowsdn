@@ -1,22 +1,31 @@
 {
   "id": "table-core",
-  "scope": "flowsdn-table",
+  "scope": "project/shared",
   "owner": "root",
   "session_id": "01a081c9-5ae6-72e3-a2f7-1a103e3c6703",
   "start_utc": "2026-09-08T18:43:20Z",
   "start_revision": "e12186c",
-  "status": "in-progress",
-  "token_baseline_sample_utc": "2026-09-08T18:43:20.340Z",
+  "status": "validated",
+  "token_baseline_sample_utc": "2026-09-08T18:34:19.856Z",
   "token_baseline": {
-    "input_tokens": 6920716,
-    "cached_input_tokens": 6766848,
+    "input_tokens": 6773733,
+    "cached_input_tokens": 6621696,
     "cache_write_input_tokens": 0,
-    "output_tokens": 31658,
+    "output_tokens": 31539,
     "reasoning_output_tokens": 5446,
-    "total_tokens": 6952374
+    "total_tokens": 6805272
   },
-  "attribution": "dedicated milestone including its integration, validation and release overhead",
-  "end_utc": null,
-  "elapsed_seconds": null,
-  "active_work_seconds": null
+  "attribution": "Table core, Rust harvester migration, public documentation and integration; not exclusive table usage.",
+  "end_utc": "2026-09-08T19:44:44.028Z",
+  "elapsed_seconds": 3684.028,
+  "active_work_seconds": null,
+  "token_endpoint": {
+    "input_tokens": 13381894,
+    "cached_input_tokens": 13115264,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 68033,
+    "reasoning_output_tokens": 12089,
+    "total_tokens": 13449927
+  },
+  "validated_commit": "addeffa"
 }

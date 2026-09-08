@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "project": "flowsdn",
-  "as_of_utc": "2026-09-08T18:26:03.474Z",
+  "as_of_utc": "2026-09-08T19:44:44.028Z",
   "measurement_start_utc": "2026-09-08T16:11:13.415Z",
-  "elapsed_seconds": 8090.059,
+  "elapsed_seconds": 12810.613,
   "historical_project_start_known": false,
   "active_work_seconds": null,
   "session": {
     "id": "01a081c9-5ae6-72e3-a2f7-1a103e3c6703",
     "source": "Local Codex token_usage_record; deduplicated by response_id; payload content excluded",
-    "completed_response_records": 69,
+    "completed_response_records": 121,
     "tokens": {
-      "input_tokens": 5906449,
-      "cached_input_tokens": 5761280,
+      "input_tokens": 13381894,
+      "cached_input_tokens": 13115264,
       "cache_write_input_tokens": 0,
-      "output_tokens": 30157,
-      "reasoning_output_tokens": 5204,
-      "total_tokens": 5936606
+      "output_tokens": 68033,
+      "reasoning_output_tokens": 12089,
+      "total_tokens": 13449927
     }
   },
   "phases": [
@@ -79,6 +79,23 @@
       },
       "attribution": "delivery-window",
       "note": "Open measurement task; counters cover completed responses only."
+    },
+    {
+      "id": "table-harvester-integration",
+      "scope": "project/shared",
+      "start_utc": "2026-09-08T18:26:03.474Z",
+      "end_utc": "2026-09-08T19:44:44.028Z",
+      "elapsed_seconds": 4720.554,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 7475445,
+        "cached_input_tokens": 7353984,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 37876,
+        "reasoning_output_tokens": 6885,
+        "total_tokens": 7513321
+      },
+      "note": "Shared table, Rust harvester migration, public documentation, status responses and release integration; includes unmeasured idle/wait time. Root session only; subagent usage is not yet included."
     }
   ],
   "crates": [
@@ -117,6 +134,24 @@
       "release": "v0.2.0",
       "tests": 8,
       "timing_basis": "Observed first source-writing tool call to validated release commit; excludes earlier design and includes waits. Windows may overlap."
+    },
+    {
+      "crate": "flowsdn-table",
+      "exclusive_tokens": null,
+      "active_work_seconds": null,
+      "token_phase": "table-harvester-integration",
+      "tests": 10,
+      "release_candidate": "v0.3.0",
+      "timing_basis": "Shared delivery window; exclusive crate time not measured."
+    },
+    {
+      "crate": "flowsdn-harvest-bpf-cases",
+      "exclusive_tokens": null,
+      "active_work_seconds": null,
+      "token_phase": "table-harvester-integration",
+      "tests": 3,
+      "release_candidate": "v0.3.0",
+      "timing_basis": "Shared delivery window; exclusive crate time not measured."
     }
   ],
   "outcomes": {
@@ -124,7 +159,7 @@
       "v0.1.0",
       "v0.2.0"
     ],
-    "unique_tests": 15,
+    "unique_tests": 28,
     "test_profiles": [
       "debug",
       "release"
@@ -132,6 +167,8 @@
     "parsed_archives": 168,
     "embedded_files": 1444,
     "parsed_commands": 3537,
-    "networking_scenarios_executed": 0
+    "networking_scenarios_executed": 0,
+    "release_candidate": "v0.3.0",
+    "validated_commit": "addeffa"
   }
 }

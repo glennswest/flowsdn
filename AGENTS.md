@@ -7,6 +7,7 @@
 - Commit source changes, lockfiles, formatting fixes, and validation records back
   to GitHub from the host where they were produced, then pull on other hosts.
 - Publish distributable build artifacts through GitHub Releases.
+- Commit and push at each completed work step so validated work is preserved.
 - Maintain CHANGELOG.md and a versioned GitHub release history. Release only
   after validation, and distinguish foundation prereleases from usable networking.
 

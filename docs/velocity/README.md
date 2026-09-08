@@ -1,61 +1,26 @@
 # flowsdn velocity ledger
 
-Snapshot: **2026-09-08T18:26:03.474Z** (UTC). Measured session began
-2026-09-08T16:11:13.415Z. This excludes the earlier specification phase, whose effort was
-not measured here. Refresh at work-item boundaries and before releases.
-
-## Project elapsed time and usage
+Snapshot: **2026-09-08T19:44:44.028Z**. Root session measurement began
+2026-09-08T16:11:13.415Z; earlier specification effort is excluded.
 
 | Measure | Value |
 |---|---:|
-| Elapsed wall-clock time | 2h 14m 50s |
-| Active work time | Not measured |
-| Input tokens (includes cached input) | 5,906,449 |
-| Cached input tokens (subset of input) | 5,761,280 |
-| Uncached input tokens | 145,169 |
-| Output tokens | 30,157 |
-| Reasoning output (subset of output) | 5,204 |
-| Total processed tokens (input + output) | 5,936,606 |
-| Completed response usage records | 69 |
-| Validated source prereleases | 2 |
-| Unique tests (each passed in debug and release) | 15 |
-| Parsed archives / embedded files / commands | 168 / 1,444 / 3,537 |
-| Networking scenarios executed | 0 |
+| Elapsed wall-clock | 3.56 hours |
+| Active coding time | Not measured |
+| Input tokens (including cached) | 13,381,894 |
+| Cached input (subset) | 13,115,264 |
+| Uncached input | 266,630 |
+| Output tokens | 68,033 |
+| Total processed tokens | 13,449,927 |
+| Validated tests in debug and release | 28 |
 
-## Per-crate delivery windows
-
-| Crate | Elapsed since first source write | Dedicated tokens | Token window | Delivered |
-|---|---:|---|---|---|
-| flowsdn-fence | 0h 13m 44s | Not separately measured | foundation | v0.1.0 |
-| xtask | 0h 14m 54s | Not separately measured | foundation | v0.1.0 |
-| flowsdn-scripttest | 1h 37m 46s | Not separately measured | parser | v0.2.0 |
-
-These are measured delivery windows, not active coding hours or estimates of a
-complete crate. Design before the first source write is outside a crate window.
-Waits, approvals, tests and infrastructure troubleshooting are inside it.
-The fence and xtask windows overlap: **do not sum per-crate elapsed times**.
-Dedicated historical token counts are unknown; no proportional allocation is used.
-
-## Disjoint work windows
-
-Tokens are assigned by response completion time to these delivery windows. They
-are measured usage during a window, not a claim that every token edited its crate.
-Boundary samples can precede a commit by part of one response; the JSON records
-both the wall-clock boundaries and token sample timestamps.
-
-| Window | Elapsed | Input | Cached input | Output | Total |
-|---|---:|---:|---:|---:|---:|
-| foundation | 0h 19m 41s | 1,732,345 | 1,656,320 | 12,179 | 1,744,524 |
-| parser | 1h 50m 51s | 2,785,086 | 2,739,968 | 12,221 | 2,797,307 |
-| measurement | 0h 04m 18s | 1,389,018 | 1,364,992 | 5,757 | 1,394,775 |
-
-## Initial throughput
-
-Over this observed session window: **0.89 validated prereleases/hour**,
-**6.67 newly passing tests/hour**, and **13,420
-output tokens/hour**. These are descriptive baseline rates, not forecasts for
-BPF, policy or a finished networking stack. The denominator includes the host
-/dev/null incident and approval delays. Parser coverage is not networking coverage.
+The machine-readable ledger preserves per-crate delivery windows and disjoint
+root-session usage windows. Table and harvester integration are shared scope;
+exclusive crate tokens and active time remain unknown. Do not sum overlapping
+crate elapsed windows. Wall time includes waits and unmeasured idle periods.
+Three subagents have just started; their usage is not included in this snapshot.
+Token counts include repeated context and do not establish subscription dollars.
+The validated v0.3.0 candidate is commit `addeffa`; publication is pending.
 
 ## Recording rules
 
