@@ -254,8 +254,10 @@ mod tests {
     fn version_dependencies_patched_to_workspace_are_included() -> Result<(), Box<dyn Error>> {
         let value = serde_json::json!({"workspace_root":"/project","workspace_members":["one","two"],"packages":[{"id":"one","name":"base","manifest_path":"/project/crates/base/Cargo.toml","dependencies":[]},{"id":"two","name":"app","manifest_path":"/project/app/Cargo.toml","dependencies":[{"name":"base","kind":null}]}]});
         let g = graph(&value)?;
-        assert_eq!(select(&g, &["crates/base/src/lib.rs".to_owned()]), BTreeSet::from(["app".to_owned(), "base".to_owned()]));
+        assert_eq!(
+            select(&g, &["crates/base/src/lib.rs".to_owned()]),
+            BTreeSet::from(["app".to_owned(), "base".to_owned()])
+        );
         Ok(())
     }
-
 }

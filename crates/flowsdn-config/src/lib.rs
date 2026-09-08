@@ -5,10 +5,10 @@
 //! or persist runtime configuration. Source adapters are available in `sources`.
 #![forbid(unsafe_code)]
 
+pub mod immutable;
 mod parse;
 pub mod sources;
 pub mod validation;
-pub mod immutable;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;

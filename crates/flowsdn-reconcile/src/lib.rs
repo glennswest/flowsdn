@@ -8,7 +8,14 @@
 //! A resync requests external pruning; incremental updates alone cannot remove
 //! unknown target entries after deletion history has been discarded.
 use flowsdn_table::{Change, ChangeStream, Key, Keyed, Revision, Table};
-use std::{collections::{BTreeMap, BTreeSet, VecDeque}, error::Error, fmt, future::Future, sync::Arc, time::{Duration, Instant}};
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    error::Error,
+    fmt,
+    future::Future,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 /// Operations must be idempotent: cancelling a round may replay its in-flight
 /// operation, including one whose target side effect already occurred.
@@ -26,12 +33,20 @@ pub struct Options {
 }
 impl Default for Options {
     fn default() -> Self {
-        Self { round_size: 1000, min_backoff: Duration::from_millis(100), max_backoff: Duration::from_secs(60) }
+        Self {
+            round_size: 1000,
+            min_backoff: Duration::from_millis(100),
+            max_backoff: Duration::from_secs(60),
+        }
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ReconcileError { EmptyRound, InvalidBackoff, RetryDeadlineOverflow }
+pub enum ReconcileError {
+    EmptyRound,
+    InvalidBackoff,
+    RetryDeadlineOverflow,
+}
 impl fmt::Display for ReconcileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
@@ -44,9 +59,16 @@ impl fmt::Display for ReconcileError {
 impl Error for ReconcileError {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Kind { Pending, Done, Error }
+pub enum Kind {
+    Pending,
+    Done,
+    Error,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Operation { Update, Delete }
+pub enum Operation {
+    Update,
+    Delete,
+}
 
 #[derive(Clone, Debug)]
 pub struct Status {
@@ -62,7 +84,15 @@ pub struct Status {
 }
 impl Status {
     fn pending(revision: Revision, operation: Operation) -> Self {
-        Self { kind: Kind::Pending, id: revision, operation, updated_at: None, error: None, retries: 0, next_retry: None }
+        Self {
+            kind: Kind::Pending,
+            id: revision,
+            operation,
+            updated_at: None,
+            error: None,
+            retries: 0,
+            next_retry: None,
+        }
     }
 }
 
@@ -95,7 +125,9 @@ impl RetryQueue {
     }
     fn due(&mut self, now: Instant) -> Option<Retry> {
         let (deadline, key) = self.deadlines.first()?;
-        if *deadline > now { return None; }
+        if *deadline > now {
+            return None;
+        }
         let key = key.clone();
         self.remove(&key)
     }
@@ -110,7 +142,11 @@ struct Work<T> {
 }
 impl<T> Work<T> {
     fn operation(&self) -> Operation {
-        if self.row.is_some() { Operation::Update } else { Operation::Delete }
+        if self.row.is_some() {
+            Operation::Update
+        } else {
+            Operation::Delete
+        }
     }
 }
 
@@ -140,16 +176,32 @@ pub struct Reconciler<'a, T: Keyed, U: Target<T>> {
 }
 impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     pub fn new(table: &'a Table<T>, target: U, options: Options) -> Result<Self, ReconcileError> {
-        if options.round_size == 0 { return Err(ReconcileError::EmptyRound); }
+        if options.round_size == 0 {
+            return Err(ReconcileError::EmptyRound);
+        }
         if options.min_backoff.is_zero() || options.min_backoff > options.max_backoff {
             return Err(ReconcileError::InvalidBackoff);
         }
-        Ok(Self { table, stream: table.watch(0), target, options, statuses: BTreeMap::new(), retries: RetryQueue::default(), pending: VecDeque::new(), attempted_revision: 0, resync_required: false })
+        Ok(Self {
+            table,
+            stream: table.watch(0),
+            target,
+            options,
+            statuses: BTreeMap::new(),
+            retries: RetryQueue::default(),
+            pending: VecDeque::new(),
+            attempted_revision: 0,
+            resync_required: false,
+        })
     }
 
-    pub fn target(&self) -> &U { &self.target }
+    pub fn target(&self) -> &U {
+        &self.target
+    }
     /// A cancelled round has immediate work even if no retry timer is armed.
-    pub fn has_pending_work(&self) -> bool { !self.pending.is_empty() }
+    pub fn has_pending_work(&self) -> bool {
+        !self.pending.is_empty()
+    }
 
     /// For a present row, status matches the desired snapshot revision. This
     /// avoids exposing old Done/Error before its next stream drain.
@@ -159,25 +211,65 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     /// until the next round observes a newer delete or reinsert-delete sequence.
     /// Successful deletion removes this diagnostic; it is not a readiness proof.
     pub fn status(&self, key: &[u8]) -> Option<Status> {
-        if let Some((_, revision)) = self.table.snapshot().get("primary", key).expect("primary index exists") {
-            Some(self.statuses.get(key).filter(|status| status.id == revision && status.operation == Operation::Update).cloned().unwrap_or_else(|| Status::pending(revision, Operation::Update)))
+        if let Some((_, revision)) = self
+            .table
+            .snapshot()
+            .get("primary", key)
+            .expect("primary index exists")
+        {
+            Some(
+                self.statuses
+                    .get(key)
+                    .filter(|status| status.id == revision && status.operation == Operation::Update)
+                    .cloned()
+                    .unwrap_or_else(|| Status::pending(revision, Operation::Update)),
+            )
         } else {
-            self.statuses.get(key).filter(|status| status.operation == Operation::Delete).cloned()
+            self.statuses
+                .get(key)
+                .filter(|status| status.operation == Operation::Delete)
+                .cloned()
         }
     }
 
-    pub fn attempted_revision(&self) -> Revision { self.attempted_revision }
-    pub fn resync_required(&self) -> bool { self.resync_required }
+    pub fn attempted_revision(&self) -> Revision {
+        self.attempted_revision
+    }
+    pub fn resync_required(&self) -> bool {
+        self.resync_required
+    }
     /// Clear only after the caller has completed a full target reconciliation.
-    pub fn acknowledge_resync(&mut self) { self.resync_required = false; }
-    pub fn next_retry(&self) -> Option<Instant> { self.retries.deadlines.first().map(|(deadline, _)| *deadline) }
+    pub fn acknowledge_resync(&mut self) {
+        self.resync_required = false;
+    }
+    pub fn next_retry(&self) -> Option<Instant> {
+        self.retries
+            .deadlines
+            .first()
+            .map(|(deadline, _)| *deadline)
+    }
     pub fn retry_low_water_mark(&self) -> Option<Revision> {
-        self.retries.revisions.first().map(|(revision, _)| *revision).into_iter()
-            .chain(self.pending.iter().filter(|work| work.failures > 0).map(|work| work.revision)).min()
+        self.retries
+            .revisions
+            .first()
+            .map(|(revision, _)| *revision)
+            .into_iter()
+            .chain(
+                self.pending
+                    .iter()
+                    .filter(|work| work.failures > 0)
+                    .map(|work| work.revision),
+            )
+            .min()
     }
 
     fn current(&self, work: &Work<T>) -> bool {
-        match self.table.snapshot().get("primary", &work.key).expect("primary index exists") {
+        match self
+            .table
+            .snapshot()
+            .get("primary", &work.key)
+            .expect("primary index exists")
+        {
             Some((_, revision)) => work.row.is_some() && revision == work.revision,
             None => work.row.is_none(),
         }
@@ -187,7 +279,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         let mut delay = self.options.min_backoff;
         for _ in 0..failures {
             delay = delay.saturating_mul(2).min(self.options.max_backoff);
-            if delay == self.options.max_backoff { break; }
+            if delay == self.options.max_backoff {
+                break;
+            }
         }
         delay
     }
@@ -205,11 +299,21 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                 Change::Insert { row, revision } => {
                     let key = row.primary_key();
                     self.retries.remove(&key);
-                    pending.push(Work { key, revision, row: Some(row), failures: 0 });
+                    pending.push(Work {
+                        key,
+                        revision,
+                        row: Some(row),
+                        failures: 0,
+                    });
                 }
                 Change::Delete { key, revision } => {
                     self.retries.remove(&key);
-                    pending.push(Work { key, revision, row: None, failures: 0 });
+                    pending.push(Work {
+                        key,
+                        revision,
+                        row: None,
+                        failures: 0,
+                    });
                 }
             }
         }
@@ -223,15 +327,33 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     /// Work stays queued across cancellation until its result is recorded.
     pub async fn run_round(&mut self, now: Instant) -> Result<Round, ReconcileError> {
         let mut round = Round::default();
-        if self.pending.is_empty() { self.load_changes(); }
+        if self.pending.is_empty() {
+            self.load_changes();
+        }
         while round.processed < self.options.round_size {
             if self.pending.is_empty() {
-                let Some(retry) = self.retries.due(now) else { break; };
-                let row = self.table.snapshot().get("primary", &retry.key).expect("primary index exists").map(|(row, _)| row);
+                let Some(retry) = self.retries.due(now) else {
+                    break;
+                };
+                let row = self
+                    .table
+                    .snapshot()
+                    .get("primary", &retry.key)
+                    .expect("primary index exists")
+                    .map(|(row, _)| row);
                 // Preserve the failed operation; a recreated row must never be
                 // deleted by an old delete retry.
-                let row = if retry.operation == Operation::Update { row } else { None };
-                let work = Work { key: retry.key, revision: retry.revision, row, failures: retry.failures };
+                let row = if retry.operation == Operation::Update {
+                    row
+                } else {
+                    None
+                };
+                let work = Work {
+                    key: retry.key,
+                    revision: retry.revision,
+                    row,
+                    failures: retry.failures,
+                };
                 if retry.operation == Operation::Update && work.row.is_none() {
                     self.statuses.remove(&work.key);
                     round.stale = round.stale.saturating_add(1);
@@ -240,7 +362,11 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                 }
                 self.pending.push_back(work);
             }
-            let work = self.pending.front().expect("pending work was filled").clone();
+            let work = self
+                .pending
+                .front()
+                .expect("pending work was filled")
+                .clone();
             round.processed = round.processed.saturating_add(1);
             if !self.current(&work) {
                 self.statuses.remove(&work.key);
@@ -267,17 +393,28 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                 Ok(()) => {
                     status.kind = Kind::Done;
                     self.retries.remove(&work.key);
-                    if work.row.is_some() { round.updated = round.updated.saturating_add(1); }
-                    else { round.deleted = round.deleted.saturating_add(1); }
+                    if work.row.is_some() {
+                        round.updated = round.updated.saturating_add(1);
+                    } else {
+                        round.deleted = round.deleted.saturating_add(1);
+                    }
                 }
                 Err(error) => {
                     let failures = work.failures.saturating_add(1);
-                    let deadline = now.checked_add(self.backoff(failures)).ok_or(ReconcileError::RetryDeadlineOverflow)?;
+                    let deadline = now
+                        .checked_add(self.backoff(failures))
+                        .ok_or(ReconcileError::RetryDeadlineOverflow)?;
                     status.kind = Kind::Error;
                     status.error = Some(error.to_string());
                     status.retries = failures;
                     status.next_retry = Some(deadline);
-                    self.retries.insert(Retry { key: work.key.clone(), revision: work.revision, operation: work.operation(), failures, deadline });
+                    self.retries.insert(Retry {
+                        key: work.key.clone(),
+                        revision: work.revision,
+                        operation: work.operation(),
+                        failures,
+                        deadline,
+                    });
                 }
             }
             if work.row.is_none() && status.kind == Kind::Done {

@@ -22,7 +22,9 @@ impl Default for State {
                 ("/".into(), std::path::MAIN_SEPARATOR.to_string()),
                 (":".into(), if cfg!(windows) { ";" } else { ":" }.into()),
             ]),
-            stdout: String::new(), stderr: String::new(), log: Vec::new(),
+            stdout: String::new(),
+            stderr: String::new(),
+            log: Vec::new(),
         }
     }
 }
@@ -31,7 +33,10 @@ impl State {
     pub fn new(mut environment: BTreeMap<String, String>) -> Self {
         environment.insert("/".into(), std::path::MAIN_SEPARATOR.to_string());
         environment.insert(":".into(), if cfg!(windows) { ";" } else { ":" }.into());
-        Self { environment, ..Self::default() }
+        Self {
+            environment,
+            ..Self::default()
+        }
     }
 
     /// Output publication replaces both buffers. A handler that does not call
@@ -113,7 +118,9 @@ pub struct Engine {
 }
 
 impl Default for Engine {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Engine {
@@ -133,7 +140,13 @@ impl Engine {
             ("stderr", true, stderr),
             ("stop", false, stop),
         ] {
-            engine.commands.insert(name.into(), RegisteredCommand { pattern_argument, handler: Box::new(handler) });
+            engine.commands.insert(
+                name.into(),
+                RegisteredCommand {
+                    pattern_argument,
+                    handler: Box::new(handler),
+                },
+            );
         }
         for (name, value) in [
             ("linux", cfg!(target_os = "linux")),
@@ -141,22 +154,48 @@ impl Engine {
             ("amd64", cfg!(target_arch = "x86_64")),
             ("arm64", cfg!(target_arch = "aarch64")),
         ] {
-            engine.conditions.insert(name.into(), RegisteredCondition {
-                prefix: false, predicate: Box::new(move |_, _| Ok(value)),
-            });
+            engine.conditions.insert(
+                name.into(),
+                RegisteredCondition {
+                    prefix: false,
+                    predicate: Box::new(move |_, _| Ok(value)),
+                },
+            );
         }
-        engine.conditions.insert("os".into(), RegisteredCondition {
-            prefix: true,
-            predicate: Box::new(|_, name| Ok(name == if cfg!(target_os = "macos") { "darwin" } else { std::env::consts::OS })),
-        });
-        engine.conditions.insert("arch".into(), RegisteredCondition {
-            prefix: true,
-            predicate: Box::new(|_, name| Ok(name == match std::env::consts::ARCH { "x86_64" => "amd64", "aarch64" => "arm64", other => other })),
-        });
+        engine.conditions.insert(
+            "os".into(),
+            RegisteredCondition {
+                prefix: true,
+                predicate: Box::new(|_, name| {
+                    Ok(name
+                        == if cfg!(target_os = "macos") {
+                            "darwin"
+                        } else {
+                            std::env::consts::OS
+                        })
+                }),
+            },
+        );
+        engine.conditions.insert(
+            "arch".into(),
+            RegisteredCondition {
+                prefix: true,
+                predicate: Box::new(|_, name| {
+                    Ok(name
+                        == match std::env::consts::ARCH {
+                            "x86_64" => "amd64",
+                            "aarch64" => "arm64",
+                            other => other,
+                        })
+                }),
+            },
+        );
         engine
     }
 
-    pub fn set_max_commands(&mut self, max_commands: usize) { self.max_commands = max_commands; }
+    pub fn set_max_commands(&mut self, max_commands: usize) {
+        self.max_commands = max_commands;
+    }
 
     /// Pattern commands regex-escape substitutions in their first non-option
     /// argument (or the argument following `--`). Argument indices exclude the
@@ -170,7 +209,13 @@ impl Engine {
         if !valid_name(name) || self.commands.contains_key(name) {
             return Err(format!("invalid or duplicate command name: {name}"));
         }
-        self.commands.insert(name.into(), RegisteredCommand { pattern_argument, handler: Box::new(handler) });
+        self.commands.insert(
+            name.into(),
+            RegisteredCommand {
+                pattern_argument,
+                handler: Box::new(handler),
+            },
+        );
         Ok(())
     }
 
@@ -186,7 +231,13 @@ impl Engine {
         if !valid_name(name) || name.contains(':') || self.conditions.contains_key(name) {
             return Err(format!("invalid or duplicate condition name: {name}"));
         }
-        self.conditions.insert(name.into(), RegisteredCondition { prefix, predicate: Box::new(predicate) });
+        self.conditions.insert(
+            name.into(),
+            RegisteredCondition {
+                prefix,
+                predicate: Box::new(predicate),
+            },
+        );
         Ok(())
     }
 
@@ -194,25 +245,45 @@ impl Engine {
     /// flags and fixture files are the caller's responsibility. Section headers
     /// enter the log, but retry prefixes are explicitly unsupported.
     pub fn run(&self, script: &str, state: &mut State) -> Result<Execution, RunError> {
-        let lines = parse_script(script).map_err(|error| RunError { line: error.line, command: String::new(), message: error.message })?;
+        let lines = parse_script(script).map_err(|error| RunError {
+            line: error.line,
+            command: String::new(),
+            message: error.message,
+        })?;
         let mut execution = Execution::default();
         for line in lines {
             let command = match line {
-                Line::Section { text, .. } => { state.log.push(text); continue; }
+                Line::Section { text, .. } => {
+                    state.log.push(text);
+                    continue;
+                }
                 Line::Command(command) => command,
             };
             let error = |message: String| RunError {
                 line: command.line,
-                command: command.words.first().map(|word| word.literal()).unwrap_or_default(),
+                command: command
+                    .words
+                    .first()
+                    .map(|word| word.literal())
+                    .unwrap_or_default(),
                 message,
             };
-            if command.background { return Err(error("background commands are not implemented".into())); }
+            if command.background {
+                return Err(error("background commands are not implemented".into()));
+            }
             if matches!(command.status, Status::SuccessRetry | Status::FailureRetry) {
                 return Err(error("section retries are not implemented".into()));
             }
-            let name = command.words.first().ok_or_else(|| error("missing command".into()))?
-                .expand(&state.environment, ExpansionMode::Plain, command.line).map_err(|e| error(e.message))?;
-            let registered = self.commands.get(&name).ok_or_else(|| error(format!("unknown command: {name}")))?;
+            let name = command
+                .words
+                .first()
+                .ok_or_else(|| error("missing command".into()))?
+                .expand(&state.environment, ExpansionMode::Plain, command.line)
+                .map_err(|e| error(e.message))?;
+            let registered = self
+                .commands
+                .get(&name)
+                .ok_or_else(|| error(format!("unknown command: {name}")))?;
             if !self.selected(&command, state).map_err(error)? {
                 execution.commands_skipped = execution.commands_skipped.saturating_add(1);
                 continue;
@@ -224,25 +295,43 @@ impl Engine {
             let mut pattern_found = false;
             let mut after_separator = false;
             for token in command.words.iter().skip(1) {
-                let plain = token.expand(&state.environment, ExpansionMode::Plain, command.line).map_err(|e| error(e.message))?;
+                let plain = token
+                    .expand(&state.environment, ExpansionMode::Plain, command.line)
+                    .map_err(|e| error(e.message))?;
                 let argument = if registered.pattern_argument && !pattern_found {
                     if !after_separator && plain == "--" {
                         after_separator = true;
                         plain
                     } else if after_separator || !plain.starts_with('-') {
                         pattern_found = true;
-                        token.expand(&state.environment, ExpansionMode::Regex, command.line).map_err(|e| error(e.message))?
-                    } else { plain }
-                } else { plain };
+                        token
+                            .expand(&state.environment, ExpansionMode::Regex, command.line)
+                            .map_err(|e| error(e.message))?
+                    } else {
+                        plain
+                    }
+                } else {
+                    plain
+                };
                 args.push(argument);
             }
             execution.commands_run = execution.commands_run.saturating_add(1);
             match (registered.handler)(state, &args) {
-                Ok(Control::Stop) => { execution.stopped = true; return Ok(execution); }
-                Ok(Control::Continue) if command.status == Status::Failure => return Err(error("unexpected success".into())),
-                Ok(Control::Continue) => {},
-                Err(CommandError::Failure(message)) if matches!(command.status, Status::Failure | Status::SuccessOrFailure) => {
-                    state.log.push(format!("line {}: expected failure: {message}", command.line));
+                Ok(Control::Stop) => {
+                    execution.stopped = true;
+                    return Ok(execution);
+                }
+                Ok(Control::Continue) if command.status == Status::Failure => {
+                    return Err(error("unexpected success".into()));
+                }
+                Ok(Control::Continue) => {}
+                Err(CommandError::Failure(message))
+                    if matches!(command.status, Status::Failure | Status::SuccessOrFailure) =>
+                {
+                    state.log.push(format!(
+                        "line {}: expected failure: {message}",
+                        command.line
+                    ));
                 }
                 Err(failure) => return Err(error(failure.to_string())),
             }
@@ -254,8 +343,15 @@ impl Engine {
         let mut selected = true;
         // Validate every condition even when another predicate is false.
         for condition in &command.conditions {
-            let (name, suffix) = condition.name.split_once(':').map(|(name, suffix)| (name, Some(suffix))).unwrap_or((&condition.name, None));
-            let registered = self.conditions.get(name).ok_or_else(|| format!("unknown condition: {name}"))?;
+            let (name, suffix) = condition
+                .name
+                .split_once(':')
+                .map(|(name, suffix)| (name, Some(suffix)))
+                .unwrap_or((&condition.name, None));
+            let registered = self
+                .conditions
+                .get(name)
+                .ok_or_else(|| format!("unknown condition: {name}"))?;
             if registered.prefix != suffix.is_some() || suffix == Some("") {
                 return Err(format!("invalid condition suffix: {}", condition.name));
             }
@@ -266,8 +362,12 @@ impl Engine {
     }
 }
 
-fn valid_name(name: &str) -> bool { !name.is_empty() && !name.chars().any(char::is_whitespace) }
-fn fail(message: &str) -> CommandError { CommandError::Failure(message.into()) }
+fn valid_name(name: &str) -> bool {
+    !name.is_empty() && !name.chars().any(char::is_whitespace)
+}
+fn fail(message: &str) -> CommandError {
+    CommandError::Failure(message.into())
+}
 
 fn echo(state: &mut State, args: &[String]) -> Result<Control, CommandError> {
     state.publish(format!("{}\n", args.join(" ")), "");
@@ -276,7 +376,11 @@ fn echo(state: &mut State, args: &[String]) -> Result<Control, CommandError> {
 
 fn env_command(state: &mut State, args: &[String]) -> Result<Control, CommandError> {
     if args.is_empty() {
-        let output: String = state.environment.iter().map(|(key, value)| format!("{key}={value}\n")).collect();
+        let output: String = state
+            .environment
+            .iter()
+            .map(|(key, value)| format!("{key}={value}\n"))
+            .collect();
         state.publish(output, "");
         return Ok(Control::Continue);
     }
@@ -285,32 +389,51 @@ fn env_command(state: &mut State, args: &[String]) -> Result<Control, CommandErr
             return Err(fail("env --from-stdout requires variable names"));
         }
         let value = state.stdout.trim().to_owned();
-        for key in args.iter().skip(1) { state.environment.insert(key.clone(), value.clone()); }
+        for key in args.iter().skip(1) {
+            state.environment.insert(key.clone(), value.clone());
+        }
         return Ok(Control::Continue);
     }
     let mut output = String::new();
     let mut printed = false;
     for arg in args {
-        let (key, value) = arg.split_once('=').map(|(key, value)| (key, Some(value))).unwrap_or((arg, None));
-        if !valid_environment_key(key) { return Err(fail("invalid env variable name")); }
+        let (key, value) = arg
+            .split_once('=')
+            .map(|(key, value)| (key, Some(value)))
+            .unwrap_or((arg, None));
+        if !valid_environment_key(key) {
+            return Err(fail("invalid env variable name"));
+        }
         if let Some(value) = value {
             state.environment.insert(key.into(), value.into());
         } else {
             printed = true;
-            output.push_str(&format!("{key}={}\n", state.environment.get(key).map(String::as_str).unwrap_or("")));
+            output.push_str(&format!(
+                "{key}={}\n",
+                state.environment.get(key).map(String::as_str).unwrap_or("")
+            ));
         }
     }
-    if printed { state.publish(output, ""); }
+    if printed {
+        state.publish(output, "");
+    }
     Ok(Control::Continue)
 }
 
 fn valid_environment_key(key: &str) -> bool {
-    !key.is_empty() && !key.starts_with('-') && !key.contains(['=', '\0']) && !key.chars().any(char::is_whitespace)
+    !key.is_empty()
+        && !key.starts_with('-')
+        && !key.contains(['=', '\0'])
+        && !key.chars().any(char::is_whitespace)
 }
 
 fn stop(state: &mut State, args: &[String]) -> Result<Control, CommandError> {
-    if args.len() > 1 { return Err(fail("stop accepts at most one message")); }
-    if let Some(message) = args.first() { state.log.push(message.clone()); }
+    if args.len() > 1 {
+        return Err(fail("stop accepts at most one message"));
+    }
+    if let Some(message) = args.first() {
+        state.log.push(message.clone());
+    }
     Ok(Control::Stop)
 }
 
@@ -322,27 +445,53 @@ fn stderr(state: &mut State, args: &[String]) -> Result<Control, CommandError> {
     match_output(&state.stderr, args, &mut state.log)
 }
 
-fn match_output(text: &str, args: &[String], log: &mut Vec<String>) -> Result<Control, CommandError> {
+fn match_output(
+    text: &str,
+    args: &[String],
+    log: &mut Vec<String>,
+) -> Result<Control, CommandError> {
     let mut pattern = None;
     let mut count = None;
     let mut quiet = false;
     let mut flags = true;
     for arg in args {
-        if flags && arg == "--" { flags = false; continue; }
-        if flags && arg == "-q" { quiet = true; continue; }
-        if flags && let Some(value) = arg.strip_prefix("--count=") {
-            count = Some(value.parse::<usize>().map_err(|_| fail("invalid match count"))?);
+        if flags && arg == "--" {
+            flags = false;
             continue;
         }
-        if flags && arg.starts_with('-') { return Err(fail("unknown output assertion flag")); }
-        if pattern.replace(arg).is_some() { return Err(fail("output assertion requires one pattern")); }
+        if flags && arg == "-q" {
+            quiet = true;
+            continue;
+        }
+        if flags && let Some(value) = arg.strip_prefix("--count=") {
+            count = Some(
+                value
+                    .parse::<usize>()
+                    .map_err(|_| fail("invalid match count"))?,
+            );
+            continue;
+        }
+        if flags && arg.starts_with('-') {
+            return Err(fail("unknown output assertion flag"));
+        }
+        if pattern.replace(arg).is_some() {
+            return Err(fail("output assertion requires one pattern"));
+        }
     }
     let pattern = pattern.ok_or_else(|| fail("output assertion requires a pattern"))?;
-    let regex = regex::RegexBuilder::new(pattern).multi_line(true).build().map_err(|_| fail("invalid output assertion pattern"))?;
+    let regex = regex::RegexBuilder::new(pattern)
+        .multi_line(true)
+        .build()
+        .map_err(|_| fail("invalid output assertion pattern"))?;
     let found = regex.find_iter(text).count();
     if !quiet {
-        for line in text.lines().filter(|line| regex.is_match(line)) { log.push((*line).into()); }
+        for line in text.lines().filter(|line| regex.is_match(line)) {
+            log.push((*line).into());
+        }
     }
-    if count.map(|count| found == count).unwrap_or(found > 0) { Ok(Control::Continue) }
-    else { Err(fail("output did not match expected pattern count")) }
+    if count.map(|count| found == count).unwrap_or(found > 0) {
+        Ok(Control::Continue)
+    } else {
+        Err(fail("output did not match expected pattern count"))
+    }
 }

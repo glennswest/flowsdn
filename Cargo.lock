@@ -52,14 +52,14 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "flowsdn-config"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "yaml-rust2",
 ]
 
 [[package]]
 name = "flowsdn-fence"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "tokio",
  "tracing",
@@ -67,22 +67,30 @@ dependencies = [
 
 [[package]]
 name = "flowsdn-harvest-bpf-cases"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "regex",
  "toml",
 ]
 
 [[package]]
+name = "flowsdn-reconcile"
+version = "0.6.0"
+dependencies = [
+ "flowsdn-table",
+ "tokio",
+]
+
+[[package]]
 name = "flowsdn-scripttest"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "flowsdn-table"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "arc-swap",
  "imbl",
@@ -426,7 +434,7 @@ checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 
 [[package]]
 name = "xtask"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
 ]

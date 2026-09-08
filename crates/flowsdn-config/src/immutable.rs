@@ -38,7 +38,15 @@ pub struct Incompatible {
 
 impl fmt::Display for Incompatible {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "immutable configuration changed while restoring endpoints: {}", self.changes.iter().map(|change| change.key.as_str()).collect::<Vec<_>>().join(", "))
+        write!(
+            f,
+            "immutable configuration changed while restoring endpoints: {}",
+            self.changes
+                .iter()
+                .map(|change| change.key.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     }
 }
 
@@ -57,20 +65,40 @@ pub fn check(
 ) -> Result<Report, Incompatible> {
     let previous = match previous {
         Previous::Absent => return Ok(Report::default()),
-        Previous::Unparseable => return Ok(Report { changes: Vec::new(), warnings: vec![Warning::PreviousUnparseable] }),
+        Previous::Unparseable => {
+            return Ok(Report {
+                changes: Vec::new(),
+                warnings: vec![Warning::PreviousUnparseable],
+            });
+        }
         Previous::Parsed(previous) => previous,
     };
-    let keys: BTreeSet<_> = previous.values().iter().chain(current.values())
+    let keys: BTreeSet<_> = previous
+        .values()
+        .iter()
+        .chain(current.values())
         .filter(|(_, effective)| effective.class == Class::Immutable)
-        .map(|(key, _)| key).collect();
-    let changes: Vec<_> = keys.into_iter().filter_map(|key| {
-        let before = previous.get(key).map(|effective| &effective.value);
-        let after = current.get(key).map(|effective| &effective.value);
-        (before != after).then(|| Change { key: key.clone(), previous: before.cloned(), current: after.cloned() })
-    }).collect();
+        .map(|(key, _)| key)
+        .collect();
+    let changes: Vec<_> = keys
+        .into_iter()
+        .filter_map(|key| {
+            let before = previous.get(key).map(|effective| &effective.value);
+            let after = current.get(key).map(|effective| &effective.value);
+            (before != after).then(|| Change {
+                key: key.clone(),
+                previous: before.cloned(),
+                current: after.cloned(),
+            })
+        })
+        .collect();
     if !changes.is_empty() && restore && has_endpoint_state {
         return Err(Incompatible { changes });
     }
-    let warnings = if changes.is_empty() { Vec::new() } else { vec![Warning::ChangedWithoutRestoredEndpoints] };
+    let warnings = if changes.is_empty() {
+        Vec::new()
+    } else {
+        vec![Warning::ChangedWithoutRestoredEndpoints]
+    };
     Ok(Report { changes, warnings })
 }

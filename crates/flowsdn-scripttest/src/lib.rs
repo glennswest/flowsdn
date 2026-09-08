@@ -4,13 +4,13 @@
 //! A synchronous engine executes registered commands; retry, background,
 //! filesystem, subprocess and networking adapters remain unimplemented.
 //! Parsing an archive is not evidence that its networking assertions pass.
-mod expansion;
 mod engine;
+mod expansion;
 mod script;
 mod txtar;
 
-pub use expansion::{ExpansionMode, expand_text};
 pub use engine::{CommandError, Control, Engine, Execution, RunError, State};
+pub use expansion::{ExpansionMode, expand_text};
 pub use script::{Command, Condition, Fragment, Line, Status, Token, parse_script, tokenize};
 pub use txtar::{Archive, File};
 
