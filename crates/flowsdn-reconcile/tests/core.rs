@@ -49,7 +49,8 @@ impl Target<Item> for Fake {
         Ok(())
     }
     async fn prune(&mut self, desired: Snapshot<Item>) -> Result<(), Self::Error> {
-        self.rows.retain(|key, _| desired.get("primary", &[*key]).unwrap().is_some());
+        self.rows
+            .retain(|key, _| desired.get("primary", &[*key]).unwrap().is_some());
         Ok(())
     }
 }

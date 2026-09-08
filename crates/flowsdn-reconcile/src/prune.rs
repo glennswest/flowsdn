@@ -1,5 +1,11 @@
 use flowsdn_table::Revision;
-use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, time::Instant};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Instant,
+};
 
 /// A coalescing request that can be shared with callers while a round runs.
 /// It records work only; the caller remains responsible for scheduling a round.

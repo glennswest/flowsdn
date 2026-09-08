@@ -30,7 +30,10 @@ pub trait Target<T: Keyed>: Send {
     fn delete(&mut self, key: Key) -> impl Future<Output = Result<(), Self::Error>> + Send;
     /// Remove target objects absent from this immutable desired snapshot.
     /// It is called only after the table has completed initialization.
-    fn prune(&mut self, desired: Snapshot<T>) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    fn prune(
+        &mut self,
+        desired: Snapshot<T>,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -363,12 +366,14 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         if !self.table.initialized() {
             return Ok(None);
         }
-        if !self.prune.in_flight && !self.prune.handle.requested()
+        if !self.prune.in_flight
+            && !self.prune.handle.requested()
             && self.prune.next_due.is_some_and(|deadline| deadline > now)
         {
             return Ok(None);
         }
-        let next_due = now.checked_add(self.options.prune_interval)
+        let next_due = now
+            .checked_add(self.options.prune_interval)
             .ok_or(ReconcileError::PruneDeadlineOverflow)?;
         // Retain in_flight across cancellation, so an interrupted target side
         // effect is replayed. Consume requests before awaiting: a request made

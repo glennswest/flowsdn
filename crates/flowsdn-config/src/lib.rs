@@ -7,8 +7,8 @@
 
 pub mod immutable;
 mod parse;
-pub mod sources;
 pub mod runtime;
+pub mod sources;
 pub mod validation;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -296,7 +296,13 @@ impl Registry {
                 key = (*target).to_owned();
             }
             let Some(spec) = self.specs.get(&key) else {
-                resolved.unknown_values.insert(key.clone(), UnknownValue { raw: entry.value, source: entry.source });
+                resolved.unknown_values.insert(
+                    key.clone(),
+                    UnknownValue {
+                        raw: entry.value,
+                        source: entry.source,
+                    },
+                );
                 if resolved.unknown_keys.insert(key.clone()) {
                     resolved.warnings.push(Warning::UnknownKey {
                         key,
