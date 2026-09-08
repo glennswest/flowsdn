@@ -31,3 +31,19 @@ Write Rust from the specifications; follow docs/licensing.md.
 Before builds, verify test -c /dev/null. A regular-file replacement caused
 compiler probes to ingest diagnostic output on 2026-09-08; see the validation
 record. Never replace or truncate a device node as part of cleanup.
+
+## Time, token and velocity accounting
+
+Maintain docs/velocity/ledger.json and its README at every work-item boundary
+and before release. Record UTC start/end, elapsed wall-clock seconds, task ID,
+agent/session, primary crate (or project/shared), usage counter baselines and
+endpoints, commits/releases and validated outcomes. Follow the recording rules
+in docs/velocity/README.md. Keep build/test, infrastructure and approval waits
+visible when their bounds are observed. Unknown active work time stays null.
+
+Use local session token_usage_record telemetry when available; deduplicate
+responses and commit only sanitized counters/timestamps. Never commit transcript
+content. Distinguish cached input, uncached input, output, and reasoning subsets.
+Do not allocate shared usage to multiple crates or sum overlapping elapsed
+windows. Track parallel agent-hours separately from project wall-clock time.
+Include a brief elapsed/usage update when reporting each finished milestone.

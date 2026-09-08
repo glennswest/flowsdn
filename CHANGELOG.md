@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Track project elapsed time, per-crate delivery windows and measured session
+  token usage in docs/velocity, with sanitized samples and explicit shared-work
+  attribution; require updates at task boundaries and releases.
+
 ## [0.2.0] - 2026-09-08
 
 - Add the dependency-free flowsdn-scripttest parsing front end: exact txtar

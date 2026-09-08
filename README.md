@@ -80,3 +80,9 @@ remote dispatch, BPF builds, images and deployment commands are not implemented.
 After results are committed or released, clean this project's compiler output:
 `cargo clean --target-dir /build/cargo/flowsdn`. `/build` is the spinning drive;
 never put targets on the root SSD or clean another project's directories.
+
+## Velocity
+
+[Time and token ledger](docs/velocity/README.md) tracks project wall-clock
+elapsed time, per-crate delivery windows, measured token usage and validated
+outcomes. Cached tokens and shared work are identified explicitly.
