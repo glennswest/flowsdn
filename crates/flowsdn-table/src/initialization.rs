@@ -1,5 +1,10 @@
 use crate::{Keyed, Table};
-use std::{collections::BTreeSet, error::Error, fmt, sync::{Arc, Mutex}};
+use std::{
+    collections::BTreeSet,
+    error::Error,
+    fmt,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::watch;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -55,7 +60,9 @@ pub struct Initializer {
 
 impl fmt::Debug for Initializer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Initializer").field("name", &self.name).finish_non_exhaustive()
+        f.debug_struct("Initializer")
+            .field("name", &self.name)
+            .finish_non_exhaustive()
     }
 }
 
@@ -67,7 +74,11 @@ impl Initializer {
     /// Mark this source complete. Returns true only for the first completion;
     /// repeated calls are harmless and never alter another source's status.
     pub fn complete(&self) -> bool {
-        let mut registration = self.initialization.registration.lock().expect("initializer registry poisoned");
+        let mut registration = self
+            .initialization
+            .registration
+            .lock()
+            .expect("initializer registry poisoned");
         let completed = registration.pending.remove(&self.name);
         if completed && registration.sealed && registration.pending.is_empty() {
             self.initialization.ready.send_replace(true);
@@ -80,9 +91,16 @@ impl<T: Keyed> Table<T> {
     /// Register a data source before sealing. Registration and sealing are
     /// serialized, so a racing registration either participates or returns
     /// `Sealed`; it cannot make an initialized table become uninitialized.
-    pub fn register_initializer(&self, name: impl Into<String>) -> Result<Initializer, InitializationError> {
+    pub fn register_initializer(
+        &self,
+        name: impl Into<String>,
+    ) -> Result<Initializer, InitializationError> {
         let name = name.into();
-        let mut registration = self.initialization.registration.lock().expect("initializer registry poisoned");
+        let mut registration = self
+            .initialization
+            .registration
+            .lock()
+            .expect("initializer registry poisoned");
         if registration.sealed {
             return Err(InitializationError::Sealed);
         }
@@ -93,14 +111,21 @@ impl<T: Keyed> Table<T> {
             return Err(InitializationError::DuplicateName(name));
         }
         registration.pending.insert(name.clone());
-        Ok(Initializer { name, initialization: self.initialization.clone() })
+        Ok(Initializer {
+            name,
+            initialization: self.initialization.clone(),
+        })
     }
 
     /// Finish registration. Sealing is idempotent and required even when there
     /// are no sources. Readiness remains false before sealing, preventing a
     /// reconciler from pruning during construction's temporarily empty set.
     pub fn seal_initializers(&self) {
-        let mut registration = self.initialization.registration.lock().expect("initializer registry poisoned");
+        let mut registration = self
+            .initialization
+            .registration
+            .lock()
+            .expect("initializer registry poisoned");
         if !registration.sealed {
             registration.sealed = true;
             if registration.pending.is_empty() {
@@ -118,7 +143,14 @@ impl<T: Keyed> Table<T> {
     /// Names still awaiting initial sync, in lexical order. An empty list
     /// alone does not imply readiness while registration remains open.
     pub fn pending_initializers(&self) -> Vec<String> {
-        self.initialization.registration.lock().expect("initializer registry poisoned").pending.iter().cloned().collect()
+        self.initialization
+            .registration
+            .lock()
+            .expect("initializer registry poisoned")
+            .pending
+            .iter()
+            .cloned()
+            .collect()
     }
 
     /// Await sealed registration and completion of every initial population.
@@ -131,7 +163,10 @@ impl<T: Keyed> Table<T> {
                 return;
             }
             // This future borrows the table, keeping the sender alive.
-            ready.changed().await.expect("table initialization sender dropped while borrowed");
+            ready
+                .changed()
+                .await
+                .expect("table initialization sender dropped while borrowed");
         }
     }
 }

@@ -37,7 +37,10 @@ pub struct LoadError {
 
 impl LoadError {
     fn new(location: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { location: location.into(), message: message.into() }
+        Self {
+            location: location.into(),
+            message: message.into(),
+        }
     }
 }
 
@@ -54,33 +57,51 @@ impl std::error::Error for LoadError {}
 /// or unreadable directories are fatal; individual unreadable files are not.
 /// Entries are sorted by filename for deterministic same-layer resolution.
 pub fn directory(path: &Path) -> Result<Loaded, LoadError> {
-    let listing = fs::read_dir(path).map_err(|error| LoadError::new(path.display().to_string(), error.to_string()))?;
+    let listing = fs::read_dir(path)
+        .map_err(|error| LoadError::new(path.display().to_string(), error.to_string()))?;
     let mut loaded = Loaded::default();
     let mut paths = Vec::new();
     for item in listing {
         match item {
             Ok(item) => paths.push(item.path()),
-            Err(error) => loaded.warnings.push(LoadWarning { location: path.display().to_string(), message: error.to_string() }),
+            Err(error) => loaded.warnings.push(LoadWarning {
+                location: path.display().to_string(),
+                message: error.to_string(),
+            }),
         }
     }
     paths.sort();
     for path in paths {
-        let warn = |message: String| LoadWarning { location: path.display().to_string(), message };
+        let warn = |message: String| LoadWarning {
+            location: path.display().to_string(),
+            message,
+        };
         let metadata = match fs::metadata(&path) {
             Ok(metadata) => metadata,
-            Err(error) => { loaded.warnings.push(warn(error.to_string())); continue; }
+            Err(error) => {
+                loaded.warnings.push(warn(error.to_string()));
+                continue;
+            }
         };
-        if metadata.is_dir() { continue; }
+        if metadata.is_dir() {
+            continue;
+        }
         if !metadata.is_file() {
-            loaded.warnings.push(warn("skipping non-regular configuration file".into()));
+            loaded
+                .warnings
+                .push(warn("skipping non-regular configuration file".into()));
             continue;
         }
         let Some(key) = path.file_name().and_then(|name| name.to_str()) else {
-            loaded.warnings.push(warn("configuration filename is not UTF-8".into()));
+            loaded
+                .warnings
+                .push(warn("configuration filename is not UTF-8".into()));
             continue;
         };
         match fs::read_to_string(&path) {
-            Ok(value) => loaded.entries.push(Entry::new(Source::Dir, key, value.trim())),
+            Ok(value) => loaded
+                .entries
+                .push(Entry::new(Source::Dir, key, value.trim())),
             Err(error) => loaded.warnings.push(warn(error.to_string())),
         }
     }
@@ -93,12 +114,22 @@ pub fn directory(path: &Path) -> Result<Loaded, LoadError> {
 /// are rejected; list/map options use their specified textual representations.
 pub fn yaml(text: &str) -> Result<Loaded, LoadError> {
     let mut receiver = ScalarMapping::default();
-    Parser::new(text.chars()).load(&mut receiver, true).map_err(|_| LoadError::new("config YAML", "invalid YAML syntax"))?;
-    if let Some(message) = receiver.error { return Err(LoadError::new("config YAML", message)); }
-    if !receiver.mapping_seen && !text.trim().is_empty() && receiver.documents != 0 {
-        return Err(LoadError::new("config YAML", "expected a mapping of keys to scalar values"));
+    Parser::new(text.chars())
+        .load(&mut receiver, true)
+        .map_err(|_| LoadError::new("config YAML", "invalid YAML syntax"))?;
+    if let Some(message) = receiver.error {
+        return Err(LoadError::new("config YAML", message));
     }
-    Ok(Loaded { entries: receiver.entries, warnings: Vec::new() })
+    if !receiver.mapping_seen && !text.trim().is_empty() && receiver.documents != 0 {
+        return Err(LoadError::new(
+            "config YAML",
+            "expected a mapping of keys to scalar values",
+        ));
+    }
+    Ok(Loaded {
+        entries: receiver.entries,
+        warnings: Vec::new(),
+    })
 }
 
 /// An explicitly selected file must exist. Without one, read `ciliumd.yaml`
@@ -115,10 +146,20 @@ pub fn file(explicit: Option<&Path>, home: Option<&Path>) -> Result<Loaded, Load
     };
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
-        Err(error) if optional && error.kind() == std::io::ErrorKind::NotFound => return Ok(Loaded::default()),
-        Err(error) => return Err(LoadError::new(path.display().to_string(), error.to_string())),
+        Err(error) if optional && error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Loaded::default());
+        }
+        Err(error) => {
+            return Err(LoadError::new(
+                path.display().to_string(),
+                error.to_string(),
+            ));
+        }
     };
-    yaml(&text).map_err(|mut error| { error.location = path.display().to_string(); error })
+    yaml(&text).map_err(|mut error| {
+        error.location = path.display().to_string();
+        error
+    })
 }
 
 /// Additional legacy names can be supplied by an area's configuration schema.
@@ -136,7 +177,12 @@ pub fn environment(
     variables: impl IntoIterator<Item = (OsString, OsString)>,
     aliases: &[EnvironmentAlias],
 ) -> Result<Loaded, LoadError> {
-    const PROCESS_ONLY: [&str; 4] = ["CILIUM_SOCK", "CILIUM_HEALTH_SOCK", "CILIUM_K8S_NAMESPACE", "K8S_NODE_NAME"];
+    const PROCESS_ONLY: [&str; 4] = [
+        "CILIUM_SOCK",
+        "CILIUM_HEALTH_SOCK",
+        "CILIUM_K8S_NAMESPACE",
+        "K8S_NODE_NAME",
+    ];
     let variables: BTreeMap<_, _> = variables.into_iter().collect();
     let mut loaded = Loaded::default();
     let mut seen_alias_keys = BTreeSet::new();
@@ -144,10 +190,16 @@ pub fn environment(
     for alias in aliases {
         let key = normalize(&alias.key);
         let canonical = format!("CILIUM_{}", key.replace('-', "_").to_ascii_uppercase());
-        if key.is_empty() || alias.variable == canonical || PROCESS_ONLY.contains(&alias.variable.as_str())
-            || !seen_alias_keys.insert(key) || !seen_alias_names.insert(&alias.variable)
+        if key.is_empty()
+            || alias.variable == canonical
+            || PROCESS_ONLY.contains(&alias.variable.as_str())
+            || !seen_alias_keys.insert(key)
+            || !seen_alias_names.insert(&alias.variable)
         {
-            return Err(LoadError::new(&alias.variable, "invalid or ambiguous environment alias"));
+            return Err(LoadError::new(
+                &alias.variable,
+                "invalid or ambiguous environment alias",
+            ));
         }
     }
     // Check the complete alias schema before consuming any input. An alias
@@ -157,23 +209,39 @@ pub fn environment(
         if let Some(body) = alias.variable.strip_prefix("CILIUM_")
             && seen_alias_keys.contains(&normalize(body))
         {
-            return Err(LoadError::new(&alias.variable, "environment alias collides with a canonical variable"));
+            return Err(LoadError::new(
+                &alias.variable,
+                "environment alias collides with a canonical variable",
+            ));
         }
     }
     for (name, value) in &variables {
-        let Some(name) = name.to_str() else { continue; };
-        if PROCESS_ONLY.contains(&name) || aliases.iter().any(|alias| alias.variable == name) { continue; }
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if PROCESS_ONLY.contains(&name) || aliases.iter().any(|alias| alias.variable == name) {
+            continue;
+        }
         if let Some(key) = name.strip_prefix("CILIUM_") {
-            let value = value.to_str().ok_or_else(|| LoadError::new(name, "configuration environment value is not UTF-8"))?;
+            let value = value.to_str().ok_or_else(|| {
+                LoadError::new(name, "configuration environment value is not UTF-8")
+            })?;
             loaded.entries.push(Entry::new(Source::Env, key, value));
         }
     }
     for alias in aliases {
         let key = normalize(&alias.key);
         let canonical = format!("CILIUM_{}", key.replace('-', "_").to_ascii_uppercase());
-        if variables.contains_key(&OsString::from(&canonical)) { continue; }
+        if variables.contains_key(&OsString::from(&canonical)) {
+            continue;
+        }
         if let Some(value) = variables.get(&OsString::from(&alias.variable)) {
-            let value = value.to_str().ok_or_else(|| LoadError::new(&alias.variable, "configuration environment value is not UTF-8"))?;
+            let value = value.to_str().ok_or_else(|| {
+                LoadError::new(
+                    &alias.variable,
+                    "configuration environment value is not UTF-8",
+                )
+            })?;
             loaded.entries.push(Entry::new(Source::Env, key, value));
         }
     }
@@ -216,32 +284,46 @@ impl ScalarMapping {
 
 impl EventReceiver for ScalarMapping {
     fn on_event(&mut self, event: Event) {
-        if self.error.is_some() { return; }
+        if self.error.is_some() {
+            return;
+        }
         match event {
             Event::DocumentStart => {
                 self.documents = self.documents.saturating_add(1);
-                if self.documents > 1 { self.error = Some("expected a single YAML document".into()); }
+                if self.documents > 1 {
+                    self.error = Some("expected a single YAML document".into());
+                }
             }
             Event::MappingStart(_, tag) if !self.mapping_seen && tag.is_none() => {
                 self.mapping_seen = true;
                 self.in_mapping = true;
             }
-            Event::MappingEnd if self.in_mapping => { self.in_mapping = false; }
+            Event::MappingEnd if self.in_mapping => {
+                self.in_mapping = false;
+            }
             Event::Scalar(value, style, anchor, tag) => {
                 // Tags can redefine interpretation; the configuration schema,
                 // rather than YAML type tags, owns value types.
-                if tag.is_some() || (style == TScalarStyle::Plain && (value.is_empty() || value == "~" || value.eq_ignore_ascii_case("null"))) {
-                    self.error = Some("YAML nulls and explicit type tags are not configuration scalar values".into());
+                if tag.is_some()
+                    || (style == TScalarStyle::Plain
+                        && (value.is_empty() || value == "~" || value.eq_ignore_ascii_case("null")))
+                {
+                    self.error = Some(
+                        "YAML nulls and explicit type tags are not configuration scalar values"
+                            .into(),
+                    );
                     return;
                 }
-                if anchor != 0 { self.anchors.insert(anchor, value.clone()); }
+                if anchor != 0 {
+                    self.anchors.insert(anchor, value.clone());
+                }
                 self.scalar(value);
             }
             Event::Alias(anchor) => match self.anchors.get(&anchor).cloned() {
                 Some(value) => self.scalar(value),
                 None => self.error = Some("configuration aliases must refer to a scalar".into()),
             },
-            Event::StreamStart | Event::StreamEnd | Event::DocumentEnd | Event::Nothing => {},
+            Event::StreamStart | Event::StreamEnd | Event::DocumentEnd | Event::Nothing => {}
             _ => self.error = Some("expected a flat mapping of keys to scalar values".into()),
         }
     }

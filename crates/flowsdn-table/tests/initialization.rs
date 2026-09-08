@@ -1,11 +1,20 @@
 #![allow(clippy::unwrap_used)]
 use flowsdn_table::{InitializationError, Key, Keyed, Table};
-use std::{future::Future, sync::{Arc, atomic::{AtomicUsize, Ordering}}, task::{Context, Poll, Wake, Waker}};
+use std::{
+    future::Future,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    task::{Context, Poll, Wake, Waker},
+};
 
 #[derive(Clone)]
 struct Item(u8);
 impl Keyed for Item {
-    fn primary_key(&self) -> Key { vec![self.0] }
+    fn primary_key(&self) -> Key {
+        vec![self.0]
+    }
 }
 
 #[tokio::test]
@@ -18,7 +27,10 @@ async fn empty_table_requires_sealing_and_readiness_is_sticky() {
     table.wait_initialized().await;
     table.seal_initializers();
     assert!(table.initialized());
-    assert_eq!(table.register_initializer("late").unwrap_err(), InitializationError::Sealed);
+    assert_eq!(
+        table.register_initializer("late").unwrap_err(),
+        InitializationError::Sealed
+    );
     assert_eq!(table.snapshot().revision(), 0);
 }
 
@@ -30,8 +42,14 @@ async fn completion_before_seal_does_not_close_registration() {
     assert!(first.complete());
     assert!(!first.complete());
     assert!(!table.initialized());
-    assert_eq!(table.register_initializer("first").unwrap_err(), InitializationError::DuplicateName("first".to_owned()));
-    assert_eq!(table.register_initializer(" \t").unwrap_err(), InitializationError::EmptyName);
+    assert_eq!(
+        table.register_initializer("first").unwrap_err(),
+        InitializationError::DuplicateName("first".to_owned())
+    );
+    assert_eq!(
+        table.register_initializer(" \t").unwrap_err(),
+        InitializationError::EmptyName
+    );
     let second = table.register_initializer("second").unwrap();
     table.seal_initializers();
     assert_eq!(table.pending_initializers(), ["second"]);
@@ -56,8 +74,12 @@ fn dropped_producer_is_not_success() {
 
 struct WakeCount(AtomicUsize);
 impl Wake for WakeCount {
-    fn wake(self: Arc<Self>) { self.0.fetch_add(1, Ordering::SeqCst); }
-    fn wake_by_ref(self: &Arc<Self>) { self.0.fetch_add(1, Ordering::SeqCst); }
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
 }
 
 #[test]
@@ -87,7 +109,7 @@ fn cancelling_one_waiter_preserves_other_waiters_and_source_progress() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn concurrent_waiters_observe_rows_published_before_source_completion() {
-    let table = Arc::new(Table::new(vec![]).unwrap());
+    let table = Arc::new(Table::<Item>::new(vec![]).unwrap());
     let first = table.register_initializer("first").unwrap();
     let second = table.register_initializer("second").unwrap();
     table.seal_initializers();
@@ -96,7 +118,11 @@ async fn concurrent_waiters_observe_rows_published_before_source_completion() {
         let table = table.clone();
         waiters.push(tokio::spawn(async move {
             table.wait_initialized().await;
-            table.snapshot().all().map(|(row, _)| row.0).collect::<Vec<_>>()
+            table
+                .snapshot()
+                .all()
+                .map(|(row, _)| row.0)
+                .collect::<Vec<_>>()
         }));
     }
     let first_table = table.clone();

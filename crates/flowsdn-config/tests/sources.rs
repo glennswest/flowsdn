@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
-use flowsdn_config::{Entry, Kind, KeySpec, Registry, Source, Value};
 use flowsdn_config::sources::{self, EnvironmentAlias};
+use flowsdn_config::{Entry, KeySpec, Kind, Registry, Source, Value};
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,25 +12,37 @@ struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        let path = std::env::temp_dir().join(format!("flowsdn-config-test-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        let path = std::env::temp_dir().join(format!(
+            "flowsdn-config-test-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
         fs::create_dir(&path).unwrap();
         Self(path)
     }
 
-    fn path(&self) -> &Path { &self.0 }
+    fn path(&self) -> &Path {
+        &self.0
+    }
 }
 
 impl Drop for Fixture {
-    fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
 }
 
 fn variables(items: &[(&str, &str)]) -> Vec<(OsString, OsString)> {
-    items.iter().map(|(key, value)| (OsString::from(key), OsString::from(value))).collect()
+    items
+        .iter()
+        .map(|(key, value)| (OsString::from(key), OsString::from(value)))
+        .collect()
 }
 
 #[test]
 fn yaml_preserves_scalar_values_and_registry_types_them() {
-    let loaded = sources::yaml(r#"
+    let loaded = sources::yaml(
+        r#"
 enable_ipv4: true
 capacity: 18446744073709551615
 ratio: 1.25e-2
@@ -41,7 +53,9 @@ multiline: |
   second
 shared: &value 'off'
 copy: *value
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let registry = Registry::new([
         KeySpec::new("enable-ipv4", Kind::Bool, "false"),
         KeySpec::new("capacity", Kind::UInt { bits: 64 }, "0"),
@@ -51,26 +65,64 @@ copy: *value
         KeySpec::new("multiline", Kind::String, ""),
         KeySpec::new("shared", Kind::Bool, "true"),
         KeySpec::new("copy", Kind::Bool, "true"),
-    ]).unwrap();
+    ])
+    .unwrap();
     let resolved = registry.resolve(loaded.entries).unwrap();
-    assert_eq!(resolved.get("capacity").unwrap().value, Value::UInt(u64::MAX));
+    assert_eq!(
+        resolved.get("capacity").unwrap().value,
+        Value::UInt(u64::MAX)
+    );
     assert_eq!(resolved.get("ratio").unwrap().value, Value::Float(0.0125));
-    assert_eq!(resolved.get("name").unwrap().value, Value::String(" spaces stay ".into()));
-    assert_eq!(resolved.get("multiline").unwrap().value, Value::String("first\nsecond\n".into()));
+    assert_eq!(
+        resolved.get("name").unwrap().value,
+        Value::String(" spaces stay ".into())
+    );
+    assert_eq!(
+        resolved.get("multiline").unwrap().value,
+        Value::String("first\nsecond\n".into())
+    );
     assert_eq!(resolved.get("copy").unwrap().value, Value::Bool(false));
-    assert_eq!(resolved.get("devices").unwrap().value, Value::List(vec!["eth0".into(), "eth1 eth2".into()]));
-    assert!(resolved.values().values().all(|value| value.source == Source::File));
+    assert_eq!(
+        resolved.get("devices").unwrap().value,
+        Value::List(vec!["eth0".into(), "eth1 eth2".into()])
+    );
+    assert!(
+        resolved
+            .values()
+            .values()
+            .all(|value| value.source == Source::File)
+    );
 }
 
 #[test]
 fn yaml_rejects_ambiguous_or_non_scalar_documents() {
     for text in [
-        "key: 1\nKEY: 2\n", "key_name: 1\nkey-name: 2\n", "key: 1\nkey: 2\n",
-        "key: [a, b]\n", "key: {nested: value}\n", "[a, b]", "scalar",
-        "key: null", "key: ~", "key:", "key: !!str value", "key: 'unterminated",
-        "key: one\n---\nkey: two\n", "'': value", "key: *missing",
-    ] { assert!(sources::yaml(text).is_err(), "{text}"); }
-    for text in ["", "  \n", "# comment only\n", "{}", "key: ''", "key: 'null'"] {
+        "key: 1\nKEY: 2\n",
+        "key_name: 1\nkey-name: 2\n",
+        "key: 1\nkey: 2\n",
+        "key: [a, b]\n",
+        "key: {nested: value}\n",
+        "[a, b]",
+        "scalar",
+        "key: null",
+        "key: ~",
+        "key:",
+        "key: !!str value",
+        "key: 'unterminated",
+        "key: one\n---\nkey: two\n",
+        "'': value",
+        "key: *missing",
+    ] {
+        assert!(sources::yaml(text).is_err(), "{text}");
+    }
+    for text in [
+        "",
+        "  \n",
+        "# comment only\n",
+        "{}",
+        "key: ''",
+        "key: 'null'",
+    ] {
         assert!(sources::yaml(text).is_ok(), "{text}");
     }
 }
@@ -79,7 +131,12 @@ fn yaml_rejects_ambiguous_or_non_scalar_documents() {
 fn file_selection_distinguishes_explicit_and_optional_defaults() {
     let fixture = Fixture::new();
     assert!(sources::file(None, None).unwrap().entries.is_empty());
-    assert!(sources::file(None, Some(fixture.path())).unwrap().entries.is_empty());
+    assert!(
+        sources::file(None, Some(fixture.path()))
+            .unwrap()
+            .entries
+            .is_empty()
+    );
     let explicit = fixture.path().join("chosen.yaml");
     assert!(sources::file(Some(&explicit), Some(fixture.path())).is_err());
     fs::write(fixture.path().join("ciliumd.yaml"), "name: default-file\n").unwrap();
@@ -89,7 +146,10 @@ fn file_selection_distinguishes_explicit_and_optional_defaults() {
     let chosen = sources::file(Some(&explicit), Some(fixture.path())).unwrap();
     assert_eq!(chosen.entries.first().unwrap().value, "explicit");
     fs::write(&explicit, "name: [bad]\n").unwrap();
-    assert_eq!(sources::file(Some(&explicit), None).unwrap_err().location, explicit.display().to_string());
+    assert_eq!(
+        sources::file(Some(&explicit), None).unwrap_err().location,
+        explicit.display().to_string()
+    );
     assert!(sources::file(Some(fixture.path()), None).is_err());
 }
 
@@ -106,7 +166,14 @@ fn directory_sorts_trims_and_warns_on_invalid_utf8() {
     assert_eq!(loaded.entries.first().unwrap().key, "A_NAME");
     assert_eq!(loaded.entries.last().unwrap().value, "final");
     assert_eq!(loaded.warnings.len(), 1);
-    assert!(loaded.warnings.first().unwrap().location.ends_with("broken"));
+    assert!(
+        loaded
+            .warnings
+            .first()
+            .unwrap()
+            .location
+            .ends_with("broken")
+    );
     assert!(sources::directory(&fixture.path().join("missing")).is_err());
 }
 
@@ -117,7 +184,11 @@ fn projected_configmap_symlinks_load_and_special_files_never_open() {
     use std::os::unix::net::UnixListener;
     let fixture = Fixture::new();
     fs::create_dir(fixture.path().join("..generation")).unwrap();
-    fs::write(fixture.path().join("..generation/enable_ipv4"), "\n true \n").unwrap();
+    fs::write(
+        fixture.path().join("..generation/enable_ipv4"),
+        "\n true \n",
+    )
+    .unwrap();
     symlink("..generation", fixture.path().join("..data")).unwrap();
     symlink("..data/enable_ipv4", fixture.path().join("enable_ipv4")).unwrap();
     symlink("missing", fixture.path().join("broken-link")).unwrap();
@@ -131,25 +202,60 @@ fn projected_configmap_symlinks_load_and_special_files_never_open() {
 
 #[test]
 fn environment_reserves_process_variables_and_prefers_canonical_even_empty() {
-    let alias = EnvironmentAlias { variable: "LEGACY_NAME".into(), key: "name".into() };
-    let loaded = sources::environment(variables(&[
-        ("LEGACY_NAME", "fallback"), ("CILIUM_NAME", ""),
-        ("CILIUM_SOCK", "socket"), ("CILIUM_HEALTH_SOCK", "socket"),
-        ("CILIUM_K8S_NAMESPACE", "ns"), ("K8S_NODE_NAME", "node"), ("UNRELATED", "value"),
-    ]), std::slice::from_ref(&alias)).unwrap();
+    let alias = EnvironmentAlias {
+        variable: "LEGACY_NAME".into(),
+        key: "name".into(),
+    };
+    let loaded = sources::environment(
+        variables(&[
+            ("LEGACY_NAME", "fallback"),
+            ("CILIUM_NAME", ""),
+            ("CILIUM_SOCK", "socket"),
+            ("CILIUM_HEALTH_SOCK", "socket"),
+            ("CILIUM_K8S_NAMESPACE", "ns"),
+            ("K8S_NODE_NAME", "node"),
+            ("UNRELATED", "value"),
+        ]),
+        std::slice::from_ref(&alias),
+    )
+    .unwrap();
     assert_eq!(loaded.entries.len(), 1);
     assert_eq!(loaded.entries.first().unwrap().value, "");
-    let fallback = sources::environment(variables(&[("LEGACY_NAME", "fallback")]), &[alias]).unwrap();
+    let fallback =
+        sources::environment(variables(&[("LEGACY_NAME", "fallback")]), &[alias]).unwrap();
     assert_eq!(fallback.entries.first().unwrap().key, "name");
     assert_eq!(fallback.entries.first().unwrap().value, "fallback");
     let registry = Registry::new([]).unwrap();
     let unknown = sources::environment(variables(&[("CILIUM_NEW_KEY", "future")]), &[]).unwrap();
-    assert!(registry.resolve(unknown.entries).unwrap().unknown_keys().contains("new-key"));
+    assert!(
+        registry
+            .resolve(unknown.entries)
+            .unwrap()
+            .unknown_keys()
+            .contains("new-key")
+    );
     for aliases in [
-        vec![EnvironmentAlias { variable: "CILIUM_NAME".into(), key: "name".into() }],
-        vec![EnvironmentAlias { variable: "CILIUM_SOCK".into(), key: "name".into() }],
-        vec![EnvironmentAlias { variable: "OLD_NAME".into(), key: "name".into() }, EnvironmentAlias { variable: "OTHER_NAME".into(), key: "NAME".into() }],
-    ] { assert!(sources::environment([], &aliases).is_err()); }
+        vec![EnvironmentAlias {
+            variable: "CILIUM_NAME".into(),
+            key: "name".into(),
+        }],
+        vec![EnvironmentAlias {
+            variable: "CILIUM_SOCK".into(),
+            key: "name".into(),
+        }],
+        vec![
+            EnvironmentAlias {
+                variable: "OLD_NAME".into(),
+                key: "name".into(),
+            },
+            EnvironmentAlias {
+                variable: "OTHER_NAME".into(),
+                key: "NAME".into(),
+            },
+        ],
+    ] {
+        assert!(sources::environment([], &aliases).is_err());
+    }
 }
 
 #[cfg(unix)]
@@ -158,18 +264,39 @@ fn invalid_environment_bytes_fail_only_for_configuration_variables() {
     use std::os::unix::ffi::OsStringExt;
     let bad = OsString::from_vec(vec![0xff]);
     assert!(sources::environment([(OsString::from("CILIUM_NAME"), bad.clone())], &[]).is_err());
-    assert!(sources::environment([(OsString::from("UNRELATED"), bad.clone()), (bad.clone(), bad)], &[]).is_ok());
+    assert!(
+        sources::environment(
+            [
+                (OsString::from("UNRELATED"), bad.clone()),
+                (bad.clone(), bad)
+            ],
+            &[]
+        )
+        .is_ok()
+    );
 }
 
 #[test]
 fn environment_alias_cannot_consume_another_declared_keys_canonical_value() {
-    let collision = EnvironmentAlias { variable: "CILIUM_B".into(), key: "a".into() };
-    let fallback = EnvironmentAlias { variable: "OLD_B".into(), key: "b".into() };
+    let collision = EnvironmentAlias {
+        variable: "CILIUM_B".into(),
+        key: "a".into(),
+    };
+    let fallback = EnvironmentAlias {
+        variable: "OLD_B".into(),
+        key: "b".into(),
+    };
     let input = variables(&[("CILIUM_A", "canonical-a"), ("CILIUM_B", "canonical-b")]);
-    for aliases in [[collision.clone(), fallback.clone()], [fallback.clone(), collision]] {
+    for aliases in [
+        [collision.clone(), fallback.clone()],
+        [fallback.clone(), collision],
+    ] {
         let error = sources::environment(input.clone(), &aliases).unwrap_err();
         assert_eq!(error.location, "CILIUM_B");
-        assert_eq!(error.message, "environment alias collides with a canonical variable");
+        assert_eq!(
+            error.message,
+            "environment alias collides with a canonical variable"
+        );
         // Ambiguity is a schema error, independent of environment contents.
         assert_eq!(sources::environment([], &aliases).unwrap_err(), error);
     }
@@ -177,10 +304,17 @@ fn environment_alias_cannot_consume_another_declared_keys_canonical_value() {
     let registry = Registry::new([
         KeySpec::new("a", Kind::String, "default"),
         KeySpec::new("b", Kind::String, "default"),
-    ]).unwrap();
+    ])
+    .unwrap();
     let resolved = registry.resolve(loaded.entries).unwrap();
-    assert_eq!(resolved.get("a").unwrap().value, Value::String("canonical-a".into()));
-    assert_eq!(resolved.get("b").unwrap().value, Value::String("canonical-b".into()));
+    assert_eq!(
+        resolved.get("a").unwrap().value,
+        Value::String("canonical-a".into())
+    );
+    assert_eq!(
+        resolved.get("b").unwrap().value,
+        Value::String("canonical-b".into())
+    );
 }
 
 #[test]
@@ -190,15 +324,41 @@ fn file_directory_environment_and_flags_layer_without_losing_unrelated_keys() {
     let registry = Registry::new([
         KeySpec::new("name", Kind::String, "default"),
         KeySpec::new("file-only", Kind::Bool, "false"),
-    ]).unwrap();
-    let mut entries = sources::yaml("name: file\nfile-only: true\n").unwrap().entries;
+    ])
+    .unwrap();
+    let mut entries = sources::yaml("name: file\nfile-only: true\n")
+        .unwrap()
+        .entries;
     entries.extend(sources::directory(fixture.path()).unwrap().entries);
-    assert_eq!(registry.resolve(entries.clone()).unwrap().get("name").unwrap().value, Value::String("directory".into()));
-    entries.extend(sources::environment(variables(&[("CILIUM_NAME", "environment")]), &[]).unwrap().entries);
-    assert_eq!(registry.resolve(entries.clone()).unwrap().get("name").unwrap().source, Source::Env);
+    assert_eq!(
+        registry
+            .resolve(entries.clone())
+            .unwrap()
+            .get("name")
+            .unwrap()
+            .value,
+        Value::String("directory".into())
+    );
+    entries.extend(
+        sources::environment(variables(&[("CILIUM_NAME", "environment")]), &[])
+            .unwrap()
+            .entries,
+    );
+    assert_eq!(
+        registry
+            .resolve(entries.clone())
+            .unwrap()
+            .get("name")
+            .unwrap()
+            .source,
+        Source::Env
+    );
     entries.push(Entry::new(Source::Flag, "name", "flag"));
     let resolved = registry.resolve(entries).unwrap();
-    assert_eq!(resolved.get("name").unwrap().value, Value::String("flag".into()));
+    assert_eq!(
+        resolved.get("name").unwrap().value,
+        Value::String("flag".into())
+    );
     assert_eq!(resolved.get("file-only").unwrap().value, Value::Bool(true));
     assert_eq!(resolved.get("file-only").unwrap().source, Source::File);
 }
