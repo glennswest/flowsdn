@@ -95,14 +95,14 @@ unique/multikey indexes and atomic batch publication. Watches, retained
 change streams, initialization tracking and reconciliation are not implemented.
 
 Validated on Linux with Rust 1.95.0:
-- `cargo xtask check`: formatting, Clippy with warnings denied, 28 native
+- `cargo xtask check`: formatting, Clippy with warnings denied, 29 native
   tests and all-target compile checks for x86_64/aarch64 Linux musl passed.
-- `cargo test --workspace --release --locked`: the same 28 tests passed.
+- `cargo test --workspace --release --locked`: the same 29 tests passed.
 - `cargo xtask deny`: advisories, bans, licenses and sources passed.
 - Rust BPF harvester: all 142 translation units and 625 effective cases match
   the pinned reference inventory, including feature/configuration, entrypoint
   and milestone fields. Generated TOML passed a second comparison.
 
-The 28 tests comprise 7 fence, 8 parser, 10 table and 3 harvester tests.
+The 29 tests comprise 7 fence, 8 parser, 10 table and 4 harvester tests.
 No Python executable source remains tracked. These checks do not exercise
 BPF programs or the networking assertions in the harvested corpus.
