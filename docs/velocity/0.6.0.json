@@ -4,7 +4,7 @@
   "start_utc": "2026-09-08T20:44:18Z",
   "start_revision": "f35c2cb",
   "owner": "/root",
-  "status": "in-progress",
+  "status": "validated",
   "active_work_seconds": null,
   "token_baseline_sample_utc": "2026-09-08T20:33:46.659Z",
   "token_baseline": {
@@ -21,5 +21,25 @@
     "flowsdn-scripttest",
     "xtask"
   ],
-  "note": "Parallel implementation windows overlap; combined usage requires unique response IDs across agent sessions. Previous reporting-to-start gap is not active coding."
+  "note": "Root and3agents unique responses. Coding, cross-review, validation and coordination overlap. No exclusive coding or active agent-hours inferred. One older child Git approval was aborted after82.9s; coordinator took all mutations.",
+  "end_utc": "2026-09-08T20:59:07.218Z",
+  "elapsed_seconds": 889.218,
+  "token_endpoint": {
+    "input_tokens": 27486802,
+    "cached_input_tokens": 27084160,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 99162,
+    "reasoning_output_tokens": 18401,
+    "total_tokens": 27585964
+  },
+  "combined_unique_response_tokens": {
+    "input_tokens": 11148126,
+    "cached_input_tokens": 10987648,
+    "output_tokens": 48077,
+    "reasoning_output_tokens": 12854,
+    "total_tokens": 11196203
+  },
+  "validated_commit": "fb318bb",
+  "tests": 110,
+  "cleanup": "1.4 GiB Cargo output removed"
 }

@@ -18,6 +18,14 @@ Build and test on dev.g8.lo, never on the Mac. Set
 CARGO_TARGET_DIR=/build/cargo/flowsdn and TMPDIR=/build/tmp.
 Write Rust from the specifications; follow docs/licensing.md.
 
+## Parallel work
+
+Use available subagents for independent crate implementation and cross-review.
+Assign disjoint file ownership. The coordinator serializes Git mutations and
+shared-host builds; subagents report completed code and validation needs.
+If an older subagent session still requires approvals, perform its Git/build
+operations from the coordinator instead of waiting on duplicate approval flows.
+
 ## Shared build host disk discipline
 
 - /build is the spinning drive (/dev/sdc); root is the smaller SSD.

@@ -138,3 +138,24 @@ A missing type annotation in one initializer test was corrected during validatio
 The full configuration catalogue, cross-key validators, runtime persistence,
 reconciliation and script command execution remain forthcoming. No networking
 coverage is claimed by these foundation tests.
+
+## Version 0.6.0 validation
+
+All 110 unique tests passed in debug and release: 30 table, 29 configuration,
+22 script/parser, 11 reconciler, 7 fence, 7 build-selector and 4 harvester tests.
+Formatting, Clippy with warnings denied, both Linux musl all-target compile
+checks, and cargo-deny passed. Dependency policy initially rejected the new
+internal path dependency without a version; pinning it to the workspace release
+passed the locked resolution and policy checks.
+
+Synthetic txtar scripts now execute generic commands and assertions. Harvested
+networking scenarios still lack their subsystem adapters. Reconciler tests cover
+retry deadlines, stale asynchronous results, cancellation replay and resync
+requests. Its caller-driven interface defers background timers and actual prune.
+Configuration tests cover foundation dependencies, ignored-feature behavior and
+restart comparisons of immutable values. Change-selection tests cover transitive
+and patched dependencies, cycles, shared inputs and documentation-only changes.
+The empty committed-diff CLI path was exercised and skipped workspace checks.
+
+Issue #43 is resolved by ADR-0009. Issue #264 remains open: check selection is
+implemented, but CI provisioning and remote cache integration are not complete.

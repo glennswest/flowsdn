@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "project": "flowsdn",
-  "as_of_utc": "2026-09-08T20:29:20.692Z",
+  "as_of_utc": "2026-09-08T20:59:07.218Z",
   "measurement_start_utc": "2026-09-08T16:11:13.415Z",
-  "elapsed_seconds": 15487.277,
+  "elapsed_seconds": 17273.803,
   "historical_project_start_known": false,
   "active_work_seconds": null,
   "session": {
     "id": "01a081c9-5ae6-72e3-a2f7-1a103e3c6703",
     "source": "Local Codex token_usage_record; deduplicated by response_id; payload content excluded",
-    "completed_response_records": 214,
+    "completed_response_records": 266,
     "tokens": {
-      "input_tokens": 20459783,
-      "cached_input_tokens": 20109056,
+      "input_tokens": 27486802,
+      "cached_input_tokens": 27084160,
       "cache_write_input_tokens": 0,
-      "output_tokens": 84060,
-      "reasoning_output_tokens": 14180,
-      "total_tokens": 20543843
+      "output_tokens": 99162,
+      "reasoning_output_tokens": 18401,
+      "total_tokens": 27585964
     }
   },
   "phases": [
@@ -130,6 +130,38 @@
         "total_tokens": 3961197
       },
       "note": "Root integration/validation/release and user requests; agents counted separately. Includes approvals and waits."
+    },
+    {
+      "id": "reporting-gap-before-0.6",
+      "scope": "project/shared",
+      "start_utc": "2026-09-08T20:29:20.692Z",
+      "end_utc": "2026-09-08T20:44:18Z",
+      "elapsed_seconds": 897.308,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 1146897,
+        "cached_input_tokens": 1137152,
+        "output_tokens": 2633,
+        "reasoning_output_tokens": 476,
+        "total_tokens": 1149530
+      },
+      "note": "Reporting/unattributed interval, not active coding."
+    },
+    {
+      "id": "0.6.0",
+      "scope": "project/shared",
+      "start_utc": "2026-09-08T20:44:18Z",
+      "end_utc": "2026-09-08T20:59:07.218Z",
+      "elapsed_seconds": 889.218,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 5880122,
+        "cached_input_tokens": 5837952,
+        "output_tokens": 12469,
+        "reasoning_output_tokens": 3745,
+        "total_tokens": 5892591
+      },
+      "note": "Root counters only; child usage is in subagents.json and combined task counters."
     }
   ],
   "crates": [
@@ -194,9 +226,10 @@
       "v0.2.0",
       "v0.3.0",
       "v0.4.0",
-      "v0.5.0"
+      "v0.5.0",
+      "v0.6.0"
     ],
-    "unique_tests": 71,
+    "unique_tests": 110,
     "test_profiles": [
       "debug",
       "release"
@@ -205,12 +238,13 @@
     "embedded_files": 1444,
     "parsed_commands": 3537,
     "networking_scenarios_executed": 0,
-    "validated_commit": "d2e7ce0",
+    "validated_commit": "fb318bb",
     "closed_issues_this_session": [
       42,
       205,
       49,
-      210
+      210,
+      43
     ]
   },
   "subagent_usage_file": "subagents.json",
@@ -259,14 +293,44 @@
       "implementation_end_utc": "2026-09-08T20:12:50Z",
       "elapsed_seconds": 123.0,
       "active_work_seconds": null
+    },
+    {
+      "crate": "flowsdn-reconcile",
+      "agent": "/root/table_streams",
+      "start_utc": "2026-09-08T20:44:37Z",
+      "implementation_end_utc": "2026-09-08T20:52:54Z",
+      "elapsed_seconds": 497.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "note": "Includes design/coding; see agent usage for cross-review/coordination, not exclusively this crate."
+    },
+    {
+      "crate": "flowsdn-config",
+      "agent": "/root/config_core",
+      "start_utc": "2026-09-08T20:44:46Z",
+      "implementation_end_utc": "2026-09-08T20:49:55Z",
+      "elapsed_seconds": 309.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "note": "Includes design/coding; see agent usage for cross-review/coordination, not exclusively this crate."
+    },
+    {
+      "crate": "flowsdn-scripttest",
+      "agent": "/root/review",
+      "start_utc": "2026-09-08T20:44:57Z",
+      "implementation_end_utc": "2026-09-08T20:49:17Z",
+      "elapsed_seconds": 260.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "note": "Includes design/coding; see agent usage for cross-review/coordination, not exclusively this crate."
     }
   ],
   "combined_unique_response_tokens": {
-    "input_tokens": 27774411,
-    "cached_input_tokens": 27184256,
-    "output_tokens": 137740,
-    "reasoning_output_tokens": 26240,
-    "total_tokens": 27912151
+    "input_tokens": 40069434,
+    "cached_input_tokens": 39309056,
+    "output_tokens": 188450,
+    "reasoning_output_tokens": 39570,
+    "total_tokens": 40257884
   },
   "cleanup": [
     {
@@ -281,6 +345,10 @@
       "release": "v0.5.0",
       "cargo_removed": "1.1 GiB",
       "task_reference_checkout_removed": true
+    },
+    {
+      "release": "v0.6.0",
+      "cargo_removed": "1.4 GiB"
     }
   ]
 }

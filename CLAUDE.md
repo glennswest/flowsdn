@@ -16,7 +16,7 @@ without following `docs/licensing.md`.
 
 ## Version
 
-0.6.0 — table initialization and streams, configuration loaders, script expansion; no networking agent yet. Version locations (when crates exist):
+0.6.0 — caller-driven reconciliation, configuration validation and script engine core; no networking agent yet. Version locations (when crates exist):
 `Cargo.toml` workspace.package.version, `CHANGELOG.md` heading.
 
 ## Work plan

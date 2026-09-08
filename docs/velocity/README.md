@@ -1,23 +1,25 @@
 # flowsdn velocity ledger
 
-Root snapshot: **2026-09-08T20:29:20.692Z**. Session elapsed: **4.30 hours**.
-Earlier specification effort is excluded. Active coding time is unmeasured.
+Snapshot: **2026-09-08T20:59:07.218Z**. Session elapsed: **4.80 hours**.
+The 0.6.0 milestone spans **14.8 minutes**, with
+**11,196,203 processed tokens** across root and three agents.
+Active coding time and active agent-hours remain unmeasured.
 
 | Combined unique-response usage | Tokens |
 |---|---:|
-| Input | 27,774,411 |
-| Cached input (subset) | 27,184,256 |
-| Output | 137,740 |
-| Total processed | 27,912,151 |
+| Input | 40,069,434 |
+| Cached input (subset) | 39,309,056 |
+| Uncached input | 760,378 |
+| Output | 188,450 |
+| Total processed | 40,257,884 |
 
-Includes root and three subagents, deduplicated by response ID. Each agent's
-cutoff is preserved in [subagents.json](subagents.json). Tokens include repeated
-context and do not establish subscription dollars. Task windows overlap and
-must not be summed as project wall time; active agent-hours remain unknown.
-The [ledger](ledger.json) records per-crate implementation windows, shared root
-integration time, releases and validation. v0.5.0 validation passed 71 tests per profile and all required checks.
-Cleanup reclaimed 1.1 GiB after this milestone; release history and closure
-results are recorded in the ledger. Later reporting is outside this cutoff.
+Each agent's cutoff is preserved in [subagents.json](subagents.json). All totals
+are deduplicated by response ID. Tokens include repeated context and do not
+establish subscription dollars. Overlapping crate windows must not be summed as
+project wall time. [Milestone 0.6](0.6.0.json) and [ledger](ledger.json) record
+scope, validated outcomes and cleanup. 110 tests pass per profile; 1.4 GiB of
+build output was removed. Release publication and later reporting are outside
+this measurement cutoff.
 
 ## Recording rules
 

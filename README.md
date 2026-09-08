@@ -19,23 +19,24 @@ Goals:
 
 **Foundation implementation started (2026-09-08), version 0.6.0.**
 
-The Cargo workspace, startup fence, indexed tables with change streams, typed configuration and source adapters, and txtar/script parsing with variable expansion
-are implemented. There is no working
-agent or datapath yet; the harvested corpora can be syntax-checked but their networking assertions are not executed yet.
+The workspace includes indexed tables, initialization gates, a caller-driven
+reconciler, configuration loaders and validation, and a script-engine core.
+There is no working networking agent or datapath. Synthetic script commands
+execute, while the harvested networking scenarios still lack their adapters.
 
 | | |
 |---|---|
 | Specifications | 24 files, ~40k lines — every area, normative, with compatibility contracts and test plans |
 | Inventories | 17 files, ~12.5k lines — the reference measured at v1.20.1 (`7d68cfb394`) |
-| Decision records | 8 (`docs/decisions/`) |
+| Decision records | 9 (`docs/decisions/`) |
 | Harvested test corpora | 1,444 files — 168 txtar scenarios, 625 BPF cases, 1,196 golden fixtures, 30 fuzz seeds |
-| Open backlog | 283 issues as checked 2026-09-08, indexed in `docs/open-decisions-index.md` |
+| Open backlog | 282 issues as checked 2026-09-08, indexed in `docs/open-decisions-index.md` |
 
 Read in this order: `docs/decisions/` for what was decided and why,
 `docs/inventory/README.md` for the scope table and build order,
 then the spec for the area you are working on.
 
-Next steps are the full configuration key catalogue, reconciliation and script execution; see
+Next steps are the full configuration key catalogue, reconciler scheduling and script filesystem/subsystem commands; see
 [implementation assessment](docs/implementation-status.md). Before the datapath crates are written, the three decisions at the top
 of `docs/open-decisions-index.md` need settling: the kernel floor, the
 single-object-versus-matrix question, and wire compatibility with Cilium nodes.
