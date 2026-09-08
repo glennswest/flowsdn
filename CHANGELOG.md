@@ -6,6 +6,12 @@
   token usage in docs/velocity, with sanitized samples and explicit shared-work
   attribution; require updates at task boundaries and releases.
 
+## [0.7.0] - 2026-09-08
+
+- Add module health reporting and readiness evaluation.
+- Add initialization-gated prune support and runtime configuration snapshots.
+- Add filesystem fixtures and generic script file commands.
+
 ## [0.6.0] - 2026-09-08
 
 - Add dependency-aware workspace change planning and focused checks.

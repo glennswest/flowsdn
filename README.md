@@ -17,7 +17,7 @@ Goals:
 
 ## Status
 
-**Foundation implementation started (2026-09-08), version 0.6.0.**
+**Foundation implementation started (2026-09-08), version 0.7.0.**
 
 The workspace includes indexed tables, initialization gates, a caller-driven
 reconciler, configuration loaders and validation, and a script-engine core.
