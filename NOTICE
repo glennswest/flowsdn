@@ -59,3 +59,20 @@ code was copied; every harness is an independent Rust implementation.
 
 "Cilium" and "Hubble" are trademarks of The Linux Foundation. flowsdn is not
 affiliated with or endorsed by the Cilium project or The Linux Foundation.
+
+
+Rust foundation dependencies (Cargo.lock, 0.1.0)
+--------------------------------------------
+once_cell 1.21.4 — MIT OR Apache-2.0
+pin-project-lite 0.2.17 — Apache-2.0 OR MIT
+proc-macro2 1.0.107 — MIT OR Apache-2.0
+quote 1.0.47 — MIT OR Apache-2.0
+syn 3.0.5 — MIT OR Apache-2.0
+tokio 1.53.1 — MIT
+tokio-macros 2.7.2 — MIT
+tracing 0.1.44 — MIT
+tracing-core 0.1.36 — MIT
+unicode-ident 1.0.24 — (MIT OR Apache-2.0) AND Unicode-3.0
+
+These crates are consumed through Cargo, not copied from Cilium. Their
+license and copyright notices accompany their upstream source distributions.

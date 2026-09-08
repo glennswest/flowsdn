@@ -42,7 +42,11 @@ pub struct Fence {
 
 impl Fence {
     pub fn new(name: &'static str) -> Self {
-        Self { name, sealed: false, waiters: Mutex::new(Vec::new()) }
+        Self {
+            name,
+            sealed: false,
+            waiters: Mutex::new(Vec::new()),
+        }
     }
 
     /// Registers a waiter. Invalid registration panics in debug builds and
@@ -54,7 +58,12 @@ impl Fence {
     ) -> Result<(), FenceError> {
         let error = if self.sealed {
             Some(format!("{}: fence is sealed", self.name))
-        } else if self.waiters.get_mut().iter().any(|waiter| waiter.name == name) {
+        } else if self
+            .waiters
+            .get_mut()
+            .iter()
+            .any(|waiter| waiter.name == name)
+        {
             Some(format!("{}: duplicate waiter {name}", self.name))
         } else {
             None
@@ -64,7 +73,10 @@ impl Fence {
             return Err(FenceError::new(error));
         }
         self.waiters.get_mut().push(Waiter {
-            name, future: Some(Box::pin(future)), result: None, started: None,
+            name,
+            future: Some(Box::pin(future)),
+            result: None,
+            started: None,
         });
         Ok(())
     }
@@ -80,19 +92,26 @@ impl Fence {
     /// `tokio::select!` or `timeout`). It never marks incomplete work successful.
     pub async fn wait(&self) -> Result<(), FenceError> {
         if !self.sealed {
-            return Err(FenceError::new(format!("{}: fence is not sealed", self.name)));
+            return Err(FenceError::new(format!(
+                "{}: fence is not sealed",
+                self.name
+            )));
         }
         let mut waiters = self.waiters.lock().await;
         let total = waiters.len();
         for (position, waiter) in waiters.iter_mut().enumerate() {
             if waiter.result.is_none() {
                 let started = *waiter.started.get_or_insert_with(Instant::now);
-                tracing::debug!(fence = self.name, name = waiter.name,
-                    remaining = total.saturating_sub(position), "Fence waiting");
+                tracing::debug!(
+                    fence = self.name,
+                    name = waiter.name,
+                    remaining = total.saturating_sub(position),
+                    "Fence waiting"
+                );
                 if let Some(future) = waiter.future.as_mut() {
-                    let result = future.await.map_err(|error| {
-                        FenceError::new(format!("{}: {error}", waiter.name))
-                    });
+                    let result = future
+                        .await
+                        .map_err(|error| FenceError::new(format!("{}: {error}", waiter.name)));
                     waiter.result = Some(result);
                     waiter.future = None;
                     tracing::debug!(fence = self.name, name = waiter.name,
@@ -113,7 +132,10 @@ impl Fence {
             if *receiver.borrow_and_update() {
                 return Ok(());
             }
-            receiver.changed().await.map_err(|_| FenceError::new("watch channel closed before ready"))?;
+            receiver
+                .changed()
+                .await
+                .map_err(|_| FenceError::new("watch channel closed before ready"))?;
         }
     }
 }
@@ -128,7 +150,10 @@ mod tests {
     #[tokio::test]
     async fn empty_and_unsealed() {
         let mut fence = Fence::new("empty");
-        assert_eq!(fence.wait().await.unwrap_err().to_string(), "empty: fence is not sealed");
+        assert_eq!(
+            fence.wait().await.unwrap_err().to_string(),
+            "empty: fence is not sealed"
+        );
         fence.seal();
         fence.wait().await.unwrap();
         fence.wait().await.unwrap();
@@ -140,15 +165,18 @@ mod tests {
         let mut fence = Fence::new("startup");
         for name in ["first", "second", "third"] {
             let log = log.clone();
-            fence.add(name, async move {
-                tokio::task::yield_now().await;
-                log.lock().unwrap().push(name);
-                Ok(())
-            }).unwrap();
+            fence
+                .add(name, async move {
+                    tokio::task::yield_now().await;
+                    log.lock().unwrap().push(name);
+                    Ok(())
+                })
+                .unwrap();
         }
         fence.seal();
         let (a, b) = tokio::join!(fence.wait(), fence.wait());
-        a.unwrap(); b.unwrap();
+        a.unwrap();
+        b.unwrap();
         fence.wait().await.unwrap();
         assert_eq!(*log.lock().unwrap(), ["first", "second", "third"]);
     }
@@ -156,11 +184,18 @@ mod tests {
     #[tokio::test]
     async fn failure_is_cached_and_stops_later_waiters() {
         let mut fence = Fence::new("startup");
-        fence.add("identity", async { Err(FenceError::new("unavailable")) }).unwrap();
-        fence.add("must-not-run", async { panic!("ran after failure") }).unwrap();
+        fence
+            .add("identity", async { Err(FenceError::new("unavailable")) })
+            .unwrap();
+        fence
+            .add("must-not-run", async { panic!("ran after failure") })
+            .unwrap();
         fence.seal();
         for _ in 0..2 {
-            assert_eq!(fence.wait().await.unwrap_err().to_string(), "identity: unavailable");
+            assert_eq!(
+                fence.wait().await.unwrap_err().to_string(),
+                "identity: unavailable"
+            );
         }
     }
 
@@ -169,11 +204,13 @@ mod tests {
         let (tx, rx) = watch::channel(false);
         let (started_tx, mut started_rx) = watch::channel(false);
         let mut fence = Fence::new("startup");
-        fence.add("source", async move {
-            // Restarting this future would attempt to send to a closed channel.
-            started_tx.send(true).unwrap();
-            Fence::watch_waiter(rx).await
-        }).unwrap();
+        fence
+            .add("source", async move {
+                // Restarting this future would attempt to send to a closed channel.
+                started_tx.send(true).unwrap();
+                Fence::watch_waiter(rx).await
+            })
+            .unwrap();
         fence.seal();
         assert!(timeout(Duration::from_secs(1), fence.wait()).await.is_err());
         assert!(*started_rx.borrow_and_update());
@@ -200,9 +237,15 @@ mod tests {
         child.add("k8s", Fence::watch_waiter(rx)).unwrap();
         child.seal();
         let mut parent = Fence::new("regeneration");
-        parent.add("identity", async move { child.wait().await }).unwrap();
+        parent
+            .add("identity", async move { child.wait().await })
+            .unwrap();
         parent.seal();
-        assert!(timeout(Duration::from_secs(1), parent.wait()).await.is_err());
+        assert!(
+            timeout(Duration::from_secs(1), parent.wait())
+                .await
+                .is_err()
+        );
         tx.send(true).unwrap();
         parent.wait().await.unwrap();
     }
@@ -213,7 +256,9 @@ mod tests {
             let result = std::panic::catch_unwind(move || {
                 let mut fence = Fence::new("startup");
                 fence.add("source", async { Ok(()) }).unwrap();
-                if sealed { fence.seal(); }
+                if sealed {
+                    fence.seal();
+                }
                 fence.add("source", async { Ok(()) })
             });
             if cfg!(debug_assertions) {

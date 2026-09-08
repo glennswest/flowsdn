@@ -29,17 +29,36 @@ fn main() -> Result<(), Box<dyn Error>> {
     if !Path::new("/build/tmp").is_dir() {
         return Err("/build/tmp must exist on the Linux build host".into());
     }
-    env::set_current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).parent().ok_or("no workspace root")?)?;
+    env::set_current_dir(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .ok_or("no workspace root")?,
+    )?;
     match command {
         "build" => run(&["build", "--workspace", "--locked"]),
         "test" => run(&["test", "--workspace", "--locked"]),
         "deny" => run(&["deny", "--locked", "check"]),
         "check" => {
             run(&["fmt", "--all", "--", "--check"])?;
-            run(&["clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings"])?;
+            run(&[
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--locked",
+                "--",
+                "-D",
+                "warnings",
+            ])?;
             run(&["test", "--workspace", "--locked"])?;
             for target in ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"] {
-                run(&["check", "--workspace", "--all-targets", "--locked", "--target", target])?;
+                run(&[
+                    "check",
+                    "--workspace",
+                    "--all-targets",
+                    "--locked",
+                    "--target",
+                    target,
+                ])?;
             }
             Ok(())
         }

@@ -68,7 +68,7 @@ git pull --ff-only
 export CARGO_TARGET_DIR=/build/cargo/flowsdn TMPDIR=/build/tmp
 cargo xtask check
 cargo test --workspace --release --locked
-cargo xtask deny  # requires cargo-deny on the build host
+PATH=/build/cache/flowsdn-tools/bin:$PATH cargo xtask deny
 ```
 
 `check` runs formatting, Clippy, native tests and compile checks for both Linux

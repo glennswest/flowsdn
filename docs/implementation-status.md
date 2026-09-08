@@ -60,5 +60,19 @@ validates compilation, not arm64 runtime behavior or static executable linking.
 
 ## Validation
 
-Pending execution on dev.g8.lo; results will be committed from that host before
-publishing the foundation prerelease.
+Executed on dev.g8.lo with Rust 1.95.0:
+- cargo xtask check: formatting, warning-free Clippy, 7 native tests, and
+  all-target compile checks for x86_64/aarch64 Linux musl passed.
+- cargo test --workspace --release --locked: 7 tests passed, including release
+  registration errors (the debug run checks the corresponding panics).
+- cargo-deny 0.20.2: advisories, bans, licenses and sources passed. Warnings
+  only report allowed licenses absent from this small dependency graph.
+- cargo clean --target-dir /build/cargo/flowsdn completed after checks.
+  Compiler artifacts, including cargo-deny installation intermediates, removed.
+  The reusable cargo-deny executable remains in /build/cache/flowsdn-tools/bin.
+
+The build target directory is on /dev/sdc (ROTA=1), mounted at /build.
+Only project source lives on the root SSD. No other project's output was cleaned.
+CI automation, negative policy fixtures, privileged tests, arm64 execution,
+static linking, health/timeout owners and harvested-corpus execution remain
+future work; this release does not claim those gates.
