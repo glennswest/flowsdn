@@ -17,9 +17,10 @@ Goals:
 
 ## Status
 
-**Foundation implementation started (2026-09-08), version 0.2.0.**
+**Foundation implementation started (2026-09-08), version 0.3.0.**
 
-The Cargo workspace, startup fence and txtar/script parser are implemented. There is no working
+The Cargo workspace, startup fence, indexed table core, and txtar/script parser
+are implemented. There is no working
 agent or datapath yet; the harvested corpora can be syntax-checked but their networking assertions are not executed yet.
 
 | | |
@@ -34,7 +35,7 @@ Read in this order: `docs/decisions/` for what was decided and why,
 `docs/inventory/README.md` for the scope table and build order,
 then the spec for the area you are working on.
 
-Next steps are the table crate, configuration registry and txtar parser; see
+Next steps are table change streams, the configuration registry and script execution; see
 [implementation assessment](docs/implementation-status.md). Before the datapath crates are written, the three decisions at the top
 of `docs/open-decisions-index.md` need settling: the kernel floor, the
 single-object-versus-matrix question, and wire compatibility with Cilium nodes.
@@ -52,37 +53,20 @@ docs/licensing.md clean-room protocol and license analysis
 
 Apache License 2.0. See `LICENSE` and `NOTICE`.
 
-## Development
+## Building and testing
 
-Rule #1: commit and push to GitHub, then pull on dev; never copy working trees
-between hosts. Source changes and validation records return through commits;
-distributable artifacts go to GitHub Releases. See [AGENTS.md](AGENTS.md).
-
-Build on `dev.g8.lo`, with Rust 1.95.0 pinned by `rust-toolchain.toml`:
+Development requires Linux and the Rust toolchain pinned in `rust-toolchain.toml`.
 
 ```sh
-ssh root@dev.g8.lo
-# First use: git clone git@github.com:glennswest/flowsdn.git /root/flowsdn
-cd /root/flowsdn
-git pull --ff-only
-test -c /dev/null  # host preflight: must be a character device
-export CARGO_TARGET_DIR=/build/cargo/flowsdn TMPDIR=/build/tmp
 cargo xtask check
 cargo test --workspace --release --locked
-PATH=/build/cache/flowsdn-tools/bin:$PATH cargo xtask deny
+cargo xtask deny
 ```
 
-`check` runs formatting, Clippy, native tests and compile checks for both Linux
-musl architectures. arm64 execution and static binary linking are separate
-future gates. The initial xtask supports `build`, `test`, `check`, and `deny`;
-remote dispatch, BPF builds, images and deployment commands are not implemented.
+`check` runs formatting, Clippy, tests, and compile checks for x86-64 and arm64
+Linux musl. `deny` requires `cargo-deny`. Build output follows Cargo's standard
+configuration, including `CARGO_TARGET_DIR` when set.
 
-After results are committed or released, clean this project's compiler output:
-`cargo clean --target-dir /build/cargo/flowsdn`. `/build` is the spinning drive;
-never put targets on the root SSD or clean another project's directories.
-
-## Velocity
-
-[Time and token ledger](docs/velocity/README.md) tracks project wall-clock
-elapsed time, per-crate delivery windows, measured token usage and validated
-outcomes. Cached tokens and shared work are identified explicitly.
+The test harnesses and inventory tools are Rust. Static compatibility fixtures
+use txtar, YAML, TOML, and JSON. A txtar archive packages test commands and named
+fixture files in one readable text file.

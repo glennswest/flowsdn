@@ -1,0 +1,22 @@
+{
+  "id": "table-core",
+  "scope": "flowsdn-table",
+  "owner": "root",
+  "session_id": "01a081c9-5ae6-72e3-a2f7-1a103e3c6703",
+  "start_utc": "2026-09-08T18:43:20Z",
+  "start_revision": "e12186c",
+  "status": "in-progress",
+  "token_baseline_sample_utc": "2026-09-08T18:43:20.340Z",
+  "token_baseline": {
+    "input_tokens": 6920716,
+    "cached_input_tokens": 6766848,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 31658,
+    "reasoning_output_tokens": 5446,
+    "total_tokens": 6952374
+  },
+  "attribution": "dedicated milestone including its integration, validation and release overhead",
+  "end_utc": null,
+  "elapsed_seconds": null,
+  "active_work_seconds": null
+}

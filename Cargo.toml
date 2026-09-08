@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "xtask"]
+members = ["crates/*", "xtask", "tools/harvest-bpf-cases"]
 exclude = ["crates/flowsdn-bpf"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.95"
 license = "Apache-2.0"
@@ -12,6 +12,10 @@ repository = "https://github.com/glennswest/flowsdn"
 publish = false
 
 [workspace.dependencies]
+regex = "=1.13.1"
+toml = "=1.1.5"
+arc-swap = "=1.9.2"
+imbl = { version = "=7.0.1", default-features = false }
 tokio = { version = "=1.53.1", default-features = false, features = ["sync"] }
 tracing = { version = "=0.1.44", default-features = false, features = ["std"] }
 

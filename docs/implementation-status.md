@@ -61,26 +61,23 @@ validates compilation, not arm64 runtime behavior or static executable linking.
 
 ## Version 0.1.0 validation
 
-Executed on dev.g8.lo with Rust 1.95.0:
+Executed on Linux with Rust 1.95.0:
 - cargo xtask check: formatting, warning-free Clippy, 7 native tests, and
   all-target compile checks for x86_64/aarch64 Linux musl passed.
 - cargo test --workspace --release --locked: 7 tests passed, including release
   registration errors (the debug run checks the corresponding panics).
 - cargo-deny 0.20.2: advisories, bans, licenses and sources passed. Warnings
   only report allowed licenses absent from this small dependency graph.
-- cargo clean --target-dir /build/cargo/flowsdn completed after checks.
+- cargo clean --target-dir <cargo-target-dir> completed after checks.
   Compiler artifacts, including cargo-deny installation intermediates, removed.
-  The reusable cargo-deny executable remains in /build/cache/flowsdn-tools/bin.
 
-The build target directory is on /dev/sdc (ROTA=1), mounted at /build.
-Only project source lives on the root SSD. No other project's output was cleaned.
 CI automation, negative policy fixtures, privileged tests, arm64 execution,
 static linking, health/timeout owners and harvested-corpus execution remain
 future work; this release does not claim those gates.
 
 ## Version 0.2.0 validation
 
-On dev.g8.lo with Rust 1.95.0 and normal compiler caching:
+On Linux with Rust 1.95.0 and normal compiler caching:
 - Formatting and warning-free Clippy passed.
 - 15 tests passed in debug and 15 in release.
 - The corpus test parsed 168 archives, 1,444 embedded files and 3,537 commands,
@@ -93,16 +90,3 @@ On dev.g8.lo with Rust 1.95.0 and normal compiler caching:
 Parsing does not execute assertions, validate command registrations or
 condition capabilities, expand variables, or materialize archive files.
 The runtime engine and adapters remain unimplemented. No harvested file changed.
-
-### Build-host fault resolved
-
-The compiler-probe failure initially looked like a Cargo cache problem.
-Inspection found /dev/null was a regular file (mode 0755) on dev, rather than
-the standard character device. Compiler diagnostic output written there could
-later be read as compiler input. Caching disabled on a clean build still failed,
-ruling out the cache as the root cause.
-
-Restored /dev/null atomically to character device major 1, minor 3, mode 0666,
-and restored its SELinux label. Removed the temporary Cargo cache workaround.
-A clean build then passed all gates with normal caching. The process that
-originally replaced /dev/null is unknown. No other project's cache was removed.

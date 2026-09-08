@@ -714,7 +714,7 @@ Notes.
 - bpffs and cgroup2: host-mounted contract (stormcos can guarantee it) versus
   the privileged init container for general Kubernetes.
 - Verify the Rocky 10 `el10` config against section 2.6 on dev
-  (`ssh root@dev.g8.lo 'grep -E "..." /boot/config-$(uname -r)'` on a Rocky
+  (`ssh <build-user>@<build-host> 'grep -E "..." /boot/config-$(uname -r)'` on a Rocky
   10 VM) and record the result in stormcos's kernel README; in particular
   `NETKIT`, `NET_SCH_FQ`, `TCP_CONG_BBR`, `NFT_TPROXY`, `NFT_SOCKET`,
   `INET_DIAG_DESTROY`, `XFRM_STATISTICS`.

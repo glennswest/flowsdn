@@ -1155,7 +1155,7 @@ floor is 6.6. The perf mmap still counts against memlock, hence `CAP_IPC_LOCK`.
 ### 10.4 CI without a cluster
 
 The whole corpus is cluster-free by construction. The CI job is: build the
-`flowsdn-bpf` ELFs on `dev.g8.lo` (cross-project rule: never on the Mac), boot
+`flowsdn-bpf` ELFs on `<build-host>` (cross-project rule: never on the Mac), boot
 each matrix VM, `cargo nextest run -p flowsdn-bpftest`, collect
 `target/bpf-stats/*.json` and the coverage summary, and publish both. No kind,
 no Docker network, no CNI, no image registry. Wall-clock target for the PR gate

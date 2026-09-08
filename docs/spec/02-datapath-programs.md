@@ -1565,7 +1565,7 @@ for `bpfel-unknown-none`); `bpf-linker` pinned by exact version in
 `Cargo.lock`/`cargo install --locked` and driven with `--cpu v3`
 (`-C link-arg=--cpu=v3`) and `--btf` (needed only for map BTF/debug);
 `-C debuginfo=2`, `opt-level=3`, `panic=abort`, `lto=fat`. Userspace uses
-stable. Both are built on `dev.g8.lo` (cross-project rules); the BPF ELF
+stable. Both are built on `<build-host>` (cross-project rules); the BPF ELF
 is architecture-independent and built once. `-mcpu=v3` is the only ISA
 level; no v2 fallback (floor kernel JITs support v3 on both arches).
 

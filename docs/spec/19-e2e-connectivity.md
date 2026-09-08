@@ -1522,7 +1522,7 @@ options, with what each actually gives:
 |---|---|---|
 | (a) GitHub-hosted arm64 runners (`ubuntu-24.04-arm`) | real arm64 CPU, `kind` works, fast | the runner's kernel is Ubuntu's, **not** 6.12-el10 or an LVH image — so this row tests the arch, not the kernel. Private-repo arm64 minutes are billed. |
 | (b) Self-hosted arm64 runner on the **Rose / stormcos nodes** | real arm64 **and** the real kernel **and** the real NIC drivers (`al_eth` — the one that has no `ndo_bpf`, per kernel-requirements §5.1) | needs the nodes registered as Actions runners and reachable; capacity is finite; a broken test can take a real node down |
-| (c) QEMU `aarch64` (TCG) on `dev.g8.lo` | any kernel, including a Rocky 10 aarch64 or an upstream 6.6/6.18 build; no extra hardware | ~10–20× slower under TCG. Fine for the verifier and `BPF_PROG_RUN` unit-test rows (CPU-light, per kernel-requirements §5.3); **too slow for a full e2e connectivity run** — a 15-minute run becomes hours. |
+| (c) QEMU `aarch64` (TCG) on `<build-host>` | any kernel, including a Rocky 10 aarch64 or an upstream 6.6/6.18 build; no extra hardware | ~10–20× slower under TCG. Fine for the verifier and `BPF_PROG_RUN` unit-test rows (CPU-light, per kernel-requirements §5.3); **too slow for a full e2e connectivity run** — a 15-minute run becomes hours. |
 | (d) An Ampere/Graviton cloud VM, nested `kind` | real arm64 with a chosen kernel | recurring cost; another environment to maintain |
 
 **Recommendation.** Use all three of (a), (b), (c), for different jobs, and do
@@ -1544,13 +1544,13 @@ not pretend any one of them covers arm64 on its own:
    `vxlan-kpr` config on a GitHub arm64 runner, purely to catch "the arm64
    binary does not start" and "the arm64 image is wrong" quickly and
    independently of the Rose cluster's availability.
-4. **Nightly, arm64 kernel matrix (non-e2e)**: option (c) on `dev.g8.lo` — QEMU
+4. **Nightly, arm64 kernel matrix (non-e2e)**: option (c) on `<build-host>` — QEMU
    aarch64 VMs at 6.6, 6.12 and 6.18 running the verifier and `BPF_PROG_RUN`
    rows only, per kernel-requirements §5.3. Their VM images and the build
    outputs live under `/build/images` and `/build/cache`, never on the SSD root
    and never in `/tmp` (per the cross-project rules).
 
-`dev.g8.lo` is also the natural host for the **nightly x86-64 matrix**: it has
+`<build-host>` is also the natural host for the **nightly x86-64 matrix**: it has
 the 2 TB `/build` volume for LVH images and sysdumps, and running the long
 matrix there keeps GitHub-hosted minutes for the PR gate. Register it as a
 self-hosted runner with a label (`flowsdn-dev-x86`).
@@ -1574,7 +1574,7 @@ merge queue / after merge to `main`; **nightly** = scheduled; **weekly** = once.
 | `e2e-upgrade` | previous minor → PR build → downgrade, `vxlan-kpr` + `ipsec` + `wireguard`, 6.12 x86-64, with `conn-disrupt` around each step | nightly, and **PR** for the `vxlan-kpr` row only | 45 min (PR row: 25 min) |
 | `e2e-arm64-rose` | `vxlan-kpr`, `native-kpr-dsr`, `wireguard` on the Rose 3-node arm64 cluster, kernel 6.12 el10 aarch64 | nightly | 40 min |
 | `e2e-arm64-smoke` | `vxlan-kpr` on a GitHub arm64 runner, kind | nightly | 15 min |
-| `arm64-verifier-bpftest` | verifier + `BPF_PROG_RUN` on QEMU aarch64 6.6/6.12/6.18 (`dev.g8.lo`) | nightly | 90 min |
+| `arm64-verifier-bpftest` | verifier + `BPF_PROG_RUN` on QEMU aarch64 6.6/6.12/6.18 (`<build-host>`) | nightly | 90 min |
 | `e2e-clustermesh` | two kind clusters, `vxlan-kpr` and `wireguard`, 6.12 x86-64 | nightly | 45 min |
 | `e2e-interop` | §3.5, 4-node kind, 6.12 x86-64 | nightly | 30 min |
 | `e2e-bgp` | `misc`-style config + a containerised peer, 6.12 x86-64; and the RouterOS peer on the Rose cluster | nightly (kind), weekly (RouterOS) | 25 min |
@@ -1653,7 +1653,7 @@ raw and AF_PACKET sockets; `hdrhistogram` for the perf rows; `insta` for the
 report snapshot tests. No `libc`-gated code outside the testpod's socket paths,
 so the suite binary itself builds and runs on macOS for development (it only
 talks to an API server), which matters because the repository's build rule keeps
-compilation on `dev.g8.lo` — the suite is one of the few crates a developer can
+compilation on `<build-host>` — the suite is one of the few crates a developer can
 usefully `cargo check` locally.
 
 **Exec without `kubectl`.** `kube::api::Api::<Pod>::exec` returns an

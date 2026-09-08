@@ -6,6 +6,13 @@
   token usage in docs/velocity, with sanitized samples and explicit shared-work
   attribution; require updates at task boundaries and releases.
 
+## [0.3.0] - 2026-09-08
+
+- Add indexed table snapshots, conditional writes, atomic batches and explicit row rendering.
+- Replace the legacy inventory harvester with Rust and verify the complete BPF case inventory.
+- Keep public documentation and command help free of internal infrastructure details.
+- Retain static compatibility data in txtar, YAML, TOML and JSON.
+
 ## [0.2.0] - 2026-09-08
 
 - Add the dependency-free flowsdn-scripttest parsing front end: exact txtar

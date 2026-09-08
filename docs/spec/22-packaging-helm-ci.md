@@ -11,8 +11,8 @@ the section 11 crate lists of specs `00`–`16`. Reference cilium v1.20.1
 `.github/actions/**`, `Makefile*`, `contrib/**`. Governed by ADR-0001 (full
 scope, boundary compatibility), ADR-0002 (Rust only, no C), ADR-0003 (no
 iptables), ADR-0004 (no Hive/StateDB), ADR-0005 (harvest tests, Rust harnesses),
-and the cross-project rules in `../CLAUDE.md` (build on `dev.g8.lo`, cargo
-target dirs under `/build/cargo/flowsdn`, nothing persists on the SSD).
+and the cross-project rules in `../CLAUDE.md` (build on `<build-host>`, cargo
+target dirs under `<cargo-target-dir>`, nothing persists on the SSD).
 
 Normative language: MUST / SHOULD / MAY as in RFC 2119. **DEVIATION** marks a
 deliberate difference from the reference with its reason and ADR.
@@ -30,7 +30,7 @@ built; the container images and their multi-arch construction with podman; the
 Helm chart as a compatibility contract over the reference's values surface; the
 Cargo workspace, the two Rust toolchains and the BPF object build; versioning,
 tagging and artifact publication; the CI workflow set, its kernel × architecture
-matrix and its relationship to `dev.g8.lo`; the local developer loop.
+matrix and its relationship to `<build-host>`; the local developer loop.
 
 Out of scope, owned elsewhere: the meaning of any individual config key (spec
 `00` §6.4); CNI plugin behaviour (spec `09`); the datapath variant set and what
@@ -215,11 +215,11 @@ budget report is keyed by (§9.2).
 #### 3.3.2 Multi-arch construction with podman
 
 Per the user's rules: **podman, always; `scratch` base; OCI is a build-time
-input only.** The build runs on `dev.g8.lo`; nothing is built on the Mac.
+input only.** The build runs on `<build-host>`; nothing is built on the Mac.
 
 ```bash
-# On dev.g8.lo. Binaries are already cross-built (§3.8.5) into
-# /build/cargo/flowsdn/<triple>/release/.
+# On <build-host>. Binaries are already cross-built (§3.8.5) into
+# <cargo-target-dir>/<triple>/release/.
 export SOURCE_DATE_EPOCH=$(git -C "$SRC" show -s --format=%ct HEAD)
 export REG=sbregistry:5100            # or ghcr.io/glennswest, see §3.9.4
 export VER=0.4.0
@@ -234,7 +234,7 @@ for arch in amd64 arm64; do
     --build-arg VERSION="${VER}" \
     --build-arg REVISION="$(git rev-parse HEAD)" \
     --tag "${REG}/flowsdn:${VER}-${arch}" \
-    /build/cargo/flowsdn
+    <cargo-target-dir>
 done
 
 podman manifest create "${REG}/flowsdn:${VER}"
@@ -848,7 +848,7 @@ cargo xtask bpf                       # build every variant
   → cargo +nightly-YYYY-MM-DD build --release -Z build-std=core \
        --target bpfel-unknown-none --features <variant features> --bin <family>
      RUSTFLAGS="-C target-cpu=v3 -C link-arg=--btf"
-  → /build/cargo/flowsdn/bpfel-unknown-none/release/<family>
+  → <cargo-target-dir>/bpfel-unknown-none/release/<family>
   → post-process: assert no `memcpy|memmove|memset|memcmp|core::panicking`
      relocations remain (spec 02 §11.4); assert every tail slot the object uses
      has a program with the expected name (spec 02 §11.1)
@@ -881,7 +881,7 @@ both agent binaries.
 
 #### 3.8.5 Cross compilation
 
-Native builds run on `dev.g8.lo` (x86-64). arm64 uses `cross`:
+Native builds run on `<build-host>` (x86-64). arm64 uses `cross`:
 
 ```toml
 # Cross.toml
@@ -893,17 +893,17 @@ image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl:0.2.5"
 ```
 
 ```bash
-ssh root@dev.g8.lo '
-  export CARGO_TARGET_DIR=/build/cargo/flowsdn
+ssh <build-user>@<build-host> '
+  export CARGO_TARGET_DIR=<cargo-target-dir>
   export CROSS_CONTAINER_ENGINE=podman
-  cd /root/flowsdn && cross build --release --target aarch64-unknown-linux-musl \
+  cd <checkout> && cross build --release --target aarch64-unknown-linux-musl \
      -p flowsdn-agent -p flowsdn-cni -p flowsdn-operator -p flowsdn-dbg \
      -p flowsdn-hubble-relay -p flowsdn-connectivity'
 ```
 
 Rules from `../CLAUDE.md`, restated because they are load-bearing here:
 
-- `CARGO_TARGET_DIR=/build/cargo/flowsdn` **always**. The SSD root is for
+- `CARGO_TARGET_DIR=<cargo-target-dir>` **always**. The SSD root is for
   working trees only; a target dir on `/` has filled it before, and the failure
   mode is `rustc-LLVM ERROR: IO failure on output stream`, which reads as a
   broken toolchain.
@@ -947,7 +947,7 @@ binaries, layers and image digests.** Method:
    nightly + `bpf-linker` pin.
 
 Verification: the nightly `reproducible` job builds the release commit twice
-(once on `dev.g8.lo`, once on a GitHub hosted runner with the same toolchain)
+(once on `<build-host>`, once on a GitHub hosted runner with the same toolchain)
 and compares `sha256` of every binary and the pushed manifest digest. A
 mismatch fails and the diff is bisected with `diffoscope` where available.
 
@@ -1101,12 +1101,12 @@ the review artefact.
 |---|---|---|
 | lint, fmt, clippy, `cargo deny`, `xtask notice`, `xtask version check`, `helm lint`, `xtask chart check`, `xtask helm-diff`, doc link check | GitHub hosted `ubuntu-latest` | cheap, no kernel needed |
 | userspace unit tests (x86-64), scripttest, cptest, golden tests, **cloud-fake replay** | GitHub hosted | no kernel needed (fakes per ADR-0005; recorded cloud responses per ADR-0007, replayed against a local server — no network egress, no credentials) |
-| **BPF build, verifier gate, privileged BPF tests, privileged netlink tests, image builds, cross arm64, kind e2e** | **self-hosted runner on `dev.g8.lo`**, labels `[self-hosted, linux, x64, dev-g8]` | needs KVM (LVH/QEMU VMs), needs podman, needs the pinned nightly + `bpf-linker`, and needs `/build` — per `../CLAUDE.md` heavy builds run on dev, never on the Mac and not on an ephemeral hosted runner where a 30-minute cold `cargo build` is the norm |
+| **BPF build, verifier gate, privileged BPF tests, privileged netlink tests, image builds, cross arm64, kind e2e** | **self-hosted runner on `<build-host>`**, labels `[self-hosted, linux, x64, dev-g8]` | needs KVM (LVH/QEMU VMs), needs podman, needs the pinned nightly + `bpf-linker`, and needs `/build` — per `../CLAUDE.md` heavy builds run on dev, never on the Mac and not on an ephemeral hosted runner where a 30-minute cold `cargo build` is the norm |
 | arm64 e2e, arm64 privileged tests | **Rose cluster node**, nightly, label `[self-hosted, linux, arm64, rose]` | real arm64 hardware and real NIC drivers; LVH publishes no arm64 kernels (`docs/kernel-requirements.md` §5.3) |
-| arm64 verifier + BPF unit tests | `dev.g8.lo` under QEMU TCG | CPU-light; the verifier is arch-independent, so this row guards only JIT-support gates |
+| arm64 verifier + BPF unit tests | `<build-host>` under QEMU TCG | CPU-light; the verifier is arch-independent, so this row guards only JIT-support gates |
 
-Every `dev.g8.lo` job MUST:
-- set `CARGO_TARGET_DIR=/build/cargo/flowsdn`, `TMPDIR=/build/tmp`;
+Every `<build-host>` job MUST:
+- set `CARGO_TARGET_DIR=<cargo-target-dir>`, `TMPDIR=/build/tmp`;
 - write VM images and OCI archives under `/build/images`;
 - run a pre-flight `df` guard that fails the job with a clear message if `/`
   has < 20 GiB or `/build` < 100 GiB free, rather than failing later as
@@ -1221,7 +1221,7 @@ The oldest verifier in the matrix (6.6, x86-64) is the row to watch, and the
 | Cache | Key | Notes |
 |---|---|---|
 | Cargo registry + git checkouts | `Cargo.lock` hash | hosted runners; `actions/cache` |
-| `sccache` object cache | rustc version + target + `Cargo.lock` | on `dev.g8.lo` a persistent local cache under `/build/cache/sccache`, capped at 40 GiB with `SCCACHE_CACHE_SIZE` |
+| `sccache` object cache | rustc version + target + `Cargo.lock` | on `<build-host>` a persistent local cache under `/build/cache/sccache`, capped at 40 GiB with `SCCACHE_CACHE_SIZE` |
 | `target/` on dev | not cached across toolchain bumps — deleted by `xtask clean --toolchain-changed` | avoids the classic "stale artefacts from a different rustc" failure |
 | BPF nightly toolchain + `bpf-linker` | pinned versions | installed once on dev, re-installed only when the pin changes |
 | LVH / Rocky VM images | image digest | under `/build/cache/vm`, never `/tmp` |
@@ -1240,7 +1240,7 @@ logic — all of it is Rust in `xtask/`, which is testable and cross-platform.
 
 | Target | What it does |
 |---|---|
-| `xtask build [--target …] [--remote]` | build the workspace; `--remote` (the default on macOS) rsyncs to `dev.g8.lo` and builds there with `CARGO_TARGET_DIR=/build/cargo/flowsdn` |
+| `xtask build [--target …] [--remote]` | build the workspace; `--remote` (the default on macOS) rsyncs to `<build-host>` and builds there with `CARGO_TARGET_DIR=<cargo-target-dir>` |
 | `xtask bpf` | build every BPF object variant with the pinned nightly (§3.8.4) |
 | `xtask test [--privileged] [--kernel 6.12]` | unit tests locally; with `--privileged`, inside a VM on dev |
 | `xtask verifier [--kernel] [--arch] [--update-baseline]` | §3.10.4 |
@@ -1250,7 +1250,7 @@ logic — all of it is Rust in `xtask/`, which is testable and cross-platform.
 | `xtask deploy [--context …]` | `helm upgrade --install flowsdn ./install/kubernetes/flowsdn` with the locally built images |
 | `xtask e2e [--test …]` | run `flowsdn-connectivity` against the current context (spec `19`) |
 | `xtask size-check`, `xtask notice`, `xtask deny`, `xtask version {check,set}` | the corresponding PR gates, runnable locally |
-| `xtask clean [--toolchain-changed] [--all]` | remove target dirs under `/build/cargo/flowsdn`; never touches anything else on `/build` |
+| `xtask clean [--toolchain-changed] [--all]` | remove target dirs under `<cargo-target-dir>`; never touches anything else on `/build` |
 
 **The local loop against kind**, end to end:
 
@@ -1356,11 +1356,11 @@ Environment variables the build honours:
 
 | Variable | Default | Effect |
 |---|---|---|
-| `CARGO_TARGET_DIR` | **must** be `/build/cargo/flowsdn` on dev | `../CLAUDE.md`; `xtask` sets it and refuses to run on dev without it |
+| `CARGO_TARGET_DIR` | **must** be `<cargo-target-dir>` on dev | `../CLAUDE.md`; `xtask` sets it and refuses to run on dev without it |
 | `SOURCE_DATE_EPOCH` | commit time | reproducibility (§3.8.7) |
 | `FLOWSDN_VERSION`, `FLOWSDN_REVISION` | derived from git | injected build metadata; CI sets them explicitly |
 | `FLOWSDN_BPF_OBJDIR` | unset | pre-built BPF objects; when unset the build script runs `xtask bpf` |
-| `FLOWSDN_REMOTE_HOST` | `root@dev.g8.lo` | `xtask --remote` target |
+| `FLOWSDN_REMOTE_HOST` | `<build-user>@<build-host>` | `xtask --remote` target |
 | `CROSS_CONTAINER_ENGINE` | `podman` | never docker (user rule) |
 | `SCCACHE_DIR`, `SCCACHE_CACHE_SIZE` | `/build/cache/sccache`, `40G` | §3.10.6 |
 | `TMPDIR` | `/build/tmp` on dev | **never** `/tmp` (tmpfs, §3.8.5) |
@@ -1381,7 +1381,7 @@ them.
 | Verifier rejects a program on a node whose kernel is older than CI's oldest row | agent fails to load the datapath | the agent logs the full verifier log for that program and exits; the CI gate exists so this cannot reach a release, and the log is the bug report |
 | `bpf-objects.lock` mismatch at build time | build script error | fail with "the datapath changed; run `xtask bpf` and commit `bpf-objects.lock`" — never silently rebuild |
 | Image built on the Mac | wrong target, missing Linux-only code | `xtask image` refuses to run on macOS with a message pointing at `--remote` |
-| `/` full on dev | `rustc-LLVM ERROR: IO failure on output stream` and a dozen unrelated crate failures | the `df` guard fails the job first with "SSD root is for working trees only; target dirs go to /build/cargo/flowsdn" |
+| `/` full on dev | `rustc-LLVM ERROR: IO failure on output stream` and a dozen unrelated crate failures | the `df` guard fails the job first with "SSD root is for working trees only; target dirs go to <cargo-target-dir>" |
 | `/tmp` full on dev (tmpfs) | `no storage space` from an unrelated writer | `TMPDIR=/build/tmp` in every job; the guard checks it |
 | Leaked loop mounts | a tmpfs stays full after a job | `always()` cleanup step unmounts; a nightly job reports stray `/build/tmp/tmp.*` mounts |
 | `helm-diff` reports an unexplained key | PR fails | either the mapping is wrong (fix it) or the divergence is intended (add a `known-diffs.toml` entry with a reason and an ADR) |
@@ -1483,7 +1483,7 @@ This spec adds none of its own; it *encodes* `docs/kernel-requirements.md`:
 - The **kernel config fragment** of §2.6 is what a node must satisfy; the chart
   cannot check it, and the agent's startup check (§4.7) is the enforcement
   point. `flowsdn.kernelCheck.mode` is the only escape hatch.
-- **Build hosts**: `dev.g8.lo` (x86-64 Linux) for everything heavy; a Rose
+- **Build hosts**: `<build-host>` (x86-64 Linux) for everything heavy; a Rose
   cluster node (arm64) for nightly arm64 e2e. macOS is an editor.
 - **Container runtime for building**: podman only (user rule). Docker is not
   used anywhere, including in `cross` (`CROSS_CONTAINER_ENGINE=podman`).
@@ -1497,7 +1497,7 @@ This spec adds none of its own; it *encodes* `docs/kernel-requirements.md`:
 invoked as `cargo xtask <cmd>`, with `clap` (derive) for the command tree and
 `xshell` for process execution. It is Rust, so it is type-checked, unit-testable
 and identical on macOS and Linux — which matters because half its job is
-deciding *not* to run locally and to dispatch to `dev.g8.lo` instead. No `make`
+deciding *not* to run locally and to dispatch to `<build-host>` instead. No `make`
 logic, no shell scripts in CI beyond a two-line invocation of `xtask`.
 
 **Workspace lints**, declared once in `[workspace.lints.rust]` /
@@ -1601,7 +1601,7 @@ committed. The line is "would a reviewer want to see this change in a diff?".
    start reaching releases. (c) is too slow for e2e and would test QEMU's
    virtio-net rather than a real driver.
 
-7. **Self-hosted runner exposure.** A self-hosted runner on `dev.g8.lo`
+7. **Self-hosted runner exposure.** A self-hosted runner on `<build-host>`
    executing PR workflows from forks is a code-execution risk. **Recommendation:**
    restrict the `dev-g8` runner to `pull_request_target`-free workflows on
    branches of this repository only, require `workflow_dispatch` approval for

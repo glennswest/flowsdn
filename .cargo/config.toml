@@ -2,5 +2,4 @@
 xtask = "run --locked --package xtask --"
 
 [build]
-target-dir = "/build/cargo/flowsdn"
 jobs = 2

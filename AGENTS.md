@@ -47,3 +47,13 @@ content. Distinguish cached input, uncached input, output, and reasoning subsets
 Do not allocate shared usage to multiple crates or sum overlapping elapsed
 windows. Track parallel agent-hours separately from project wall-clock time.
 Include a brief elapsed/usage update when reporting each finished milestone.
+
+## Source language and public documentation
+
+All committed executable project code, tests, fixture generators, harvesters
+and reusable tools must be Rust. Temporary Python used only for editing is
+permitted; do not commit Python scripts. Static txtar, YAML, TOML and JSON test
+data are permitted. Keep internal operating rules and actual machine names,
+addresses and filesystem paths out of customer-facing documentation, help
+messages and release notes. Public build instructions use standard Cargo
+configuration; internal builds still use the required shared-host paths above.

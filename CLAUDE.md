@@ -16,7 +16,7 @@ without following `docs/licensing.md`.
 
 ## Version
 
-0.2.0 — foundation and txtar/script parser; no networking agent yet. Version locations (when crates exist):
+0.3.0 — indexed table core and Rust inventory harvester; no networking agent yet. Version locations (when crates exist):
 `Cargo.toml` workspace.package.version, `CHANGELOG.md` heading.
 
 ## Work plan

@@ -1798,3 +1798,13 @@ registry + generator + build-config ~3k, fence + health ~1k.
 8. **Duration bare integers.** Keep Go's nanosecond interpretation (this spec,
    with warning) or treat bare integers as seconds. Recommendation: keep Go
    semantics for compatibility; Helm never emits bare integers for durations.
+
+## Implementation amendment — 2026-09-08
+
+ADR-0008 records the choices for #42 (whole-table watches) and #205 (explicit
+`TableRender::headers`/`cells`). The first implementation slice supplies only
+indexed snapshots and writes. Its secondary index representation is an ordered
+key tuple; no zero-separator encoding leaks into exact-key query semantics.
+Change streams, tombstone retention, initialization, metrics and reconciliation
+remain pending. The core's range-query APIs currently return collected rows;
+streaming range iterators may replace those allocations before scale tuning.

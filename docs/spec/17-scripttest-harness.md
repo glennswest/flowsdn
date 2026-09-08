@@ -1424,7 +1424,7 @@ endianness-sensitive except the map-dump rendering, which reads
 network-order fields explicitly (§4.3).
 
 macOS: unprivileged areas only; the netns, netlink and BPF fixtures compile
-out. Per the cross-project rule, the authoritative run is on `dev.g8.lo`.
+out. Per the cross-project rule, the authoritative run is on `<build-host>`.
 
 ---
 
@@ -1563,7 +1563,7 @@ an `[exec:gobgpd]`-gated cross-check job so a shared bug is caught.
 
 **12.5 Are the 51 LB scripts run on both map backends in CI?** Doubling the
 run time buys a real invariant (§9.3). **Recommendation: in-memory on every
-PR, both backends nightly on `dev.g8.lo`.**
+PR, both backends nightly on `<build-host>`.**
 
 **12.6 Line endings.** Implementation decision, 2026-09-08 (#210): reject
 CRLF with a line-numbered error, following recommendation (a). Never normalize

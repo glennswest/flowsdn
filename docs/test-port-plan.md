@@ -908,7 +908,7 @@ fastetcd at step 1, not step 12.** They are 2,280 Go test lines that answer
 
 1. **Privileged CI lane.** 230 tests need root and a kernel, across 53 packages.
    ADR-0005 does not say where they run. Recommendation: a `vmtest`-style lane on
-   `dev.g8.lo` gating merge, matching the kernel floor in
+   `<build-host>` gating merge, matching the kernel floor in
    `docs/kernel-requirements.md`, with the unprivileged lane on every push.
 2. **The dropped iptables coverage.** ~~2,592 Go test lines vanish under ADR-0003
    with no automatic replacement.~~ **Resolved 2026-09-07.**
