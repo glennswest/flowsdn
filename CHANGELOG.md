@@ -6,6 +6,11 @@
   token usage in docs/velocity, with sanitized samples and explicit shared-work
   attribution; require updates at task boundaries and releases.
 
+## [0.5.0] - 2026-09-08
+
+- Add explicit table initialization registration and sealing with cancellable waits.
+- Add configuration source adapters and lexical script variable expansion.
+
 ## [0.4.0] - 2026-09-08
 
 - Add whole-table change streams with explicit acknowledgements, coalescing,
