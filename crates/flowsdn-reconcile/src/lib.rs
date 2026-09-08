@@ -3,11 +3,12 @@
 //! Desired rows and reconciliation status are separate. Revision checks reject
 //! stale results, and status reads synthesize Pending for newer desired rows.
 //! This slice does not install atomic table write hooks or run a background
-//! task. Timers, rate limiting, annotations, batch targets, prune, refresh,
+//! task. Timers, rate limiting, annotations, batch targets, refresh,
 //! health reporting and asynchronous completion waiters remain integration work.
-//! A resync requests external pruning; incremental updates alone cannot remove
-//! unknown target entries after deletion history has been discarded.
-use flowsdn_table::{Change, ChangeStream, Key, Keyed, Revision, Table};
+//! Prune runs only after table initialization and clears a resync request only
+//! on success. Incremental updates alone cannot remove unknown target entries
+//! after deletion history has been discarded.
+use flowsdn_table::{Change, ChangeStream, Key, Keyed, Revision, Snapshot, Table};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     error::Error,
@@ -17,12 +18,19 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod prune;
+use prune::PruneState;
+pub use prune::{PruneHandle, PruneStatus};
+
 /// Operations must be idempotent: cancelling a round may replay its in-flight
 /// operation, including one whose target side effect already occurred.
 pub trait Target<T: Keyed>: Send {
     type Error: fmt::Display;
     fn update(&mut self, row: Arc<T>) -> impl Future<Output = Result<(), Self::Error>> + Send;
     fn delete(&mut self, key: Key) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    /// Remove target objects absent from this immutable desired snapshot.
+    /// It is called only after the table has completed initialization.
+    fn prune(&mut self, desired: Snapshot<T>) -> impl Future<Output = Result<(), Self::Error>> + Send;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -30,6 +38,7 @@ pub struct Options {
     pub round_size: usize,
     pub min_backoff: Duration,
     pub max_backoff: Duration,
+    pub prune_interval: Duration,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -37,6 +46,7 @@ impl Default for Options {
             round_size: 1000,
             min_backoff: Duration::from_millis(100),
             max_backoff: Duration::from_secs(60),
+            prune_interval: Duration::from_secs(3600),
         }
     }
 }
@@ -46,6 +56,8 @@ pub enum ReconcileError {
     EmptyRound,
     InvalidBackoff,
     RetryDeadlineOverflow,
+    InvalidPruneInterval,
+    PruneDeadlineOverflow,
 }
 impl fmt::Display for ReconcileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -53,6 +65,8 @@ impl fmt::Display for ReconcileError {
             Self::EmptyRound => "round size must be positive",
             Self::InvalidBackoff => "backoff must be positive and minimum must not exceed maximum",
             Self::RetryDeadlineOverflow => "retry deadline exceeds the monotonic clock range",
+            Self::InvalidPruneInterval => "prune interval must be positive",
+            Self::PruneDeadlineOverflow => "prune deadline exceeds the monotonic clock range",
         })
     }
 }
@@ -159,6 +173,7 @@ pub struct Round {
     pub attempted_revision: Revision,
     pub remaining_retries: usize,
     pub resync_required: bool,
+    pub prune: Option<PruneStatus>,
 }
 
 /// Owns a separate status store and retry indexes for one target. Multiple
@@ -173,6 +188,7 @@ pub struct Reconciler<'a, T: Keyed, U: Target<T>> {
     pending: VecDeque<Work<T>>,
     attempted_revision: Revision,
     resync_required: bool,
+    prune: PruneState,
 }
 impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     pub fn new(table: &'a Table<T>, target: U, options: Options) -> Result<Self, ReconcileError> {
@@ -181,6 +197,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         }
         if options.min_backoff.is_zero() || options.min_backoff > options.max_backoff {
             return Err(ReconcileError::InvalidBackoff);
+        }
+        if options.prune_interval.is_zero() {
+            return Err(ReconcileError::InvalidPruneInterval);
         }
         Ok(Self {
             table,
@@ -192,15 +211,20 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             pending: VecDeque::new(),
             attempted_revision: 0,
             resync_required: false,
+            prune: PruneState::default(),
         })
     }
 
     pub fn target(&self) -> &U {
         &self.target
     }
-    /// A cancelled round has immediate work even if no retry timer is armed.
+    /// Immediate queued work, including an initialized table awaiting its
+    /// first prune. Time-based deadlines are exposed separately.
     pub fn has_pending_work(&self) -> bool {
         !self.pending.is_empty()
+            || self.prune.in_flight
+            || (self.table.initialized()
+                && (self.prune.handle.requested() || self.prune.next_due.is_none()))
     }
 
     /// For a present row, status matches the desired snapshot revision. This
@@ -238,9 +262,21 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     pub fn resync_required(&self) -> bool {
         self.resync_required
     }
-    /// Clear only after the caller has completed a full target reconciliation.
-    pub fn acknowledge_resync(&mut self) {
-        self.resync_required = false;
+    /// Request an additional prune. Calls before initialization remain pending.
+    pub fn prune_now(&self) {
+        self.prune.handle.prune_now();
+    }
+    pub fn prune_handle(&self) -> PruneHandle {
+        self.prune.handle.clone()
+    }
+    pub fn prune_status(&self) -> Option<&PruneStatus> {
+        self.prune.status.as_ref()
+    }
+    /// Periodic deadline after the last completed attempt. Before the first
+    /// attempt, initialization itself makes prune due. Explicit requests and
+    /// cancelled attempts can make work due before this deadline.
+    pub fn next_prune(&self) -> Option<Instant> {
+        self.prune.next_due
     }
     pub fn next_retry(&self) -> Option<Instant> {
         self.retries
@@ -293,6 +329,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             match change {
                 Change::Resync { .. } => {
                     self.resync_required = true;
+                    self.prune.handle.prune_now();
                     self.retries = RetryQueue::default();
                     self.statuses.clear();
                 }
@@ -322,8 +359,42 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         self.pending.extend(pending);
     }
 
+    async fn run_prune(&mut self, now: Instant) -> Result<Option<PruneStatus>, ReconcileError> {
+        if !self.table.initialized() {
+            return Ok(None);
+        }
+        if !self.prune.in_flight && !self.prune.handle.requested()
+            && self.prune.next_due.is_some_and(|deadline| deadline > now)
+        {
+            return Ok(None);
+        }
+        let next_due = now.checked_add(self.options.prune_interval)
+            .ok_or(ReconcileError::PruneDeadlineOverflow)?;
+        // Retain in_flight across cancellation, so an interrupted target side
+        // effect is replayed. Consume requests before awaiting: a request made
+        // during this call must survive for the following round.
+        self.prune.in_flight = true;
+        self.prune.handle.take();
+        let desired = self.table.snapshot();
+        let revision = desired.revision();
+        let result = self.target.prune(desired).await;
+        let status = PruneStatus {
+            revision,
+            updated_at: now,
+            error: result.err().map(|error| error.to_string()),
+        };
+        self.prune.in_flight = false;
+        self.prune.next_due = Some(next_due);
+        if status.error.is_none() {
+            self.resync_required = false;
+        }
+        self.prune.status = Some(status.clone());
+        Ok(Some(status))
+    }
+
     /// Execute one bounded round using a caller-supplied monotonic scheduling
-    /// instant. The caller owns startup gating, timers and repeat scheduling.
+    /// instant. Prune is initialization-gated; the caller owns any additional
+    /// startup gating for incremental writes, timers and repeat scheduling.
     /// Work stays queued across cancellation until its result is recorded.
     pub async fn run_round(&mut self, now: Instant) -> Result<Round, ReconcileError> {
         let mut round = Round::default();
@@ -428,6 +499,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             self.attempted_revision = self.stream.revision();
             self.stream.ack(self.attempted_revision);
         }
+        round.prune = self.run_prune(now).await?;
         round.attempted_revision = self.attempted_revision;
         round.remaining_retries = self.retries.entries.len();
         round.resync_required = self.resync_required;

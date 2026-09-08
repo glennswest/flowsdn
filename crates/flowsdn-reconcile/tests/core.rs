@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
 use flowsdn_reconcile::{Kind, Options, Reconciler, Target};
-use flowsdn_table::{Key, Keyed, StreamOptions, Table};
+use flowsdn_table::{Key, Keyed, Snapshot, StreamOptions, Table};
 use std::{
     collections::BTreeMap,
     future::Future,
@@ -46,6 +46,10 @@ impl Target<Item> for Fake {
         self.calls.push((true, key));
         self.fail(key)?;
         self.rows.remove(&key);
+        Ok(())
+    }
+    async fn prune(&mut self, desired: Snapshot<Item>) -> Result<(), Self::Error> {
+        self.rows.retain(|key, _| desired.get("primary", &[*key]).unwrap().is_some());
         Ok(())
     }
 }
@@ -213,6 +217,9 @@ impl Target<Item> for RacingTarget {
     async fn delete(&mut self, _: Key) -> Result<(), Self::Error> {
         Ok(())
     }
+    async fn prune(&mut self, _: Snapshot<Item>) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }
 
 #[tokio::test]
@@ -257,6 +264,9 @@ impl Target<Item> for CancellableTarget {
         Ok(())
     }
     async fn delete(&mut self, _: Key) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn prune(&mut self, _: Snapshot<Item>) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -315,9 +325,11 @@ async fn forced_resync_requests_prune_and_rebuilds_current_rows() {
     assert_eq!(reconciler.target().rows.get(&3), Some(&3));
     assert!(
         reconciler.target().rows.contains_key(&1),
-        "prune is explicitly deferred to integration"
+        "prune must wait for initialization"
     );
-    reconciler.acknowledge_resync();
+    table.seal_initializers();
+    assert!(reconciler.run_round(now).await.unwrap().prune.is_some());
+    assert!(!reconciler.target().rows.contains_key(&1));
     assert!(!reconciler.resync_required());
 }
 
@@ -380,6 +392,10 @@ fn options_reject_rounds_and_backoffs_that_cannot_progress() {
     for options in [
         Options {
             round_size: 0,
+            ..Options::default()
+        },
+        Options {
+            prune_interval: Duration::ZERO,
             ..Options::default()
         },
         Options {

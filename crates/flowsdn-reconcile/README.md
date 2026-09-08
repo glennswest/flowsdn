@@ -17,13 +17,35 @@ round observes the new stream generation and replaces or clears it. An absent
 row's status is therefore not evidence that its latest deletion has succeeded.
 Successful deletion releases its status entry.
 
-The caller supplies the scheduling instant for a round and owns initialization
-gating and subsequent scheduling. `next_retry()` and `retry_low_water_mark()`
-expose the next timer deadline and oldest failed revision. A cancelled round
-retains queued work; `has_pending_work()` indicates it can resume immediately.
+The caller supplies the scheduling instant for a round and schedules subsequent
+rounds. `next_retry()` and `retry_low_water_mark()` expose the next retry deadline
+and oldest failed revision. A cancelled round retains queued work;
+`has_pending_work()` indicates it can resume immediately.
+
+After incremental work, a round prunes only if the table is initialized. The
+first prune follows initialization, then repeats at `prune_interval` (one hour
+by default; it must be positive). `prune_now()` requests an extra pass, and a
+cloneable `prune_handle()` allows other callers to request it while a round runs.
+Requests coalesce; a request arriving during prune schedules one further pass.
+Requests made before initialization remain pending. The handle does not spawn
+or wake a task: the caller still schedules rounds and initialization wakeups.
+
+`Target::prune` receives an immutable snapshot of all desired rows and removes
+target objects absent from it. Its scan is separate from the incremental round
+size limit. Concurrent desired changes arrive through subsequent stream rounds.
+`prune_status()` reports the last completed attempt's snapshot revision and
+error; `next_prune()` gives the periodic deadline. Failure does not enter the
+per-key retry queue and waits for that deadline or another explicit request.
+Cancellation replays the interrupted prune immediately, so targets must remain
+idempotent even when an operation already changed the target before cancellation.
+
+A resync caused by discarded deletion history requests prune automatically.
+`resync_required()` remains true until prune succeeds; there is no manual bypass.
+Clearing it confirms deletion-history recovery, not successful application of
+all rows: individual update failures may still be queued for retry.
 
 This slice does not run an autonomous task or timer and does not install atomic
-status hooks into table publication. Prune, refresh, annotations, batch targets,
+status hooks into table publication. Refresh, annotations, batch targets,
 health reporting and asynchronous completion waiters remain unimplemented.
-`resync_required()` requests a full external reconciliation after deletion
-history loss; incremental application alone cannot remove unknown target rows.
+Prune owns its initialization gate; callers still own any extra startup gate
+needed before incremental target writes, such as restoration of allocated IDs.
