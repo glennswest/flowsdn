@@ -1,11 +1,12 @@
 //! Typed configuration layering from foundation specification §3.3.
 //!
 //! Callers supply the schema and raw source entries. This core does not yet
-//! supply the complete agent key catalogue, load files or environment variables,
-//! validate relationships between keys, or persist runtime configuration.
+//! supply the complete agent key catalogue, validate relationships between keys,
+//! or persist runtime configuration. Source adapters are available in `sources`.
 #![forbid(unsafe_code)]
 
 mod parse;
+pub mod sources;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;

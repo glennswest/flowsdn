@@ -19,8 +19,21 @@ callers can report them without activating functionality. Duration values are
 signed 64-bit nanoseconds. Floating-point values must be finite. CIDR parsing
 preserves the supplied address, including host bits.
 
+The `sources` module reads file-per-key directories, YAML config files and
+environment snapshots. Directory values are trimmed; projected ConfigMap
+symlinks are followed, directories and special files are skipped, and unreadable
+files produce diagnostics. An explicit config file must exist; otherwise the
+loader checks `ciliumd.yaml` under the supplied home directory.
+
+YAML input is a single flat mapping of scalar keys and values. Scalar text is
+preserved until typed parsing, including large integers. Scalar aliases and
+quoted/block strings are supported. Duplicate normalized keys, nested containers,
+null values and explicit YAML tags are rejected. List and map options use their
+textual comma-separated forms. Environment loading excludes the process-only
+variables listed in the specification and accepts caller-supplied legacy aliases;
+a canonical variable wins even when its value is empty.
+
 This initial core does not yet include the complete 539-key agent catalogue,
-file or environment loading, CLI argument parsing, area-specific map validators,
+CLI argument parsing, area-specific map validators,
 cross-key validation, derived settings, runtime persistence or dynamic config
-reflection. `Entry::environment` only handles the standard `CILIUM_` prefix;
-legacy environment aliases belong to the pending loader.
+reflection. Legacy alias definitions are supplied by the owning area's schema.
