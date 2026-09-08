@@ -1,0 +1,5 @@
+[build.env]
+passthrough = ["FLOWSDN_BPF_OBJDIR", "SOURCE_DATE_EPOCH", "CARGO_TARGET_DIR", "TMPDIR"]
+
+[target.aarch64-unknown-linux-musl]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl:0.2.5"

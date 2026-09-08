@@ -1,7 +1,8 @@
 # flowsdn — Project Instructions
 
 Rust reimplementation of Cilium. Private repo `github.com/glennswest/flowsdn`.
-Cross-project rules in `../CLAUDE.md` apply (commit+push everything, changelog,
+Rule #1 in `AGENTS.md` applies: transfer via GitHub commits/pulls only; keep release history.
+Cross-project rules referenced in the original spec (commit+push everything, changelog,
 build on dev never on the Mac, cargo target dirs under `/build/cargo/flowsdn`).
 
 ## Reference source
@@ -15,7 +16,7 @@ without following `docs/licensing.md`.
 
 ## Version
 
-0.0.0 — spec phase, no crates yet. Version locations (when crates exist):
+0.1.0 — foundation implementation started; workspace and startup fence. Version locations (when crates exist):
 `Cargo.toml` workspace.package.version, `CHANGELOG.md` heading.
 
 ## Work plan

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-08
+
+- Start the Rust workspace with pinned Rust 1.95.0, shared lints and dependency policy.
+- Implement ordered startup fences with shared cached results, cancellation-safe
+  waiting, watch-channel readiness and debug/release registration validation.
+- Add Linux build/check tasks and compile checks for both musl architectures.
+- Record the implementation/backlog assessment and GitHub-only transfer rule.
+- Foundation prerelease: no agent, datapath, CNI or deployable networking yet.
+
 ### 2026-09-07
 - **chore:** Project created. Name check (GitHub, crates.io, npm, PyPI, .com/.io/.net/.org) clear.
 - **docs:** Licensing analysis and clean-room protocol.
