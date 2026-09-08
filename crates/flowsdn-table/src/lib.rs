@@ -1,13 +1,16 @@
-//! Indexed table core from spec 00 §§3.1.1–3.1.4.
+//! Indexed tables and change streams from spec 00 §§3.1.1–3.1.5.
 //!
 //! Snapshots are immutable and cheap; writers publish one version atomically.
-//! Change streams, retained tombstones, initialization and reconciliation are
-//! not implemented in this first slice. Do not use it as a StateDB replacement
-//! for a live reconciler until those contracts land.
+//! Whole-table streams coalesce writes and retain deletions until acknowledged.
+//! Initialization, metrics and reconciliation are not implemented yet.
 use arc_swap::ArcSwap;
 use imbl::OrdMap;
 use std::{collections::BTreeSet, error::Error, fmt, sync::Arc};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, watch};
+
+mod streams;
+pub use streams::{Change, ChangeStream, StreamOptions};
+use streams::StreamState;
 
 pub type Key = Vec<u8>;
 pub type Revision = u64;
@@ -30,6 +33,8 @@ pub trait TableRender {
 }
 
 /// A multi-key secondary index. Keys returned more than once are deduplicated.
+/// The callback must return stable keys for an immutable row: deletion and
+/// replacement recompute its old keys to remove the corresponding entries.
 pub struct Index<T> {
     name: &'static str,
     unique: bool,
@@ -93,11 +98,21 @@ pub struct Table<T: Keyed> {
     indexes: Arc<Vec<Index<T>>>,
     published: ArcSwap<Version<T>>,
     writer: Mutex<()>,
+    streams: std::sync::Mutex<StreamState>,
+    notify: watch::Sender<Revision>,
 }
 
 impl<T: Keyed> Table<T> {
     /// `primary` is reserved for the unique primary index.
     pub fn new(indexes: Vec<Index<T>>) -> Result<Self, TableError> {
+        Self::with_stream_options(indexes, StreamOptions::default())
+    }
+
+    /// Configure deletion retention and the maximum lag of each subscriber.
+    pub fn with_stream_options(
+        indexes: Vec<Index<T>>,
+        options: StreamOptions,
+    ) -> Result<Self, TableError> {
         let mut names = BTreeSet::from(["primary"]);
         for index in &indexes {
             if index.name.is_empty() || !names.insert(index.name) {
@@ -114,6 +129,8 @@ impl<T: Keyed> Table<T> {
             indexes: Arc::new(indexes),
             published: ArcSwap::from_pointee(version),
             writer: Mutex::new(()),
+            streams: std::sync::Mutex::new(StreamState::new(options)),
+            notify: watch::channel(0).0,
         })
     }
 
@@ -132,12 +149,18 @@ impl<T: Keyed> Table<T> {
         let _writer = self.writer.lock().await;
         let mut version = self.published.load_full().as_ref().clone();
         let previous_revision = version.revision;
+        let mut mutations = Vec::new();
         let result = apply(&mut Write {
             version: &mut version,
             indexes: &self.indexes,
+            mutations: &mut mutations,
         });
         if previous_revision != version.revision {
+            let mut streams = self.streams.lock().expect("stream registry poisoned");
+            let revision = version.revision;
+            streams.publish(mutations, revision);
             self.published.store(Arc::new(version));
+            self.notify.send_replace(revision);
         }
         result
     }
@@ -187,6 +210,7 @@ pub struct WriteResult<T> {
 pub struct Write<'a, T: Keyed> {
     version: &'a mut Version<T>,
     indexes: &'a [Index<T>],
+    mutations: &'a mut Vec<(Key, Revision, bool)>,
 }
 
 impl<T: Keyed> Write<'_, T> {
@@ -251,7 +275,8 @@ impl<T: Keyed> Write<'_, T> {
         self.version
             .rows
             .insert(key.clone(), (Arc::new(row), revision));
-        self.version.revisions.insert(revision, key);
+        self.version.revisions.insert(revision, key.clone());
+        self.mutations.push((key, revision, false));
         self.version.revision = revision;
         Ok(WriteResult {
             previous: previous.map(|(row, _)| row),
@@ -269,10 +294,11 @@ impl<T: Keyed> Write<'_, T> {
     }
 
     /// Even an absent-key delete consumes a revision, matching spec 00.
-    /// This core slice has no change stream or retained tombstone history yet.
+    /// An absent-key delete also produces a tombstone for change streams.
     pub fn delete(&mut self, key: &[u8]) -> Result<WriteResult<T>, TableError> {
         let revision = self.next_revision()?;
         let previous = self.version.rows.remove(key);
+        self.mutations.push((key.to_vec(), revision, true));
         if let Some((old, old_revision)) = &previous {
             self.remove_indexes(&key.to_vec(), old, *old_revision);
         }

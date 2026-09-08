@@ -307,3 +307,41 @@ fn key_encodings_and_render_contract() {
     assert_eq!(r.cells(), ["7", "seven", "0"]);
     assert!(Table::<Item>::new(vec![Index::new("primary", true, |_| vec![])]).is_err());
 }
+
+#[tokio::test]
+async fn replacement_deletion_and_late_multikey_collision_preserve_revision_index() {
+    let table = Table::new(vec![Index::new("labels", true, |item: &Item| {
+        item.labels.iter().map(|label| label.as_bytes().to_vec()).collect()
+    })]).unwrap();
+    table.insert(row(1, "one", &["a", "z"])).await.unwrap();
+    table.insert(row(2, "two", &["b"])).await.unwrap();
+    // "c" validates before "z" collides. Neither new nor old indexes may move.
+    assert!(table.insert(row(2, "bad", &["c", "z"])).await.is_err());
+    let snapshot = table.snapshot();
+    assert_eq!(snapshot.get("labels", b"b").unwrap().unwrap().0.name, "two");
+    assert!(snapshot.get("labels", b"c").unwrap().is_none());
+    assert_eq!(snapshot.by_revision(0).map(|(r, rev)| (r.id, rev)).collect::<Vec<_>>(), [(1, 1), (2, 2)]);
+    table.insert(row(1, "replacement", &["d"])).await.unwrap();
+    table.delete(&key::u32be(2)).await.unwrap();
+    assert_eq!(table.snapshot().by_revision(0).map(|(r, rev)| (r.id, rev)).collect::<Vec<_>>(), [(1, 3)]);
+    assert_eq!(snapshot.by_revision(0).map(|(r, rev)| (r.id, rev)).collect::<Vec<_>>(), [(1, 1), (2, 2)]);
+}
+
+#[tokio::test]
+async fn empty_binary_primary_and_secondary_keys_are_valid() {
+    #[derive(Clone)]
+    struct Binary(Key);
+    impl Keyed for Binary {
+        fn primary_key(&self) -> Key { self.0.clone() }
+    }
+    let table = Table::new(vec![Index::new("empty", false, |_: &Binary| vec![vec![]])]).unwrap();
+    table.insert(Binary(vec![])).await.unwrap();
+    table.insert(Binary(vec![0])).await.unwrap();
+    let snapshot = table.snapshot();
+    assert!(snapshot.get("primary", b"").unwrap().is_some());
+    assert_eq!(snapshot.list("empty", b"").unwrap().len(), 2);
+    assert_eq!(snapshot.prefix("primary", b"").unwrap().len(), 2);
+    table.delete(b"").await.unwrap();
+    assert_eq!(table.snapshot().list("empty", b"").unwrap().len(), 1);
+    assert_eq!(snapshot.list("empty", b"").unwrap().len(), 2);
+}
