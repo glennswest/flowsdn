@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use flowsdn_scripttest::{ExpansionMode, expand_text, tokenize};
+use flowsdn_scripttest::{ExpansionMode, expand_text, expand_text_bounded, tokenize};
 use std::collections::BTreeMap;
 
 fn environment() -> BTreeMap<String, String> {
@@ -97,4 +97,17 @@ fn malformed_unquoted_braces_report_source_line() {
             .unwrap(),
         "${}"
     );
+}
+
+#[test]
+fn bounded_expansion_counts_values_quotes_and_regex_escaping_before_append() {
+    let env = BTreeMap::from([("x".into(), "abcd".into()), ("meta".into(), "....".into())]);
+    assert_eq!(expand_text_bounded("$x$x", &env, ExpansionMode::Plain, 7, 8).unwrap(), "abcdabcd");
+    let error = expand_text_bounded("$x$x$x", &env, ExpansionMode::Plain, 7, 8).unwrap_err();
+    assert_eq!(error.line, 7);
+    assert!(error.message.contains("limit"));
+    assert!(expand_text_bounded("$meta", &env, ExpansionMode::Regex, 7, 7).is_err());
+    let token = tokenize("'prefix'$x", 7).unwrap().pop().unwrap();
+    assert!(token.expand_bounded(&env, ExpansionMode::Plain, 7, 9).is_err());
+    assert_eq!(token.expand_bounded(&env, ExpansionMode::Plain, 7, 10).unwrap(), "prefixabcd");
 }

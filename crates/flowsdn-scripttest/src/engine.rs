@@ -5,14 +5,32 @@ use crate::{Command, ExpansionMode, Line, Status, parse_script};
 use std::collections::BTreeMap;
 use std::fmt;
 
+pub(crate) const MAX_DIAGNOSTIC_BYTES: usize = 65_536;
+const MAX_LOG_BYTES: usize = 1_048_576;
+const MAX_LOG_ENTRIES: usize = 4096;
+const MAX_ARGUMENT_BYTES: usize = 8_388_608;
+
+pub(crate) fn record_log(log: &mut Vec<String>, message: &str) -> Result<(), CommandError> {
+    let bytes = log.iter().fold(0usize, |sum, entry| sum.saturating_add(entry.len()));
+    if message.len() > MAX_DIAGNOSTIC_BYTES {
+        return Err(CommandError::LimitExceeded("diagnostic exceeds 64 KiB limit"));
+    }
+    if bytes.saturating_add(message.len()) > MAX_LOG_BYTES || log.len() >= MAX_LOG_ENTRIES {
+        return Err(CommandError::LimitExceeded("script log exceeds 1 MiB or 4096 entry limit"));
+    }
+    log.push(message.into());
+    Ok(())
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct State {
-    /// The fixture supplies WORK, PWD, TMPDIR and DATADIR. This engine does not
-    /// create directories or inspect the process environment.
+    /// The fixture supplies WORK, PWD, TMPDIR and DATADIR, or `with_workspace`
+    /// initializes them. The engine does not inspect the process environment.
     pub environment: BTreeMap<String, String>,
     pub stdout: String,
     pub stderr: String,
     pub log: Vec<String>,
+    pub(crate) files: Option<crate::files::Context>,
 }
 
 impl Default for State {
@@ -25,6 +43,7 @@ impl Default for State {
             stdout: String::new(),
             stderr: String::new(),
             log: Vec::new(),
+            files: None,
         }
     }
 }
@@ -58,6 +77,7 @@ pub enum CommandError {
     Failure(String),
     Cancelled,
     Deadline,
+    LimitExceeded(&'static str),
 }
 
 impl fmt::Display for CommandError {
@@ -66,6 +86,7 @@ impl fmt::Display for CommandError {
             Self::Failure(message) => f.write_str(message),
             Self::Cancelled => f.write_str("command cancelled"),
             Self::Deadline => f.write_str("command deadline exceeded"),
+            Self::LimitExceeded(message) => f.write_str(message),
         }
     }
 }
@@ -124,7 +145,8 @@ impl Default for Engine {
 }
 
 impl Engine {
-    /// Registers echo, env, stdout, stderr and stop. OS/architecture conditions
+    /// Registers echo, env, stdout, stderr, stop and the implemented file commands.
+    /// OS/architecture conditions
     /// are built in; privilege, kernel, short/verbose and fixture conditions
     /// must be supplied by the caller. No privilege is inferred from an env var.
     pub fn new() -> Self {
@@ -139,6 +161,16 @@ impl Engine {
             ("stdout", true, stdout),
             ("stderr", true, stderr),
             ("stop", false, stop),
+            ("cmp", false, crate::files::cmp),
+            ("cmpenv", false, crate::files::cmpenv),
+            ("empty", false, crate::files::empty),
+            ("cat", false, crate::files::cat),
+            ("grep", true, crate::files::grep),
+            ("cp", false, crate::files::cp),
+            ("replace", false, crate::files::replace),
+            ("sed", true, crate::files::sed),
+            ("mkdir", false, crate::files::mkdir),
+            ("cd", false, crate::files::cd),
         ] {
             engine.commands.insert(
                 name.into(),
@@ -253,8 +285,8 @@ impl Engine {
         let mut execution = Execution::default();
         for line in lines {
             let command = match line {
-                Line::Section { text, .. } => {
-                    state.log.push(text);
+                Line::Section { line, text } => {
+                    record_log(&mut state.log, &text).map_err(|error| RunError { line, command: "#".into(), message: error.to_string() })?;
                     continue;
                 }
                 Line::Command(command) => command,
@@ -278,7 +310,7 @@ impl Engine {
                 .words
                 .first()
                 .ok_or_else(|| error("missing command".into()))?
-                .expand(&state.environment, ExpansionMode::Plain, command.line)
+                .expand_bounded(&state.environment, ExpansionMode::Plain, command.line, MAX_ARGUMENT_BYTES)
                 .map_err(|e| error(e.message))?;
             let registered = self
                 .commands
@@ -292,11 +324,12 @@ impl Engine {
                 return Err(error("command execution limit exceeded".into()));
             }
             let mut args = Vec::new();
+            let mut argument_bytes = 0usize;
             let mut pattern_found = false;
             let mut after_separator = false;
             for token in command.words.iter().skip(1) {
                 let plain = token
-                    .expand(&state.environment, ExpansionMode::Plain, command.line)
+                    .expand_bounded(&state.environment, ExpansionMode::Plain, command.line, MAX_ARGUMENT_BYTES.saturating_sub(argument_bytes))
                     .map_err(|e| error(e.message))?;
                 let argument = if registered.pattern_argument && !pattern_found {
                     if !after_separator && plain == "--" {
@@ -305,7 +338,7 @@ impl Engine {
                     } else if after_separator || !plain.starts_with('-') {
                         pattern_found = true;
                         token
-                            .expand(&state.environment, ExpansionMode::Regex, command.line)
+                            .expand_bounded(&state.environment, ExpansionMode::Regex, command.line, MAX_ARGUMENT_BYTES.saturating_sub(argument_bytes))
                             .map_err(|e| error(e.message))?
                     } else {
                         plain
@@ -313,6 +346,7 @@ impl Engine {
                 } else {
                     plain
                 };
+                argument_bytes = argument_bytes.saturating_add(argument.len());
                 args.push(argument);
             }
             execution.commands_run = execution.commands_run.saturating_add(1);
@@ -328,10 +362,10 @@ impl Engine {
                 Err(CommandError::Failure(message))
                     if matches!(command.status, Status::Failure | Status::SuccessOrFailure) =>
                 {
-                    state.log.push(format!(
+                    record_log(&mut state.log, &format!(
                         "line {}: expected failure: {message}",
                         command.line
-                    ));
+                    )).map_err(|failure| error(failure.to_string()))?;
                 }
                 Err(failure) => return Err(error(failure.to_string())),
             }
@@ -432,7 +466,7 @@ fn stop(state: &mut State, args: &[String]) -> Result<Control, CommandError> {
         return Err(fail("stop accepts at most one message"));
     }
     if let Some(message) = args.first() {
-        state.log.push(message.clone());
+        record_log(&mut state.log, message)?;
     }
     Ok(Control::Stop)
 }
@@ -445,7 +479,7 @@ fn stderr(state: &mut State, args: &[String]) -> Result<Control, CommandError> {
     match_output(&state.stderr, args, &mut state.log)
 }
 
-fn match_output(
+pub(crate) fn match_output(
     text: &str,
     args: &[String],
     log: &mut Vec<String>,
@@ -486,7 +520,7 @@ fn match_output(
     let found = regex.find_iter(text).count();
     if !quiet {
         for line in text.lines().filter(|line| regex.is_match(line)) {
-            log.push((*line).into());
+            record_log(log, line)?;
         }
     }
     if count.map(|count| found == count).unwrap_or(found > 0) {

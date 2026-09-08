@@ -28,11 +28,24 @@ pub fn expand_text(
     mode: ExpansionMode,
     line: usize,
 ) -> Result<String, ParseError> {
+    expand_text_bounded(text, environment, mode, line, usize::MAX)
+}
+
+/// As `expand_text`, but refuses each append that would exceed `max_bytes`.
+/// A repeated variable cannot allocate the full expanded output before failing.
+pub fn expand_text_bounded(
+    text: &str,
+    environment: &BTreeMap<String, String>,
+    mode: ExpansionMode,
+    line: usize,
+    max_bytes: usize,
+) -> Result<String, ParseError> {
     let mut chars = text.chars().peekable();
     let mut result = String::new();
     while let Some(ch) = chars.next() {
         if ch != '$' {
-            result.push(ch);
+            let mut bytes = [0; 4];
+            append(&mut result, ch.encode_utf8(&mut bytes), max_bytes, line)?;
             continue;
         }
         let mut name = String::new();
@@ -61,18 +74,33 @@ pub fn expand_text(
                 name.push(ch);
             }
             if name.is_empty() {
-                result.push('$');
+                append(&mut result, "$", max_bytes, line)?;
                 continue;
             }
         }
         if let Some(value) = environment.get(&name) {
             match mode {
-                ExpansionMode::Plain => result.push_str(value),
-                ExpansionMode::Regex => result.push_str(&regex::escape(value)),
+                ExpansionMode::Plain => append(&mut result, value, max_bytes, line)?,
+                ExpansionMode::Regex => {
+                    // Escape never shortens a value. Check before allocating it;
+                    // the intermediate escape buffer is at most twice this bound.
+                    if result.len().saturating_add(value.len()) > max_bytes {
+                        return Err(ParseError::new(line, "variable expansion exceeds byte limit"));
+                    }
+                    append(&mut result, &regex::escape(value), max_bytes, line)?;
+                }
             }
         }
     }
     Ok(result)
+}
+
+fn append(output: &mut String, value: &str, limit: usize, line: usize) -> Result<(), ParseError> {
+    if output.len().saturating_add(value.len()) > limit {
+        return Err(ParseError::new(line, "variable expansion exceeds byte limit"));
+    }
+    output.push_str(value);
+    Ok(())
 }
 
 impl Token {
@@ -86,12 +114,25 @@ impl Token {
         mode: ExpansionMode,
         line: usize,
     ) -> Result<String, ParseError> {
+        self.expand_bounded(environment, mode, line, usize::MAX)
+    }
+
+    /// Expand a complete token under an aggregate byte limit, including quoted
+    /// fragments. The limit is enforced while producing each fragment.
+    pub fn expand_bounded(
+        &self,
+        environment: &BTreeMap<String, String>,
+        mode: ExpansionMode,
+        line: usize,
+        max_bytes: usize,
+    ) -> Result<String, ParseError> {
         let mut result = String::new();
         for fragment in &self.0 {
             if fragment.quoted {
-                result.push_str(&fragment.text);
+                append(&mut result, &fragment.text, max_bytes, line)?;
             } else {
-                result.push_str(&expand_text(&fragment.text, environment, mode, line)?);
+                let expanded = expand_text_bounded(&fragment.text, environment, mode, line, max_bytes.saturating_sub(result.len()))?;
+                append(&mut result, &expanded, max_bytes, line)?;
             }
         }
         Ok(result)
