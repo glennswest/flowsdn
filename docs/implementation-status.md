@@ -159,3 +159,22 @@ The empty committed-diff CLI path was exercised and skipped workspace checks.
 
 Issue #43 is resolved by ADR-0009. Issue #264 remains open: check selection is
 implemented, but CI provisioning and remote cache integration are not complete.
+
+## Version 0.7.0 validation
+
+All 149 unique tests passed in debug and release: 41 configuration, 35 script,
+30 table, 18 reconciler, 7 health, 7 fence, 7 build-selector and 4 harvester tests.
+Formatting, Clippy with warnings denied, both Linux musl all-target compile
+checks and cargo-deny passed. Issue #265 is complete: the workspace license
+policy is configured and its checks pass against the locked dependencies.
+
+The milestone adds initialization-gated target pruning, bounded runtime
+configuration snapshots with atomic publication and history rotation, module
+health reporters and readiness evaluation, and confined script file commands.
+Regression coverage includes cancellation replay, concurrent snapshot readers,
+special-file rejection, symlink confinement, expansion and log limits, and
+normalization of the script working directory after returning to its root.
+
+Reconciler scheduling remains caller-owned. The full configuration catalogue,
+health HTTP serving, script subprocesses and networking adapters remain pending.
+These foundation tests do not establish runtime networking compatibility.

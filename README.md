@@ -20,8 +20,9 @@ Goals:
 **Foundation implementation started (2026-09-08), version 0.7.0.**
 
 The workspace includes indexed tables, initialization gates, a caller-driven
-reconciler, configuration loaders and validation, and a script-engine core.
-There is no working networking agent or datapath. Synthetic script commands
+reconciler with pruning, configuration snapshots, module health and a script
+engine with generic file commands.
+There is no working networking agent or datapath. Synthetic scripts and file assertions
 execute, while the harvested networking scenarios still lack their adapters.
 
 | | |
@@ -30,13 +31,13 @@ execute, while the harvested networking scenarios still lack their adapters.
 | Inventories | 17 files, ~12.5k lines — the reference measured at v1.20.1 (`7d68cfb394`) |
 | Decision records | 9 (`docs/decisions/`) |
 | Harvested test corpora | 1,444 files — 168 txtar scenarios, 625 BPF cases, 1,196 golden fixtures, 30 fuzz seeds |
-| Open backlog | 282 issues as checked 2026-09-08, indexed in `docs/open-decisions-index.md` |
+| Open backlog | 281 issues as checked 2026-09-08, indexed in `docs/open-decisions-index.md` |
 
 Read in this order: `docs/decisions/` for what was decided and why,
 `docs/inventory/README.md` for the scope table and build order,
 then the spec for the area you are working on.
 
-Next steps are the full configuration key catalogue, reconciler scheduling and script filesystem/subsystem commands; see
+Next steps are the full configuration key catalogue, reconciler scheduling and script subprocess/subsystem commands; see
 [implementation assessment](docs/implementation-status.md). Before the datapath crates are written, the three decisions at the top
 of `docs/open-decisions-index.md` need settling: the kernel floor, the
 single-object-versus-matrix question, and wire compatibility with Cilium nodes.

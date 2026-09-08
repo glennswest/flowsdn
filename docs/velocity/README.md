@@ -1,25 +1,33 @@
 # flowsdn velocity ledger
 
-Snapshot: **2026-09-08T20:59:07.218Z**. Session elapsed: **4.80 hours**.
-The 0.6.0 milestone spans **14.8 minutes**, with
-**11,196,203 processed tokens** across root and three agents.
-Active coding time and active agent-hours remain unmeasured.
+Usage cutoff: **2026-09-08T21:53:08.201Z**. Validation and cleanup completed
+**2026-09-08T21:55:39Z**. Session elapsed at completion: **5.74 hours**.
+The 0.7.0 milestone took **39 minutes 32 seconds**, with **19,708,877 processed
+tokens** measured through the earlier usage cutoff across root and three agents.
 
 | Combined unique-response usage | Tokens |
 |---|---:|
-| Input | 40,069,434 |
-| Cached input (subset) | 39,309,056 |
-| Uncached input | 760,378 |
-| Output | 188,450 |
-| Total processed | 40,257,884 |
+| Input | 60,685,267 |
+| Cached input (subset) | 59,603,200 |
+| Uncached input | 1,082,067 |
+| Output | 270,991 |
+| Reasoning output (subset of output) | 64,904 |
+| Total processed | 60,956,258 |
 
-Each agent's cutoff is preserved in [subagents.json](subagents.json). All totals
-are deduplicated by response ID. Tokens include repeated context and do not
-establish subscription dollars. Overlapping crate windows must not be summed as
-project wall time. [Milestone 0.6](0.6.0.json) and [ledger](ledger.json) record
-scope, validated outcomes and cleanup. 110 tests pass per profile; 1.4 GiB of
-build output was removed. Release publication and later reporting are outside
-this measurement cutoff.
+Each agent's distinct cutoff is preserved in [subagents.json](subagents.json).
+Totals are deduplicated by response ID across all four sessions. They include
+repeated context and do not establish subscription dollar usage.
+[Milestone 0.7](0.7.0.json) records implementation, review and fix windows. Their
+per-agent interval unions total **0.851 observed agent-window hours**, including
+waits; active work and active agent-hours remain unknown. Overlapping windows
+must not be added as project wall-clock time.
+
+Commit `a98a068` passed **149 tests per debug/release profile**, formatting,
+Clippy, both Linux musl compile checks and cargo-deny. Cleanup removed **9,195
+files / 2.3 GiB**. Release candidate **v0.7.0** awaits publication. The ledger
+records six issues closed this session; the repository has nine closed and 281
+open issues at completion. Usage after the earlier cutoff—including the final
+validation, cleanup, ledger edits and reporting—is excluded from token totals.
 
 ## Recording rules
 

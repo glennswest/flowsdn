@@ -47,4 +47,5 @@ helper is available and the object remains redistributable under BSD-2-Clause.
 
 Permitted: MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, MPL-2.0 (file-level
 copyleft, acceptable), Unicode. Not permitted without a decision record:
-GPL, LGPL, AGPL, SSPL, BUSL. Enforced with `cargo deny` once crates exist.
+GPL, LGPL, AGPL, SSPL, BUSL. The workspace policy in `deny.toml` is enforced
+with `cargo xtask deny` against the locked dependency graph.
