@@ -66,7 +66,12 @@ pub struct KeySpec {
 
 impl KeySpec {
     pub fn new(name: impl Into<String>, kind: Kind, default: impl Into<String>) -> Self {
-        Self { name: name.into(), kind, default: default.into(), class: Class::Active }
+        Self {
+            name: name.into(),
+            kind,
+            default: default.into(),
+            class: Class::Active,
+        }
     }
 }
 
@@ -105,9 +110,16 @@ pub enum Warning {
 impl fmt::Display for Warning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnknownKey { key, source } => write!(f, "unknown configuration key {key} (source {source})"),
-            Self::IgnoredKey { key, source } => write!(f, "ignored configuration key {key} (source {source})"),
-            Self::BareDuration { key, source } => write!(f, "bare duration for {key} interpreted as nanoseconds (source {source})"),
+            Self::UnknownKey { key, source } => {
+                write!(f, "unknown configuration key {key} (source {source})")
+            }
+            Self::IgnoredKey { key, source } => {
+                write!(f, "ignored configuration key {key} (source {source})")
+            }
+            Self::BareDuration { key, source } => write!(
+                f,
+                "bare duration for {key} interpreted as nanoseconds (source {source})"
+            ),
         }
     }
 }
@@ -120,7 +132,10 @@ pub struct Error {
 
 impl Error {
     fn new(key: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { key: key.into(), message: message.into() }
+        Self {
+            key: key.into(),
+            message: message.into(),
+        }
     }
 }
 
@@ -141,12 +156,17 @@ pub struct Entry {
 
 impl Entry {
     pub fn new(source: Source, key: impl Into<String>, value: impl Into<String>) -> Self {
-        Self { source, key: key.into(), value: value.into() }
+        Self {
+            source,
+            key: key.into(),
+            value: value.into(),
+        }
     }
 
     /// Returns None for environment variables outside the compatibility prefix.
     pub fn environment(name: &str, value: impl Into<String>) -> Option<Self> {
-        name.strip_prefix("CILIUM_").map(|key| Self::new(Source::Env, key, value))
+        name.strip_prefix("CILIUM_")
+            .map(|key| Self::new(Source::Env, key, value))
     }
 }
 
@@ -195,18 +215,29 @@ impl Resolved {
 
 impl Registry {
     pub fn new(specs: impl IntoIterator<Item = KeySpec>) -> Result<Self, Error> {
-        let mut registry = Self { specs: BTreeMap::new() };
+        let mut registry = Self {
+            specs: BTreeMap::new(),
+        };
         for mut spec in specs {
             let name = normalize(&spec.name);
-            if name.is_empty() || !name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-                || name.starts_with('-') || name.ends_with('-') || name.contains("--")
+            if name.is_empty()
+                || !name
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+                || name.starts_with('-')
+                || name.ends_with('-')
+                || name.contains("--")
             {
                 return Err(Error::new(name, "invalid configuration key"));
             }
             if ALIASES.iter().any(|(alias, _)| *alias == name) {
-                return Err(Error::new(name, "deprecated alias cannot be registered as a canonical key"));
+                return Err(Error::new(
+                    name,
+                    "deprecated alias cannot be registered as a canonical key",
+                ));
             }
-            parse::parse(&spec.kind, &spec.default).map_err(|message| Error::new(&name, message))?;
+            parse::parse(&spec.kind, &spec.default)
+                .map_err(|message| Error::new(&name, message))?;
             spec.name = name.clone();
             if registry.specs.insert(name.clone(), spec).is_some() {
                 return Err(Error::new(name, "duplicate key after normalization"));
@@ -220,11 +251,19 @@ impl Registry {
     /// defaults do not suppress aliases. Repeated list flags append in input order.
     pub fn resolve(&self, entries: impl IntoIterator<Item = Entry>) -> Result<Resolved, Error> {
         let mut entries: Vec<_> = entries.into_iter().collect();
-        let canonical: BTreeSet<_> = entries.iter().filter(|e| e.source != Source::Default)
-            .map(|e| normalize(&e.key)).filter(|k| self.specs.contains_key(k)).collect();
+        let canonical: BTreeSet<_> = entries
+            .iter()
+            .filter(|e| e.source != Source::Default)
+            .map(|e| normalize(&e.key))
+            .filter(|k| self.specs.contains_key(k))
+            .collect();
         // Stable sorting preserves repeated flag order within its source.
         entries.sort_by_key(|entry| entry.source);
-        let mut resolved = Resolved { values: BTreeMap::new(), warnings: Vec::new(), unknown_keys: BTreeSet::new() };
+        let mut resolved = Resolved {
+            values: BTreeMap::new(),
+            warnings: Vec::new(),
+            unknown_keys: BTreeSet::new(),
+        };
         for spec in self.specs.values() {
             self.apply(&mut resolved, spec, Source::Default, &spec.default)?;
         }
@@ -239,32 +278,59 @@ impl Registry {
             }
             let Some(spec) = self.specs.get(&key) else {
                 if resolved.unknown_keys.insert(key.clone()) {
-                    resolved.warnings.push(Warning::UnknownKey { key, source: entry.source });
+                    resolved.warnings.push(Warning::UnknownKey {
+                        key,
+                        source: entry.source,
+                    });
                 }
                 continue;
             };
             self.apply(&mut resolved, spec, entry.source, &entry.value)?;
             if spec.class != Class::Active && ignored.insert(key.clone()) {
-                resolved.warnings.push(Warning::IgnoredKey { key, source: entry.source });
+                resolved.warnings.push(Warning::IgnoredKey {
+                    key,
+                    source: entry.source,
+                });
             }
         }
         Ok(resolved)
     }
 
-    fn apply(&self, resolved: &mut Resolved, spec: &KeySpec, source: Source, raw: &str) -> Result<(), Error> {
-        let (mut value, bare_duration) = parse::parse(&spec.kind, raw).map_err(|message| Error::new(&spec.name, message))?;
+    fn apply(
+        &self,
+        resolved: &mut Resolved,
+        spec: &KeySpec,
+        source: Source,
+        raw: &str,
+    ) -> Result<(), Error> {
+        let (mut value, bare_duration) =
+            parse::parse(&spec.kind, raw).map_err(|message| Error::new(&spec.name, message))?;
         if bare_duration {
-            resolved.warnings.push(Warning::BareDuration { key: spec.name.clone(), source });
+            resolved.warnings.push(Warning::BareDuration {
+                key: spec.name.clone(),
+                source,
+            });
         }
         if source == Source::Flag
-            && let Some(Effective { value: Value::List(previous), source: Source::Flag, .. }) = resolved.values.get(&spec.name)
+            && let Some(Effective {
+                value: Value::List(previous),
+                source: Source::Flag,
+                ..
+            }) = resolved.values.get(&spec.name)
             && let Value::List(items) = &mut value
         {
             let mut combined = previous.clone();
             combined.append(items);
             *items = combined;
         }
-        resolved.values.insert(spec.name.clone(), Effective { value, source, class: spec.class });
+        resolved.values.insert(
+            spec.name.clone(),
+            Effective {
+                value,
+                source,
+                class: spec.class,
+            },
+        );
         Ok(())
     }
 }
