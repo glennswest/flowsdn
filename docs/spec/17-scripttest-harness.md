@@ -1596,3 +1596,11 @@ set, and that list belongs in `tools/harvest-txtar.sh`.**
 budget? **Recommendation: a bump is its own PR containing only the corpus
 diff and the `PROVENANCE`/`DIVERGENCES` updates, with the harness run before
 and after and the delta in XFAIL count stated in the description.**
+
+### Variable-expansion implementation clarification (0.5.0)
+
+Unbraced variable names accept ASCII letters, digits and underscores, plus the
+single-character `/` and `:` separator names. Braces allow other environment
+names. Empty or unterminated braces are parse errors; a dollar without a name
+is literal. Expansion is single-pass and does not split arguments. Quoted
+fragments remain literal; regex mode quotes only substituted values.

@@ -190,8 +190,12 @@ minimum wake when the table changes.
 
 A table has a set of named **initializers**. A data source that populates the
 table registers one at construction and marks it complete after its first full
-sync. `table.initialized()` is true when the set is empty; `wait_initialized()`
-awaits it. Reconcilers MUST NOT prune before `initialized()` is true. This is
+sync, after publishing its initial rows. Registration starts open and the owner
+MUST call `seal_initializers()` once all sources have registered, including when
+there are no sources. `table.initialized()` is true only after sealing and
+completion of all registered sources; `wait_initialized()` awaits that monotonic
+condition. Late, duplicate and blank registrations fail. Dropping a source
+handle does not mark success; completion is idempotent. Reconcilers MUST NOT prune before `initialized()` is true. This is
 the `RegisterInitializer`/`Initialized` contract the LB reconciler relies on
 (inventory 04: restore-from-maps then wait `lb-init-wait-timeout` for all
 initializers before the first reconcile; prune only after init).

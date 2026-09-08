@@ -150,6 +150,16 @@ pub fn environment(
             return Err(LoadError::new(&alias.variable, "invalid or ambiguous environment alias"));
         }
     }
+    // Check the complete alias schema before consuming any input. An alias
+    // variable cannot also be a canonical variable for another declared key:
+    // consuming it as an alias would silently discard that key's source value.
+    for alias in aliases {
+        if let Some(body) = alias.variable.strip_prefix("CILIUM_")
+            && seen_alias_keys.contains(&normalize(body))
+        {
+            return Err(LoadError::new(&alias.variable, "environment alias collides with a canonical variable"));
+        }
+    }
     for (name, value) in &variables {
         let Some(name) = name.to_str() else { continue; };
         if PROCESS_ONLY.contains(&name) || aliases.iter().any(|alias| alias.variable == name) { continue; }

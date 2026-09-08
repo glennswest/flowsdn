@@ -37,3 +37,8 @@ alone do not imply loss. Acknowledgements are explicit. Maintenance runs during
 writes and stream operations, with ordinary garbage collection throttled to one
 second and count overflow forcing collection. Initialization, metrics and
 reconciliation remain separate work.
+
+Version 0.5 adds named initialization gates. Explicit sealing prevents an empty
+registration set from reporting readiness before sources register. Owners seal
+even tables with no initializers. Source completion follows initial publication;
+dropping a source does not imply successful synchronization.

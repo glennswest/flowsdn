@@ -162,6 +162,28 @@ fn invalid_environment_bytes_fail_only_for_configuration_variables() {
 }
 
 #[test]
+fn environment_alias_cannot_consume_another_declared_keys_canonical_value() {
+    let collision = EnvironmentAlias { variable: "CILIUM_B".into(), key: "a".into() };
+    let fallback = EnvironmentAlias { variable: "OLD_B".into(), key: "b".into() };
+    let input = variables(&[("CILIUM_A", "canonical-a"), ("CILIUM_B", "canonical-b")]);
+    for aliases in [[collision.clone(), fallback.clone()], [fallback.clone(), collision]] {
+        let error = sources::environment(input.clone(), &aliases).unwrap_err();
+        assert_eq!(error.location, "CILIUM_B");
+        assert_eq!(error.message, "environment alias collides with a canonical variable");
+        // Ambiguity is a schema error, independent of environment contents.
+        assert_eq!(sources::environment([], &aliases).unwrap_err(), error);
+    }
+    let loaded = sources::environment(input, &[fallback]).unwrap();
+    let registry = Registry::new([
+        KeySpec::new("a", Kind::String, "default"),
+        KeySpec::new("b", Kind::String, "default"),
+    ]).unwrap();
+    let resolved = registry.resolve(loaded.entries).unwrap();
+    assert_eq!(resolved.get("a").unwrap().value, Value::String("canonical-a".into()));
+    assert_eq!(resolved.get("b").unwrap().value, Value::String("canonical-b".into()));
+}
+
+#[test]
 fn file_directory_environment_and_flags_layer_without_losing_unrelated_keys() {
     let fixture = Fixture::new();
     fs::write(fixture.path().join("name"), "directory\n").unwrap();
