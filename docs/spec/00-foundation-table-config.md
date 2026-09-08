@@ -1799,7 +1799,7 @@ registry + generator + build-config ~3k, fence + health ~1k.
 7. **Unknown keys: warn vs. fail in CI.** Add a `--strict-config` flowsdn key
    (default false) that turns unknown keys into a fatal error, for CI charts.
    Recommendation: yes, S effort.
-8. **Duration bare integers.** Keep Go's nanosecond interpretation (this spec,
+8. **Resolved (#49): duration bare integers are nanoseconds with a warning.** The implemented parser and regression tests preserve Go's nanosecond interpretation (this spec,
    with warning) or treat bare integers as seconds. Recommendation: keep Go
    semantics for compatibility; Helm never emits bare integers for durations.
 

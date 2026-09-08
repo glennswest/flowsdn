@@ -123,3 +123,18 @@ and flag append, typed ranges, durations, malformed inputs and diagnostics.
 Initialization gates, source loaders, the full configuration catalogue,
 reconciliation and script execution remain forthcoming. Compile checks on both
 architectures do not claim arm64 runtime or networking coverage.
+
+## Version 0.5.0 validation
+
+All 71 unique tests passed in debug and release: 30 table, 17 configuration,
+13 parser/expansion, 7 fence and 4 harvester. Formatting, Clippy with warnings
+denied, all-target x86_64/aarch64 Linux musl compile checks and cargo-deny passed.
+
+The new regressions cover initializer registration/seal races and cancellation,
+YAML scalar lexemes and duplicate detection, projected directory symlinks,
+source precedence and alias collisions, plus literal/regex variable expansion.
+A missing type annotation in one initializer test was corrected during validation.
+
+The full configuration catalogue, cross-key validators, runtime persistence,
+reconciliation and script command execution remain forthcoming. No networking
+coverage is claimed by these foundation tests.

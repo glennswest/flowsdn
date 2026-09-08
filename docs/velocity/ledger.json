@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "project": "flowsdn",
-  "as_of_utc": "2026-09-08T20:10:06.335Z",
+  "as_of_utc": "2026-09-08T20:29:20.692Z",
   "measurement_start_utc": "2026-09-08T16:11:13.415Z",
-  "elapsed_seconds": 14332.92,
+  "elapsed_seconds": 15487.277,
   "historical_project_start_known": false,
   "active_work_seconds": null,
   "session": {
     "id": "01a081c9-5ae6-72e3-a2f7-1a103e3c6703",
     "source": "Local Codex token_usage_record; deduplicated by response_id; payload content excluded",
-    "completed_response_records": 173,
+    "completed_response_records": 214,
     "tokens": {
-      "input_tokens": 16506859,
-      "cached_input_tokens": 16188160,
+      "input_tokens": 20459783,
+      "cached_input_tokens": 20109056,
       "cache_write_input_tokens": 0,
-      "output_tokens": 75787,
-      "reasoning_output_tokens": 12818,
-      "total_tokens": 16582646
+      "output_tokens": 84060,
+      "reasoning_output_tokens": 14180,
+      "total_tokens": 20543843
     }
   },
   "phases": [
@@ -113,6 +113,23 @@
         "total_tokens": 3132719
       },
       "note": "Root-only integration, release work, approval waits and user status responses. Subagent usage recorded separately."
+    },
+    {
+      "id": "initialization-loaders-expansion",
+      "scope": "project/shared",
+      "start_utc": "2026-09-08T20:10:06.335Z",
+      "end_utc": "2026-09-08T20:29:20.692Z",
+      "elapsed_seconds": 1154.357,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 3952924,
+        "cached_input_tokens": 3920896,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 8273,
+        "reasoning_output_tokens": 1362,
+        "total_tokens": 3961197
+      },
+      "note": "Root integration/validation/release and user requests; agents counted separately. Includes approvals and waits."
     }
   ],
   "crates": [
@@ -175,9 +192,11 @@
     "validated_releases": [
       "v0.1.0",
       "v0.2.0",
-      "v0.3.0"
+      "v0.3.0",
+      "v0.4.0",
+      "v0.5.0"
     ],
-    "unique_tests": 51,
+    "unique_tests": 71,
     "test_profiles": [
       "debug",
       "release"
@@ -186,8 +205,13 @@
     "embedded_files": 1444,
     "parsed_commands": 3537,
     "networking_scenarios_executed": 0,
-    "release_candidate": "v0.4.0",
-    "validated_commit": "daefaa4"
+    "validated_commit": "d2e7ce0",
+    "closed_issues_this_session": [
+      42,
+      205,
+      49,
+      210
+    ]
   },
   "subagent_usage_file": "subagents.json",
   "parallel_work": [
@@ -211,6 +235,52 @@
       "validation_end_utc": "2026-09-08T20:02:35Z",
       "performance_followup_start_utc": "2026-09-08T20:05:24Z",
       "performance_followup_end_utc": "2026-09-08T20:06:44Z"
+    },
+    {
+      "crate": "flowsdn-table",
+      "agent": "/root/table_streams",
+      "start_utc": "2026-09-08T20:10:34Z",
+      "implementation_end_utc": "2026-09-08T20:13:06Z",
+      "elapsed_seconds": 152.0,
+      "active_work_seconds": null
+    },
+    {
+      "crate": "flowsdn-config",
+      "agent": "/root/config_core",
+      "start_utc": "2026-09-08T20:10:39Z",
+      "implementation_end_utc": "2026-09-08T20:16:00Z",
+      "elapsed_seconds": 321.0,
+      "active_work_seconds": null
+    },
+    {
+      "crate": "flowsdn-scripttest",
+      "agent": "/root/review",
+      "start_utc": "2026-09-08T20:10:47Z",
+      "implementation_end_utc": "2026-09-08T20:12:50Z",
+      "elapsed_seconds": 123.0,
+      "active_work_seconds": null
+    }
+  ],
+  "combined_unique_response_tokens": {
+    "input_tokens": 27774411,
+    "cached_input_tokens": 27184256,
+    "output_tokens": 137740,
+    "reasoning_output_tokens": 26240,
+    "total_tokens": 27912151
+  },
+  "cleanup": [
+    {
+      "release": "v0.3.0",
+      "cargo_removed": "849.7 MiB"
+    },
+    {
+      "release": "v0.4.0",
+      "cargo_removed": "1.1 GiB"
+    },
+    {
+      "release": "v0.5.0",
+      "cargo_removed": "1.1 GiB",
+      "task_reference_checkout_removed": true
     }
   ]
 }

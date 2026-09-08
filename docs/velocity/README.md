@@ -1,29 +1,23 @@
 # flowsdn velocity ledger
 
-Root snapshot: **2026-09-08T20:10:06.335Z**. Measurement began
-2026-09-08T16:11:13.415Z; earlier specification effort is excluded.
+Root snapshot: **2026-09-08T20:29:20.692Z**. Session elapsed: **4.30 hours**.
+Earlier specification effort is excluded. Active coding time is unmeasured.
 
-| Measure | Value |
+| Combined unique-response usage | Tokens |
 |---|---:|
-| Project elapsed wall-clock | 3.98 hours |
-| Active coding time | Not measured |
-| Root processed tokens | 16,582,646 |
-| Subagent processed tokens | 3,419,746 |
-| Combined unique-response input | 19,896,134 |
-| Combined cached input (subset) | 19,431,680 |
-| Combined output | 106,258 |
-| Combined processed tokens | 20,002,392 |
+| Input | 27,774,411 |
+| Cached input (subset) | 27,184,256 |
+| Output | 137,740 |
+| Total processed | 27,912,151 |
 
-Three subagent sessions are recorded in [sanitized subagent usage](subagents.json),
-each with its own completion cutoff. Root and child sessions are distinct;
-combined totals sum unique completed responses, not cumulative parent counters.
-Table/config implementation windows overlap: do not sum them as project time.
-Exclusive active coding time and agent-hours are unknown. Root integration
-includes approvals, waits, status answers and release work. Tokens include
-repeated context and do not establish subscription dollars.
-
-v0.3.0 is published at `382bc9d`; v0.4.0 combined validation passed 51 tests in each profile plus both target checks.
-The JSON ledger retains historical per-crate windows and task phase attribution.
+Includes root and three subagents, deduplicated by response ID. Each agent's
+cutoff is preserved in [subagents.json](subagents.json). Tokens include repeated
+context and do not establish subscription dollars. Task windows overlap and
+must not be summed as project wall time; active agent-hours remain unknown.
+The [ledger](ledger.json) records per-crate implementation windows, shared root
+integration time, releases and validation. v0.5.0 validation passed 71 tests per profile and all required checks.
+Cleanup reclaimed 1.1 GiB after this milestone; release history and closure
+results are recorded in the ledger. Later reporting is outside this cutoff.
 
 ## Recording rules
 
