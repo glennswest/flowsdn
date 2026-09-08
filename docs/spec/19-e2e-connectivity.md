@@ -56,7 +56,7 @@ In scope:
 Out of scope (owned by sibling specs; referenced, never duplicated):
 
 - The txtar scripttest, `BPF_PROG_RUN` BPF unit tests, and control-plane golden
-  tests — `17-test-harness.md` (ADR-0005 §3). This spec covers only the fourth
+  tests — `17-scripttest-harness.md` (ADR-0005 §3). This spec covers only the fourth
   harness, `flowsdn-connectivity`.
 - Map layouts, pin paths, the ABI version and the pin-replace protocol —
   `01-bpf-map-abi-loader.md`. §3.6 here consumes them, it does not define them.

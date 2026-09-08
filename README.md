@@ -15,9 +15,26 @@ Goals:
 - **Everything.** Full feature scope unless a documented decision records a
   better solution.
 
-Status: **spec phase**. See `docs/inventory/` for the feature inventory of
-the reference implementation and `docs/spec/` for the specifications that
-the code is written from.
+## Status
+
+**Specification complete (2026-09-07); no code written yet.**
+
+| | |
+|---|---|
+| Specifications | 24 files, ~40k lines — every area, normative, with compatibility contracts and test plans |
+| Inventories | 17 files, ~12.5k lines — the reference measured at v1.20.1 (`7d68cfb394`) |
+| Decision records | 7 (`docs/decisions/`) |
+| Harvested test corpora | 1,444 files — 168 txtar scenarios, 625 BPF cases, 1,196 golden fixtures, 30 fuzz seeds |
+| Open backlog | 288 issues, indexed in `docs/open-decisions-index.md` |
+
+Read in this order: `docs/decisions/` for what was decided and why,
+`docs/inventory/README.md` for the scope table and build order,
+then the spec for the area you are working on.
+
+Next step is the Cargo workspace scaffold (`docs/spec/22-packaging-helm-ci.md`
+§3.8). Before the datapath crates are written, the three decisions at the top
+of `docs/open-decisions-index.md` need settling: the kernel floor, the
+single-object-versus-matrix question, and wire compatibility with Cilium nodes.
 
 ## Layout
 

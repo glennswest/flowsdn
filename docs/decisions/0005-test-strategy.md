@@ -68,7 +68,7 @@ tag is cheap.
 ## Consequences
 
 - The test corpus is a first-class deliverable, specified in
-  `docs/spec/17-test-harness.md`, and the scripttest harness is built early —
+  `docs/spec/17-scripttest-harness.md`, and the scripttest harness is built early —
   before the load balancer, since 51 of its scenarios are LB tests.
 - Divergences flowsdn chooses deliberately (ADR-0002/0003 especially: no
   iptables rules to assert on, different kernel floor) will make some

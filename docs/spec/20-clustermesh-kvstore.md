@@ -79,7 +79,7 @@ policy-matched against pods in another.
 | `Fence` semantics, the table store, the config registry, module health | `00-foundation-table-config.md` §3.2, §3.3, §3.4 |
 | Node manager, `NodeUpdated`/`NodeDeleted`, ipset, tunnel/route programming for remote nodes | `10-node-routing-nftables.md` |
 | WireGuard public keys and IPsec key indices carried inside node and ipcache records | `14-encryption-egress.md` |
-| The scripttest harness that runs the harvested `.txtar` corpora | `17-test-harness.md` (in flight; ADR-0005) |
+| The scripttest harness that runs the harvested `.txtar` corpora | `17-scripttest-harness.md` (ADR-0005) |
 
 **Deferred from the first cut** (§12 records the decisions):
 
