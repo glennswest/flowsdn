@@ -27,3 +27,7 @@ Write Rust from the specifications; follow docs/licensing.md.
 - After publishing or committing results, run cargo clean --target-dir
   /build/cargo/flowsdn and remove only temporary files created by this task.
 - Never clean another project's targets, shared caches, or installed toolchains.
+
+Before builds, verify test -c /dev/null. A regular-file replacement caused
+compiler probes to ingest diagnostic output on 2026-09-08; see the validation
+record. Never replace or truncate a device node as part of cleanup.

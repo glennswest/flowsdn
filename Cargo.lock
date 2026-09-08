@@ -4,11 +4,15 @@ version = 4
 
 [[package]]
 name = "flowsdn-fence"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "tokio",
  "tracing",
 ]
+
+[[package]]
+name = "flowsdn-scripttest"
+version = "0.2.0"
 
 [[package]]
 name = "once_cell"
@@ -99,4 +103,4 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.0"

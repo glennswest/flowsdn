@@ -20,13 +20,19 @@ impl Token {
 
     /// Concatenates fragments without interpreting environment variables.
     pub fn literal(&self) -> String {
-        self.0.iter().map(|fragment| fragment.text.as_str()).collect()
+        self.0
+            .iter()
+            .map(|fragment| fragment.text.as_str())
+            .collect()
     }
 }
 
 fn flush_fragment(text: &mut String, fragments: &mut Vec<Fragment>) {
     if !text.is_empty() {
-        fragments.push(Fragment { text: std::mem::take(text), quoted: false });
+        fragments.push(Fragment {
+            text: std::mem::take(text),
+            quoted: false,
+        });
     }
 }
 
@@ -63,7 +69,10 @@ pub fn tokenize(input: &str, line: usize) -> Result<Vec<Token>, ParseError> {
                         None => return Err(ParseError::new(line, "unterminated single quote")),
                     }
                 }
-                fragments.push(Fragment { text: quoted, quoted: true });
+                fragments.push(Fragment {
+                    text: quoted,
+                    quoted: true,
+                });
             }
             _ => text.push(ch),
         }
@@ -106,7 +115,9 @@ pub enum Line {
 
 fn parse_command(mut tokens: Vec<Token>, line: usize) -> Result<Command, ParseError> {
     let background = tokens.last().and_then(Token::unquoted) == Some("&");
-    if background { tokens.pop(); }
+    if background {
+        tokens.pop();
+    }
     let mut tokens = tokens.into_iter().peekable();
     let mut status = None;
     let mut conditions = Vec::new();
@@ -123,12 +134,20 @@ fn parse_command(mut tokens: Vec<Token>, line: usize) -> Result<Command, ParseEr
                 return Err(ParseError::new(line, "multiple status prefixes"));
             }
         } else if let Some(condition) = word.strip_prefix('[') {
-            let condition = condition.strip_suffix(']').ok_or_else(|| ParseError::new(line, "unterminated condition"))?;
-            let (negated, name) = condition.strip_prefix('!').map(|name| (true, name)).unwrap_or((false, condition));
+            let condition = condition
+                .strip_suffix(']')
+                .ok_or_else(|| ParseError::new(line, "unterminated condition"))?;
+            let (negated, name) = condition
+                .strip_prefix('!')
+                .map(|name| (true, name))
+                .unwrap_or((false, condition));
             if name.is_empty() {
                 return Err(ParseError::new(line, "empty condition"));
             }
-            conditions.push(Condition { name: name.to_owned(), negated });
+            conditions.push(Condition {
+                name: name.to_owned(),
+                negated,
+            });
         } else {
             break;
         }
@@ -138,7 +157,13 @@ fn parse_command(mut tokens: Vec<Token>, line: usize) -> Result<Command, ParseEr
     if words.is_empty() {
         return Err(ParseError::new(line, "missing command"));
     }
-    Ok(Command { line, status: status.unwrap_or_default(), conditions, words, background })
+    Ok(Command {
+        line,
+        status: status.unwrap_or_default(),
+        conditions,
+        words,
+        background,
+    })
 }
 
 /// Parses sections and command syntax only. Command/condition registration,
@@ -148,7 +173,10 @@ pub fn parse_script(script: &str) -> Result<Vec<Line>, ParseError> {
     for (offset, text) in script.split('\n').enumerate() {
         let line = offset.saturating_add(1);
         if text.starts_with('#') {
-            lines.push(Line::Section { line, text: text.to_owned() });
+            lines.push(Line::Section {
+                line,
+                text: text.to_owned(),
+            });
         } else {
             let tokens = tokenize(text, line)?;
             if !tokens.is_empty() {

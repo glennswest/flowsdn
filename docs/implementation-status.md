@@ -2,11 +2,12 @@
 
 ## Current state
 
-The initial tree contains specifications, inventories and harvested fixture data,
+The initial tree contained specifications, inventories and harvested fixture data,
 with no implementation or executable harness. The first implementation adds the
 Cargo workspace, a Linux xtask driver and flowsdn-fence from spec 00 §3.4.1.
-The dependency license policy is configured for issue #265; enforcement must be
-validated with cargo-deny before that issue can be considered complete.
+The dependency license policy for issue #265 passes cargo-deny on the resolved
+graph; negative policy fixtures and CI automation remain. Version 0.2.0 adds
+the dependency-free txtar/script parsing front end from spec 17.
 
 The GitHub backlog was read live on 2026-09-08: **287 open issues**:
 204 open decisions, 36 verification items, 24 specification gaps, 13 deferred
@@ -58,7 +59,7 @@ No BPF nightly pin or empty component crates are invented. The initial xtask has
 no automatic SSH dispatch, packaging or deployment. Cross-target cargo check
 validates compilation, not arm64 runtime behavior or static executable linking.
 
-## Validation
+## Version 0.1.0 validation
 
 Executed on dev.g8.lo with Rust 1.95.0:
 - cargo xtask check: formatting, warning-free Clippy, 7 native tests, and
@@ -76,3 +77,32 @@ Only project source lives on the root SSD. No other project's output was cleaned
 CI automation, negative policy fixtures, privileged tests, arm64 execution,
 static linking, health/timeout owners and harvested-corpus execution remain
 future work; this release does not claim those gates.
+
+## Version 0.2.0 validation
+
+On dev.g8.lo with Rust 1.95.0 and normal compiler caching:
+- Formatting and warning-free Clippy passed.
+- 15 tests passed in debug and 15 in release.
+- The corpus test parsed 168 archives, 1,444 embedded files and 3,537 commands,
+  and reconstructed every archive byte for byte.
+- Compile checks passed for both x86_64 and aarch64 Linux musl.
+- cargo-deny 0.20.2 passed advisories, bans, licenses and sources; only unused
+  allow-list entries produced warnings.
+- Compiler output was cleaned after these checks.
+
+Parsing does not execute assertions, validate command registrations or
+condition capabilities, expand variables, or materialize archive files.
+The runtime engine and adapters remain unimplemented. No harvested file changed.
+
+### Build-host fault resolved
+
+The compiler-probe failure initially looked like a Cargo cache problem.
+Inspection found /dev/null was a regular file (mode 0755) on dev, rather than
+the standard character device. Compiler diagnostic output written there could
+later be read as compiler input. Caching disabled on a clean build still failed,
+ruling out the cache as the root cause.
+
+Restored /dev/null atomically to character device major 1, minor 3, mode 0666,
+and restored its SELinux label. Removed the temporary Cargo cache workaround.
+A clean build then passed all gates with normal caching. The process that
+originally replaced /dev/null is unknown. No other project's cache was removed.

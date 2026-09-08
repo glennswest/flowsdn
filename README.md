@@ -65,6 +65,7 @@ ssh root@dev.g8.lo
 # First use: git clone git@github.com:glennswest/flowsdn.git /root/flowsdn
 cd /root/flowsdn
 git pull --ff-only
+test -c /dev/null  # host preflight: must be a character device
 export CARGO_TARGET_DIR=/build/cargo/flowsdn TMPDIR=/build/tmp
 cargo xtask check
 cargo test --workspace --release --locked
