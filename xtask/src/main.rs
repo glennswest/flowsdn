@@ -1,4 +1,6 @@
 //! Initial Linux build driver. Packaging and BPF commands arrive with their crates.
+mod changed;
+
 use std::{env, error::Error, path::Path, process::Command};
 
 fn run(args: &[&str]) -> Result<(), Box<dyn Error>> {
@@ -13,11 +15,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().skip(1).collect();
     let command = args.first().map(String::as_str).unwrap_or("help");
     if command == "help" || command == "--help" {
-        println!("cargo xtask <build|test|check|deny>\nRun build tasks on Linux; see README.md.");
+        println!("cargo xtask <build|test|check|deny>\ncargo xtask <plan|check-changed> BASE\nRun build tasks on Linux; see README.md.");
         return Ok(());
     }
-    if args.len() != 1 || !matches!(command, "build" | "test" | "check" | "deny") {
-        return Err("expected one command: build, test, check, deny".into());
+    if !((args.len() == 1 && matches!(command, "build" | "test" | "check" | "deny"))
+        || (args.len() == 2 && matches!(command, "plan" | "check-changed"))) {
+        return Err("expected build/test/check/deny, or plan/check-changed BASE".into());
     }
     if !cfg!(target_os = "linux") {
         return Err("build tasks require Linux".into());
@@ -27,6 +30,27 @@ fn main() -> Result<(), Box<dyn Error>> {
             .parent()
             .ok_or("no workspace root")?,
     )?;
+    if matches!(command, "plan" | "check-changed") {
+        let packages = changed::plan(args.get(1).ok_or("missing base revision")?)?;
+        if command == "plan" {
+            println!("{}", serde_json::to_string(&packages)?);
+            return Ok(());
+        }
+        if packages.is_empty() {
+            println!("No workspace checks required for this committed diff.");
+            return Ok(());
+        }
+        run(&["fmt", "--all", "--", "--check"])?;
+        for (action, target) in [("clippy", None), ("test", None), ("check", Some("x86_64-unknown-linux-musl")), ("check", Some("aarch64-unknown-linux-musl"))] {
+            let mut invocation = vec![action.to_owned(), "--locked".to_owned()];
+            for package in &packages { invocation.extend(["-p".to_owned(), package.clone()]); }
+            if action != "test" { invocation.push("--all-targets".to_owned()); }
+            if let Some(target) = target { invocation.extend(["--target".to_owned(), target.to_owned()]); }
+            if action == "clippy" { invocation.extend(["--".to_owned(), "-D".to_owned(), "warnings".to_owned()]); }
+            run(&invocation.iter().map(String::as_str).collect::<Vec<_>>())?;
+        }
+        return Ok(());
+    }
     match command {
         "build" => run(&["build", "--workspace", "--locked"]),
         "test" => run(&["test", "--workspace", "--locked"]),
