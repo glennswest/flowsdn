@@ -4,8 +4,3 @@ xtask = "run --locked --package xtask --"
 [build]
 target-dir = "/build/cargo/flowsdn"
 jobs = 2
-
-[env]
-# On dev with Rust 1.95.0, the compiler-probe cache retained invalid stdin
-# diagnostics between Clippy and cargo test. Re-evaluate at the next pin bump.
-CARGO_CACHE_RUSTC_INFO = "0"
