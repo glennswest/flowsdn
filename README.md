@@ -17,9 +17,9 @@ Goals:
 
 ## Status
 
-**Foundation implementation started (2026-09-08), version 0.3.0.**
+**Foundation implementation started (2026-09-08), version 0.4.0.**
 
-The Cargo workspace, startup fence, indexed table core, and txtar/script parser
+The Cargo workspace, startup fence, indexed tables with change streams, typed configuration core, and txtar/script parser
 are implemented. There is no working
 agent or datapath yet; the harvested corpora can be syntax-checked but their networking assertions are not executed yet.
 
@@ -35,7 +35,7 @@ Read in this order: `docs/decisions/` for what was decided and why,
 `docs/inventory/README.md` for the scope table and build order,
 then the spec for the area you are working on.
 
-Next steps are table change streams, the configuration registry and script execution; see
+Next steps are initialization gates, the full configuration key catalogue and script execution; see
 [implementation assessment](docs/implementation-status.md). Before the datapath crates are written, the three decisions at the top
 of `docs/open-decisions-index.md` need settling: the kernel floor, the
 single-object-versus-matrix question, and wire compatibility with Cilium nodes.

@@ -30,3 +30,10 @@ The first table release implements indexed immutable snapshots and writes.
 It does not expose watch streams, retained tombstones, initialization, metrics
 or reconciliation. These remain required before using it for a live reconciler.
 No event-delivery or garbage-collection guarantee is implied by this core slice.
+
+Version 0.4 adds whole-table streams and retained tombstones. A discarded-delete
+watermark identifies checkpoints requiring resync; gaps between live revisions
+alone do not imply loss. Acknowledgements are explicit. Maintenance runs during
+writes and stream operations, with ordinary garbage collection throttled to one
+second and count overflow forcing collection. Initialization, metrics and
+reconciliation remain separate work.

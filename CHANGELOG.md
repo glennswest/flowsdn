@@ -6,6 +6,13 @@
   token usage in docs/velocity, with sanitized samples and explicit shared-work
   attribution; require updates at task boundaries and releases.
 
+## [0.4.0] - 2026-09-08
+
+- Add whole-table change streams with explicit acknowledgements, coalescing,
+  bounded deletion retention and lag-triggered resynchronization.
+- Add typed configuration normalization, aliases, source precedence and diagnostics.
+- Add concurrency, retention, index and configuration regression tests.
+
 ## [0.3.0] - 2026-09-08
 
 - Add indexed table snapshots, conditional writes, atomic batches and explicit row rendering.
