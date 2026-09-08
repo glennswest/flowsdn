@@ -2,9 +2,7 @@
 use std::{env, error::Error, path::Path, process::Command};
 
 fn run(args: &[&str]) -> Result<(), Box<dyn Error>> {
-    let status = Command::new("cargo")
-        .args(args)
-        .status()?;
+    let status = Command::new("cargo").args(args).status()?;
     if !status.success() {
         return Err(format!("cargo {} failed: {status}", args.join(" ")).into());
     }
