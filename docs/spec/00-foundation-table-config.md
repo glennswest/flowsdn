@@ -1763,7 +1763,7 @@ registry + generator + build-config ~3k, fence + health ~1k.
 
 ## 12. Open decisions
 
-1. **Per-key watches.** Whole-table notifiers (3.1.5) vs. per-key wakeups.
+1. **Resolved by ADR-0008 (#42): whole-table notifiers.** Per-key watches remain deferred until profiling establishes a need. Original alternatives: whole-table notifiers (3.1.5) vs. per-key wakeups.
    Options: (a) table-level only; (b) add `watch_key` implemented by a
    per-key `Notify` map populated on demand. Recommendation: (a) now; revisit
    if dynamic-config or ipcache consumers show wakeup storms in profiling.

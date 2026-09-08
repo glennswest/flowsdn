@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "project": "flowsdn",
-  "as_of_utc": "2026-09-08T19:44:44.028Z",
+  "as_of_utc": "2026-09-08T20:10:06.335Z",
   "measurement_start_utc": "2026-09-08T16:11:13.415Z",
-  "elapsed_seconds": 12810.613,
+  "elapsed_seconds": 14332.92,
   "historical_project_start_known": false,
   "active_work_seconds": null,
   "session": {
     "id": "01a081c9-5ae6-72e3-a2f7-1a103e3c6703",
     "source": "Local Codex token_usage_record; deduplicated by response_id; payload content excluded",
-    "completed_response_records": 121,
+    "completed_response_records": 173,
     "tokens": {
-      "input_tokens": 13381894,
-      "cached_input_tokens": 13115264,
+      "input_tokens": 16506859,
+      "cached_input_tokens": 16188160,
       "cache_write_input_tokens": 0,
-      "output_tokens": 68033,
-      "reasoning_output_tokens": 12089,
-      "total_tokens": 13449927
+      "output_tokens": 75787,
+      "reasoning_output_tokens": 12818,
+      "total_tokens": 16582646
     }
   },
   "phases": [
@@ -96,6 +96,23 @@
         "total_tokens": 7513321
       },
       "note": "Shared table, Rust harvester migration, public documentation, status responses and release integration; includes unmeasured idle/wait time. Root session only; subagent usage is not yet included."
+    },
+    {
+      "id": "streams-config-integration",
+      "scope": "project/shared",
+      "start_utc": "2026-09-08T19:44:44.028Z",
+      "end_utc": "2026-09-08T20:10:06.335Z",
+      "elapsed_seconds": 1522.307,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 3124965,
+        "cached_input_tokens": 3072896,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 7754,
+        "reasoning_output_tokens": 729,
+        "total_tokens": 3132719
+      },
+      "note": "Root-only integration, release work, approval waits and user status responses. Subagent usage recorded separately."
     }
   ],
   "crates": [
@@ -157,9 +174,10 @@
   "outcomes": {
     "validated_releases": [
       "v0.1.0",
-      "v0.2.0"
+      "v0.2.0",
+      "v0.3.0"
     ],
-    "unique_tests": 28,
+    "unique_tests": 51,
     "test_profiles": [
       "debug",
       "release"
@@ -168,7 +186,31 @@
     "embedded_files": 1444,
     "parsed_commands": 3537,
     "networking_scenarios_executed": 0,
-    "release_candidate": "v0.3.0",
-    "validated_commit": "addeffa"
-  }
+    "release_candidate": "v0.4.0",
+    "validated_commit": "daefaa4"
+  },
+  "subagent_usage_file": "subagents.json",
+  "parallel_work": [
+    {
+      "crate": "flowsdn-config",
+      "agent": "/root/config_core",
+      "start_utc": "2026-09-08T19:43:48Z",
+      "implementation_end_utc": "2026-09-08T19:50:00Z",
+      "elapsed_seconds": 372,
+      "active_work_seconds": null
+    },
+    {
+      "crate": "flowsdn-table",
+      "agent": "/root/table_streams",
+      "start_utc": "2026-09-08T19:43:52Z",
+      "implementation_end_utc": "2026-09-08T19:50:00Z",
+      "elapsed_seconds": 368,
+      "active_work_seconds": null,
+      "timing_note": "Approximate end reported by agent; later review and validation separately recorded.",
+      "validation_start_utc": "2026-09-08T20:02:14Z",
+      "validation_end_utc": "2026-09-08T20:02:35Z",
+      "performance_followup_start_utc": "2026-09-08T20:05:24Z",
+      "performance_followup_end_utc": "2026-09-08T20:06:44Z"
+    }
+  ]
 }

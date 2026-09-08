@@ -1,26 +1,29 @@
 # flowsdn velocity ledger
 
-Snapshot: **2026-09-08T19:44:44.028Z**. Root session measurement began
+Root snapshot: **2026-09-08T20:10:06.335Z**. Measurement began
 2026-09-08T16:11:13.415Z; earlier specification effort is excluded.
 
 | Measure | Value |
 |---|---:|
-| Elapsed wall-clock | 3.56 hours |
+| Project elapsed wall-clock | 3.98 hours |
 | Active coding time | Not measured |
-| Input tokens (including cached) | 13,381,894 |
-| Cached input (subset) | 13,115,264 |
-| Uncached input | 266,630 |
-| Output tokens | 68,033 |
-| Total processed tokens | 13,449,927 |
-| Validated tests in debug and release | 28 |
+| Root processed tokens | 16,582,646 |
+| Subagent processed tokens | 3,419,746 |
+| Combined unique-response input | 19,896,134 |
+| Combined cached input (subset) | 19,431,680 |
+| Combined output | 106,258 |
+| Combined processed tokens | 20,002,392 |
 
-The machine-readable ledger preserves per-crate delivery windows and disjoint
-root-session usage windows. Table and harvester integration are shared scope;
-exclusive crate tokens and active time remain unknown. Do not sum overlapping
-crate elapsed windows. Wall time includes waits and unmeasured idle periods.
-Three subagents have just started; their usage is not included in this snapshot.
-Token counts include repeated context and do not establish subscription dollars.
-The validated v0.3.0 candidate is commit `addeffa`; publication is pending.
+Three subagent sessions are recorded in [sanitized subagent usage](subagents.json),
+each with its own completion cutoff. Root and child sessions are distinct;
+combined totals sum unique completed responses, not cumulative parent counters.
+Table/config implementation windows overlap: do not sum them as project time.
+Exclusive active coding time and agent-hours are unknown. Root integration
+includes approvals, waits, status answers and release work. Tokens include
+repeated context and do not establish subscription dollars.
+
+v0.3.0 is published at `382bc9d`; v0.4.0 combined validation passed 51 tests in each profile plus both target checks.
+The JSON ledger retains historical per-crate windows and task phase attribution.
 
 ## Recording rules
 

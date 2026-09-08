@@ -1535,7 +1535,7 @@ All are MIT/Apache-2.0/BSD; `cargo deny` per `docs/licensing.md`.
 
 ## 12. Open decisions
 
-**12.1 `TableRender` in spec 00.** `db/cmp`, `db/show` and the query commands
+**12.1 Resolved by ADR-0008 (#205): explicit `TableRender`.** Spec 00 §4.3a and `flowsdn-table` now define ordered headers and cells; a convenience derive remains optional future work. Original decision context: `db/cmp`, `db/show` and the query commands
 need each row type to expose an ordered header and ordered rendered cells.
 Spec 00 does not define one. Options: (a) add a `TableRender` trait to
 `flowsdn-table` and implement it for every row type — matches the reference,

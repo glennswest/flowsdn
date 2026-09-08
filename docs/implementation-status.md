@@ -106,3 +106,20 @@ Validated on Linux with Rust 1.95.0:
 The 29 tests comprise 7 fence, 8 parser, 10 table and 4 harvester tests.
 No Python executable source remains tracked. These checks do not exercise
 BPF programs or the networking assertions in the harvested corpus.
+
+## Version 0.4.0 validation
+
+Whole-table streams and the typed configuration core are implemented. All 51
+unique tests passed in debug and release: 24 table, 8 configuration, 8 parser,
+7 fence and 4 harvester. Formatting, Clippy with warnings denied, all-target
+x86_64/aarch64 Linux musl compile checks, and cargo-deny passed.
+
+Stream tests cover concurrent subscription/publication, cancelled waits,
+independent acknowledgements, lag resync, partially consumed snapshots, and
+reference-model convergence. Live draining merges ordered indexes up to the
+requested limit. Configuration tests cover aliases, precedence, list replacement
+and flag append, typed ranges, durations, malformed inputs and diagnostics.
+
+Initialization gates, source loaders, the full configuration catalogue,
+reconciliation and script execution remain forthcoming. Compile checks on both
+architectures do not claim arm64 runtime or networking coverage.
