@@ -75,3 +75,7 @@ cargo xtask deny  # requires cargo-deny on the build host
 musl architectures. arm64 execution and static binary linking are separate
 future gates. The initial xtask supports `build`, `test`, `check`, and `deny`;
 remote dispatch, BPF builds, images and deployment commands are not implemented.
+
+After results are committed or released, clean this project's compiler output:
+`cargo clean --target-dir /build/cargo/flowsdn`. `/build` is the spinning drive;
+never put targets on the root SSD or clean another project's directories.

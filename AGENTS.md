@@ -16,3 +16,14 @@ Read CLAUDE.md, README.md, the architecture decisions and the relevant spec.
 Build and test on dev.g8.lo, never on the Mac. Set
 CARGO_TARGET_DIR=/build/cargo/flowsdn and TMPDIR=/build/tmp.
 Write Rust from the specifications; follow docs/licensing.md.
+
+## Shared build host disk discipline
+
+- /build is the spinning drive (/dev/sdc); root is the smaller SSD.
+- Follow neighboring projects: target output under /build/cargo/flowsdn,
+  temporary files under /build/tmp, artifacts under /build/images or /build/cache.
+- Inspect disk space before and after builds. Limit build concurrency on this
+  shared host; default CARGO_BUILD_JOBS=2 unless capacity is checked.
+- After publishing or committing results, run cargo clean --target-dir
+  /build/cargo/flowsdn and remove only temporary files created by this task.
+- Never clean another project's targets, shared caches, or installed toolchains.
