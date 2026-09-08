@@ -6,6 +6,13 @@
   token usage in docs/velocity, with sanitized samples and explicit shared-work
   attribution; require updates at task boundaries and releases.
 
+## [0.6.0] - 2026-09-08
+
+- Add dependency-aware workspace change planning and focused checks.
+- Add a caller-driven reconciliation core with separate status and retries.
+- Add configuration cross-key and restart immutability validation.
+- Add a script engine core with explicit command and condition registries.
+
 ## [0.5.0] - 2026-09-08
 
 - Add explicit table initialization registration and sealing with cancellable waits.

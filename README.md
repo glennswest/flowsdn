@@ -17,7 +17,7 @@ Goals:
 
 ## Status
 
-**Foundation implementation started (2026-09-08), version 0.5.0.**
+**Foundation implementation started (2026-09-08), version 0.6.0.**
 
 The Cargo workspace, startup fence, indexed tables with change streams, typed configuration and source adapters, and txtar/script parsing with variable expansion
 are implemented. There is no working

@@ -1,0 +1,25 @@
+{
+  "id": "0.6.0",
+  "scope": "project/shared",
+  "start_utc": "2026-09-08T20:44:18Z",
+  "start_revision": "f35c2cb",
+  "owner": "/root",
+  "status": "in-progress",
+  "active_work_seconds": null,
+  "token_baseline_sample_utc": "2026-09-08T20:33:46.659Z",
+  "token_baseline": {
+    "input_tokens": 21606680,
+    "cached_input_tokens": 21246208,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 86693,
+    "reasoning_output_tokens": 14656,
+    "total_tokens": 21693373
+  },
+  "workstreams": [
+    "flowsdn-reconcile",
+    "flowsdn-config",
+    "flowsdn-scripttest",
+    "xtask"
+  ],
+  "note": "Parallel implementation windows overlap; combined usage requires unique response IDs across agent sessions. Previous reporting-to-start gap is not active coding."
+}

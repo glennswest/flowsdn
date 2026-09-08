@@ -1771,7 +1771,7 @@ registry + generator + build-config ~3k, fence + health ~1k.
    Options: (a) table-level only; (b) add `watch_key` implemented by a
    per-key `Notify` map populated on demand. Recommendation: (a) now; revisit
    if dynamic-config or ipcache consumers show wakeup storms in profiling.
-2. **Status side-table vs. embedded status.** (a) side table (this spec);
+2. **Resolved by ADR-0009 (#43): separate reconciliation status.** Original alternatives: (a) side table (this spec);
    (b) embed `ReconcileStatus` in rows as the reference does, simpler for
    `GET /service`. Recommendation: (a); the LB REST handler joins two tables,
    which is trivial with shared primary keys.
