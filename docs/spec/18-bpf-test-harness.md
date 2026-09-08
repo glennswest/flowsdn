@@ -123,7 +123,7 @@ Per ADR-0005 §2 and `docs/licensing.md`, flowsdn takes it under
 C code. Concretely:
 
 - `tests/bpf/CASES.toml` contains only identifiers and counts, mechanically
-  extracted by `tools/harvest-bpf-cases.py`. It carries a `PROVENANCE` block in
+  extracted by `tools/harvest-bpf-cases (Rust)`. It carries a `PROVENANCE` block in
   its header naming the repository, tag `v1.20.1`, commit `7d68cfb394`,
   directory `bpf/tests`, and the license election; `tests/bpf/PROVENANCE`
   carries the full BSD-2-Clause text and the taken/not-taken inventory. The
@@ -734,8 +734,7 @@ By object pulled into the translation unit:
 
 ### 4.2 How the harvest is produced
 
-`tools/harvest-bpf-cases.py` (committed, ~330 lines, no dependencies beyond
-the standard library) walks each `bpf/tests/*.c` with a small
+`tools/harvest-bpf-cases (Rust)` (a Rust workspace crate with regex and TOML support) walks each `bpf/tests/*.c` with a small
 `#ifdef`/`#ifndef`/`#if`/`#elif`/`#else`/`#endif`-aware preprocessor and a
 `#define`/`#undef` table, following test-local `#include "…"` edges. This
 matters: 16 shared test headers contain 79 `CHECK` sections that are
@@ -1075,7 +1074,7 @@ tests, at the tiers of §10.3.
       generated stub list is the oracle).
 - [ ] Every `retargeted` / `replaced` / `dropped` entry has a `disposition`.
 - [ ] Coverage is monotonic against the previous commit (§5.3).
-- [ ] Re-running `tools/harvest-bpf-cases.py` against the pinned reference
+- [ ] Re-running `tools/harvest-bpf-cases (Rust)` against the pinned reference
       commit reproduces `CASES.toml` byte-for-byte (guards silent hand edits).
       Skipped with a clear message when the reference clone is absent.
 
@@ -1191,7 +1190,7 @@ tests/
   fixtures/addresses.toml   shared address book
   fixtures/packets/*.toml   shared packet fixtures
 tools/
-  harvest-bpf-cases.py      the harvester
+  harvest-bpf-cases/        the Rust harvester
 ```
 
 `flowsdn-bpftest` depends on `flowsdn-datapath` (the production loader),

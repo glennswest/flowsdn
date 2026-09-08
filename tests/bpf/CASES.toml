@@ -1,6 +1,6 @@
 # flowsdn — harvest of the reference BPF unit-test case inventory
 #
-# GENERATED FILE. Produced by tools/harvest-bpf-cases.py from a read-only
+# GENERATED FILE. Produced by tools/harvest-bpf-cases (Rust) from a read-only
 # checkout of the reference. Do not edit by hand: re-run the tool.
 # Hand-maintained state lives in [[port]] entries in tests/bpf/PORTED.toml,
 # which is keyed on (file, name) from this file.
@@ -25,7 +25,7 @@
 #
 # HOW IT WAS DERIVED
 # ------------------
-# tools/harvest-bpf-cases.py walks each bpf/tests/*.c with a small
+# tools/harvest-bpf-cases (Rust) walks each bpf/tests/*.c with a small
 # #ifdef/#elif/#else-aware preprocessor, so the feature set, ASSIGN_CONFIG
 # set, included datapath object and PKTGEN/SETUP/CHECK section list recorded
 # below are the ones the compiler actually sees for that translation unit.
@@ -62,7 +62,7 @@ reference_commit = "7d68cfb394"
 reference_dir = "bpf/tests"
 reference_license = "GPL-2.0-only OR BSD-2-Clause; taken under BSD-2-Clause"
 harvested = "2026-09-07"
-harvester = "tools/harvest-bpf-cases.py"
+harvester = "tools/harvest-bpf-cases (Rust)"
 spec = "docs/spec/18-bpf-test-harness.md"
 translation_units = 142
 translation_units_compiled = 141
