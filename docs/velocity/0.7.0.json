@@ -1,0 +1,24 @@
+{
+  "id": "0.7.0",
+  "scope": "project/shared",
+  "start_utc": "2026-09-08T21:16:07Z",
+  "start_revision": "a90f282",
+  "status": "in-progress",
+  "owner": "/root",
+  "active_work_seconds": null,
+  "token_baseline_sample_utc": "2026-09-08T21:01:31.446Z",
+  "token_baseline": {
+    "input_tokens": 28472967,
+    "cached_input_tokens": 28064384,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 102494,
+    "reasoning_output_tokens": 19303,
+    "total_tokens": 28575461
+  },
+  "workstreams": [
+    "flowsdn-reconcile",
+    "flowsdn-config",
+    "flowsdn-scripttest",
+    "flowsdn-health"
+  ]
+}
