@@ -166,8 +166,9 @@ fn parse_command(mut tokens: Vec<Token>, line: usize) -> Result<Command, ParseEr
     })
 }
 
-/// Parses sections and command syntax only. Command/condition registration,
-/// async capability checks and variable expansion belong to the future engine.
+/// Parses sections and command syntax only. Variable expansion is a separate
+/// explicit step; command registration and async capability checks belong to
+/// the future engine.
 pub fn parse_script(script: &str) -> Result<Vec<Line>, ParseError> {
     let mut lines = Vec::new();
     for (offset, text) in script.split('\n').enumerate() {

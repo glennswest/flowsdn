@@ -1,10 +1,13 @@
 //! Parsing front end for the harvested scripts (spec 17 §§3.1–3.2).
 //!
-//! This crate does not execute commands, expand variables, or materialize files.
+//! Variable expansion is explicit and preserves the tokenizer's literal fragments.
+//! This crate does not execute commands or materialize files.
 //! Parsing an archive is not evidence that its networking assertions pass.
+mod expansion;
 mod script;
 mod txtar;
 
+pub use expansion::{ExpansionMode, expand_text};
 pub use script::{Command, Condition, Fragment, Line, Status, Token, parse_script, tokenize};
 pub use txtar::{Archive, File};
 

@@ -1,12 +1,17 @@
-//! Indexed tables and change streams from spec 00 §§3.1.1–3.1.5.
+//! Indexed tables and change streams from spec 00 §§3.1.1–3.1.6.
 //!
 //! Snapshots are immutable and cheap; writers publish one version atomically.
 //! Whole-table streams coalesce writes and retain deletions until acknowledged.
-//! Initialization, metrics and reconciliation are not implemented yet.
+//! Named initializers gate readiness after registration is sealed.
+//! Metrics and reconciliation are not implemented yet.
 use arc_swap::ArcSwap;
 use imbl::OrdMap;
 use std::{collections::BTreeSet, error::Error, fmt, sync::Arc};
 use tokio::sync::{Mutex, watch};
+
+mod initialization;
+use initialization::Initialization;
+pub use initialization::{InitializationError, Initializer};
 
 mod streams;
 use streams::StreamState;
@@ -100,6 +105,7 @@ pub struct Table<T: Keyed> {
     writer: Mutex<()>,
     streams: std::sync::Mutex<StreamState>,
     notify: watch::Sender<Revision>,
+    initialization: Arc<Initialization>,
 }
 
 impl<T: Keyed> Table<T> {
@@ -131,6 +137,7 @@ impl<T: Keyed> Table<T> {
             writer: Mutex::new(()),
             streams: std::sync::Mutex::new(StreamState::new(options)),
             notify: watch::channel(0).0,
+            initialization: Arc::new(Initialization::new()),
         })
     }
 
