@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-08
+
+- Add the dependency-free flowsdn-scripttest parsing front end: exact txtar
+  reconstruction, flag extraction, quoted fragments, conditions, status prefixes,
+  section boundaries, background syntax and line-numbered errors.
+- Reject CRLF per the spec recommendation for #210; preserve LF fixture bytes.
+- Add synthetic parser regressions and a static check of all 168 harvested
+  scenarios. Commands are parsed, not executed; the runtime engine is next.
+
 ## [0.1.0] - 2026-09-08
 
 - Start the Rust workspace with pinned Rust 1.95.0, shared lints and dependency policy.

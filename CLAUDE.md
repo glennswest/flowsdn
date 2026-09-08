@@ -16,7 +16,7 @@ without following `docs/licensing.md`.
 
 ## Version
 
-0.1.0 — foundation implementation started; workspace and startup fence. Version locations (when crates exist):
+0.2.0 — foundation and txtar/script parser; no networking agent yet. Version locations (when crates exist):
 `Cargo.toml` workspace.package.version, `CHANGELOG.md` heading.
 
 ## Work plan

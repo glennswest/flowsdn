@@ -17,10 +17,10 @@ Goals:
 
 ## Status
 
-**Foundation implementation started (2026-09-08), version 0.1.0.**
+**Foundation implementation started (2026-09-08), version 0.2.0.**
 
-The Cargo workspace and startup fence are implemented. There is no working
-agent or datapath yet; the harvested corpora are not executable tests yet.
+The Cargo workspace, startup fence and txtar/script parser are implemented. There is no working
+agent or datapath yet; the harvested corpora can be syntax-checked but their networking assertions are not executed yet.
 
 | | |
 |---|---|

@@ -1565,7 +1565,11 @@ an `[exec:gobgpd]`-gated cross-check job so a shared bug is caught.
 run time buys a real invariant (§9.3). **Recommendation: in-memory on every
 PR, both backends nightly on `dev.g8.lo`.**
 
-**12.6 Line endings.** The corpus is LF-only. Should the parser normalize
+**12.6 Line endings.** Implementation decision, 2026-09-08 (#210): reject
+CRLF with a line-numbered error, following recommendation (a). Never normalize
+archived fixture bytes. The original alternatives follow for context.
+
+The corpus is LF-only. Should the parser normalize
 CRLF? (a) reject with a clear error; (b) normalize. **Recommendation: (a)** —
 a CRLF `.txtar` in this repo means someone edited a harvested file, which is
 exactly what must not happen, and a hard error surfaces it.
