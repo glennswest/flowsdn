@@ -98,16 +98,17 @@ impl StreamState {
                 return false;
             };
             let mut progress = progress.lock().expect("stream progress poisoned");
-            let backlog = self
-                .tombstones
-                .range((
-                    std::ops::Bound::Excluded(progress.acked),
-                    std::ops::Bound::Unbounded,
-                ))
-                .take(self.options.tombstone_max_count.saturating_add(1))
-                .count();
+            let over_count = self.tombstones.len() > self.options.tombstone_max_count
+                && self
+                    .tombstones
+                    .range((
+                        std::ops::Bound::Excluded(progress.acked),
+                        std::ops::Bound::Unbounded,
+                    ))
+                    .nth(self.options.tombstone_max_count)
+                    .is_some();
             if progress.acked < revision
-                && (backlog > self.options.tombstone_max_count
+                && (over_count
                     || now.duration_since(progress.last_ack) > self.options.tombstone_max_age)
             {
                 progress.acked = revision;
@@ -256,14 +257,15 @@ impl<T: Keyed> ChangeStream<'_, T> {
         if self.pending.is_empty() {
             let lower = std::ops::Bound::Excluded(self.cursor);
             let upper = std::ops::Bound::Unbounded;
-            let deletes = registry
+            let mut deletes = registry
                 .tombstones
                 .range((lower, upper))
                 .map(|(revision, key)| Change::Delete {
                     key: key.clone(),
                     revision: *revision,
-                });
-            let inserts = version
+                })
+                .peekable();
+            let mut inserts = version
                 .revisions
                 .range((lower, upper))
                 .filter_map(|(revision, key)| {
@@ -271,12 +273,24 @@ impl<T: Keyed> ChangeStream<'_, T> {
                         row: row.clone(),
                         revision: *revision,
                     })
-                });
-            let mut changes: Vec<_> = deletes.chain(inserts).collect();
-            changes.sort_by_key(Change::revision);
+                })
+                .peekable();
+            // Merge the two ordered indexes lazily. Small drains must not
+            // scan or clone the entire remaining backlog on every call.
+            let mut changes = Vec::new();
+            while changes.len() < max {
+                let next = match (deletes.peek(), inserts.peek()) {
+                    (Some(delete), Some(insert)) if delete.revision() < insert.revision() => deletes.next(),
+                    (_, Some(_)) => inserts.next(),
+                    (Some(_), None) => deletes.next(),
+                    (None, None) => break,
+                };
+                if let Some(change) = next {
+                    changes.push(change);
+                }
+            }
             // Only snapshot populations need buffering. Live updates can be
             // coalesced again between drains, bounding retained row versions.
-            changes.truncate(max);
             if let Some(change) = changes.last() {
                 self.cursor = change.revision();
             } else {
