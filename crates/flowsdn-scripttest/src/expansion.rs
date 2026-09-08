@@ -85,7 +85,10 @@ pub fn expand_text_bounded(
                     // Escape never shortens a value. Check before allocating it;
                     // the intermediate escape buffer is at most twice this bound.
                     if result.len().saturating_add(value.len()) > max_bytes {
-                        return Err(ParseError::new(line, "variable expansion exceeds byte limit"));
+                        return Err(ParseError::new(
+                            line,
+                            "variable expansion exceeds byte limit",
+                        ));
                     }
                     append(&mut result, &regex::escape(value), max_bytes, line)?;
                 }
@@ -97,7 +100,10 @@ pub fn expand_text_bounded(
 
 fn append(output: &mut String, value: &str, limit: usize, line: usize) -> Result<(), ParseError> {
     if output.len().saturating_add(value.len()) > limit {
-        return Err(ParseError::new(line, "variable expansion exceeds byte limit"));
+        return Err(ParseError::new(
+            line,
+            "variable expansion exceeds byte limit",
+        ));
     }
     output.push_str(value);
     Ok(())
@@ -131,7 +137,13 @@ impl Token {
             if fragment.quoted {
                 append(&mut result, &fragment.text, max_bytes, line)?;
             } else {
-                let expanded = expand_text_bounded(&fragment.text, environment, mode, line, max_bytes.saturating_sub(result.len()))?;
+                let expanded = expand_text_bounded(
+                    &fragment.text,
+                    environment,
+                    mode,
+                    line,
+                    max_bytes.saturating_sub(result.len()),
+                )?;
                 append(&mut result, &expanded, max_bytes, line)?;
             }
         }

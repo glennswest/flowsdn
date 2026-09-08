@@ -11,12 +11,18 @@ const MAX_LOG_ENTRIES: usize = 4096;
 const MAX_ARGUMENT_BYTES: usize = 8_388_608;
 
 pub(crate) fn record_log(log: &mut Vec<String>, message: &str) -> Result<(), CommandError> {
-    let bytes = log.iter().fold(0usize, |sum, entry| sum.saturating_add(entry.len()));
+    let bytes = log
+        .iter()
+        .fold(0usize, |sum, entry| sum.saturating_add(entry.len()));
     if message.len() > MAX_DIAGNOSTIC_BYTES {
-        return Err(CommandError::LimitExceeded("diagnostic exceeds 64 KiB limit"));
+        return Err(CommandError::LimitExceeded(
+            "diagnostic exceeds 64 KiB limit",
+        ));
     }
     if bytes.saturating_add(message.len()) > MAX_LOG_BYTES || log.len() >= MAX_LOG_ENTRIES {
-        return Err(CommandError::LimitExceeded("script log exceeds 1 MiB or 4096 entry limit"));
+        return Err(CommandError::LimitExceeded(
+            "script log exceeds 1 MiB or 4096 entry limit",
+        ));
     }
     log.push(message.into());
     Ok(())
@@ -286,7 +292,11 @@ impl Engine {
         for line in lines {
             let command = match line {
                 Line::Section { line, text } => {
-                    record_log(&mut state.log, &text).map_err(|error| RunError { line, command: "#".into(), message: error.to_string() })?;
+                    record_log(&mut state.log, &text).map_err(|error| RunError {
+                        line,
+                        command: "#".into(),
+                        message: error.to_string(),
+                    })?;
                     continue;
                 }
                 Line::Command(command) => command,
@@ -310,7 +320,12 @@ impl Engine {
                 .words
                 .first()
                 .ok_or_else(|| error("missing command".into()))?
-                .expand_bounded(&state.environment, ExpansionMode::Plain, command.line, MAX_ARGUMENT_BYTES)
+                .expand_bounded(
+                    &state.environment,
+                    ExpansionMode::Plain,
+                    command.line,
+                    MAX_ARGUMENT_BYTES,
+                )
                 .map_err(|e| error(e.message))?;
             let registered = self
                 .commands
@@ -329,7 +344,12 @@ impl Engine {
             let mut after_separator = false;
             for token in command.words.iter().skip(1) {
                 let plain = token
-                    .expand_bounded(&state.environment, ExpansionMode::Plain, command.line, MAX_ARGUMENT_BYTES.saturating_sub(argument_bytes))
+                    .expand_bounded(
+                        &state.environment,
+                        ExpansionMode::Plain,
+                        command.line,
+                        MAX_ARGUMENT_BYTES.saturating_sub(argument_bytes),
+                    )
                     .map_err(|e| error(e.message))?;
                 let argument = if registered.pattern_argument && !pattern_found {
                     if !after_separator && plain == "--" {
@@ -338,7 +358,12 @@ impl Engine {
                     } else if after_separator || !plain.starts_with('-') {
                         pattern_found = true;
                         token
-                            .expand_bounded(&state.environment, ExpansionMode::Regex, command.line, MAX_ARGUMENT_BYTES.saturating_sub(argument_bytes))
+                            .expand_bounded(
+                                &state.environment,
+                                ExpansionMode::Regex,
+                                command.line,
+                                MAX_ARGUMENT_BYTES.saturating_sub(argument_bytes),
+                            )
                             .map_err(|e| error(e.message))?
                     } else {
                         plain
@@ -362,10 +387,11 @@ impl Engine {
                 Err(CommandError::Failure(message))
                     if matches!(command.status, Status::Failure | Status::SuccessOrFailure) =>
                 {
-                    record_log(&mut state.log, &format!(
-                        "line {}: expected failure: {message}",
-                        command.line
-                    )).map_err(|failure| error(failure.to_string()))?;
+                    record_log(
+                        &mut state.log,
+                        &format!("line {}: expected failure: {message}", command.line),
+                    )
+                    .map_err(|failure| error(failure.to_string()))?;
                 }
                 Err(failure) => return Err(error(failure.to_string())),
             }
