@@ -24,7 +24,8 @@ must not be added as project wall-clock time.
 
 Commit `a98a068` passed **149 tests per debug/release profile**, formatting,
 Clippy, both Linux musl compile checks and cargo-deny. Cleanup removed **9,195
-files / 2.3 GiB**. Release candidate **v0.7.0** awaits publication. The ledger
+files / 2.3 GiB**. [v0.7.0](https://github.com/glennswest/flowsdn/releases/tag/v0.7.0) was published
+at 21:58 UTC, after the measurement cutoff. The ledger
 records six issues closed this session; the repository has nine closed and 281
 open issues at completion. Usage after the earlier cutoff—including the final
 validation, cleanup, ledger edits and reporting—is excluded from token totals.

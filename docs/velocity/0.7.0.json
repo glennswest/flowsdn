@@ -303,17 +303,20 @@
     "completed_at_utc": "2026-09-08T21:55:39Z"
   },
   "commit": "a98a068",
-  "release": null,
+  "release": "v0.7.0",
   "cleanup": {
     "status": "complete",
     "cargo_removed": "2.3 GiB",
     "files_removed": 9195,
     "completed_at_utc": "2026-09-08T21:55:39Z"
   },
-  "note": "Completed responses are measured through usage_cutoff_utc, before validation and cleanup completed at21:55:39 UTC. Source is validated; release publication remains pending. Baseline is unchanged. Shared integration/waits and overlapping agent windows are not exclusive coding time.",
+  "note": "Completed responses are measured through usage_cutoff_utc, before validation and cleanup completed at 21:55:39 UTC. Source is validated; release publication is recorded separately after the measurement cutoff. Baseline is unchanged. Shared integration/waits and overlapping agent windows are not exclusive coding time.",
   "usage_cutoff_utc": "2026-09-08T21:53:08.201Z",
   "completed_at_utc": "2026-09-08T21:55:39Z",
   "measurement_elapsed_seconds": 2221.201,
   "validated_commit": "a98a068",
-  "release_candidate": "v0.7.0"
+  "release_candidate": "v0.7.0",
+  "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.7.0",
+  "release_commit": "0c3e728ba531986ecb819751eb5875cf37a40485",
+  "publication_observed_utc": "2026-09-08T21:58:37Z"
 }

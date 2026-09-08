@@ -263,7 +263,8 @@
       "v0.3.0",
       "v0.4.0",
       "v0.5.0",
-      "v0.6.0"
+      "v0.6.0",
+      "v0.7.0"
     ],
     "unique_tests": 149,
     "test_profiles": [
@@ -290,7 +291,9 @@
       "open": 281,
       "closed_this_session": 6,
       "as_of_utc": "2026-09-08T21:55:39Z"
-    }
+    },
+    "release_commit": "0c3e728ba531986ecb819751eb5875cf37a40485",
+    "publication_observed_utc": "2026-09-08T21:58:37Z"
   },
   "subagent_usage_file": "subagents.json",
   "parallel_work": [
