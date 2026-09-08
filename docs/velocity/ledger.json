@@ -634,9 +634,10 @@
     "validated_commit": "a98a068",
     "completed_at_utc": "2026-09-08T21:55:39Z",
     "release_candidate": "v0.7.0",
-    "release": null,
-    "publication": "pending",
-    "cleanup": "complete"
+    "release": "v0.7.0",
+    "publication": "published",
+    "cleanup": "complete",
+    "publication_observed_utc": "2026-09-08T21:58:37Z"
   },
   "milestone_0_7_parallel_time": {
     "observed_agent_window_seconds": 3064.201,
