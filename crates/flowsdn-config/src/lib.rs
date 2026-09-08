@@ -1,13 +1,14 @@
 //! Typed configuration layering from foundation specification §3.3.
 //!
 //! Callers supply the schema and raw source entries. This core does not yet
-//! supply the complete agent key catalogue, validate relationships between keys,
-//! or persist runtime configuration. Source adapters are available in `sources`.
+//! supply the complete agent key catalogue or every cross-key validation rule.
+//! Source adapters are available in `sources`; runtime snapshots in `runtime`.
 #![forbid(unsafe_code)]
 
 pub mod immutable;
 mod parse;
 pub mod sources;
+pub mod runtime;
 pub mod validation;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -198,6 +199,14 @@ pub struct Resolved {
     values: BTreeMap<String, Effective>,
     warnings: Vec<Warning>,
     unknown_keys: BTreeSet<String>,
+    unknown_values: BTreeMap<String, UnknownValue>,
+}
+
+/// The effective raw value of an unregistered key, retained for diagnostics.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnknownValue {
+    pub raw: String,
+    pub source: Source,
 }
 
 impl Resolved {
@@ -215,6 +224,10 @@ impl Resolved {
 
     pub fn unknown_keys(&self) -> &BTreeSet<String> {
         &self.unknown_keys
+    }
+
+    pub fn unknown_values(&self) -> &BTreeMap<String, UnknownValue> {
+        &self.unknown_values
     }
 }
 
@@ -268,6 +281,7 @@ impl Registry {
             values: BTreeMap::new(),
             warnings: Vec::new(),
             unknown_keys: BTreeSet::new(),
+            unknown_values: BTreeMap::new(),
         };
         for spec in self.specs.values() {
             self.apply(&mut resolved, spec, Source::Default, &spec.default)?;
@@ -282,6 +296,7 @@ impl Registry {
                 key = (*target).to_owned();
             }
             let Some(spec) = self.specs.get(&key) else {
+                resolved.unknown_values.insert(key.clone(), UnknownValue { raw: entry.value, source: entry.source });
                 if resolved.unknown_keys.insert(key.clone()) {
                     resolved.warnings.push(Warning::UnknownKey {
                         key,

@@ -48,9 +48,28 @@ Keys marked `Class::Immutable` are compared across parsed snapshots using
 endpoint state exists; other changes are reported for diagnostics. Missing
 previous state is accepted, and an unparseable previous snapshot produces a
 warning. The caller provides decoded snapshots and actual endpoint-state
-presence; this module does not read or rotate runtime files.
+presence.
+
+`runtime` serializes and decodes snapshots with version, RFC3339 timestamp and
+reference compatibility metadata. It retains typed values and source provenance,
+effective unknown raw values, and immutable-key membership; script keys are
+excluded. Decoding never fills defaults for keys absent in the previous file.
+`check_previous` reads prior state and feeds it into the immutable-change check.
+Unknown-key source provenance is retained in the `sources` object as well.
+Snapshot input and output are limited to 16 MiB. Prior-state reads use a
+nonblocking, no-follow open and validate the opened file descriptor; symlinks,
+special files and oversized input produce an unparseable-history warning.
+
+`runtime::store` stages and syncs the new snapshot, preserves current availability
+through history rotation, and atomically publishes the staged file. It keeps
+the two prior snapshots when rotation succeeds. All storage/rotation failures
+are returned as nonfatal diagnostics; a published snapshot can still have a
+history or directory-sync warning. Callers serialize writers for the supplied
+state directory and check previous state before publishing a changed config.
+Temporary files are cleaned on completion/failure. Unix snapshot files use
+mode 0600, and final-path symlinks are replaced without writing their targets.
 
 This core does not yet include the complete 539-key agent catalogue,
 CLI argument parsing, area-specific map validators, all cross-key rules,
-derived settings, runtime persistence or dynamic config reflection. Legacy alias
+derived settings or dynamic config reflection. Legacy alias
 definitions are supplied by the owning area's schema.
