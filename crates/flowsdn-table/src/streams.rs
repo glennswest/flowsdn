@@ -280,7 +280,9 @@ impl<T: Keyed> ChangeStream<'_, T> {
             let mut changes = Vec::new();
             while changes.len() < max {
                 let next = match (deletes.peek(), inserts.peek()) {
-                    (Some(delete), Some(insert)) if delete.revision() < insert.revision() => deletes.next(),
+                    (Some(delete), Some(insert)) if delete.revision() < insert.revision() => {
+                        deletes.next()
+                    }
                     (_, Some(_)) => inserts.next(),
                     (Some(_), None) => deletes.next(),
                     (None, None) => break,

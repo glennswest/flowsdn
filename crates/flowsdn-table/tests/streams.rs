@@ -234,7 +234,11 @@ async fn single_item_drains_merge_interleaved_indexes_and_new_writes() {
     let mut stream = table.watch(0);
     let mut expected = Vec::new();
     for id in 0..100_u8 {
-        let inserted = table.insert(Item(id, u64::from(id))).await.unwrap().revision;
+        let inserted = table
+            .insert(Item(id, u64::from(id)))
+            .await
+            .unwrap()
+            .revision;
         expected.push((false, id, inserted));
         let deleted = table.delete(&[id + 100]).await.unwrap().revision;
         expected.push((true, id + 100, deleted));
@@ -248,12 +252,18 @@ async fn single_item_drains_merge_interleaved_indexes_and_new_writes() {
     let deleted = table.delete(&[99]).await.unwrap().revision;
     let reinserted = table.insert(Item(199, 7)).await.unwrap().revision;
     expected.retain(|(_, _, revision)| *revision < 199);
-    expected.extend([(false, 0, updated), (true, 99, deleted), (false, 199, reinserted)]);
+    expected.extend([
+        (false, 0, updated),
+        (true, 99, deleted),
+        (false, 199, reinserted),
+    ]);
     let mut actual = Vec::new();
     loop {
         match stream.drain(1).pop() {
             Some(Change::Insert { row, revision }) => actual.push((false, row.0, revision)),
-            Some(Change::Delete { key, revision }) => actual.push((true, *key.first().unwrap(), revision)),
+            Some(Change::Delete { key, revision }) => {
+                actual.push((true, *key.first().unwrap(), revision))
+            }
             Some(Change::Resync { .. }) => panic!("retained history must not resync"),
             None => break,
         }
@@ -264,24 +274,33 @@ async fn single_item_drains_merge_interleaved_indexes_and_new_writes() {
 
 #[tokio::test]
 async fn writes_during_partial_resync_population_are_delivered_after_snapshot() {
-    let table = Table::with_stream_options(vec![], StreamOptions {
-        tombstone_max_count: 1,
-        ..StreamOptions::default()
-    }).unwrap();
+    let table = Table::with_stream_options(
+        vec![],
+        StreamOptions {
+            tombstone_max_count: 1,
+            ..StreamOptions::default()
+        },
+    )
+    .unwrap();
     for id in 1..4 {
         table.insert(Item(id, u64::from(id))).await.unwrap();
     }
     let mut stream = table.watch(3);
     table.delete(&[99]).await.unwrap();
     table.delete(&[98]).await.unwrap();
-    assert!(matches!(stream.drain(1).as_slice(), [Change::Resync { revision: 5 }]));
+    assert!(matches!(
+        stream.drain(1).as_slice(),
+        [Change::Resync { revision: 5 }]
+    ));
     assert_eq!(inserts(stream.drain(1)), [(1, 1, 1)]);
     table.delete(&[2]).await.unwrap();
     table.insert(Item(3, 9)).await.unwrap();
     table.insert(Item(4, 4)).await.unwrap();
     assert_eq!(inserts(stream.drain(10)), [(2, 2, 2), (3, 3, 3)]);
     assert_eq!(stream.revision(), 5);
-    assert!(matches!(stream.drain(1).as_slice(), [Change::Delete { key, revision: 6 }] if key == &[2]));
+    assert!(
+        matches!(stream.drain(1).as_slice(), [Change::Delete { key, revision: 6 }] if key == &[2])
+    );
     assert_eq!(inserts(stream.drain(10)), [(3, 9, 7), (4, 4, 8)]);
     assert!(stream.drain(10).is_empty());
     assert_eq!(stream.ack(stream.revision()), 8);
