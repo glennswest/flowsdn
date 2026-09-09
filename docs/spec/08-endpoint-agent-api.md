@@ -110,7 +110,8 @@ Out of scope, with owner:
 
 - `ep_config.json` — §4.2, including legacy keys `dockerID`, `OpLabels`,
   `SecLabel`, `DNSRules` (v1, read and ignored), `DNSRulesV2`.
-- deletion queue entries — `EndpointBatchDeleteRequest` JSON, one per file.
+- deletion queue entries — container JSON or bare attachment strings, as
+  specified in spec 09 §4.7 and §5.1.
 - `health-endpoint.pid` — decimal PID and newline.
 
 ### 2.4 Kubernetes
@@ -606,8 +607,10 @@ the API (host/ingress/health endpoints reject `APICanModify`).
 **Deletion queue (agent side).** Before the API socket is created, after
 `endpoint-restore.restored-into-manager`: take the exclusive `flock` on
 `deleteQueue/lockfile` (creating the directory 0755 if missing), read every
-`*.delete` file (JSON `EndpointBatchDeleteRequest`), delete the endpoints by
-container id (missing endpoints are not errors), remove the file, then
+`*.delete` file, first trying JSON `EndpointBatchDeleteRequest`; otherwise
+decode the bare `<container-id>:<ifname>` attachment string. Delete endpoints
+by container id or attachment id respectively (missing endpoints are not
+errors), remove the file, then
 release the lock **after** the API is listening (`api-ready` fence orders
 `delete-queue-lock-held` before `api-listening`; the unlock is a job that
 runs once the server is up). The CNI holds a shared lock while writing, so
@@ -1181,9 +1184,11 @@ metadata), `kubectl get cep`.
 
 ### 4.9 Deletion-queue entry
 
-`<deleteQueue>/<random>.delete` containing
-`{"container-id": "<cid>"}`; the directory MUST not exceed a few hundred
-files (the CNI refuses beyond a limit it owns, spec 09).
+`<deleteQueue>/<sha256hex(contents)>.delete`, containing either
+`{"container-id":"<cid>"}` or the bare `<cid>:<ifname>` string. The CNI
+enforces a 256-entry cap. This aligns the agent replay contract with the
+normative writer format in spec 09 §4.7/§5.1; the earlier random-name and
+JSON-only description was incomplete.
 
 ## 5. Algorithms
 
