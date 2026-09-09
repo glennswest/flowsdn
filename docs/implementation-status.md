@@ -310,3 +310,5 @@ Formatting, warning-free Clippy, both x86_64/aarch64 Linux musl compile checks,
 and dependency advisories/bans/licenses/sources checks passed. The dependency
 graph remains at 89 external versions. No live-map, verifier, mixed-cluster or
 arm64 runtime compatibility is claimed.
+After recording validation, cleanup removed 11,693 build files / 3.3 GiB and
+this milestone's seven temporary logs. The release remains source-only.

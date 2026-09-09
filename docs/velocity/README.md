@@ -1,45 +1,43 @@
 # flowsdn velocity ledger
 
-Usage cutoff: **2026-09-09T12:55:18.196Z**. Milestone 0.11.0 started
-**2026-09-09T12:46:19Z** and is **awaiting validation**. Elapsed through the token cutoff is
-**539.196 seconds**. Later activity bounds are reported separately below.
+Usage cutoff and cleanup completion: **2026-09-09T13:04:59Z**. Milestone 0.11.0
+started at **12:46:19 UTC** and completed in **18 minutes 40 seconds**
+(**1,120 elapsed seconds**). Source is validated; release publication is pending.
 
 | Combined unique-response usage | Tokens |
 |---|---:|
-| Input | 119,862,213 |
-| Cached input (subset) | 116,833,664 |
-| Uncached input | 3,028,549 |
-| Output | 543,096 |
-| Reasoning output (subset) | 132,323 |
-| Total processed | 120,405,309 |
+| Input | 127,502,211 |
+| Cached input (subset) | 124,422,912 |
+| Uncached input | 3,079,299 |
+| Output | 559,066 |
+| Reasoning output (subset) | 138,986 |
+| Total processed | 128,061,277 |
 
-Milestone usage is **10,015,230 processed tokens** across root
+Milestone usage is **17,671,198 processed tokens** across root
 and three agents, deduplicated by response ID. The combined baseline uses
-responses strictly before the milestone start; the root baseline is the latest
-sample at or before start. The superseded after-start sample remains in the
-milestone audit metadata. Repeated context counts as input, and these figures
-do not establish subscription dollar usage. Per-agent cutoffs are retained in
-[subagents.json](subagents.json).
+responses strictly before start; root uses the latest sample at or before start.
+The superseded after-start sample remains only as audit metadata. Repeated
+context counts as input; these figures do not establish subscription dollars.
+Per-agent cutoffs and cumulative counters remain in [subagents.json](subagents.json).
 
-Seven closed reported windows total **1,229 agent-window seconds**
-(**0.341389 hours**), with a **593-second project interval union**. Script
-implementation ended at **12:56:41 UTC** after 577 elapsed seconds, including
-its review fix. A separate 66-second script review ended at 12:56:00 UTC.
-These completion bounds follow the fixed token cutoff; their later usage is
-not inferred. All active-work fields remain unknown.
+Seven reported windows total **1,229 agent-window seconds** (**0.341389 hours**),
+with a **593-second project interval union**. Observed validation windows are
+**217 seconds** through the debug/release transition and **217 seconds** through
+final checks, followed by **35 seconds** of cleanup. These are nested elapsed
+windows, not exclusive processing time, and are not added to milestone elapsed.
+Active work and active agent-hours remain unknown.
 
-Focused validation passed **33 ABI tests, 62 reconciler tests and Clippy**
-for both crates. Script work adds 14 tests awaiting full validation. Full
-workspace checks began at **12:57:10 UTC**, when milestone elapsed reached
-**651 seconds**; no complete-suite pass is claimed. Cleanup and publication
-are pending. Issue #13 was confirmed closed. [Milestone 0.11](0.11.0.json)
-records the separate usage/activity bounds; prior releases remain preserved in
-[0.10](0.10.0.json) and the ledger. Usage after the cutoff is excluded.
+Commit `7972548` passed **286 all-features tests in each debug/release profile**,
+formatting, Clippy, both Linux musl compile checks and dependency policy;
+`7952174` records validation. Test counts: script 80, reconciler 62, config 51,
+ABI 33, table 30, health 7, fence 7, selector 7, version 5 and harvester 4. Validation
+completed at **13:04:24 UTC**. Cleanup removed **11,693 files / 3.3 GiB** and
+seven task logs; the device check passed. Issue #13 closed; repository totals
+are **11 closed / 279 open**. Release publication is pending.
 
-A later validation checkpoint at **13:00:47 UTC** passed all **286 debug tests**,
-formatting, Clippy and both Linux musl compile checks against `7972548`.
-Release tests and dependency policy remain pending. This checkpoint is after
-the usage cutoff above.
+[Milestone 0.11](0.11.0.json) preserves timing, counters and validation details;
+[0.10](0.10.0.json) and the ledger retain prior history. Usage after the fixed
+cutoff, including these ledger edits and publication, is excluded.
 
 ## Recording rules
 
