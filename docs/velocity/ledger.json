@@ -527,7 +527,9 @@
       },
       "commit": "3e5ba2a",
       "validation_record_commit": "619908e",
-      "note": "Numeric identity, labels, guarded BPF classifications and spec decisions; source-only foundation."
+      "note": "Numeric identity, labels, guarded BPF classifications and spec decisions; source-only foundation.",
+      "release": "v0.13.0",
+      "release_commit": "762bf4cd0e6bb577e1e3ded737b6d5f17cfe5ce1"
     }
   ],
   "crates": [
@@ -689,7 +691,8 @@
       "v0.9.0",
       "v0.10.0",
       "v0.11.0",
-      "v0.12.0"
+      "v0.12.0",
+      "v0.13.0"
     ],
     "unique_tests": 341,
     "test_profiles": [
@@ -745,7 +748,7 @@
       "flowsdn-harvest-bpf-cases": 9,
       "flowsdn-identity": 16
     },
-    "publication": "pending",
+    "publication": "published",
     "issues_closed_this_milestone": [
       53,
       54,
@@ -756,9 +759,12 @@
       271,
       272
     ],
-    "release_commit": "a803972b87364c1385e6b87292de2c41f38b75da",
-    "published_at_utc": "2026-09-09T13:34:15Z",
-    "publication_observed_utc": "2026-09-09T13:34:15Z"
+    "release_commit": "762bf4cd0e6bb577e1e3ded737b6d5f17cfe5ce1",
+    "published_at_utc": "2026-09-09T13:59:22Z",
+    "publication_observed_utc": "2026-09-09T13:59:22Z",
+    "release": "v0.13.0",
+    "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.13.0",
+    "elapsed_to_publication_seconds": 1068
   },
   "subagent_usage_file": "subagents.json",
   "parallel_work": [
@@ -2157,7 +2163,7 @@
       "BPF entrypoint classification",
       "kernel and loader review"
     ],
-    "publication": "pending",
+    "publication": "published",
     "as_of_utc": "2026-09-09T13:58:06Z",
     "tokens": {
       "input_tokens": 18017010,
@@ -2602,7 +2608,12 @@
         "elapsed_seconds": 39,
         "note": "Observed record publication and cleanup; nested in milestone elapsed."
       }
-    ]
+    ],
+    "release": "v0.13.0",
+    "release_commit": "762bf4cd0e6bb577e1e3ded737b6d5f17cfe5ce1",
+    "published_at_utc": "2026-09-09T13:59:22Z",
+    "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.13.0",
+    "elapsed_to_publication_seconds": 1068
   },
   "milestone_0_7_parallel_time": {
     "observed_agent_window_seconds": 3064.201,

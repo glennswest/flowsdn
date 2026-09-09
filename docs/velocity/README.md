@@ -6,8 +6,12 @@ Validation and cleanup completed in **16 minutes 32 seconds** (992 seconds).
 All **341 tests** passed in debug and release, with formatting, Clippy, both
 Linux musl compile checks, dependency policy and full harvester reproduction.
 Cleanup removed **12,845 files / 3.4 GiB**, five logs and the generated inventory.
-Eight issues closed; repository totals are **19 closed / 271 open**. Publication
-is pending; source validation is recorded in `619908e`. A 17 MiB pinned reference
+Eight issues closed; repository totals are **19 closed / 271 open**. Foundation
+prerelease [v0.13.0](https://github.com/glennswest/flowsdn/releases/tag/v0.13.0)
+was published at **13:59:22 UTC**, **17 minutes 48 seconds** after milestone
+start (1,068 elapsed seconds). Source validation is recorded in `619908e`;
+release commit is `762bf4c`. Publication and subsequent ledger work are outside
+the fixed usage cutoff. A 17 MiB pinned reference
 cache is retained for future audits; compiler output was cleaned.
 
 Milestone processed usage: **18,068,981 tokens** across root and

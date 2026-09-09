@@ -23,7 +23,7 @@
     "BPF entrypoint classification",
     "kernel and loader review"
   ],
-  "publication": "pending",
+  "publication": "published",
   "as_of_utc": "2026-09-09T13:58:06Z",
   "tokens": {
     "input_tokens": 18017010,
@@ -468,5 +468,10 @@
       "elapsed_seconds": 39,
       "note": "Observed record publication and cleanup; nested in milestone elapsed."
     }
-  ]
+  ],
+  "release": "v0.13.0",
+  "release_commit": "762bf4cd0e6bb577e1e3ded737b6d5f17cfe5ce1",
+  "published_at_utc": "2026-09-09T13:59:22Z",
+  "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.13.0",
+  "elapsed_to_publication_seconds": 1068
 }
