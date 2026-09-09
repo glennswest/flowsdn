@@ -110,15 +110,18 @@ dependencies = [
 
 [[package]]
 name = "flowsdn-bpf-abi"
-version = "0.13.0"
+version = "0.14.0"
 
 [[package]]
 name = "flowsdn-bpf-loader"
-version = "0.13.0"
+version = "0.14.0"
+dependencies = [
+ "flowsdn-bpf-abi",
+]
 
 [[package]]
 name = "flowsdn-config"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "libc",
  "serde_json",
@@ -127,7 +130,7 @@ dependencies = [
 
 [[package]]
 name = "flowsdn-fence"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "tokio",
  "tracing",
@@ -135,7 +138,7 @@ dependencies = [
 
 [[package]]
 name = "flowsdn-harvest-bpf-cases"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "regex",
  "toml",
@@ -143,7 +146,7 @@ dependencies = [
 
 [[package]]
 name = "flowsdn-health"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "flowsdn-table",
  "tokio",
@@ -151,11 +154,15 @@ dependencies = [
 
 [[package]]
 name = "flowsdn-identity"
-version = "0.13.0"
+version = "0.14.0"
+dependencies = [
+ "regex",
+ "serde_json",
+]
 
 [[package]]
 name = "flowsdn-reconcile"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "flowsdn-health",
  "flowsdn-table",
@@ -164,7 +171,7 @@ dependencies = [
 
 [[package]]
 name = "flowsdn-scripttest"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "cap-std",
  "flowsdn-table",
@@ -176,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "flowsdn-table"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "arc-swap",
  "imbl",
@@ -185,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "flowsdn-version"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "serde_json",
 ]
@@ -811,7 +818,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "serde_json",
 ]

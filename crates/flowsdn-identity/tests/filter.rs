@@ -1,7 +1,12 @@
 #![cfg(feature = "filter")]
-use flowsdn_identity::{filter::{DEFAULT_ENTRIES, FilterDiagnostic, LabelFilter, Rule}, labels::{Label, Labels}};
+use flowsdn_identity::{
+    filter::{DEFAULT_ENTRIES, FilterDiagnostic, LabelFilter, Rule},
+    labels::{Label, Labels},
+};
 
-fn label(source: &str, key: &str) -> Label { Label::new(source, key, "ignored-value").expect("label fixture") }
+fn label(source: &str, key: &str) -> Label {
+    Label::new(source, key, "ignored-value").expect("label fixture")
+}
 
 #[test]
 fn default_includes_are_exceptions_not_a_whitelist() {
@@ -9,10 +14,23 @@ fn default_includes_are_exceptions_not_a_whitelist() {
     assert!(!filter.is_whitelist());
     assert_eq!(filter.rules().len(), 21);
     assert_eq!(DEFAULT_ENTRIES.first(), Some(&"reserved:.*"));
-    for key in ["app", "team", "io.kubernetes.pod.namespace", "io.cilium.k8s.namespace.labels.team", "app.kubernetes.io/name"] {
+    for key in [
+        "app",
+        "team",
+        "io.kubernetes.pod.namespace",
+        "io.cilium.k8s.namespace.labels.team",
+        "app.kubernetes.io/name",
+    ] {
         assert!(filter.retains(&label("k8s", key)), "{key}");
     }
-    for key in ["io.kubernetes.hidden", "kubernetes.io/name", "pod-template-hash", "annotation.note", "topology.kubernetes.io/zone", "x.beta.kubernetes.io/name"] {
+    for key in [
+        "io.kubernetes.hidden",
+        "kubernetes.io/name",
+        "pod-template-hash",
+        "annotation.note",
+        "topology.kubernetes.io/zone",
+        "x.beta.kubernetes.io/name",
+    ] {
         assert!(!filter.retains(&label("k8s", key)), "{key}");
     }
     // Reserved regex consumes the full key and beats a shorter excluded prefix.
@@ -29,7 +47,11 @@ fn user_include_enables_whitelist_but_preserves_default_exceptions() {
     assert!(!filter.retains(&label("k8s", "app")));
     assert!(filter.retains(&label("reserved", "host")));
     assert!(filter.retains(&label("k8s", "io.kubernetes.pod.namespace")));
-    assert!(!LabelFilter::identity(&["", "!private"]).expect("filter").is_whitelist());
+    assert!(
+        !LabelFilter::identity(&["", "!private"])
+            .expect("filter")
+            .is_whitelist()
+    );
 }
 
 #[test]
@@ -55,9 +77,17 @@ fn regex_matching_is_anchored_and_reports_utf8_byte_offsets() {
     assert_eq!(rule.match_length(&label("node", "éé.rest")), Some(4));
     assert_eq!(rule.match_length(&label("node", "xéé")), None);
     assert_eq!(rule.match_length(&label("k8s", "éé")), None);
-    assert_eq!(Rule::parse(":a|bc").expect("regex").match_length(&label("node", "bc-tail")), Some(2));
+    assert_eq!(
+        Rule::parse(":a|bc")
+            .expect("regex")
+            .match_length(&label("node", "bc-tail")),
+        Some(2)
+    );
     // Values never participate in key matching.
-    assert_eq!(rule.match_length(&Label::new("node", "other", "éé").expect("label")), None);
+    assert_eq!(
+        rule.match_length(&Label::new("node", "other", "éé").expect("label")),
+        None
+    );
 }
 
 #[test]
@@ -68,24 +98,60 @@ fn source_split_precedes_exclusion_and_preserves_whitespace() {
     let source = Rule::parse("!node:zone").expect("rule");
     assert!(!source.is_exclusion());
     assert_eq!(source.source(), "!node");
-    assert_eq!(Rule::parse(":(?:a|b)").expect("explicit empty source").match_length(&label("node", "b")), Some(1));
-    assert_eq!(Rule::parse(" x").expect("space").match_length(&label("node", "x")), None);
-    for invalid in ["", "node:", "[", r"(a)\1", "(?=x)"] { assert!(Rule::parse(invalid).is_err(), "{invalid}"); }
+    assert_eq!(
+        Rule::parse(":(?:a|b)")
+            .expect("explicit empty source")
+            .match_length(&label("node", "b")),
+        Some(1)
+    );
+    assert_eq!(
+        Rule::parse(" x")
+            .expect("space")
+            .match_length(&label("node", "x")),
+        None
+    );
+    for invalid in ["", "node:", "[", r"(a)\1", "(?=x)"] {
+        assert!(Rule::parse(invalid).is_err(), "{invalid}");
+    }
 }
 
 #[test]
 fn zero_length_regex_sentinels_keep_reference_rule_order_behavior() {
     let input = label("node", "abc");
-    assert!(!LabelFilter::node(&["^$"]).expect("no match").retains(&input));
-    assert!(!LabelFilter::node(&["^"]).expect("zero include").retains(&input));
-    assert!(LabelFilter::node(&["!"]).expect("empty exclusion").retains(&input));
-    assert!(LabelFilter::node(&["!a", "!"]).expect("reset exclusion").retains(&input));
-    assert!(!LabelFilter::node(&["!", "!a"]).expect("positive exclusion last").retains(&input));
+    assert!(
+        !LabelFilter::node(&["^$"])
+            .expect("no match")
+            .retains(&input)
+    );
+    assert!(
+        !LabelFilter::node(&["^"])
+            .expect("zero include")
+            .retains(&input)
+    );
+    assert!(
+        LabelFilter::node(&["!"])
+            .expect("empty exclusion")
+            .retains(&input)
+    );
+    assert!(
+        LabelFilter::node(&["!a", "!"])
+            .expect("reset exclusion")
+            .retains(&input)
+    );
+    assert!(
+        !LabelFilter::node(&["!", "!a"])
+            .expect("positive exclusion last")
+            .retains(&input)
+    );
 }
 
 #[test]
 fn node_filter_has_no_defaults_and_only_filters_node_source() {
-    assert!(LabelFilter::node(&[]).expect("empty").retains(&label("node", "annotation.hidden")));
+    assert!(
+        LabelFilter::node(&[])
+            .expect("empty")
+            .retains(&label("node", "annotation.hidden"))
+    );
     let excluded = LabelFilter::node(&["!private"]).expect("exclude");
     assert!(excluded.retains(&label("node", "public")));
     assert!(!excluded.retains(&label("node", "private.x")));
@@ -105,19 +171,26 @@ fn json_prefixes_are_literal_and_replace_defaults() {
     assert!(!filter.retains(&label("k8s", "axb.more")));
     assert!(filter.retains(&label("k8s", "[literal")));
     assert!(!filter.retains(&label("reserved", "host")));
-    assert_eq!(filter.diagnostics(), &[FilterDiagnostic::MissingReservedRule]);
+    assert_eq!(
+        filter.diagnostics(),
+        &[FilterDiagnostic::MissingReservedRule]
+    );
 }
 
 #[test]
 fn json_and_cli_keep_their_distinct_matchers_and_diagnostic_contract() {
     let file = br#"{"version":1,"valid-prefixes":[{"prefix":"team.secret","source":"k8s","invert":true}]}"#;
-    let filter = LabelFilter::identity_from_json(file, &["k8s:team\\.secret\\.allowed", "reserved:.*"]).expect("mixed");
+    let filter =
+        LabelFilter::identity_from_json(file, &["k8s:team\\.secret\\.allowed", "reserved:.*"])
+            .expect("mixed");
     assert!(filter.diagnostics().is_empty());
     assert!(!filter.retains(&label("k8s", "team.secret")));
     assert!(filter.retains(&label("k8s", "team.secret.allowed")));
     assert!(filter.retains(&label("reserved", "host")));
-    let misleading = br#"{"version":1,"valid-prefixes":[{"prefix":".*","source":"reserved","invert":true}]}"#;
-    let filter = LabelFilter::identity_from_json(misleading, &["k8s:team"]).expect("accepted diagnostic presence");
+    let misleading =
+        br#"{"version":1,"valid-prefixes":[{"prefix":".*","source":"reserved","invert":true}]}"#;
+    let filter = LabelFilter::identity_from_json(misleading, &["k8s:team"])
+        .expect("accepted diagnostic presence");
     assert!(filter.diagnostics().is_empty());
     assert!(!filter.retains(&label("reserved", "host")));
 }
@@ -125,15 +198,26 @@ fn json_and_cli_keep_their_distinct_matchers_and_diagnostic_contract() {
 #[test]
 fn json_rejects_bad_shapes_versions_and_empty_fields_atomically() {
     for json in [
-        "[]", "{}", r#"{"version":2}"#, r#"{"version":1,"valid-prefixes":{}}"#,
+        "[]",
+        "{}",
+        r#"{"version":2}"#,
+        r#"{"version":1,"valid-prefixes":{}}"#,
         r#"{"version":1,"valid-prefixes":[null]}"#,
         r#"{"version":1,"valid-prefixes":[{"prefix":"","source":"k8s"}]}"#,
         r#"{"version":1,"valid-prefixes":[{"prefix":"x","source":""}]}"#,
         r#"{"version":1,"valid-prefixes":[{"prefix":"x","source":"k8s","invert":"false"}]}"#,
         r#"{"version":1} trailing"#,
-    ] { assert!(LabelFilter::identity_from_json(json.as_bytes(), &[]).is_err(), "{json}"); }
+    ] {
+        assert!(
+            LabelFilter::identity_from_json(json.as_bytes(), &[]).is_err(),
+            "{json}"
+        );
+    }
     assert!(LabelFilter::identity_from_json(br#"{"version":1}"#, &["["]).is_err());
-    for json in [r#"{"version":1,"future":true}"#, r#"{"version":1,"valid-prefixes":null}"#] {
+    for json in [
+        r#"{"version":1,"future":true}"#,
+        r#"{"version":1,"valid-prefixes":null}"#,
+    ] {
         let filter = LabelFilter::identity_from_json(json.as_bytes(), &[]).expect("empty accepted");
         assert!(!filter.is_whitelist());
         assert!(filter.retains(&label("k8s", "app")));
@@ -142,11 +226,22 @@ fn json_rejects_bad_shapes_versions_and_empty_fields_atomically() {
 
 #[test]
 fn partition_preserves_values_sources_and_input_canonical_key() {
-    let labels: Labels = [Label::new("node", "team", "blue").expect("label"), Label::new("node", "private", "yes").expect("label"), Label::new("k8s", "app", "db").expect("label")].into_iter().collect();
+    let labels: Labels = [
+        Label::new("node", "team", "blue").expect("label"),
+        Label::new("node", "private", "yes").expect("label"),
+        Label::new("k8s", "app", "db").expect("label"),
+    ]
+    .into_iter()
+    .collect();
     let original = labels.canonical_key();
-    let (identity, information) = LabelFilter::node(&["!private"]).expect("filter").partition(&labels);
+    let (identity, information) = LabelFilter::node(&["!private"])
+        .expect("filter")
+        .partition(&labels);
     assert_eq!(identity.canonical_key(), "k8s:app=db;node:team=blue;");
     assert_eq!(information.canonical_key(), "node:private=yes;");
     assert_eq!(labels.canonical_key(), original);
-    assert_eq!(identity.len().checked_add(information.len()), Some(labels.len()));
+    assert_eq!(
+        identity.len().checked_add(information.len()),
+        Some(labels.len())
+    );
 }
