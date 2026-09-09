@@ -5,8 +5,8 @@
 //! Source adapters are available in `sources`; runtime snapshots in `runtime`.
 #![forbid(unsafe_code)]
 
-pub mod immutable;
 pub mod catalogue;
+pub mod immutable;
 mod parse;
 pub mod runtime;
 pub mod sources;

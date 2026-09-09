@@ -9,22 +9,46 @@ use crate::{Class, Entry, KeySpec, Kind, Registry, Resolved, normalize};
 use std::collections::BTreeMap;
 use std::fmt;
 
-pub const SPECIFICATION: &str = "docs/spec/00-foundation-table-config.md#64-the-registry-key-table-539-keys";
+pub const SPECIFICATION: &str =
+    "docs/spec/00-foundation-table-config.md#64-the-registry-key-table-539-keys";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Pflag {
-    Bool, Int, Int64, Uint, Uint8, Uint16, Uint32, Uint64,
-    Float32, Float64, Duration, String, StringSlice, StringToString, Var,
+    Bool,
+    Int,
+    Int64,
+    Uint,
+    Uint8,
+    Uint16,
+    Uint32,
+    Uint64,
+    Float32,
+    Float64,
+    Duration,
+    String,
+    StringSlice,
+    StringToString,
+    Var,
 }
 
 impl Pflag {
     pub fn name(self) -> &'static str {
         match self {
-            Self::Bool => "Bool", Self::Int => "Int", Self::Int64 => "Int64",
-            Self::Uint => "Uint", Self::Uint8 => "Uint8", Self::Uint16 => "Uint16",
-            Self::Uint32 => "Uint32", Self::Uint64 => "Uint64", Self::Float32 => "Float32",
-            Self::Float64 => "Float64", Self::Duration => "Duration", Self::String => "String",
-            Self::StringSlice => "StringSlice", Self::StringToString => "StringToString", Self::Var => "Var",
+            Self::Bool => "Bool",
+            Self::Int => "Int",
+            Self::Int64 => "Int64",
+            Self::Uint => "Uint",
+            Self::Uint8 => "Uint8",
+            Self::Uint16 => "Uint16",
+            Self::Uint32 => "Uint32",
+            Self::Uint64 => "Uint64",
+            Self::Float32 => "Float32",
+            Self::Float64 => "Float64",
+            Self::Duration => "Duration",
+            Self::String => "String",
+            Self::StringSlice => "StringSlice",
+            Self::StringToString => "StringToString",
+            Self::Var => "Var",
         }
     }
 
@@ -34,10 +58,14 @@ impl Pflag {
             Self::Bool => Kind::Bool,
             Self::Int | Self::Int64 => Kind::Int { bits: 64 },
             Self::Uint | Self::Uint64 => Kind::UInt { bits: 64 },
-            Self::Uint8 => Kind::UInt { bits: 8 }, Self::Uint16 => Kind::UInt { bits: 16 },
-            Self::Uint32 => Kind::UInt { bits: 32 }, Self::Float32 => Kind::Float { bits: 32 },
-            Self::Float64 => Kind::Float { bits: 64 }, Self::Duration => Kind::Duration,
-            Self::String => Kind::String, Self::StringSlice => Kind::List,
+            Self::Uint8 => Kind::UInt { bits: 8 },
+            Self::Uint16 => Kind::UInt { bits: 16 },
+            Self::Uint32 => Kind::UInt { bits: 32 },
+            Self::Float32 => Kind::Float { bits: 32 },
+            Self::Float64 => Kind::Float { bits: 64 },
+            Self::Duration => Kind::Duration,
+            Self::String => Kind::String,
+            Self::StringSlice => Kind::List,
             Self::StringToString | Self::Var => Kind::Map,
         }
     }
@@ -58,20 +86,36 @@ pub struct Definition {
 
 impl Definition {
     /// The table does not supply help text or hidden-flag metadata.
-    pub fn help(self) -> Option<&'static str> { None }
-    pub fn hidden(self) -> Option<bool> { None }
-    pub fn needs_area_validator(self) -> bool { self.pflag == Pflag::Var }
+    pub fn help(self) -> Option<&'static str> {
+        None
+    }
+    pub fn hidden(self) -> Option<bool> {
+        None
+    }
+    pub fn needs_area_validator(self) -> bool {
+        self.pflag == Pflag::Var
+    }
     pub fn aliases(self) -> impl Iterator<Item = &'static str> {
-        crate::ALIASES.iter().filter_map(move |(alias, target)| (*target == self.name).then_some(*alias))
+        crate::ALIASES
+            .iter()
+            .filter_map(move |(alias, target)| (*target == self.name).then_some(*alias))
     }
     fn spec(self, default: &str) -> KeySpec {
-        KeySpec { name: self.name.into(), kind: self.pflag.kind(), default: default.into(), class: self.class }
+        KeySpec {
+            name: self.name.into(),
+            kind: self.pflag.kind(),
+            default: default.into(),
+            class: self.class,
+        }
     }
 }
 
 pub fn get(name: &str) -> Option<&'static Definition> {
     let name = normalize(name);
-    let canonical = crate::ALIASES.iter().find(|(alias, _)| *alias == name).map_or(name.as_str(), |(_, key)| *key);
+    let canonical = crate::ALIASES
+        .iter()
+        .find(|(alias, _)| *alias == name)
+        .map_or(name.as_str(), |(_, key)| *key);
     ENTRIES.iter().find(|entry| entry.name == canonical)
 }
 
@@ -88,10 +132,22 @@ pub struct Coverage {
 pub fn coverage() -> Coverage {
     Coverage {
         declared: ENTRIES.len(),
-        literal_defaults: ENTRIES.iter().filter(|entry| entry.default.is_some()).count(),
-        unresolved_defaults: ENTRIES.iter().filter(|entry| entry.default.is_none()).map(|entry| entry.name).collect(),
-        area_validators_required: ENTRIES.iter().filter(|entry| entry.needs_area_validator()).map(|entry| entry.name).collect(),
-        help_metadata_missing: ENTRIES.len(), hidden_metadata_missing: ENTRIES.len(),
+        literal_defaults: ENTRIES
+            .iter()
+            .filter(|entry| entry.default.is_some())
+            .count(),
+        unresolved_defaults: ENTRIES
+            .iter()
+            .filter(|entry| entry.default.is_none())
+            .map(|entry| entry.name)
+            .collect(),
+        area_validators_required: ENTRIES
+            .iter()
+            .filter(|entry| entry.needs_area_validator())
+            .map(|entry| entry.name)
+            .collect(),
+        help_metadata_missing: ENTRIES.len(),
+        hidden_metadata_missing: ENTRIES.len(),
     }
 }
 
@@ -103,17 +159,28 @@ pub struct DefaultGap {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
-    UnknownOverride(String), DuplicateOverride(String), MissingProvenance(String),
-    UnresolvedDefaults(Vec<DefaultGap>), OmittedKey(String), InvalidValue(crate::Error),
+    UnknownOverride(String),
+    DuplicateOverride(String),
+    MissingProvenance(String),
+    UnresolvedDefaults(Vec<DefaultGap>),
+    OmittedKey(String),
+    InvalidValue(crate::Error),
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownOverride(key) => write!(f, "unknown catalogue default override {key}"),
-            Self::DuplicateOverride(key) => write!(f, "duplicate normalized default override {key}"),
+            Self::DuplicateOverride(key) => {
+                write!(f, "duplicate normalized default override {key}")
+            }
             Self::MissingProvenance(key) => write!(f, "default override {key} requires provenance"),
-            Self::UnresolvedDefaults(keys) => write!(f, "{} configuration defaults remain unresolved", keys.len()),
-            Self::OmittedKey(key) => write!(f, "option {key} has an unresolved default and was omitted from the partial registry"),
+            Self::UnresolvedDefaults(keys) => {
+                write!(f, "{} configuration defaults remain unresolved", keys.len())
+            }
+            Self::OmittedKey(key) => write!(
+                f,
+                "option {key} has an unresolved default and was omitted from the partial registry"
+            ),
             Self::InvalidValue(error) => write!(f, "{error}"),
         }
     }
@@ -150,17 +217,44 @@ pub fn complete_registry(overrides: &[DefaultOverride<'_>]) -> Result<BuiltRegis
     let mut applied = Vec::new();
     for value in overrides {
         let definition = get(value.key).ok_or_else(|| Error::UnknownOverride(value.key.into()))?;
-        if value.provenance.trim().is_empty() { return Err(Error::MissingProvenance(definition.name.into())); }
-        if supplied.insert(definition.name, value.value).is_some() { return Err(Error::DuplicateOverride(definition.name.into())); }
-        applied.push(AppliedDefault { key: definition.name.into(), value: value.value.into(), provenance: value.provenance.into() });
+        if value.provenance.trim().is_empty() {
+            return Err(Error::MissingProvenance(definition.name.into()));
+        }
+        if supplied.insert(definition.name, value.value).is_some() {
+            return Err(Error::DuplicateOverride(definition.name.into()));
+        }
+        applied.push(AppliedDefault {
+            key: definition.name.into(),
+            value: value.value.into(),
+            provenance: value.provenance.into(),
+        });
     }
-    let gaps: Vec<_> = ENTRIES.iter().filter(|entry| entry.default.is_none() && !supplied.contains_key(entry.name))
-        .map(|entry| DefaultGap { key: entry.name, expression: entry.default_expression }).collect();
-    if !gaps.is_empty() { return Err(Error::UnresolvedDefaults(gaps)); }
-    let specs = ENTRIES.iter().map(|entry| entry.spec(supplied.get(entry.name).copied().or(entry.default).expect("all missing defaults checked")));
+    let gaps: Vec<_> = ENTRIES
+        .iter()
+        .filter(|entry| entry.default.is_none() && !supplied.contains_key(entry.name))
+        .map(|entry| DefaultGap {
+            key: entry.name,
+            expression: entry.default_expression,
+        })
+        .collect();
+    if !gaps.is_empty() {
+        return Err(Error::UnresolvedDefaults(gaps));
+    }
+    let specs = ENTRIES.iter().map(|entry| {
+        entry.spec(
+            supplied
+                .get(entry.name)
+                .copied()
+                .or(entry.default)
+                .expect("all missing defaults checked"),
+        )
+    });
     let registry = Registry::new(specs).map_err(Error::InvalidValue)?;
     applied.sort_by(|left, right| left.key.cmp(&right.key));
-    Ok(BuiltRegistry { registry, default_overrides: applied })
+    Ok(BuiltRegistry {
+        registry,
+        default_overrides: applied,
+    })
 }
 
 /// Explicitly incomplete schema for focused foundation tests and staged owners.
@@ -171,12 +265,16 @@ pub struct PartialKnownDefaultsRegistry {
 }
 
 impl PartialKnownDefaultsRegistry {
-    pub fn omitted(&self) -> &[DefaultGap] { &self.omitted }
+    pub fn omitted(&self) -> &[DefaultGap] {
+        &self.omitted
+    }
 
     pub fn resolve(&self, entries: impl IntoIterator<Item = Entry>) -> Result<Resolved, Error> {
         let entries: Vec<_> = entries.into_iter().collect();
         for entry in &entries {
-            if let Some(definition) = get(&entry.key) && definition.default.is_none() {
+            if let Some(definition) = get(&entry.key)
+                && definition.default.is_none()
+            {
                 return Err(Error::OmittedKey(definition.name.into()));
             }
         }
@@ -185,7 +283,19 @@ impl PartialKnownDefaultsRegistry {
 }
 
 pub fn partial_known_defaults_registry() -> Result<PartialKnownDefaultsRegistry, Error> {
-    let registry = Registry::new(ENTRIES.iter().filter_map(|entry| entry.default.map(|default| entry.spec(default)))).map_err(Error::InvalidValue)?;
-    let omitted = ENTRIES.iter().filter(|entry| entry.default.is_none()).map(|entry| DefaultGap { key: entry.name, expression: entry.default_expression }).collect();
+    let registry = Registry::new(
+        ENTRIES
+            .iter()
+            .filter_map(|entry| entry.default.map(|default| entry.spec(default))),
+    )
+    .map_err(Error::InvalidValue)?;
+    let omitted = ENTRIES
+        .iter()
+        .filter(|entry| entry.default.is_none())
+        .map(|entry| DefaultGap {
+            key: entry.name,
+            expression: entry.default_expression,
+        })
+        .collect();
     Ok(PartialKnownDefaultsRegistry { registry, omitted })
 }
