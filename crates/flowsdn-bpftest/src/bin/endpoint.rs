@@ -9,6 +9,9 @@ use flowsdn_bpf_abi::{
     endpoint::{EndpointInfo, EndpointKey},
 };
 use nix::sched::{CloneFlags, unshare};
+
+#[path = "endpoint/packets.rs"]
+mod packets;
 use std::{
     error::Error,
     io::{BufRead, BufReader, ErrorKind, Write},
@@ -313,6 +316,7 @@ fn run(object: &str) -> Result<()> {
         .ok_or("missing local delivery program")?
         .try_into()?;
     program.load()?;
+    packets::verify(program)?;
     for host in ["p1", "p2"] {
         program.attach(host, TcAttachType::Ingress)?;
     }

@@ -11,8 +11,8 @@ use aya_ebpf::{
 use flowsdn_bpf::local_delivery::{deliver, destination};
 use flowsdn_bpf_abi::endpoint::{EndpointInfo, EndpointKey};
 
-#[map]
-static cilium_lxc: HashMap<EndpointKey, EndpointInfo> =
+#[map(name = "cilium_lxc")]
+static CILIUM_LXC: HashMap<EndpointKey, EndpointInfo> =
     HashMap::with_max_entries(1024, BPF_F_NO_PREALLOC);
 
 #[classifier]
@@ -23,7 +23,7 @@ pub fn local_delivery(ctx: TcContext) -> i32 {
     // SAFETY: NO_PREALLOC prevents deleted entries being reused in place;
     // lookup storage is RCU protected for this invocation. Copy immediately,
     // retain no reference across helpers, and never write through the pointer.
-    let Some(endpoint) = (unsafe { cilium_lxc.get(&key).copied() }) else {
+    let Some(endpoint) = (unsafe { CILIUM_LXC.get(&key).copied() }) else {
         return TC_ACT_SHOT;
     };
     deliver(&ctx, endpoint)
