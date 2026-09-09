@@ -19,6 +19,19 @@ view preserves all 32 bits. No L7 proxy-port conversion is provided: map ABI
 specification §4.3 says host order while service specification §2 says
 `htons(proxy_port)`. This disagreement needs resolution before L7 integration.
 
-Affinity, skip-LB and variable-length Maglev layouts are deferred. This module
-does not implement map creation, service reconciliation, Aya integration or
-live datapath compatibility checks.
+The `affinity` module adds six fixed layouts: IPv4/IPv6 affinity keys, the
+affinity value and match key, and both skip-LB keys. Their sizes and every
+field offset have compile-time assertions. Packed numeric accessors return
+copies. Client unions retain all 8 or 16 raw bytes, and the network-namespace
+cookie discriminator changes only bit zero while preserving reserved bits.
+Cookie constructors zero padding and unused union bytes. The raw timestamp
+has no clock-unit conversion in this ABI layer.
+
+Skip-LB address/port integers follow the unmarked host-order fields in map ABI
+specification §4.3 and its little-endian rule in §4; IPv6 addresses remain
+network bytes. No conversion from an IPv4 address object into the affinity
+union is implied by its raw byte storage.
+
+Variable-length Maglev layouts remain deferred. These modules do not implement
+map creation, service reconciliation, Aya integration or live datapath
+compatibility checks.

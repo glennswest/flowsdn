@@ -1147,19 +1147,13 @@
     }
   ],
   "current_milestone": {
-    "id": "0.10.0",
-    "status": "validated",
-    "unique_tests": 247,
-    "validated_commit": "cc9ec2c",
-    "validation_record_commit": "c590a07",
-    "completed_at_utc": "2026-09-09T12:36:15Z",
-    "release_candidate": "v0.10.0",
-    "publication": "published",
-    "cleanup": "complete",
-    "release": "v0.10.0",
-    "release_commit": "b42616da57ace71ddbfca5f85d5fd5efbaea2e97",
-    "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.10.0",
-    "published_at_utc": "2026-09-09T12:38:42Z"
+    "id": "0.11.0",
+    "status": "in_progress",
+    "start_utc": "2026-09-09T12:46:19Z",
+    "release_candidate": "v0.11.0",
+    "publication": "not published",
+    "cleanup": "pending",
+    "validation": "pending"
   },
   "milestone_0_7_parallel_time": {
     "observed_agent_window_seconds": 3064.201,

@@ -4,6 +4,10 @@
 
 No unreleased changes.
 
+## [0.11.0] - 2026-09-09
+
+- Add policy ABI layouts and verify the reserved policy flag bits.
+
 ## [0.10.0] - 2026-09-09
 
 - Add conntrack, NAT and load-balancer layouts with lossless byte codecs and

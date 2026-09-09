@@ -1,0 +1,30 @@
+{
+  "id": "0.11.0",
+  "scope": "project/shared",
+  "start_utc": "2026-09-09T12:46:19Z",
+  "start_revision": "4ac4910",
+  "owner": "/root",
+  "status": "in_progress",
+  "active_work_seconds": null,
+  "token_baseline": {
+    "input_tokens": 61264429,
+    "cached_input_tokens": 60381440,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 202051,
+    "reasoning_output_tokens": 44929,
+    "total_tokens": 61466480
+  },
+  "token_baseline_sample_utc": "2026-09-09T12:46:19.977Z",
+  "workstreams": [
+    "flowsdn-bpf-abi",
+    "flowsdn-reconcile",
+    "flowsdn-scripttest"
+  ],
+  "validation": {
+    "status": "pending"
+  },
+  "cleanup": {
+    "status": "pending"
+  },
+  "release": null
+}

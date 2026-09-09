@@ -39,6 +39,8 @@ pub trait MapBytes<const N: usize>: Sized {
     fn from_bytes(bytes: [u8; N]) -> Self;
 }
 
+pub mod affinity;
+pub mod policy;
 pub mod ct;
 pub mod lb;
 

@@ -1,5 +1,9 @@
 # flowsdn velocity ledger
 
+v0.11.0 started at **2026-09-09T12:46:19Z**; [its work record](0.11.0.json)
+contains the baseline. The completed milestone and usage snapshot below remain
+v0.10.0 until the next measured work boundary.
+
 Usage cutoff and observed completion: **2026-09-09T12:36:15Z**.
 Milestone **v0.10.0 is validated, cleaned up and published**.
 Elapsed project time was **857 seconds (14m 17s)**, with

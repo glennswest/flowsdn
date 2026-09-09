@@ -1137,6 +1137,15 @@ and `wildcard_dport` in Cilium 1.16 and are kept zero "for 1.17"
 (`bpf/lib/policy.h`). flowsdn MUST write 0 and MUST ignore them on read
 (dump/upgrade); reuse is §12 item 9.
 
+**Verification (2026-09-09, issue #13).** Read the declaration in
+`bpf/lib/policy.h:71–80` at the pinned reference commit
+`7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc`. On the supported
+little-endian targets, the flag byte is deny at bit 0, reserved at bits 1–2,
+and the five-bit LPM length at bits 3–7; the next byte is the seven-bit auth
+type followed by its explicit bit. The Rust ABI encodes these bytes explicitly
+and does not reuse the reserved bits. This resolves the inventory ambiguity;
+no reference executable code was copied.
+
 Map: `cilium_policy_v3_<epid>` (LPM trie, `bpf-policy-map-max`, NO_PREALLOC,
 RDONLY_PROG) and `cilium_policystats` — layouts, pins and sizing in spec 01.
 
