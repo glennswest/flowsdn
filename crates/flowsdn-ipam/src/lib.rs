@@ -261,6 +261,12 @@ impl Ipam {
         self.family_mut(address)?.allocate(address, owner)
     }
 
+    /// An explicit API family request must not depend on the other pool.
+    pub fn allocate_next_family(&mut self, ipv6: bool, owner: &str) -> Result<IpAddr, Error> {
+        let pool = if ipv6 { self.ipv6.as_mut() } else { self.ipv4.as_mut() };
+        pool.ok_or(Error::FamilyDisabled)?.allocate_next(owner)
+    }
+
     pub fn exclude_ip(&mut self, address: IpAddr, owner: &str) -> Result<(), Error> {
         self.family_mut(address)?.exclude_ip(address, owner);
         Ok(())

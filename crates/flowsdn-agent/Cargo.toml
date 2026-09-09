@@ -12,7 +12,10 @@ workspace = true
 
 [dependencies]
 serde_json.workspace = true
-nix = { version = "=0.30.1", default-features = false, features = ["fs"] }
+nix = { version = "=0.30.1", default-features = false, features = ["fs", "socket"] }
+httparse = "=1.10.1"
+uuid = { version = "=1.18.1", features = ["v4"] }
+flowsdn-cni = { path = "../flowsdn-cni", version = "=0.14.0" }
 flowsdn-bpf-loader = { path = "../flowsdn-bpf-loader", version = "=0.14.0", features = ["kernel"] }
 flowsdn-bpf-abi = { path = "../flowsdn-bpf-abi", version = "=0.14.0" }
 flowsdn-ipam = { path = "../flowsdn-ipam", version = "=0.14.0" }

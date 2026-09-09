@@ -78,10 +78,16 @@ impl Manager {
         };
         let connector = Connector::open()?;
         // Validate every persisted identity/address before installing any link.
-        for record in &records {
+        let mut viable = Vec::new();
+        for record in records {
+            let Some(link) = connector.link(text(&record.document, "IfName"))? else {
+                // DEL may remove the peer while the agent is down. Its host
+                // link disappears too; no live endpoint remains to restore.
+                manager.store.remove(record.id)?;
+                continue;
+            };
             manager.ids.reserve(record.id)?;
-            let link = connector.require_link(text(&record.document, "IfName"))?;
-            let endpoint = info(record)?;
+            let endpoint = info(&record)?;
             if link.index != endpoint.ifindex || mac_value(&link.mac)? != endpoint.node_mac {
                 return Err("restored endpoint host link no longer matches persisted state".into());
             }
@@ -100,8 +106,9 @@ impl Manager {
                 }
                 manager.ipam.allocate(ip, &owner)?;
             }
+            viable.push(record);
         }
-        for record in records {
+        for record in viable {
             manager.install(&record)?;
             manager.records.insert(record.attachment.clone(), record);
         }
@@ -115,6 +122,7 @@ impl Manager {
     pub fn get(&self, attachment: &str) -> Option<&Record> {
         self.records.get(attachment)
     }
+    pub fn records(&self) -> impl Iterator<Item = &Record> { self.records.values() }
     pub fn len(&self) -> usize {
         self.records.len()
     }
