@@ -12,3 +12,8 @@ workspace = true
 
 [dependencies]
 flowsdn-bpf-abi = { path = "../flowsdn-bpf-abi", version = "=0.14.0" }
+aya = { version = "=0.14.0", optional = true }
+
+[features]
+default = []
+kernel = ["dep:aya"]

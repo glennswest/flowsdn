@@ -14,6 +14,7 @@ workspace = true
 aya = "=0.14.0"
 nix = { version = "=0.30.1", default-features = false, features = ["sched"] }
 flowsdn-bpf-abi = { path = "../flowsdn-bpf-abi", version = "=0.14.0" }
+flowsdn-bpf-loader = { path = "../flowsdn-bpf-loader", version = "=0.14.0", features = ["kernel"] }
 
 [[bin]]
 name = "flowsdn-endpoint-test"

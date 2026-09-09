@@ -1,13 +1,7 @@
 //! Privileged dual-stack endpoint delivery test in three anonymous namespaces.
-use aya::{
-    Ebpf,
-    maps::{HashMap, MapData},
-    programs::{SchedClassifier, TcAttachType},
-};
-use flowsdn_bpf_abi::{
-    MapBytes,
-    endpoint::{EndpointInfo, EndpointKey},
-};
+use aya::programs::{SchedClassifier, TcAttachType};
+use flowsdn_bpf_abi::endpoint::EndpointInfo;
+use flowsdn_bpf_loader::kernel::LocalDelivery;
 use nix::sched::{CloneFlags, unshare};
 
 #[path = "endpoint/packets.rs"]
@@ -22,7 +16,6 @@ use std::{
 };
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
-type Endpoints = HashMap<MapData, [u8; 20], [u8; 48]>;
 
 fn ensure(ok: bool, message: &str) -> Result<()> {
     if ok { Ok(()) } else { Err(message.into()) }
@@ -56,17 +49,8 @@ fn address(id: u8, v6: bool) -> String {
 fn mac(id: u8, host: bool) -> String {
     format!("02:00:00:00:{}:{id:02x}", if host { "00" } else { "01" })
 }
-fn key(id: u8, v6: bool) -> Result<[u8; 20]> {
-    Ok(if v6 {
-        EndpointKey::v6(
-            address(id, true).parse::<std::net::Ipv6Addr>()?.octets(),
-            0,
-            0,
-        )
-        .to_bytes()
-    } else {
-        EndpointKey::v4([198, 18, 0, id], 0, 0).to_bytes()
-    })
+fn key(id: u8, v6: bool) -> Result<std::net::IpAddr> {
+    Ok(address(id, v6).parse()?)
 }
 
 struct Endpoint {
@@ -300,42 +284,35 @@ fn run(object: &str) -> Result<()> {
             mac: u64::from_le_bytes([2, 0, 0, 0, 1, ep.id, 0, 0]),
             node_mac: u64::from_le_bytes([2, 0, 0, 0, 0, ep.id, 0, 0]),
             ..Default::default()
-        }
-        .to_bytes();
+        };
         entries.push((key(ep.id, false)?, info));
         entries.push((key(ep.id, true)?, info));
     }
-    let mut bpf = Ebpf::load_file(object)?;
-    let mut endpoints: Endpoints =
-        HashMap::try_from(bpf.take_map("cilium_lxc").ok_or("missing endpoint map")?)?;
-    for (key, value) in &entries {
-        endpoints.insert(*key, *value, 0)?;
-    }
-    let program: &mut SchedClassifier = bpf
-        .program_mut("local_delivery")
-        .ok_or("missing local delivery program")?
-        .try_into()?;
-    program.load()?;
-    packets::verify(program)?;
-    for host in ["p1", "p2"] {
-        program.attach(host, TcAttachType::Ingress)?;
-    }
+    let mut driver = LocalDelivery::load(object)?;
+    for (key, value) in &entries { driver.upsert(*key, *value)?; }
+    packets::verify(driver.program()?)?;
+    for host in ["p1", "p2"] { driver.attach(host)?; }
+    ensure(driver.attach("p1").is_err(), "duplicate attachment accepted")?;
+    ensure(SchedClassifier::query_tcx("p1", TcAttachType::Ingress)?.1.len() == 1, "duplicate attempt changed attachment count")?;
+    let mut invalid = entries.first().ok_or("missing fixture")?.1;
+    invalid.ifindex = 0;
+    ensure(driver.upsert(key(1, false)?, invalid).is_err(), "invalid endpoint replaced valid route")?;
     for v6 in [false, true] {
         exchange(&mut first, &mut second, v6, "forward", true)?;
         exchange(&mut second, &mut first, v6, "reverse", true)?;
-        endpoints.remove(&key(2, v6)?)?;
+        driver.remove(key(2, v6)?)?;
         exchange(&mut first, &mut second, v6, "removed", false)?;
         let (key, value) = entries
             .iter()
             .find(|(k, _)| Some(*k) == key(2, v6).ok())
             .ok_or("missing fixture entry")?;
-        endpoints.insert(*key, *value, 0)?;
+        driver.upsert(*key, *value)?;
         exchange(&mut first, &mut second, v6, "restored", true)?;
     }
     println!(
         "PASS: bidirectional IPv4/IPv6 between endpoints, deletion blocks and reinsertion restores traffic"
     );
-    drop(bpf);
+    drop(driver);
     for host in ["p1", "p2"] {
         ensure(
             SchedClassifier::query_tcx(host, TcAttachType::Ingress)?
@@ -349,29 +326,13 @@ fn run(object: &str) -> Result<()> {
     }
     // Recreate the program owner and map, proving the restore path rather than
     // accidentally depending on a still-attached old program.
-    let mut restored = Ebpf::load_file(object)?;
-    let mut restored_map: Endpoints = HashMap::try_from(
-        restored
-            .take_map("cilium_lxc")
-            .ok_or("missing restored map")?,
-    )?;
-    for (key, value) in &entries {
-        restored_map.insert(*key, *value, 0)?;
-    }
-    let program: &mut SchedClassifier = restored
-        .program_mut("local_delivery")
-        .ok_or("missing restored program")?
-        .try_into()?;
-    program.load()?;
-    for host in ["p1", "p2"] {
-        program.attach(host, TcAttachType::Ingress)?;
-    }
+    let mut restored = LocalDelivery::load(object)?;
+    for (key, value) in &entries { restored.upsert(*key, *value)?; }
+    for host in ["p1", "p2"] { restored.attach(host)?; }
     for v6 in [false, true] {
         exchange(&mut first, &mut second, v6, "reloaded", true)?;
     }
     drop(restored);
-    drop(restored_map);
-    drop(endpoints);
     for host in ["p1", "p2"] {
         ip(&["link", "del", host])?;
     }

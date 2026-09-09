@@ -1,6 +1,6 @@
 //! Map lifecycle planning from map ABI/loader specification §3.2.
 //! These decisions perform no syscalls, pin mutations, or program attachment.
-#![no_std]
+#![cfg_attr(not(feature = "kernel"), no_std)]
 
 /// Kernel ABI flag: programs may read this map but cannot write it.
 pub const RDONLY_PROG: u32 = 1 << 7;
@@ -113,3 +113,6 @@ pub const fn plan_map(spec: MapSpec, existing: Option<MapSpec>, owner: Owner) ->
 
 pub mod layout;
 pub mod tails;
+/// Live local-delivery object ownership, behind an explicit kernel feature.
+#[cfg(feature = "kernel")]
+pub mod kernel;
