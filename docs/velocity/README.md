@@ -1,31 +1,35 @@
 # flowsdn velocity ledger
 
-Usage cutoff: **2026-09-09T12:11:00.810Z**. Validation and cleanup observed complete **2026-09-09T12:11:00.810Z**.
-Milestone v0.9.0 elapsed **19m 36s**, with **13,835,412 processed tokens**
-across root and three agents through the cutoff. Active work time is unknown.
+Usage cutoff: **2026-09-09T12:32:20.664Z**. Milestone **v0.10.0 is in progress**;
+full validation, cleanup and publication are pending.
+Observed project elapsed through the cutoff is **622.664 seconds**,
+with **7,816,962 processed tokens** across root and three
+agents during this milestone. Active work time is unknown.
 
 | Combined unique-response usage | Tokens |
 |---|---:|
-| Input | 96,937,804 |
-| Cached input (subset) | 94,395,264 |
-| Uncached input | 2,542,540 |
-| Output | 429,944 |
-| Reasoning output (subset) | 110,418 |
-| Total processed | 97,367,748 |
+| Input | 106,266,509 |
+| Cached input (subset) | 103,463,424 |
+| Uncached input | 2,803,085 |
+| Output | 487,975 |
+| Reasoning output (subset) | 121,303 |
+| Total processed | 106,754,484 |
 
-Totals are deduplicated by response ID and include repeated context; they do not
-establish subscription dollars. [Subagent records](subagents.json) preserve each
-cutoff. Observed agent windows total **1,427 seconds**
-(**0.396 agent-window hours**) with overlapping
-project time kept separate. These windows include coordination, not measured
-active coding time.
+Totals are deduplicated by response ID across the root and three agent sessions
+and include repeated context; they do not establish subscription dollars.
+[Subagent records](subagents.json) retain sanitized counters and cutoff timestamps.
+Closed observed agent windows total **1025 seconds**
+(**0.284722 agent-window hours**). Overlapping agent windows are
+kept separate from project wall-clock elapsed; these are not measured active
+coding hours. The root's approximate CT/NAT start is not presented as an exact
+crate-only interval.
 
-Commit `48a7d19` passed **211 tests in debug and release with all features**,
-formatting, Clippy, both Linux musl compile checks and dependency policy.
-Cleanup removed **11,035 files / 3.1 GiB**. [v0.9.0](https://github.com/glennswest/flowsdn/releases/tag/v0.9.0) was published
-at 12:14 UTC, after the usage cutoff. Repository issue counts remain **10 closed / 280 open**.
-[Milestone details](0.9.0.json) retain crate windows, baseline/endpoint counters
-and validation. Later publication and reporting are outside this cutoff.
+The coordinator reported 14 new ABI tests plus six existing tests and focused
+Clippy passing. Full checks are running; no v0.10.0 validation outcome or release
+is claimed. [Milestone details](0.10.0.json) record the baseline, provisional
+endpoint and reported crate windows. The latest validated release remains
+[v0.9.0](https://github.com/glennswest/flowsdn/releases/tag/v0.9.0), with
+[its validation record](0.9.0.json). Later work is outside this cutoff.
 
 ## Recording rules
 

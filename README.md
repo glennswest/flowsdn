@@ -17,12 +17,13 @@ Goals:
 
 ## Status
 
-**Foundation implementation started (2026-09-08), version 0.9.0.**
+**Foundation implementation started (2026-09-08), version 0.10.0.**
 
 The workspace includes indexed tables, initialization gates, a reconciler with
-pruning and a caller-owned scheduling loop, configuration snapshots, module
-health and a script engine with generic file commands and foreground execution.
-The map ABI crate defines the first connection-tuple and ipcache byte layouts.
+pruning, optional batching and a caller-owned scheduling loop, configuration snapshots, module
+health and a script engine with generic file commands, foreground execution and background jobs.
+The map ABI crate defines connection tuples, conntrack/NAT values, service
+layouts and ipcache byte layouts.
 There is no working networking agent or datapath. Synthetic scripts and file assertions
 execute, while the harvested networking scenarios still lack their adapters.
 

@@ -243,3 +243,27 @@ code retains OS permissions; stronger process isolation remains caller-owned.
 
 Batch reconciliation, remaining map layouts, background script jobs and
 networking subsystem adapters remain forthcoming.
+
+## Version 0.10.0 implementation
+
+The map ABI now includes conntrack and NAT values plus 15 load-balancer layouts.
+Explicit codecs retain raw unions, unknown flags and padding; compile-time
+assertions freeze sizes and offsets, including the proxy identity at byte 44.
+Independent Rust byte fixtures exercise network-order addresses and ports,
+host-order counters, prefix bounds and service union views. The specifications
+conflict on L7 proxy-port byte order, so that conversion remains deferred.
+
+Targets can opt into bounded reconciliation batches with scalar defaults.
+Deletes precede updates, each result names its desired key and revision, and
+malformed responses retain the complete unacknowledged group for replay.
+Per-row failures use normal retry scheduling; stale generations, refresh hints
+and completion-based refresh deadlines remain checked across cancellation.
+
+Background script execution snapshots each job's environment and working
+directory. `wait` drains in launch order, combines output and applies individual
+exit expectations. Job count, shared queued output and diagnostics are bounded;
+script exit and dropped futures clean up retained processes and workspaces.
+Section retries and networking subsystem adapters remain forthcoming.
+
+These additions remain foundation libraries. Map creation, Aya integration,
+live datapath compatibility and an operational networking agent are not included.

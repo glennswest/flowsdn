@@ -1,0 +1,220 @@
+{
+  "id": "0.10.0",
+  "scope": "project/shared",
+  "start_utc": "2026-09-09T12:21:58Z",
+  "start_revision": "8911172",
+  "owner": "/root",
+  "status": "in_progress",
+  "active_work_seconds": null,
+  "workstreams": [
+    "flowsdn-bpf-abi",
+    "flowsdn-reconcile",
+    "flowsdn-scripttest"
+  ],
+  "token_baseline": {
+    "input_tokens": 56030835,
+    "cached_input_tokens": 55242112,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 179320,
+    "reasoning_output_tokens": 42081,
+    "total_tokens": 56210155
+  },
+  "token_baseline_sample_utc": "2026-09-09T12:14:39.435Z",
+  "usage_cutoff_utc": "2026-09-09T12:32:20.664Z",
+  "measurement_end_utc": "2026-09-09T12:32:20.664Z",
+  "end_utc": null,
+  "completed_at_utc": null,
+  "elapsed_seconds": null,
+  "measurement_elapsed_seconds": 622.664,
+  "token_endpoint_sample_utc": "2026-09-09T12:32:19.122Z",
+  "token_endpoint": {
+    "input_tokens": 58443544,
+    "cached_input_tokens": 57588608,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 194864,
+    "reasoning_output_tokens": 42936,
+    "total_tokens": 58638408
+  },
+  "root_unique_response_tokens": {
+    "input_tokens": 2412709,
+    "cached_input_tokens": 2346496,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 15544,
+    "reasoning_output_tokens": 855,
+    "total_tokens": 2428253
+  },
+  "combined_token_baseline": {
+    "input_tokens": 98501911,
+    "cached_input_tokens": 95950208,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 435611,
+    "reasoning_output_tokens": 112827,
+    "total_tokens": 98937522
+  },
+  "combined_token_baseline_cutoff_utc": "2026-09-09T12:21:58Z",
+  "combined_unique_response_tokens": {
+    "input_tokens": 7764598,
+    "cached_input_tokens": 7513216,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 52364,
+    "reasoning_output_tokens": 8476,
+    "total_tokens": 7816962
+  },
+  "agent_cutoffs": {
+    "/root": "2026-09-09T12:32:19.122Z",
+    "/root/table_streams": "2026-09-09T12:29:46.764Z",
+    "/root/config_core": "2026-09-09T12:30:12.730Z",
+    "/root/review": "2026-09-09T12:32:20.664Z"
+  },
+  "reported_work_windows": [
+    {
+      "task_id": "0.10.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-bpf-abi",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T12:22:36Z",
+      "end_utc": "2026-09-09T12:26:21Z",
+      "elapsed_seconds": 225.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:05:56.753Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:24:22.994Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 414265,
+        "cached_input_tokens": 407808,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3428,
+        "reasoning_output_tokens": 490,
+        "total_tokens": 417693
+      },
+      "note": "Agent-reported elapsed window; response delivery-window usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.10.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-reconcile",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T12:28:10Z",
+      "end_utc": "2026-09-09T12:29:04Z",
+      "elapsed_seconds": 54.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:26:36.777Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:29:01.588Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 604896,
+        "cached_input_tokens": 549888,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1314,
+        "reasoning_output_tokens": 805,
+        "total_tokens": 606210
+      },
+      "note": "Agent-reported elapsed window; response delivery-window usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.10.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-scripttest",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T12:29:28Z",
+      "end_utc": "2026-09-09T12:29:45Z",
+      "elapsed_seconds": 17.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:29:14.419Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:29:38.836Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 389069,
+        "cached_input_tokens": 378624,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 242,
+        "reasoning_output_tokens": 11,
+        "total_tokens": 389311
+      },
+      "note": "Agent-reported elapsed window; response delivery-window usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.10.0",
+      "agent": "/root/table_streams",
+      "crate": "flowsdn-reconcile",
+      "kind": "implementation-and-review-fix",
+      "start_utc": "2026-09-09T12:22:45Z",
+      "end_utc": "2026-09-09T12:29:33Z",
+      "elapsed_seconds": 408.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:04:07.844Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:29:10.053Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 881228,
+        "cached_input_tokens": 844160,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 11299,
+        "reasoning_output_tokens": 2099,
+        "total_tokens": 892527
+      },
+      "note": "Agent-reported elapsed window; response delivery-window usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.10.0",
+      "agent": "/root/review",
+      "crate": "flowsdn-scripttest",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T12:22:56Z",
+      "end_utc": "2026-09-09T12:28:17Z",
+      "elapsed_seconds": 321.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:01:02.995Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:27:31.979Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 503655,
+        "cached_input_tokens": 487808,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 8647,
+        "reasoning_output_tokens": 2640,
+        "total_tokens": 512302
+      },
+      "note": "Agent-reported elapsed window; response delivery-window usage includes context processing and coordination, not exclusive coding."
+    }
+  ],
+  "parallel_time": {
+    "observed_agent_window_seconds": 1025.0,
+    "observed_agent_window_hours": 0.284722,
+    "project_wall_clock_seconds": 622.664,
+    "active_work_seconds": null,
+    "note": "Closed observed agent windows only; overlapping intervals are not summed as project elapsed. Root CT/NAT coding start was approximate and is not assigned an invented exclusive window.",
+    "active_agent_hours": null,
+    "project_union_of_observed_child_windows_seconds": 429
+  },
+  "root_work_scope": {
+    "crate": "project/shared",
+    "start_utc": "2026-09-09T12:21:58Z",
+    "end_utc": null,
+    "active_work_seconds": null,
+    "note": "Includes CT/NAT implementation, coordination and validation. CT/NAT coding was reported to begin approximately 12:24 UTC; no exact crate-only start or elapsed duration is claimed."
+  },
+  "validation": {
+    "status": "awaiting-validation",
+    "focused_abi_tests": {
+      "status": "passed",
+      "new_tests": 14,
+      "existing_tests": 6,
+      "clippy": "passed",
+      "provenance": "Coordinator report; no exact completion timestamp recorded."
+    },
+    "full_checks": "running; no result recorded"
+  },
+  "implementation_commits": [
+    "ff1bf0a",
+    "214c6d7",
+    "99b1057"
+  ],
+  "commit": null,
+  "release": null,
+  "release_candidate": "v0.10.0",
+  "cleanup": {
+    "status": "pending"
+  },
+  "note": "Provisional sanitized telemetry snapshot. No completion, full validation, cleanup or release is claimed. Baselines include only responses delivered at or before milestone start; endpoints use the stated cutoff. This response and subsequent validation/reporting are not fully included."
+}

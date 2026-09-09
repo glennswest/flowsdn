@@ -16,7 +16,7 @@ without following `docs/licensing.md`.
 
 ## Version
 
-0.9.0 — initial map ABI, periodic refresh, foreground script execution and config default resolution; no networking agent yet. Version locations (when crates exist):
+0.10.0 — CT/NAT and service ABI, optional reconciliation batching and background script jobs; no networking agent yet. Version locations (when crates exist):
 `Cargo.toml` workspace.package.version, `CHANGELOG.md` heading.
 
 ## Work plan

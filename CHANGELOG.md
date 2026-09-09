@@ -2,13 +2,16 @@
 
 ## [Unreleased]
 
-- Track project elapsed time, per-crate delivery windows and measured session
-  token usage in docs/velocity, with sanitized samples and explicit shared-work
-  attribution; require updates at task boundaries and releases.
+No unreleased changes.
 
 ## [0.10.0] - 2026-09-09
 
-- Add conntrack and NAT values with lossless byte codecs and frozen layout checks.
+- Add conntrack, NAT and load-balancer layouts with lossless byte codecs and
+  frozen layout checks. Keep ambiguous L7 union conversion deferred.
+- Coalesce optional reconciliation batches with per-row results, strict response
+  validation and cancellation replay.
+- Add bounded background script execution and ordered wait, retaining per-job
+  exit expectations and cleanup on script completion or cancellation.
 
 ## [0.9.0] - 2026-09-09
 
