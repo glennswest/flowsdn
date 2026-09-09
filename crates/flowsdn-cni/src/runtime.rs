@@ -80,23 +80,34 @@ struct Platform {
     device_mtu: u32,
     route_mtu: u32,
     cookie: u64,
+    gateways: Vec<IpAddr>,
 }
 impl AddBackend for Platform {
     fn allocate(&mut self, request: &AddRequest) -> Result<Vec<Lease>> {
         let value = response(self.client.allocate(&request.owner(), "", "", true))?;
         let mut leases = Vec::new();
         let outcome = (|| {
+            let mut first_error = None;
             for family in ["ipv6", "ipv4"] {
                 let raw = text(field(&value, "address"), family);
                 if raw.is_empty() {
                     continue;
                 }
-                let address = raw
+                let address = match raw
                     .split('/')
                     .next()
                     .unwrap_or(raw)
                     .parse::<IpAddr>()
-                    .map_err(error)?;
+                {
+                    Ok(address) => address,
+                    Err(cause) => {
+                        first_error.get_or_insert_with(|| error(cause));
+                        continue;
+                    }
+                };
+                if address.is_ipv6() != (family == "ipv6") {
+                    first_error.get_or_insert_with(|| error("IPAM address family does not match its field"));
+                }
                 // Register a releasable address before validating its gateway.
                 leases.push(Lease {
                     address,
@@ -109,6 +120,9 @@ impl AddBackend for Platform {
                     .into(),
                 });
             }
+            // A malformed first family must not hide a releasable allocation
+            // in the second family of the same successful IPAM response.
+            if let Some(error) = first_error { return Err(error); }
             for lease in &mut leases {
                 let family = if lease.address.is_ipv4() {
                     "ipv4"
@@ -187,6 +201,7 @@ impl AddBackend for Platform {
         let namespace = self.namespace.try_clone().map_err(error)?;
         let name = request.ifname.clone();
         let leases = leases.to_vec();
+        self.gateways = leases.iter().map(|lease| lease.gateway).collect();
         let mtu = self.route_mtu;
         let host_mac = mac_bytes(&link.host_mac)?;
         self.cookie = system(in_namespace(namespace, move || {
@@ -247,10 +262,18 @@ impl AddBackend for Platform {
             "k8s-pod-name":request.pod_name,"k8s-namespace":request.pod_namespace,"k8s-uid":request.pod_uid,
             "state":"waiting-for-identity","labels":[],"addressing":addressing,"datapath-configuration":{},"properties":{},
             "netns-cookie":self.cookie.to_string(),"sync-build-endpoint":true});
-        let endpoint = response(
-            self.client
-                .put_endpoint_unbounded_response(&request.attachment_id(), &body),
-        )?;
+        let reply = self.client.put_endpoint_unbounded_response(&request.attachment_id(), &body).map_err(error)?;
+        if !(200..300).contains(&reply.status) { return response(Ok(reply)).map(|_| Endpoint { mac_override: None }); }
+        let endpoint = match endpoint_response(reply) {
+            Ok(endpoint) => endpoint,
+            Err(primary) => {
+                // The server reported creation success, so an invalid response
+                // does not imply no endpoint exists. Clean it before the ADD
+                // coordinator releases this attachment's link and allocations.
+                if let Err(cleanup) = self.delete_endpoint(request) { eprintln!("CNI rollback: {cleanup}"); }
+                return Err(primary);
+            }
+        };
         let mac = text(field(field(&endpoint, "status"), "networking"), "mac");
         Ok(Endpoint {
             mac_override: if mac.is_empty() {
@@ -273,12 +296,20 @@ impl AddBackend for Platform {
             .as_ref()
             .map(|v| mac_bytes(v))
             .transpose()?;
+        let current_mac = mac_bytes(&link.peer_mac)?;
+        let new_mac = new_mac.filter(|mac| *mac != current_mac);
+        let gateways = self.gateways.clone();
+        let host_mac = mac_bytes(&link.host_mac)?;
         let mtu = self.device_mtu;
         let cubic = field(&self.config, "enable-bbr-host-namespace-only") == &Value::Bool(true);
         system(in_namespace(namespace, move || {
             if let Some(mac) = new_mac {
                 let connector = Connector::open()?;
-                connector.configure(connector.require_link(&name)?.index, &name, mac, mtu)?;
+                let index = connector.require_link(&name)?.index;
+                connector.configure(index, &name, mac, mtu)?;
+                // Changing the L2 address flushes neighbour state. Restore
+                // the gateways established before the endpoint was created.
+                for gateway in gateways { connector.neighbour(index, gateway, host_mac)?; }
             }
             if cubic {
                 std::fs::write("/proc/sys/net/ipv4/tcp_congestion_control", "cubic\n")?;
@@ -341,6 +372,7 @@ impl DeleteBackend for Deleter {
         };
         match File::open(path) {
             Ok(file) => {
+                system(in_namespace(file.try_clone().map_err(error)?, || Ok(())))?;
                 self.namespace = Some(file);
                 Ok(true)
             }
@@ -406,6 +438,7 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
                 route_mtu: mtu("route-mtu")?,
                 config,
                 cookie: 0,
+                gateways: Vec::new(),
             };
             let namespace = platform.namespace.try_clone().map_err(error)?;
             let name = request.ifname.clone();
@@ -474,13 +507,7 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
                     e.code = 100;
                     e
                 })?;
-            if field(&health, "overall-health").as_str() == Some("failure") {
-                return Err(CniError {
-                    code: 101,
-                    message: "container is unhealthy in agent".into(),
-                    details: String::new(),
-                });
-            }
+            validate_health(&health)?;
             let interfaces = field(field(&conf, "prevResult"), "interfaces")
                 .as_array()
                 .ok_or_else(|| error("CHECK requires previous interfaces"))?;
@@ -535,5 +562,144 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
             details: String::new(),
         }),
         _ => Err(error(format!("CNI command {command} is not implemented"))),
+    }
+}
+
+fn endpoint_response(reply: Response) -> Result<Value> {
+    if reply.status != 201 { return Err(error("endpoint creation did not return HTTP 201")); }
+    let endpoint = reply.json.filter(Value::is_object).ok_or_else(|| error("endpoint creation returned invalid JSON object"))?;
+    if let Some(status) = endpoint.get("status") {
+        if !status.is_object() { return Err(error("invalid endpoint status")); }
+        if let Some(networking) = status.get("networking") {
+            if !networking.is_object() || networking.get("mac").is_some_and(|mac| !mac.is_string()) {
+                return Err(error("invalid endpoint networking"));
+            }
+        }
+    }
+    Ok(endpoint)
+}
+
+fn validate_health(health: &Value) -> Result<()> {
+    match health.get("overallHealth").and_then(Value::as_str) {
+        Some("OK" | "Bootstrap" | "Pending" | "Warning" | "Disabled") => Ok(()),
+        Some("Failure") => Err(CniError { code:101, message:"container is unhealthy in agent".into(), details:String::new() }),
+        _ => Err(CniError { code:100, message:"failed to retrieve container health: invalid overallHealth".into(), details:String::new() }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{io::{Read, Write}, os::unix::net::UnixListener,
+        sync::atomic::{AtomicU64, Ordering}, thread::{self, JoinHandle}};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    struct Agent {
+        path: PathBuf,
+        thread: Option<JoinHandle<Vec<String>>>,
+    }
+    impl Agent {
+        fn new(replies: Vec<(u16, Value)>) -> Self {
+            let path = std::env::temp_dir().join(format!("flowsdn-rollback-{}-{}.sock",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
+            let listener = UnixListener::bind(&path).expect("fake agent");
+            listener.set_nonblocking(true).expect("nonblocking");
+            let thread = thread::spawn(move || {
+                let mut requests = Vec::new();
+                for (status, body) in replies {
+                    let start = Instant::now();
+                    let mut stream = loop {
+                        match listener.accept() {
+                            Ok((stream,_)) => break stream,
+                            Err(e) if e.kind()==std::io::ErrorKind::WouldBlock && start.elapsed()<Duration::from_secs(2) => thread::sleep(Duration::from_millis(2)),
+                            Err(e) => panic!("expected rollback request: {e}"),
+                        }
+                    };
+                    stream.set_read_timeout(Some(Duration::from_secs(1))).expect("read timeout");
+                    let mut bytes = Vec::new();
+                    while !bytes.ends_with(b"\r\n\r\n") {
+                        let mut byte = [0]; stream.read_exact(&mut byte).expect("header"); bytes.extend_from_slice(&byte);
+                        assert!(bytes.len()<16_384);
+                    }
+                    let header = std::str::from_utf8(&bytes).expect("header text");
+                    requests.push(header.split("\r\n").next().expect("request line").into());
+                    let length:usize = header.split("\r\n").find_map(|h|h.strip_prefix("Content-Length: "))
+                        .expect("length").parse().expect("number");
+                    assert!(length<65_536);
+                    stream.read_exact(&mut vec![0;length]).expect("body");
+                    let body=body.to_string();
+                    write!(stream,"HTTP/1.1 {status} Fixture\r\nContent-Length: {}\r\n\r\n{body}",body.len()).expect("response");
+                }
+                requests
+            });
+            Self { path,thread:Some(thread) }
+        }
+        fn platform(&self)->Platform {
+            Platform { client:Client::new(&self.path,Duration::from_secs(1)),namespace:File::open("/dev/null").expect("unused namespace fd"),
+                config:json!({}),device_mtu:1500,route_mtu:1450,cookie:0,gateways:Vec::new() }
+        }
+        fn requests(&mut self)->Vec<String>{self.thread.take().expect("thread").join().expect("fake agent requests")}
+    }
+    impl Drop for Agent {
+        fn drop(&mut self){if let Some(thread)=self.thread.take(){let _=thread.join();}let _=std::fs::remove_file(&self.path);}
+    }
+    fn request()->AddRequest {
+        AddRequest { version:"1.1.0".into(),container_id:"cid".into(),ifname:"eth0".into(),netns:"/fixture/netns".into(),
+            cni_path:"/fixture".into(),pod_name:"pod".into(),pod_namespace:"ns".into(),pod_uid:"uid".into() }
+    }
+    fn allocation(v6:&str,v4:&str,gateway6:&str)->Value {
+        json!({"address":{"ipv6":v6,"ipv4":v4,"ipv6-pool-name":"default","ipv4-pool-name":"default"},
+            "host-addressing":{"ipv6":{"enabled":true,"ip":gateway6},"ipv4":{"enabled":true,"ip":"198.18.0.254"}}})
+    }
+    fn check_releases(response:Value,addresses:&[&str]) {
+        let mut replies=vec![(201,response)];
+        replies.extend(addresses.iter().map(|_|(200,json!({}))));
+        let mut agent=Agent::new(replies);
+        assert!(agent.platform().allocate(&request()).is_err());
+        let requests=agent.requests();
+        assert!(requests.first().is_some_and(|r|r.starts_with("POST /v1/ipam?owner=ns%2Fpod")));
+        let mut actual:Vec<_>=requests.into_iter().skip(1).collect(); actual.sort();
+        let mut expected:Vec<_>=addresses.iter().map(|ip|format!("DELETE /v1/ipam/{}?pool=default HTTP/1.1",flowsdn_api_client::encode_component(ip))).collect(); expected.sort();
+        assert_eq!(actual,expected);
+    }
+
+    #[test]
+    fn malformed_ipv6_does_not_hide_releasable_ipv4() {
+        check_releases(allocation("bad","198.18.0.1","2001:db8::ffff"),&["198.18.0.1"]);
+    }
+    #[test]
+    fn malformed_ipv4_releases_previously_parsed_ipv6() {
+        check_releases(allocation("2001:db8::1","bad","2001:db8::ffff"),&["2001:db8::1"]);
+    }
+    #[test]
+    fn incorrect_family_label_releases_every_parseable_address() {
+        check_releases(allocation("198.18.0.2","198.18.0.1","2001:db8::ffff"),&["198.18.0.1","198.18.0.2"]);
+    }
+    #[test]
+    fn invalid_gateway_releases_both_families() {
+        check_releases(allocation("2001:db8::1","198.18.0.1","bad"),&["198.18.0.1","2001:db8::1"]);
+    }
+    #[test]
+    fn malformed_successful_endpoint_response_deletes_created_endpoint() {
+        let mut agent=Agent::new(vec![(201,Value::Null),(200,json!({}))]);
+        let link=Link {host_name:"lxcfixture".into(),host_index:1,host_mac:"02:00:00:00:00:01".into(),peer_mac:"02:00:00:00:00:02".into()};
+        assert!(agent.platform().create_endpoint(&request(),&link,&[]).is_err());
+        let requests=agent.requests();
+        assert!(requests.first().is_some_and(|r|r.starts_with("PUT /v1/endpoint/")));
+        assert_eq!(requests.last().map(String::as_str),Some("DELETE /v1/endpoint/cni-attachment-id%3Acid%3Aeth0 HTTP/1.1"));
+    }
+    #[test]
+    fn check_validates_real_health_wire_enum_and_rejects_missing_health() {
+        for status in ["OK","Bootstrap","Pending","Warning","Disabled"] { assert!(validate_health(&json!({"overallHealth":status})).is_ok()); }
+        assert_eq!(validate_health(&json!({"overallHealth":"Failure"})).expect_err("unhealthy").code,101);
+        for invalid in [Value::Null,json!({}),json!({"overall-health":"ok"}),json!({"overallHealth":"unknown"})] {
+            assert_eq!(validate_health(&invalid).expect_err("invalid health").code,100);
+        }
+    }
+    #[test]
+    fn del_namespace_entry_failure_is_retryable() {
+        let mut backend=Deleter {client:Client::new("/unused",Duration::from_secs(1)),queue:PathBuf::from("/unused"),namespace:None};
+        assert!(backend.enter_namespace(Some("/dev/null")).is_err());
+        assert!(backend.namespace.is_none());
+        assert!(!backend.enter_namespace(None).expect("missing namespace"));
     }
 }

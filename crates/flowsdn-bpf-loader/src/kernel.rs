@@ -94,6 +94,16 @@ impl LocalDelivery {
         Ok(())
     }
 
+    /// Delete a map entry during retryable endpoint teardown. Ignore only the
+    /// kernel's missing-key error; permission and other syscall failures remain.
+    pub fn remove_if_present(&mut self, address: IpAddr) -> KernelResult<()> {
+        match self.endpoints.remove(&key(address)) {
+            Ok(()) => Ok(()),
+            Err(aya::maps::MapError::SyscallError(error)) if error.io_error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     /// Read-only access for the kernel packet-test harness.
     pub fn program(&self) -> KernelResult<&SchedClassifier> {
         Ok(self
