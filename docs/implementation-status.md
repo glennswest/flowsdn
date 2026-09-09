@@ -312,3 +312,25 @@ graph remains at 89 external versions. No live-map, verifier, mixed-cluster or
 arm64 runtime compatibility is claimed.
 After recording validation, cleanup removed 11,693 build files / 3.3 GiB and
 this milestone's seven temporary logs. The release remains source-only.
+
+## Version 0.12.0 implementation
+
+The loader crate now plans pinned-map reuse or replacement from the five
+specified compatibility attributes. Only an existing read-write map satisfying
+a program-read-only specification permits flag relaxation. Other mismatches
+retain the original desired specification and report changed attributes.
+Agent-owned maps are replaced empty; loader-owned replacements wait for the
+attachment commit. These are pure decisions: kernel operations, inner-map
+schema checks, Aya integration and rollback execution remain forthcoming.
+
+Six endpoint, node and subnet ABI types add explicit codecs, family constructors
+and layout assertions. Constructors zero unused address storage and reserved
+bytes; raw decoding preserves them. Endpoint MAC fields remain raw integers.
+
+Script engines can bind typed tables per fixture for `db/show` and `db/empty`.
+Rendering uses immutable snapshots in primary-key order, declared columns and
+specified padding. Output paths use the existing capability-confined writer;
+row, column, cell-count and byte limits bound rendering. Whole-section retries
+can recheck live table state. Serialization, indexed query commands and
+watch-driven `db/cmp` remain forthcoming; harvested networking cases still
+require subsystem adapters.

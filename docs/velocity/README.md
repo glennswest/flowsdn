@@ -1,45 +1,41 @@
 # flowsdn velocity ledger
 
-Usage cutoff and cleanup completion: **2026-09-09T13:04:59Z**. Milestone 0.11.0
-started at **12:46:19 UTC** and completed in **18 minutes 40 seconds**
-(**1,120 elapsed seconds**). [v0.11.0](https://github.com/glennswest/flowsdn/releases/tag/v0.11.0)
-was published at **13:08:36 UTC**, **22m 17s** after work started. Publication
-and ledger preparation follow the usage cutoff and validation/cleanup boundary.
+Usage cutoff: **2026-09-09T13:16:55.369Z**. Milestone 0.12.0 started
+**2026-09-09T13:10:31Z** and remains **in progress**, with
+**384.369 seconds elapsed** through the cutoff.
+Validation, cleanup and release publication remain pending.
 
 | Combined unique-response usage | Tokens |
 |---|---:|
-| Input | 127,502,211 |
-| Cached input (subset) | 124,422,912 |
-| Uncached input | 3,079,299 |
-| Output | 559,066 |
-| Reasoning output (subset) | 138,986 |
-| Total processed | 128,061,277 |
+| Input | 138,342,036 |
+| Cached input (subset) | 135,150,848 |
+| Uncached input | 3,191,188 |
+| Output | 596,719 |
+| Reasoning output (subset) | 148,719 |
+| Total processed | 138,938,755 |
 
-Milestone usage is **17,671,198 processed tokens** across root
-and three agents, deduplicated by response ID. The combined baseline uses
-responses strictly before start; root uses the latest sample at or before start.
-The superseded after-start sample remains only as audit metadata. Repeated
-context counts as input; these figures do not establish subscription dollars.
-Per-agent cutoffs and cumulative counters remain in [subagents.json](subagents.json).
+Milestone usage is **7,591,456 processed tokens** across root
+and three agents, deduplicated by response ID. The root baseline at
+**2026-09-09T13:10:30.966Z** precedes milestone start; all comparisons use parsed
+timestamps. Historical per-response cumulative counters remain preserved.
+Repeated context counts as input and these figures do not establish dollar usage.
+Per-agent cutoffs are in [subagents.json](subagents.json).
 
-Seven reported windows total **1,229 agent-window seconds** (**0.341389 hours**),
-with a **593-second project interval union**. Observed validation windows are
-**217 seconds** through the debug/release transition and **217 seconds** through
-final checks, followed by **35 seconds** of cleanup. These are nested elapsed
-windows, not exclusive processing time, and are not added to milestone elapsed.
-Active work and active agent-hours remain unknown.
+Two closed reported windows total **145 agent-window seconds**
+(**0.040278 hours**), also a **145-second project interval union**.
+Reconciler work began at **13:11:49 UTC** and remains ongoing; unobserved
+endpoints and active time remain unknown. Script adapter work began at
+**13:12:05 UTC** and remains ongoing. Root loader coding began approximately
+13:12 UTC; no exact exclusive coding duration is inferred.
 
-Commit `7972548` passed **286 all-features tests in each debug/release profile**,
-formatting, Clippy, both Linux musl compile checks and dependency policy;
-`7952174` records validation. Test counts: script 80, reconciler 62, config 51,
-ABI 33, table 30, health 7, fence 7, selector 7, version 5 and harvester 4. Validation
-completed at **13:04:24 UTC**. Cleanup removed **11,693 files / 3.3 GiB** and
-seven task logs; the device check passed. Issue #13 closed; repository totals
-are **11 closed / 279 open**. Release publication is recorded above.
+Six endpoint ABI tests and six loader-planning tests were added and are
+**not yet validated**. [Milestone 0.12](0.12.0.json) preserves current counters
+and work windows; [0.11](0.11.0.json) and the ledger retain validated release
+history. Later usage, including ledger edits and reporting, is excluded.
 
-[Milestone 0.11](0.11.0.json) preserves timing, counters and validation details;
-[0.10](0.10.0.json) and the ledger retain prior history. Usage after the fixed
-cutoff, including these ledger edits and publication, is excluded.
+Later checkpoint at **13:20:01 UTC**: **45 focused map tests** and Clippy
+passed against `45beab7`; script validation is running and health integration
+is still under review. This checkpoint is after the usage cutoff above.
 
 ## Recording rules
 

@@ -7,6 +7,9 @@ No unreleased changes.
 ## [0.12.0] - 2026-09-09
 
 - Add explicit pinned-map compatibility and replacement planning.
+- Add endpoint, node and subnet ABI layouts with byte fixtures.
+- Connect optional reconciler health reporting to module health scopes.
+- Add typed script table bindings for bounded `db/show` and `db/empty` commands.
 
 ## [0.11.0] - 2026-09-09
 

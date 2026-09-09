@@ -16,7 +16,7 @@ without following `docs/licensing.md`.
 
 ## Version
 
-0.11.0 — policy and affinity ABI, reconciliation observers and whole-section script retries; no networking agent yet. Version locations (when crates exist):
+0.12.0 — endpoint ABI, map lifecycle planning, reconciliation health and script table adapters; no networking agent yet. Version locations (when crates exist):
 `Cargo.toml` workspace.package.version, `CHANGELOG.md` heading.
 
 ## Work plan

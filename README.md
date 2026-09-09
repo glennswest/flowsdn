@@ -17,15 +17,17 @@ Goals:
 
 ## Status
 
-**Foundation implementation started (2026-09-08), version 0.11.0.**
+**Foundation implementation started (2026-09-08), version 0.12.0.**
 
 The workspace includes indexed tables, initialization gates, a reconciler with
 pruning, optional batching and a caller-owned scheduling loop, configuration snapshots, module
 health and a script engine with generic file commands, foreground execution,
 background jobs and whole-section retries. Reconciliation observers expose
-attempted revisions and remaining retry progress.
+attempted revisions and remaining retry progress, with optional module health
+reporting. Typed script table bindings support `db/show` and `db/empty`.
 The map ABI crate defines connection tuples, conntrack/NAT values, service
-and policy layouts, plus ipcache byte layouts.
+and policy layouts, plus endpoint, node, subnet and ipcache byte layouts.
+The loader crate begins with pure pinned-map compatibility planning.
 There is no working networking agent or datapath. Synthetic scripts and file assertions
 execute, while the harvested networking scenarios still lack their adapters.
 
