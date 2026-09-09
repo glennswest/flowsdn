@@ -348,3 +348,5 @@ features**: 92 script, 72 reconciler, 51 configuration, 39 ABI, 30 table,
 4 harvester tests. Formatting, warning-free Clippy, x86_64/aarch64 Linux musl
 compile checks and dependency advisories/bans/licenses/sources all passed.
 External dependencies remain pinned to the previous 89-version graph.
+After validation was recorded, cleanup removed 12,819 build files / 3.9 GiB and
+this milestone's six temporary logs. The release is source-only.
