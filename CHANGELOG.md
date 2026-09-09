@@ -6,6 +6,10 @@
   token usage in docs/velocity, with sanitized samples and explicit shared-work
   attribution; require updates at task boundaries and releases.
 
+## [0.9.0] - 2026-09-09
+
+- Begin the map ABI foundation with explicit byte order and layout contracts.
+
 ## [0.8.0] - 2026-09-09
 
 - Reserve separate crate names for module health and active network checking.

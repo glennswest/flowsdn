@@ -1,0 +1,16 @@
+{
+  "id": "0.9.0",
+  "scope": "project/shared",
+  "start_utc": "2026-09-09T11:51:25Z",
+  "start_revision": "13d5e41",
+  "owner": "/root",
+  "status": "in-progress",
+  "active_work_seconds": null,
+  "token_baseline": null,
+  "workstreams": [
+    "flowsdn-config",
+    "flowsdn-reconcile",
+    "flowsdn-scripttest",
+    "flowsdn-bpf-abi"
+  ]
+}
