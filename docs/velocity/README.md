@@ -2,7 +2,10 @@
 
 Usage cutoff and cleanup completion: **2026-09-09T13:31:33Z**. Milestone 0.12.0
 started at **13:10:31 UTC** and completed in **21 minutes 2 seconds**
-(**1,262 elapsed seconds**). Source is validated; release publication is pending.
+(**1,262 elapsed seconds**) through validation and cleanup. The foundation
+prerelease [v0.12.0](https://github.com/glennswest/flowsdn/releases/tag/v0.12.0)
+was published at **13:34:15 UTC**, **23 minutes 44 seconds**
+(**1,424 elapsed seconds**) after milestone start.
 
 | Combined unique-response usage | Tokens |
 |---|---:|
@@ -34,7 +37,7 @@ formatting, Clippy, both Linux musl compile checks and dependency policy;
 ABI 39, table 30, health 7, fence 7, selector 7, loader 6, version 5 and harvester 4.
 Validation completed at **13:30:52 UTC**. Cleanup removed **12,819 files / 3.9 GiB**
 and six task logs; the device check passed. No issues closed this milestone;
-repository totals remain **11 closed / 279 open**. Release publication is pending.
+repository totals remain **11 closed / 279 open**. Release commit: `a803972`.
 
 [Milestone 0.12](0.12.0.json) retains detailed counters, scopes and checkpoints;
 [0.11](0.11.0.json) and the ledger preserve prior releases. Usage after the fixed

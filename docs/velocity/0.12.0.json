@@ -296,7 +296,7 @@
     "c267aec"
   ],
   "commit": "c267aec",
-  "release": null,
+  "release": "v0.12.0",
   "release_candidate": "v0.12.0",
   "cleanup": {
     "status": "complete",
@@ -315,7 +315,7 @@
   "observed_full_validation_start_utc": "2026-09-09T13:24:15Z",
   "validated_commit": "c267aec",
   "validation_record_commit": "978aa64",
-  "publication": "pending",
+  "publication": "published",
   "observed_validation_windows": [
     {
       "task_id": "0.12.0",
@@ -383,5 +383,9 @@
     "closed": 11,
     "open": 279,
     "as_of_utc": "2026-09-09T13:31:33Z"
-  }
+  },
+  "release_commit": "a803972b87364c1385e6b87292de2c41f38b75da",
+  "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.12.0",
+  "published_at_utc": "2026-09-09T13:34:15Z",
+  "elapsed_to_publication_seconds": 1424
 }
