@@ -9,10 +9,17 @@ publish = false
 
 [dependencies]
 aya-ebpf = "=0.2.1"
+flowsdn-bpf-abi = { path = "../flowsdn-bpf-abi", version = "=0.14.0" }
 
 [[bin]]
 name = "smoke"
 path = "src/bin/smoke.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "local-delivery"
+path = "src/bin/local-delivery.rs"
 test = false
 bench = false
 

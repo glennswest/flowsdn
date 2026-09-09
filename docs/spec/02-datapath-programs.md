@@ -761,6 +761,12 @@ the veth egress where `to_container` runs.
 
 ### 3.9 Local delivery (`ipv4_local_delivery`)
 
+MAC ABI clarification (2026-09-09): the endpoint `mac` and `node_mac` u64
+values store the six Ethernet bytes in their low six little-endian bytes.
+This resolves the map-layout spec's previously uninterpreted u64 fields for
+packet rewriting. Evidence: pinned reference `pkg/mac/mac.go:71–85` and
+`pkg/mac/mac_test.go:62–66`. No reference implementation was copied.
+
 Inputs: L3 offset, source identity, `magic` to use if a mark must be set,
 destination `endpoint_info`, metric direction, `from_host`, `from_tunnel`,
 `cluster_id`.
