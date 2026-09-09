@@ -587,6 +587,53 @@
         "total_tokens": 224961
       },
       "note": "Observed planning interval only; initial backlog/readme review preceded the first captured clock sample. Four GitHub milestones created, all 270 current issues covered by area ownership in docs/milestones.md. No build or release; documentation checked with git diff --check. Usage is processed context, not account allowance. Commit is the commit containing this record. Publication/reporting after cutoff excluded."
+    },
+    {
+      "id": "m1-kernel-smoke",
+      "scope": "project/shared",
+      "crates": [
+        "flowsdn-bpf",
+        "flowsdn-bpftest"
+      ],
+      "agent": "root",
+      "start_revision": "328feb8",
+      "validated_revision": "bbc6541",
+      "validation_record_commit": "038c8ae",
+      "start_utc": "2026-09-09T17:24:52.650Z",
+      "end_utc": "2026-09-09T17:33:16Z",
+      "elapsed_seconds": 503.35,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T17:00:09.931Z",
+      "token_end_sample_utc": "2026-09-09T17:33:15.329Z",
+      "token_baseline": {
+        "input_tokens": 101259495,
+        "cached_input_tokens": 99972480,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 314337,
+        "reasoning_output_tokens": 77274,
+        "total_tokens": 101573832
+      },
+      "token_endpoint": {
+        "input_tokens": 103509299,
+        "cached_input_tokens": 102172416,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 326821,
+        "reasoning_output_tokens": 79891,
+        "total_tokens": 103836120
+      },
+      "tokens": {
+        "input_tokens": 2249804,
+        "cached_input_tokens": 2199936,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 12484,
+        "reasoning_output_tokens": 2617,
+        "total_tokens": 2262288
+      },
+      "subagent_count": 0,
+      "release": null,
+      "outcome": "Kernel BPF round trips, live UDP pass/drop/recovery, explicit and owner-drop TCX cleanup passed. Formatting, Clippy, both userspace musl compile checks and both workspace dependency policies passed. Milestone 1 remains in progress. Validation and subsequent cleanup committed; namespace is anonymous and process scoped.",
+      "attribution": "Shared across BPF program, harness, dependency setup and validation; not allocated to both crates.",
+      "note": "Single root session cumulative counters; no subagents. Context is processed tokens, not account quota or dollars. Build/check waits are within this wall interval; active work time unknown. Final ledger commit and reporting after cutoff excluded."
     }
   ],
   "crates": [

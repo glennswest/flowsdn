@@ -43,3 +43,8 @@ These checks do not claim arm64 execution, the 6.6/6.12 kernel matrix,
 production forwarding, CNI, cross-node traffic or harvested networking-case
 coverage. The existing 377 foundation tests were not rerun for this independent
 harness checkpoint. No milestone acceptance gate is marked complete.
+
+Cleanup completed at 17:32:44 UTC after committing validation: Cargo removed
+1,399 files / 777.3 MiB. Two task logs and the downloaded linker archive were
+removed. The installed linker remains as a reusable 100 MiB tool. Available
+space after cleanup was 30 GiB on the system disk and 1.4 TiB on the build disk.

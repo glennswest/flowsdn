@@ -35,6 +35,11 @@ Fixed VXLAN/Geneve headers and Geneve DSR options have explicit wire codecs.
 There is no working networking agent or datapath. Synthetic scripts and file assertions
 execute, while the harvested networking scenarios still lack their adapters.
 
+The unreleased milestone 1 work adds a [kernel smoke harness](crates/flowsdn-bpftest/README.md):
+a Rust BPF classifier tested with kernel packet round trips and isolated live
+UDP pass/drop updates, including attachment cleanup. Pod connectivity remains
+outstanding.
+
 | | |
 |---|---|
 | Specifications | 24 files, ~40k lines — every area, normative, with compatibility contracts and test plans |

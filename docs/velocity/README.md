@@ -65,3 +65,12 @@ initial review preceded that interval. Root-only processed-token delta: 224,961
 through 2026-09-09T16:59:58.614Z. No builds, release, or billable-dollar estimate.
 The prior release totals above retain their original cutoff. Detailed counters
 are in the `four-milestone-plan` ledger phase.
+
+## Milestone 1: kernel smoke checkpoint
+
+2026-09-09T17:33:16Z: Rust BPF kernel execution and isolated live UDP pass/drop/cleanup
+validated, with no new release. One root agent; elapsed 503.4 seconds,
+2,262,288 processed tokens through 2026-09-09T17:33:15.329Z.
+Counters include cached/repeated context and do not measure account allowance.
+See `m1-kernel-smoke` in the ledger and
+[validation](../validation/m1-kernel-smoke.md). Milestone 1 remains in progress.
