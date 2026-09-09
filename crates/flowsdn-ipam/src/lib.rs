@@ -78,24 +78,43 @@ impl HostScope {
         let reserve_last = host_bits > 1 && !options.allow_last_ip;
         let first = network_number.wrapping_add(u128::from(reserve_first));
         let last = (network_number | host_mask).wrapping_sub(u128::from(reserve_last));
-        let capacity = last.checked_sub(first).and_then(|n| n.checked_add(1))
+        let capacity = last
+            .checked_sub(first)
+            .and_then(|n| n.checked_add(1))
             .ok_or(Error::CapacityOverflow)?;
         Ok(Self {
-            network, prefix_len, first, last, capacity,
-            words: BTreeMap::new(), owners: BTreeMap::new(), excluded: BTreeMap::new(),
-            random: RandomState::new(), sequence: 0,
+            network,
+            prefix_len,
+            first,
+            last,
+            capacity,
+            words: BTreeMap::new(),
+            owners: BTreeMap::new(),
+            excluded: BTreeMap::new(),
+            random: RandomState::new(),
+            sequence: 0,
         })
     }
 
-    pub fn network(&self) -> IpAddr { self.network }
+    pub fn network(&self) -> IpAddr {
+        self.network
+    }
 
-    pub fn prefix_len(&self) -> u8 { self.prefix_len }
+    pub fn prefix_len(&self) -> u8 {
+        self.prefix_len
+    }
 
-    pub fn capacity(&self) -> u128 { self.capacity }
+    pub fn capacity(&self) -> u128 {
+        self.capacity
+    }
 
-    pub fn allocated(&self) -> usize { self.owners.len() }
+    pub fn allocated(&self) -> usize {
+        self.owners.len()
+    }
 
-    pub fn dump(&self) -> &BTreeMap<IpAddr, String> { &self.owners }
+    pub fn dump(&self) -> &BTreeMap<IpAddr, String> {
+        &self.owners
+    }
 
     /// Restore uses the same collision and exclusion checks as a static
     /// allocation. Host scope has no upstream synchronization to defer.
@@ -108,9 +127,13 @@ impl HostScope {
     pub fn allocate(&mut self, address: IpAddr, owner: &str) -> Result<(), Error> {
         let offset = self.offset(address).ok_or(Error::NotInRange)?;
         if let Some(owner) = self.excluded.get(&address) {
-            return Err(Error::Excluded { owner: owner.clone() });
+            return Err(Error::Excluded {
+                owner: owner.clone(),
+            });
         }
-        if self.is_set(offset) { return Err(Error::Allocated); }
+        if self.is_set(offset) {
+            return Err(Error::Allocated);
+        }
         self.reserve(offset, address, owner.to_owned());
         Ok(())
     }
@@ -123,11 +146,15 @@ impl HostScope {
     /// Scanning is bounded by occupied addresses plus exclusions, rather than
     /// the potentially enormous address space, unless that space is full.
     pub fn allocate_next(&mut self, owner: &str) -> Result<IpAddr, Error> {
-        if self.owners.len() as u128 == self.capacity { return Err(Error::Full); }
+        if self.owners.len() as u128 == self.capacity {
+            return Err(Error::Full);
+        }
         self.sequence = self.sequence.wrapping_add(1);
         let high = u128::from(self.random.hash_one((self.sequence, 0u8)));
         let low = u128::from(self.random.hash_one((self.sequence, 1u8)));
-        let start = ((high << 64) | low).checked_rem(self.capacity).ok_or(Error::Full)?;
+        let start = ((high << 64) | low)
+            .checked_rem(self.capacity)
+            .ok_or(Error::Full)?;
         let mut offset = start;
         loop {
             if !self.is_set(offset) {
@@ -140,7 +167,11 @@ impl HostScope {
                     return Ok(address);
                 }
             }
-            offset = if offset == self.capacity.wrapping_sub(1) { 0 } else { offset.wrapping_add(1) };
+            offset = if offset == self.capacity.wrapping_sub(1) {
+                0
+            } else {
+                offset.wrapping_add(1)
+            };
             if offset == start || self.owners.len() as u128 == self.capacity {
                 return Err(Error::Full);
             }
@@ -157,25 +188,35 @@ impl HostScope {
     /// Releasing a free, reserved-endpoint or foreign address is a no-op.
     /// Exclusions are persistent: release never makes an excluded IP usable.
     pub fn release(&mut self, address: IpAddr) {
-        let Some(offset) = self.offset(address) else { return; };
+        let Some(offset) = self.offset(address) else {
+            return;
+        };
         let word = offset >> 6;
         let mask = 1u64 << (offset & 63);
         if let Some(bits) = self.words.get_mut(&word) {
             *bits &= !mask;
-            if *bits == 0 { self.words.remove(&word); }
+            if *bits == 0 {
+                self.words.remove(&word);
+            }
         }
         self.owners.remove(&address);
     }
 
     fn offset(&self, address: IpAddr) -> Option<u128> {
-        if address.is_ipv4() != self.network.is_ipv4() { return None; }
+        if address.is_ipv4() != self.network.is_ipv4() {
+            return None;
+        }
         let value = number(address);
-        if value < self.first || value > self.last { return None; }
+        if value < self.first || value > self.last {
+            return None;
+        }
         value.checked_sub(self.first)
     }
 
     fn is_set(&self, offset: u128) -> bool {
-        self.words.get(&(offset >> 6)).is_some_and(|bits| bits & (1u64 << (offset & 63)) != 0)
+        self.words
+            .get(&(offset >> 6))
+            .is_some_and(|bits| bits & (1u64 << (offset & 63)) != 0)
     }
 
     fn reserve(&mut self, offset: u128, address: IpAddr, owner: String) {
@@ -201,15 +242,20 @@ pub struct Ipam {
 impl Ipam {
     pub fn new(ipv4: Option<HostScope>, ipv6: Option<HostScope>) -> Result<Self, Error> {
         if ipv4.as_ref().is_some_and(|p| !p.network.is_ipv4())
-            || ipv6.as_ref().is_some_and(|p| !p.network.is_ipv6()) {
+            || ipv6.as_ref().is_some_and(|p| !p.network.is_ipv6())
+        {
             return Err(Error::FamilyMismatch);
         }
         Ok(Self { ipv4, ipv6 })
     }
 
-    pub fn ipv4(&self) -> Option<&HostScope> { self.ipv4.as_ref() }
+    pub fn ipv4(&self) -> Option<&HostScope> {
+        self.ipv4.as_ref()
+    }
 
-    pub fn ipv6(&self) -> Option<&HostScope> { self.ipv6.as_ref() }
+    pub fn ipv6(&self) -> Option<&HostScope> {
+        self.ipv6.as_ref()
+    }
 
     pub fn allocate(&mut self, address: IpAddr, owner: &str) -> Result<(), Error> {
         self.family_mut(address)?.allocate(address, owner)
@@ -229,7 +275,9 @@ impl Ipam {
     /// newly allocated IPv6 IP, while preserving pre-existing allocations and
     /// any infrastructure exclusions discovered during the scan.
     pub fn allocate_next(&mut self, owner: &str) -> Result<AddressPair, Error> {
-        if self.ipv4.is_none() && self.ipv6.is_none() { return Err(Error::FamilyDisabled); }
+        if self.ipv4.is_none() && self.ipv6.is_none() {
+            return Err(Error::FamilyDisabled);
+        }
         let ipv6 = match self.ipv6.as_mut() {
             Some(pool) => match pool.allocate_next(owner)? {
                 IpAddr::V6(ip) => Some(ip),
@@ -253,8 +301,12 @@ impl Ipam {
     }
 
     fn family_mut(&mut self, address: IpAddr) -> Result<&mut HostScope, Error> {
-        if address.is_ipv4() { self.ipv4.as_mut() } else { self.ipv6.as_mut() }
-            .ok_or(Error::FamilyDisabled)
+        if address.is_ipv4() {
+            self.ipv4.as_mut()
+        } else {
+            self.ipv6.as_mut()
+        }
+        .ok_or(Error::FamilyDisabled)
     }
 }
 
@@ -266,6 +318,9 @@ fn number(address: IpAddr) -> u128 {
 }
 
 fn from_number(value: u128, ipv4: bool) -> IpAddr {
-    if ipv4 { IpAddr::V4(Ipv4Addr::from(value as u32)) }
-    else { IpAddr::V6(Ipv6Addr::from(value)) }
+    if ipv4 {
+        IpAddr::V4(Ipv4Addr::from(value as u32))
+    } else {
+        IpAddr::V6(Ipv6Addr::from(value))
+    }
 }

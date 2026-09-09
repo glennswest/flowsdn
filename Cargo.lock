@@ -188,6 +188,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-cni"
+version = "0.14.0"
+dependencies = [
+ "flowsdn-ipam",
+ "serde_json",
+]
+
+[[package]]
 name = "flowsdn-config"
 version = "0.14.0"
 dependencies = [
@@ -228,6 +236,10 @@ dependencies = [
  "regex-syntax",
  "serde_json",
 ]
+
+[[package]]
+name = "flowsdn-ipam"
+version = "0.14.0"
 
 [[package]]
 name = "flowsdn-reconcile"
