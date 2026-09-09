@@ -5,6 +5,7 @@ use std::{collections::BTreeMap, fmt, net::IpAddr};
 
 pub mod delete;
 pub mod queue;
+pub mod runtime;
 
 pub type Result<T> = std::result::Result<T, CniError>;
 

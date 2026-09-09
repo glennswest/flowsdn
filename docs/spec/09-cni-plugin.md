@@ -187,8 +187,8 @@ step 7 the rollback of section 3.4.1 runs and the error is returned.
    peer, or a runtime retry). "Not found" is success.
 5. **IPAM.**
    - `conf.ipam-mode == "delegated-plugin"` → delegated IPAM (section 3.10).
-   - otherwise → `POST /ipam?owner=<K8S_POD_NAMESPACE>/<K8S_POD_NAME>&expiration=true`
-     with no `family` and no `pool` query parameter. Pool selection is the
+   - otherwise → `POST /ipam?owner=<K8S_POD_NAMESPACE>/<K8S_POD_NAME>`
+     with header `expiration: true`, no `family` and no `pool` query parameter. Pool selection is the
      agent's (spec 07: pod/namespace annotations, `CiliumPodIPPool`
      selectors, default pool). The agent returns both families when both are
      enabled (dual-stack); the plugin MUST NOT make one call per family.
@@ -752,7 +752,7 @@ node do not rewrite the file on every start (the byte-compare in 3.11 step
 | Call | Request | Success | Failure handling |
 |---|---|---|---|
 | `GET /config` | — | 200 `DaemonConfiguration{status}` | fatal (3.3) |
-| `POST /ipam?owner=<ns>/<pod>&expiration=true` (`family`, `pool` empty) | — | 201 `IPAMResponse{address{ipv4,ipv4-pool-name,ipv4-expiration-uuid,ipv6,…}, ipv4{ip,gateway,cidrs[],master-mac,expiration-uuid,interface-number,skip-masquerade}, ipv6{…}, host-addressing{ipv4{ip,enabled,…},ipv6{…}}}` | 403 / 502 fatal |
+| `POST /ipam?owner=<ns>/<pod>` with header `expiration: true` (`family`, `pool` empty) | — | 201 `IPAMResponse{address{ipv4,ipv4-pool-name,ipv4-expiration-uuid,ipv6,…}, ipv4{ip,gateway,cidrs[],master-mac,expiration-uuid,interface-number,skip-masquerade}, ipv6{…}, host-addressing{ipv4{ip,enabled,…},ipv6{…}}}` | 403 / 502 fatal |
 | `DELETE /ipam/{ip}?pool=<pool>` | — | 200 | 400/403/404/500/501 logged at warn |
 | `PUT /endpoint/{id}` `id=cni-attachment-id:<cid>:<ifname>` | `EndpointChangeRequest` (below) | 201 `Endpoint{id,status{networking{mac,addressing,…},…}}` | 400 invalid, 409 exists, 429, 500 failed, 503 not ready → fatal |
 | `DELETE /endpoint/{id}` | — | 200; 206 (deleted with errors) | 400 invalid, 404 not found, 429 → warn, continue; 503 → queue (5.1) |
@@ -1247,3 +1247,8 @@ time, so the ADD function can be tested with a recording implementation.
    Decide in spec 08 whether flowsdn's agent bind-mounts sandbox namespaces
    there (useful for re-entering pods after a plugin crash) or the field is
    dropped from the request.
+
+Implementation clarification (2026-09-09): expiration is an HTTP header,
+not a query parameter. Confirmed against reference `api/v1/openapi.yaml`
+`ipam-expiration` at the pinned reference commit; aligns this spec with
+spec 07 §3.2. No executable reference code was copied.
