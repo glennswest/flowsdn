@@ -41,6 +41,7 @@ pub trait MapBytes<const N: usize>: Sized {
 
 pub mod affinity;
 pub mod ct;
+pub mod endpoint;
 pub mod lb;
 pub mod policy;
 

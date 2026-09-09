@@ -271,6 +271,12 @@ agent (`OpenOrCreate`) or by the loader as part of a collection:
 | 4 | pin exists, spec lacks `RO` but pinned map has it | unpin the old map, create new (downgrade path: programs need write access) |
 | 5 | pin exists and is incompatible for any other reason | agent-created maps: unpin and create empty (**no content migration**, log old vs new type/key/value/max/flags). Loader-created maps: defer the replacement to the commit step (§3.6) so the old map keeps serving until the new programs are attached |
 
+**Flag encoding verified (2026-09-09).** `RO` is bit 7 (`0x80`), as
+declared in the pinned reference’s `bpf/include/linux/bpf.h:1294` at
+`7d68cfb394`. This kernel ABI value is used by the explicit compatibility
+planner; no reference implementation logic is copied. Loader-owned replacements,
+including a read-only downgrade, retain the staged-commit rule from step 5.
+
 Steps 3–4 exist because the reference toggled `RO` between releases; flowsdn
 keeps them so a node can be taken over from a running reference agent without
 recreating agent-owned maps. Memory flags (`BPF_F_MMAPABLE` and similar) are

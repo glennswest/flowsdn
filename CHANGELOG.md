@@ -4,6 +4,10 @@
 
 No unreleased changes.
 
+## [0.12.0] - 2026-09-09
+
+- Add explicit pinned-map compatibility and replacement planning.
+
 ## [0.11.0] - 2026-09-09
 
 - Add policy and affinity ABI layouts, verify reserved policy flags, and preserve

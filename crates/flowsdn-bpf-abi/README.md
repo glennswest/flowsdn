@@ -3,7 +3,8 @@
 Dependency-free `no_std` layouts and explicit byte codecs from map ABI spec
 §§4.1–4.4: IPv4/IPv6 connection tuples, conntrack and NAT values, service and
 backend and affinity layouts, policy keys/values and counters, address-only LPM keys, the frozen ipcache key and remote
-endpoint value. Packed types use by-value accessors for
+endpoint value. Endpoint, node and subnet keys/values include explicit family
+constructors; endpoint MAC storage remains a raw host-order integer. Packed types use by-value accessors for
 multi-byte host fields. Network-order fields use byte-array wrappers.
 
 Layout assertions compile on every target; independent byte fixtures check
@@ -21,6 +22,6 @@ while semantic accessors ignore them. Entry construction checks field encoding;
 the policy owner must derive deny from precedence and validate cross-field
 policy semantics.
 
-This is a subset of the map catalogue. Endpoint and node layouts, Aya integration,
+This is a subset of the map catalogue. Additional telemetry/feature layouts, Aya integration,
 map operations and BPF loading remain forthcoming.
 No verifier, live-map or mixed-cluster compatibility is claimed by these tests.
