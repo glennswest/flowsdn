@@ -33,8 +33,9 @@
 # attributed to every .c that includes it, with `defined_in` naming the
 # header. `entrypoint` is resolved by following the SETUP stage to the
 # entry helper it tail-calls, through up to three levels of local helper or
-# macro indirection; "direct" means the CHECK stage calls the function under
-# test itself (a library unit test) and "unresolved" means the harvester
+# macro indirection, supplemented by guarded audits in spec 18 §4.3.1.
+# "direct" means SETUP or CHECK invokes the library function under test
+# without entering an attached datapath program; "unresolved" means the harvester
 # could not follow the indirection and a human must classify it.
 #
 # SUMMARY (reference v1.20.1 / 7d68cfb394)
@@ -45,7 +46,7 @@
 #   effective cases after header expansion 625
 #   by milestone   M1 279   M2 138   M3 208
 #   by file        M1 63    M2 42    M3 37
-#   by entrypoint  from_netdev 182  to_netdev 160  direct 109  from_container 63  xdp_entry 26  unresolved 23  from_host 22  from_overlay 21  to_container 13  lxc_policy 3  to_overlay 3
+#   by entrypoint  from_netdev 186  to_netdev 164  direct 112  from_container 63  xdp_entry 26  lxc_policy_egress 4  from_wireguard 4  to_wireguard 4  from_host 22  from_overlay 21  to_container 13  lxc_policy 3  to_overlay 3
 #   by object      host 72  (library unit test) 23  lxc 20  xdp 13  overlay 8  sock 3  wireguard 2  sock_term 1
 #
 # FINDING: bpf/tests/encrypt_host_wireguard_tunnel is a C source file that is
@@ -90,7 +91,8 @@ cases_m3 = 208
 #   progtype    ELF section prefix: tc | xdp
 #   stages      which of PKTGEN / SETUP / CHECK the case defines
 #   entrypoint  flowsdn entrypoint under test (spec 02 §1.1) | direct |
-#               unresolved
+#               lxc_policy_egress | from_wireguard | to_wireguard | unresolved
+#   entrypoint_resolution  optional audited evidence source (spec 18 §4.3.1)
 #   milestone   per-case milestone; may be lower than the file when the file
 #               is gated on a later-milestone feature that only some cases use
 # ---------------------------------------------------------------------------
@@ -756,7 +758,8 @@ case_count = 1
   name = "nat4_icmp_error_tcp_snat_revnat"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "direct"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 1
 
 [[file]]
@@ -875,14 +878,16 @@ case_count = 4
   name = "ipv6_without_extension_header"
   progtype = "xdp"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "direct"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 1
 
   [[file.case]]
   name = "ipv6_with_auth_hop_tcp"
   progtype = "xdp"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "direct"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 1
 
   [[file.case]]
@@ -1776,7 +1781,8 @@ case_count = 8
   name = "ingress_ipv4_l3_to_l2_fast_redirect_pod"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "from_netdev"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 1
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -1784,7 +1790,8 @@ case_count = 8
   name = "ingress_ipv6_l3_to_l2_fast_redirect_pod"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "from_netdev"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 1
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -1792,7 +1799,8 @@ case_count = 8
   name = "egress_ipv4_l3_to_l2_fast_redirect_pod"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "to_netdev"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 1
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -1800,7 +1808,8 @@ case_count = 8
   name = "egress_ipv6_l3_to_l2_fast_redirect_pod"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "to_netdev"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 1
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -1808,7 +1817,8 @@ case_count = 8
   name = "ingress_ipv4_l3_to_l2_fast_redirect_host"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "from_netdev"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 1
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -1816,7 +1826,8 @@ case_count = 8
   name = "ingress_ipv6_l3_to_l2_fast_redirect_host"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "from_netdev"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 1
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -1824,7 +1835,8 @@ case_count = 8
   name = "egress_ipv4_l3_to_l2_fast_redirect_host"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "to_netdev"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 1
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -1832,7 +1844,8 @@ case_count = 8
   name = "egress_ipv6_l3_to_l2_fast_redirect_host"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "to_netdev"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 1
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -3326,7 +3339,8 @@ case_count = 2
   name = "l7_lb_local_backend_v4"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "lxc_policy_egress"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 2
   defined_in = "bpf/tests/l7_lb_local_backend.h"
 
@@ -3334,7 +3348,8 @@ case_count = 2
   name = "l7_lb_local_backend_v6"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "lxc_policy_egress"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 2
   defined_in = "bpf/tests/l7_lb_local_backend.h"
 
@@ -3355,7 +3370,8 @@ case_count = 2
   name = "l7_lb_local_backend_v4"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "lxc_policy_egress"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 2
   defined_in = "bpf/tests/l7_lb_local_backend.h"
 
@@ -3363,7 +3379,8 @@ case_count = 2
   name = "l7_lb_local_backend_v6"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "lxc_policy_egress"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 2
   defined_in = "bpf/tests/l7_lb_local_backend.h"
 
@@ -6213,7 +6230,8 @@ case_count = 8
   name = "ingress_ipv4_l3_to_l2_fast_redirect_pod"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "from_wireguard"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 3
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -6221,7 +6239,8 @@ case_count = 8
   name = "ingress_ipv6_l3_to_l2_fast_redirect_pod"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "from_wireguard"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 3
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -6229,7 +6248,8 @@ case_count = 8
   name = "egress_ipv4_l3_to_l2_fast_redirect_pod"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "to_wireguard"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 3
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -6237,7 +6257,8 @@ case_count = 8
   name = "egress_ipv6_l3_to_l2_fast_redirect_pod"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "to_wireguard"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 3
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -6245,7 +6266,8 @@ case_count = 8
   name = "ingress_ipv4_l3_to_l2_fast_redirect_host"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "from_wireguard"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 3
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -6253,7 +6275,8 @@ case_count = 8
   name = "ingress_ipv6_l3_to_l2_fast_redirect_host"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "from_wireguard"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 3
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -6261,7 +6284,8 @@ case_count = 8
   name = "egress_ipv4_l3_to_l2_fast_redirect_host"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "to_wireguard"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 3
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 
@@ -6269,7 +6293,8 @@ case_count = 8
   name = "egress_ipv6_l3_to_l2_fast_redirect_host"
   progtype = "tc"
   stages = "PKTGENSETUPCHECK"
-  entrypoint = "unresolved"
+  entrypoint = "to_wireguard"
+  entrypoint_resolution = "spec-18 §4.3.1 audited evidence"
   milestone = 3
   defined_in = "bpf/tests/tc_nodeport_l3_dev.h"
 

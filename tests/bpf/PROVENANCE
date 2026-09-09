@@ -104,3 +104,13 @@ The top-level NOTICE carries an entry for harvested test data under ADR-0005.
 This directory's content is the bpf/tests half of that harvest and is covered
 by the BSD-2-Clause election above rather than by the Apache-2.0 election that
 applies to the txtar corpus in tests/scripttest/.
+
+Entrypoint ambiguity audit (2026-09-09)
+-------------------------------------
+
+The 23 entrypoints previously unresolved in issues #267–272 were checked
+against the pinned reference. Read paths, source locations and behavioral
+resolutions are recorded in docs/spec/18-bpf-test-harness.md §4.3.1. The Rust
+harvester checks the audited structural evidence and emits the corresponding
+entrypoint_resolution marker. No source bodies or assertion sequences were
+copied; regression inputs are independently authored structural examples.

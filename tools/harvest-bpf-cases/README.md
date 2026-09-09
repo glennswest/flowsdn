@@ -21,6 +21,11 @@ The expression evaluator deliberately implements the limited conditional syntax
 used by the original harvester. Unsupported expressions select their branch
 conservatively; this is an inventory extractor, not a complete C preprocessor.
 The pinned reference is the compatibility test: 142 translation units and 625
-cases, with exact feature, config, entrypoint and milestone parity.
+cases, with exact feature, config and milestone parity. The 23 previously
+unresolved entrypoints have guarded, evidence-based classifications recorded
+in spec 18 §4.3.1. A changed audited setup, target mapping or object fails the
+harvest for review; unknown cases still remain unresolved. Library tests may
+invoke the function under test from SETUP or CHECK without entering an attached
+datapath program.
 
 Static fixture data remain TOML. The generator and its tests are Rust.

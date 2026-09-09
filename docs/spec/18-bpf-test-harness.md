@@ -716,12 +716,13 @@ By flowsdn entrypoint (spec 02 §1.1):
 
 | Entrypoint | Cases | Entrypoint | Cases |
 |---|---|---|---|
-| `from_netdev` | 182 | `from_host` | 22 |
-| `to_netdev` | 160 | `from_overlay` | 21 |
-| `direct` (library / costume, §3.9) | 109 | `to_container` | 13 |
+| `from_netdev` | 186 | `from_host` | 22 |
+| `to_netdev` | 164 | `from_overlay` | 21 |
+| `direct` (library / costume, §3.9) | 112 | `to_container` | 13 |
 | `from_container` | 63 | `lxc_policy` | 3 |
 | `xdp_entry` | 26 | `to_overlay` | 3 |
-| *unresolved* (§4.3) | 23 | | |
+| `lxc_policy_egress` | 4 | `from_wireguard` | 4 |
+| `to_wireguard` | 4 | *unresolved* (§4.3) | 0 |
 
 By object pulled into the translation unit:
 
@@ -755,7 +756,7 @@ count and the wrong attribution. The tool records, per translation unit:
 - `seeds` — which map-seeding helper groups the file's SETUP stage uses;
 - `entrypoint` — resolved by following the SETUP stage's `return` to the entry
   helper it tail-calls, through up to three levels of local function or macro
-  indirection.
+  indirection, supplemented by the guarded evidence audit in §4.3.1.
 
 Re-running the tool against a newer reference tag is the whole re-harvest
 procedure (ADR-0005 §4).
@@ -764,12 +765,10 @@ procedure (ADR-0005 §4).
 
 Stated so nobody mistakes the file for ground truth:
 
-- **23 cases have `entrypoint = "unresolved"`** — six files
-  (`tc_nodeport_l3_dev.c` 8, `tc_nodeport_l3_wireguard.c` 8,
-  `l7_lb_local_backend_{host,pod}.c` 2 each, `ipv6_test.c` 2,
-  `icmp_error_revnat.c` 1) route through deeper indirection than the resolver
-  follows. A human MUST classify each before the case is ported; the value is
-  `unresolved`, never a guess.
+- **The 23 formerly unresolved cases are classified in §4.3.1.** Their
+  audited evidence is checked by the Rust harvester. Unknown cases still remain
+  `unresolved`; changing an audited setup or target mapping requires a new
+  review rather than silently retaining its label.
 - **`#if` expressions the evaluator cannot compute are assumed true**, which
   over-approximates the feature set of a handful of files. This is the safe
   direction (a superset of features means a superset of behaviour to test).
@@ -780,6 +779,57 @@ Stated so nobody mistakes the file for ground truth:
   use — e.g. `tc_lxc_lb_nodeport.c` defines `ENABLE_DSR` but only its four
   `*_dsr_*` cases are M2. Corrections are made in the tool's override tables,
   never by editing the generated file.
+
+#### 4.3.1 Resolved entrypoint ambiguities (#267–272)
+
+Reference ambiguity audit, 2026-09-09: Cilium v1.20.1,
+`7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc`. This records behavior and
+identifier relationships read under `docs/licensing.md`; no C implementation
+or assertion sequence is copied into flowsdn. Rust regression inputs are
+synthetic structural examples.
+
+| Issue | Translation unit / cases | Resolved entrypoint | Evidence |
+|---|---|---|---|
+| #267 | `icmp_error_revnat.c`: `nat4_icmp_error_tcp_snat_revnat` | `direct` | SETUP invokes `snat_v4_rev_nat` directly and returns a test result; it does not enter a datapath program. |
+| #268 | `ipv6_test.c`: `ipv6_without_extension_header`, `ipv6_with_auth_hop_tcp` | `direct` | SETUP returns sentinel values 123 / 1234; CHECK invokes `ipv6_hdrlen`. |
+| #269 | `tc_nodeport_l3_dev.c`: four ingress and four egress cases | `from_netdev` / `to_netdev` | The shared SETUP helper passes its `is_ingress` parameter to program-array slot selection: slot 0 / 1 target `cil_from_netdev` / `cil_to_netdev`. |
+| #272 | `tc_nodeport_l3_wireguard.c`: the same eight shared cases | `from_wireguard` / `to_wireguard` | The WireGuard inclusion selects the corresponding object and slot 0 / 1 target `cil_from_wireguard` / `cil_to_wireguard`. |
+| #270, #271 | `l7_lb_local_backend_host.c`, `l7_lb_local_backend_pod.c`: IPv4 / IPv6 cases in each | `lxc_policy_egress` | SETUP calls `tail_call_egress_policy`; its mocked program-array dispatch targets `cil_lxc_policy_egress`. The host/pod variants simulate different callers, not different first programs under test. |
+
+The `direct` classification covers library functions invoked in either SETUP
+or CHECK. The mere presence of SETUP does not imply a datapath entrypoint.
+The existing `progtype`, object, feature and milestone metadata remain intact:
+these labels do not establish a runnable port, kernel support or test tier by
+themselves. In particular, the WireGuard entrypoints retain the WireGuard
+object and M3 milestone; the L7 cases retain the lxc object and M2 milestone.
+
+The audit consulted these reference paths and locations:
+
+- `bpf/tests/icmp_error_revnat.c`: SETUP at lines 73–122 and CHECK beginning
+  at 124; the direct reverse-NAT operation is in SETUP.
+- `bpf/tests/ipv6_test.c`: SETUP/CHECK pairs at lines 32–77 and 131–175.
+- `bpf/tests/tc_nodeport_l3_dev.c` and `tc_nodeport_l3_wireguard.c`: inclusion
+  mode definitions; `bpf/tests/tc_nodeport_l3_dev.h`: object includes at 60–78,
+  entry array at 83–100, common SETUP at 182–227 and all eight SETUP call sites
+  at 520–650. The first boolean argument determines direction independently
+  of IP family and host/pod destination.
+- `bpf/tests/l7_lb_local_backend_host.c` and `l7_lb_local_backend_pod.c`:
+  configuration/include wrappers; `bpf/tests/l7_lb_local_backend.h`: mocked
+  policy array and dispatch at 39–65, caller distinction at 67–91 and SETUP
+  calls at 111–118 / 168–175. `bpf/bpf_lxc.c` at 2555–2584 confirms the
+  egress-policy entrypoint's L7 return-path role.
+- `bpf/bpf_wireguard.c` at 250–254 / 346–351 confirms ingress/egress program
+  declarations. Supporting identifier searches also consulted
+  `bpf/lib/policy.h`, `bpf/lib/tailcall.h` and `bpf/tests/lib/policy.h`.
+
+The harvester applies these audited resolutions only to the exact listed
+file/case identities, checking setup arguments, called helper, array targets
+and included object as applicable. Comments and quoted strings cannot satisfy
+evidence checks; ambiguous object sets are rejected. Each receives `entrypoint_resolution =
+"spec-18 §4.3.1 audited evidence"`. Missing or changed evidence is an error;
+unknown identities continue through the generic resolver and may remain
+unresolved. The pinned-reference re-harvest must preserve all 625 cases and
+all unrelated fields while reproducing these 23 resolutions.
 
 ### 4.4 `tests/bpf/PORTED.toml`
 
