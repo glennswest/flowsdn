@@ -3,7 +3,7 @@
 use crate::{CommandError, Control, State, Status};
 use std::sync::{
     Arc,
-    atomic::{AtomicUsize, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -25,7 +25,7 @@ impl Cancellation {
     pub fn is_cancelled(&self) -> bool {
         *self.0.borrow()
     }
-    async fn cancelled(&self) {
+    pub(crate) async fn cancelled(&self) {
         let mut receiver = self.0.subscribe();
         let _ = receiver.wait_for(|cancelled| *cancelled).await;
     }
@@ -37,6 +37,9 @@ pub struct RunOptions {
     pub deadline: Instant,
     /// SIGINT-to-SIGKILL interval, default 100 ms. Cleanup also runs on drop.
     pub grace: Duration,
+    /// Whole-section replay backoff; must be nonzero and no greater than the cap.
+    pub retry_interval: Duration,
+    pub max_retry_interval: Duration,
 }
 impl Default for RunOptions {
     fn default() -> Self {
@@ -52,6 +55,8 @@ impl RunOptions {
             cancellation: Cancellation::default(),
             deadline,
             grace: Duration::from_millis(100),
+            retry_interval: Duration::from_millis(100),
+            max_retry_interval: Duration::from_millis(500),
         })
     }
     pub(crate) fn check(&self) -> Result<(), CommandError> {
@@ -126,8 +131,10 @@ fn decode(output: Output) -> Decoded {
 struct Pending {
     receiver: oneshot::Receiver<Output>,
     cancellation: Cancellation,
+    replay_cancelled: Arc<AtomicBool>,
 }
 struct Job {
+    id: usize,
     line: usize,
     status: Status,
     pending: Result<Pending, CommandError>,
@@ -136,6 +143,7 @@ struct Job {
 pub(crate) struct Jobs {
     jobs: Vec<Job>,
     budget: Arc<AtomicUsize>,
+    next_id: usize,
 }
 impl Jobs {
     pub(crate) fn is_empty(&self) -> bool {
@@ -163,11 +171,44 @@ impl Jobs {
             Err(failure("exec requires Linux"))
         };
         self.jobs.push(Job {
+            id: self.next_id,
             line,
             status,
             pending,
         });
+        self.next_id = self.next_id.saturating_add(1);
         Ok(())
+    }
+    pub(crate) fn checkpoint(&self) -> usize { self.next_id }
+    pub(crate) async fn discard_attempt(&mut self, checkpoint: usize, options: &RunOptions) -> Result<(), CommandError> {
+        let index = self.jobs.iter().position(|job| job.id >= checkpoint).unwrap_or(self.jobs.len());
+        let discarded = self.jobs.split_off(index);
+        for job in &discarded {
+            if let Ok(pending) = &job.pending {
+                pending.replay_cancelled.store(true, Ordering::Relaxed);
+                pending.cancellation.cancel();
+            }
+        }
+        let mut errors = String::new();
+        let mut fatal = false;
+        for job in discarded {
+            let output = match job.pending {
+                Ok(pending) => pending.receiver.await.unwrap_or_else(|_| Output {
+                    stdout: Vec::new(), stderr: Vec::new(), result: Err(CommandError::ProcessOwnershipLost),
+                }),
+                Err(error) => Output { stdout: Vec::new(), stderr: Vec::new(), result: Err(error) },
+            };
+            self.budget.fetch_sub(output.stdout.len().saturating_add(output.stderr.len()), Ordering::Relaxed);
+            let output = decode(output);
+            match output.result {
+                Ok(()) if job.status == Status::Failure => join_error(&mut errors, &mut fatal, job.line, failure("unexpected background success during retry cleanup")),
+                Ok(()) | Err(CommandError::ReplayCancelled) => {},
+                Err(CommandError::Failure(_)) if matches!(job.status, Status::Failure | Status::SuccessOrFailure) => {},
+                Err(error) => join_error(&mut errors, &mut fatal, job.line, error),
+            }
+        }
+        options.check()?;
+        if errors.is_empty() { Ok(()) } else { Err(CommandError::BackgroundFailure(errors)) }
     }
     pub(crate) fn cancel(&self) {
         for job in &self.jobs {
@@ -390,15 +431,18 @@ mod linux {
         let options = options.clone();
         let cancellation = Cancellation::default();
         let task_cancellation = cancellation.clone();
+        let replay_cancelled = Arc::new(AtomicBool::new(false));
+        let task_replay = replay_cancelled.clone();
         // This task owns the child even when the caller drops its run future.
         tokio::spawn(async move {
             let _directory = directory;
             let _workspace = workspace;
-            supervise(process, pid, options, task_cancellation, budget, sender).await;
+            supervise(process, pid, options, task_cancellation, task_replay, budget, sender).await;
         });
         Ok(Pending {
             receiver,
             cancellation,
+            replay_cancelled,
         })
     }
 
@@ -451,14 +495,23 @@ mod linux {
     async fn interrupted(
         options: &RunOptions,
         cancellation: &Cancellation,
+        replay_cancelled: &AtomicBool,
         sender: &mut oneshot::Sender<Output>,
     ) -> CommandError {
         tokio::select! {
             biased;
             _ = options.cancellation.cancelled() => CommandError::Cancelled,
-            _ = cancellation.cancelled() => CommandError::Cancelled,
             _ = tokio::time::sleep_until(options.deadline) => CommandError::Deadline,
+            _ = cancellation.cancelled() => if replay_cancelled.load(Ordering::Relaxed) { CommandError::ReplayCancelled } else { CommandError::Cancelled },
             _ = sender.closed() => CommandError::Cancelled,
+        }
+    }
+
+    fn preserve_capture_failure(result: &mut Result<(), CommandError>, error: CommandError) {
+        if result.is_ok()
+            || (matches!(result, Err(CommandError::ReplayCancelled))
+                && !matches!(error, CommandError::Failure(_))) {
+            *result = Err(error);
         }
     }
 
@@ -467,6 +520,7 @@ mod linux {
         pid: Pid,
         options: RunOptions,
         cancellation: Cancellation,
+        replay_cancelled: Arc<AtomicBool>,
         budget: Option<Arc<AtomicUsize>>,
         mut sender: oneshot::Sender<Output>,
     ) {
@@ -491,14 +545,14 @@ mod linux {
             let mut captured = false;
             result = tokio::select! {
                 biased;
-                error = interrupted(&options, &cancellation, &mut sender) => Err(error),
+                error = interrupted(&options, &cancellation, &replay_cancelled, &mut sender) => Err(error),
                 output = &mut capture => {
                     captured = true;
                     match output {
                         Err(error) => Err(error),
                         Ok(()) => tokio::select! {
                             biased;
-                            error = interrupted(&options, &cancellation, &mut sender) => Err(error),
+                            error = interrupted(&options, &cancellation, &replay_cancelled, &mut sender) => Err(error),
                             exited = exited(pid) => exited,
                         },
                     }
@@ -552,7 +606,7 @@ mod linux {
             }
             if !captured {
                 match tokio::time::timeout(Duration::from_millis(100), &mut capture).await {
-                    Ok(Err(error)) if result.is_ok() => result = Err(error),
+                    Ok(Err(error)) => preserve_capture_failure(&mut result, error),
                     Err(_) if result.is_ok() => {
                         result = Err(failure("child output pipes remained open after cleanup"))
                     }
@@ -566,4 +620,22 @@ mod linux {
             result,
         });
     }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        #[test]
+        fn fatal_capture_errors_override_internal_replay_cancellation() {
+            let mut result = Err(CommandError::ReplayCancelled);
+            preserve_capture_failure(&mut result, CommandError::LimitExceeded("output budget"));
+            assert_eq!(result, Err(CommandError::LimitExceeded("output budget")));
+            let mut result = Err(CommandError::ReplayCancelled);
+            preserve_capture_failure(&mut result, failure("closed pipe"));
+            assert_eq!(result, Err(CommandError::ReplayCancelled));
+            let mut result = Err(CommandError::Deadline);
+            preserve_capture_failure(&mut result, CommandError::LimitExceeded("output budget"));
+            assert_eq!(result, Err(CommandError::Deadline));
+        }
+    }
+
+
 }

@@ -29,6 +29,11 @@ async fn main() {
             );
             eprintln!("diagnostic");
         }
+        "delayed-pid" => {
+            std::fs::write(args.get(3).unwrap(), std::process::id().to_string()).unwrap();
+            tokio::time::sleep(Duration::from_millis(args.get(1).unwrap().parse().unwrap())).await;
+            println!("{}", args.get(2).unwrap());
+        }
         "delayed-output" => {
             let delay = args.get(1).unwrap().parse::<u64>().unwrap();
             tokio::time::sleep(Duration::from_millis(delay)).await;

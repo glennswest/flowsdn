@@ -49,10 +49,10 @@ line by line; quote capture replacements such as `'$1'` so script environment
 expansion does not consume them. Comparison failures produce a whole-file
 unified diff unless quiet mode is selected.
 
-Retry sections, networking adapters, update mode,
+Networking adapters, update mode,
 agent fixture flags remain unimplemented. Unsupported commands and execution
 syntax fail explicitly.
-Section comments are logged, but retry prefixes are rejected. Successful
+Section comments and asynchronous retry attempts are logged. Successful
 synthetic scripts do not imply that the harvested networking corpus passes.
 
 `Engine::run_async(script, state, &RunOptions)` runs Linux processes.
@@ -88,7 +88,9 @@ environment. `wait` accepts no arguments or flags. It drains jobs in launch
 order, checks each job's original expected status, logs its output, concatenates
 stdout and stderr separately, and clears the job list. An empty wait clears both
 buffers. Ordinary failures are joined; cancellation, deadlines, ownership loss,
-and resource limits remain fatal even under a negative wait assertion.
+and resource limits remain fatal. Errors returned by `wait` ignore its own
+status prefix because each job's status has already been checked. A successful
+`! wait` is still an unexpected success, including when no jobs are queued.
 
 At most 32 jobs may be queued between waits. Their retained output shares an
 8 MiB combined stdout/stderr budget checked before capture appends. Output log
@@ -97,4 +99,32 @@ existing total log limit still applies. Script completion, stop and errors
 cancel remaining jobs and implicitly wait for cleanup, reporting unexpected
 background outcomes. Dropping the async run future also triggers cleanup of all
 remaining jobs. Explicitly wait before script end when jobs should finish
-normally. Retry sections remain unsupported.
+normally.
+
+Async `* command` and `!* command` retry the entire current section through the
+failed assertion, including all preceding commands. Every replay reevaluates
+conditions and expands arguments again. Environment changes, files, cwd and
+output side effects persist; there is no state rollback. `State::retry_count`
+starts at zero for each section and increments before every replay, so adapters
+can distinguish retries. During an active replay, an ordinary mismatch in an
+earlier command starts another replay (§5.1); an unmarked failure after the
+retrying assertion has succeeded remains terminal.
+
+Backoff defaults to 100, 200, 400, then 500 milliseconds. Configure
+`RunOptions::retry_interval` and `max_retry_interval` for other suites. Intervals
+must be nonzero and the initial interval cannot exceed the cap. The script
+context is the time bound; existing command/log resource budgets still apply.
+Logs include the failing command, next delay, successful replay count and elapsed
+time. Cancellation/deadline diagnostics name the section and last failed command.
+Cancellation, output limits, ownership errors and other harness errors never
+trigger a retry. Synchronous execution rejects retry syntax with an explicit
+`run_async` requirement.
+
+Before a replay, jobs launched by the failed attempt are cancelled and reaped;
+completed errors are checked, and caller cancellation, deadlines and fatal
+capture errors remain terminal. Internal replay cancellation is distinguished
+from caller cancellation. Prior-section jobs remain queued. Cleanup discards
+attempt-job output without resetting script buffers or fixture state. Combining
+a retry prefix directly with background execution (`* exec ... &` or
+`!* exec ... &`) remains an explicitly unsupported gap; use a foreground retry
+assertion after launching background work.

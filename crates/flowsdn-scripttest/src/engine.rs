@@ -1,6 +1,6 @@
 //! Shared synchronous/asynchronous execution from spec 17 §§3.2–3.3. Custom
 //! handlers must return promptly: blocking callbacks cannot be interrupted.
-//! Async execution supports exec jobs and wait; section retries remain deferred.
+//! Async execution supports exec jobs, wait and whole-section retries.
 use crate::{Command, ExpansionMode, Line, Status, parse_script};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -36,6 +36,8 @@ pub struct State {
     pub stdout: String,
     pub stderr: String,
     pub log: Vec<String>,
+    /// Number of whole-section replays, exposed to command adapters.
+    pub retry_count: usize,
     pub(crate) files: Option<crate::files::Context>,
 }
 
@@ -49,6 +51,7 @@ impl Default for State {
             stdout: String::new(),
             stderr: String::new(),
             log: Vec::new(),
+            retry_count: 0,
             files: None,
         }
     }
@@ -82,6 +85,7 @@ pub enum Control {
 pub enum CommandError {
     Failure(String),
     Cancelled,
+    ReplayCancelled,
     Deadline,
     ProcessOwnershipLost,
     BackgroundFailure(String),
@@ -93,6 +97,7 @@ impl fmt::Display for CommandError {
         match self {
             Self::Failure(message) | Self::BackgroundFailure(message) => f.write_str(message),
             Self::Cancelled => f.write_str("command cancelled"),
+            Self::ReplayCancelled => f.write_str("command cancelled for section replay"),
             Self::Deadline => f.write_str("command deadline exceeded"),
             Self::ProcessOwnershipLost => {
                 f.write_str("child process ownership was lost before cleanup")
@@ -365,12 +370,34 @@ impl Engine {
             command: String::new(),
             message: error.message,
         })?;
+        if let Some(options) = options {
+            if options.retry_interval.is_zero() || options.max_retry_interval < options.retry_interval {
+                return Err(RunError { line: 0, command: String::new(), message: "retry intervals must be nonzero and initial interval must not exceed the cap".into() });
+            }
+        }
         let mut execution = Execution::default();
-        for line in lines {
+        let mut position = 0usize;
+        let mut section_start = 0usize;
+        let mut section_name = "script start".to_owned();
+        let mut checkpoint = jobs.checkpoint();
+        let mut retry: Option<RetryEpisode> = None;
+        let mut delay = options.map(|options| options.retry_interval).unwrap_or_default();
+        state.retry_count = 0;
+        while let Some(line) = lines.get(position) {
+            if finish_retry(&mut retry, position, &section_name, state)? {
+                delay = options.map(|options| options.retry_interval).unwrap_or_default();
+            }
+            let current = position;
+            position = position.saturating_add(1);
             let command = match line {
                 Line::Section { line, text } => {
+                    section_start = position;
+                    section_name = text.clone();
+                    checkpoint = jobs.checkpoint();
+                    state.retry_count = 0;
+                    delay = options.map(|options| options.retry_interval).unwrap_or_default();
                     record_log(&mut state.log, &text).map_err(|error| RunError {
-                        line,
+                        line: *line,
                         command: "#".into(),
                         message: error.to_string(),
                     })?;
@@ -388,15 +415,14 @@ impl Engine {
                 message,
             };
             if let Some(options) = options {
-                options
-                    .check()
-                    .map_err(|failure| error(failure.to_string()))?;
+                options.check().map_err(|failure| error(retry_context(&section_name, &retry, &failure.to_string())))?;
             }
             if command.background && options.is_none() {
                 return Err(error("background commands require run_async".into()));
             }
             if matches!(command.status, Status::SuccessRetry | Status::FailureRetry) {
-                return Err(error("section retries are not implemented".into()));
+                if options.is_none() { return Err(error("section retries require run_async".into())); }
+                if command.background { return Err(error("retry prefixes on background exec are not supported".into())); }
             }
             let name = command
                 .words
@@ -488,27 +514,55 @@ impl Engine {
             } else {
                 (registered.handler)(state, &args)
             };
-            match result {
+            let mismatch = match result {
                 Ok(Control::Stop) => {
                     execution.stopped = true;
                     return Ok(execution);
                 }
-                Ok(Control::Continue) if command.status == Status::Failure => {
-                    return Err(error("unexpected success".into()));
+                Ok(Control::Continue) if matches!(command.status, Status::Failure | Status::FailureRetry) => Some("unexpected success".to_owned()),
+                Ok(Control::Continue) => None,
+                // Wait already checked each job's own status. Its errors must
+                // propagate as-is, regardless of prefixes on the wait line.
+                Err(failure) if name == "wait" => return Err(error(retry_context(&section_name, &retry, &failure.to_string()))),
+                Err(CommandError::Failure(message)) if matches!(command.status, Status::Failure | Status::FailureRetry | Status::SuccessOrFailure) => {
+                    record_log(&mut state.log, &format!("line {}: expected failure: {message}", command.line))
+                        .map_err(|failure| error(failure.to_string()))?;
+                    None
                 }
-                Ok(Control::Continue) => {}
-                Err(CommandError::Failure(message))
-                    if matches!(command.status, Status::Failure | Status::SuccessOrFailure) =>
-                {
-                    record_log(
-                        &mut state.log,
-                        &format!("line {}: expected failure: {message}", command.line),
-                    )
+                Err(CommandError::Failure(message)) => Some(message),
+                Err(failure) => return Err(error(retry_context(&section_name, &retry, &failure.to_string()))),
+            };
+            if let Some(message) = mismatch {
+                if !matches!(command.status, Status::SuccessRetry | Status::FailureRetry) && retry.is_none() {
+                    return Err(error(message));
+                }
+                let options = options.expect("retry only runs asynchronously");
+                let episode = retry.get_or_insert_with(|| RetryEpisode {
+                    through: current,
+                    started: tokio::time::Instant::now(),
+                    last_failure: String::new(),
+                    initial_count: state.retry_count,
+                });
+                episode.last_failure = format!("line {} {name}: {message}", command.line);
+                record_log(&mut state.log, &format!("section {section_name}: retry after {}; delay {} ms", episode.last_failure, delay.as_millis()))
                     .map_err(|failure| error(failure.to_string()))?;
+                jobs.discard_attempt(checkpoint, options).await
+                    .map_err(|failure| error(retry_context(&section_name, &retry, &failure.to_string())))?;
+                let interruption = tokio::select! {
+                    biased;
+                    _ = options.cancellation.cancelled() => Some(CommandError::Cancelled),
+                    _ = tokio::time::sleep_until(options.deadline) => Some(CommandError::Deadline),
+                    _ = tokio::time::sleep_until(tokio::time::Instant::now().checked_add(delay).unwrap_or(options.deadline).min(options.deadline)) => None,
+                };
+                if let Some(failure) = interruption {
+                    return Err(error(retry_context(&section_name, &retry, &failure.to_string())));
                 }
-                Err(failure) => return Err(error(failure.to_string())),
+                state.retry_count = state.retry_count.saturating_add(1);
+                delay = delay.saturating_mul(2).min(options.max_retry_interval);
+                position = section_start;
             }
         }
+        finish_retry(&mut retry, position, &section_name, state)?;
         Ok(execution)
     }
 
@@ -533,6 +587,28 @@ impl Engine {
         }
         Ok(selected)
     }
+}
+
+struct RetryEpisode {
+    through: usize,
+    started: tokio::time::Instant,
+    last_failure: String,
+    initial_count: usize,
+}
+fn retry_context(section: &str, retry: &Option<RetryEpisode>, message: &str) -> String {
+    match retry {
+        Some(retry) => format!("section {section}: {message}; last failure: {}", retry.last_failure),
+        None => message.to_owned(),
+    }
+}
+fn finish_retry(retry: &mut Option<RetryEpisode>, position: usize, section: &str, state: &mut State) -> Result<bool, RunError> {
+    if retry.as_ref().is_some_and(|episode| position > episode.through) {
+        let episode = retry.take().expect("checked above");
+        record_log(&mut state.log, &format!("section {section}: retry succeeded after {} retries; elapsed {} ms", state.retry_count.saturating_sub(episode.initial_count), episode.started.elapsed().as_millis()))
+            .map_err(|error| RunError { line: 0, command: "retry".into(), message: error.to_string() })?;
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 fn valid_name(name: &str) -> bool {
