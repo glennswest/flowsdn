@@ -201,3 +201,37 @@ async fn empty_wide_rows_are_bounded_before_allocating_cell_metadata() {
     let error = engine.run("! db/show wide", &mut State::default()).unwrap_err();
     assert!(error.message.contains("65536 cells"));
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn binding_retains_its_validated_headers_even_if_the_trait_changes() {
+    // This type and its counter are private to this one test, so parallel
+    // fixtures cannot affect the changing-header sequence.
+    #[derive(Clone)]
+    struct Changing { extra_cell: bool }
+    impl Keyed for Changing { fn primary_key(&self) -> Key { vec![1] } }
+    impl TableRender for Changing {
+        fn headers() -> &'static [&'static str] {
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            static CALLS: AtomicUsize = AtomicUsize::new(0);
+            if CALLS.fetch_add(1, Ordering::SeqCst) == 0 { &["Name"] }
+            else { &["unvalidated\nheader"] }
+        }
+        fn cells(&self) -> Vec<String> {
+            if self.extra_cell { vec!["value".into(), "extra".into()] }
+            else { vec!["value".into()] }
+        }
+    }
+    let table = Arc::new(Table::new(vec![]).unwrap());
+    table.insert(Changing { extra_cell: false }).await.unwrap();
+    let mut engine = Engine::new();
+    engine.register_table("changing", table.clone()).unwrap();
+    assert_eq!(Changing::headers(), &["unvalidated\nheader"]);
+    let mut state = State::default();
+    engine.run("db/show changing --columns=Name", &mut state).unwrap();
+    assert_eq!(state.stdout, "Name \nvalue\n");
+    let error = engine.run("db/show changing --columns=missing", &mut state).unwrap_err();
+    assert!(error.message.contains("available columns: Name"));
+    assert!(!error.message.contains("unvalidated"));
+    table.insert(Changing { extra_cell: true }).await.unwrap();
+    assert!(engine.run("db/show changing", &mut state).unwrap_err().message.contains("cells/header count mismatch"));
+}

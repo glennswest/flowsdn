@@ -22,7 +22,10 @@ pub(crate) trait Binding: Send + Sync {
     fn is_empty(&self) -> bool;
     fn render(&self, columns: Option<&str>) -> Result<String>;
 }
-struct Typed<T: Keyed + TableRender>(Arc<Table<T>>);
+struct Typed<T: Keyed + TableRender> {
+    table: Arc<Table<T>>,
+    headers: &'static [&'static str],
+}
 
 pub(crate) fn bind<T: Keyed + TableRender>(table: Arc<Table<T>>) -> std::result::Result<Arc<dyn Binding>, String> {
     let headers = T::headers();
@@ -35,13 +38,13 @@ pub(crate) fn bind<T: Keyed + TableRender>(table: Arc<Table<T>>) -> std::result:
             return Err("table headers must be unique nonempty names without whitespace/control characters, at most 256 bytes each".into());
         }
     }
-    Ok(Arc::new(Typed(table)))
+    Ok(Arc::new(Typed { table, headers }))
 }
 
 impl<T: Keyed + TableRender> Binding for Typed<T> {
-    fn is_empty(&self) -> bool { self.0.snapshot().is_empty() }
+    fn is_empty(&self) -> bool { self.table.snapshot().is_empty() }
     fn render(&self, columns: Option<&str>) -> Result<String> {
-        let headers = T::headers();
+        let headers = self.headers;
         let selected: Vec<usize> = match columns {
             None => (0..headers.len()).collect(),
             Some(columns) => {
@@ -56,7 +59,7 @@ impl<T: Keyed + TableRender> Binding for Typed<T> {
                 result
             }
         };
-        let snapshot = self.0.snapshot();
+        let snapshot = self.table.snapshot();
         if snapshot.len() > MAX_ROWS || snapshot.len().saturating_add(1).saturating_mul(selected.len()) > MAX_CELLS { return Err(limit()); }
         let mut rows = Vec::new();
         let mut bytes = 0usize;
