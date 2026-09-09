@@ -21,19 +21,35 @@ pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 #[allow(unsafe_code)]
 pub fn namespace_cookie() -> Result<u64> {
     use nix::sys::socket::{AddressFamily, SockFlag, SockType, socket};
-    let socket = socket(AddressFamily::Inet, SockType::Stream, SockFlag::SOCK_CLOEXEC, None)?;
+    let socket = socket(
+        AddressFamily::Inet,
+        SockType::Stream,
+        SockFlag::SOCK_CLOEXEC,
+        None,
+    )?;
     let mut cookie = 0u64;
     let mut length = std::mem::size_of::<u64>() as nix::libc::socklen_t;
     // SAFETY: socket owns a live descriptor. Both output pointers refer to
     // writable stack values, and length is exactly the allocated cookie size.
-    let result = unsafe { nix::libc::getsockopt(socket.as_raw_fd(), nix::libc::SOL_SOCKET,
-        nix::libc::SO_NETNS_COOKIE, std::ptr::from_mut(&mut cookie).cast(), std::ptr::from_mut(&mut length)) };
+    let result = unsafe {
+        nix::libc::getsockopt(
+            socket.as_raw_fd(),
+            nix::libc::SOL_SOCKET,
+            nix::libc::SO_NETNS_COOKIE,
+            std::ptr::from_mut(&mut cookie).cast(),
+            std::ptr::from_mut(&mut length),
+        )
+    };
     if result != 0 {
         let error = std::io::Error::last_os_error();
-        if error.raw_os_error() == Some(nix::libc::ENOPROTOOPT) { return Ok(0); }
+        if error.raw_os_error() == Some(nix::libc::ENOPROTOOPT) {
+            return Ok(0);
+        }
         return Err(error.into());
     }
-    if usize::try_from(length)? != std::mem::size_of::<u64>() { return Err("invalid namespace cookie length".into()); }
+    if usize::try_from(length)? != std::mem::size_of::<u64>() {
+        return Err("invalid namespace cookie length".into());
+    }
     Ok(cookie)
 }
 
@@ -55,12 +71,20 @@ impl Connector {
     pub fn addresses(&self, index: u32) -> Result<Vec<IpAddr>> {
         use rtnetlink::packet_route::address::AddressAttribute;
         self.run(async {
-            let mut stream = self.handle.address().get().set_link_index_filter(index).execute();
+            let mut stream = self
+                .handle
+                .address()
+                .get()
+                .set_link_index_filter(index)
+                .execute();
             let mut addresses = Vec::new();
             while let Some(message) = stream.try_next().await? {
                 for attribute in message.attributes {
                     if let AddressAttribute::Address(ip) | AddressAttribute::Local(ip) = attribute
-                        && !addresses.contains(&ip) { addresses.push(ip); }
+                        && !addresses.contains(&ip)
+                    {
+                        addresses.push(ip);
+                    }
                 }
             }
             Ok(addresses)

@@ -45,6 +45,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
 
 [[package]]
+name = "autocfg"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
+
+[[package]]
 name = "aya"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -204,6 +210,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-api-client"
+version = "0.14.0"
+dependencies = [
+ "httparse",
+ "nix",
+ "serde_json",
+]
+
+[[package]]
 name = "flowsdn-bpf-abi"
 version = "0.14.0"
 
@@ -232,6 +247,8 @@ dependencies = [
 name = "flowsdn-cni"
 version = "0.14.0"
 dependencies = [
+ "flowsdn-api-client",
+ "flowsdn-connector",
  "flowsdn-ipam",
  "nix",
  "serde_json",
@@ -439,6 +456,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "httparse"
+version = "1.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
+
+[[package]]
 name = "imbl"
 version = "7.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -538,6 +561,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "memoffset"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "mio"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -605,6 +637,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+ "memoffset",
 ]
 
 [[package]]
