@@ -86,7 +86,11 @@ impl Endpoint {
         std::thread::spawn(move || {
             for line in BufReader::new(output).lines() {
                 match line {
-                    Ok(line) => { if send.send(line).is_err() { break; } }
+                    Ok(line) => {
+                        if send.send(line).is_err() {
+                            break;
+                        }
+                    }
                     _ => break,
                 }
             }

@@ -102,7 +102,12 @@ name = "flowsdn-bpf"
 version = "0.14.0"
 dependencies = [
  "aya-ebpf",
+ "flowsdn-bpf-abi",
 ]
+
+[[package]]
+name = "flowsdn-bpf-abi"
+version = "0.14.0"
 
 [[package]]
 name = "itoa"
