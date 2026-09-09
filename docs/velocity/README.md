@@ -1,34 +1,34 @@
 # flowsdn velocity ledger
 
-Usage cutoff: **2026-09-08T21:53:08.201Z**. Validation and cleanup completed
-**2026-09-08T21:55:39Z**. Session elapsed at completion: **5.74 hours**.
-The 0.7.0 milestone took **39 minutes 32 seconds**, with **19,708,877 processed
-tokens** measured through the earlier usage cutoff across root and three agents.
+Usage cutoff: **2026-09-09T11:41:38.751Z**. Validation and cleanup completed
+**2026-09-09T11:43:30Z**. Milestone v0.8.0 elapsed **10h 11m 4s**, including an
+observed **35,576.259-second inter-response gap**.
+That gap includes a reported capacity interruption and later continuation;
+it is not active coding time. Active work remains unknown.
 
 | Combined unique-response usage | Tokens |
 |---|---:|
-| Input | 60,685,267 |
-| Cached input (subset) | 59,603,200 |
-| Uncached input | 1,082,067 |
-| Output | 270,991 |
-| Reasoning output (subset of output) | 64,904 |
-| Total processed | 60,956,258 |
+| Input | 81,250,842 |
+| Cached input (subset) | 79,116,800 |
+| Uncached input | 2,134,042 |
+| Output | 357,034 |
+| Reasoning output (subset) | 88,440 |
+| Total processed | 81,607,876 |
 
-Each agent's distinct cutoff is preserved in [subagents.json](subagents.json).
-Totals are deduplicated by response ID across all four sessions. They include
-repeated context and do not establish subscription dollar usage.
-[Milestone 0.7](0.7.0.json) records implementation, review and fix windows. Their
-per-agent interval unions total **0.851 observed agent-window hours**, including
-waits; active work and active agent-hours remain unknown. Overlapping windows
-must not be added as project wall-clock time.
+The milestone accounts for **15,788,690 processed tokens**
+across root and three agents through the cutoff. These are deduplicated response
+counters, include repeated context, and do not establish subscription dollars.
+Per-agent cutoffs are in [subagents.json](subagents.json). Reported parallel
+windows total **0.532 agent-window hours**;
+they include coordination and cannot be added as project wall time.
 
-Commit `a98a068` passed **149 tests per debug/release profile**, formatting,
-Clippy, both Linux musl compile checks and cargo-deny. Cleanup removed **9,195
-files / 2.3 GiB**. [v0.7.0](https://github.com/glennswest/flowsdn/releases/tag/v0.7.0) was published
-at 21:58 UTC, after the measurement cutoff. The ledger
-records six issues closed this session; the repository has nine closed and 281
-open issues at completion. Usage after the earlier cutoff—including the final
-validation, cleanup, ledger edits and reporting—is excluded from token totals.
+Commit `ea7cbea` passed **180 tests in both debug and release**, formatting,
+Clippy, both Linux musl compile checks and dependency policy. Cleanup removed
+**10,012 files / 2.4 GiB**. Release candidate v0.8.0 awaits publication.
+Issue #122 closed; repository totals are **10 closed / 280 open**.
+[Milestone details](0.8.0.json) retain crate windows, baseline and endpoint
+counters, validation and interruption bounds. Usage after the cutoff, including
+final reporting and publication, is excluded.
 
 ## Recording rules
 

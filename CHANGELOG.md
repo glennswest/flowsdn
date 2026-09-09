@@ -10,6 +10,11 @@
 
 - Reserve separate crate names for module health and active network checking.
 - Add deterministic build metadata, JSON presentation and build-info labels.
+- Catalogue all 539 configuration keys with 51 unresolved defaults explicitly
+  requiring validated values and provenance before complete construction.
+- Add a caller-owned reconciler run loop with bounded rounds, wakeups, shutdown
+  and retry/prune deadlines measured after operations complete.
+- Add script file existence, permission, rename, symlink and removal commands.
 
 ## [0.7.0] - 2026-09-08
 

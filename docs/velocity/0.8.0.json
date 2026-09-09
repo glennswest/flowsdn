@@ -3,7 +3,7 @@
   "scope": "project/shared",
   "start_utc": "2026-09-09T01:32:26Z",
   "start_revision": "55b6135",
-  "status": "in-progress",
+  "status": "validated",
   "owner": "/root",
   "active_work_seconds": null,
   "token_baseline": {
@@ -20,5 +20,213 @@
     "flowsdn-scripttest",
     "project/shared"
   ],
-  "token_baseline_sample_utc": "2026-09-09T01:32:23.487Z"
+  "token_baseline_sample_utc": "2026-09-09T01:32:23.487Z",
+  "usage_cutoff_utc": "2026-09-09T11:41:38.751Z",
+  "measurement_end_utc": "2026-09-09T11:41:38.751Z",
+  "end_utc": "2026-09-09T11:43:30Z",
+  "completed_at_utc": "2026-09-09T11:43:30Z",
+  "elapsed_seconds": 36664.0,
+  "measurement_elapsed_seconds": 36552.751,
+  "token_endpoint_sample_utc": "2026-09-09T11:41:38.751Z",
+  "token_endpoint": {
+    "input_tokens": 44343923,
+    "cached_input_tokens": 43627904,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 146170,
+    "reasoning_output_tokens": 29374,
+    "total_tokens": 44490093
+  },
+  "root_unique_response_tokens": {
+    "input_tokens": 5970452,
+    "cached_input_tokens": 5809664,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 18349,
+    "reasoning_output_tokens": 4056,
+    "total_tokens": 5988801
+  },
+  "combined_token_baseline": {
+    "input_tokens": 65534340,
+    "cached_input_tokens": 64134400,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 284846,
+    "reasoning_output_tokens": 67405,
+    "total_tokens": 65819186
+  },
+  "combined_unique_response_tokens": {
+    "input_tokens": 15716502,
+    "cached_input_tokens": 14982400,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 72188,
+    "reasoning_output_tokens": 21035,
+    "total_tokens": 15788690
+  },
+  "agent_cutoffs": {
+    "/root": "2026-09-09T11:41:38.751Z",
+    "/root/config_core": "2026-09-09T01:44:28.048Z",
+    "/root/table_streams": "2026-09-09T01:46:23.405Z",
+    "/root/review": "2026-09-09T11:39:07.435Z"
+  },
+  "reported_work_windows": [
+    {
+      "task_id": "0.8.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-config",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T01:32:26Z",
+      "end_utc": "2026-09-09T01:39:35Z",
+      "elapsed_seconds": 429,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T01:32:26.155Z",
+      "token_endpoint_sample_utc": "2026-09-09T01:39:35.713Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 1416241,
+        "cached_input_tokens": 1391104,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 12338,
+        "reasoning_output_tokens": 3786,
+        "total_tokens": 1428579
+      },
+      "note": "Agent-reported elapsed window; usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.8.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-reconcile",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T01:39:35Z",
+      "end_utc": "2026-09-09T01:42:06Z",
+      "elapsed_seconds": 151,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T01:39:35.713Z",
+      "token_endpoint_sample_utc": "2026-09-09T01:42:06.699Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 515950,
+        "cached_input_tokens": 479104,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3652,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 519602
+      },
+      "note": "Agent-reported elapsed window; usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.8.0",
+      "agent": "/root/table_streams",
+      "crate": "flowsdn-reconcile",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T01:32:31Z",
+      "end_utc": "2026-09-09T01:42:18Z",
+      "elapsed_seconds": 587,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-08T21:54:38.610Z",
+      "token_endpoint_sample_utc": "2026-09-09T01:42:18.577Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 1398486,
+        "cached_input_tokens": 1250176,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 12156,
+        "reasoning_output_tokens": 4349,
+        "total_tokens": 1410642
+      },
+      "note": "Agent-reported elapsed window; usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.8.0",
+      "agent": "/root/review",
+      "crate": "flowsdn-scripttest",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T01:32:42Z",
+      "end_utc": "2026-09-09T01:40:37Z",
+      "elapsed_seconds": 475,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T01:32:42.394Z",
+      "token_endpoint_sample_utc": "2026-09-09T01:40:37.911Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 2486623,
+        "cached_input_tokens": 2430720,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 12074,
+        "reasoning_output_tokens": 5575,
+        "total_tokens": 2498697
+      },
+      "note": "Agent-reported elapsed window; usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.8.0",
+      "agent": "/root/table_streams",
+      "crate": "project/shared",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T01:42:18Z",
+      "end_utc": "2026-09-09T01:45:55Z",
+      "elapsed_seconds": 217.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null
+    },
+    {
+      "task_id": "0.8.0",
+      "agent": "/root/review",
+      "crate": "flowsdn-scripttest",
+      "kind": "fix",
+      "start_utc": "2026-09-09T11:37:52Z",
+      "end_utc": "2026-09-09T11:38:48Z",
+      "elapsed_seconds": 56.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null
+    }
+  ],
+  "parallel_time": {
+    "observed_agent_window_seconds": 1915.0,
+    "observed_agent_window_hours": 0.531944,
+    "active_agent_hours": null,
+    "project_union_of_observed_child_windows_seconds": 865.0,
+    "note": "Per-agent interval unions include observed implementation and review windows; overlapping elapsed time is not summed as project wall time. Other ongoing reviews are not allocated without reported bounds."
+  },
+  "validation": {
+    "status": "passed",
+    "unique_tests": 180,
+    "profiles": [
+      "debug",
+      "release"
+    ],
+    "checks": [
+      "formatting",
+      "Clippy -D warnings",
+      "x86_64 Linux musl compile",
+      "aarch64 Linux musl compile",
+      "cargo-deny"
+    ],
+    "validated_commit": "ea7cbea",
+    "completed_at_utc": "2026-09-09T11:43:30Z"
+  },
+  "commit": "ea7cbea",
+  "release": null,
+  "release_candidate": "v0.8.0",
+  "cleanup": {
+    "status": "complete",
+    "files_removed": 10012,
+    "cargo_removed": "2.4 GiB",
+    "completed_at_utc": "2026-09-09T11:43:30Z"
+  },
+  "note": "Usage is measured through the earlier explicit cutoff. Completion and cleanup occurred later; publication is pending. Elapsed wall time includes the recorded interruption; active work remains unknown.",
+  "observed_interruption": {
+    "start_response_utc": "2026-09-09T01:44:35.220Z",
+    "end_response_utc": "2026-09-09T11:37:31.479Z",
+    "elapsed_seconds": 35576.259,
+    "active_work_seconds": null,
+    "note": "Enclosing root inter-response gap includes a reported model-capacity interruption and later user continuation; not a measured active-work or exact capacity-wait duration."
+  },
+  "previous_combined_baseline_sample": {
+    "input_tokens": 65343792,
+    "cached_input_tokens": 64122496,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 284734,
+    "reasoning_output_tokens": 67405,
+    "total_tokens": 65628526
+  },
+  "combined_baseline_note": "Recomputed from the complete deduplicated sanitized response set before task start; original sampled aggregate retained separately. Root cumulative baseline is unchanged.",
+  "validated_commit": "ea7cbea"
 }

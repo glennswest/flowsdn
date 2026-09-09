@@ -178,3 +178,34 @@ normalization of the script working directory after returning to its root.
 Reconciler scheduling remains caller-owned. The full configuration catalogue,
 health HTTP serving, script subprocesses and networking adapters remain pending.
 These foundation tests do not establish runtime networking compatibility.
+
+## Version 0.8.0 implementation
+
+All 180 unique tests passed in debug and release: 48 configuration, 45 script,
+30 table, 27 reconciler, 7 health, 7 fence, 7 build-selector, 5 build-metadata
+and 4 harvester tests. Formatting, Clippy with warnings denied, both Linux musl
+all-target compile checks and dependency policy checks passed.
+
+The registry catalogue contains all 539 normative declarations, with 488
+literal defaults and 51 unresolved defaults requiring explicit values and
+provenance. Class metadata includes immutable, runtime and dynamic keys;
+registration does not itself make an option mutable. Missing help metadata
+and area validators remain documented gaps.
+
+The reconciler has a caller-owned run loop for row changes, retries, periodic
+pruning and shutdown. It preserves queued work across cancellation, measures
+retry delays after failures complete and throttles bounded rounds. Initialization
+gates prune; stricter startup fences remain the caller's responsibility.
+
+Script file commands now include exists, chmod, mv, symlink and rm. New
+regressions cover mode-000 paths, special files, recursive limits, workspace-root
+aliases and cleanup beyond the command depth budget. Validation corrected an
+invalid combination of Linux path-only and nonblocking open flags.
+
+The new build-metadata crate provides deterministic timestamp conversion, JSON
+and metric labels. Invalid injected values fail explicitly, including non-UTF-8
+environment values. No current-clock build timestamps are sampled. This does
+not establish whole-binary reproducibility or provide a networking executable.
+
+Issue #122 is resolved by ADR-0010. Refresh and batched reconciliation, remaining
+catalogue defaults, script subprocesses and networking adapters remain pending.

@@ -16,7 +16,7 @@ without following `docs/licensing.md`.
 
 ## Version
 
-0.7.0 — pruning, runtime snapshots, module health and script file commands; no networking agent yet. Version locations (when crates exist):
+0.8.0 — configuration catalogue, reconciler scheduling, file mutations and build metadata; no networking agent yet. Version locations (when crates exist):
 `Cargo.toml` workspace.package.version, `CHANGELOG.md` heading.
 
 ## Work plan
