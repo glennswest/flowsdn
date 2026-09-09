@@ -231,7 +231,7 @@
     "99b1057"
   ],
   "commit": "cc9ec2c",
-  "release": null,
+  "release": "v0.10.0",
   "release_candidate": "v0.10.0",
   "cleanup": {
     "status": "complete",
@@ -252,8 +252,8 @@
   "note": "Source validated and cleanup complete at the observed completion bound. Responses are deduplicated across root and three agents with timestamps at or before the cutoff; later publication/reporting and this refresh are excluded. Active work remains unknown.",
   "validated_commit": "cc9ec2c",
   "validation_record_commit": "c590a07",
-  "release_commit": null,
-  "publication": "ready; not published",
+  "release_commit": "b42616da57ace71ddbfca5f85d5fd5efbaea2e97",
+  "publication": "published",
   "observed_validation_windows": [
     {
       "scope": "project/shared",
@@ -265,5 +265,7 @@
       "active_work_seconds": null,
       "note": "Observed checkpoint-to-completion interval only. The actual build began slightly before the checkpoint; its exact start was not observed. This is not a coding-time allocation."
     }
-  ]
+  ],
+  "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.10.0",
+  "published_at_utc": "2026-09-09T12:38:42Z"
 }

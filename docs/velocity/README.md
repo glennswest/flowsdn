@@ -1,7 +1,7 @@
 # flowsdn velocity ledger
 
 Usage cutoff and observed completion: **2026-09-09T12:36:15Z**.
-Milestone **v0.10.0 is validated and cleaned up**, ready for publication.
+Milestone **v0.10.0 is validated, cleaned up and published**.
 Elapsed project time was **857 seconds (14m 17s)**, with
 **9,609,372 processed tokens** across root and three agents
 through the cutoff. Active work time is unknown.
@@ -30,8 +30,9 @@ all features**, formatting, Clippy, both Linux musl compile checks and dependenc
 policy. Validation was observed complete at **12:35:45 UTC** and recorded in
 `c590a07`. Cleanup removed **9,880 files / 2.7 GiB** and the five task logs;
 completion was observed at **12:36:15 UTC**. Device and before/after disk checks
-passed. Publication has not occurred; the latest published release remains
-[v0.9.0](https://github.com/glennswest/flowsdn/releases/tag/v0.9.0).
+passed. [v0.10.0](https://github.com/glennswest/flowsdn/releases/tag/v0.10.0)
+was published at **12:38:42 UTC**, after the usage cutoff. The issue count
+remains **10 closed / 280 open**.
 [Milestone details](0.10.0.json) retain baselines, endpoints, crate windows and
 validation evidence. Later publication and reporting are outside this cutoff.
 
