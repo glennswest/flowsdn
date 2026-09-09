@@ -3,6 +3,8 @@
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, fmt, net::IpAddr};
 
+pub mod delete;
+
 pub type Result<T> = std::result::Result<T, CniError>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
