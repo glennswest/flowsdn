@@ -125,7 +125,11 @@ fn recursive_removal_rejects_work_root_aliases_before_touching_entries() {
     fs::write(root.join("sentinel"), "keep").unwrap();
     symlink(".", root.join("root-alias")).unwrap();
     for path in ["root-alias/", "root-alias/."] {
-        assert!(Engine::new().run(&format!("rm {path}"), &mut state).is_err());
+        assert!(
+            Engine::new()
+                .run(&format!("rm {path}"), &mut state)
+                .is_err()
+        );
         assert_eq!(fs::read_to_string(root.join("sentinel")).unwrap(), "keep");
         assert!(fs::symlink_metadata(root.join("root-alias")).is_ok());
     }
@@ -144,10 +148,13 @@ fn cleanup_repairs_restricted_trees_beyond_the_command_depth_budget() {
     fs::create_dir_all(&path).unwrap();
     fs::write(path.join("item"), "cleanup").unwrap();
     for directory in directories.iter().rev() {
-        fs::set_permissions(directory, fs::Permissions::from_mode(0)).unwrap();
+        fs::set_permissions(directory, fs::Permissions::from_mode(0o0)).unwrap();
     }
     drop(state);
-    assert!(!root.exists(), "cleanup must repair directories past depth 128");
+    assert!(
+        !root.exists(),
+        "cleanup must repair directories past depth 128"
+    );
 }
 
 #[test]

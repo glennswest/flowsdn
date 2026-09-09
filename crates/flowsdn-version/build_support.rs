@@ -14,8 +14,17 @@ pub const INPUTS: &[&str] = &[
 ];
 
 /// A supplied invalid value is an error, never an absent variable.
-pub fn environment_value(name: &str, value: Option<std::ffi::OsString>) -> Result<Option<String>, String> {
-    value.map(|value| value.into_string().map_err(|_| format!("{name} must be UTF-8"))).transpose()
+pub fn environment_value(
+    name: &str,
+    value: Option<std::ffi::OsString>,
+) -> Result<Option<String>, String> {
+    value
+        .map(|value| {
+            value
+                .into_string()
+                .map_err(|_| format!("{name} must be UTF-8"))
+        })
+        .transpose()
 }
 
 pub fn clean(value: &str) -> Result<&str, String> {

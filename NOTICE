@@ -61,7 +61,7 @@ code was copied; every harness is an independent Rust implementation.
 affiliated with or endorsed by the Cilium project or The Linux Foundation.
 
 
-Rust foundation dependencies (Cargo.lock, 0.7.0)
+Rust foundation dependencies (Cargo.lock, 0.8.0)
 --------------------------------------------
 aho-corasick 1.1.5 — Unlicense OR MIT
 ambient-authority 0.0.2 — Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT

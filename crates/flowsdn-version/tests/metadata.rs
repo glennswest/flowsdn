@@ -17,13 +17,22 @@ fn inputs() -> BTreeMap<String, String> {
 #[test]
 fn supplied_environment_values_are_never_silently_dropped() {
     use std::ffi::OsString;
-    assert_eq!(build_support::environment_value("FLOWSDN_DIRTY", None).unwrap(), None);
-    assert_eq!(build_support::environment_value("FLOWSDN_DIRTY", Some(OsString::from("true"))).unwrap(), Some("true".into()));
+    assert_eq!(
+        build_support::environment_value("FLOWSDN_DIRTY", None).unwrap(),
+        None
+    );
+    assert_eq!(
+        build_support::environment_value("FLOWSDN_DIRTY", Some(OsString::from("true"))).unwrap(),
+        Some("true".into())
+    );
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStringExt;
         for name in build_support::INPUTS {
-            assert!(build_support::environment_value(name, Some(OsString::from_vec(vec![0xff]))).is_err());
+            assert!(
+                build_support::environment_value(name, Some(OsString::from_vec(vec![0xff])))
+                    .is_err()
+            );
         }
     }
 }
