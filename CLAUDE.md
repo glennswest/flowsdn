@@ -16,7 +16,7 @@ without following `docs/licensing.md`.
 
 ## Version
 
-0.13.0 — identity primitives, canonical labels and audited BPF case entrypoints; no networking agent yet. Version locations (when crates exist):
+0.14.0 — identity filters, CIDR labels, overlay wire codecs and loader layout contracts; no networking agent yet. Version locations (when crates exist):
 `Cargo.toml` workspace.package.version, `CHANGELOG.md` heading.
 
 ## Work plan

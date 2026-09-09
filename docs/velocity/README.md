@@ -1,41 +1,27 @@
 # flowsdn velocity ledger
 
-Milestone [0.14.0](0.14.0.json) started **2026-09-09T15:42:01Z**. Identity
-filtering, CIDR labels, wire codecs and loader layout planning are in progress.
-The counters below remain the completed 0.13 snapshot until the next boundary.
+Milestone [0.14.0](0.14.0.json) started **2026-09-09T15:42:01Z**.
+Usage cutoff: **2026-09-09T15:55:23Z**; observed elapsed **802 seconds**.
+Validation is in progress; prior release records remain available in the ledger.
 
-Milestone [0.13.0](0.13.0.json) started **2026-09-09T13:41:34Z**.
-Usage cutoff: **2026-09-09T13:58:06Z**; observed elapsed **992 seconds**.
-Validation and cleanup completed in **16 minutes 32 seconds** (992 seconds).
-All **341 tests** passed in debug and release, with formatting, Clippy, both
-Linux musl compile checks, dependency policy and full harvester reproduction.
-Cleanup removed **12,845 files / 3.4 GiB**, five logs and the generated inventory.
-Eight issues closed; repository totals are **19 closed / 271 open**. Foundation
-prerelease [v0.13.0](https://github.com/glennswest/flowsdn/releases/tag/v0.13.0)
-was published at **13:59:22 UTC**, **17 minutes 48 seconds** after milestone
-start (1,068 elapsed seconds). Source validation is recorded in `619908e`;
-release commit is `762bf4c`. Publication and subsequent ledger work are outside
-the fixed usage cutoff. A 17 MiB pinned reference
-cache is retained for future audits; compiler output was cleaned.
-
-Milestone processed usage: **18,068,981 tokens** across root and
-three agents, deduplicated by response ID. This includes repeated context and
-is not subscription dollar usage. Root coding and coordination are recorded
-under project/shared; active work time remains unknown.
+Milestone processed usage: **16,799,354 tokens** across root and
+three agents, deduplicated by response ID. Repeated context is included; these
+counters do not measure subscription dollar usage. Root coding and coordination
+remain project/shared. Unknown active work time is null.
 
 | Combined lifetime usage | Tokens |
 |---|---:|
-| Input | 172,332,590 |
-| Cached input (subset) | 168,673,536 |
-| Uncached input | 3,659,054 |
-| Output | 689,946 |
-| Reasoning output (subset) | 168,993 |
-| Total processed | 173,022,536 |
+| Input | 190,126,047 |
+| Cached input (subset) | 186,168,704 |
+| Uncached input | 3,957,343 |
+| Output | 742,602 |
+| Reasoning output (subset) | 178,651 |
+| Total processed | 190,868,649 |
 
-Reported agent windows total **1195 seconds**;
-they overlap project elapsed and are not added to it. Individual windows and
-per-crate delivery counters are in the milestone record. Shared usage is counted
-once. Token counters exclude work after this fixed cutoff.
+Reported agent windows total **1105 seconds**;
+these overlap project elapsed. Per-crate delivery windows and counter baselines
+are recorded in the milestone. Shared usage is counted once. This fixed cutoff
+excludes subsequent publication and reporting work.
 
 ## Recording rules
 

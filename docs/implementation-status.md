@@ -375,3 +375,29 @@ Configuration provenance line references were refreshed after spec insertion;
 no defaults changed. Cleanup removed 12,845 files / 3.4 GiB of build output.
 Issues #53, #54 and #267–272 are closed; repository totals are 19 closed / 271 open.
 The release remains source-only.
+
+## Version 0.14.0 implementation
+
+Identity primitives now include canonical CIDR label keys and same-family prefix
+containment. `/0` produces no CIDR identity label; the caller chooses a world
+label. An optional filter feature adds default/CLI rules, literal JSON-file
+prefixes and identity/information partitioning. Reference evidence corrected
+several earlier spec assumptions: built-in includes are exceptions rather than
+a whitelist, file prefixes are literal, and zero-length exclusions preserve the
+reference's ordered sentinel behavior. Regex normalization uses parsed syntax to
+preserve ASCII shorthand classes and word boundaries while keeping Unicode
+literals, properties and case folding.
+
+The ABI adds fixed VXLAN/Geneve headers and IPv4/IPv6 Geneve DSR options, with
+24-bit identity checks and host/world rewrites. These are individual codecs;
+packet parsing, option-chain validation and mixed-cluster forwarding are not
+implemented. Issue #55's policy is resolved to the existing reference encoding,
+without introducing a private identity option.
+
+The frozen tail-call slot enum feeds typed loader inventory checks for missing,
+duplicate and undeclared programs. Auxiliary scratch layout planning uses the
+specified target cache lines and possible CPU count, with checked sizing and
+clamped offsets. ELF parsing, zeroed allocation, live maps and program attachment
+remain forthcoming. These are foundation components, not an operational agent.
+
+Validation is in progress for this milestone.

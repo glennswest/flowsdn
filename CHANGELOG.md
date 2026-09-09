@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## [0.14.0] - 2026-09-09
+
+- Add canonical CIDR label conversion and family-aware prefix containment.
+- Add optional identity/node label filtering and JSON prefix configuration.
+- Add VXLAN/Geneve wire headers, identity rewrites and Geneve DSR option codecs.
+- Freeze tail-slot numbering and validate typed program inventories.
+- Plan auxiliary scratch layouts with checked target-specific sizing.
+- Resolve the wire-format policy to preserve reference encodings.
+
 ## [0.13.0] - 2026-09-09
 
 - Add validated numeric identity scopes, cluster ranges, aggregation and tunnel encoding.

@@ -17,7 +17,7 @@ Goals:
 
 ## Status
 
-**Foundation implementation started (2026-09-08), version 0.13.0.**
+**Foundation implementation started (2026-09-08), version 0.14.0.**
 
 The workspace includes indexed tables, initialization gates, a reconciler with
 pruning, optional batching and a caller-owned scheduling loop, configuration snapshots, module
@@ -27,9 +27,11 @@ attempted revisions and remaining retry progress, with optional module health
 reporting. Typed script table bindings support `db/show` and `db/empty`.
 The map ABI crate defines connection tuples, conntrack/NAT values, service
 and policy layouts, plus endpoint, node, subnet and ipcache byte layouts.
-The loader crate begins with pure pinned-map compatibility planning.
+The loader crate provides pinned-map compatibility planning, auxiliary scratch
+layout planning and typed tail-program inventory checks.
 The identity crate adds numeric scopes, cluster ranges and tunnel encoding,
-plus label parsing and canonical identity keys.
+plus canonical CIDR labels and optional identity/node label filtering.
+Fixed VXLAN/Geneve headers and Geneve DSR options have explicit wire codecs.
 There is no working networking agent or datapath. Synthetic scripts and file assertions
 execute, while the harvested networking scenarios still lack their adapters.
 
@@ -52,8 +54,8 @@ is available for future binaries.
 
 Next steps include extending the map ABI, resolving catalogue gaps and adding script subsystem adapters; see
 [implementation assessment](docs/implementation-status.md). The kernel target and measured object-variant policy are reconciled in the
-specifications. Wire compatibility with Cilium nodes remains a decision to settle
-before datapath integration.
+specifications. The wire-format policy preserves the reference encodings; live
+mixed-cluster compatibility remains unvalidated.
 
 ## Layout
 
