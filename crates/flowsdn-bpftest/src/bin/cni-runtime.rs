@@ -586,11 +586,18 @@ fn exchange(from: &mut Endpoint, to: &mut Endpoint, v6: bool) -> Result<()> {
             let namespace = fs::File::open(endpoint.netns())?;
             let diagnostic = flowsdn_connector::in_namespace(namespace, || {
                 let mut output = String::new();
-                for args in [vec!["-j","link","show"], vec!["-j","neigh","show"], vec!["-j","route","show"]] {
-                    output.push_str(&String::from_utf8(Command::new("ip").args(args).output()?.stdout)?);
+                for args in [
+                    vec!["-j", "link", "show"],
+                    vec!["-j", "neigh", "show"],
+                    vec!["-j", "route", "show"],
+                ] {
+                    output.push_str(&String::from_utf8(
+                        Command::new("ip").args(args).output()?.stdout,
+                    )?);
                 }
                 Ok(output)
-            }).map_err(|e| e as Box<dyn Error>)?;
+            })
+            .map_err(|e| e as Box<dyn Error>)?;
             eprintln!("endpoint {} diagnostic: {diagnostic}", endpoint.id);
         }
         return Err(format!("IPv{family} {payload}: expected datagram, got {received}").into());

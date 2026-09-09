@@ -213,6 +213,10 @@ dependencies = [
 name = "flowsdn-agent"
 version = "0.14.0"
 dependencies = [
+ "flowsdn-bpf-abi",
+ "flowsdn-bpf-loader",
+ "flowsdn-connector",
+ "flowsdn-ipam",
  "nix",
  "serde_json",
 ]
