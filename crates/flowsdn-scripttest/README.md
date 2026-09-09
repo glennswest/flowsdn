@@ -128,3 +128,33 @@ attempt-job output without resetting script buffers or fixture state. Combining
 a retry prefix directly with background execution (`* exec ... &` or
 `!* exec ... &`) remains an explicitly unsupported gap; use a foreground retry
 assertion after launching background work.
+
+`Engine::register_table::<T>(name, Arc<Table<T>>)` binds rows implementing
+`Keyed + TableRender` to one fixture engine. Duplicate table names fail without
+replacing the existing binding, and the `db/show` / `db/empty` command names are
+reserved. Independent engines keep independent bindings.
+
+`db/empty table...` checks current snapshots once; use `* db/empty` when the
+whole section should retry. `db/show table` renders one immutable snapshot in
+primary-key order. Header spelling and default order come directly from
+`TableRender`; `--columns=Name,ID` selects exact-case names in the requested
+order. The writer uses character widths, pads each column to its widest cell
+including the header, and separates columns by three spaces. Empty tables still
+print a header. Malformed row widths and cells containing tabs or line breaks
+are rejected. The future `db/cmp` command has its separately specified
+case-insensitive expected-header matching; it is not implemented yet.
+
+`db/show` accepts `--columns`, `-o`/`--out`, and `-f`/`--format=table`, with
+separate or `=` values and flags before or after the table name. An output file
+uses the existing confined, nonblocking writer and leaves output buffers intact;
+without `-o`, rendering replaces stdout and clears stderr. Invalid formats,
+columns and row data are checked before opening an output file. JSON/YAML
+serialization, row deserialization, typed index queries and asynchronous
+`db/cmp` remain explicit gaps.
+
+Rendering is bounded to 8 MiB of retained cell text and 8 MiB of final output,
+65,536 rows, 128 columns and 65,536 selected cells. Padding amplification is
+checked before appending. Adapter-provided `TableRender::cells` runs as trusted
+Rust code; the harness checks its returned data but cannot bound allocations
+inside that callback. Synthetic table adapters do not imply that harvested
+networking fixtures execute.

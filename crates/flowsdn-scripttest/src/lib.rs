@@ -10,6 +10,7 @@ mod expansion;
 mod files;
 mod process;
 mod script;
+mod table;
 mod txtar;
 
 pub use engine::{CommandError, Control, Engine, Execution, RunError, State};

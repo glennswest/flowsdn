@@ -543,6 +543,9 @@ impl State {
         let directory = context.workspace.dir.open_dir(path).map_err(io_error)?;
         Ok((directory, context.clone()))
     }
+    pub(crate) fn write_table_output(&self, name: &str, bytes: &[u8]) -> Result<()> {
+        self.context()?.write(name, bytes, false)
+    }
     fn context(&self) -> Result<&Context> {
         self.files
             .as_ref()

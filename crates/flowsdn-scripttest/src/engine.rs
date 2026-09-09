@@ -152,6 +152,7 @@ pub struct Engine {
     commands: BTreeMap<String, RegisteredCommand>,
     conditions: BTreeMap<String, RegisteredCondition>,
     max_commands: usize,
+    tables: BTreeMap<String, std::sync::Arc<dyn crate::table::Binding>>,
 }
 
 impl Default for Engine {
@@ -170,6 +171,7 @@ impl Engine {
             commands: BTreeMap::new(),
             conditions: BTreeMap::new(),
             max_commands: 100_000,
+            tables: BTreeMap::new(),
         };
         for (name, pattern_argument, handler) in [
             ("echo", false, echo as fn(&mut State, &[String]) -> _),
@@ -179,6 +181,8 @@ impl Engine {
             ("stop", false, stop),
             ("exec", false, async_only),
             ("wait", false, async_only),
+            ("db/empty", false, async_only),
+            ("db/show", false, async_only),
             ("cmp", false, crate::files::cmp),
             ("cmpenv", false, crate::files::cmpenv),
             ("empty", false, crate::files::empty),
@@ -271,6 +275,19 @@ impl Engine {
                 handler: Box::new(handler),
             },
         );
+        Ok(())
+    }
+
+    /// Bind a typed table to this engine. Duplicate names never replace a live
+    /// fixture binding; register another Engine for an independent fixture.
+    pub fn register_table<T: flowsdn_table::Keyed + flowsdn_table::TableRender>(
+        &mut self, name: &str, table: std::sync::Arc<flowsdn_table::Table<T>>,
+    ) -> Result<(), String> {
+        if !valid_name(name) || name.len() > 256 || name.chars().any(char::is_control) || self.tables.contains_key(name) {
+            return Err(format!("invalid or duplicate table name: {name}"));
+        }
+        let binding = crate::table::bind(table)?;
+        self.tables.insert(name.into(), binding);
         Ok(())
     }
 
@@ -528,7 +545,11 @@ impl Engine {
                 state.publish("", "");
                 continue;
             }
-            let result = if name == "wait" {
+            let result = if name == "db/empty" {
+                crate::table::empty(&self.tables, &args)
+            } else if name == "db/show" {
+                crate::table::show(&self.tables, state, &args)
+            } else if name == "wait" {
                 jobs.wait(state).await
             } else if name == "exec" {
                 crate::process::execute(state, &args, options.expect("checked above")).await
