@@ -52,7 +52,7 @@ impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
                     round.processed = round.processed.saturating_add(1);
                     continue;
                 }
-                self.pending.push_back(Work {
+                self.push_work(Work {
                     key: retry.key,
                     revision: retry.revision,
                     row,
@@ -64,7 +64,7 @@ impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
                 // recorded, including cancellation replay after the rate gap.
                 break;
             } else if let Some(work) = self.next_refresh_work(clock())? {
-                self.pending.push_back(work);
+                self.push_work(work);
             } else {
                 break;
             }
@@ -95,6 +95,7 @@ impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
                 }
                 self.statuses.insert(work.key.clone(), status);
             }
+            self.publish_progress();
             let results = if active.is_empty() {
                 Vec::new()
             } else if deleting {
@@ -159,7 +160,8 @@ impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
                         round.stale = round.stale.saturating_add(1);
                     }
                 }
-                self.pending.pop_front();
+                self.pop_work();
+                self.publish_progress();
                 round.processed = round.processed.saturating_add(1);
                 if work.refresh {
                     self.complete_refresh_work(clock())?;

@@ -26,6 +26,7 @@ impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
     /// Retry/prune/refresh deadlines use Tokio's monotonic clock, allowing virtual-time
     /// testing. Completed rounds are separated by `Options::round_interval`.
     pub async fn run(&mut self, shutdown: impl Future<Output = ()>) -> Result<(), ReconcileError> {
+        let _driver = crate::observer::DriverGuard::new(&self.progress);
         tokio::pin!(shutdown);
         let mut next_round = Clock::now();
         loop {

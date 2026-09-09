@@ -4,7 +4,7 @@
 //! stale results, and status reads synthesize Pending for newer desired rows.
 //! The caller owns the `run` future and its shutdown signal; no task is spawned.
 //! Atomic table write hooks, annotations, health
-//! reporting and asynchronous completion waiters remain integration work.
+//! reporting remain integration work.
 //! Prune runs only after table initialization and clears a resync request only
 //! on success. Incremental updates alone cannot remove unknown target entries
 //! after deletion history has been discarded.
@@ -18,6 +18,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod observer;
+pub use observer::{DriverState, ReconcileObserver, ReconcileProgress, WaitError};
 mod batch;
 pub use batch::{BatchDelete, BatchResult, BatchUpdate};
 mod refresh;
@@ -283,10 +285,13 @@ pub struct Reconciler<'a, T: Keyed, U: Target<T>> {
     statuses: BTreeMap<Key, Status>,
     retries: RetryQueue,
     pending: VecDeque<Work<T>>,
+    pending_first_attempts: BTreeMap<Revision, usize>,
+    pending_failures: BTreeMap<Revision, usize>,
     attempted_revision: Revision,
     resync_required: bool,
     prune: PruneState,
     refresh: RefreshState<T>,
+    progress: tokio::sync::watch::Sender<ReconcileProgress>,
 }
 impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     pub fn new(table: &'a Table<T>, target: U, options: Options) -> Result<Self, ReconcileError> {
@@ -313,10 +318,13 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             statuses: BTreeMap::new(),
             retries: RetryQueue::default(),
             pending: VecDeque::new(),
+            pending_first_attempts: BTreeMap::new(),
+            pending_failures: BTreeMap::new(),
             attempted_revision: 0,
             resync_required: false,
             prune: PruneState::default(),
             refresh: RefreshState::default(),
+            progress: tokio::sync::watch::channel(ReconcileProgress::default()).0,
         })
     }
 
@@ -396,12 +404,32 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             .map(|(revision, _)| *revision)
             .into_iter()
             .chain(
-                self.pending
-                    .iter()
-                    .filter(|work| work.failures > 0)
-                    .map(|work| work.revision),
+                self.pending_failures.first_key_value().map(|(revision, _)| *revision),
             )
             .min()
+    }
+
+    fn push_work(&mut self, work: Work<T>) {
+        let index = if work.failures > 0 { Some(&mut self.pending_failures) }
+            else if !work.refresh { Some(&mut self.pending_first_attempts) } else { None };
+        if let Some(index) = index {
+            let count = index.entry(work.revision).or_default();
+            *count = count.saturating_add(1);
+        }
+        self.pending.push_back(work);
+    }
+
+    fn pop_work(&mut self) {
+        if let Some(work) = self.pending.pop_front() {
+            let index = if work.failures > 0 { Some(&mut self.pending_failures) }
+                else if !work.refresh { Some(&mut self.pending_first_attempts) } else { None };
+            if let Some(index) = index {
+                if let Some(count) = index.get_mut(&work.revision) {
+                    *count = count.saturating_sub(1);
+                    if *count == 0 { index.remove(&work.revision); }
+                }
+            }
+        }
     }
 
     fn current(&self, work: &Work<T>) -> bool {
@@ -468,7 +496,8 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         }
         // Preserve revision order within each operation group, deletes first.
         pending.sort_by_key(|work| work.row.is_some());
-        self.pending.extend(pending);
+        for work in pending { self.push_work(work); }
+        self.publish_progress();
     }
 
     async fn run_prune(
@@ -492,6 +521,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         self.prune.handle.take();
         let desired = self.table.snapshot();
         let revision = desired.revision();
+        self.publish_progress();
         let result = self.target.prune(desired).await;
         let now = clock();
         let next_due = now
@@ -508,6 +538,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             self.resync_required = false;
         }
         self.prune.status = Some(status.clone());
+        self.publish_progress();
         Ok(Some(status))
     }
 
@@ -516,6 +547,10 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     /// startup gating for incremental writes, timers and repeat scheduling.
     /// Work stays queued across cancellation until its result is recorded.
     pub async fn run_round(&mut self, now: Instant) -> Result<Round, ReconcileError> {
+        self.progress.send_if_modified(|progress| {
+            if progress.driver == DriverState::Manual { false }
+            else { progress.driver = DriverState::Manual; true }
+        });
         self.run_round_with_clock(|| now).await
     }
 
@@ -610,9 +645,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                         round.processed = round.processed.saturating_add(1);
                         continue;
                     }
-                    self.pending.push_back(work);
+                    self.push_work(work);
                 } else if let Some(work) = self.next_refresh_work(clock())? {
-                    self.pending.push_back(work);
+                    self.push_work(work);
                 } else {
                     break;
                 }
@@ -625,7 +660,8 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             round.processed = round.processed.saturating_add(1);
             if !self.current(&work) {
                 self.statuses.remove(&work.key);
-                self.pending.pop_front();
+                self.pop_work();
+                self.publish_progress();
                 if work.refresh {
                     self.complete_refresh_work(clock())?;
                 }
@@ -638,6 +674,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                 pending.kind = Kind::Refreshing;
             }
             self.statuses.insert(work.key.clone(), pending);
+            self.publish_progress();
             let result = match &work.row {
                 Some(row) => {
                     self.target
@@ -655,7 +692,8 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             };
             if !self.current(&work) {
                 self.statuses.remove(&work.key);
-                self.pending.pop_front();
+                self.pop_work();
+                self.publish_progress();
                 if work.refresh {
                     self.complete_refresh_work(clock())?;
                 }
@@ -669,13 +707,14 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                 now,
                 &mut round,
             )?;
-            self.pending.pop_front();
+            self.pop_work();
+            self.publish_progress();
             if work.refresh {
                 self.complete_refresh_work(now)?;
             }
         }
         if self.pending.is_empty() {
-            self.attempted_revision = self.stream.revision();
+            self.publish_progress();
             self.stream.ack(self.attempted_revision);
         }
         round.prune = self.run_prune(&clock).await?;

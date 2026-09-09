@@ -58,7 +58,7 @@ all rows: individual update failures may still be queued for retry.
 
 This slice does not install atomic status hooks into table publication.
 Annotations,
-health reporting and asynchronous completion waiters remain unimplemented.
+health reporting remain unimplemented.
 Prune owns its initialization gate; callers still own any extra startup gate
 needed before incremental target writes, such as restoration of allocated IDs.
 
@@ -93,3 +93,21 @@ entry in that group. The caller can fix the target and resume the retained work.
 A valid response records independent retries and discards stale generations.
 Cancellation replays the unfinished group, including any already applied target
 side effects; successfully recorded earlier groups remain complete.
+
+`observer()` returns a cloneable handle independent of the mutable reconciler.
+`wait_until_reconciled(revision)` waits for stream catch-up and the first attempt
+of all non-superseded work through that revision, then returns a
+`ReconcileProgress` checkpoint. Failures satisfy this attempted barrier;
+`retry_low_water_mark` reports the oldest failure, including retries currently
+being replayed. Use `progress()` and `changed()` to observe subsequent retry
+resolution. A low-water mark above the requested revision, or no retry, means
+no known failure remains at or below it. Check `resync_required` separately for
+lost deletion history; this barrier does not wait for prune or periodic refresh.
+
+The observer does not keep the reconciler alive. New owners and callers driving
+manual rounds allow waits before or between rounds. When `run` returns or its
+future is dropped, unresolved waits return `WaitError::Stopped`; a later loop
+or manual round can resume progress. Dropping the owner returns
+`WaitError::Closed` for unreachable revisions. An already satisfied revision
+remains readable from the final checkpoint. Cancelling one waiter does not
+cancel reconciliation or other waiters. Notifications coalesce to current state.
