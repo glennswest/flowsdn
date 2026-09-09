@@ -366,4 +366,12 @@ not execute the BPF assertions. Kernel and object-policy specifications now
 consistently use the existing 6.6 minimum, 6.12 supported target and measured
 object promotion gate. Privileged loader and verifier validation remain pending.
 
-Validation is pending for this milestone.
+Source `3e5ba2a` passed **341 tests in debug and release with all features**;
+16 identity tests and five added harvester regressions extend the prior 320.
+Formatting, warning-free Clippy, both Linux musl compile checks and dependency
+policy passed. The harvester matched all 625 pinned cases and passed an output
+round-trip check. External dependencies remain unchanged at 89 versions.
+Configuration provenance line references were refreshed after spec insertion;
+no defaults changed. Cleanup removed 12,845 files / 3.4 GiB of build output.
+Issues #53, #54 and #267–272 are closed; repository totals are 19 closed / 271 open.
+The release remains source-only.
