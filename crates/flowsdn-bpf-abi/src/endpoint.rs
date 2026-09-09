@@ -98,7 +98,10 @@ impl MapBytes<48> for EndpointInfo {
             node_mac: u64::from_le_bytes(take(&bytes, 24)),
             sec_id: u32::from_le_bytes(take(&bytes, 32)),
             parent_ifindex: u32::from_le_bytes(take(&bytes, 36)),
-            pad: [u32::from_le_bytes(take(&bytes, 40)), u32::from_le_bytes(take(&bytes, 44))],
+            pad: [
+                u32::from_le_bytes(take(&bytes, 40)),
+                u32::from_le_bytes(take(&bytes, 44)),
+            ],
         }
     }
 }
@@ -224,38 +227,74 @@ impl EndpointKey {
     pub fn v4(address: [u8; 4], key: u8, cluster_id: u16) -> Self {
         let mut full = [0; 16];
         put(&mut full, 0, address);
-        Self { address: full, family: FAMILY_V4, key, cluster_id }
+        Self {
+            address: full,
+            family: FAMILY_V4,
+            key,
+            cluster_id,
+        }
     }
     pub fn v6(address: [u8; 16], key: u8, cluster_id: u16) -> Self {
-        Self { address, family: FAMILY_V6, key, cluster_id }
+        Self {
+            address,
+            family: FAMILY_V6,
+            key,
+            cluster_id,
+        }
     }
     /// Packed multi-byte fields are exposed by value, never unaligned reference.
-    pub fn cluster_id(self) -> u16 { self.cluster_id }
+    pub fn cluster_id(self) -> u16 {
+        self.cluster_id
+    }
 }
 impl NodeKey {
     pub fn v4(address: [u8; 4]) -> Self {
         let mut full = [0; 16];
         put(&mut full, 0, address);
-        Self { address: full, family: FAMILY_V4, ..Default::default() }
+        Self {
+            address: full,
+            family: FAMILY_V4,
+            ..Default::default()
+        }
     }
     pub fn v6(address: [u8; 16]) -> Self {
-        Self { address, family: FAMILY_V6, ..Default::default() }
+        Self {
+            address,
+            family: FAMILY_V6,
+            ..Default::default()
+        }
     }
 }
 impl SubnetKey {
     /// Prefix counts 32 static padding/family bits plus CIDR bits. Host bits
     /// remain unchanged; address masking belongs to the IP-prefix owner.
     pub fn v4(address: [u8; 4], bits: u32) -> Result<Self, InvalidPrefix> {
-        if bits > 32 { return Err(InvalidPrefix); }
+        if bits > 32 {
+            return Err(InvalidPrefix);
+        }
         let mut full = [0; 16];
         put(&mut full, 0, address);
-        Ok(Self { prefixlen: 32_u32.checked_add(bits).ok_or(InvalidPrefix)?, family: FAMILY_V4, address: full, ..Default::default() })
+        Ok(Self {
+            prefixlen: 32_u32.checked_add(bits).ok_or(InvalidPrefix)?,
+            family: FAMILY_V4,
+            address: full,
+            ..Default::default()
+        })
     }
     pub fn v6(address: [u8; 16], bits: u32) -> Result<Self, InvalidPrefix> {
-        if bits > 128 { return Err(InvalidPrefix); }
-        Ok(Self { prefixlen: 32_u32.checked_add(bits).ok_or(InvalidPrefix)?, family: FAMILY_V6, address, ..Default::default() })
+        if bits > 128 {
+            return Err(InvalidPrefix);
+        }
+        Ok(Self {
+            prefixlen: 32_u32.checked_add(bits).ok_or(InvalidPrefix)?,
+            family: FAMILY_V6,
+            address,
+            ..Default::default()
+        })
     }
-    pub fn prefixlen(self) -> u32 { self.prefixlen }
+    pub fn prefixlen(self) -> u32 {
+        self.prefixlen
+    }
 }
 
 const _: () = {

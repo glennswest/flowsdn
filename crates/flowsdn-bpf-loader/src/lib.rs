@@ -58,7 +58,9 @@ impl MapSpec {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MapPlan {
-    Create { spec: MapSpec },
+    Create {
+        spec: MapSpec,
+    },
     Reuse {
         effective_spec: MapSpec,
         /// True only for the permitted read-write-map upgrade exception.
@@ -79,18 +81,32 @@ pub enum MapPlan {
 /// Loader replacements are staged for commit, including read-only downgrades.
 /// No contents are migrated by this policy.
 pub const fn plan_map(spec: MapSpec, existing: Option<MapSpec>, owner: Owner) -> MapPlan {
-    let Some(existing) = existing else { return MapPlan::Create { spec }; };
+    let Some(existing) = existing else {
+        return MapPlan::Create { spec };
+    };
     let relaxed = spec.flags & RDONLY_PROG != 0 && existing.flags & RDONLY_PROG == 0;
     let effective_spec = MapSpec {
-        flags: if relaxed { spec.flags & !RDONLY_PROG } else { spec.flags },
+        flags: if relaxed {
+            spec.flags & !RDONLY_PROG
+        } else {
+            spec.flags
+        },
         ..spec
     };
     if !effective_spec.differences(existing).any() {
-        MapPlan::Reuse { effective_spec, relaxed_program_read_only: relaxed }
+        MapPlan::Reuse {
+            effective_spec,
+            relaxed_program_read_only: relaxed,
+        }
     } else {
         MapPlan::Replace {
-            spec, existing, changed: spec.differences(existing),
-            replacement: match owner { Owner::Agent => Replacement::EmptyAgentMap, Owner::Loader => Replacement::AtLoaderCommit },
+            spec,
+            existing,
+            changed: spec.differences(existing),
+            replacement: match owner {
+                Owner::Agent => Replacement::EmptyAgentMap,
+                Owner::Loader => Replacement::AtLoaderCommit,
+            },
         }
     }
 }
