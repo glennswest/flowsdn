@@ -114,7 +114,13 @@ impl Connector {
                 .get()
                 .match_name(name.to_string())
                 .execute();
-            links.try_next().await?.map(link_info).transpose()
+            match links.try_next().await {
+                Ok(link) => link.map(link_info).transpose(),
+                // A named RTM_GETLINK can report ENODEV/ENOENT rather than an
+                // empty dump. Both mean the interface is already absent.
+                Err(rtnetlink::Error::NetlinkError(error)) if matches!(error.raw_code(), -19 | -2) => Ok(None),
+                Err(error) => Err(error.into()),
+            }
         })
     }
     pub fn require_link(&self, name: &str) -> Result<Link> {
