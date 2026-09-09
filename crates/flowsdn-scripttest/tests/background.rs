@@ -257,7 +257,14 @@ async fn background_invalid_utf8_preserves_deadline_and_drains_other_jobs() {
 async fn wait_failure_ignores_the_wait_lines_negative_or_retry_status() {
     for prefix in ["!", "?", "*", "!*"] {
         let mut state = state();
-        let error = Engine::new().run_async(&format!("exec $CHILD exit 7 &\n{prefix} wait"), &mut state, &RunOptions::default()).await.unwrap_err();
+        let error = Engine::new()
+            .run_async(
+                &format!("exec $CHILD exit 7 &\n{prefix} wait"),
+                &mut state,
+                &RunOptions::default(),
+            )
+            .await
+            .unwrap_err();
         assert!(error.message.contains("process exited"), "{error}");
         assert_eq!(state.retry_count, 0);
     }
@@ -268,28 +275,47 @@ async fn retry_reaps_failed_attempt_jobs_and_preserves_prior_section_jobs() {
     let mut state = state();
     let root = state.work_dir().unwrap().to_owned();
     let mut engine = Engine::new();
-    engine.register_command("attempt", false, |state, _| {
-        state.environment.insert("attempt".into(), state.retry_count.to_string());
-        Ok(flowsdn_scripttest::Control::Continue)
-    }).unwrap();
-    engine.register_command("settled", false, |state, _| {
-        if state.retry_count >= 1 { Ok(flowsdn_scripttest::Control::Continue) }
-        else { Err(flowsdn_scripttest::CommandError::Failure("retry now".into())) }
-    }).unwrap();
-    let mut options = RunOptions::default();
-    options.retry_interval = Duration::from_millis(1);
+    engine
+        .register_command("attempt", false, |state, _| {
+            state
+                .environment
+                .insert("attempt".into(), state.retry_count.to_string());
+            Ok(flowsdn_scripttest::Control::Continue)
+        })
+        .unwrap();
+    engine
+        .register_command("settled", false, |state, _| {
+            if state.retry_count >= 1 {
+                Ok(flowsdn_scripttest::Control::Continue)
+            } else {
+                Err(flowsdn_scripttest::CommandError::Failure(
+                    "retry now".into(),
+                ))
+            }
+        })
+        .unwrap();
+    let options = RunOptions {
+        retry_interval: Duration::from_millis(1),
+        ..RunOptions::default()
+    };
     engine.run_async("# prior\nexec $CHILD delayed-output 300 prior &\n# replay\nattempt\nexec $CHILD delayed-pid 200 attempt-$attempt pid-$attempt &\nexec $CHILD await-file pid-$attempt\n* settled\nwait", &mut state, &options).await.unwrap();
     assert_eq!(state.stdout, "prior\nattempt-1\n");
     for name in ["pid-0", "pid-1"] {
         let pid = ready(&root.join(name)).await;
-        assert!(!Path::new(&format!("/proc/{pid}")).exists(), "attempt child must be reaped");
+        assert!(
+            !Path::new(&format!("/proc/{pid}")).exists(),
+            "attempt child must be reaped"
+        );
     }
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn successful_negative_wait_is_unexpected_even_without_jobs() {
     for script in ["! wait", "exec $CHILD exit 0 &\n! wait"] {
-        let error = Engine::new().run_async(script, &mut state(), &RunOptions::default()).await.unwrap_err();
+        let error = Engine::new()
+            .run_async(script, &mut state(), &RunOptions::default())
+            .await
+            .unwrap_err();
         assert!(error.message.contains("unexpected success"), "{error}");
     }
 }

@@ -179,9 +179,19 @@ impl Jobs {
         self.next_id = self.next_id.saturating_add(1);
         Ok(())
     }
-    pub(crate) fn checkpoint(&self) -> usize { self.next_id }
-    pub(crate) async fn discard_attempt(&mut self, checkpoint: usize, options: &RunOptions) -> Result<(), CommandError> {
-        let index = self.jobs.iter().position(|job| job.id >= checkpoint).unwrap_or(self.jobs.len());
+    pub(crate) fn checkpoint(&self) -> usize {
+        self.next_id
+    }
+    pub(crate) async fn discard_attempt(
+        &mut self,
+        checkpoint: usize,
+        options: &RunOptions,
+    ) -> Result<(), CommandError> {
+        let index = self
+            .jobs
+            .iter()
+            .position(|job| job.id >= checkpoint)
+            .unwrap_or(self.jobs.len());
         let discarded = self.jobs.split_off(index);
         for job in &discarded {
             if let Ok(pending) = &job.pending {
@@ -194,21 +204,40 @@ impl Jobs {
         for job in discarded {
             let output = match job.pending {
                 Ok(pending) => pending.receiver.await.unwrap_or_else(|_| Output {
-                    stdout: Vec::new(), stderr: Vec::new(), result: Err(CommandError::ProcessOwnershipLost),
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                    result: Err(CommandError::ProcessOwnershipLost),
                 }),
-                Err(error) => Output { stdout: Vec::new(), stderr: Vec::new(), result: Err(error) },
+                Err(error) => Output {
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                    result: Err(error),
+                },
             };
-            self.budget.fetch_sub(output.stdout.len().saturating_add(output.stderr.len()), Ordering::Relaxed);
+            self.budget.fetch_sub(
+                output.stdout.len().saturating_add(output.stderr.len()),
+                Ordering::Relaxed,
+            );
             let output = decode(output);
             match output.result {
-                Ok(()) if job.status == Status::Failure => join_error(&mut errors, &mut fatal, job.line, failure("unexpected background success during retry cleanup")),
-                Ok(()) | Err(CommandError::ReplayCancelled) => {},
-                Err(CommandError::Failure(_)) if matches!(job.status, Status::Failure | Status::SuccessOrFailure) => {},
+                Ok(()) if job.status == Status::Failure => join_error(
+                    &mut errors,
+                    &mut fatal,
+                    job.line,
+                    failure("unexpected background success during retry cleanup"),
+                ),
+                Ok(()) | Err(CommandError::ReplayCancelled) => {}
+                Err(CommandError::Failure(_))
+                    if matches!(job.status, Status::Failure | Status::SuccessOrFailure) => {}
                 Err(error) => join_error(&mut errors, &mut fatal, job.line, error),
             }
         }
         options.check()?;
-        if errors.is_empty() { Ok(()) } else { Err(CommandError::BackgroundFailure(errors)) }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(CommandError::BackgroundFailure(errors))
+        }
     }
     pub(crate) fn cancel(&self) {
         for job in &self.jobs {
@@ -437,7 +466,16 @@ mod linux {
         tokio::spawn(async move {
             let _directory = directory;
             let _workspace = workspace;
-            supervise(process, pid, options, task_cancellation, task_replay, budget, sender).await;
+            supervise(
+                process,
+                pid,
+                options,
+                task_cancellation,
+                task_replay,
+                budget,
+                sender,
+            )
+            .await;
         });
         Ok(Pending {
             receiver,
@@ -510,7 +548,8 @@ mod linux {
     fn preserve_capture_failure(result: &mut Result<(), CommandError>, error: CommandError) {
         if result.is_ok()
             || (matches!(result, Err(CommandError::ReplayCancelled))
-                && !matches!(error, CommandError::Failure(_))) {
+                && !matches!(error, CommandError::Failure(_)))
+        {
             *result = Err(error);
         }
     }
@@ -636,6 +675,4 @@ mod linux {
             assert_eq!(result, Err(CommandError::Deadline));
         }
     }
-
-
 }
