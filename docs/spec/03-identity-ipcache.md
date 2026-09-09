@@ -496,6 +496,24 @@ A prefix of length 0 yields no `cidr:` label, only the world label. Printing
 A `cidr` selector label `A` matches a `cidr` label `B` when `A`'s prefix
 contains `B`'s address and is not longer.
 
+The CIDR numeric boundary canonicalizes a prefix by masking all host bits before
+encoding or comparison. IPv4 lengths are 0–32 and IPv6 lengths 0–128; an address
+and a decimal length are both required. IPv6 uses compressed lowercase address
+formatting before colon escaping. IPv4-mapped IPv6 remains an IPv6 prefix and
+never matches an IPv4 prefix. Family equality is required for containment,
+including `/0` selectors. These rules make selector containment deterministic
+without introducing general label matching or identity allocation.
+
+Decoding accepts the encoded key or the decoded textual prefix used for display,
+then validates and masks it. It does not accept zone identifiers, whitespace or
+signed lengths; encoded input is bounded to 64 bytes (longer than every valid
+key). Generating identity labels for either family's `/0` omits the CIDR label;
+the caller still selects the appropriate reserved world label from its stack
+mode. A manually supplied `/0` CIDR selector can be decoded for same-family
+containment without being emitted as an identity label. Non-CIDR source labels
+are outside this helper's matching contract. This clarifies the §4.1 boundary
+for the Rust CIDR primitive; no reference implementation read was needed.
+
 `cidrgroup` encoded form: key `<key>+<value>`, no value.
 
 ### 4.2 Identity label filter
@@ -504,15 +522,23 @@ Grammar of one entry (`--labels`, one per element): `[<source>:]<regex>`,
 optional leading `!` on the regex part meaning *exclude*. `<source>` limits
 the entry to labels of that source (empty = any). The regex MUST match at
 offset 0 of the key (Go RE2 syntax; flowsdn uses the `regex` crate in the
-RE2-compatible subset). A label is identity-relevant when (no include entry
-exists in the configuration and no exclude matched) or (the longest include
-match is strictly longer than the shortest exclude match); `included`/
-`ignored` lengths are the match end offsets. Entries from `--labels` are
-appended to the defaults (or to the file's list); any include entry makes
-the list a whitelist.
+RE2-compatible subset). Entries from `--labels` are appended to the defaults
+(or to the file's list). A user or file include enables whitelist mode;
+built-in includes do not. The built-in includes instead override shorter
+exclusions, keeping ordinary application labels by default.
 
-Default list, in order (`reserved:.*` first is required; a file lacking it
-logs an error):
+For each label, `included` and `ignored` begin at zero. Each matching include
+updates `included` to the larger match end offset. Each matching exclusion
+updates `ignored` when it is zero or the new match end is smaller. Retain the
+label when `(!whitelist && ignored == 0) || included > ignored`. Offsets are
+UTF-8 byte offsets. Equal positive lengths exclude. Zero-length matches use
+the same zero sentinel: an empty include does not itself admit a label, an
+empty exclusion alone does not reject it, and an empty exclusion can reset
+a prior positive exclusion before later rules are examined. This preserves
+the reference's ordered behavior rather than treating zero as a positive match.
+
+Default list, in order (`reserved:.*` is first in the defaults; file diagnostics
+are described below):
 
 ```
 reserved:.*
@@ -540,8 +566,39 @@ io\.cilium\.k8s\.policy\.serviceaccount
 
 `--label-prefix-file` JSON: `{"version":1,"valid-prefixes":[{"prefix":"..",
 "source":"..","invert":false}]}`; version MUST be 1, prefix and source
-non-empty. `--node-labels` uses the same grammar and applies only to
-`node:` labels; with no include entry every node label is kept.
+non-empty. File entries are **literal key prefixes**, not compiled regexes;
+their match length is the prefix's byte length. `invert` defaults to false.
+The file replaces the defaults; CLI additions remain regexes. Missing or null
+`valid-prefixes` means an empty list. Unknown JSON fields are ignored. A final
+file-plus-CLI list lacking source `reserved` and pattern `.*` emits an
+error-level diagnostic but is accepted. This presence check does not require
+first position or inspect `invert`, and does not prove reserved labels will
+be retained (a file's literal `.*` differs from a CLI regex). The pure API
+returns the diagnostic for its caller to log.
+
+`--node-labels` uses the CLI grammar with an empty default list, and applies
+only to `node:` labels. With no include, unmatched node labels are kept but
+positive-length exclusions still reject them. Non-node labels pass through
+unchanged when applying this node-only filter.
+
+CLI parsing splits at the first colon, then strips at most one leading `!`
+from the pattern. Thus `node:!zone` excludes while `!node:zone` is an include
+for the literal source `!node`. Use an explicit empty source for a regex
+containing a colon, such as `:(?:a|b)`. Empty CLI elements are skipped by list
+construction; a standalone empty pattern is invalid, while `!` compiles the
+empty exclusion regex. No whitespace is trimmed. Rust regex syntax outside
+the RE2-compatible subset is not a portability guarantee.
+
+**Reference ambiguity resolution, 2026-09-09.** These details correct the
+earlier summary that every include (including defaults) enabled a whitelist,
+and clarify file literal matching and zero-length behavior. Read-only evidence:
+Cilium v1.20.1, commit `7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc`,
+`pkg/labelsfilter/filter.go` lines 58–105 (matching and source split),
+135–189 (user includes and nonfatal reserved diagnostic), 220–259
+(default mode), 264–341 (file decoding and precedence). This records behavior;
+no reference implementation or test fixture was copied. The Rust `filter`
+feature enables the existing regex and JSON dependencies; numeric and label
+primitives remain available without default features.
 
 ### 4.3 `CiliumIdentity` (cilium.io/v2, cluster-scoped)
 

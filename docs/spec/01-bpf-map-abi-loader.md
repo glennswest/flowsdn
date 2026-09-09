@@ -994,6 +994,13 @@ C side reads `_aux_stride` and has no other assumption; the Go side uses
 same per-target constants (64 / 128) rather than the runtime cache line, so
 a Rust and a Go agent produce identical map value sizes on the same node.
 
+The initial pure layout planner accepts only existing nonempty sections and
+nonzero possible-CPU counts, rejects rounding or multiplication beyond the u32
+map-value size ABI, and returns stride, total value size and maximum offset.
+The owner still creates zeroed storage and checks kernel-specific size limits;
+an absent scratch section does not require a layout. This arithmetic helper
+performs no allocation or map mutation.
+
 ### 5.5 Upgrade of a whole node
 
 Order at agent start: mount bpffs → open/create agent-owned global maps

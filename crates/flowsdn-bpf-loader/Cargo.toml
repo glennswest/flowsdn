@@ -9,3 +9,6 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+flowsdn-bpf-abi = { path = "../flowsdn-bpf-abi", version = "=0.14.0" }

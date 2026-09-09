@@ -13,3 +13,13 @@ this planner never adds flags to make a map compatible.
 The caller must validate map-type/flag combinations and inner-map schemas.
 Kernel probing, Aya integration, bpffs operations, live-map compatibility,
 transaction execution and rollback are not implemented by this crate yet.
+
+Auxiliary scratch planning uses target-specific 64/128-byte strides, possible
+CPU counts and checked map-value sizing. It exposes patch values and clamped
+CPU offsets; the caller provides zeroed storage. Empty sections and zero CPU
+counts fail before allocation. Kernel-specific map limits remain caller checks.
+
+Typed tail inventories validate declared slots against exactly one program per
+slot, using the frozen ABI numbering. Global endpoint-policy arrays are separate.
+ELF section/name parsing, reachability and program-array population are not yet
+implemented; callers supply the typed declarations and program slots.
