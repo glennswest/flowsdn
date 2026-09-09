@@ -21,6 +21,15 @@ without following `docs/licensing.md`.
 
 ## Work plan
 
+The current execution plan is `docs/milestones.md`: four remaining milestones.
+The historical phase checklist below is background, not the active work queue.
+Use one coding agent by default; delegate only bounded independent work with
+narrow context. Commit completed steps frequently. Batch releases at milestone
+acceptance, with focused checks during implementation and the full required
+matrix before release. Repeat checks only after relevant changes or failures.
+Keep accounting concise at work boundaries; do not create a release merely to
+report counters. Continue the disk cleanup requirements in AGENTS.md.
+
 ### Phase 0 — Inventory (COMPLETE 2026-09-07, except kernel-requirements roll-up)
 - [x] Repo, license, NOTICE, clean-room protocol, ADR-0001 scope
 - [x] Name check: flowsdn clear on GitHub, crates.io, npm, PyPI, .com/.io/.net/.org

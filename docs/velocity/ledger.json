@@ -551,6 +551,42 @@
       "note": "Identity filters/CIDR, overlay wire codecs and loader contracts; source-only foundation.",
       "release": "v0.14.0",
       "release_commit": "9dfc33bcc98f0883ad59c7947f387ff3410f1786"
+    },
+    {
+      "id": "four-milestone-plan",
+      "scope": "project/shared",
+      "agent": "root",
+      "start_utc": "2026-09-09T16:58:05Z",
+      "end_utc": "2026-09-09T16:59:58Z",
+      "elapsed_seconds": 113.0,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T16:58:03.540Z",
+      "token_end_sample_utc": "2026-09-09T16:59:58.614Z",
+      "token_baseline": {
+        "input_tokens": 100961214,
+        "cached_input_tokens": 99684224,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 311183,
+        "reasoning_output_tokens": 76843,
+        "total_tokens": 101272397
+      },
+      "token_endpoint": {
+        "input_tokens": 101183204,
+        "cached_input_tokens": 99897728,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 314154,
+        "reasoning_output_tokens": 77274,
+        "total_tokens": 101497358
+      },
+      "tokens": {
+        "input_tokens": 221990,
+        "cached_input_tokens": 213504,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 2971,
+        "reasoning_output_tokens": 431,
+        "total_tokens": 224961
+      },
+      "note": "Observed planning interval only; initial backlog/readme review preceded the first captured clock sample. Four GitHub milestones created, all 270 current issues covered by area ownership in docs/milestones.md. No build or release; documentation checked with git diff --check. Usage is processed context, not account allowance. Commit is the commit containing this record. Publication/reporting after cutoff excluded."
     }
   ],
   "crates": [

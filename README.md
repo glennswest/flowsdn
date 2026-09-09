@@ -52,8 +52,9 @@ from the specifications and 18 require explicit values; see the
 [catalogue gaps](crates/flowsdn-config/REGISTRY-GAPS.md). Build identity metadata
 is available for future binaries.
 
-Next steps include extending the map ABI, resolving catalogue gaps and adding script subsystem adapters; see
-[implementation assessment](docs/implementation-status.md). The kernel target and measured object-variant policy are reconciled in the
+The remaining implementation follows [four milestones](docs/milestones.md),
+starting with working pod networking. See the
+[implementation assessment](docs/implementation-status.md) for delivered components. The kernel target and measured object-variant policy are reconciled in the
 specifications. The wire-format policy preserves the reference encodings; live
 mixed-cluster compatibility remains unvalidated.
 

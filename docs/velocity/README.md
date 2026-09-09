@@ -56,3 +56,12 @@ excludes subsequent publication and reporting work.
    commit or all subsequent reporting work.
 
 [Machine-readable ledger](ledger.json) · [Sanitized token samples](token-samples.json)
+
+## Four-milestone planning update
+
+2026-09-09T16:59:58Z: created four GitHub milestones and the remaining-scope plan in
+`docs/milestones.md`. Observed planning interval: 113 seconds;
+initial review preceded that interval. Root-only processed-token delta: 224,961
+through 2026-09-09T16:59:58.614Z. No builds, release, or billable-dollar estimate.
+The prior release totals above retain their original cutoff. Detailed counters
+are in the `four-milestone-plan` ledger phase.
