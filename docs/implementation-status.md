@@ -302,3 +302,11 @@ background jobs are cancelled and drained before replay; prior-section jobs
 remain queued. Background retry prefixes remain explicitly unsupported.
 Wait errors now propagate independently of the wait line's own status prefix,
 as required by the script specification.
+
+Source `7972548` passed **286 unique Rust tests in debug and release with all
+features**: 80 script, 62 reconciler, 51 configuration, 33 map ABI, 30 table,
+7 health, 7 fence, 7 build-selector, 5 build-metadata and 4 harvester tests.
+Formatting, warning-free Clippy, both x86_64/aarch64 Linux musl compile checks,
+and dependency advisories/bans/licenses/sources checks passed. The dependency
+graph remains at 89 external versions. No live-map, verifier, mixed-cluster or
+arm64 runtime compatibility is claimed.
