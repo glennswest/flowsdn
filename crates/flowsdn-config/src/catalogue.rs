@@ -1,5 +1,5 @@
 //! All 539 key declarations from foundation specification §6.4. Defaults that
-//! the specification leaves symbolic are explicit gaps, never guessed literals.
+//! remain symbolic after consulting owning specs are explicit gaps, never guessed literals.
 //! Schema construction does not replace foundation or area-specific validation.
 
 mod entries;
@@ -85,6 +85,48 @@ pub struct Definition {
 }
 
 impl Definition {
+    /// Source of the resolved parser input. Original table expressions remain
+    /// available separately. None means that a production default is unresolved.
+    /// Cross-spec citations name a Markdown file and its exact declaration line.
+    pub fn default_provenance(self) -> Option<&'static str> {
+        self.default?;
+        Some(match self.name {
+            "agent-not-ready-taint-key" => "docs/spec/12-operator.md:1415",
+            "bpf-lb-algorithm" => "docs/spec/05-service-loadbalancing.md:926",
+            "bpf-lb-dsr-dispatch" => "docs/spec/05-service-loadbalancing.md:925",
+            "bpf-lb-maglev-hash-seed" => "docs/spec/05-service-loadbalancing.md:929",
+            "bpf-lb-maglev-table-size" => "docs/spec/05-service-loadbalancing.md:928",
+            "bpf-lb-map-max" => "docs/spec/05-service-loadbalancing.md:917",
+            "bpf-lb-mode" => "docs/spec/05-service-loadbalancing.md:923",
+            "bpf-map-event-buffers" => "docs/spec/03-identity-ipcache.md:824",
+            "bpf-nat-global-max" => "docs/spec/04-conntrack-nat.md:804",
+            "bpf-neigh-global-max" => "docs/spec/01-bpf-map-abi-loader.md:193",
+            "bpf-node-map-max" => "docs/spec/14-encryption-egress.md:1715",
+            "clustermesh-service-v2" => "docs/spec/20-clustermesh-kvstore.md:1548",
+            "enable-bandwidth-manager" => "docs/spec/10-node-routing-nftables.md:1381",
+            "enable-bbr" => "docs/spec/10-node-routing-nftables.md:1382",
+            "enable-bbr-hostns-only" => "docs/spec/10-node-routing-nftables.md:1382",
+            "enable-dynamic-source-lookup-nodeport" => "docs/spec/05-service-loadbalancing.md:940",
+            "enable-node-ipam" => "docs/spec/12-operator.md:1452",
+            "fixed-identity-mapping" => "docs/spec/03-identity-ipcache.md:809",
+            "gateway-api-secrets-namespace" => "docs/spec/21-gateway-api-ingress.md:1697",
+            "hubble-drop-events-reasons" => "docs/spec/11-hubble-monitor.md:2523",
+            "hubble-event-buffer-capacity" => "docs/spec/11-hubble-monitor.md:2474",
+            "hubble-lost-event-send-interval" => "docs/spec/11-hubble-monitor.md:2477",
+            "hubble-socket-path" => "docs/spec/11-hubble-monitor.md:2472",
+            "hubble-tls-cert-file" => "docs/spec/11-hubble-monitor.md:2480",
+            "hubble-tls-client-ca-files" => "docs/spec/11-hubble-monitor.md:2482",
+            "hubble-tls-key-file" => "docs/spec/11-hubble-monitor.md:2481",
+            "ingress-secrets-namespace" => "docs/spec/21-gateway-api-ingress.md:1714",
+            "ipam-multi-pool-pre-allocation" => "docs/spec/07-ipam.md:1247",
+            "kvstore" => "docs/spec/20-clustermesh-kvstore.md:1507",
+            "node-port-range" => "docs/spec/05-service-loadbalancing.md:919",
+            "policy-secrets-namespace" => "docs/spec/12-operator.md:1449",
+            "policy-secrets-only-from-secrets-namespace" => "docs/spec/16-l7-envoy-dns.md:1479",
+            "socket-path" => "docs/spec/08-endpoint-agent-api.md:1319",
+            _ => SPECIFICATION,
+        })
+    }
     /// The table does not supply help text or hidden-flag metadata.
     pub fn help(self) -> Option<&'static str> {
         None

@@ -7,6 +7,80 @@ use std::collections::BTreeSet;
 const SPEC: &str = include_str!("../../../docs/spec/00-foundation-table-config.md");
 
 #[test]
+fn owning_defaults_resolve_typed_values_without_requiring_overrides() {
+    let schema = catalogue::partial_known_defaults_registry().unwrap();
+    let resolved = schema.resolve([]).unwrap();
+    for (key, expected) in [
+        ("bpf-lb-map-max", Value::Int(65536)),
+        ("bpf-nat-global-max", Value::Int(524288)),
+        ("bpf-neigh-global-max", Value::Int(524288)),
+        ("bpf-lb-maglev-table-size", Value::UInt(16381)),
+        ("bpf-node-map-max", Value::UInt(16384)),
+        ("hubble-event-buffer-capacity", Value::Int(4095)),
+        ("hubble-lost-event-send-interval", Value::Duration(1_000_000_000)),
+        ("enable-bbr", Value::Bool(false)),
+        ("enable-bbr-hostns-only", Value::Bool(false)),
+        ("enable-bandwidth-manager", Value::Bool(false)),
+        ("node-port-range", Value::List(vec!["30000".into(), "32767".into()])),
+        ("hubble-drop-events-reasons", Value::List(vec!["auth_required".into(), "policy_denied".into()])),
+        ("bpf-lb-algorithm", Value::String("random".into())),
+        ("bpf-lb-dsr-dispatch", Value::String("opt".into())),
+        ("bpf-lb-mode", Value::String("snat".into())),
+        ("bpf-lb-maglev-hash-seed", Value::String("JLfvgnHc2kaSUFaI".into())),
+        ("clustermesh-service-v2", Value::String("prefer-legacy".into())),
+        ("kvstore", Value::String(String::new())),
+        ("hubble-tls-client-ca-files", Value::List(Vec::new())),
+        ("fixed-identity-mapping", Value::Map(Default::default())),
+        ("ipam-multi-pool-pre-allocation", Value::Map([("default".into(), "8".into())].into())),
+    ] {
+        let actual = resolved.get(key).unwrap();
+        assert_eq!(actual.value, expected, "{key}");
+        assert_eq!(actual.source, Source::Default, "{key}");
+    }
+    let overridden = schema.resolve([Entry::new(Source::Flag, "BPF_LB_MAGLEV_TABLE_SIZE", "65537")]).unwrap();
+    assert_eq!(overridden.get("bpf-lb-maglev-table-size").unwrap().value, Value::UInt(65537));
+    assert_eq!(catalogue::get("bpf-lb-maglev-table-size").unwrap().default_expression, "userCfg.TableSize");
+}
+
+#[test]
+fn conflicting_and_missing_defaults_stay_fail_closed() {
+    let schema = catalogue::partial_known_defaults_registry().unwrap();
+    for key in ["monitor-aggregation", "lb-test-fault-probability", "enable-policy-secrets-sync", "local-max-addr-scope", "packetization-layer-pmtud-mode", "log-opt", "enable-gops"] {
+        let definition = catalogue::get(key).unwrap();
+        assert!(definition.default.is_none(), "{key}");
+        assert!(definition.default_provenance().is_none(), "{key}");
+        assert!(schema.omitted().iter().any(|gap| gap.key == key));
+    }
+    assert!(matches!(catalogue::complete_registry(&[]), Err(Error::UnresolvedDefaults(gaps)) if gaps.len() == 18));
+    assert!(catalogue::get("fixed-identity-mapping").unwrap().needs_area_validator());
+    assert!(catalogue::get("bpf-map-event-buffers").unwrap().needs_area_validator());
+    assert!(catalogue::get("ipam-multi-pool-pre-allocation").unwrap().needs_area_validator());
+}
+
+#[test]
+fn resolved_provenance_points_to_the_actual_owning_declaration() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut cross_spec_count = 0_usize;
+    for definition in catalogue::ENTRIES {
+        let Some(provenance) = definition.default_provenance() else {
+            assert!(definition.default.is_none());
+            continue;
+        };
+        if provenance == catalogue::SPECIFICATION {
+            continue;
+        }
+        cross_spec_count = cross_spec_count.saturating_add(1);
+        let (path, line) = provenance.rsplit_once(':').unwrap();
+        let text = std::fs::read_to_string(root.join(path)).unwrap();
+        let index = line.parse::<usize>().unwrap().checked_sub(1).unwrap();
+        let declaration = text.lines().nth(index).unwrap();
+        assert!(declaration.contains(definition.name), "{}: {provenance}", definition.name);
+    }
+    assert_eq!(cross_spec_count, 33);
+    assert_eq!(catalogue::coverage().literal_defaults, 521);
+}
+
+#[test]
 fn every_normative_declaration_has_exact_metadata_and_unique_canonical_name() {
     let table = SPEC
         .split_once("### 6.4 The registry key table (539 keys)")
@@ -137,25 +211,23 @@ fn literal_defaults_are_typed_and_evaluated_without_inventing_symbolic_values() 
             coverage.literal_defaults,
             coverage.unresolved_defaults.len()
         ),
-        (539, 488, 51)
+        (539, 521, 18)
     );
     assert_eq!(coverage.help_metadata_missing, 539);
     assert_eq!(coverage.hidden_metadata_missing, 539);
     assert_eq!(coverage.area_validators_required.len(), 4);
-    assert!(
-        catalogue::get("bpf-lb-maglev-table-size")
-            .unwrap()
-            .default
-            .is_none()
+    assert_eq!(
+        catalogue::get("bpf-lb-maglev-table-size").unwrap().default,
+        Some("16381")
     );
     assert!(
         catalogue::get("enable-gops").unwrap().default.is_none(),
         "ignored does not authorize inventing a default"
     );
     let partial = catalogue::partial_known_defaults_registry().unwrap();
-    assert_eq!(partial.omitted().len(), 51);
+    assert_eq!(partial.omitted().len(), 18);
     let resolved = partial.resolve([]).unwrap();
-    assert_eq!(resolved.values().len(), 488);
+    assert_eq!(resolved.values().len(), 521);
     assert_eq!(
         resolved.get("bpf-auth-map-max").unwrap().value,
         Value::Int(524_288)
@@ -194,7 +266,7 @@ fn literal_defaults_are_typed_and_evaluated_without_inventing_symbolic_values() 
 #[test]
 fn partial_registry_rejects_omitted_known_keys_instead_of_calling_them_unknown() {
     let partial = catalogue::partial_known_defaults_registry().unwrap();
-    for key in ["BPF_LB_MAGLEV_TABLE_SIZE", "MONITOR_AGGREGATION_LEVEL"] {
+    for key in ["ENABLE_GOPS", "MONITOR_AGGREGATION_LEVEL"] {
         assert!(matches!(
             partial.resolve([Entry::new(Source::Flag, key, "anything")]),
             Err(Error::OmittedKey(_))
@@ -239,14 +311,14 @@ fn fixture_resolutions() -> Vec<DefaultOverride<'static>> {
 #[test]
 fn complete_schema_fails_closed_then_requires_explicit_typed_resolutions() {
     assert!(
-        matches!(catalogue::complete_registry(&[]), Err(Error::UnresolvedDefaults(gaps)) if gaps.len() == 51)
+        matches!(catalogue::complete_registry(&[]), Err(Error::UnresolvedDefaults(gaps)) if gaps.len() == 18)
     );
     let mut overrides = fixture_resolutions();
     let built = catalogue::complete_registry(&overrides).unwrap();
     let resolved = built.registry.resolve([]).unwrap();
     assert_eq!(resolved.values().len(), 539);
     assert!(resolved.unknown_keys().is_empty());
-    assert_eq!(built.default_overrides.len(), 51);
+    assert_eq!(built.default_overrides.len(), 18);
     assert!(
         built
             .default_overrides

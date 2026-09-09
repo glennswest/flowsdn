@@ -7,9 +7,11 @@ values in that order, preserving the winning source for each key.
 
 The `catalogue` module declares all 539 keys in specification §6.4, including
 their original default expressions, pflag types, six behavior classes, three
-deprecated aliases and four inventory-name renames. **488 defaults are resolved;
-51 remain explicit gaps.** [The gap list](REGISTRY-GAPS.md) records unresolved
-expressions, missing help/hidden metadata and area-validator requirements.
+deprecated aliases and four inventory-name renames. **521 defaults are resolved;
+18 remain explicit gaps.** [The gap list](REGISTRY-GAPS.md) records unresolved
+expressions, owning-spec provenance, conflicts, missing help/hidden metadata
+and area-validator requirements. `Definition::default_provenance()` preserves
+the source of each resolved default without changing its original expression.
 
 `complete_registry` refuses construction until every missing default has an
 explicit, typed resolution with provenance. It returns the constructed schema
@@ -84,7 +86,7 @@ state directory and check previous state before publishing a changed config.
 Temporary files are cleaned on completion/failure. Unix snapshot files use
 mode 0600, and final-path symlinks are replaced without writing their targets.
 
-This core still requires the 51 unresolved production defaults,
+This core still requires the 18 unresolved production defaults,
 CLI argument parsing, area-specific map validators, all cross-key rules,
 derived settings or dynamic config reflection. Legacy alias
 definitions are supplied by the owning area's schema.
