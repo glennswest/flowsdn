@@ -6,6 +6,10 @@
   token usage in docs/velocity, with sanitized samples and explicit shared-work
   attribution; require updates at task boundaries and releases.
 
+## [0.10.0] - 2026-09-09
+
+- Add conntrack and NAT values with lossless byte codecs and frozen layout checks.
+
 ## [0.9.0] - 2026-09-09
 
 - Begin the map ABI foundation with explicit byte order and layout contracts.

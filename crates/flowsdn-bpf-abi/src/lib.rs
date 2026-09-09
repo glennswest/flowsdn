@@ -1,4 +1,4 @@
-//! Initial map data layouts from map ABI specification §§4.1 and 4.4.
+//! Map data layouts from map ABI specification §4.
 //! No allocation, system calls, loader, or unsafe memory casts. Byte codecs are
 //! explicit; integration with the future Aya loader remains separate.
 #![no_std]
@@ -38,6 +38,9 @@ pub trait MapBytes<const N: usize>: Sized {
     fn to_bytes(self) -> [u8; N];
     fn from_bytes(bytes: [u8; N]) -> Self;
 }
+
+pub mod ct;
+pub mod lb;
 
 pub mod ct_flags {
     pub const OUT: u8 = 0;
