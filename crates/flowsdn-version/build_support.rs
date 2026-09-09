@@ -2,9 +2,15 @@
 use std::collections::BTreeMap;
 
 pub const INPUTS: &[&str] = &[
-    "FLOWSDN_VERSION", "FLOWSDN_REVISION", "SOURCE_DATE_EPOCH", "FLOWSDN_DIRTY",
-    "FLOWSDN_RUSTC", "FLOWSDN_BPF_TOOLCHAIN", "FLOWSDN_BPF_LINKER",
-    "FLOWSDN_BPF_OBJECTS_SHA", "FLOWSDN_FEATURES",
+    "FLOWSDN_VERSION",
+    "FLOWSDN_REVISION",
+    "SOURCE_DATE_EPOCH",
+    "FLOWSDN_DIRTY",
+    "FLOWSDN_RUSTC",
+    "FLOWSDN_BPF_TOOLCHAIN",
+    "FLOWSDN_BPF_LINKER",
+    "FLOWSDN_BPF_OBJECTS_SHA",
+    "FLOWSDN_FEATURES",
 ];
 
 pub fn clean(value: &str) -> Result<&str, String> {
@@ -27,19 +33,36 @@ pub fn build_date(epoch: &str) -> Result<String, String> {
     let days = seconds / 86400 + 719468;
     let era = days / 146097;
     let day_of_era = days - era * 146097;
-    let year_of_era = (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
     let mut year = year_of_era + era * 400;
     let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     let month_index = (5 * day_of_year + 2) / 153;
     let day = day_of_year - (153 * month_index + 2) / 5 + 1;
     let month = month_index + if month_index < 10 { 3 } else { -9 };
     year += i64::from(month <= 2);
-    Ok(format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z", seconds / 3600 % 24, seconds / 60 % 60, seconds % 60))
+    Ok(format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        seconds / 3600 % 24,
+        seconds / 60 % 60,
+        seconds % 60
+    ))
 }
 
-pub fn metadata(mut values: BTreeMap<String, String>, development: bool) -> Result<BTreeMap<String, String>, String> {
-    for value in values.values() { clean(value)?; }
-    for required in ["FLOWSDN_VERSION", "FLOWSDN_REVISION", "SOURCE_DATE_EPOCH", "FLOWSDN_RUSTC", "TARGET"] {
+pub fn metadata(
+    mut values: BTreeMap<String, String>,
+    development: bool,
+) -> Result<BTreeMap<String, String>, String> {
+    for value in values.values() {
+        clean(value)?;
+    }
+    for required in [
+        "FLOWSDN_VERSION",
+        "FLOWSDN_REVISION",
+        "SOURCE_DATE_EPOCH",
+        "FLOWSDN_RUSTC",
+        "TARGET",
+    ] {
         if values.get(required).is_none_or(String::is_empty) {
             return Err(format!("missing build metadata: {required}"));
         }
@@ -52,12 +75,26 @@ pub fn metadata(mut values: BTreeMap<String, String>, development: bool) -> Resu
     };
     values.insert("FLOWSDN_DIRTY".into(), dirty.to_string());
     values.insert("FLOWSDN_BUILD_DATE".into(), date);
-    for name in ["FLOWSDN_BPF_TOOLCHAIN", "FLOWSDN_BPF_LINKER", "FLOWSDN_BPF_OBJECTS_SHA"] {
-        values.entry(name.into()).or_insert_with(|| "unavailable".into());
+    for name in [
+        "FLOWSDN_BPF_TOOLCHAIN",
+        "FLOWSDN_BPF_LINKER",
+        "FLOWSDN_BPF_OBJECTS_SHA",
+    ] {
+        values
+            .entry(name.into())
+            .or_insert_with(|| "unavailable".into());
     }
-    let features = values.get("FLOWSDN_FEATURES").map(String::as_str).unwrap_or("");
-    let mut features: Vec<_> = features.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
-    features.sort_unstable(); features.dedup();
+    let features = values
+        .get("FLOWSDN_FEATURES")
+        .map(String::as_str)
+        .unwrap_or("");
+    let mut features: Vec<_> = features
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    features.sort_unstable();
+    features.dedup();
     values.insert("FLOWSDN_FEATURES".into(), features.join(","));
     Ok(values)
 }
