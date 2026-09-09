@@ -12,9 +12,9 @@ mod process;
 mod script;
 mod txtar;
 
-pub use process::{Cancellation, RunOptions};
 pub use engine::{CommandError, Control, Engine, Execution, RunError, State};
 pub use expansion::{ExpansionMode, expand_text, expand_text_bounded};
+pub use process::{Cancellation, RunOptions};
 pub use script::{Command, Condition, Fragment, Line, Status, Token, parse_script, tokenize};
 pub use txtar::{Archive, File};
 

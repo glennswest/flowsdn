@@ -93,7 +93,9 @@ impl fmt::Display for CommandError {
             Self::Failure(message) => f.write_str(message),
             Self::Cancelled => f.write_str("command cancelled"),
             Self::Deadline => f.write_str("command deadline exceeded"),
-            Self::ProcessOwnershipLost => f.write_str("child process ownership was lost before cleanup"),
+            Self::ProcessOwnershipLost => {
+                f.write_str("child process ownership was lost before cleanup")
+            }
             Self::LimitExceeded(message) => f.write_str(message),
         }
     }
@@ -298,18 +300,30 @@ impl Engine {
         match std::future::Future::poll(future.as_mut(), &mut context) {
             std::task::Poll::Ready(result) => result,
             std::task::Poll::Pending => Err(RunError {
-                line: 0, command: String::new(), message: "asynchronous command requires run_async".into(),
+                line: 0,
+                command: String::new(),
+                message: "asynchronous command requires run_async".into(),
             }),
         }
     }
 
     /// Execute foreground processes with an explicit cancellation/deadline context.
     /// Synchronous custom handlers must still return promptly.
-    pub async fn run_async(&self, script: &str, state: &mut State, options: &crate::RunOptions) -> Result<Execution, RunError> {
+    pub async fn run_async(
+        &self,
+        script: &str,
+        state: &mut State,
+        options: &crate::RunOptions,
+    ) -> Result<Execution, RunError> {
         self.run_inner(script, state, Some(options)).await
     }
 
-    async fn run_inner(&self, script: &str, state: &mut State, options: Option<&crate::RunOptions>) -> Result<Execution, RunError> {
+    async fn run_inner(
+        &self,
+        script: &str,
+        state: &mut State,
+        options: Option<&crate::RunOptions>,
+    ) -> Result<Execution, RunError> {
         let lines = parse_script(script).map_err(|error| RunError {
             line: error.line,
             command: String::new(),
@@ -338,7 +352,9 @@ impl Engine {
                 message,
             };
             if let Some(options) = options {
-                options.check().map_err(|failure| error(failure.to_string()))?;
+                options
+                    .check()
+                    .map_err(|failure| error(failure.to_string()))?;
             }
             if command.background {
                 return Err(error("background commands are not implemented".into()));

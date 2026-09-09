@@ -1,6 +1,14 @@
 //! Rust-only child process used by the harness integration tests.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout, clippy::print_stderr)]
-use std::{io::{self, Write}, time::Duration};
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
+use std::{
+    io::{self, Write},
+    time::Duration,
+};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -8,11 +16,17 @@ async fn main() {
     match args.first().map(String::as_str).unwrap_or("") {
         "report" => {
             println!("cwd={}", std::env::current_dir().unwrap().display());
-            println!("value={}", std::env::var("FIXTURE_VALUE").unwrap_or_default());
+            println!(
+                "value={}",
+                std::env::var("FIXTURE_VALUE").unwrap_or_default()
+            );
             println!("separator={}", std::env::var("/").is_ok());
             println!("path_separator={}", std::env::var(":").is_ok());
             println!("home={}", std::env::var("HOME").is_ok());
-            println!("args={}", args.iter().skip(1).cloned().collect::<Vec<_>>().join("|"));
+            println!(
+                "args={}",
+                args.iter().skip(1).cloned().collect::<Vec<_>>().join("|")
+            );
             eprintln!("diagnostic");
         }
         "exit" => std::process::exit(args.get(1).unwrap().parse().unwrap()),
@@ -23,7 +37,9 @@ async fn main() {
         "interrupt" => {
             #[cfg(unix)]
             {
-                let mut signal = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()).unwrap();
+                let mut signal =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+                        .unwrap();
                 std::fs::write(args.get(1).unwrap(), std::process::id().to_string()).unwrap();
                 signal.recv().await;
                 std::fs::write(args.get(2).unwrap(), "interrupted").unwrap();
@@ -36,14 +52,19 @@ async fn main() {
         }
         "spam" => {
             let chunk = [b'x'; 8192];
-            for _ in 0..1025 { io::stdout().write_all(&chunk).unwrap(); }
+            for _ in 0..1025 {
+                io::stdout().write_all(&chunk).unwrap();
+            }
             tokio::time::sleep(Duration::from_secs(60)).await;
         }
         "descendant" => {
             // Inherit output pipes and process group, then outlive the leader.
-            #[allow(clippy::zombie_processes)] // Deliberate orphan exercised by the supervisor test.
+            #[allow(clippy::zombie_processes)]
+            // Deliberate orphan exercised by the supervisor test.
             let child = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(["sleep", args.get(1).unwrap()]).spawn().unwrap();
+                .args(["sleep", args.get(1).unwrap()])
+                .spawn()
+                .unwrap();
             // This fixture intentionally exercises supervisor cleanup of a
             // descendant; the supervisor must kill it when this leader exits.
             drop(child);
