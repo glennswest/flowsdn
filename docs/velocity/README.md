@@ -1,51 +1,27 @@
 # flowsdn velocity ledger
 
-Milestone [0.13.0](0.13.0.json) started at **2026-09-09T13:41:34Z**; identity
-encoding, labels and BPF case classifications are in progress. Counters below
-remain the completed 0.12 snapshot until the next measurement boundary.
+Milestone [0.13.0](0.13.0.json) started **2026-09-09T13:41:34Z**.
+Usage cutoff: **2026-09-09T13:53:40Z**; observed elapsed **726 seconds**.
+Validation is in progress; the previous completed release is [0.12.0](0.12.0.json).
 
-Usage cutoff and cleanup completion: **2026-09-09T13:31:33Z**. Milestone 0.12.0
-started at **13:10:31 UTC** and completed in **21 minutes 2 seconds**
-(**1,262 elapsed seconds**) through validation and cleanup. The foundation
-prerelease [v0.12.0](https://github.com/glennswest/flowsdn/releases/tag/v0.12.0)
-was published at **13:34:15 UTC**, **23 minutes 44 seconds**
-(**1,424 elapsed seconds**) after milestone start.
+Milestone processed usage: **16,229,592 tokens** across root and
+three agents, deduplicated by response ID. This includes repeated context and
+is not subscription dollar usage. Root coding and coordination are recorded
+under project/shared; active work time remains unknown.
 
-| Combined unique-response usage | Tokens |
+| Combined lifetime usage | Tokens |
 |---|---:|
-| Input | 151,328,845 |
-| Cached input (subset) | 148,069,888 |
-| Uncached input | 3,258,957 |
-| Output | 625,385 |
-| Reasoning output (subset) | 159,746 |
-| Total processed | 151,954,230 |
+| Input | 170,497,818 |
+| Cached input (subset) | 166,855,296 |
+| Uncached input | 3,642,522 |
+| Output | 685,329 |
+| Reasoning output (subset) | 167,491 |
+| Total processed | 171,183,147 |
 
-Milestone usage is **20,606,931 processed tokens** across root
-and three agents, deduplicated by response ID. Root baseline
-**2026-09-09T13:10:30.966Z** precedes milestone start; combined baseline uses unique
-responses strictly before start. Historical cumulative counters remain in
-[subagents.json](subagents.json). Repeated context counts as input; these figures
-do not establish subscription dollar usage.
-
-Seven reported windows total **1,157 agent-window seconds** (**0.321389 hours**),
-with a **544-second project interval union**. Observed validation spans were
-**137 seconds** through the debug/release transition and **260 seconds** through
-final checks, followed by **41 seconds** of cleanup. These windows are nested
-within milestone elapsed and are not added to it. Root loader coding began at
-an approximate time only; exclusive coding time and active agent-hours remain
-unknown.
-
-Commit `c267aec` passed **320 all-features tests in each debug/release profile**,
-formatting, Clippy, both Linux musl compile checks and dependency policy;
-`978aa64` records validation. Test counts: script 92, reconciler 72, config 51,
-ABI 39, table 30, health 7, fence 7, selector 7, loader 6, version 5 and harvester 4.
-Validation completed at **13:30:52 UTC**. Cleanup removed **12,819 files / 3.9 GiB**
-and six task logs; the device check passed. No issues closed this milestone;
-repository totals remain **11 closed / 279 open**. Release commit: `a803972`.
-
-[Milestone 0.12](0.12.0.json) retains detailed counters, scopes and checkpoints;
-[0.11](0.11.0.json) and the ledger preserve prior releases. Usage after the fixed
-cutoff, including these ledger edits and publication, is excluded.
+Reported agent windows total **1195 seconds**;
+they overlap project elapsed and are not added to it. Individual windows and
+per-crate delivery counters are in the milestone record. Shared usage is counted
+once. Token counters exclude work after this fixed cutoff.
 
 ## Recording rules
 

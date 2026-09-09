@@ -4,7 +4,7 @@
   "agent": "/root",
   "start_utc": "2026-09-09T13:41:34Z",
   "end_utc": null,
-  "elapsed_seconds": null,
+  "elapsed_seconds": 726.0,
   "active_work_seconds": null,
   "start_commit": "4c6bb1a",
   "status": "in_progress",
@@ -23,5 +23,216 @@
     "BPF entrypoint classification",
     "kernel and loader review"
   ],
-  "publication": "not_started"
+  "publication": "not_started",
+  "as_of_utc": "2026-09-09T13:53:40Z",
+  "tokens": {
+    "input_tokens": 16182238,
+    "cached_input_tokens": 15823872,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 47354,
+    "reasoning_output_tokens": 6128,
+    "total_tokens": 16229592
+  },
+  "combined_lifetime_tokens": {
+    "input_tokens": 170497818,
+    "cached_input_tokens": 166855296,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 685329,
+    "reasoning_output_tokens": 167491,
+    "total_tokens": 171183147
+  },
+  "root_tokens": {
+    "input_tokens": 4520785,
+    "cached_input_tokens": 4432768,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 13119,
+    "reasoning_output_tokens": 1040,
+    "total_tokens": 4533904
+  },
+  "token_end_sample_utc": "2026-09-09T13:53:20.913Z",
+  "token_endpoint": {
+    "input_tokens": 86606778,
+    "cached_input_tokens": 85494784,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 268877,
+    "reasoning_output_tokens": 66187,
+    "total_tokens": 86875655
+  },
+  "work_windows": [
+    {
+      "task_id": "numeric",
+      "agent": "/root/config_core",
+      "scope": "flowsdn-identity",
+      "start_utc": "2026-09-09T13:41:56Z",
+      "end_utc": "2026-09-09T13:49:46Z",
+      "elapsed_seconds": 470.0,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 1414638,
+        "cached_input_tokens": 1358720,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 9947,
+        "reasoning_output_tokens": 1212,
+        "total_tokens": 1424585
+      },
+      "attribution": "response-delivery-window; overlapping agent usage is not allocated again"
+    },
+    {
+      "task_id": "harvester",
+      "agent": "/root/table_streams",
+      "scope": "flowsdn-harvest-bpf-cases",
+      "start_utc": "2026-09-09T13:42:09Z",
+      "end_utc": "2026-09-09T13:48:46Z",
+      "elapsed_seconds": 397.0,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 2251694,
+        "cached_input_tokens": 2185600,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 9375,
+        "reasoning_output_tokens": 1923,
+        "total_tokens": 2261069
+      },
+      "attribution": "response-delivery-window; overlapping agent usage is not allocated again"
+    },
+    {
+      "task_id": "decision-review",
+      "agent": "/root/review",
+      "scope": "project/shared",
+      "start_utc": "2026-09-09T13:42:17Z",
+      "end_utc": "2026-09-09T13:43:00Z",
+      "elapsed_seconds": 43.0,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 674940,
+        "cached_input_tokens": 632576,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 542,
+        "reasoning_output_tokens": 21,
+        "total_tokens": 675482
+      },
+      "attribution": "response-delivery-window; overlapping agent usage is not allocated again"
+    },
+    {
+      "task_id": "decision-docs",
+      "agent": "/root/review",
+      "scope": "project/shared",
+      "start_utc": "2026-09-09T13:43:33Z",
+      "end_utc": "2026-09-09T13:45:24Z",
+      "elapsed_seconds": 111.0,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 551863,
+        "cached_input_tokens": 545920,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3158,
+        "reasoning_output_tokens": 181,
+        "total_tokens": 555021
+      },
+      "attribution": "response-delivery-window; overlapping agent usage is not allocated again"
+    },
+    {
+      "task_id": "labels-review",
+      "agent": "/root/review",
+      "scope": "flowsdn-identity",
+      "start_utc": "2026-09-09T13:45:24Z",
+      "end_utc": "2026-09-09T13:45:54Z",
+      "elapsed_seconds": 30.0,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 569647,
+        "cached_input_tokens": 557056,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 411,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 570058
+      },
+      "attribution": "response-delivery-window; overlapping agent usage is not allocated again"
+    },
+    {
+      "task_id": "decision-docs-followup",
+      "agent": "/root/review",
+      "scope": "project/shared",
+      "start_utc": "2026-09-09T13:45:54Z",
+      "end_utc": "2026-09-09T13:46:07Z",
+      "elapsed_seconds": 13.0,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 193605,
+        "cached_input_tokens": 190080,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 372,
+        "reasoning_output_tokens": 257,
+        "total_tokens": 193977
+      },
+      "attribution": "response-delivery-window; overlapping agent usage is not allocated again"
+    },
+    {
+      "task_id": "numeric-review",
+      "agent": "/root/review",
+      "scope": "flowsdn-identity",
+      "start_utc": "2026-09-09T13:47:03Z",
+      "end_utc": "2026-09-09T13:47:22Z",
+      "elapsed_seconds": 19.0,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 397093,
+        "cached_input_tokens": 391552,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 185,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 397278
+      },
+      "attribution": "response-delivery-window; overlapping agent usage is not allocated again"
+    },
+    {
+      "task_id": "harvester-review",
+      "agent": "/root/config_core",
+      "scope": "flowsdn-harvest-bpf-cases",
+      "start_utc": "2026-09-09T13:49:46Z",
+      "end_utc": "2026-09-09T13:50:11Z",
+      "elapsed_seconds": 25.0,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 207579,
+        "cached_input_tokens": 196736,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3396,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 210975
+      },
+      "attribution": "response-delivery-window; overlapping agent usage is not allocated again"
+    },
+    {
+      "task_id": "harvester-docs",
+      "agent": "/root/config_core",
+      "scope": "flowsdn-harvest-bpf-cases",
+      "start_utc": "2026-09-09T13:50:52Z",
+      "end_utc": "2026-09-09T13:51:16Z",
+      "elapsed_seconds": 24.0,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 48473,
+        "cached_input_tokens": 48000,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 67,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 48540
+      },
+      "attribution": "response-delivery-window; overlapping agent usage is not allocated again"
+    }
+  ],
+  "additional_review_window": {
+    "agent": "/root/table_streams",
+    "scope": "flowsdn-identity",
+    "reported_elapsed_seconds": 63,
+    "start_utc": "2026-09-09T13:49:36Z",
+    "end_utc": null,
+    "active_work_seconds": null,
+    "note": "Two non-overlapping review windows reported; individual endpoints unavailable. Not included in interval union."
+  },
+  "parallel_agent_window_seconds": 1195.0,
+  "parallel_agent_window_hours": 0.33194444444444443,
+  "note": "Processed counters include repeated context. Cached input and reasoning are subsets. Root coding/coordination is project/shared; unknown active time remains null. Agent-window hours are not project elapsed.",
+  "known_agent_project_interval_union_seconds": 519.0
 }
