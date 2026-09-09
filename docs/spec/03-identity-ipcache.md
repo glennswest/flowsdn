@@ -89,6 +89,18 @@ the first `=` is the key, the rest the value; for `reserved` a string
 `reserved:=x` yields key `x`. A `cidr` label MUST NOT carry a value. In a
 selector (`ParseSelectLabel`) an absent source becomes `any`.
 
+**Parsing clarification (2026-09-09).** Verified against the pinned reference
+`pkg/labels/labels.go:807–887`: source splitting precedes value splitting,
+so even a colon after an equals sign is the source delimiter. An empty source
+normalizes to `unspec`; selector parsing changes both implicit and explicit
+`unspec` to `any`. The reserved empty-key shorthand moves the entire remainder
+into the key and leaves the value empty. Parsing does not trim whitespace.
+The flowsdn validated label constructor rejects an empty final key and a
+nonempty CIDR value; CIDR prefix validation, selector matching and label-source
+validation remain separate responsibilities. Canonical serialization uses the
+specified unescaped delimiters; callers must validate external label grammars
+before treating that representation as a unique allocation key.
+
 A label set (`Labels`) is a map keyed by **key only**. Two labels with the
 same key and different sources cannot coexist in one set; the last write
 wins. flowsdn MUST keep this (it is visible in `security-labels`, the
@@ -561,6 +573,15 @@ byte-identically; `status` exists but is unused. A `CiliumIdentity` whose
 `NumericIdentity` is `u32`; bits 31..24 scope, 23..0 usable on the wire
 (VXLAN/Geneve VNI, skb mark). Wire identities MUST be < 2^24.
 
+**Numeric decoding boundary.** The supported numeric core accepts scope zero
+including reserved holes (decoding does not authorize allocation), and the two
+nonzero-index scoped ranges in the table below. Their highest supported value
+is `0x02FF_FFFF`; the empty bases `0x0100_0000` and `0x0200_0000` are not
+allocated identities and are rejected by validated constructors. Other scope
+bytes are unsupported. All supported scoped identities are rejected by the
+24-bit wire encoder rather than truncated. This defines the numeric core's
+supported boundary without importing an unspecified backend sentinel value.
+
 | Number | `reserved:` name | Meaning |
 |---|---|---|
 | 0 | unknown | invalid / not yet determined; also the wildcard key in policy maps |
@@ -653,6 +674,12 @@ is checked on connect). `cluster-id` MUST be in `1..max` when meshing (0 =
 unset); an id with bit `0x80` set is refused with ENI or Alibaba IPAM or
 `aws-cni` chaining (mark collision). `cluster-name` matches
 `^([a-z0-9][-a-z0-9]*)?[a-z0-9]$`, max 32 chars.
+
+For the numeric interface, the configured maximum is inclusive: valid meshed
+cluster IDs are `1..=255` or `1..=511`. Cluster zero is allowed for standalone
+allocation only. Index zero in a nonzero cluster is included in its range;
+only cluster zero excludes indices 0 through 255. Cluster extraction applies
+to global identities; the scoped identity index is not a cluster encoding.
 
 **Remote identity validation.** An identity observed from cluster `c` MUST
 be in `[min(c), max(c)]`, and its labels MUST include
