@@ -1,0 +1,27 @@
+{
+  "task_id": "0.13.0",
+  "scope": "project/shared",
+  "agent": "/root",
+  "start_utc": "2026-09-09T13:41:34Z",
+  "end_utc": null,
+  "elapsed_seconds": null,
+  "active_work_seconds": null,
+  "start_commit": "4c6bb1a",
+  "status": "in_progress",
+  "token_baseline_sample_utc": "2026-09-09T13:41:33.305Z",
+  "token_baseline": {
+    "input_tokens": 82085993,
+    "cached_input_tokens": 81062016,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 255758,
+    "reasoning_output_tokens": 65147,
+    "total_tokens": 82341751
+  },
+  "work_items": [
+    "numeric identity encoding",
+    "canonical identity labels",
+    "BPF entrypoint classification",
+    "kernel and loader review"
+  ],
+  "publication": "not_started"
+}

@@ -1,5 +1,9 @@
 # flowsdn velocity ledger
 
+Milestone [0.13.0](0.13.0.json) started at **2026-09-09T13:41:34Z**; identity
+encoding, labels and BPF case classifications are in progress. Counters below
+remain the completed 0.12 snapshot until the next measurement boundary.
+
 Usage cutoff and cleanup completion: **2026-09-09T13:31:33Z**. Milestone 0.12.0
 started at **13:10:31 UTC** and completed in **21 minutes 2 seconds**
 (**1,262 elapsed seconds**) through validation and cleanup. The foundation

@@ -1739,20 +1739,31 @@
     }
   ],
   "current_milestone": {
-    "id": "0.12.0",
-    "status": "validated",
-    "unique_tests": 320,
-    "validated_commit": "c267aec",
-    "validation_record_commit": "978aa64",
-    "completed_at_utc": "2026-09-09T13:31:33Z",
-    "release_candidate": "v0.12.0",
-    "publication": "published",
-    "cleanup": "complete",
-    "release": "v0.12.0",
-    "release_commit": "a803972b87364c1385e6b87292de2c41f38b75da",
-    "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.12.0",
-    "published_at_utc": "2026-09-09T13:34:15Z",
-    "elapsed_to_publication_seconds": 1424
+    "task_id": "0.13.0",
+    "scope": "project/shared",
+    "agent": "/root",
+    "start_utc": "2026-09-09T13:41:34Z",
+    "end_utc": null,
+    "elapsed_seconds": null,
+    "active_work_seconds": null,
+    "start_commit": "4c6bb1a",
+    "status": "in_progress",
+    "token_baseline_sample_utc": "2026-09-09T13:41:33.305Z",
+    "token_baseline": {
+      "input_tokens": 82085993,
+      "cached_input_tokens": 81062016,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 255758,
+      "reasoning_output_tokens": 65147,
+      "total_tokens": 82341751
+    },
+    "work_items": [
+      "numeric identity encoding",
+      "canonical identity labels",
+      "BPF entrypoint classification",
+      "kernel and loader review"
+    ],
+    "publication": "not_started"
   },
   "milestone_0_7_parallel_time": {
     "observed_agent_window_seconds": 3064.201,
