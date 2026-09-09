@@ -13,6 +13,20 @@ fn inputs() -> BTreeMap<String, String> {
         ("TARGET".into(), "aarch64-unknown-linux-musl".into()),
     ])
 }
+
+#[test]
+fn supplied_environment_values_are_never_silently_dropped() {
+    use std::ffi::OsString;
+    assert_eq!(build_support::environment_value("FLOWSDN_DIRTY", None).unwrap(), None);
+    assert_eq!(build_support::environment_value("FLOWSDN_DIRTY", Some(OsString::from("true"))).unwrap(), Some("true".into()));
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        for name in build_support::INPUTS {
+            assert!(build_support::environment_value(name, Some(OsString::from_vec(vec![0xff]))).is_err());
+        }
+    }
+}
 #[test]
 fn epoch_conversion_handles_leap_centuries_and_bounds() {
     for (input, expected) in [

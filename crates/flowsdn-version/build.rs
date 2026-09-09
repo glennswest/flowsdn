@@ -18,7 +18,11 @@ fn main() {
     println!("cargo:rerun-if-env-changed=RUSTC");
     let mut values: BTreeMap<String, String> = build_support::INPUTS
         .iter()
-        .filter_map(|name| env::var(name).ok().map(|value| ((*name).into(), value)))
+        .filter_map(|name| {
+            build_support::environment_value(name, env::var_os(name))
+                .expect("invalid build metadata environment")
+                .map(|value| ((*name).into(), value))
+        })
         .collect();
     let development = ["FLOWSDN_VERSION", "FLOWSDN_REVISION", "SOURCE_DATE_EPOCH"]
         .iter()
