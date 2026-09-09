@@ -533,6 +533,12 @@ impl State {
         }
         Ok(())
     }
+    pub(crate) fn process_directory(&self) -> Result<(Dir, Context)> {
+        let context = self.context()?;
+        let path = if context.cwd.as_os_str().is_empty() { Path::new(".") } else { &context.cwd };
+        let directory = context.workspace.dir.open_dir(path).map_err(io_error)?;
+        Ok((directory, context.clone()))
+    }
     fn context(&self) -> Result<&Context> {
         self.files
             .as_ref()

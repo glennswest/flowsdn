@@ -25,7 +25,7 @@ reading or truncating them. FIFO paths cannot suspend fixture setup or commands.
 
 Implemented commands: `echo`, `env`, `stdout`, `stderr`, `stop`, `cmp`, `cmpenv`,
 `empty`, `cat`, `grep`, `cp`, `replace`, `sed`, `mkdir`, `cd`, `exists`, `mv`,
-`chmod`, `symlink`, `rm`.
+`chmod`, `symlink`, `rm`, and foreground `exec` through `run_async`.
 
 `mv` performs a rename, including replacement of an existing destination file.
 `exists --readonly` checks that write permission bits are absent; `--exec`
@@ -49,8 +49,35 @@ line by line; quote capture replacements such as `'$1'` so script environment
 expansion does not consume them. Comparison failures produce a whole-file
 unified diff unless quiet mode is selected.
 
-Retry sections, background jobs, subprocesses, networking adapters, update mode,
+Retry sections, background jobs, networking adapters, update mode,
 agent fixture flags remain unimplemented. Unsupported commands and execution
 syntax fail explicitly.
 Section comments are logged, but retry prefixes are rejected. Successful
 synthetic scripts do not imply that the harvested networking corpus passes.
+
+`Engine::run_async(script, state, &RunOptions)` runs foreground Linux processes.
+`RunOptions` supplies a deadline (60 seconds by default), cloneable cancellation
+handle and SIGINT grace interval (100 milliseconds by default, capped at five
+seconds). The synchronous `run` rejects `exec`, including negative assertions.
+Conditions, expansion and expected exit status use the same engine logic.
+
+A child starts in the state's capability-resolved current directory, with null
+stdin and only the script environment; separator variables `/` and `:` are
+omitted. A bare executable name requires an explicit script `PATH`. Each output
+stream is limited to 8 MiB and must be UTF-8. Cancellation, deadlines and output
+limits cannot satisfy `!` or `?`. Cancellation sends SIGINT, then SIGKILL after
+the grace interval, and reaps the direct child. Descendants in its process group
+are terminated before reaping, while the leader's process identity remains reserved. Dropping
+the run future triggers the same supervisor cleanup; keep the Tokio runtime
+alive until cleanup finishes and leave child wait-status ownership to the
+supervisor. Background jobs and interactive stdin are deferred.
+
+Execute only trusted scripts: subprocesses inherit the caller's operating-system
+permissions and can access files beyond WORK. Capability confinement applies to
+the generic file commands, not to arbitrary executable code. A process that
+creates another session can escape process-group cleanup; OS isolation is the
+caller's responsibility when stronger containment is required.
+
+Run the real-child Rust regression suite with
+`cargo test -p flowsdn-scripttest --features process-fixture`. The helper binary
+is enabled only by that feature and is not part of the normal build.

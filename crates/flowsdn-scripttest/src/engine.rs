@@ -83,6 +83,7 @@ pub enum CommandError {
     Failure(String),
     Cancelled,
     Deadline,
+    ProcessOwnershipLost,
     LimitExceeded(&'static str),
 }
 
@@ -92,6 +93,7 @@ impl fmt::Display for CommandError {
             Self::Failure(message) => f.write_str(message),
             Self::Cancelled => f.write_str("command cancelled"),
             Self::Deadline => f.write_str("command deadline exceeded"),
+            Self::ProcessOwnershipLost => f.write_str("child process ownership was lost before cleanup"),
             Self::LimitExceeded(message) => f.write_str(message),
         }
     }
@@ -167,6 +169,7 @@ impl Engine {
             ("stdout", true, stdout),
             ("stderr", true, stderr),
             ("stop", false, stop),
+            ("exec", false, async_only),
             ("cmp", false, crate::files::cmp),
             ("cmpenv", false, crate::files::cmpenv),
             ("empty", false, crate::files::empty),
@@ -288,6 +291,25 @@ impl Engine {
     /// flags and fixture files are the caller's responsibility. Section headers
     /// enter the log, but retry prefixes are explicitly unsupported.
     pub fn run(&self, script: &str, state: &mut State) -> Result<Execution, RunError> {
+        // With no async options, every branch completes in its first poll.
+        // This keeps parsing, expansion and expected-status handling shared.
+        let mut future = std::pin::pin!(self.run_inner(script, state, None));
+        let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+        match std::future::Future::poll(future.as_mut(), &mut context) {
+            std::task::Poll::Ready(result) => result,
+            std::task::Poll::Pending => Err(RunError {
+                line: 0, command: String::new(), message: "asynchronous command requires run_async".into(),
+            }),
+        }
+    }
+
+    /// Execute foreground processes with an explicit cancellation/deadline context.
+    /// Synchronous custom handlers must still return promptly.
+    pub async fn run_async(&self, script: &str, state: &mut State, options: &crate::RunOptions) -> Result<Execution, RunError> {
+        self.run_inner(script, state, Some(options)).await
+    }
+
+    async fn run_inner(&self, script: &str, state: &mut State, options: Option<&crate::RunOptions>) -> Result<Execution, RunError> {
         let lines = parse_script(script).map_err(|error| RunError {
             line: error.line,
             command: String::new(),
@@ -315,6 +337,9 @@ impl Engine {
                     .unwrap_or_default(),
                 message,
             };
+            if let Some(options) = options {
+                options.check().map_err(|failure| error(failure.to_string()))?;
+            }
             if command.background {
                 return Err(error("background commands are not implemented".into()));
             }
@@ -379,8 +404,19 @@ impl Engine {
                 argument_bytes = argument_bytes.saturating_add(argument.len());
                 args.push(argument);
             }
+            if name == "exec" && options.is_none() {
+                return Err(error("exec requires run_async".into()));
+            }
+            if name == "exec" && !cfg!(target_os = "linux") {
+                return Err(error("foreground exec currently requires Linux".into()));
+            }
             execution.commands_run = execution.commands_run.saturating_add(1);
-            match (registered.handler)(state, &args) {
+            let result = if name == "exec" {
+                crate::process::execute(state, &args, options.expect("checked above")).await
+            } else {
+                (registered.handler)(state, &args)
+            };
+            match result {
                 Ok(Control::Stop) => {
                     execution.stopped = true;
                     return Ok(execution);
@@ -559,4 +595,8 @@ pub(crate) fn match_output(
     } else {
         Err(fail("output did not match expected pattern count"))
     }
+}
+
+fn async_only(_state: &mut State, _args: &[String]) -> Result<Control, CommandError> {
+    Err(fail("exec requires run_async"))
 }
