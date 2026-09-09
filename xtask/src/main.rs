@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             ("check", Some("x86_64-unknown-linux-musl")),
             ("check", Some("aarch64-unknown-linux-musl")),
         ] {
-            let mut invocation = vec![action.to_owned(), "--locked".to_owned()];
+            let mut invocation = vec![action.to_owned(), "--locked".to_owned(), "--all-features".to_owned()];
             for package in &packages {
                 invocation.extend(["-p".to_owned(), package.clone()]);
             }
@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     match command {
         "build" => run(&["build", "--workspace", "--locked"]),
-        "test" => run(&["test", "--workspace", "--locked"]),
+        "test" => run(&["test", "--workspace", "--all-features", "--locked"]),
         "deny" => run(&["deny", "--locked", "check"]),
         "check" => {
             run(&["fmt", "--all", "--", "--check"])?;
@@ -77,17 +77,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "clippy",
                 "--workspace",
                 "--all-targets",
+                "--all-features",
                 "--locked",
                 "--",
                 "-D",
                 "warnings",
             ])?;
-            run(&["test", "--workspace", "--locked"])?;
+            run(&["test", "--workspace", "--all-features", "--locked"])?;
             for target in ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"] {
                 run(&[
                     "check",
                     "--workspace",
                     "--all-targets",
+                    "--all-features",
                     "--locked",
                     "--target",
                     target,

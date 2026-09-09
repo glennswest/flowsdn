@@ -6,11 +6,19 @@
   "owner": "/root",
   "status": "in-progress",
   "active_work_seconds": null,
-  "token_baseline": null,
+  "token_baseline": {
+    "input_tokens": 46261950,
+    "cached_input_tokens": 45532544,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 152603,
+    "reasoning_output_tokens": 31743,
+    "total_tokens": 46414553
+  },
   "workstreams": [
     "flowsdn-config",
     "flowsdn-reconcile",
     "flowsdn-scripttest",
     "flowsdn-bpf-abi"
-  ]
+  ],
+  "token_baseline_sample_utc": "2026-09-09T11:51:25.615Z"
 }
