@@ -37,6 +37,10 @@ Later checkpoint at **13:20:01 UTC**: **45 focused map tests** and Clippy
 passed against `45beab7`; script validation is running and health integration
 is still under review. This checkpoint is after the usage cutoff above.
 
+A later checkpoint at **13:26:32 UTC** passed **320 debug tests**, formatting,
+Clippy and both Linux musl compile checks against `c267aec`. Release tests and
+dependency checks are running; the usage snapshot above predates this work.
+
 ## Recording rules
 
 1. At work start, record UTC time, task ID, owner agent, primary crate or

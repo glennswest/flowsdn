@@ -192,7 +192,21 @@
       "source_commit": "45beab7"
     },
     "focused_scripts": "running",
-    "full_workspace": "pending"
+    "full_workspace": "pending",
+    "debug_checkpoint": {
+      "observed_at_utc": "2026-09-09T13:26:32Z",
+      "tests": 320,
+      "all_features": true,
+      "formatting": "passed",
+      "clippy": "passed",
+      "linux_musl_compile_checks": [
+        "x86_64",
+        "aarch64"
+      ],
+      "source_commit": "c267aec",
+      "release_tests": "running",
+      "dependency_policy": "pending"
+    }
   },
   "implementation_commits": [
     "cb14ec8",
@@ -207,5 +221,6 @@
     "status": "pending"
   },
   "note": "Timestamp-aware fixed cutoff. Root baseline is latest outer token_usage_record at or before start; combined baseline is unique responses strictly before start. Ongoing work and source validation remain pending. No completion, release or cleanup claim.",
-  "activity_observed_at_utc": "2026-09-09T13:20:01Z"
+  "activity_observed_at_utc": "2026-09-09T13:20:01Z",
+  "observed_full_validation_start_utc": "2026-09-09T13:24:15Z"
 }

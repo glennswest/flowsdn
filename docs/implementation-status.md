@@ -334,3 +334,10 @@ row, column, cell-count and byte limits bound rendering. Whole-section retries
 can recheck live table state. Serialization, indexed query commands and
 watch-driven `db/cmp` remain forthcoming; harvested networking cases still
 require subsystem adapters.
+
+Reconciliation can publish into an optional module-health reporter. Current
+row failures, interrupted retries, prune errors, lost-history recovery and
+protocol errors remain visible until resolved. Clean work does not fabricate
+health errors; bounded diagnostics retain the total error count. Explicit
+shutdown publishes a stop marker. Dropping the run future cannot await a
+health publication; its existing progress observer still reports driver stop.
