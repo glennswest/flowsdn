@@ -4,7 +4,8 @@ use tokio::time::{Instant as Clock, sleep_until};
 
 impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
     fn loop_deadline(&self) -> Option<Instant> {
-        self.next_retry().into_iter()
+        self.next_retry()
+            .into_iter()
             .chain(self.next_prune().filter(|_| self.table.initialized()))
             .min()
     }
@@ -70,7 +71,8 @@ impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
                 _ = &mut shutdown => return Ok(()),
                 result = self.run_round_with_clock(|| Clock::now().into_std()) => { result?; },
             }
-            next_round = Clock::now().checked_add(self.options.round_interval)
+            next_round = Clock::now()
+                .checked_add(self.options.round_interval)
                 .ok_or(ReconcileError::RoundDeadlineOverflow)?;
         }
     }

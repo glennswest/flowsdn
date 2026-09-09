@@ -18,8 +18,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-mod run;
 mod prune;
+mod run;
 use prune::PruneState;
 pub use prune::{PruneHandle, PruneStatus};
 
@@ -377,7 +377,10 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         self.pending.extend(pending);
     }
 
-    async fn run_prune(&mut self, clock: &impl Fn() -> Instant) -> Result<Option<PruneStatus>, ReconcileError> {
+    async fn run_prune(
+        &mut self,
+        clock: &impl Fn() -> Instant,
+    ) -> Result<Option<PruneStatus>, ReconcileError> {
         let now = clock();
         if !self.table.initialized() {
             return Ok(None);
@@ -397,7 +400,8 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         let revision = desired.revision();
         let result = self.target.prune(desired).await;
         let now = clock();
-        let next_due = now.checked_add(self.options.prune_interval)
+        let next_due = now
+            .checked_add(self.options.prune_interval)
             .ok_or(ReconcileError::PruneDeadlineOverflow)?;
         let status = PruneStatus {
             revision,
@@ -421,7 +425,10 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         self.run_round_with_clock(|| now).await
     }
 
-    async fn run_round_with_clock(&mut self, clock: impl Fn() -> Instant) -> Result<Round, ReconcileError> {
+    async fn run_round_with_clock(
+        &mut self,
+        clock: impl Fn() -> Instant,
+    ) -> Result<Round, ReconcileError> {
         let mut round = Round::default();
         if self.pending.is_empty() {
             self.load_changes();

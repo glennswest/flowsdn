@@ -1,12 +1,26 @@
 #![allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
 use flowsdn_reconcile::{Options, ReconcileError, Reconciler, Target};
 use flowsdn_table::{Key, Keyed, Snapshot, Table};
-use std::{collections::BTreeMap, future::Future, pin::Pin, sync::{Arc, Mutex, atomic::{AtomicUsize, Ordering}}, task::{Context, Poll, Wake, Waker}, time::Duration};
+use std::{
+    collections::BTreeMap,
+    future::Future,
+    pin::Pin,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+    task::{Context, Poll, Wake, Waker},
+    time::Duration,
+};
 use tokio::{sync::oneshot, time::advance};
 
 #[derive(Clone)]
 struct Item(u8);
-impl Keyed for Item { fn primary_key(&self) -> Key { vec![self.0] } }
+impl Keyed for Item {
+    fn primary_key(&self) -> Key {
+        vec![self.0]
+    }
+}
 #[derive(Default)]
 struct Observed {
     rows: BTreeMap<u8, ()>,
@@ -26,13 +40,26 @@ impl Target<Item> for Fake {
             let mut state = self.0.lock().unwrap();
             state.updates += 1;
             let failed = state.failures > 0;
-            if failed { state.failures -= 1; }
-            else { state.rows.insert(row.0, ()); }
-            (std::mem::take(&mut state.block_once), failed, state.delay_failure_once.take())
+            if failed {
+                state.failures -= 1;
+            } else {
+                state.rows.insert(row.0, ());
+            }
+            (
+                std::mem::take(&mut state.block_once),
+                failed,
+                state.delay_failure_once.take(),
+            )
         };
-        if let Some(delay) = delay { tokio::time::sleep(delay).await; }
-        if failed { return Err("injected failure"); }
-        if block { std::future::pending::<()>().await; }
+        if let Some(delay) = delay {
+            tokio::time::sleep(delay).await;
+        }
+        if failed {
+            return Err("injected failure");
+        }
+        if block {
+            std::future::pending::<()>().await;
+        }
         Ok(())
     }
     async fn delete(&mut self, key: Key) -> Result<(), Self::Error> {
@@ -44,23 +71,35 @@ impl Target<Item> for Fake {
     async fn prune(&mut self, desired: Snapshot<Item>) -> Result<(), Self::Error> {
         let mut state = self.0.lock().unwrap();
         state.prunes += 1;
-        state.rows.retain(|key, _| desired.get("primary", &[*key]).unwrap().is_some());
+        state
+            .rows
+            .retain(|key, _| desired.get("primary", &[*key]).unwrap().is_some());
         Ok(())
     }
 }
 struct WakeCount(AtomicUsize);
 impl Wake for WakeCount {
-    fn wake(self: Arc<Self>) { self.0.fetch_add(1, Ordering::SeqCst); }
-    fn wake_by_ref(self: &Arc<Self>) { self.0.fetch_add(1, Ordering::SeqCst); }
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
 }
 fn poll<F: Future>(future: &mut Pin<Box<F>>, wakes: &Arc<WakeCount>) -> Poll<F::Output> {
     let waker = Waker::from(wakes.clone());
     future.as_mut().poll(&mut Context::from_waker(&waker))
 }
 fn assert_send(_: &impl Send) {}
-fn wakes() -> Arc<WakeCount> { Arc::new(WakeCount(AtomicUsize::new(0))) }
-async fn shutdown(receiver: oneshot::Receiver<()>) { let _ = receiver.await; }
-fn completed(result: Poll<Result<(), ReconcileError>>) { assert!(matches!(result, Poll::Ready(Ok(())))); }
+fn wakes() -> Arc<WakeCount> {
+    Arc::new(WakeCount(AtomicUsize::new(0)))
+}
+async fn shutdown(receiver: oneshot::Receiver<()>) {
+    let _ = receiver.await;
+}
+fn completed(result: Poll<Result<(), ReconcileError>>) {
+    assert!(matches!(result, Poll::Ready(Ok(()))));
+}
 
 #[tokio::test(start_paused = true)]
 async fn idle_loop_sleeps_until_periodic_prune_without_repeating_work() {
@@ -75,7 +114,9 @@ async fn idle_loop_sleeps_until_periodic_prune_without_repeating_work() {
     let wakes = wakes();
     assert!(poll(&mut running, &wakes).is_pending());
     assert_eq!(observed.lock().unwrap().prunes, 1);
-    for _ in 0..10 { assert!(poll(&mut running, &wakes).is_pending()); }
+    for _ in 0..10 {
+        assert!(poll(&mut running, &wakes).is_pending());
+    }
     assert_eq!(observed.lock().unwrap().prunes, 1);
     advance(Duration::from_secs(3599)).await;
     assert!(poll(&mut running, &wakes).is_pending());
@@ -155,7 +196,8 @@ async fn prune_handle_wakes_an_idle_loop_and_coalesces_requests() {
     let wakes = wakes();
     assert!(poll(&mut running, &wakes).is_pending());
     let before = wakes.0.load(Ordering::SeqCst);
-    handle.prune_now(); handle.prune_now();
+    handle.prune_now();
+    handle.prune_now();
     assert!(wakes.0.load(Ordering::SeqCst) > before);
     advance(Duration::from_millis(1)).await;
     assert!(poll(&mut running, &wakes).is_pending());
@@ -197,11 +239,22 @@ async fn shutdown_cancels_target_work_without_losing_the_queued_operation() {
 #[tokio::test(start_paused = true)]
 async fn rate_limit_bounds_bursts_and_dropping_sleep_retains_prefetched_rows() {
     let table = Table::new(vec![]).unwrap();
-    for id in 0..15 { table.insert(Item(id)).await.unwrap(); }
+    for id in 0..15 {
+        table.insert(Item(id)).await.unwrap();
+    }
     table.seal_initializers();
     let target = Fake::default();
     let observed = target.0.clone();
-    let mut reconciler = Reconciler::new(&table, target, Options { round_size: 5, round_interval: Duration::from_millis(10), ..Options::default() }).unwrap();
+    let mut reconciler = Reconciler::new(
+        &table,
+        target,
+        Options {
+            round_size: 5,
+            round_interval: Duration::from_millis(10),
+            ..Options::default()
+        },
+    )
+    .unwrap();
     let wakes = wakes();
     let mut running = Box::pin(reconciler.run(std::future::pending::<()>()));
     assert!(poll(&mut running, &wakes).is_pending());
@@ -210,7 +263,10 @@ async fn rate_limit_bounds_bursts_and_dropping_sleep_retains_prefetched_rows() {
     assert!(poll(&mut running, &wakes).is_pending());
     assert_eq!(observed.lock().unwrap().updates, 5);
     drop(running);
-    assert!(reconciler.has_pending_work(), "prefetched work survives cancellation during throttling");
+    assert!(
+        reconciler.has_pending_work(),
+        "prefetched work survives cancellation during throttling"
+    );
     let mut resumed = Box::pin(reconciler.run(std::future::pending::<()>()));
     assert!(poll(&mut resumed, &wakes).is_pending());
     assert_eq!(observed.lock().unwrap().updates, 10);
