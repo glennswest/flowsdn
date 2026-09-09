@@ -1,22 +1,27 @@
 # flowsdn velocity ledger
 
 Milestone [0.14.0](0.14.0.json) started **2026-09-09T15:42:01Z**.
-Usage cutoff: **2026-09-09T15:55:23Z**; observed elapsed **802 seconds**.
-Validation is in progress; prior release records remain available in the ledger.
+Usage cutoff: **2026-09-09T16:01:17Z**; observed elapsed **1156 seconds**.
+Validation and cleanup completed in **19 minutes 16 seconds** (1,156 seconds).
+All **377 tests** passed in debug and release, with formatting, Clippy, both
+Linux musl compile checks, dependency policy and identity no-default-features
+compilation. Cleanup removed **13,452 files / 3.8 GiB** and seven task logs.
+One issue closed; totals are **20 closed / 270 open**. Source validation is
+recorded in `5ec0cb3`; publication is pending. Prior releases remain in the ledger.
 
-Milestone processed usage: **16,799,354 tokens** across root and
+Milestone processed usage: **19,368,222 tokens** across root and
 three agents, deduplicated by response ID. Repeated context is included; these
 counters do not measure subscription dollar usage. Root coding and coordination
 remain project/shared. Unknown active work time is null.
 
 | Combined lifetime usage | Tokens |
 |---|---:|
-| Input | 190,126,047 |
-| Cached input (subset) | 186,168,704 |
-| Uncached input | 3,957,343 |
-| Output | 742,602 |
-| Reasoning output (subset) | 178,651 |
-| Total processed | 190,868,649 |
+| Input | 192,688,524 |
+| Cached input (subset) | 188,719,616 |
+| Uncached input | 3,968,908 |
+| Output | 748,993 |
+| Reasoning output (subset) | 181,690 |
+| Total processed | 193,437,517 |
 
 Reported agent windows total **1105 seconds**;
 these overlap project elapsed. Per-crate delivery windows and counter baselines

@@ -3,11 +3,11 @@
   "scope": "project/shared",
   "agent": "/root",
   "start_utc": "2026-09-09T15:42:01Z",
-  "end_utc": null,
-  "elapsed_seconds": 802.0,
+  "end_utc": "2026-09-09T16:01:17Z",
+  "elapsed_seconds": 1156.0,
   "active_work_seconds": null,
   "start_commit": "c599d8a",
-  "status": "in_progress",
+  "status": "validated",
   "token_baseline_sample_utc": "2026-09-09T15:42:00.826Z",
   "token_baseline": {
     "input_tokens": 89484961,
@@ -23,40 +23,40 @@
     "tunnel wire codecs",
     "loader layout planning"
   ],
-  "publication": "not_started",
-  "as_of_utc": "2026-09-09T15:55:23Z",
+  "publication": "pending",
+  "as_of_utc": "2026-09-09T16:01:17Z",
   "tokens": {
-    "input_tokens": 16750046,
-    "cached_input_tokens": 16459264,
+    "input_tokens": 19312523,
+    "cached_input_tokens": 19010176,
     "cache_write_input_tokens": 0,
-    "output_tokens": 49308,
-    "reasoning_output_tokens": 9181,
-    "total_tokens": 16799354
+    "output_tokens": 55699,
+    "reasoning_output_tokens": 12220,
+    "total_tokens": 19368222
   },
   "combined_lifetime_tokens": {
-    "input_tokens": 190126047,
-    "cached_input_tokens": 186168704,
+    "input_tokens": 192688524,
+    "cached_input_tokens": 188719616,
     "cache_write_input_tokens": 0,
-    "output_tokens": 742602,
-    "reasoning_output_tokens": 178651,
-    "total_tokens": 190868649
+    "output_tokens": 748993,
+    "reasoning_output_tokens": 181690,
+    "total_tokens": 193437517
   },
-  "token_end_sample_utc": "2026-09-09T15:54:21.824Z",
+  "token_end_sample_utc": "2026-09-09T16:01:14.037Z",
   "token_endpoint": {
-    "input_tokens": 95273017,
-    "cached_input_tokens": 94086144,
+    "input_tokens": 97835494,
+    "cached_input_tokens": 96637056,
     "cache_write_input_tokens": 0,
-    "output_tokens": 292754,
-    "reasoning_output_tokens": 71531,
-    "total_tokens": 95565771
+    "output_tokens": 299145,
+    "reasoning_output_tokens": 74570,
+    "total_tokens": 98134639
   },
   "root_tokens": {
-    "input_tokens": 5788056,
-    "cached_input_tokens": 5737216,
+    "input_tokens": 8350533,
+    "cached_input_tokens": 8288128,
     "cache_write_input_tokens": 0,
-    "output_tokens": 15912,
-    "reasoning_output_tokens": 3365,
-    "total_tokens": 5803968
+    "output_tokens": 22303,
+    "reasoning_output_tokens": 6404,
+    "total_tokens": 8372836
   },
   "work_windows": [
     {
@@ -375,17 +375,17 @@
   "issue_counts": {
     "closed": 20,
     "open": 270,
-    "as_of_utc": "2026-09-09T15:56:20Z"
+    "as_of_utc": "2026-09-09T16:01:17Z"
   },
   "validation": {
     "debug_tests": 377,
-    "release_tests": null,
+    "release_tests": 377,
     "formatting": "passed",
     "clippy": "passed",
     "linux_musl_x86_64": "compile passed",
     "linux_musl_aarch64": "compile passed",
-    "dependency_policy": "pending",
-    "identity_no_default_features": "passed before final regex direct dependency; final check queued",
+    "dependency_policy": "passed",
+    "identity_no_default_features": "passed after final dependency update",
     "full_validation_running_observed_utc": "2026-09-09T15:52:51Z",
     "debug_complete_observed_by_utc": "2026-09-09T15:55:37Z",
     "release_dispatch_observed_utc": "2026-09-09T15:55:57Z",
@@ -393,6 +393,52 @@
       "Use checked scratch remainder for workspace arithmetic lint.",
       "Normalize RE2 ASCII shorthand classes/word boundaries through parsed regex syntax, preserving Unicode literals/properties/case folding.",
       "Refresh two displaced configuration provenance references; defaults unchanged."
-    ]
-  }
+    ],
+    "external_dependency_versions": 89,
+    "completed_observed_at_utc": "2026-09-09T16:00:33Z"
+  },
+  "release_candidate": "v0.14.0",
+  "validation_record_commit": "5ec0cb3",
+  "cleanup": {
+    "status": "complete",
+    "files_removed": 13452,
+    "cargo_removed": "3.8 GiB",
+    "task_log_files_removed": 7,
+    "device_check": "passed",
+    "completed_at_utc": "2026-09-09T16:01:17Z",
+    "disk_free_before": {
+      "root": "30 GiB",
+      "build_volume": "1.4 TiB"
+    },
+    "disk_free_after": {
+      "root": "30 GiB",
+      "build_volume": "1.4 TiB"
+    }
+  },
+  "observed_wait_windows": [
+    {
+      "kind": "debug-and-cross-target-validation",
+      "start_utc": "2026-09-09T15:52:51Z",
+      "end_utc": "2026-09-09T15:55:37Z",
+      "elapsed_seconds": 166,
+      "active_work_seconds": null,
+      "note": "Observed validation window includes coordination; nested in milestone elapsed."
+    },
+    {
+      "kind": "release-and-dependency-validation",
+      "start_utc": "2026-09-09T15:55:57Z",
+      "end_utc": "2026-09-09T16:00:33Z",
+      "elapsed_seconds": 276,
+      "active_work_seconds": null,
+      "note": "Observed dispatch through final check completion; nested in milestone elapsed."
+    },
+    {
+      "kind": "validation-record-and-cleanup",
+      "start_utc": "2026-09-09T16:00:33Z",
+      "end_utc": "2026-09-09T16:01:17Z",
+      "elapsed_seconds": 44,
+      "active_work_seconds": null,
+      "note": "Includes record publication and cleanup; nested in milestone elapsed."
+    }
+  ]
 }

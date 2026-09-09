@@ -16489,15 +16489,15 @@
       }
     }
   ],
-  "as_of_utc": "2026-09-09T15:55:23Z",
+  "as_of_utc": "2026-09-09T16:01:17Z",
   "deduplication": "response_id within and across the root and three agent sessions; only counters and timestamps retained",
   "combined_tokens": {
-    "input_tokens": 190126047,
-    "cached_input_tokens": 186168704,
+    "input_tokens": 192688524,
+    "cached_input_tokens": 188719616,
     "cache_write_input_tokens": 0,
-    "output_tokens": 742602,
-    "reasoning_output_tokens": 178651,
-    "total_tokens": 190868649
+    "output_tokens": 748993,
+    "reasoning_output_tokens": 181690,
+    "total_tokens": 193437517
   },
-  "unique_response_count": 1632
+  "unique_response_count": 1645
 }

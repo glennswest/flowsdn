@@ -400,4 +400,11 @@ specified target cache lines and possible CPU count, with checked sizing and
 clamped offsets. ELF parsing, zeroed allocation, live maps and program attachment
 remain forthcoming. These are foundation components, not an operational agent.
 
-Validation is in progress for this milestone.
+Source `07607ac` passed **377 tests in both debug and release with all features**:
+92 script, 72 reconciler, 51 config, 45 ABI, 40 identity, 30 table, 12 loader,
+9 harvester, 7 health, 7 fence, 7 selector and 5 version tests. Formatting,
+warning-free Clippy, both Linux musl compile checks, dependency policy and
+identity no-default-features compilation passed. External dependencies remain
+at the previous 89-version set. Cleanup removed 13,452 files / 3.8 GiB and seven
+task logs. Issue #55 is closed; repository totals are 20 closed / 270 open.
+The release remains source-only.

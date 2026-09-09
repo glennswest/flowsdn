@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "project": "flowsdn",
-  "as_of_utc": "2026-09-09T15:55:23Z",
+  "as_of_utc": "2026-09-09T16:01:17Z",
   "measurement_start_utc": "2026-09-08T16:11:13.415Z",
-  "elapsed_seconds": 85449.585,
+  "elapsed_seconds": 85803.585,
   "historical_project_start_known": false,
   "active_work_seconds": null,
   "session": {
     "id": "01a081c9-5ae6-72e3-a2f7-1a103e3c6703",
     "source": "Local Codex token_usage_record; deduplicated by response_id; payload content excluded",
-    "completed_response_records": 821,
+    "completed_response_records": 834,
     "tokens": {
-      "input_tokens": 95273017,
-      "cached_input_tokens": 94086144,
+      "input_tokens": 97835494,
+      "cached_input_tokens": 96637056,
       "cache_write_input_tokens": 0,
-      "output_tokens": 292754,
-      "reasoning_output_tokens": 71531,
-      "total_tokens": 95565771
+      "output_tokens": 299145,
+      "reasoning_output_tokens": 74570,
+      "total_tokens": 98134639
     }
   },
   "phases": [
@@ -530,6 +530,25 @@
       "note": "Numeric identity, labels, guarded BPF classifications and spec decisions; source-only foundation.",
       "release": "v0.13.0",
       "release_commit": "762bf4cd0e6bb577e1e3ded737b6d5f17cfe5ce1"
+    },
+    {
+      "id": "0.14.0",
+      "scope": "project/shared",
+      "start_utc": "2026-09-09T15:42:01Z",
+      "end_utc": "2026-09-09T16:01:17Z",
+      "elapsed_seconds": 1156.0,
+      "active_work_seconds": null,
+      "tokens": {
+        "input_tokens": 19312523,
+        "cached_input_tokens": 19010176,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 55699,
+        "reasoning_output_tokens": 12220,
+        "total_tokens": 19368222
+      },
+      "commit": "07607ac",
+      "validation_record_commit": "5ec0cb3",
+      "note": "Identity filters/CIDR, overlay wire codecs and loader contracts; source-only foundation."
     }
   ],
   "crates": [
@@ -676,6 +695,33 @@
       "active_work_seconds": null,
       "exclusive_tokens": null,
       "timing_basis": "Per-agent delivery windows in 0.13.0.json; shared integration is not allocated again."
+    },
+    {
+      "crate": "flowsdn-identity",
+      "tests": 40,
+      "token_phase": "0.14.0",
+      "release_candidate": "v0.14.0",
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "timing_basis": "Agent delivery windows in milestone; root loader coding/integration stays project/shared."
+    },
+    {
+      "crate": "flowsdn-bpf-abi",
+      "tests": 45,
+      "token_phase": "0.14.0",
+      "release_candidate": "v0.14.0",
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "timing_basis": "Agent delivery windows in milestone; root loader coding/integration stays project/shared."
+    },
+    {
+      "crate": "flowsdn-bpf-loader",
+      "tests": 12,
+      "token_phase": "0.14.0",
+      "release_candidate": "v0.14.0",
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "timing_basis": "Agent delivery windows in milestone; root loader coding/integration stays project/shared."
     }
   ],
   "outcomes": {
@@ -694,7 +740,7 @@
       "v0.12.0",
       "v0.13.0"
     ],
-    "unique_tests": 341,
+    "unique_tests": 377,
     "test_profiles": [
       "debug",
       "release"
@@ -703,7 +749,7 @@
     "embedded_files": 1444,
     "parsed_commands": 3537,
     "networking_scenarios_executed": 0,
-    "validated_commit": "3e5ba2a",
+    "validated_commit": "07607ac",
     "closed_issues_this_session": [
       42,
       205,
@@ -723,33 +769,33 @@
       272,
       55
     ],
-    "validation_completed_at_utc": "2026-09-09T13:57:27Z",
-    "validated_release_candidate": "v0.13.0",
+    "validation_completed_at_utc": "2026-09-09T16:00:33Z",
+    "validated_release_candidate": "v0.14.0",
     "issue_counts": {
       "closed": 20,
       "open": 270,
-      "as_of_utc": "2026-09-09T15:56:20Z",
+      "as_of_utc": "2026-09-09T16:01:17Z",
       "closed_this_session": 17
     },
-    "release_candidate": "v0.13.0",
+    "release_candidate": "v0.14.0",
     "repository_closed_issues": 20,
     "repository_open_issues": 270,
-    "validation_record_commit": "619908e",
+    "validation_record_commit": "5ec0cb3",
     "tests_by_crate": {
       "flowsdn-scripttest": 92,
       "flowsdn-reconcile": 72,
       "flowsdn-config": 51,
-      "flowsdn-bpf-abi": 39,
+      "flowsdn-bpf-abi": 45,
       "flowsdn-table": 30,
       "flowsdn-health": 7,
       "flowsdn-fence": 7,
       "flowsdn-selector": 7,
-      "flowsdn-bpf-loader": 6,
+      "flowsdn-bpf-loader": 12,
       "flowsdn-version": 5,
       "flowsdn-harvest-bpf-cases": 9,
-      "flowsdn-identity": 16
+      "flowsdn-identity": 40
     },
-    "publication": "published",
+    "publication": "pending",
     "issues_closed_this_milestone": [
       55
     ],
@@ -2025,15 +2071,303 @@
         "reasoning_output_tokens": 25111,
         "total_tokens": 33228402
       }
+    },
+    {
+      "task_id": "filter",
+      "agent": "/root/config_core",
+      "scope": "flowsdn-identity",
+      "start_utc": "2026-09-09T15:42:22Z",
+      "end_utc": "2026-09-09T15:46:21Z",
+      "elapsed_seconds": 239.0,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T13:51:27.199Z",
+      "token_baseline": {
+        "input_tokens": 33231343,
+        "cached_input_tokens": 32318720,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 150982,
+        "reasoning_output_tokens": 25111,
+        "total_tokens": 33382325
+      },
+      "token_endpoint_sample_utc": "2026-09-09T15:44:53.123Z",
+      "token_endpoint": {
+        "input_tokens": 33782713,
+        "cached_input_tokens": 32813056,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 155265,
+        "reasoning_output_tokens": 25251,
+        "total_tokens": 33937978
+      },
+      "tokens": {
+        "input_tokens": 551370,
+        "cached_input_tokens": 494336,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 4283,
+        "reasoning_output_tokens": 140,
+        "total_tokens": 555653
+      },
+      "attribution": "response-delivery-window; not exclusive coding usage"
+    },
+    {
+      "task_id": "cidr",
+      "agent": "/root/table_streams",
+      "scope": "flowsdn-identity",
+      "start_utc": "2026-09-09T15:42:31Z",
+      "end_utc": "2026-09-09T15:45:33Z",
+      "elapsed_seconds": 182.0,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T13:51:01.567Z",
+      "token_baseline": {
+        "input_tokens": 22888723,
+        "cached_input_tokens": 22062464,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 136686,
+        "reasoning_output_tokens": 42451,
+        "total_tokens": 23025409
+      },
+      "token_endpoint_sample_utc": "2026-09-09T15:45:07.788Z",
+      "token_endpoint": {
+        "input_tokens": 23423557,
+        "cached_input_tokens": 22594048,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 141492,
+        "reasoning_output_tokens": 43483,
+        "total_tokens": 23565049
+      },
+      "tokens": {
+        "input_tokens": 534834,
+        "cached_input_tokens": 531584,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 4806,
+        "reasoning_output_tokens": 1032,
+        "total_tokens": 539640
+      },
+      "attribution": "response-delivery-window; not exclusive coding usage"
+    },
+    {
+      "task_id": "wire",
+      "agent": "/root/review",
+      "scope": "flowsdn-bpf-abi",
+      "start_utc": "2026-09-09T15:42:43Z",
+      "end_utc": "2026-09-09T15:48:06Z",
+      "elapsed_seconds": 323.0,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T13:47:37.461Z",
+      "token_baseline": {
+        "input_tokens": 27770974,
+        "cached_input_tokens": 26979328,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 128784,
+        "reasoning_output_tokens": 33742,
+        "total_tokens": 27899758
+      },
+      "token_endpoint_sample_utc": "2026-09-09T15:47:58.482Z",
+      "token_endpoint": {
+        "input_tokens": 29406350,
+        "cached_input_tokens": 28567552,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 138042,
+        "reasoning_output_tokens": 34166,
+        "total_tokens": 29544392
+      },
+      "tokens": {
+        "input_tokens": 1635376,
+        "cached_input_tokens": 1588224,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 9258,
+        "reasoning_output_tokens": 424,
+        "total_tokens": 1644634
+      },
+      "attribution": "response-delivery-window; not exclusive coding usage"
+    },
+    {
+      "task_id": "cidr-review",
+      "agent": "/root/config_core",
+      "scope": "flowsdn-identity",
+      "start_utc": "2026-09-09T15:46:58Z",
+      "end_utc": "2026-09-09T15:47:03Z",
+      "elapsed_seconds": 5.0,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T15:46:41.466Z",
+      "token_baseline": {
+        "input_tokens": 34066898,
+        "cached_input_tokens": 33092096,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 158473,
+        "reasoning_output_tokens": 25337,
+        "total_tokens": 34225371
+      },
+      "token_endpoint_sample_utc": "2026-09-09T15:46:58.262Z",
+      "token_endpoint": {
+        "input_tokens": 34139044,
+        "cached_input_tokens": 33163904,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 158531,
+        "reasoning_output_tokens": 25337,
+        "total_tokens": 34297575
+      },
+      "tokens": {
+        "input_tokens": 72146,
+        "cached_input_tokens": 71808,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 58,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 72204
+      },
+      "attribution": "response-delivery-window; not exclusive coding usage"
+    },
+    {
+      "task_id": "layout-review",
+      "agent": "/root/table_streams",
+      "scope": "project/shared",
+      "start_utc": "2026-09-09T15:46:38Z",
+      "end_utc": "2026-09-09T15:47:05Z",
+      "elapsed_seconds": 27.0,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T15:46:06.366Z",
+      "token_baseline": {
+        "input_tokens": 24160469,
+        "cached_input_tokens": 23324672,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 142879,
+        "reasoning_output_tokens": 44093,
+        "total_tokens": 24303348
+      },
+      "token_endpoint_sample_utc": "2026-09-09T15:46:49.371Z",
+      "token_endpoint": {
+        "input_tokens": 24720510,
+        "cached_input_tokens": 23879552,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 143140,
+        "reasoning_output_tokens": 44093,
+        "total_tokens": 24863650
+      },
+      "tokens": {
+        "input_tokens": 560041,
+        "cached_input_tokens": 554880,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 261,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 560302
+      },
+      "attribution": "response-delivery-window; not exclusive coding usage"
+    },
+    {
+      "task_id": "wire-review",
+      "agent": "/root/table_streams",
+      "scope": "flowsdn-bpf-abi",
+      "start_utc": "2026-09-09T15:49:51Z",
+      "end_utc": "2026-09-09T15:50:19Z",
+      "elapsed_seconds": 28.0,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T15:49:35.949Z",
+      "token_baseline": {
+        "input_tokens": 27070958,
+        "cached_input_tokens": 26197504,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 145465,
+        "reasoning_output_tokens": 45347,
+        "total_tokens": 27216423
+      },
+      "token_endpoint_sample_utc": "2026-09-09T15:49:56.070Z",
+      "token_endpoint": {
+        "input_tokens": 27472328,
+        "cached_input_tokens": 26597760,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 145617,
+        "reasoning_output_tokens": 45347,
+        "total_tokens": 27617945
+      },
+      "tokens": {
+        "input_tokens": 401370,
+        "cached_input_tokens": 400256,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 152,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 401522
+      },
+      "attribution": "response-delivery-window; not exclusive coding usage"
+    },
+    {
+      "task_id": "regex-fix",
+      "agent": "/root/config_core",
+      "scope": "flowsdn-identity",
+      "start_utc": "2026-09-09T15:49:29Z",
+      "end_utc": "2026-09-09T15:52:03Z",
+      "elapsed_seconds": 154.0,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T15:47:12.281Z",
+      "token_baseline": {
+        "input_tokens": 34367675,
+        "cached_input_tokens": 33387648,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 158804,
+        "reasoning_output_tokens": 25403,
+        "total_tokens": 34526479
+      },
+      "token_endpoint_sample_utc": "2026-09-09T15:51:46.581Z",
+      "token_endpoint": {
+        "input_tokens": 35147132,
+        "cached_input_tokens": 34139776,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 162555,
+        "reasoning_output_tokens": 25948,
+        "total_tokens": 35309687
+      },
+      "tokens": {
+        "input_tokens": 779457,
+        "cached_input_tokens": 752128,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3751,
+        "reasoning_output_tokens": 545,
+        "total_tokens": 783208
+      },
+      "attribution": "response-delivery-window; not exclusive coding usage"
+    },
+    {
+      "task_id": "regex-fix-review",
+      "agent": "/root/table_streams",
+      "scope": "flowsdn-identity",
+      "start_utc": "2026-09-09T15:52:35Z",
+      "end_utc": "2026-09-09T15:53:31Z",
+      "elapsed_seconds": 56.0,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T15:50:43.378Z",
+      "token_baseline": {
+        "input_tokens": 28297829,
+        "cached_input_tokens": 27416960,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 146478,
+        "reasoning_output_tokens": 45863,
+        "total_tokens": 28444307
+      },
+      "token_endpoint_sample_utc": "2026-09-09T15:53:06.157Z",
+      "token_endpoint": {
+        "input_tokens": 28927417,
+        "cached_input_tokens": 28040192,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 147227,
+        "reasoning_output_tokens": 46379,
+        "total_tokens": 29074644
+      },
+      "tokens": {
+        "input_tokens": 629588,
+        "cached_input_tokens": 623232,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 749,
+        "reasoning_output_tokens": 516,
+        "total_tokens": 630337
+      },
+      "attribution": "response-delivery-window; not exclusive coding usage"
     }
   ],
   "combined_unique_response_tokens": {
-    "input_tokens": 190126047,
-    "cached_input_tokens": 186168704,
+    "input_tokens": 192688524,
+    "cached_input_tokens": 188719616,
     "cache_write_input_tokens": 0,
-    "output_tokens": 742602,
-    "reasoning_output_tokens": 178651,
-    "total_tokens": 190868649
+    "output_tokens": 748993,
+    "reasoning_output_tokens": 181690,
+    "total_tokens": 193437517
   },
   "cleanup": [
     {
@@ -2130,6 +2464,23 @@
         "build_volume": "1.5 TiB"
       },
       "retained_reference_cache": "17 MiB sparse pinned reference for subsequent audits; reusable cache, no build output"
+    },
+    {
+      "release_candidate": "v0.14.0",
+      "status": "complete",
+      "files_removed": 13452,
+      "cargo_removed": "3.8 GiB",
+      "task_log_files_removed": 7,
+      "device_check": "passed",
+      "completed_at_utc": "2026-09-09T16:01:17Z",
+      "disk_free_before": {
+        "root": "30 GiB",
+        "build_volume": "1.4 TiB"
+      },
+      "disk_free_after": {
+        "root": "30 GiB",
+        "build_volume": "1.4 TiB"
+      }
     }
   ],
   "current_milestone": {
@@ -2137,11 +2488,11 @@
     "scope": "project/shared",
     "agent": "/root",
     "start_utc": "2026-09-09T15:42:01Z",
-    "end_utc": null,
-    "elapsed_seconds": 802.0,
+    "end_utc": "2026-09-09T16:01:17Z",
+    "elapsed_seconds": 1156.0,
     "active_work_seconds": null,
     "start_commit": "c599d8a",
-    "status": "in_progress",
+    "status": "validated",
     "token_baseline_sample_utc": "2026-09-09T15:42:00.826Z",
     "token_baseline": {
       "input_tokens": 89484961,
@@ -2157,40 +2508,40 @@
       "tunnel wire codecs",
       "loader layout planning"
     ],
-    "publication": "not_started",
-    "as_of_utc": "2026-09-09T15:55:23Z",
+    "publication": "pending",
+    "as_of_utc": "2026-09-09T16:01:17Z",
     "tokens": {
-      "input_tokens": 16750046,
-      "cached_input_tokens": 16459264,
+      "input_tokens": 19312523,
+      "cached_input_tokens": 19010176,
       "cache_write_input_tokens": 0,
-      "output_tokens": 49308,
-      "reasoning_output_tokens": 9181,
-      "total_tokens": 16799354
+      "output_tokens": 55699,
+      "reasoning_output_tokens": 12220,
+      "total_tokens": 19368222
     },
     "combined_lifetime_tokens": {
-      "input_tokens": 190126047,
-      "cached_input_tokens": 186168704,
+      "input_tokens": 192688524,
+      "cached_input_tokens": 188719616,
       "cache_write_input_tokens": 0,
-      "output_tokens": 742602,
-      "reasoning_output_tokens": 178651,
-      "total_tokens": 190868649
+      "output_tokens": 748993,
+      "reasoning_output_tokens": 181690,
+      "total_tokens": 193437517
     },
-    "token_end_sample_utc": "2026-09-09T15:54:21.824Z",
+    "token_end_sample_utc": "2026-09-09T16:01:14.037Z",
     "token_endpoint": {
-      "input_tokens": 95273017,
-      "cached_input_tokens": 94086144,
+      "input_tokens": 97835494,
+      "cached_input_tokens": 96637056,
       "cache_write_input_tokens": 0,
-      "output_tokens": 292754,
-      "reasoning_output_tokens": 71531,
-      "total_tokens": 95565771
+      "output_tokens": 299145,
+      "reasoning_output_tokens": 74570,
+      "total_tokens": 98134639
     },
     "root_tokens": {
-      "input_tokens": 5788056,
-      "cached_input_tokens": 5737216,
+      "input_tokens": 8350533,
+      "cached_input_tokens": 8288128,
       "cache_write_input_tokens": 0,
-      "output_tokens": 15912,
-      "reasoning_output_tokens": 3365,
-      "total_tokens": 5803968
+      "output_tokens": 22303,
+      "reasoning_output_tokens": 6404,
+      "total_tokens": 8372836
     },
     "work_windows": [
       {
@@ -2509,18 +2860,18 @@
     "issue_counts": {
       "closed": 20,
       "open": 270,
-      "as_of_utc": "2026-09-09T15:56:20Z",
+      "as_of_utc": "2026-09-09T16:01:17Z",
       "closed_this_session": 17
     },
     "validation": {
       "debug_tests": 377,
-      "release_tests": null,
+      "release_tests": 377,
       "formatting": "passed",
       "clippy": "passed",
       "linux_musl_x86_64": "compile passed",
       "linux_musl_aarch64": "compile passed",
-      "dependency_policy": "pending",
-      "identity_no_default_features": "passed before final regex direct dependency; final check queued",
+      "dependency_policy": "passed",
+      "identity_no_default_features": "passed after final dependency update",
       "full_validation_running_observed_utc": "2026-09-09T15:52:51Z",
       "debug_complete_observed_by_utc": "2026-09-09T15:55:37Z",
       "release_dispatch_observed_utc": "2026-09-09T15:55:57Z",
@@ -2528,8 +2879,54 @@
         "Use checked scratch remainder for workspace arithmetic lint.",
         "Normalize RE2 ASCII shorthand classes/word boundaries through parsed regex syntax, preserving Unicode literals/properties/case folding.",
         "Refresh two displaced configuration provenance references; defaults unchanged."
-      ]
-    }
+      ],
+      "external_dependency_versions": 89,
+      "completed_observed_at_utc": "2026-09-09T16:00:33Z"
+    },
+    "release_candidate": "v0.14.0",
+    "validation_record_commit": "5ec0cb3",
+    "cleanup": {
+      "status": "complete",
+      "files_removed": 13452,
+      "cargo_removed": "3.8 GiB",
+      "task_log_files_removed": 7,
+      "device_check": "passed",
+      "completed_at_utc": "2026-09-09T16:01:17Z",
+      "disk_free_before": {
+        "root": "30 GiB",
+        "build_volume": "1.4 TiB"
+      },
+      "disk_free_after": {
+        "root": "30 GiB",
+        "build_volume": "1.4 TiB"
+      }
+    },
+    "observed_wait_windows": [
+      {
+        "kind": "debug-and-cross-target-validation",
+        "start_utc": "2026-09-09T15:52:51Z",
+        "end_utc": "2026-09-09T15:55:37Z",
+        "elapsed_seconds": 166,
+        "active_work_seconds": null,
+        "note": "Observed validation window includes coordination; nested in milestone elapsed."
+      },
+      {
+        "kind": "release-and-dependency-validation",
+        "start_utc": "2026-09-09T15:55:57Z",
+        "end_utc": "2026-09-09T16:00:33Z",
+        "elapsed_seconds": 276,
+        "active_work_seconds": null,
+        "note": "Observed dispatch through final check completion; nested in milestone elapsed."
+      },
+      {
+        "kind": "validation-record-and-cleanup",
+        "start_utc": "2026-09-09T16:00:33Z",
+        "end_utc": "2026-09-09T16:01:17Z",
+        "elapsed_seconds": 44,
+        "active_work_seconds": null,
+        "note": "Includes record publication and cleanup; nested in milestone elapsed."
+      }
+    ]
   },
   "milestone_0_7_parallel_time": {
     "observed_agent_window_seconds": 3064.201,
@@ -2538,8 +2935,8 @@
     "project_union_of_observed_child_windows_seconds": 1875.201,
     "note": "Per-agent interval unions are summed only as observed agent-window hours. They include waits and reviews, exclude unobserved intervals, and are not active agent-hours or project wall time."
   },
-  "usage_cutoff_utc": "2026-09-09T15:55:23Z",
-  "elapsed_at_usage_cutoff_seconds": 85449.585,
+  "usage_cutoff_utc": "2026-09-09T16:01:17Z",
+  "elapsed_at_usage_cutoff_seconds": 85803.585,
   "milestone_0_8_parallel_time": {
     "observed_agent_window_seconds": 1915.0,
     "observed_agent_window_hours": 0.531944,
@@ -2594,5 +2991,10 @@
     "parallel_agent_window_seconds": 1195.0,
     "parallel_agent_window_hours": 0.33194444444444443,
     "known_agent_project_interval_union_seconds": 519.0
+  },
+  "milestone_0_14_parallel_time": {
+    "parallel_agent_window_seconds": 1105.0,
+    "parallel_agent_window_hours": 0.30694444444444446,
+    "known_agent_project_interval_union_seconds": 554.0
   }
 }
