@@ -111,8 +111,8 @@ pub const fn plan_map(spec: MapSpec, existing: Option<MapSpec>, owner: Owner) ->
     }
 }
 
-pub mod layout;
-pub mod tails;
 /// Live local-delivery object ownership, behind an explicit kernel feature.
 #[cfg(feature = "kernel")]
 pub mod kernel;
+pub mod layout;
+pub mod tails;
