@@ -16,7 +16,7 @@ without following `docs/licensing.md`.
 
 ## Version
 
-0.8.0 — configuration catalogue, reconciler scheduling, file mutations and build metadata; no networking agent yet. Version locations (when crates exist):
+0.9.0 — initial map ABI, periodic refresh, foreground script execution and config default resolution; no networking agent yet. Version locations (when crates exist):
 `Cargo.toml` workspace.package.version, `CHANGELOG.md` heading.
 
 ## Work plan

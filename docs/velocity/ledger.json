@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "project": "flowsdn",
-  "as_of_utc": "2026-09-09T11:43:30Z",
+  "as_of_utc": "2026-09-09T12:11:00.810Z",
   "measurement_start_utc": "2026-09-08T16:11:13.415Z",
-  "elapsed_seconds": 70336.585,
+  "elapsed_seconds": 71987.395,
   "historical_project_start_known": false,
   "active_work_seconds": null,
   "session": {
     "id": "01a081c9-5ae6-72e3-a2f7-1a103e3c6703",
     "source": "Local Codex token_usage_record; deduplicated by response_id; payload content excluded",
-    "completed_response_records": 425,
+    "completed_response_records": 489,
     "tokens": {
-      "input_tokens": 44343923,
-      "cached_input_tokens": 43627904,
+      "input_tokens": 54466728,
+      "cached_input_tokens": 53687168,
       "cache_write_input_tokens": 0,
-      "output_tokens": 146170,
-      "reasoning_output_tokens": 29374,
-      "total_tokens": 44490093
+      "output_tokens": 173653,
+      "reasoning_output_tokens": 39672,
+      "total_tokens": 54640381
     }
   },
   "phases": [
@@ -232,6 +232,47 @@
         "total_tokens": 5988801
       },
       "note": "Root cumulative delta only; combined deduplicated usage and interruption bounds are recorded in 0.8.0.json."
+    },
+    {
+      "id": "reporting-gap-before-0.9",
+      "scope": "project/shared",
+      "start_utc": "2026-09-09T11:43:30Z",
+      "end_utc": "2026-09-09T11:51:25Z",
+      "elapsed_seconds": 475.0,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T11:41:38.751Z",
+      "token_end_sample_utc": "2026-09-09T11:51:25.615Z",
+      "tokens": {
+        "input_tokens": 1918027,
+        "cached_input_tokens": 1904640,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 6433,
+        "reasoning_output_tokens": 2369,
+        "total_tokens": 1924460
+      },
+      "note": "Root counters only; reporting/unattributed gap. Token sample boundaries differ from elapsed boundaries and include post-cutoff work from the preceding milestone. Not an active-coding claim."
+    },
+    {
+      "id": "0.9.0",
+      "scope": "project/shared",
+      "start_utc": "2026-09-09T11:51:25Z",
+      "end_utc": "2026-09-09T12:11:00.810Z",
+      "measurement_end_utc": "2026-09-09T12:05:24.308Z",
+      "elapsed_seconds": 1175.81,
+      "measurement_elapsed_seconds": 839.308,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T11:51:25.615Z",
+      "token_end_sample_utc": "2026-09-09T12:11:00.810Z",
+      "tokens": {
+        "input_tokens": 8204778,
+        "cached_input_tokens": 8154624,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 21050,
+        "reasoning_output_tokens": 7929,
+        "total_tokens": 8225828
+      },
+      "status": "awaiting-validation",
+      "note": "Root-only integration, coordination, validation and reporting; combined deduplicated child usage appears in 0.9.0.json."
     }
   ],
   "crates": [
@@ -324,6 +365,42 @@
       "active_work_seconds": null,
       "exclusive_tokens": null,
       "timing_basis": "See milestone reported work windows; integration and cross-review usage remains shared."
+    },
+    {
+      "crate": "flowsdn-bpf-abi",
+      "tests": 6,
+      "token_phase": "0.9.0",
+      "release_candidate": "v0.9.0",
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "timing_basis": "See milestone reported windows; root integration and cross-review remain shared."
+    },
+    {
+      "crate": "flowsdn-config",
+      "tests": 51,
+      "token_phase": "0.9.0",
+      "release_candidate": "v0.9.0",
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "timing_basis": "See milestone reported windows; root integration and cross-review remain shared."
+    },
+    {
+      "crate": "flowsdn-reconcile",
+      "tests": 39,
+      "token_phase": "0.9.0",
+      "release_candidate": "v0.9.0",
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "timing_basis": "See milestone reported windows; root integration and cross-review remain shared."
+    },
+    {
+      "crate": "flowsdn-scripttest",
+      "tests": 55,
+      "token_phase": "0.9.0",
+      "release_candidate": "v0.9.0",
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "timing_basis": "See milestone reported windows; root integration and cross-review remain shared."
     }
   ],
   "outcomes": {
@@ -337,7 +414,7 @@
       "v0.7.0",
       "v0.8.0"
     ],
-    "unique_tests": 180,
+    "unique_tests": 211,
     "test_profiles": [
       "debug",
       "release"
@@ -346,7 +423,7 @@
     "embedded_files": 1444,
     "parsed_commands": 3537,
     "networking_scenarios_executed": 0,
-    "validated_commit": "ea7cbea",
+    "validated_commit": "48a7d19",
     "closed_issues_this_session": [
       42,
       205,
@@ -366,7 +443,7 @@
     },
     "release_commit": "2b36e54fc20aad2b0f64b484c21ba906283e1b9e",
     "publication_observed_utc": "2026-09-09T11:45:38Z",
-    "release_candidate": "v0.8.0",
+    "release_candidate": "v0.9.0",
     "repository_closed_issues": 10,
     "repository_open_issues": 280
   },
@@ -755,15 +832,125 @@
         "total_tokens": 2498697
       },
       "note": "Agent-reported elapsed window; usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.9.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-config",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T11:51:59Z",
+      "end_utc": "2026-09-09T11:55:15Z",
+      "elapsed_seconds": 196,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T11:51:59.532Z",
+      "token_endpoint_sample_utc": "2026-09-09T11:55:15.437Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 857559,
+        "cached_input_tokens": 829696,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 5361,
+        "reasoning_output_tokens": 299,
+        "total_tokens": 862920
+      },
+      "note": "Agent-reported elapsed window; response delivery-window usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.9.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-bpf-abi",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T11:57:40Z",
+      "end_utc": "2026-09-09T11:57:52Z",
+      "elapsed_seconds": 12,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T11:55:28.400Z",
+      "token_endpoint_sample_utc": "2026-09-09T11:57:52.963Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 234189,
+        "cached_input_tokens": 226944,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 354,
+        "reasoning_output_tokens": 48,
+        "total_tokens": 234543
+      },
+      "note": "Agent-reported elapsed window; response delivery-window usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.9.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-reconcile",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T11:59:10Z",
+      "end_utc": "2026-09-09T11:59:25Z",
+      "elapsed_seconds": 15,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T11:59:10.183Z",
+      "token_endpoint_sample_utc": "2026-09-09T11:59:25.197Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 185138,
+        "cached_input_tokens": 173696,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 338,
+        "reasoning_output_tokens": 151,
+        "total_tokens": 185476
+      },
+      "note": "Agent-reported elapsed window; response delivery-window usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.9.0",
+      "agent": "/root/review",
+      "crate": "flowsdn-scripttest",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T11:52:20Z",
+      "end_utc": "2026-09-09T12:00:43Z",
+      "elapsed_seconds": 503,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T11:52:20.970Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:00:43.565Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 1043493,
+        "cached_input_tokens": 1010176,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 13155,
+        "reasoning_output_tokens": 3123,
+        "total_tokens": 1056648
+      },
+      "note": "Agent-reported elapsed window; response delivery-window usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.9.0",
+      "agent": "/root/table_streams",
+      "crate": "flowsdn-reconcile",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T11:52:13Z",
+      "end_utc": "2026-09-09T12:03:54Z",
+      "elapsed_seconds": 701,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T11:52:13.366Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:03:54.794Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 1574296,
+        "cached_input_tokens": 1526656,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 20955,
+        "reasoning_output_tokens": 7679,
+        "total_tokens": 1595251
+      },
+      "note": "Agent-reported elapsed window; response delivery-window usage includes context processing and coordination, not exclusive coding."
     }
   ],
   "combined_unique_response_tokens": {
-    "input_tokens": 81250842,
-    "cached_input_tokens": 79116800,
+    "input_tokens": 96937804,
+    "cached_input_tokens": 94395264,
     "cache_write_input_tokens": 0,
-    "output_tokens": 357034,
-    "reasoning_output_tokens": 88440,
-    "total_tokens": 81607876
+    "output_tokens": 429944,
+    "reasoning_output_tokens": 110418,
+    "total_tokens": 97367748
   },
   "cleanup": [
     {
@@ -795,19 +982,24 @@
       "files_removed": 10012,
       "cargo_removed": "2.4 GiB",
       "completed_at_utc": "2026-09-09T11:43:30Z"
+    },
+    {
+      "release_candidate": "v0.9.0",
+      "status": "complete",
+      "cargo_removed": "3.1 GiB",
+      "files_removed": 11035,
+      "completed_at_utc": "2026-09-09T12:11:00.810Z"
     }
   ],
   "current_milestone": {
-    "id": "0.8.0",
+    "id": "0.9.0",
     "status": "validated",
-    "unique_tests": 180,
-    "validated_commit": "ea7cbea",
-    "completed_at_utc": "2026-09-09T11:43:30Z",
-    "release_candidate": "v0.8.0",
-    "publication": "published",
-    "cleanup": "complete",
-    "release": "v0.8.0",
-    "publication_observed_utc": "2026-09-09T11:45:38Z"
+    "unique_tests": 211,
+    "validated_commit": "48a7d19",
+    "completed_at_utc": "2026-09-09T12:11:00.810Z",
+    "release_candidate": "v0.9.0",
+    "publication": "pending",
+    "cleanup": "complete"
   },
   "milestone_0_7_parallel_time": {
     "observed_agent_window_seconds": 3064.201,
@@ -816,13 +1008,20 @@
     "project_union_of_observed_child_windows_seconds": 1875.201,
     "note": "Per-agent interval unions are summed only as observed agent-window hours. They include waits and reviews, exclude unobserved intervals, and are not active agent-hours or project wall time."
   },
-  "usage_cutoff_utc": "2026-09-09T11:41:38.751Z",
-  "elapsed_at_usage_cutoff_seconds": 70225.336,
+  "usage_cutoff_utc": "2026-09-09T12:11:00.810Z",
+  "elapsed_at_usage_cutoff_seconds": 71987.395,
   "milestone_0_8_parallel_time": {
     "observed_agent_window_seconds": 1915.0,
     "observed_agent_window_hours": 0.531944,
     "active_agent_hours": null,
     "project_union_of_observed_child_windows_seconds": 865.0,
     "note": "Per-agent interval unions include observed implementation and review windows; overlapping elapsed time is not summed as project wall time. Other ongoing reviews are not allocated without reported bounds."
+  },
+  "milestone_0_9_parallel_time": {
+    "observed_agent_window_seconds": 1427,
+    "observed_agent_window_hours": 0.396389,
+    "active_agent_hours": null,
+    "project_union_of_observed_child_windows_seconds": 715,
+    "note": "Sum of per-agent interval unions; overlapping windows are not summed as project wall time. Active work remains unknown."
   }
 }

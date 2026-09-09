@@ -17,11 +17,12 @@ Goals:
 
 ## Status
 
-**Foundation implementation started (2026-09-08), version 0.8.0.**
+**Foundation implementation started (2026-09-08), version 0.9.0.**
 
 The workspace includes indexed tables, initialization gates, a reconciler with
 pruning and a caller-owned scheduling loop, configuration snapshots, module
-health and a script engine with generic file commands.
+health and a script engine with generic file commands and foreground execution.
+The map ABI crate defines the first connection-tuple and ipcache byte layouts.
 There is no working networking agent or datapath. Synthetic scripts and file assertions
 execute, while the harvested networking scenarios still lack their adapters.
 
@@ -37,12 +38,12 @@ Read in this order: `docs/decisions/` for what was decided and why,
 `docs/inventory/README.md` for the scope table and build order,
 then the spec for the area you are working on.
 
-The configuration catalogue records all 539 keys. Of their defaults, 488 resolve
-directly and 51 require explicit values; see the
+The configuration catalogue records all 539 keys. Of their defaults, 521 resolve
+from the specifications and 18 require explicit values; see the
 [catalogue gaps](crates/flowsdn-config/REGISTRY-GAPS.md). Build identity metadata
 is available for future binaries.
 
-Next steps include resolving catalogue gaps and script subprocess/subsystem commands; see
+Next steps include extending the map ABI, resolving catalogue gaps and adding script subsystem adapters; see
 [implementation assessment](docs/implementation-status.md). Before the datapath crates are written, the three decisions at the top
 of `docs/open-decisions-index.md` need settling: the kernel floor, the
 single-object-versus-matrix question, and wire compatibility with Cilium nodes.
@@ -66,12 +67,13 @@ Development requires Linux and the Rust toolchain pinned in `rust-toolchain.toml
 
 ```sh
 cargo xtask check
-cargo test --workspace --release --locked
+cargo test --workspace --all-features --release --locked
 cargo xtask deny
 ```
 
 `check` runs formatting, Clippy, tests, and compile checks for x86-64 and arm64
-Linux musl. `deny` requires `cargo-deny`. Build output follows Cargo's standard
+Linux musl, including all feature-gated test fixtures. `deny` requires
+`cargo-deny`. Build output follows Cargo's standard
 configuration, including `CARGO_TARGET_DIR` when set.
 
 The test harnesses and inventory tools are Rust. Static compatibility fixtures

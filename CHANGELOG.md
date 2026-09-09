@@ -9,6 +9,13 @@
 ## [0.9.0] - 2026-09-09
 
 - Begin the map ABI foundation with explicit byte order and layout contracts.
+- Resolve 33 configuration defaults from owning specifications, retaining
+  provenance and leaving conflicting declarations unresolved.
+- Add foreground asynchronous script execution with bounded output, explicit
+  environment, deadlines, cancellation and process-group cleanup.
+- Include feature-gated Rust fixtures in workspace validation.
+- Add periodic reconciliation refresh with rate-limited force-write hints,
+  cancellation-safe replay and completion-based scheduling.
 
 ## [0.8.0] - 2026-09-09
 

@@ -1,35 +1,31 @@
 # flowsdn velocity ledger
 
-Usage cutoff: **2026-09-09T11:41:38.751Z**. Validation and cleanup completed
-**2026-09-09T11:43:30Z**. Milestone v0.8.0 elapsed **10h 11m 4s**, including an
-observed **35,576.259-second inter-response gap**.
-That gap includes a reported capacity interruption and later continuation;
-it is not active coding time. Active work remains unknown.
+Usage cutoff: **2026-09-09T12:11:00.810Z**. Validation and cleanup observed complete **2026-09-09T12:11:00.810Z**.
+Milestone v0.9.0 elapsed **19m 36s**, with **13,835,412 processed tokens**
+across root and three agents through the cutoff. Active work time is unknown.
 
 | Combined unique-response usage | Tokens |
 |---|---:|
-| Input | 81,250,842 |
-| Cached input (subset) | 79,116,800 |
-| Uncached input | 2,134,042 |
-| Output | 357,034 |
-| Reasoning output (subset) | 88,440 |
-| Total processed | 81,607,876 |
+| Input | 96,937,804 |
+| Cached input (subset) | 94,395,264 |
+| Uncached input | 2,542,540 |
+| Output | 429,944 |
+| Reasoning output (subset) | 110,418 |
+| Total processed | 97,367,748 |
 
-The milestone accounts for **15,788,690 processed tokens**
-across root and three agents through the cutoff. These are deduplicated response
-counters, include repeated context, and do not establish subscription dollars.
-Per-agent cutoffs are in [subagents.json](subagents.json). Reported parallel
-windows total **0.532 agent-window hours**;
-they include coordination and cannot be added as project wall time.
+Totals are deduplicated by response ID and include repeated context; they do not
+establish subscription dollars. [Subagent records](subagents.json) preserve each
+cutoff. Observed agent windows total **1,427 seconds**
+(**0.396 agent-window hours**) with overlapping
+project time kept separate. These windows include coordination, not measured
+active coding time.
 
-Commit `ea7cbea` passed **180 tests in both debug and release**, formatting,
-Clippy, both Linux musl compile checks and dependency policy. Cleanup removed
-**10,012 files / 2.4 GiB**. [v0.8.0](https://github.com/glennswest/flowsdn/releases/tag/v0.8.0) was published
-at 11:45 UTC, after the usage cutoff.
-Issue #122 closed; repository totals are **10 closed / 280 open**.
-[Milestone details](0.8.0.json) retain crate windows, baseline and endpoint
-counters, validation and interruption bounds. Usage after the cutoff, including
-final reporting and publication, is excluded.
+Commit `48a7d19` passed **211 tests in debug and release with all features**,
+formatting, Clippy, both Linux musl compile checks and dependency policy.
+Cleanup removed **11,035 files / 3.1 GiB**. Release candidate v0.9.0 awaits
+publication. Repository issue counts remain **10 closed / 280 open**.
+[Milestone details](0.9.0.json) retain crate windows, baseline/endpoint counters
+and validation. Later publication and reporting are outside this cutoff.
 
 ## Recording rules
 

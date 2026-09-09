@@ -209,3 +209,37 @@ not establish whole-binary reproducibility or provide a networking executable.
 
 Issue #122 is resolved by ADR-0010. Refresh and batched reconciliation, remaining
 catalogue defaults, script subprocesses and networking adapters remain pending.
+
+## Version 0.9.0 implementation
+
+All 211 unique tests passed in debug and release with all features enabled:
+55 script, 51 configuration, 39 reconciler, 30 table, 7 health, 7 fence,
+7 build-selector, 6 map ABI, 5 build-metadata and 4 harvester tests.
+Formatting, Clippy with warnings denied, both Linux musl all-target compile
+checks and dependency policy passed against 89 external dependency versions.
+
+The first map ABI subset provides dependency-free `no_std` connection tuples,
+LPM address keys and frozen ipcache layouts. Compile-time layout assertions and
+independent byte fixtures cover offsets, endian rules, prefix bounds and padding.
+This does not establish Aya integration, live-map or verifier compatibility.
+
+Owning specifications resolve 33 more configuration defaults with recorded
+provenance. Of 539 declarations, 521 defaults now resolve and 18 remain explicit
+gaps. Conflicting declarations remain unresolved; no reference implementation
+code was used to invent missing values.
+
+Periodic refresh traverses a revision snapshot in bounded chunks, rechecks
+candidate generations, limits new refresh dispatches and carries force-write
+hints across cancellation and retries. Slow successes schedule from completion;
+recent rows skipped by a pass contribute their earliest eligibility deadline.
+
+Foreground subprocess execution uses the existing engine's expansion, conditions
+and exit assertions. It bounds output, clears the inherited environment, tracks
+cancellation/deadlines and owns process-group signals before reaping the leader.
+Rust fixture processes cover graceful interruption, forced cleanup, descendants,
+caller-future drop, output overflow and invalid UTF-8 error precedence.
+Feature-gated fixtures are included in the standard workspace checks. Executable
+code retains OS permissions; stronger process isolation remains caller-owned.
+
+Batch reconciliation, remaining map layouts, background script jobs and
+networking subsystem adapters remain forthcoming.
