@@ -431,7 +431,7 @@ exist → exit 0. Duplicate DEL: same.
 3. Chainer present → its CHECK (generic-veth: endpoint health only).
 4. Otherwise `GET /endpoint/cni-attachment-id:<cid>:<ifname>/healthz`;
    transport/404 → code **100** `HealthzFailed` `failed to retrieve
-   container health: …`; `overall-health == "failure"` → code **101**
+   container health: …`; `overallHealth == "Failure"` → code **101**
    `Unhealthy` `container is unhealthy in agent`.
 5. Enter the netns; the link `CNI_IFNAME` MUST exist and MUST carry every
    address that `prevResult.ips[]` attributes (via `interface` index) to the
@@ -757,7 +757,7 @@ node do not rewrite the file on every start (the byte-compare in 3.11 step
 | `PUT /endpoint/{id}` `id=cni-attachment-id:<cid>:<ifname>` | `EndpointChangeRequest` (below) | 201 `Endpoint{id,status{networking{mac,addressing,…},…}}` | 400 invalid, 409 exists, 429, 500 failed, 503 not ready → fatal |
 | `DELETE /endpoint/{id}` | — | 200; 206 (deleted with errors) | 400 invalid, 404 not found, 429 → warn, continue; 503 → queue (5.1) |
 | `DELETE /endpoint` | `EndpointBatchDeleteRequest{container-id}` | 200/206 | as above; used when the interface name is unknown |
-| `GET /endpoint/{id}/healthz` | — | 200 `EndpointHealth{overall-health,…}` | CHECK codes 100/101 |
+| `GET /endpoint/{id}/healthz` | — | 200 `EndpointHealth{overallHealth,…}` | CHECK codes 100/101 |
 | `GET /healthz` | — | 200 | STATUS code 50 |
 
 `EndpointChangeRequest` fields sent by the primary ADD (all others omitted):
@@ -1252,3 +1252,9 @@ Implementation clarification (2026-09-09): expiration is an HTTP header,
 not a query parameter. Confirmed against reference `api/v1/openapi.yaml`
 `ipam-expiration` at the pinned reference commit; aligns this spec with
 spec 07 §3.2. No executable reference code was copied.
+
+Implementation clarification (2026-09-09): endpoint health uses camel-case
+`overallHealth` and the enum `OK`, `Bootstrap`, `Pending`, `Warning`, `Failure`,
+`Disabled`. Confirmed against pinned reference `api/v1/openapi.yaml` and
+`api/v1/models/endpoint_health_status.go`; aligns with spec 08 §4.5. Missing
+or malformed health responses are retrieval errors, never healthy results.

@@ -304,7 +304,7 @@ impl State {
                 && let Some(id) = id.strip_suffix("/healthz")
             {
                 return Ok(if self.endpoints.contains_key(&decode(id)?) {
-                    (200, json!({"overall-health":"ok"}))
+                    (200, json!({"overallHealth":"OK"}))
                 } else {
                     (404, json!({"error":"missing endpoint"}))
                 });
@@ -580,10 +580,22 @@ fn exchange(from: &mut Endpoint, to: &mut Endpoint, v6: bool) -> Result<()> {
         from.command(&format!("send {family} {} {payload}", to.socket(v6)?))? == "SENT",
         "send failed",
     )?;
-    ensure(
-        to.command(&format!("recv {family}"))? == format!("DATA {payload}"),
-        "runtime UDP delivery failed",
-    )
+    let received = to.command(&format!("recv {family}"))?;
+    if received != format!("DATA {payload}") {
+        for endpoint in [from, to] {
+            let namespace = fs::File::open(endpoint.netns())?;
+            let diagnostic = flowsdn_connector::in_namespace(namespace, || {
+                let mut output = String::new();
+                for args in [vec!["-j","link","show"], vec!["-j","neigh","show"], vec!["-j","route","show"]] {
+                    output.push_str(&String::from_utf8(Command::new("ip").args(args).output()?.stdout)?);
+                }
+                Ok(output)
+            }).map_err(|e| e as Box<dyn Error>)?;
+            eprintln!("endpoint {} diagnostic: {diagnostic}", endpoint.id);
+        }
+        return Err(format!("IPv{family} {payload}: expected datagram, got {received}").into());
+    }
+    Ok(())
 }
 
 fn run(binary: &Path, object: &Path) -> Result<()> {
