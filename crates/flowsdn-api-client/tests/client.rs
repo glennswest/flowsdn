@@ -302,3 +302,30 @@ fn invalid_request_and_missing_socket_have_distinct_errors() {
     ));
     assert!(client.config().expect_err("missing agent").is_transport());
 }
+
+#[test]
+fn full_unix_listener_backlog_cannot_block_connect_past_deadline() {
+    use nix::sys::socket::{AddressFamily, SockFlag, SockType, UnixAddr, connect, socket};
+    use std::os::fd::AsRawFd;
+    let path = std::env::temp_dir().join(format!("flowsdn-backlog-{}-{}.sock", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+    let listener = UnixListener::bind(&path).expect("listener");
+    let address = UnixAddr::new(&path).expect("address");
+    let mut connections = Vec::new();
+    let mut full = false;
+    for _ in 0..512 {
+        let fd = socket(AddressFamily::Unix, SockType::Stream, SockFlag::SOCK_NONBLOCK, None).expect("socket");
+        match connect(fd.as_raw_fd(), &address) {
+            Ok(()) => connections.push(fd),
+            Err(nix::errno::Errno::EAGAIN) => { full = true; break; }
+            Err(error) => panic!("fill backlog: {error}"),
+        }
+    }
+    assert!(full, "fixture failed to saturate backlog");
+    let start = Instant::now();
+    let result = Client::new(&path, Duration::from_millis(40)).config();
+    drop(connections);
+    drop(listener);
+    fs::remove_file(path).expect("remove socket");
+    assert!(matches!(result, Err(Error::Timeout)));
+    assert!(start.elapsed() < Duration::from_millis(500));
+}
