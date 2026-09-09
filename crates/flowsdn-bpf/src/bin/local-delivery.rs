@@ -2,20 +2,30 @@
 #![no_std]
 #![no_main]
 
-use aya_ebpf::{bindings::{BPF_F_NO_PREALLOC, TC_ACT_SHOT}, macros::{classifier, map}, maps::HashMap, programs::TcContext};
+use aya_ebpf::{
+    bindings::{BPF_F_NO_PREALLOC, TC_ACT_SHOT},
+    macros::{classifier, map},
+    maps::HashMap,
+    programs::TcContext,
+};
 use flowsdn_bpf::local_delivery::{deliver, destination};
 use flowsdn_bpf_abi::endpoint::{EndpointInfo, EndpointKey};
 
 #[map]
-static cilium_lxc: HashMap<EndpointKey, EndpointInfo> = HashMap::with_max_entries(1024, BPF_F_NO_PREALLOC);
+static cilium_lxc: HashMap<EndpointKey, EndpointInfo> =
+    HashMap::with_max_entries(1024, BPF_F_NO_PREALLOC);
 
 #[classifier]
 pub fn local_delivery(ctx: TcContext) -> i32 {
-    let Some(key) = destination(&ctx) else { return TC_ACT_SHOT; };
+    let Some(key) = destination(&ctx) else {
+        return TC_ACT_SHOT;
+    };
     // SAFETY: NO_PREALLOC prevents deleted entries being reused in place;
     // lookup storage is RCU protected for this invocation. Copy immediately,
     // retain no reference across helpers, and never write through the pointer.
-    let Some(endpoint) = (unsafe { cilium_lxc.get(&key).copied() }) else { return TC_ACT_SHOT; };
+    let Some(endpoint) = (unsafe { cilium_lxc.get(&key).copied() }) else {
+        return TC_ACT_SHOT;
+    };
     deliver(&ctx, endpoint)
 }
 
@@ -25,4 +35,6 @@ pub fn local_delivery(ctx: TcContext) -> i32 {
 static LICENSE: [u8; 13] = *b"Dual BSD/GPL\0";
 
 #[panic_handler]
-fn panic(_: &core::panic::PanicInfo<'_>) -> ! { loop {} }
+fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
+    loop {}
+}

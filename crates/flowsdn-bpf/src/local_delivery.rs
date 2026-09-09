@@ -58,16 +58,21 @@ fn rewrite(ctx: &TcContext, ep: EndpointInfo) -> Option<()> {
     match ctx.load::<[u8; 2]>(12).ok()? {
         [0x08, 0x00] => {
             let [ttl, protocol] = ctx.load::<[u8; 2]>(22).ok()?;
-            if ttl <= 1 { return None; }
+            if ttl <= 1 {
+                return None;
+            }
             let next = ttl.checked_sub(1)?;
             let old_word = u16::from_ne_bytes([ttl, protocol]);
             let new_word = u16::from_ne_bytes([next, protocol]);
-            ctx.l3_csum_replace(24, u64::from(old_word), u64::from(new_word), 2).ok()?;
+            ctx.l3_csum_replace(24, u64::from(old_word), u64::from(new_word), 2)
+                .ok()?;
             ctx.store(22, &next, 0).ok()?;
         }
         [0x86, 0xdd] => {
             let hop = ctx.load::<u8>(21).ok()?;
-            if hop <= 1 { return None; }
+            if hop <= 1 {
+                return None;
+            }
             ctx.store(21, &hop.checked_sub(1)?, 0).ok()?;
         }
         _ => return None,

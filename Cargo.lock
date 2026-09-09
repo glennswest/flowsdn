@@ -181,6 +181,7 @@ name = "flowsdn-bpftest"
 version = "0.14.0"
 dependencies = [
  "aya",
+ "flowsdn-bpf-abi",
  "nix",
 ]
 
