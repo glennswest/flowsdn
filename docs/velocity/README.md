@@ -24,7 +24,8 @@ they include coordination and cannot be added as project wall time.
 
 Commit `ea7cbea` passed **180 tests in both debug and release**, formatting,
 Clippy, both Linux musl compile checks and dependency policy. Cleanup removed
-**10,012 files / 2.4 GiB**. Release candidate v0.8.0 awaits publication.
+**10,012 files / 2.4 GiB**. [v0.8.0](https://github.com/glennswest/flowsdn/releases/tag/v0.8.0) was published
+at 11:45 UTC, after the usage cutoff.
 Issue #122 closed; repository totals are **10 closed / 280 open**.
 [Milestone details](0.8.0.json) retain crate windows, baseline and endpoint
 counters, validation and interruption bounds. Usage after the cutoff, including

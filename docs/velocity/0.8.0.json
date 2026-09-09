@@ -203,7 +203,7 @@
     "completed_at_utc": "2026-09-09T11:43:30Z"
   },
   "commit": "ea7cbea",
-  "release": null,
+  "release": "v0.8.0",
   "release_candidate": "v0.8.0",
   "cleanup": {
     "status": "complete",
@@ -211,7 +211,7 @@
     "cargo_removed": "2.4 GiB",
     "completed_at_utc": "2026-09-09T11:43:30Z"
   },
-  "note": "Usage is measured through the earlier explicit cutoff. Completion and cleanup occurred later; publication is pending. Elapsed wall time includes the recorded interruption; active work remains unknown.",
+  "note": "Usage is measured through the earlier explicit cutoff. Completion and cleanup occurred later; publication is recorded separately. Elapsed wall time includes the recorded interruption; active work remains unknown.",
   "observed_interruption": {
     "start_response_utc": "2026-09-09T01:44:35.220Z",
     "end_response_utc": "2026-09-09T11:37:31.479Z",
@@ -228,5 +228,8 @@
     "total_tokens": 65628526
   },
   "combined_baseline_note": "Recomputed from the complete deduplicated sanitized response set before task start; original sampled aggregate retained separately. Root cumulative baseline is unchanged.",
-  "validated_commit": "ea7cbea"
+  "validated_commit": "ea7cbea",
+  "release_commit": "2b36e54fc20aad2b0f64b484c21ba906283e1b9e",
+  "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.8.0",
+  "publication_observed_utc": "2026-09-09T11:45:38Z"
 }
