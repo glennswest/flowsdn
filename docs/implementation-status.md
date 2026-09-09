@@ -341,3 +341,10 @@ protocol errors remain visible until resolved. Clean work does not fabricate
 health errors; bounded diagnostics retain the total error count. Explicit
 shutdown publishes a stop marker. Dropping the run future cannot await a
 health publication; its existing progress observer still reports driver stop.
+
+Source `c267aec` passed **320 unique tests in debug and release with all
+features**: 92 script, 72 reconciler, 51 configuration, 39 ABI, 30 table,
+7 health, 7 fence, 7 build-selector, 6 loader-planning, 5 build-metadata and
+4 harvester tests. Formatting, warning-free Clippy, x86_64/aarch64 Linux musl
+compile checks and dependency advisories/bans/licenses/sources all passed.
+External dependencies remain pinned to the previous 89-version graph.
