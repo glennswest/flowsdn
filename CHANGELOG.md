@@ -6,7 +6,13 @@ No unreleased changes.
 
 ## [0.11.0] - 2026-09-09
 
-- Add policy ABI layouts and verify the reserved policy flag bits.
+- Add policy and affinity ABI layouts, verify reserved policy flags, and preserve
+  declared prefixes for port ranges beginning at zero.
+- Expose reconciliation revision barriers and retry progress through cloneable
+  observers, including shutdown and resynchronization state.
+- Add asynchronous whole-section script retries with bounded backoff, retained
+  state, retry diagnostics and cleanup of failed-attempt background jobs.
+- Propagate background wait errors regardless of the wait line’s status prefix.
 
 ## [0.10.0] - 2026-09-09
 

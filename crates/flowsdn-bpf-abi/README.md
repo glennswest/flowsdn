@@ -17,7 +17,9 @@ for supported service layouts and the unresolved L7 union interpretation.
 
 Policy constructors derive port range prefixes from their declared length,
 including ranges starting at zero. Raw policy decoding retains reserved bits
-while semantic accessors ignore them.
+while semantic accessors ignore them. Entry construction checks field encoding;
+the policy owner must derive deny from precedence and validate cross-field
+policy semantics.
 
 This is a subset of the map catalogue. Endpoint and node layouts, Aya integration,
 map operations and BPF loading remain forthcoming.

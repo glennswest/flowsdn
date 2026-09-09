@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "project": "flowsdn",
-  "as_of_utc": "2026-09-09T12:36:15Z",
+  "as_of_utc": "2026-09-09T12:55:18.196Z",
   "measurement_start_utc": "2026-09-08T16:11:13.415Z",
-  "elapsed_seconds": 73501.585,
+  "elapsed_seconds": 74644.781,
   "historical_project_start_known": false,
   "active_work_seconds": null,
   "session": {
     "id": "01a081c9-5ae6-72e3-a2f7-1a103e3c6703",
     "source": "Local Codex token_usage_record; deduplicated by response_id; payload content excluded",
-    "completed_response_records": 547,
+    "completed_response_records": 593,
     "tokens": {
-      "input_tokens": 59792234,
-      "cached_input_tokens": 58921728,
+      "input_tokens": 64317741,
+      "cached_input_tokens": 63400064,
       "cache_write_input_tokens": 0,
-      "output_tokens": 198333,
-      "reasoning_output_tokens": 43886,
-      "total_tokens": 59990567
+      "output_tokens": 212820,
+      "reasoning_output_tokens": 46622,
+      "total_tokens": 64530561
     }
   },
   "phases": [
@@ -297,6 +297,47 @@
       "note": "Root-only implementation/integration/coordination/validation/reporting; source validated and cleanup complete. Combined unique child usage is in 0.10.0.json; publication has not happened.",
       "release": "v0.10.0",
       "release_commit": "b42616da57ace71ddbfca5f85d5fd5efbaea2e97"
+    },
+    {
+      "id": "reporting-gap-before-0.11",
+      "scope": "project/shared",
+      "start_utc": "2026-09-09T12:36:15Z",
+      "end_utc": "2026-09-09T12:46:19Z",
+      "elapsed_seconds": 604.0,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T12:36:09.340Z",
+      "token_end_sample_utc": "2026-09-09T12:40:13.720Z",
+      "tokens": {
+        "input_tokens": 1385571,
+        "cached_input_tokens": 1373440,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3581,
+        "reasoning_output_tokens": 1043,
+        "total_tokens": 1389152
+      },
+      "note": "Root-only reporting/unattributed gap. Token sample boundaries differ from wall-clock boundaries; no active-coding inference."
+    },
+    {
+      "id": "0.11.0",
+      "scope": "project/shared",
+      "start_utc": "2026-09-09T12:46:19Z",
+      "end_utc": null,
+      "measurement_end_utc": "2026-09-09T12:55:18.196Z",
+      "elapsed_seconds": null,
+      "measurement_elapsed_seconds": 539.196,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T12:40:13.720Z",
+      "token_end_sample_utc": "2026-09-09T12:55:16.010Z",
+      "tokens": {
+        "input_tokens": 3139936,
+        "cached_input_tokens": 3104896,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 10906,
+        "reasoning_output_tokens": 1693,
+        "total_tokens": 3150842
+      },
+      "status": "in_progress",
+      "note": "Root-only implementation/integration/coordination/validation/reporting. Combined child usage and windows are in 0.11.0.json."
     }
   ],
   "crates": [
@@ -1080,15 +1121,159 @@
         "total_tokens": 512302
       },
       "note": "Agent-reported elapsed window; response delivery-window usage includes context processing and coordination, not exclusive coding."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-bpf-abi",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T12:46:48Z",
+      "end_utc": "2026-09-09T12:49:34Z",
+      "elapsed_seconds": 166.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:30:12.730Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:49:33.937Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 553190,
+        "cached_input_tokens": 549120,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 4863,
+        "reasoning_output_tokens": 367,
+        "total_tokens": 558053
+      },
+      "measurement_end_utc": "2026-09-09T12:49:34Z",
+      "status": "reported-complete",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-bpf-abi",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T12:50:15Z",
+      "end_utc": "2026-09-09T12:50:28Z",
+      "elapsed_seconds": 13.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:49:50.123Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:50:16.141Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 143191,
+        "cached_input_tokens": 142848,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 83,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 143274
+      },
+      "measurement_end_utc": "2026-09-09T12:50:28Z",
+      "status": "reported-complete",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-reconcile",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T12:51:39Z",
+      "end_utc": "2026-09-09T12:51:58Z",
+      "elapsed_seconds": 19.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:50:39.674Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:51:39.861Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 149785,
+        "cached_input_tokens": 149504,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 85,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 149870
+      },
+      "measurement_end_utc": "2026-09-09T12:51:58Z",
+      "status": "reported-complete",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-reconcile",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T12:52:48Z",
+      "end_utc": "2026-09-09T12:52:57Z",
+      "elapsed_seconds": 9.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:52:22.922Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:52:48.230Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 156698,
+        "cached_input_tokens": 156160,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 102,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 156800
+      },
+      "measurement_end_utc": "2026-09-09T12:52:57Z",
+      "status": "reported-complete",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/table_streams",
+      "crate": "flowsdn-reconcile",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T12:46:57Z",
+      "end_utc": "2026-09-09T12:53:16Z",
+      "elapsed_seconds": 379.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:29:46.764Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:52:46.407Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 870319,
+        "cached_input_tokens": 833280,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 9624,
+        "reasoning_output_tokens": 2207,
+        "total_tokens": 879943
+      },
+      "measurement_end_utc": "2026-09-09T12:53:16Z",
+      "status": "reported-complete",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/review",
+      "crate": "flowsdn-scripttest",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T12:47:04Z",
+      "end_utc": null,
+      "elapsed_seconds": null,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:38:15.825Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:55:14.745Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 1768481,
+        "cached_input_tokens": 1741312,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 11327,
+        "reasoning_output_tokens": 3079,
+        "total_tokens": 1779808
+      },
+      "measurement_end_utc": "2026-09-09T12:55:18.196Z",
+      "status": "in_progress",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
     }
   ],
   "combined_unique_response_tokens": {
-    "input_tokens": 108054580,
-    "cached_input_tokens": 105227008,
+    "input_tokens": 119862213,
+    "cached_input_tokens": 116833664,
     "cache_write_input_tokens": 0,
-    "output_tokens": 492314,
-    "reasoning_output_tokens": 122407,
-    "total_tokens": 108546894
+    "output_tokens": 543096,
+    "reasoning_output_tokens": 132323,
+    "total_tokens": 120405309
   },
   "cleanup": [
     {
@@ -1149,11 +1334,11 @@
   "current_milestone": {
     "id": "0.11.0",
     "status": "in_progress",
-    "start_utc": "2026-09-09T12:46:19Z",
+    "validated_commit": null,
+    "completed_at_utc": null,
     "release_candidate": "v0.11.0",
-    "publication": "not published",
-    "cleanup": "pending",
-    "validation": "pending"
+    "publication": "pending",
+    "cleanup": "pending"
   },
   "milestone_0_7_parallel_time": {
     "observed_agent_window_seconds": 3064.201,
@@ -1162,8 +1347,8 @@
     "project_union_of_observed_child_windows_seconds": 1875.201,
     "note": "Per-agent interval unions are summed only as observed agent-window hours. They include waits and reviews, exclude unobserved intervals, and are not active agent-hours or project wall time."
   },
-  "usage_cutoff_utc": "2026-09-09T12:36:15Z",
-  "elapsed_at_usage_cutoff_seconds": 73501.585,
+  "usage_cutoff_utc": "2026-09-09T12:55:18.196Z",
+  "elapsed_at_usage_cutoff_seconds": 74644.781,
   "milestone_0_8_parallel_time": {
     "observed_agent_window_seconds": 1915.0,
     "observed_agent_window_hours": 0.531944,
@@ -1186,5 +1371,23 @@
     "note": "Closed observed agent windows only; overlapping intervals are not summed as project elapsed. Root CT/NAT coding start was approximate and is not assigned an invented exclusive window.",
     "active_agent_hours": null,
     "project_union_of_observed_child_windows_seconds": 429
-  }
+  },
+  "milestone_0_11_parallel_time": {
+    "observed_agent_window_seconds": 586,
+    "observed_agent_window_hours": 0.162778,
+    "project_wall_clock_seconds": 539.196,
+    "active_work_seconds": null,
+    "active_agent_hours": null,
+    "project_union_of_observed_child_windows_seconds": 388,
+    "note": "Closed observed windows only; the ongoing script window is excluded from summed agent-window time. Overlaps are not summed as project elapsed."
+  },
+  "issue_events": [
+    {
+      "issue": 13,
+      "event": "closed",
+      "reported_by": "/root",
+      "observed_during_milestone": "0.11.0",
+      "observed_at_utc": "2026-09-09T12:55:18.196Z"
+    }
+  ]
 }

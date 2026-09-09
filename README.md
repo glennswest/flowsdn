@@ -17,13 +17,15 @@ Goals:
 
 ## Status
 
-**Foundation implementation started (2026-09-08), version 0.10.0.**
+**Foundation implementation started (2026-09-08), version 0.11.0.**
 
 The workspace includes indexed tables, initialization gates, a reconciler with
 pruning, optional batching and a caller-owned scheduling loop, configuration snapshots, module
-health and a script engine with generic file commands, foreground execution and background jobs.
+health and a script engine with generic file commands, foreground execution,
+background jobs and whole-section retries. Reconciliation observers expose
+attempted revisions and remaining retry progress.
 The map ABI crate defines connection tuples, conntrack/NAT values, service
-layouts and ipcache byte layouts.
+and policy layouts, plus ipcache byte layouts.
 There is no working networking agent or datapath. Synthetic scripts and file assertions
 execute, while the harvested networking scenarios still lack their adapters.
 
@@ -33,7 +35,7 @@ execute, while the harvested networking scenarios still lack their adapters.
 | Inventories | 17 files, ~12.5k lines — the reference measured at v1.20.1 (`7d68cfb394`) |
 | Decision records | 10 (`docs/decisions/`) |
 | Harvested test corpora | 1,444 files — 168 txtar scenarios, 625 BPF cases, 1,196 golden fixtures, 30 fuzz seeds |
-| Open backlog | 280 issues as checked 2026-09-09, indexed in `docs/open-decisions-index.md` |
+| Open backlog | 279 issues as checked 2026-09-09, indexed in `docs/open-decisions-index.md` |
 
 Read in this order: `docs/decisions/` for what was decided and why,
 `docs/inventory/README.md` for the scope table and build order,

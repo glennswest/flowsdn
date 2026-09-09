@@ -1,44 +1,40 @@
 # flowsdn velocity ledger
 
-v0.11.0 started at **2026-09-09T12:46:19Z**; [its work record](0.11.0.json)
-contains the baseline. The completed milestone and usage snapshot below remain
-v0.10.0 until the next measured work boundary.
-
-Usage cutoff and observed completion: **2026-09-09T12:36:15Z**.
-Milestone **v0.10.0 is validated, cleaned up and published**.
-Elapsed project time was **857 seconds (14m 17s)**, with
-**9,609,372 processed tokens** across root and three agents
-through the cutoff. Active work time is unknown.
+Usage cutoff: **2026-09-09T12:55:18.196Z**. Milestone 0.11.0 started
+**2026-09-09T12:46:19Z** and remains **in progress**. Elapsed through the
+cutoff is **539.196 seconds**. Full validation,
+cleanup and release publication remain pending.
 
 | Combined unique-response usage | Tokens |
 |---|---:|
-| Input | 108,054,580 |
-| Cached input (subset) | 105,227,008 |
-| Uncached input | 2,827,572 |
-| Output | 492,314 |
-| Reasoning output (subset) | 122,407 |
-| Total processed | 108,546,894 |
+| Input | 119,862,213 |
+| Cached input (subset) | 116,833,664 |
+| Uncached input | 3,028,549 |
+| Output | 543,096 |
+| Reasoning output (subset) | 132,323 |
+| Total processed | 120,405,309 |
 
-Totals are deduplicated by response ID across root and three agent sessions and
-include repeated context; they do not establish subscription dollars.
-[Subagent records](subagents.json) preserve sanitized counters and cutoffs.
-Closed observed agent windows total **1,025 seconds (0.284722 agent-window
-hours)**; their project interval union is **429 seconds**. These are separate
-from the 857-second milestone wall time and are not measured active coding hours.
-The root's approximate CT/NAT start is not assigned an exact crate-only window.
-An additional 173-second validation checkpoint interval is recorded separately;
-the actual build began slightly before that observed checkpoint.
+Milestone usage is **10,015,230 processed tokens** across root
+and three agents, deduplicated by response ID. The combined baseline uses
+responses strictly before the milestone start; the root baseline is the latest
+sample at or before start. The superseded after-start sample remains in the
+milestone audit metadata. Repeated context counts as input, and these figures
+do not establish subscription dollar usage. Per-agent cutoffs are retained in
+[subagents.json](subagents.json).
 
-Source commit `cc9ec2c` passed **247 unique tests in both debug and release with
-all features**, formatting, Clippy, both Linux musl compile checks and dependency
-policy. Validation was observed complete at **12:35:45 UTC** and recorded in
-`c590a07`. Cleanup removed **9,880 files / 2.7 GiB** and the five task logs;
-completion was observed at **12:36:15 UTC**. Device and before/after disk checks
-passed. [v0.10.0](https://github.com/glennswest/flowsdn/releases/tag/v0.10.0)
-was published at **12:38:42 UTC**, after the usage cutoff. The issue count
-remains **10 closed / 280 open**.
-[Milestone details](0.10.0.json) retain baselines, endpoints, crate windows and
-validation evidence. Later publication and reporting are outside this cutoff.
+Five closed reported windows total **586 agent-window seconds**
+(**0.162778 hours**), with a **388-second project interval union**.
+Script work began at **12:47:04 UTC** and is still ongoing; its elapsed endpoint
+and active time are unknown, so it is excluded from the closed-window total.
+All active-work fields remain unknown.
+
+Focused validation passed **33 ABI tests and ABI Clippy**. The reconciler has
+12 newly added observer tests awaiting validation. Issue #13 was reported
+closed; prior issue-count snapshots remain historical. [Milestone 0.11](0.11.0.json)
+records current scope and counters; [milestone 0.10](0.10.0.json) and the ledger
+preserve previous releases and outcomes. The reporting gap is recorded with
+root-only counters and explicit sample boundaries. Usage after the cutoff,
+including these ledger edits and subsequent reporting, is excluded.
 
 ## Recording rules
 

@@ -7,24 +7,253 @@
   "status": "in_progress",
   "active_work_seconds": null,
   "token_baseline": {
-    "input_tokens": 61264429,
-    "cached_input_tokens": 60381440,
+    "input_tokens": 61177805,
+    "cached_input_tokens": 60295168,
     "cache_write_input_tokens": 0,
-    "output_tokens": 202051,
+    "output_tokens": 201914,
     "reasoning_output_tokens": 44929,
-    "total_tokens": 61466480
+    "total_tokens": 61379719
   },
-  "token_baseline_sample_utc": "2026-09-09T12:46:19.977Z",
+  "token_baseline_sample_utc": "2026-09-09T12:40:13.720Z",
   "workstreams": [
     "flowsdn-bpf-abi",
     "flowsdn-reconcile",
     "flowsdn-scripttest"
   ],
   "validation": {
-    "status": "pending"
+    "status": "pending-full-validation",
+    "focused_checks": {
+      "flowsdn_bpf_abi_tests": 33,
+      "flowsdn_bpf_abi_clippy": "passed"
+    },
+    "observer_tests_added_not_yet_validated": 12
   },
   "cleanup": {
     "status": "pending"
   },
-  "release": null
+  "release": null,
+  "usage_cutoff_utc": "2026-09-09T12:55:18.196Z",
+  "measurement_end_utc": "2026-09-09T12:55:18.196Z",
+  "end_utc": null,
+  "completed_at_utc": null,
+  "elapsed_seconds": null,
+  "measurement_elapsed_seconds": 539.196,
+  "token_endpoint_sample_utc": "2026-09-09T12:55:16.010Z",
+  "token_endpoint": {
+    "input_tokens": 64317741,
+    "cached_input_tokens": 63400064,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 212820,
+    "reasoning_output_tokens": 46622,
+    "total_tokens": 64530561
+  },
+  "root_unique_response_tokens": {
+    "input_tokens": 3139936,
+    "cached_input_tokens": 3104896,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 10906,
+    "reasoning_output_tokens": 1693,
+    "total_tokens": 3150842
+  },
+  "combined_token_baseline": {
+    "input_tokens": 109890971,
+    "cached_input_tokens": 107046400,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 499108,
+    "reasoning_output_tokens": 123832,
+    "total_tokens": 110390079
+  },
+  "combined_token_baseline_cutoff_utc": "2026-09-09T12:46:19Z",
+  "combined_unique_response_tokens": {
+    "input_tokens": 9971242,
+    "cached_input_tokens": 9787264,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 43988,
+    "reasoning_output_tokens": 8491,
+    "total_tokens": 10015230
+  },
+  "agent_cutoffs": {
+    "/root": "2026-09-09T12:55:16.010Z",
+    "/root/config_core": "2026-09-09T12:55:18.196Z",
+    "/root/table_streams": "2026-09-09T12:55:15.594Z",
+    "/root/review": "2026-09-09T12:55:14.745Z"
+  },
+  "reported_work_windows": [
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-bpf-abi",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T12:46:48Z",
+      "end_utc": "2026-09-09T12:49:34Z",
+      "elapsed_seconds": 166.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:30:12.730Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:49:33.937Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 553190,
+        "cached_input_tokens": 549120,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 4863,
+        "reasoning_output_tokens": 367,
+        "total_tokens": 558053
+      },
+      "measurement_end_utc": "2026-09-09T12:49:34Z",
+      "status": "reported-complete",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-bpf-abi",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T12:50:15Z",
+      "end_utc": "2026-09-09T12:50:28Z",
+      "elapsed_seconds": 13.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:49:50.123Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:50:16.141Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 143191,
+        "cached_input_tokens": 142848,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 83,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 143274
+      },
+      "measurement_end_utc": "2026-09-09T12:50:28Z",
+      "status": "reported-complete",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-reconcile",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T12:51:39Z",
+      "end_utc": "2026-09-09T12:51:58Z",
+      "elapsed_seconds": 19.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:50:39.674Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:51:39.861Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 149785,
+        "cached_input_tokens": 149504,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 85,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 149870
+      },
+      "measurement_end_utc": "2026-09-09T12:51:58Z",
+      "status": "reported-complete",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/config_core",
+      "crate": "flowsdn-reconcile",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T12:52:48Z",
+      "end_utc": "2026-09-09T12:52:57Z",
+      "elapsed_seconds": 9.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:52:22.922Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:52:48.230Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 156698,
+        "cached_input_tokens": 156160,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 102,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 156800
+      },
+      "measurement_end_utc": "2026-09-09T12:52:57Z",
+      "status": "reported-complete",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/table_streams",
+      "crate": "flowsdn-reconcile",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T12:46:57Z",
+      "end_utc": "2026-09-09T12:53:16Z",
+      "elapsed_seconds": 379.0,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:29:46.764Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:52:46.407Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 870319,
+        "cached_input_tokens": 833280,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 9624,
+        "reasoning_output_tokens": 2207,
+        "total_tokens": 879943
+      },
+      "measurement_end_utc": "2026-09-09T12:53:16Z",
+      "status": "reported-complete",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/review",
+      "crate": "flowsdn-scripttest",
+      "kind": "implementation",
+      "start_utc": "2026-09-09T12:47:04Z",
+      "end_utc": null,
+      "elapsed_seconds": null,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:38:15.825Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:55:14.745Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 1768481,
+        "cached_input_tokens": 1741312,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 11327,
+        "reasoning_output_tokens": 3079,
+        "total_tokens": 1779808
+      },
+      "measurement_end_utc": "2026-09-09T12:55:18.196Z",
+      "status": "in_progress",
+      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+    }
+  ],
+  "parallel_time": {
+    "observed_agent_window_seconds": 586,
+    "observed_agent_window_hours": 0.162778,
+    "project_wall_clock_seconds": 539.196,
+    "active_work_seconds": null,
+    "active_agent_hours": null,
+    "project_union_of_observed_child_windows_seconds": 388,
+    "note": "Closed observed windows only; the ongoing script window is excluded from summed agent-window time. Overlaps are not summed as project elapsed."
+  },
+  "root_work_scope": {
+    "crate": "project/shared",
+    "start_utc": "2026-09-09T12:46:19Z",
+    "end_utc": null,
+    "active_work_seconds": null,
+    "note": "Root policy ABI implementation, coordination and validation; no separate exclusive coding window observed."
+  },
+  "implementation_commits": [],
+  "commit": null,
+  "release_candidate": "v0.11.0",
+  "note": "Root baseline corrected to the latest sample at or before start; superseded after-start baseline retained for audit. Combined baseline is deduplicated responses strictly before milestone start. Fixed timestamp-aware cutoff excludes subsequent work. Script implementation is ongoing; no completion, cleanup or publication claim.",
+  "superseded_root_token_baseline": {
+    "sample_utc": "2026-09-09T12:46:19.977Z",
+    "tokens": {
+      "input_tokens": 61264429,
+      "cached_input_tokens": 60381440,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 202051,
+      "reasoning_output_tokens": 44929,
+      "total_tokens": 61466480
+    },
+    "reason": "Initial sample was after start; retained here for audit but excluded as the corrected baseline."
+  }
 }

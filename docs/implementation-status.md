@@ -276,3 +276,29 @@ x86_64/aarch64 Linux musl compile checks and dependency policy all passed.
 The locked dependency graph remains unchanged at 89 external versions.
 Build output was cleaned after validation: 9,880 files / 2.7 GiB removed, along
 with this milestone's temporary logs. The release is source-only.
+
+## Version 0.11.0 implementation
+
+Policy ABI adds keys, values and statistics with independent Rust byte fixtures.
+Issue #13 is resolved by checking the pinned reference declaration and recording
+reserved flag positions in policy spec §4.4. Constructors clear reserved bits;
+raw decoding preserves them and semantic readers ignore them. Port ranges
+starting at zero keep their declared prefix, avoiding accidental all-port rules.
+Policy-rule validation and deny/precedence consistency remain caller-owned.
+Six affinity and skip-LB layouts complete that fixed-size service-map subset;
+Maglev sizing, endpoint/node layouts and Aya integration remain forthcoming.
+
+Cloneable reconciliation observers expose attempted revision barriers separately
+from retry success. They account for pending replay, malformed batch results,
+delete-before-update dispatch, resync state and driver/owner shutdown. Indexed
+pending revisions keep progress publication from rescanning a full batch for
+every result. Observers do not keep the reconciler alive or borrow its driver.
+
+Asynchronous retries replay every command from the current section boundary
+through the failed assertion, reevaluating conditions and expansion while
+retaining state and filesystem side effects. Retry counts, capped exponential
+backoff and contextual cancellation diagnostics are exposed. Failed-attempt
+background jobs are cancelled and drained before replay; prior-section jobs
+remain queued. Background retry prefixes remain explicitly unsupported.
+Wait errors now propagate independently of the wait line's own status prefix,
+as required by the script specification.
