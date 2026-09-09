@@ -209,12 +209,23 @@ impl MapBytes<32> for SkipLb6Key {
 impl Lb4AffinityKey {
     /// Construct the cookie member; all padding and reserved flag bits are zero.
     pub fn with_cookie(cookie: u64, rev_nat_id: u16) -> Self {
-        Self { client_id: cookie.to_le_bytes(), rev_nat_id, flags: NETNS_COOKIE, ..Default::default() }
+        Self {
+            client_id: cookie.to_le_bytes(),
+            rev_nat_id,
+            flags: NETNS_COOKIE,
+            ..Default::default()
+        }
     }
     /// Raw cookie view. The caller must first check `uses_netns_cookie()`.
-    pub fn cookie(self) -> u64 { u64::from_le_bytes(self.client_id) }
-    pub fn rev_nat_id(self) -> u16 { self.rev_nat_id }
-    pub fn uses_netns_cookie(self) -> bool { self.flags & NETNS_COOKIE != 0 }
+    pub fn cookie(self) -> u64 {
+        u64::from_le_bytes(self.client_id)
+    }
+    pub fn rev_nat_id(self) -> u16 {
+        self.rev_nat_id
+    }
+    pub fn uses_netns_cookie(self) -> bool {
+        self.flags & NETNS_COOKIE != 0
+    }
     /// Change only the discriminator bit; the union and reserved bits stay intact.
     pub fn set_netns_cookie(&mut self, enabled: bool) {
         self.flags = (self.flags & !NETNS_COOKIE) | u8::from(enabled);
@@ -225,28 +236,51 @@ impl Lb6AffinityKey {
     pub fn with_cookie(cookie: u64, rev_nat_id: u16) -> Self {
         let mut client_id = [0; 16];
         put(&mut client_id, 0, cookie.to_le_bytes());
-        Self { client_id, rev_nat_id, flags: NETNS_COOKIE, ..Default::default() }
+        Self {
+            client_id,
+            rev_nat_id,
+            flags: NETNS_COOKIE,
+            ..Default::default()
+        }
     }
     /// Construct the IPv6 member from network bytes with no cookie flag.
     pub fn with_address(address: [u8; 16], rev_nat_id: u16) -> Self {
-        Self { client_id: address, rev_nat_id, ..Default::default() }
+        Self {
+            client_id: address,
+            rev_nat_id,
+            ..Default::default()
+        }
     }
     /// Raw cookie view. The upper eight union bytes remain available in client_id.
-    pub fn cookie(self) -> u64 { u64::from_le_bytes(take(&self.client_id, 0)) }
-    pub fn rev_nat_id(self) -> u16 { self.rev_nat_id }
-    pub fn uses_netns_cookie(self) -> bool { self.flags & NETNS_COOKIE != 0 }
+    pub fn cookie(self) -> u64 {
+        u64::from_le_bytes(take(&self.client_id, 0))
+    }
+    pub fn rev_nat_id(self) -> u16 {
+        self.rev_nat_id
+    }
+    pub fn uses_netns_cookie(self) -> bool {
+        self.flags & NETNS_COOKIE != 0
+    }
     pub fn set_netns_cookie(&mut self, enabled: bool) {
         self.flags = (self.flags & !NETNS_COOKIE) | u8::from(enabled);
     }
 }
 impl LbAffinityVal {
     /// Packed numeric fields are returned by value, never by unaligned reference.
-    pub fn last_used(self) -> u64 { self.last_used }
-    pub fn backend_id(self) -> u32 { self.backend_id }
+    pub fn last_used(self) -> u64 {
+        self.last_used
+    }
+    pub fn backend_id(self) -> u32 {
+        self.backend_id
+    }
 }
 impl LbAffinityMatch {
-    pub fn backend_id(self) -> u32 { self.backend_id }
-    pub fn rev_nat_id(self) -> u16 { self.rev_nat_id }
+    pub fn backend_id(self) -> u32 {
+        self.backend_id
+    }
+    pub fn rev_nat_id(self) -> u16 {
+        self.rev_nat_id
+    }
 }
 
 const _: () = {

@@ -40,9 +40,9 @@ pub trait MapBytes<const N: usize>: Sized {
 }
 
 pub mod affinity;
-pub mod policy;
 pub mod ct;
 pub mod lb;
+pub mod policy;
 
 pub mod ct_flags {
     pub const OUT: u8 = 0;
