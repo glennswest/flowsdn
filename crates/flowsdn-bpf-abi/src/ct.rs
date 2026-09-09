@@ -42,7 +42,11 @@ impl CtEntry {
     /// Select the service interpretation, zeroing reserved union storage.
     pub fn set_service_backend(&mut self, backend_id: u32) {
         self.nat_addr_or_service = [0; 16];
-        put(&mut self.nat_addr_or_service, 8, u64::from(backend_id).to_le_bytes());
+        put(
+            &mut self.nat_addr_or_service,
+            8,
+            u64::from(backend_id).to_le_bytes(),
+        );
     }
 }
 impl MapBytes<56> for CtEntry {

@@ -514,23 +514,40 @@ pub type Lb6Service = LbService;
 /// Master-slot algorithm codes, spec01 §4.3 and spec05 §4.3.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Algorithm { Random = 1, Maglev = 2 }
+pub enum Algorithm {
+    Random = 1,
+    Maglev = 2,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InvalidAffinityTimeout;
 
 impl LbService {
     /// Interpret the raw union only when this is a master affinity slot.
-    pub fn affinity_seconds(self) -> u32 { self.union_raw & 0x00ff_ffff }
+    pub fn affinity_seconds(self) -> u32 {
+        self.union_raw & 0x00ff_ffff
+    }
     /// Unknown algorithm bytes remain observable; decoding never coerces them.
-    pub fn algorithm_code(self) -> u8 { self.union_raw.to_be_bytes()[0] }
-    pub fn set_affinity(&mut self, algorithm: Algorithm, seconds: u32) -> Result<(), InvalidAffinityTimeout> {
-        if seconds > 0x00ff_ffff { return Err(InvalidAffinityTimeout); }
+    pub fn algorithm_code(self) -> u8 {
+        self.union_raw.to_be_bytes()[0]
+    }
+    pub fn set_affinity(
+        &mut self,
+        algorithm: Algorithm,
+        seconds: u32,
+    ) -> Result<(), InvalidAffinityTimeout> {
+        if seconds > 0x00ff_ffff {
+            return Err(InvalidAffinityTimeout);
+        }
         self.union_raw = (u32::from(algorithm as u8) << 24) | seconds;
         Ok(())
     }
     /// Interpret the same raw union as a backend ID only for backend slots.
-    pub fn backend_id(self) -> u32 { self.union_raw }
-    pub fn service_flags(self) -> u16 { u16::from_le_bytes([self.flags, self.flags2]) }
+    pub fn backend_id(self) -> u32 {
+        self.union_raw
+    }
+    pub fn service_flags(self) -> u16 {
+        u16::from_le_bytes([self.flags, self.flags2])
+    }
     pub fn set_service_flags(&mut self, flags: u16) {
         let [low, high] = flags.to_le_bytes();
         self.flags = low;
@@ -542,14 +559,28 @@ impl Lb4SrcRangeKey {
     /// CIDR prefix bits exclude the 32 static service-ID/padding bits. Host
     /// bits are preserved; canonicalization belongs to the IP-prefix owner.
     pub fn new(address: [u8; 4], bits: u32, rev_nat_id: u16) -> Result<Self, InvalidPrefix> {
-        if bits > 32 { return Err(InvalidPrefix); }
-        Ok(Self { prefixlen: 32_u32.checked_add(bits).ok_or(InvalidPrefix)?, rev_nat_id, pad: 0, address: Be32(address) })
+        if bits > 32 {
+            return Err(InvalidPrefix);
+        }
+        Ok(Self {
+            prefixlen: 32_u32.checked_add(bits).ok_or(InvalidPrefix)?,
+            rev_nat_id,
+            pad: 0,
+            address: Be32(address),
+        })
     }
 }
 impl Lb6SrcRangeKey {
     pub fn new(address: [u8; 16], bits: u32, rev_nat_id: u16) -> Result<Self, InvalidPrefix> {
-        if bits > 128 { return Err(InvalidPrefix); }
-        Ok(Self { prefixlen: 32_u32.checked_add(bits).ok_or(InvalidPrefix)?, rev_nat_id, pad: 0, address })
+        if bits > 128 {
+            return Err(InvalidPrefix);
+        }
+        Ok(Self {
+            prefixlen: 32_u32.checked_add(bits).ok_or(InvalidPrefix)?,
+            rev_nat_id,
+            pad: 0,
+            address,
+        })
     }
 }
 
