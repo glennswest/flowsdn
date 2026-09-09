@@ -89,7 +89,9 @@ impl VxlanHeader {
         if take::<4, 8>(&bytes, 0) != [8, 0, 0, 0] {
             return Err(WireError::Unsupported);
         }
-        Ok(Self { identity: TunnelIdentity::decode(take(&bytes, 4))? })
+        Ok(Self {
+            identity: TunnelIdentity::decode(take(&bytes, 4))?,
+        })
     }
 }
 
@@ -103,28 +105,50 @@ pub struct GeneveHeader {
     pub critical: bool,
 }
 impl GeneveHeader {
-    pub fn new(identity: TunnelIdentity, option_words: u8, critical: bool) -> Result<Self, WireError> {
+    pub fn new(
+        identity: TunnelIdentity,
+        option_words: u8,
+        critical: bool,
+    ) -> Result<Self, WireError> {
         if option_words > 63 {
             return Err(WireError::Length);
         }
-        Ok(Self { identity, option_words, critical })
+        Ok(Self {
+            identity,
+            option_words,
+            critical,
+        })
     }
-    pub const fn option_words(self) -> u8 { self.option_words }
+    pub const fn option_words(self) -> u8 {
+        self.option_words
+    }
     pub fn to_bytes(self) -> [u8; 8] {
         let mut bytes = [0; 8];
-        put(&mut bytes, 0, [self.option_words, u8::from(self.critical) << 6]);
+        put(
+            &mut bytes,
+            0,
+            [self.option_words, u8::from(self.critical) << 6],
+        );
         put(&mut bytes, 2, ETHERNET_PROTOCOL.to_be_bytes());
         put(&mut bytes, 4, self.identity.word());
         bytes
     }
     pub fn from_bytes(bytes: [u8; 8]) -> Result<Self, WireError> {
         let [version_length, flags] = take(&bytes, 0);
-        if version_length & 0xc0 != 0 || flags & 0x80 != 0
-            || u16::from_be_bytes(take(&bytes, 2)) != ETHERNET_PROTOCOL {
+        if version_length & 0xc0 != 0
+            || flags & 0x80 != 0
+            || u16::from_be_bytes(take(&bytes, 2)) != ETHERNET_PROTOCOL
+        {
             return Err(WireError::Unsupported);
         }
-        if flags & 0x3f != 0 { return Err(WireError::Reserved); }
-        Self::new(TunnelIdentity::decode(take(&bytes, 4))?, version_length, flags & 0x40 != 0)
+        if flags & 0x3f != 0 {
+            return Err(WireError::Reserved);
+        }
+        Self::new(
+            TunnelIdentity::decode(take(&bytes, 4))?,
+            version_length,
+            flags & 0x40 != 0,
+        )
     }
 }
 
@@ -144,7 +168,10 @@ impl DsrIpv4 {
     }
     pub fn from_bytes(bytes: [u8; 12]) -> Result<Self, WireError> {
         validate_option(take(&bytes, 0), 2, take(&bytes, 10))?;
-        Ok(Self { address: take(&bytes, 4), port: u16::from_be_bytes(take(&bytes, 8)) })
+        Ok(Self {
+            address: take(&bytes, 4),
+            port: u16::from_be_bytes(take(&bytes, 8)),
+        })
     }
 }
 
@@ -164,7 +191,10 @@ impl DsrIpv6 {
     }
     pub fn from_bytes(bytes: [u8; 24]) -> Result<Self, WireError> {
         validate_option(take(&bytes, 0), 5, take(&bytes, 22))?;
-        Ok(Self { address: take(&bytes, 4), port: u16::from_be_bytes(take(&bytes, 20)) })
+        Ok(Self {
+            address: take(&bytes, 4),
+            port: u16::from_be_bytes(take(&bytes, 20)),
+        })
     }
 }
 fn validate_option(header: [u8; 4], words: u8, padding: [u8; 2]) -> Result<(), WireError> {
@@ -172,7 +202,11 @@ fn validate_option(header: [u8; 4], words: u8, padding: [u8; 2]) -> Result<(), W
     if u16::from_be_bytes([class_hi, class_lo]) != DSR_CLASS || kind != DSR_TYPE {
         return Err(WireError::Unsupported);
     }
-    if length & 0xe0 != 0 || padding != [0; 2] { return Err(WireError::Reserved); }
-    if length != words { return Err(WireError::Length); }
+    if length & 0xe0 != 0 || padding != [0; 2] {
+        return Err(WireError::Reserved);
+    }
+    if length != words {
+        return Err(WireError::Length);
+    }
     Ok(())
 }

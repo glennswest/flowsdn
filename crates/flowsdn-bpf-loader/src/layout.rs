@@ -53,7 +53,9 @@ impl ScratchLayout {
             return Err(LayoutError::NoPossibleCpus);
         }
         let line = target.cache_line_bytes();
-        let remainder = section_size % line;
+        let remainder = section_size
+            .checked_rem(line)
+            .ok_or(LayoutError::ValueSizeOverflow)?;
         let padding = if remainder == 0 {
             0
         } else {
