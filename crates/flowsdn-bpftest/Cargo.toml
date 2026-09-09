@@ -12,4 +12,4 @@ workspace = true
 
 [dependencies]
 aya = "=0.14.0"
-nix = { version = "=0.31.1", default-features = false, features = ["sched"] }
+nix = { version = "=0.30.1", default-features = false, features = ["sched"] }
