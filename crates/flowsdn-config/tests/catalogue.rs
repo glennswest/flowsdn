@@ -17,44 +17,98 @@ fn owning_defaults_resolve_typed_values_without_requiring_overrides() {
         ("bpf-lb-maglev-table-size", Value::UInt(16381)),
         ("bpf-node-map-max", Value::UInt(16384)),
         ("hubble-event-buffer-capacity", Value::Int(4095)),
-        ("hubble-lost-event-send-interval", Value::Duration(1_000_000_000)),
+        (
+            "hubble-lost-event-send-interval",
+            Value::Duration(1_000_000_000),
+        ),
         ("enable-bbr", Value::Bool(false)),
         ("enable-bbr-hostns-only", Value::Bool(false)),
         ("enable-bandwidth-manager", Value::Bool(false)),
-        ("node-port-range", Value::List(vec!["30000".into(), "32767".into()])),
-        ("hubble-drop-events-reasons", Value::List(vec!["auth_required".into(), "policy_denied".into()])),
+        (
+            "node-port-range",
+            Value::List(vec!["30000".into(), "32767".into()]),
+        ),
+        (
+            "hubble-drop-events-reasons",
+            Value::List(vec!["auth_required".into(), "policy_denied".into()]),
+        ),
         ("bpf-lb-algorithm", Value::String("random".into())),
         ("bpf-lb-dsr-dispatch", Value::String("opt".into())),
         ("bpf-lb-mode", Value::String("snat".into())),
-        ("bpf-lb-maglev-hash-seed", Value::String("JLfvgnHc2kaSUFaI".into())),
-        ("clustermesh-service-v2", Value::String("prefer-legacy".into())),
+        (
+            "bpf-lb-maglev-hash-seed",
+            Value::String("JLfvgnHc2kaSUFaI".into()),
+        ),
+        (
+            "clustermesh-service-v2",
+            Value::String("prefer-legacy".into()),
+        ),
         ("kvstore", Value::String(String::new())),
         ("hubble-tls-client-ca-files", Value::List(Vec::new())),
         ("fixed-identity-mapping", Value::Map(Default::default())),
-        ("ipam-multi-pool-pre-allocation", Value::Map([("default".into(), "8".into())].into())),
+        (
+            "ipam-multi-pool-pre-allocation",
+            Value::Map([("default".into(), "8".into())].into()),
+        ),
     ] {
         let actual = resolved.get(key).unwrap();
         assert_eq!(actual.value, expected, "{key}");
         assert_eq!(actual.source, Source::Default, "{key}");
     }
-    let overridden = schema.resolve([Entry::new(Source::Flag, "BPF_LB_MAGLEV_TABLE_SIZE", "65537")]).unwrap();
-    assert_eq!(overridden.get("bpf-lb-maglev-table-size").unwrap().value, Value::UInt(65537));
-    assert_eq!(catalogue::get("bpf-lb-maglev-table-size").unwrap().default_expression, "userCfg.TableSize");
+    let overridden = schema
+        .resolve([Entry::new(
+            Source::Flag,
+            "BPF_LB_MAGLEV_TABLE_SIZE",
+            "65537",
+        )])
+        .unwrap();
+    assert_eq!(
+        overridden.get("bpf-lb-maglev-table-size").unwrap().value,
+        Value::UInt(65537)
+    );
+    assert_eq!(
+        catalogue::get("bpf-lb-maglev-table-size")
+            .unwrap()
+            .default_expression,
+        "userCfg.TableSize"
+    );
 }
 
 #[test]
 fn conflicting_and_missing_defaults_stay_fail_closed() {
     let schema = catalogue::partial_known_defaults_registry().unwrap();
-    for key in ["monitor-aggregation", "lb-test-fault-probability", "enable-policy-secrets-sync", "local-max-addr-scope", "packetization-layer-pmtud-mode", "log-opt", "enable-gops"] {
+    for key in [
+        "monitor-aggregation",
+        "lb-test-fault-probability",
+        "enable-policy-secrets-sync",
+        "local-max-addr-scope",
+        "packetization-layer-pmtud-mode",
+        "log-opt",
+        "enable-gops",
+    ] {
         let definition = catalogue::get(key).unwrap();
         assert!(definition.default.is_none(), "{key}");
         assert!(definition.default_provenance().is_none(), "{key}");
         assert!(schema.omitted().iter().any(|gap| gap.key == key));
     }
-    assert!(matches!(catalogue::complete_registry(&[]), Err(Error::UnresolvedDefaults(gaps)) if gaps.len() == 18));
-    assert!(catalogue::get("fixed-identity-mapping").unwrap().needs_area_validator());
-    assert!(catalogue::get("bpf-map-event-buffers").unwrap().needs_area_validator());
-    assert!(catalogue::get("ipam-multi-pool-pre-allocation").unwrap().needs_area_validator());
+    assert!(
+        matches!(catalogue::complete_registry(&[]), Err(Error::UnresolvedDefaults(gaps)) if gaps.len() == 18)
+    );
+    assert!(
+        catalogue::get("fixed-identity-mapping")
+            .unwrap()
+            .needs_area_validator()
+    );
+    assert!(
+        catalogue::get("bpf-map-event-buffers")
+            .unwrap()
+            .needs_area_validator()
+    );
+    assert!(
+        catalogue::get("ipam-multi-pool-pre-allocation")
+            .unwrap()
+            .needs_area_validator()
+    );
 }
 
 #[test]
@@ -74,7 +128,11 @@ fn resolved_provenance_points_to_the_actual_owning_declaration() {
         let text = std::fs::read_to_string(root.join(path)).unwrap();
         let index = line.parse::<usize>().unwrap().checked_sub(1).unwrap();
         let declaration = text.lines().nth(index).unwrap();
-        assert!(declaration.contains(definition.name), "{}: {provenance}", definition.name);
+        assert!(
+            declaration.contains(definition.name),
+            "{}: {provenance}",
+            definition.name
+        );
     }
     assert_eq!(cross_spec_count, 33);
     assert_eq!(catalogue::coverage().literal_defaults, 521);
