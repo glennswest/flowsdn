@@ -1,0 +1,17 @@
+{
+  "id": "0.8.0",
+  "scope": "project/shared",
+  "start_utc": "2026-09-09T01:32:26Z",
+  "start_revision": "55b6135",
+  "status": "in-progress",
+  "owner": "/root",
+  "active_work_seconds": null,
+  "token_baseline": null,
+  "token_baseline_note": "Will populate from latest sanitized session telemetry before task start; not an inferred zero.",
+  "workstreams": [
+    "flowsdn-config",
+    "flowsdn-reconcile",
+    "flowsdn-scripttest",
+    "project/shared"
+  ]
+}

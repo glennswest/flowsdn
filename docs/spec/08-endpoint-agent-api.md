@@ -852,7 +852,7 @@ Every request records `cilium_api_process_time_seconds{path,method,return_code}`
 
 ### 3.13 Health checker
 
-Owner: `flowsdn-health`. Enabled by `enable-health-checking` (default true).
+Owner: `flowsdn-healthcheck` (ADR-0010). Enabled by `enable-health-checking` (default true).
 Runs inside the agent after `endpoint-restore.restored-into-manager` and
 after `GET /healthz` first answered (the health server waits for the agent
 status to be available).
@@ -1613,10 +1613,8 @@ Crates (all `#![forbid(unsafe_code)]` except the netns thread, which needs
   `flowsdn-api` does not depend on them. The `/statedb/query` route reads
   the health table and streams `serde_json` objects through
   `axum::body::Body::from_stream`.
-- **`flowsdn-health`** (the checker; the *registry* of spec 00 keeps its
-  name — rename that one `flowsdn-health-registry` or place the checker in
-  `flowsdn-healthcheck`; recommendation: **`flowsdn-healthcheck`** to avoid
-  the clash) — prober task (`surge-ping` for ICMP over `IPPROTO_ICMP`
+- **`flowsdn-healthcheck`** (the checker; the registry of spec 00 remains
+  `flowsdn-health`, as settled by ADR-0010) — prober task (`surge-ping` for ICMP over `IPPROTO_ICMP`
   datagram sockets with raw fallback; `hyper` client with a 10 s timeout for
   `/hello`), responder (`hyper` server bound on each node address and on a
   socket created by a `std::thread` that `setns` into the health netns),
@@ -1684,6 +1682,5 @@ API server + models + limiter ~5k, healthcheck ~2k, status ~0.8k, tests ~5k.
 9. **Status verdict severity of "not all probes executed".** Reference:
    `Warning`; spec 00 §3.4.2: `Failure`. Both yield 500 on 9879. This spec
    follows the reference; spec 00 should be amended.
-10. **Crate naming clash `flowsdn-health`.** Spec 00 uses it for the module
-    health registry. Recommendation: registry keeps `flowsdn-health`; this
-    spec's checker is `flowsdn-healthcheck`.
+10. **Resolved by ADR-0010 (#122):** the module health registry keeps
+    `flowsdn-health`; this spec's checker is `flowsdn-healthcheck`.
