@@ -3,7 +3,7 @@
 //! Desired rows and reconciliation status are separate. Revision checks reject
 //! stale results, and status reads synthesize Pending for newer desired rows.
 //! The caller owns the `run` future and its shutdown signal; no task is spawned.
-//! Atomic table write hooks, annotations, batch targets, refresh, health
+//! Atomic table write hooks, annotations, batch targets, health
 //! reporting and asynchronous completion waiters remain integration work.
 //! Prune runs only after table initialization and clears a resync request only
 //! on success. Incremental updates alone cannot remove unknown target entries
@@ -18,16 +18,28 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod refresh;
+use refresh::RefreshState;
 mod prune;
 mod run;
 use prune::PruneState;
 pub use prune::{PruneHandle, PruneStatus};
+
+/// Whether an update follows a desired change or requests a forced rewrite.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UpdateHint { Changed, Refresh }
 
 /// Operations must be idempotent: cancelling a round may replay its in-flight
 /// operation, including one whose target side effect already occurred.
 pub trait Target<T: Keyed>: Send {
     type Error: fmt::Display;
     fn update(&mut self, row: Arc<T>) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    /// Refresh asks the target to force a rewrite even if it believes the row
+    /// unchanged. Existing targets default to repeating their idempotent update;
+    /// targets that skip unchanged values should override and honor the hint.
+    fn update_with_hint(&mut self, row: Arc<T>, _hint: UpdateHint) -> impl Future<Output = Result<(), Self::Error>> + Send {
+        self.update(row)
+    }
     fn delete(&mut self, key: Key) -> impl Future<Output = Result<(), Self::Error>> + Send;
     /// Remove target objects absent from this immutable desired snapshot.
     /// It is called only after the table has completed initialization.
@@ -45,6 +57,10 @@ pub struct Options {
     pub prune_interval: Duration,
     /// Minimum gap between loop rounds; `run_round` itself remains unthrottled.
     pub round_interval: Duration,
+    /// Zero disables refresh.
+    pub refresh_interval: Duration,
+    /// Maximum newly scheduled refresh rows per second; no burst credit.
+    pub refresh_rate: u32,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -54,6 +70,8 @@ impl Default for Options {
             max_backoff: Duration::from_secs(60),
             prune_interval: Duration::from_secs(3600),
             round_interval: Duration::from_millis(1),
+            refresh_interval: Duration::from_secs(1800),
+            refresh_rate: 100,
         }
     }
 }
@@ -67,6 +85,8 @@ pub enum ReconcileError {
     PruneDeadlineOverflow,
     InvalidRoundInterval,
     RoundDeadlineOverflow,
+    InvalidRefreshRate,
+    RefreshDeadlineOverflow,
 }
 impl fmt::Display for ReconcileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -78,6 +98,8 @@ impl fmt::Display for ReconcileError {
             Self::PruneDeadlineOverflow => "prune deadline exceeds the monotonic clock range",
             Self::InvalidRoundInterval => "round interval must be positive",
             Self::RoundDeadlineOverflow => "round deadline exceeds the monotonic clock range",
+            Self::InvalidRefreshRate => "refresh rate must be positive when refresh is enabled",
+            Self::RefreshDeadlineOverflow => "refresh deadline exceeds the monotonic clock range",
         })
     }
 }
@@ -86,6 +108,7 @@ impl Error for ReconcileError {}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Kind {
     Pending,
+    Refreshing,
     Done,
     Error,
 }
@@ -128,6 +151,7 @@ struct Retry {
     operation: Operation,
     failures: u32,
     deadline: Instant,
+    refresh: bool,
 }
 #[derive(Default)]
 struct RetryQueue {
@@ -164,6 +188,7 @@ struct Work<T> {
     revision: Revision,
     row: Option<Arc<T>>,
     failures: u32,
+    refresh: bool,
 }
 impl<T> Work<T> {
     fn operation(&self) -> Operation {
@@ -179,6 +204,7 @@ impl<T> Work<T> {
 pub struct Round {
     pub processed: usize,
     pub updated: usize,
+    pub refreshed: usize,
     pub deleted: usize,
     pub stale: usize,
     pub attempted_revision: Revision,
@@ -200,6 +226,7 @@ pub struct Reconciler<'a, T: Keyed, U: Target<T>> {
     attempted_revision: Revision,
     resync_required: bool,
     prune: PruneState,
+    refresh: RefreshState<T>,
 }
 impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     pub fn new(table: &'a Table<T>, target: U, options: Options) -> Result<Self, ReconcileError> {
@@ -215,6 +242,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         if options.round_interval.is_zero() {
             return Err(ReconcileError::InvalidRoundInterval);
         }
+        if !options.refresh_interval.is_zero() && options.refresh_rate == 0 {
+            return Err(ReconcileError::InvalidRefreshRate);
+        }
         Ok(Self {
             table,
             stream: table.watch(0),
@@ -226,6 +256,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             attempted_revision: 0,
             resync_required: false,
             prune: PruneState::default(),
+            refresh: RefreshState::default(),
         })
     }
 
@@ -350,6 +381,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                     self.prune.handle.prune_now();
                     self.retries = RetryQueue::default();
                     self.statuses.clear();
+                    self.refresh.reset_pass();
                 }
                 Change::Insert { row, revision } => {
                     let key = row.primary_key();
@@ -359,6 +391,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                         revision,
                         row: Some(row),
                         failures: 0,
+                        refresh: false,
                     });
                 }
                 Change::Delete { key, revision } => {
@@ -368,6 +401,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                         revision,
                         row: None,
                         failures: 0,
+                        refresh: false,
                     });
                 }
             }
@@ -429,15 +463,14 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         &mut self,
         clock: impl Fn() -> Instant,
     ) -> Result<Round, ReconcileError> {
+        self.arm_refresh(clock())?;
         let mut round = Round::default();
         if self.pending.is_empty() {
             self.load_changes();
         }
         while round.processed < self.options.round_size {
             if self.pending.is_empty() {
-                let Some(retry) = self.retries.due(clock()) else {
-                    break;
-                };
+                if let Some(retry) = self.retries.due(clock()) {
                 let row = self
                     .table
                     .snapshot()
@@ -456,6 +489,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                     revision: retry.revision,
                     row,
                     failures: retry.failures,
+                    refresh: retry.refresh,
                 };
                 if retry.operation == Operation::Update && work.row.is_none() {
                     self.statuses.remove(&work.key);
@@ -464,6 +498,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                     continue;
                 }
                 self.pending.push_back(work);
+                } else if let Some(work) = self.next_refresh_work(clock())? {
+                    self.pending.push_back(work);
+                } else { break; }
             }
             let work = self
                 .pending
@@ -479,9 +516,10 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             }
             let mut pending = Status::pending(work.revision, work.operation());
             pending.retries = work.failures;
+            if work.refresh { pending.kind = Kind::Refreshing; }
             self.statuses.insert(work.key.clone(), pending);
             let result = match &work.row {
-                Some(row) => self.target.update(row.clone()).await,
+                Some(row) => self.target.update_with_hint(row.clone(), if work.refresh { UpdateHint::Refresh } else { UpdateHint::Changed }).await,
                 None => self.target.delete(work.key.clone()).await,
             };
             if !self.current(&work) {
@@ -499,6 +537,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                     self.retries.remove(&work.key);
                     if work.row.is_some() {
                         round.updated = round.updated.saturating_add(1);
+                        if work.refresh { round.refreshed = round.refreshed.saturating_add(1); }
                     } else {
                         round.deleted = round.deleted.saturating_add(1);
                     }
@@ -518,6 +557,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                         operation: work.operation(),
                         failures,
                         deadline,
+                        refresh: work.refresh,
                     });
                 }
             }

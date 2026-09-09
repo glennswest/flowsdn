@@ -18,7 +18,7 @@ row's status is therefore not evidence that its latest deletion has succeeded.
 Successful deletion releases its status entry.
 
 `run(shutdown_future)` drives work until shutdown completes or a scheduling error
-occurs. It waits for table changes, initialization readiness, retry/prune timers,
+occurs. It waits for table changes, initialization readiness, retry/prune/refresh timers,
 and explicit prune requests. The caller owns this future and may poll or spawn
 it; no worker is detached. Shutdown takes priority and cancels an in-flight
 operation. Dropping the future also cancels it, retaining queued work so the
@@ -27,7 +27,7 @@ same reconciler can resume later.
 The loop waits at least `round_interval` between completed rounds (1 ms by
 default, at most 1000 rounds/s). Idle loops wait on notifications or timers;
 retries are timed from operation completion, including slow target calls. Tokio's
-monotonic clock supports paused-time tests. Refresh scheduling remains deferred.
+monotonic clock supports paused-time tests.
 
 Callers can instead use `run_round(now)` to supply a fixed scheduling instant and
 drive rounds themselves. `next_retry()` and `retry_low_water_mark()` expose the
@@ -57,7 +57,22 @@ Clearing it confirms deletion-history recovery, not successful application of
 all rows: individual update failures may still be queued for retry.
 
 This slice does not install atomic status hooks into table publication.
-Refresh, annotations, batch targets,
+Annotations, batch targets,
 health reporting and asynchronous completion waiters remain unimplemented.
 Prune owns its initialization gate; callers still own any extra startup gate
 needed before incremental target writes, such as restoration of allocated IDs.
+
+Periodic refresh defaults to 30 minutes and 100 newly scheduled rows per second.
+Set `refresh_interval` to zero to disable it. Each pass visits an immutable
+snapshot in revision order, scanning bounded chunks and selecting Done statuses
+at least one interval old. Recent successes contribute their next eligibility
+deadline; failed rows retain their existing backoff. Rate limits do not accumulate
+burst credit while idle. `next_refresh()` exposes the next scan or dispatch timer
+for callers driving manual rounds.
+
+Refresh sets the side-table status to Refreshing and calls
+`Target::update_with_hint` with `UpdateHint::Refresh`, requesting a forced rewrite.
+The default method repeats `update`, preserving existing target implementations;
+targets that skip unchanged values should override it to honor the hint. Retries
+and cancellation replay retain the hint. Generation checks discard stale results,
+and refresh never changes desired-table revisions.

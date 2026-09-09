@@ -7,6 +7,7 @@ impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
         self.next_retry()
             .into_iter()
             .chain(self.next_prune().filter(|_| self.table.initialized()))
+            .chain(self.next_refresh())
             .min()
     }
 
@@ -22,7 +23,7 @@ impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
     /// prune state remain in this reconciler, so a later invocation can resume;
     /// idempotent operations may be replayed after their side effects occurred.
     ///
-    /// Retry/prune deadlines use Tokio's monotonic clock, allowing virtual-time
+    /// Retry/prune/refresh deadlines use Tokio's monotonic clock, allowing virtual-time
     /// testing. Completed rounds are separated by `Options::round_interval`.
     pub async fn run(&mut self, shutdown: impl Future<Output = ()>) -> Result<(), ReconcileError> {
         tokio::pin!(shutdown);
