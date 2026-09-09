@@ -129,6 +129,10 @@ impl Drop for Endpoint {
     }
 }
 
+fn native<T>(result: flowsdn_connector::Result<T>) -> Result<T> {
+    result.map_err(|e| e as Box<dyn std::error::Error>)
+}
+
 fn worker(id: u8) -> Result<()> {
     ensure((1..=3).contains(&id), "invalid fixture endpoint")?;
     isolate()?;
@@ -139,42 +143,17 @@ fn worker(id: u8) -> Result<()> {
         lines.next().transpose()?.as_deref() == Some("configure"),
         "missing setup request",
     )?;
-    ip(&["link", "set", &format!("e{id}"), "name", "eth0"])?;
-    ip(&["link", "set", "eth0", "address", &mac(id, false)])?;
-    ip(&["link", "set", "eth0", "mtu", "1500", "up"])?;
-    ip(&["link", "set", "lo", "up"])?;
+    let connector = native(flowsdn_connector::Connector::open())?;
+    let link = native(connector.require_link(&format!("e{id}")))?;
+    native(connector.configure(link.index, "eth0", [2, 0, 0, 0, 1, id], 1500))?;
     for v6 in [true, false] {
-        let family = if v6 { "-6" } else { "-4" };
         let prefix = if v6 { 128 } else { 32 };
-        let local = format!("{}/{prefix}", address(id, v6));
-        if v6 {
-            ip(&["-6", "addr", "add", &local, "dev", "eth0", "nodad"])?;
-        } else {
-            ip(&["addr", "add", &local, "dev", "eth0"])?;
-        }
-        let gateway = cni::gateway(v6);
-        ip(&[
-            family,
-            "route",
-            "add",
-            &format!("{gateway}/{prefix}"),
-            "dev",
-            "eth0",
-        ])?;
-        ip(&[
-            family, "route", "add", "default", "via", gateway, "dev", "eth0", "mtu", "1450",
-        ])?;
-        ip(&[
-            "neigh",
-            "replace",
-            gateway,
-            "lladdr",
-            &mac(id, true),
-            "nud",
-            "permanent",
-            "dev",
-            "eth0",
-        ])?;
+        let gateway = cni::gateway(v6).parse()?;
+        native(connector.add_address(link.index, key(id, v6)?, prefix))?;
+        native(connector.add_route(link.index, gateway, prefix, None, None))?;
+        let default = if v6 { "::" } else { "0.0.0.0" }.parse()?;
+        native(connector.add_route(link.index, default, 0, Some(gateway), Some(1450)))?;
+        native(connector.neighbour(link.index, gateway, [2, 0, 0, 0, 0, id]))?;
     }
     let v4 = UdpSocket::bind(format!("{}:0", address(id, false)))?;
     let v6 = UdpSocket::bind(format!("[{}]:0", address(id, true)))?;

@@ -1,11 +1,11 @@
 //! Fixture adapter joining the real CNI transaction, host IPAM and BPF loader.
-//! Only the fixture's platform operations use `ip`; this is not the CNI binary.
-use super::{Endpoint as Process, Result, ip, key, mac};
+//! Link operations use the native Rust connector; this is not the CNI binary.
+use super::{Endpoint as Process, Result, key, mac, native};
 use flowsdn_bpf_abi::endpoint::EndpointInfo;
 use flowsdn_bpf_loader::kernel::LocalDelivery;
 use flowsdn_cni::{AddBackend, AddRequest, CniError, Endpoint, Lease, Link};
 use flowsdn_ipam::Ipam;
-use std::process::Command;
+use std::fs::File;
 
 fn adapt<T>(result: Result<T>) -> flowsdn_cni::Result<T> {
     result.map_err(|e| CniError::internal(e.to_string()))
@@ -70,36 +70,14 @@ impl AddBackend for Backend<'_> {
         let id = self.process.id;
         let host = format!("p{id}");
         let peer = format!("e{id}");
-        adapt(ip(&[
-            "link", "add", &host, "type", "veth", "peer", "name", &peer,
-        ]))?;
+        let connector = adapt(native(flowsdn_connector::Connector::open()))?;
+        let link = adapt(native(connector.create_veth(&host, &peer, 1500)))?;
         let setup = (|| -> Result<Link> {
-            ip(&[
-                "link",
-                "set",
-                &host,
-                "address",
-                &mac(id, true),
-                "mtu",
-                "1500",
-                "up",
-            ])?;
-            ip(&[
-                "link",
-                "set",
-                &peer,
-                "netns",
-                &self.process.child.id().to_string(),
-            ])?;
-            let output = Command::new("ip")
-                .args(["-o", "link", "show", "dev", &host])
-                .output()?;
-            super::ensure(output.status.success(), "link inspection failed")?;
-            let index = std::str::from_utf8(&output.stdout)?
-                .split(':')
-                .next()
-                .ok_or("missing ifindex")?
-                .parse()?;
+            native(connector.configure(link.index, &host, [2, 0, 0, 0, 0, id], 1500))?;
+            let peer_link = native(connector.require_link(&peer))?;
+            let namespace = File::open(format!("/proc/{}/ns/net", self.process.child.id()))?;
+            native(connector.move_to_namespace(peer_link.index, &namespace))?;
+            let index = link.index;
             self.info = Some(EndpointInfo {
                 ifindex: index,
                 lxc_id: u16::from(id),
@@ -115,7 +93,7 @@ impl AddBackend for Backend<'_> {
             })
         })();
         if setup.is_err() {
-            let _ = ip(&["link", "del", &host]);
+            let _ = connector.delete(&host);
         }
         adapt(setup)
     }
@@ -172,7 +150,8 @@ impl AddBackend for Backend<'_> {
         }
     }
     fn delete_link(&mut self, link: &Link) -> flowsdn_cni::Result<()> {
-        adapt(ip(&["link", "del", &link.host_name]))
+        let connector = adapt(native(flowsdn_connector::Connector::open()))?;
+        adapt(native(connector.delete(&link.host_name)))
     }
     fn release(&mut self, lease: &Lease) -> flowsdn_cni::Result<()> {
         self.ipam
