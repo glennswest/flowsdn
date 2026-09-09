@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-No unreleased changes.
+- Add a Rust BPF classifier and privileged harness for kernel packet round
+  trips, live UDP pass/drop updates and attachment cleanup in an isolated
+  network namespace. This is a milestone 1 checkpoint, not a pod datapath.
 
 ## [0.14.0] - 2026-09-09
 

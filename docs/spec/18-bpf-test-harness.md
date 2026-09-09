@@ -1258,16 +1258,20 @@ the agent is a scripttest scenario, not a bpftest case.
 
 ### 11.2 `BPF_PROG_TEST_RUN` and aya
 
-**GAP (to-verify).** As recalled at aya 0.13, aya exposes no
-`BPF_PROG_TEST_RUN` wrapper — there is no `Program::test_run`, and
-`aya::programs` offers attach and pin APIs only. cilium/ebpf, which the
-reference uses, has `Program.Run(*RunOptions)` with `Data`, `DataOut`,
-`Context`, `ContextOut`, `Repeat`, `Flags`, `CPU`. Every row here is to-verify
-against the pinned aya version before Phase 2 starts:
+**Updated 2026-09-09 for pinned Aya 0.14.0.** The previous Aya 0.13
+recollection is superseded for test execution: `SchedClassifier` implements
+`aya::programs::TestRun`, with packet/context buffers, repeat and execution
+attributes, returning verdict, duration and output lengths. Use this safe
+API instead of adding a syscall wrapper for supported operations. Evidence:
+[Aya SchedClassifier](https://docs.rs/aya/0.14.0/aya/programs/tc/struct.SchedClassifier.html)
+and the published crate's `src/programs/mod.rs` (`TestRunOptions`,
+`TestRunResult`, `TestRun`). The smoke harness covers packet buffers,
+repeat=1 and verdicts; the full context/CPU/flags matrix remains to verify.
+Other gaps below remain provisional until separately checked.
 
 | Need | aya status (to-verify) | Plan |
 |---|---|---|
-| `BPF_PROG_TEST_RUN` with `data_in/out`, `ctx_in/out`, `repeat`, `flags`, `cpu`, `duration`, `retval` | **absent** | Implement `flowsdn_bpftest::run::prog_test_run` directly over `libc::syscall(SYS_bpf, BPF_PROG_TEST_RUN, &attr, size)` taking a `BorrowedFd` from `aya::programs::ProgramFd`. ~120 lines. Upstream it to aya as `Program::test_run` (ADR-0002 says fix gaps upstream where possible). |
+| `BPF_PROG_TEST_RUN` with packet/context buffers, repeat and result metadata | present in Aya 0.14.0 | Use `TestRun`; extend validation to the context and execution-attribute matrix before claiming those capabilities. |
 | Program fd access (`AsFd` on a loaded program) | present via `ProgramFd` | — |
 | `log_level = 4` on load and access to the verifier log on **success** | aya exposes the log on *failure* (`ProgramError::LoadError { verifier_log }`); the success-path log is what §5.2 needs | If unavailable, load with `EbpfLoader::verifier_log_level(VerifierLogLevel::STATS)` and, failing that, do the stats load through the same raw-syscall path with our own log buffer, discarding that fd and letting aya do the real load. Wasteful but honest; upstream a `verifier_log()` accessor. |
 | `BPF_OBJ_GET_INFO_BY_FD` → `bpf_prog_info.verified_insns` | `aya::programs::ProgramInfo` exists; `verified_insns` coverage unknown | raw syscall fallback in the same module |
@@ -1276,7 +1280,7 @@ against the pinned aya version before Phase 2 starts:
 | `PerfEventArray` reader with lost-sample count | present (`AsyncPerfEventArray` / `PerfEventArray`) | use the sync reader; lost count from the perf record header |
 | netns manipulation | out of scope for aya | `nix::sched::{unshare, setns}` + `rtnetlink` for devices; the netns tier reuses `flowsdn-datapath`'s netlink code |
 
-The raw-syscall shim is confined to one module with one `unsafe` block per
+Any remaining raw-syscall shim is confined to one module with one `unsafe` block per
 command and its own Tier-0 tests against a trivial program, so the rest of the
 harness stays safe Rust.
 

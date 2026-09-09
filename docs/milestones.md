@@ -36,6 +36,10 @@ isolated network namespace, using real maps and attachment cleanup. That proves
 the kernel/toolchain path before expanding packet processing and agent wiring.
 It is an implementation checkpoint, not completion of milestone 1.
 
+The [kernel smoke harness](../crates/flowsdn-bpftest/README.md) implements this
+first checkpoint. Validation results are recorded separately from the milestone
+acceptance gates; live pod networking remains outstanding.
+
 ## Acceptance and release status
 
 Each milestone records its demonstrated scenarios, remaining failures and
