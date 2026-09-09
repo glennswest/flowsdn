@@ -1,12 +1,21 @@
 #![allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
 use flowsdn_reconcile::{Kind, Options, Reconciler, Target, UpdateHint};
 use flowsdn_table::{Key, Keyed, Snapshot, Table};
-use std::{future::Future, sync::{Arc, Mutex}, task::{Context, Poll, Wake, Waker}, time::{Duration, Instant}};
-use tokio::time::{advance, Instant as Clock};
+use std::{
+    future::Future,
+    sync::{Arc, Mutex},
+    task::{Context, Poll, Wake, Waker},
+    time::{Duration, Instant},
+};
+use tokio::time::{Instant as Clock, advance};
 
 #[derive(Clone)]
 struct Item(u8, u64);
-impl Keyed for Item { fn primary_key(&self) -> Key { vec![self.0] } }
+impl Keyed for Item {
+    fn primary_key(&self) -> Key {
+        vec![self.0]
+    }
+}
 #[derive(Default)]
 struct Observed {
     calls: Vec<(u8, UpdateHint, Instant)>,
@@ -22,35 +31,80 @@ impl Fake {
         let (fail, block, mutate) = {
             let mut state = self.0.lock().unwrap();
             state.calls.push((row.0, hint, now()));
-            let failures = if hint == UpdateHint::Refresh { &mut state.fail_refresh } else { &mut state.fail_changed };
+            let failures = if hint == UpdateHint::Refresh {
+                &mut state.fail_refresh
+            } else {
+                &mut state.fail_changed
+            };
             let fail = *failures > 0;
-            if fail { *failures -= 1; }
-            let block = hint == UpdateHint::Refresh && std::mem::take(&mut state.block_refresh_once);
-            let mutate = if hint == UpdateHint::Refresh { state.mutate_refresh.take() } else { None };
+            if fail {
+                *failures -= 1;
+            }
+            let block =
+                hint == UpdateHint::Refresh && std::mem::take(&mut state.block_refresh_once);
+            let mutate = if hint == UpdateHint::Refresh {
+                state.mutate_refresh.take()
+            } else {
+                None
+            };
             (fail, block, mutate)
         };
-        if block { std::future::pending::<()>().await; }
+        if block {
+            std::future::pending::<()>().await;
+        }
         if let Some(table) = mutate {
             table.insert(Item(row.0, row.1 + 1)).await.unwrap();
             return Err("obsolete refresh failure");
         }
-        if fail { Err("injected failure") } else { Ok(()) }
+        if fail {
+            Err("injected failure")
+        } else {
+            Ok(())
+        }
     }
     fn refreshed(&self) -> Vec<u8> {
-        self.0.lock().unwrap().calls.iter().filter(|(_, hint, _)| *hint == UpdateHint::Refresh).map(|(id, _, _)| *id).collect()
+        self.0
+            .lock()
+            .unwrap()
+            .calls
+            .iter()
+            .filter(|(_, hint, _)| *hint == UpdateHint::Refresh)
+            .map(|(id, _, _)| *id)
+            .collect()
     }
 }
 impl Target<Item> for Fake {
     type Error = &'static str;
-    async fn update(&mut self, row: Arc<Item>) -> Result<(), Self::Error> { self.apply(row, UpdateHint::Changed).await }
-    async fn update_with_hint(&mut self, row: Arc<Item>, hint: UpdateHint) -> Result<(), Self::Error> { self.apply(row, hint).await }
-    async fn delete(&mut self, _: Key) -> Result<(), Self::Error> { Ok(()) }
-    async fn prune(&mut self, _: Snapshot<Item>) -> Result<(), Self::Error> { Ok(()) }
+    async fn update(&mut self, row: Arc<Item>) -> Result<(), Self::Error> {
+        self.apply(row, UpdateHint::Changed).await
+    }
+    async fn update_with_hint(
+        &mut self,
+        row: Arc<Item>,
+        hint: UpdateHint,
+    ) -> Result<(), Self::Error> {
+        self.apply(row, hint).await
+    }
+    async fn delete(&mut self, _: Key) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn prune(&mut self, _: Snapshot<Item>) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }
-fn now() -> Instant { Clock::now().into_std() }
-fn options() -> Options { Options { refresh_interval: Duration::from_secs(1), ..Options::default() } }
+fn now() -> Instant {
+    Clock::now().into_std()
+}
+fn options() -> Options {
+    Options {
+        refresh_interval: Duration::from_secs(1),
+        ..Options::default()
+    }
+}
 struct NoopWake;
-impl Wake for NoopWake { fn wake(self: Arc<Self>) {} }
+impl Wake for NoopWake {
+    fn wake(self: Arc<Self>) {}
+}
 
 #[tokio::test(start_paused = true)]
 async fn default_refresh_occurs_after_thirty_minutes_without_desired_revision_write() {
@@ -77,7 +131,16 @@ async fn zero_interval_disables_refresh_and_accepts_unused_zero_rate() {
     table.insert(Item(1, 10)).await.unwrap();
     let target = Fake::default();
     let observed = target.clone();
-    let mut reconciler = Reconciler::new(&table, target, Options { refresh_interval: Duration::ZERO, refresh_rate: 0, ..Options::default() }).unwrap();
+    let mut reconciler = Reconciler::new(
+        &table,
+        target,
+        Options {
+            refresh_interval: Duration::ZERO,
+            refresh_rate: 0,
+            ..Options::default()
+        },
+    )
+    .unwrap();
     reconciler.run_round(now()).await.unwrap();
     advance(Duration::from_secs(36_000)).await;
     reconciler.run_round(now()).await.unwrap();
@@ -88,10 +151,20 @@ async fn zero_interval_disables_refresh_and_accepts_unused_zero_rate() {
 #[tokio::test(start_paused = true)]
 async fn revision_order_rate_spacing_and_no_accumulated_burst_credit() {
     let table = Table::new(vec![]).unwrap();
-    for id in [9, 2, 5] { table.insert(Item(id, 0)).await.unwrap(); }
+    for id in [9, 2, 5] {
+        table.insert(Item(id, 0)).await.unwrap();
+    }
     let target = Fake::default();
     let observed = target.clone();
-    let mut reconciler = Reconciler::new(&table, target, Options { refresh_rate: 2, ..options() }).unwrap();
+    let mut reconciler = Reconciler::new(
+        &table,
+        target,
+        Options {
+            refresh_rate: 2,
+            ..options()
+        },
+    )
+    .unwrap();
     reconciler.run_round(now()).await.unwrap();
     advance(Duration::from_secs(1)).await;
     assert_eq!(reconciler.run_round(now()).await.unwrap().refreshed, 1);
@@ -112,11 +185,23 @@ async fn revision_order_rate_spacing_and_no_accumulated_burst_credit() {
 #[tokio::test(start_paused = true)]
 async fn recent_statuses_deleted_rows_and_changed_cached_candidates_are_skipped() {
     let table = Table::new(vec![]).unwrap();
-    for id in 1..6 { table.insert(Item(id, 0)).await.unwrap(); }
+    for id in 1..6 {
+        table.insert(Item(id, 0)).await.unwrap();
+    }
     let target = Fake::default();
     let observed = target.clone();
-    let mut reconciler = Reconciler::new(&table, target, Options { round_size: 2, ..options() }).unwrap();
-    for _ in 0..3 { reconciler.run_round(now()).await.unwrap(); }
+    let mut reconciler = Reconciler::new(
+        &table,
+        target,
+        Options {
+            round_size: 2,
+            ..options()
+        },
+    )
+    .unwrap();
+    for _ in 0..3 {
+        reconciler.run_round(now()).await.unwrap();
+    }
     advance(Duration::from_millis(500)).await;
     table.insert(Item(2, 1)).await.unwrap();
     table.delete(&[4]).await.unwrap();
@@ -195,7 +280,10 @@ async fn in_flight_refresh_result_is_discarded_after_a_new_desired_generation() 
     assert!(reconciler.next_retry().is_none());
     reconciler.run_round(now()).await.unwrap();
     assert_eq!(reconciler.status(&[1]).unwrap().kind, Kind::Done);
-    assert_eq!(observed.0.lock().unwrap().calls.last().unwrap().1, UpdateHint::Changed);
+    assert_eq!(
+        observed.0.lock().unwrap().calls.last().unwrap().1,
+        UpdateHint::Changed
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -205,7 +293,16 @@ async fn refresh_does_not_reset_backoff_for_an_already_failed_row() {
     let target = Fake::default();
     target.0.lock().unwrap().fail_changed = 1;
     let observed = target.clone();
-    let mut reconciler = Reconciler::new(&table, target, Options { min_backoff: Duration::from_secs(10), max_backoff: Duration::from_secs(10), ..options() }).unwrap();
+    let mut reconciler = Reconciler::new(
+        &table,
+        target,
+        Options {
+            min_backoff: Duration::from_secs(10),
+            max_backoff: Duration::from_secs(10),
+            ..options()
+        },
+    )
+    .unwrap();
     reconciler.run_round(now()).await.unwrap();
     let retry = reconciler.next_retry();
     advance(Duration::from_secs(2)).await;
@@ -225,7 +322,9 @@ async fn run_scheduler_wakes_for_refresh_and_shutdown_keeps_interrupted_force_wo
     let observed = target.clone();
     let mut reconciler = Reconciler::new(&table, target, options()).unwrap();
     let (stop, receiver) = tokio::sync::oneshot::channel::<()>();
-    let mut running = Box::pin(reconciler.run(async move { let _ = receiver.await; }));
+    let mut running = Box::pin(reconciler.run(async move {
+        let _ = receiver.await;
+    }));
     let waker = Waker::from(Arc::new(NoopWake));
     let mut context = Context::from_waker(&waker);
     assert!(running.as_mut().poll(&mut context).is_pending());
@@ -236,7 +335,10 @@ async fn run_scheduler_wakes_for_refresh_and_shutdown_keeps_interrupted_force_wo
     assert!(running.as_mut().poll(&mut context).is_pending());
     assert_eq!(observed.refreshed(), [1]);
     stop.send(()).unwrap();
-    assert!(matches!(running.as_mut().poll(&mut context), Poll::Ready(Ok(()))));
+    assert!(matches!(
+        running.as_mut().poll(&mut context),
+        Poll::Ready(Ok(()))
+    ));
     drop(running);
     assert_eq!(reconciler.status(&[1]).unwrap().kind, Kind::Refreshing);
     let mut resumed = Box::pin(reconciler.run(std::future::pending::<()>()));
@@ -249,9 +351,16 @@ async fn default_target_hint_method_repeats_existing_update_implementations() {
     struct Legacy(usize);
     impl Target<Item> for Legacy {
         type Error = &'static str;
-        async fn update(&mut self, _: Arc<Item>) -> Result<(), Self::Error> { self.0 += 1; Ok(()) }
-        async fn delete(&mut self, _: Key) -> Result<(), Self::Error> { Ok(()) }
-        async fn prune(&mut self, _: Snapshot<Item>) -> Result<(), Self::Error> { Ok(()) }
+        async fn update(&mut self, _: Arc<Item>) -> Result<(), Self::Error> {
+            self.0 += 1;
+            Ok(())
+        }
+        async fn delete(&mut self, _: Key) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn prune(&mut self, _: Snapshot<Item>) -> Result<(), Self::Error> {
+            Ok(())
+        }
     }
     let table = Table::new(vec![]).unwrap();
     table.insert(Item(1, 0)).await.unwrap();
@@ -265,21 +374,40 @@ async fn default_target_hint_method_repeats_existing_update_implementations() {
 #[tokio::test(start_paused = true)]
 async fn all_ineligible_multi_chunk_pass_finishes_and_rearms_at_eligibility() {
     let table = Table::new(vec![]).unwrap();
-    for id in 1..=5 { table.insert(Item(id, 0)).await.unwrap(); }
+    for id in 1..=5 {
+        table.insert(Item(id, 0)).await.unwrap();
+    }
     let target = Fake::default();
     let observed = target.clone();
-    let mut reconciler = Reconciler::new(&table, target, Options { round_size: 2, ..options() }).unwrap();
-    for _ in 0..3 { reconciler.run_round(now()).await.unwrap(); }
+    let mut reconciler = Reconciler::new(
+        &table,
+        target,
+        Options {
+            round_size: 2,
+            ..options()
+        },
+    )
+    .unwrap();
+    for _ in 0..3 {
+        reconciler.run_round(now()).await.unwrap();
+    }
     advance(Duration::from_millis(500)).await;
-    for id in 1..=5 { table.insert(Item(id, 1)).await.unwrap(); }
-    for _ in 0..3 { reconciler.run_round(now()).await.unwrap(); }
+    for id in 1..=5 {
+        table.insert(Item(id, 1)).await.unwrap();
+    }
+    for _ in 0..3 {
+        reconciler.run_round(now()).await.unwrap();
+    }
     advance(Duration::from_millis(500)).await;
     for _ in 0..2 {
         assert_eq!(reconciler.run_round(now()).await.unwrap().refreshed, 0);
         assert_eq!(reconciler.next_refresh(), Some(now()));
     }
     assert_eq!(reconciler.run_round(now()).await.unwrap().refreshed, 0);
-    assert_eq!(reconciler.next_refresh(), Some(now() + Duration::from_millis(500)));
+    assert_eq!(
+        reconciler.next_refresh(),
+        Some(now() + Duration::from_millis(500))
+    );
     assert!(observed.refreshed().is_empty());
 }
 
@@ -291,13 +419,21 @@ async fn slow_successes_refresh_at_completion_age_without_skipping_an_interval()
         async fn update(&mut self, row: Arc<Item>) -> Result<(), Self::Error> {
             self.update_with_hint(row, UpdateHint::Changed).await
         }
-        async fn update_with_hint(&mut self, _: Arc<Item>, hint: UpdateHint) -> Result<(), Self::Error> {
+        async fn update_with_hint(
+            &mut self,
+            _: Arc<Item>,
+            hint: UpdateHint,
+        ) -> Result<(), Self::Error> {
             self.0.lock().unwrap().push((hint, now()));
             tokio::time::sleep(Duration::from_millis(200)).await;
             Ok(())
         }
-        async fn delete(&mut self, _: Key) -> Result<(), Self::Error> { Ok(()) }
-        async fn prune(&mut self, _: Snapshot<Item>) -> Result<(), Self::Error> { Ok(()) }
+        async fn delete(&mut self, _: Key) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn prune(&mut self, _: Snapshot<Item>) -> Result<(), Self::Error> {
+            Ok(())
+        }
     }
     let table = Table::new(vec![]).unwrap();
     table.insert(Item(1, 0)).await.unwrap();
@@ -315,7 +451,10 @@ async fn slow_successes_refresh_at_completion_age_without_skipping_an_interval()
     assert_eq!(calls.lock().unwrap().len(), 1);
     advance(Duration::from_millis(200)).await;
     assert!(running.as_mut().poll(&mut context).is_pending());
-    assert_eq!(calls.lock().unwrap()[1], (UpdateHint::Refresh, start + Duration::from_millis(1200)));
+    assert_eq!(
+        calls.lock().unwrap().get(1).cloned().unwrap(),
+        (UpdateHint::Refresh, start + Duration::from_millis(1200))
+    );
     advance(Duration::from_millis(200)).await;
     assert!(running.as_mut().poll(&mut context).is_pending());
     advance(Duration::from_millis(999)).await;
@@ -323,6 +462,9 @@ async fn slow_successes_refresh_at_completion_age_without_skipping_an_interval()
     assert_eq!(calls.lock().unwrap().len(), 2);
     advance(Duration::from_millis(1)).await;
     assert!(running.as_mut().poll(&mut context).is_pending());
-    assert_eq!(calls.lock().unwrap()[2], (UpdateHint::Refresh, start + Duration::from_millis(2400)));
+    assert_eq!(
+        calls.lock().unwrap().get(2).cloned().unwrap(),
+        (UpdateHint::Refresh, start + Duration::from_millis(2400))
+    );
     assert_eq!(table.snapshot().revision(), 1);
 }

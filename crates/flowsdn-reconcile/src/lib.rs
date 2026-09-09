@@ -27,7 +27,10 @@ pub use prune::{PruneHandle, PruneStatus};
 
 /// Whether an update follows a desired change or requests a forced rewrite.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UpdateHint { Changed, Refresh }
+pub enum UpdateHint {
+    Changed,
+    Refresh,
+}
 
 /// Operations must be idempotent: cancelling a round may replay its in-flight
 /// operation, including one whose target side effect already occurred.
@@ -37,7 +40,11 @@ pub trait Target<T: Keyed>: Send {
     /// Refresh asks the target to force a rewrite even if it believes the row
     /// unchanged. Existing targets default to repeating their idempotent update;
     /// targets that skip unchanged values should override and honor the hint.
-    fn update_with_hint(&mut self, row: Arc<T>, _hint: UpdateHint) -> impl Future<Output = Result<(), Self::Error>> + Send {
+    fn update_with_hint(
+        &mut self,
+        row: Arc<T>,
+        _hint: UpdateHint,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send {
         self.update(row)
     }
     fn delete(&mut self, key: Key) -> impl Future<Output = Result<(), Self::Error>> + Send;
@@ -471,36 +478,38 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         while round.processed < self.options.round_size {
             if self.pending.is_empty() {
                 if let Some(retry) = self.retries.due(clock()) {
-                let row = self
-                    .table
-                    .snapshot()
-                    .get("primary", &retry.key)
-                    .expect("primary index exists")
-                    .map(|(row, _)| row);
-                // Preserve the failed operation; a recreated row must never be
-                // deleted by an old delete retry.
-                let row = if retry.operation == Operation::Update {
-                    row
-                } else {
-                    None
-                };
-                let work = Work {
-                    key: retry.key,
-                    revision: retry.revision,
-                    row,
-                    failures: retry.failures,
-                    refresh: retry.refresh,
-                };
-                if retry.operation == Operation::Update && work.row.is_none() {
-                    self.statuses.remove(&work.key);
-                    round.stale = round.stale.saturating_add(1);
-                    round.processed = round.processed.saturating_add(1);
-                    continue;
-                }
-                self.pending.push_back(work);
+                    let row = self
+                        .table
+                        .snapshot()
+                        .get("primary", &retry.key)
+                        .expect("primary index exists")
+                        .map(|(row, _)| row);
+                    // Preserve the failed operation; a recreated row must never be
+                    // deleted by an old delete retry.
+                    let row = if retry.operation == Operation::Update {
+                        row
+                    } else {
+                        None
+                    };
+                    let work = Work {
+                        key: retry.key,
+                        revision: retry.revision,
+                        row,
+                        failures: retry.failures,
+                        refresh: retry.refresh,
+                    };
+                    if retry.operation == Operation::Update && work.row.is_none() {
+                        self.statuses.remove(&work.key);
+                        round.stale = round.stale.saturating_add(1);
+                        round.processed = round.processed.saturating_add(1);
+                        continue;
+                    }
+                    self.pending.push_back(work);
                 } else if let Some(work) = self.next_refresh_work(clock())? {
                     self.pending.push_back(work);
-                } else { break; }
+                } else {
+                    break;
+                }
             }
             let work = self
                 .pending
@@ -511,22 +520,39 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             if !self.current(&work) {
                 self.statuses.remove(&work.key);
                 self.pending.pop_front();
-                if work.refresh { self.complete_refresh_work(clock())?; }
+                if work.refresh {
+                    self.complete_refresh_work(clock())?;
+                }
                 round.stale = round.stale.saturating_add(1);
                 continue;
             }
             let mut pending = Status::pending(work.revision, work.operation());
             pending.retries = work.failures;
-            if work.refresh { pending.kind = Kind::Refreshing; }
+            if work.refresh {
+                pending.kind = Kind::Refreshing;
+            }
             self.statuses.insert(work.key.clone(), pending);
             let result = match &work.row {
-                Some(row) => self.target.update_with_hint(row.clone(), if work.refresh { UpdateHint::Refresh } else { UpdateHint::Changed }).await,
+                Some(row) => {
+                    self.target
+                        .update_with_hint(
+                            row.clone(),
+                            if work.refresh {
+                                UpdateHint::Refresh
+                            } else {
+                                UpdateHint::Changed
+                            },
+                        )
+                        .await
+                }
                 None => self.target.delete(work.key.clone()).await,
             };
             if !self.current(&work) {
                 self.statuses.remove(&work.key);
                 self.pending.pop_front();
-                if work.refresh { self.complete_refresh_work(clock())?; }
+                if work.refresh {
+                    self.complete_refresh_work(clock())?;
+                }
                 round.stale = round.stale.saturating_add(1);
                 continue;
             }
@@ -539,7 +565,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                     self.retries.remove(&work.key);
                     if work.row.is_some() {
                         round.updated = round.updated.saturating_add(1);
-                        if work.refresh { round.refreshed = round.refreshed.saturating_add(1); }
+                        if work.refresh {
+                            round.refreshed = round.refreshed.saturating_add(1);
+                        }
                     } else {
                         round.deleted = round.deleted.saturating_add(1);
                     }
@@ -569,7 +597,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                 self.statuses.insert(work.key, status);
             }
             self.pending.pop_front();
-            if work.refresh { self.complete_refresh_work(now)?; }
+            if work.refresh {
+                self.complete_refresh_work(now)?;
+            }
         }
         if self.pending.is_empty() {
             self.attempted_revision = self.stream.revision();
