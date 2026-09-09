@@ -65,7 +65,7 @@
     },
     "completed_at_utc": "2026-09-09T13:04:59Z"
   },
-  "release": null,
+  "release": "v0.11.0",
   "usage_cutoff_utc": "2026-09-09T13:04:59Z",
   "measurement_end_utc": "2026-09-09T13:04:59Z",
   "end_utc": "2026-09-09T13:04:59Z",
@@ -321,7 +321,7 @@
   "usage_elapsed_seconds": 1120,
   "validated_commit": "7972548",
   "validation_record_commit": "7952174",
-  "publication": "pending",
+  "publication": "published",
   "observed_validation_windows": [
     {
       "task_id": "0.11.0",
@@ -383,5 +383,9 @@
       },
       "note": "Observed checkpoints enclose build/test or cleanup work and coordination; not exclusive CPU/build duration. These windows are nested within milestone project elapsed and must not be added to it."
     }
-  ]
+  ],
+  "release_commit": "3c7f77ffb1dd922bb3fae622f56f88396d0c6567",
+  "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.11.0",
+  "published_at_utc": "2026-09-09T13:08:36Z",
+  "elapsed_to_publication_seconds": 1337
 }

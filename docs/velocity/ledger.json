@@ -400,7 +400,9 @@
           },
           "note": "Observed checkpoints enclose build/test or cleanup work and coordination; not exclusive CPU/build duration. These windows are nested within milestone project elapsed and must not be added to it."
         }
-      ]
+      ],
+      "release": "v0.11.0",
+      "release_commit": "3c7f77ffb1dd922bb3fae622f56f88396d0c6567"
     }
   ],
   "crates": [
@@ -542,7 +544,8 @@
       "v0.7.0",
       "v0.8.0",
       "v0.9.0",
-      "v0.10.0"
+      "v0.10.0",
+      "v0.11.0"
     ],
     "unique_tests": 286,
     "test_profiles": [
@@ -588,7 +591,10 @@
       "flowsdn-version": 5,
       "flowsdn-harvest-bpf-cases": 4
     },
-    "publication": "pending"
+    "publication": "pending",
+    "release_commit": "3c7f77ffb1dd922bb3fae622f56f88396d0c6567",
+    "published_at_utc": "2026-09-09T13:08:36Z",
+    "publication_observed_utc": "2026-09-09T13:08:36Z"
   },
   "subagent_usage_file": "subagents.json",
   "parallel_work": [
@@ -1450,8 +1456,13 @@
     "validation_record_commit": "7952174",
     "completed_at_utc": "2026-09-09T13:04:59Z",
     "release_candidate": "v0.11.0",
-    "publication": "pending",
-    "cleanup": "complete"
+    "publication": "published",
+    "cleanup": "complete",
+    "release": "v0.11.0",
+    "release_commit": "3c7f77ffb1dd922bb3fae622f56f88396d0c6567",
+    "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.11.0",
+    "published_at_utc": "2026-09-09T13:08:36Z",
+    "elapsed_to_publication_seconds": 1337
   },
   "milestone_0_7_parallel_time": {
     "observed_agent_window_seconds": 3064.201,
