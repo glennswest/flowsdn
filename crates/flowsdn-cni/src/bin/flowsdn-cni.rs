@@ -25,7 +25,7 @@ fn main() {
             let conf: serde_json::Value = serde_json::from_slice(&input).unwrap_or_default();
             println!(
                 "{}",
-                error.json(conf["cniVersion"].as_str().unwrap_or("1.1.0"))
+                error.json(conf.get("cniVersion").and_then(serde_json::Value::as_str).unwrap_or("1.1.0"))
             );
             std::process::exit(1);
         }

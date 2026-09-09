@@ -30,6 +30,7 @@ fn response(response: std::result::Result<Response, flowsdn_api_client::Error>) 
     }
     Ok(response.json.unwrap_or(Value::Null))
 }
+fn field<'a>(value: &'a Value, key: &str) -> &'a Value { value.get(key).unwrap_or(&Value::Null) }
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or("")
 }
@@ -84,7 +85,7 @@ impl AddBackend for Platform {
         let mut leases = Vec::new();
         let outcome = (|| {
             for family in ["ipv6", "ipv4"] {
-                let raw = text(&value["address"], family);
+                let raw = text(field(&value, "address"), family);
                 if raw.is_empty() {
                     continue;
                 }
@@ -98,8 +99,8 @@ impl AddBackend for Platform {
                 leases.push(Lease {
                     address,
                     gateway: address,
-                    pool: text(&value["address"], &format!("{family}-pool-name")).into(),
-                    expiration_uuid: text(&value["address"], &format!("{family}-expiration-uuid"))
+                    pool: text(field(&value, "address"), &format!("{family}-pool-name")).into(),
+                    expiration_uuid: text(field(&value, "address"), &format!("{family}-expiration-uuid"))
                         .into(),
                 });
             }
@@ -109,14 +110,14 @@ impl AddBackend for Platform {
                 } else {
                     "ipv6"
                 };
-                if value["host-addressing"][family]["enabled"] != true {
+                if field(field(field(&value, "host-addressing"), family), "enabled") != &Value::Bool(true) {
                     return Err(error("allocated address family is disabled"));
                 }
-                lease.gateway = text(&value["host-addressing"][family], "ip")
+                lease.gateway = text(field(field(&value, "host-addressing"), family), "ip")
                     .parse()
                     .map_err(error)?;
                 if lease.expiration_uuid.is_empty() {
-                    lease.expiration_uuid = text(&value[family], "expiration-uuid").into();
+                    lease.expiration_uuid = text(field(&value, family), "expiration-uuid").into();
                 }
             }
             if leases.is_empty() {
@@ -243,7 +244,7 @@ impl AddBackend for Platform {
             self.client
                 .put_endpoint_unbounded_response(&request.attachment_id(), &body),
         )?;
-        let mac = text(&endpoint["status"]["networking"], "mac");
+        let mac = text(field(field(&endpoint, "status"), "networking"), "mac");
         Ok(Endpoint {
             mac_override: if mac.is_empty() {
                 None
@@ -266,7 +267,7 @@ impl AddBackend for Platform {
             .map(|v| mac_bytes(v))
             .transpose()?;
         let mtu = self.device_mtu;
-        let cubic = self.config["enable-bbr-host-namespace-only"] == true;
+        let cubic = field(&self.config, "enable-bbr-host-namespace-only") == &Value::Bool(true);
         system(in_namespace(namespace, move || {
             if let Some(mac) = new_mac {
                 let connector = Connector::open()?;
@@ -366,7 +367,7 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
             details: String::new(),
         });
     }
-    if !text(&conf, "chaining-mode").is_empty() || !text(&conf["ipam"], "type").is_empty() {
+    if !text(&conf, "chaining-mode").is_empty() || !text(field(&conf, "ipam"), "type").is_empty() {
         return Err(error("chaining and delegated IPAM are not implemented"));
     }
     let socket = PathBuf::from(
@@ -378,14 +379,14 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
         "ADD" => {
             let request = AddRequest::parse(input, env)?;
             let (client, conf) = connect(&socket)?;
-            let config = conf["status"].clone();
+            let config = field(&conf, "status").clone();
             if text(&config, "datapath-mode") != "veth"
                 || !matches!(text(&config, "ipam-mode"), "kubernetes" | "cluster-pool")
             {
                 return Err(error("initial CNI requires veth and host-scope IPAM"));
             }
             let mtu = |key| {
-                config[key]
+                field(&config, key)
                     .as_u64()
                     .and_then(|v| u32::try_from(v).ok())
                     .filter(|v| *v >= 1280)
@@ -466,14 +467,14 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
                     e.code = 100;
                     e
                 })?;
-            if health["overall-health"] == "failure" {
+            if field(&health, "overall-health").as_str() == Some("failure") {
                 return Err(CniError {
                     code: 101,
                     message: "container is unhealthy in agent".into(),
                     details: String::new(),
                 });
             }
-            let interfaces = conf["prevResult"]["interfaces"]
+            let interfaces = field(field(&conf, "prevResult"), "interfaces")
                 .as_array()
                 .ok_or_else(|| error("CHECK requires previous interfaces"))?;
             let selected: Vec<_> = interfaces
@@ -488,11 +489,11 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
                 return Err(error("previous result has no sandbox interface"));
             }
             let mut expected = Vec::new();
-            for ip in conf["prevResult"]["ips"]
+            for ip in field(field(&conf, "prevResult"), "ips")
                 .as_array()
                 .ok_or_else(|| error("CHECK requires previous addresses"))?
             {
-                if ip["interface"]
+                if field(&ip, "interface")
                     .as_u64()
                     .and_then(|v| usize::try_from(v).ok())
                     .is_some_and(|i| selected.contains(&i))
