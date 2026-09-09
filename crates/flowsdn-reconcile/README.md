@@ -57,8 +57,7 @@ Clearing it confirms deletion-history recovery, not successful application of
 all rows: individual update failures may still be queued for retry.
 
 This slice does not install atomic status hooks into table publication.
-Annotations,
-health reporting remain unimplemented.
+Annotations remain unimplemented.
 Prune owns its initialization gate; callers still own any extra startup gate
 needed before incremental target writes, such as restoration of allocated IDs.
 
@@ -111,3 +110,24 @@ or manual round can resume progress. Dropping the owner returns
 `WaitError::Closed` for unreachable revisions. An already satisfied revision
 remains readable from the final checkpoint. Cancelling one waiter does not
 cancel reconciliation or other waiters. Notifications coalesce to current state.
+
+Attach a health registry reporter with `with_reporter(reporter)` to publish
+reconciler health. Without one, health reporting is disabled. Completed rounds
+report OK with the desired object count when there are no known failures, or
+Degraded with the total error count and joined row, prune, resync and batch or
+scheduling diagnostics. Diagnostic text is capped at 64 KiB with a truncation
+marker; the count still includes every error. Each reconciler needs its own scope.
+
+Known failed-attempt diagnostics remain visible during cancelled retry replay;
+new desired generations supersede old row failures. Clean pending work is not
+an error. Health is a summary of known outcomes, not an atomic desired/status
+transaction or proof that all desired work has completed. Cancelling a brand-new
+first attempt can therefore leave the previous OK summary visible. Use the
+observer for attempted revisions and driver state.
+
+Health publication errors return `HealthPublicationFailed`, with details in
+`last_health_error()`. Unfinished work remains queued, and already recorded
+results remain recorded. A later successful round clears this diagnostic.
+An explicit return from `run` awaits the reporter's stopped marker, preserving
+its last level and errors. Dropping the future cannot perform async health
+publication: only the observer's driver state becomes Stopped in that case.

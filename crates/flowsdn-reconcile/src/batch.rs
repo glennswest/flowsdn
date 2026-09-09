@@ -48,6 +48,7 @@ impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
                 };
                 if retry.operation == crate::Operation::Update && row.is_none() {
                     self.statuses.remove(&retry.key);
+                    self.forget_health_failure(&retry.key);
                     round.stale = round.stale.saturating_add(1);
                     round.processed = round.processed.saturating_add(1);
                     continue;
@@ -87,6 +88,7 @@ impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
                 .filter(|work| self.current(work))
                 .cloned()
                 .collect();
+            self.publish_health_changes().await?;
             for work in &active {
                 let mut status = Status::pending(work.revision, work.operation());
                 status.retries = work.failures;

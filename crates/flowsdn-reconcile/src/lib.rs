@@ -3,8 +3,7 @@
 //! Desired rows and reconciliation status are separate. Revision checks reject
 //! stale results, and status reads synthesize Pending for newer desired rows.
 //! The caller owns the `run` future and its shutdown signal; no task is spawned.
-//! Atomic table write hooks, annotations, health
-//! reporting remain integration work.
+//! Atomic table write hooks and annotations remain integration work.
 //! Prune runs only after table initialization and clears a resync request only
 //! on success. Incremental updates alone cannot remove unknown target entries
 //! after deletion history has been discarded.
@@ -18,6 +17,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod health;
 mod observer;
 pub use observer::{DriverState, ReconcileObserver, ReconcileProgress, WaitError};
 mod batch;
@@ -143,6 +143,7 @@ pub enum ReconcileError {
     PruneDeadlineOverflow,
     InvalidRoundInterval,
     RoundDeadlineOverflow,
+    HealthPublicationFailed,
     InvalidBatchResults,
     InvalidRefreshRate,
     RefreshDeadlineOverflow,
@@ -157,6 +158,7 @@ impl fmt::Display for ReconcileError {
             Self::PruneDeadlineOverflow => "prune deadline exceeds the monotonic clock range",
             Self::InvalidRoundInterval => "round interval must be positive",
             Self::RoundDeadlineOverflow => "round deadline exceeds the monotonic clock range",
+            Self::HealthPublicationFailed => "health publication failed; inspect last_health_error",
             Self::InvalidBatchResults => {
                 "batch results must match every requested key and revision exactly once"
             }
@@ -292,6 +294,11 @@ pub struct Reconciler<'a, T: Keyed, U: Target<T>> {
     prune: PruneState,
     refresh: RefreshState<T>,
     progress: tokio::sync::watch::Sender<ReconcileProgress>,
+    reporter: Option<flowsdn_health::Reporter>,
+    health_error: Option<String>,
+    health_failures: BTreeMap<Key, (Revision, String)>,
+    health_dirty: bool,
+    health_round_error: Option<ReconcileError>,
 }
 impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     pub fn new(table: &'a Table<T>, target: U, options: Options) -> Result<Self, ReconcileError> {
@@ -325,6 +332,11 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             prune: PruneState::default(),
             refresh: RefreshState::default(),
             progress: tokio::sync::watch::channel(ReconcileProgress::default()).0,
+            reporter: None,
+            health_error: None,
+            health_failures: BTreeMap::new(),
+            health_dirty: false,
+            health_round_error: None,
         })
     }
 
@@ -428,6 +440,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
 
     fn pop_work(&mut self) {
         if let Some(work) = self.pending.pop_front() {
+            if !self.statuses.contains_key(&work.key) { self.forget_health_failure(&work.key); }
             let index = if work.failures > 0 {
                 Some(&mut self.pending_failures)
             } else if !work.refresh {
@@ -483,11 +496,14 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                     self.prune.handle.prune_now();
                     self.retries = RetryQueue::default();
                     self.statuses.clear();
+                    self.health_failures.clear();
+                    self.health_dirty = true;
                     self.refresh.reset_pass();
                 }
                 Change::Insert { row, revision } => {
                     let key = row.primary_key();
                     self.retries.remove(&key);
+                    self.forget_health_failure(&key);
                     pending.push(Work {
                         key,
                         revision,
@@ -498,6 +514,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                 }
                 Change::Delete { key, revision } => {
                     self.retries.remove(&key);
+                    self.forget_health_failure(&key);
                     pending.push(Work {
                         key,
                         revision,
@@ -586,6 +603,8 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         match result {
             Ok(()) => {
                 status.kind = Kind::Done;
+                self.forget_health_failure(&work.key);
+                self.health_dirty |= work.failures > 0;
                 self.retries.remove(&work.key);
                 if work.row.is_some() {
                     round.updated = round.updated.saturating_add(1);
@@ -602,6 +621,8 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                     .checked_add(self.backoff(failures))
                     .ok_or(ReconcileError::RetryDeadlineOverflow)?;
                 status.kind = Kind::Error;
+                self.health_dirty = true;
+                if self.reporter.is_some() { self.health_failures.insert(work.key.clone(), (work.revision, health::retain_error(&error))); }
                 status.error = Some(error);
                 status.retries = failures;
                 status.next_retry = Some(deadline);
@@ -624,6 +645,18 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     }
 
     async fn run_round_with_clock(
+        &mut self,
+        clock: impl Fn() -> Instant,
+    ) -> Result<Round, ReconcileError> {
+        self.begin_health_round().await?;
+        let result = self.run_core_round(clock).await;
+        self.health_round_error = result.as_ref().err().copied();
+        self.finish_health_round(self.health_round_error).await?;
+        if result.is_ok() { self.health_error = None; }
+        result
+    }
+
+    async fn run_core_round(
         &mut self,
         clock: impl Fn() -> Instant,
     ) -> Result<Round, ReconcileError> {
@@ -661,6 +694,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                     };
                     if retry.operation == Operation::Update && work.row.is_none() {
                         self.statuses.remove(&work.key);
+                    self.forget_health_failure(&work.key);
                         round.stale = round.stale.saturating_add(1);
                         round.processed = round.processed.saturating_add(1);
                         continue;
@@ -688,6 +722,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                 round.stale = round.stale.saturating_add(1);
                 continue;
             }
+            self.publish_health_changes().await?;
             let mut pending = Status::pending(work.revision, work.operation());
             pending.retries = work.failures;
             if work.refresh {
