@@ -289,14 +289,30 @@ fn run(object: &str) -> Result<()> {
         entries.push((key(ep.id, true)?, info));
     }
     let mut driver = LocalDelivery::load(object)?;
-    for (key, value) in &entries { driver.upsert(*key, *value)?; }
+    for (key, value) in &entries {
+        driver.upsert(*key, *value)?;
+    }
     packets::verify(driver.program()?)?;
-    for host in ["p1", "p2"] { driver.attach(host)?; }
-    ensure(driver.attach("p1").is_err(), "duplicate attachment accepted")?;
-    ensure(SchedClassifier::query_tcx("p1", TcAttachType::Ingress)?.1.len() == 1, "duplicate attempt changed attachment count")?;
+    for host in ["p1", "p2"] {
+        driver.attach(host)?;
+    }
+    ensure(
+        driver.attach("p1").is_err(),
+        "duplicate attachment accepted",
+    )?;
+    ensure(
+        SchedClassifier::query_tcx("p1", TcAttachType::Ingress)?
+            .1
+            .len()
+            == 1,
+        "duplicate attempt changed attachment count",
+    )?;
     let mut invalid = entries.first().ok_or("missing fixture")?.1;
     invalid.ifindex = 0;
-    ensure(driver.upsert(key(1, false)?, invalid).is_err(), "invalid endpoint replaced valid route")?;
+    ensure(
+        driver.upsert(key(1, false)?, invalid).is_err(),
+        "invalid endpoint replaced valid route",
+    )?;
     for v6 in [false, true] {
         exchange(&mut first, &mut second, v6, "forward", true)?;
         exchange(&mut second, &mut first, v6, "reverse", true)?;
@@ -327,8 +343,12 @@ fn run(object: &str) -> Result<()> {
     // Recreate the program owner and map, proving the restore path rather than
     // accidentally depending on a still-attached old program.
     let mut restored = LocalDelivery::load(object)?;
-    for (key, value) in &entries { restored.upsert(*key, *value)?; }
-    for host in ["p1", "p2"] { restored.attach(host)?; }
+    for (key, value) in &entries {
+        restored.upsert(*key, *value)?;
+    }
+    for host in ["p1", "p2"] {
+        restored.attach(host)?;
+    }
     for v6 in [false, true] {
         exchange(&mut first, &mut second, v6, "reloaded", true)?;
     }

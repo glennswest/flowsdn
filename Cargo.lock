@@ -173,6 +173,7 @@ version = "0.14.0"
 name = "flowsdn-bpf-loader"
 version = "0.14.0"
 dependencies = [
+ "aya",
  "flowsdn-bpf-abi",
 ]
 
@@ -182,6 +183,7 @@ version = "0.14.0"
 dependencies = [
  "aya",
  "flowsdn-bpf-abi",
+ "flowsdn-bpf-loader",
  "nix",
 ]
 
