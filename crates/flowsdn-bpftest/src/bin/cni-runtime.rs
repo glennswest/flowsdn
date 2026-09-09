@@ -1,17 +1,15 @@
 //! Actual CNI executable integration against a fixture-only Unix fake agent.
 //! All links, BPF attachments and network sysctls live in anonymous namespaces.
-use flowsdn_bpf_abi::endpoint::EndpointInfo;
-use flowsdn_bpf_loader::kernel::LocalDelivery;
+use flowsdn_agent::endpoints::Manager;
 use flowsdn_cni::queue::{Queue, ReplayRequest};
 use flowsdn_ipam::{HostScope, Ipam};
 use nix::sched::{CloneFlags, unshare};
 use serde_json::{Value, json};
 use std::{
-    collections::BTreeMap,
     error::Error,
     fs,
     io::{BufRead, BufReader, ErrorKind, Read, Write},
-    net::{IpAddr, SocketAddr, UdpSocket},
+    net::{SocketAddr, UdpSocket},
     os::unix::net::{UnixListener, UnixStream},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
@@ -212,55 +210,51 @@ fn endpoint_worker(id: u8) -> Result<()> {
     Ok(())
 }
 
-struct Record {
-    host: String,
-    addresses: Vec<IpAddr>,
-}
 struct State {
-    driver: LocalDelivery,
-    ipam: Ipam,
-    endpoints: BTreeMap<String, Record>,
+    manager: Option<Manager>,
+    object: PathBuf,
+    store: PathBuf,
     offline_delete: bool,
     errors: Vec<String>,
 }
 impl State {
-    fn new(object: &Path) -> Result<Self> {
-        let v4 = HostScope::new("198.18.0.0".parse()?, 24, Default::default())?;
-        let v6 = HostScope::new("2001:db8:1::".parse()?, 64, Default::default())?;
-        let mut ipam = Ipam::new(Some(v4), Some(v6))?;
-        for v6 in [false, true] {
-            ipam.exclude_ip(gateway(v6).parse()?, "router")?;
-        }
+    fn new(object: &Path, store: &Path) -> Result<Self> {
         Ok(Self {
-            driver: LocalDelivery::load(object)?,
-            ipam,
-            endpoints: BTreeMap::new(),
+            manager: Some(managed(Manager::restore(store, object, fresh_ipam()?))?),
+            object: object.to_owned(),
+            store: store.to_owned(),
             offline_delete: false,
             errors: Vec::new(),
         })
+    }
+    fn manager(&self) -> Result<&Manager> { self.manager.as_ref().ok_or_else(|| "endpoint manager stopped".into()) }
+    fn manager_mut(&mut self) -> Result<&mut Manager> { self.manager.as_mut().ok_or_else(|| "endpoint manager stopped".into()) }
+    fn restart(&mut self) -> Result<()> {
+        let mut ids = Vec::new();
+        for id in [1,2] {
+            let attachment = format!("cni-attachment-id:cid{id}:eth0");
+            ids.push((attachment.clone(), self.manager()?.get(&attachment).ok_or("endpoint before restart")?.id));
+        }
+        ensure(self.manager()?.len() == ids.len(), "unexpected endpoint count before restart")?;
+        // Drop all old BPF/map/IPAM/store-lock ownership. The Unix fake API
+        // remains alive, but no endpoint state is copied into the new manager.
+        drop(self.manager.take().ok_or("manager before restart")?);
+        self.manager = Some(managed(Manager::restore(&self.store, &self.object, fresh_ipam()?))?);
+        ensure(self.manager()?.len() == ids.len(), "restored endpoint count")?;
+        for (attachment, id) in ids {
+            ensure(self.manager()?.get(&attachment).ok_or("restored attachment")?.id == id, "endpoint ID changed on restore")?;
+        }
+        let ipam = self.manager_mut()?.ipam_mut();
+        ensure(ipam.ipv4().ok_or("restored IPv4")?.allocated() == 2
+            && ipam.ipv6().ok_or("restored IPv6")?.allocated() == 2, "restored IP allocations")
     }
     fn delete(&mut self, id: &str) -> Result<(u16, Value)> {
         if self.offline_delete {
             return Ok((503, json!({"error":"fixture unavailable"})));
         }
-        let Some(record) = self.endpoints.remove(id) else {
+        if !managed(self.manager_mut()?.delete(id))? {
             return Ok((404, json!({"error":"missing endpoint"})));
-        };
-        self.driver.detach(&record.host)?;
-        for ip in record.addresses {
-            self.driver.remove(ip)?;
-            self.ipam.release(ip)?;
         }
-        let output = Command::new("ip")
-            .args(["link", "del", &record.host])
-            .output()?;
-        ensure(
-            output.status.success(),
-            &format!(
-                "delete host link: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ),
-        )?;
         Ok((200, json!({})))
     }
     fn handle(&mut self, method: &str, target: &str, body: Value) -> Result<(u16, Value)> {
@@ -285,7 +279,7 @@ impl State {
                 _ => return Err("unknown fixture owner".into()),
             };
             for v6 in [true, false] {
-                self.ipam.allocate(address(id, v6).parse()?, &owner)?;
+                self.manager_mut()?.ipam_mut().allocate(address(id, v6).parse()?, &owner)?;
             }
             return Ok((
                 201,
@@ -296,14 +290,14 @@ impl State {
         if method == "DELETE"
             && let Some(ip) = path.strip_prefix("/v1/ipam/")
         {
-            self.ipam.release(decode(ip)?.parse()?)?;
+            self.manager_mut()?.ipam_mut().release(decode(ip)?.parse()?)?;
             return Ok((200, json!({})));
         }
         if let Some(id) = path.strip_prefix("/v1/endpoint/") {
             if method == "GET"
                 && let Some(id) = id.strip_suffix("/healthz")
             {
-                return Ok(if self.endpoints.contains_key(&decode(id)?) {
+                return Ok(if self.manager()?.get(&decode(id)?).is_some() {
                     (200, json!({"overallHealth":"OK"}))
                 } else {
                     (404, json!({"error":"missing endpoint"}))
@@ -314,31 +308,23 @@ impl State {
                 return self.delete(&id);
             }
             if method == "PUT" {
-                ensure(!self.endpoints.contains_key(&id), "duplicate endpoint")?;
+                ensure(self.manager()?.get(&id).is_none(), "duplicate endpoint")?;
                 let host = text(&body, "interface-name")?.to_owned();
                 let ifindex = body
                     .get("interface-index")
                     .and_then(Value::as_u64)
                     .and_then(|n| u32::try_from(n).ok())
                     .ok_or("interface index")?;
-                let info = EndpointInfo {
-                    ifindex,
-                    mac: parse_mac(text(&body, "mac")?)?,
-                    node_mac: parse_mac(text(&body, "host-mac")?)?,
-                    ..EndpointInfo::default()
-                };
                 let addressing = body.get("addressing").ok_or("addressing")?;
-                let mut addresses = Vec::new();
-                for family in ["ipv4", "ipv6"] {
-                    let ip = text(addressing, family)?.parse()?;
-                    self.driver.upsert(ip, info)?;
-                    addresses.push(ip);
-                }
-                self.driver.attach(&host)?;
-                self.endpoints.insert(id, Record { host, addresses });
+                let document = json!({"dockerID":text(&body,"container-id")?,"ContainerIfName":text(&body,"container-interface-name")?,
+                    "IfName":host,"IfIndex":ifindex,"LXCMAC":text(&body,"mac")?,"NodeMAC":text(&body,"host-mac")?,
+                    "IPv4":text(addressing,"ipv4")?,"IPv6":text(addressing,"ipv6")?,
+                    "K8sNamespace":text(&body,"k8s-namespace")?,"K8sPodName":text(&body,"k8s-pod-name")?});
+                ensure(id == format!("cni-attachment-id:{}:{}",text(&body,"container-id")?,text(&body,"container-interface-name")?), "endpoint URL/body identity mismatch")?;
+                let endpoint_id = managed(self.manager_mut()?.create(document))?;
                 return Ok((
                     201,
-                    json!({"status":{"networking":{"mac":text(&body,"mac")?}}}),
+                    json!({"id":endpoint_id,"status":{"networking":{"mac":text(&body,"mac")?}}}),
                 ));
             }
         }
@@ -352,13 +338,15 @@ impl State {
     }
 }
 
-fn parse_mac(text: &str) -> Result<u64> {
-    let bytes = text
-        .split(':')
-        .map(|v| u8::from_str_radix(v, 16))
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    let [a, b, c, d, e, f]: [u8; 6] = bytes.try_into().map_err(|_| "invalid MAC")?;
-    Ok(u64::from_le_bytes([a, b, c, d, e, f, 0, 0]))
+fn managed<T>(result: flowsdn_agent::state::Result<T>) -> Result<T> {
+    result.map_err(|error| error as Box<dyn Error>)
+}
+fn fresh_ipam() -> Result<Ipam> {
+    let v4 = HostScope::new("198.18.0.0".parse()?,24,Default::default())?;
+    let v6 = HostScope::new("2001:db8:1::".parse()?,64,Default::default())?;
+    let mut ipam = Ipam::new(Some(v4),Some(v6))?;
+    for v6 in [false,true] { ipam.exclude_ip(gateway(v6).parse()?,"router")?; }
+    Ok(ipam)
 }
 fn decode(text: &str) -> Result<String> {
     let mut input = text.bytes();
@@ -612,7 +600,7 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
     let temp = Temp::new()?;
     let mut first = Endpoint::spawn(1)?;
     let mut second = Endpoint::spawn(2)?;
-    let state = Arc::new(Mutex::new(State::new(&object)?));
+    let state = Arc::new(Mutex::new(State::new(&object, &temp.0.join("state"))?));
     let _agent = Agent::start(&temp.0.join("agent.sock"), state.clone())?;
     let conf = json!({"cniVersion":"1.1.0","name":"flowsdn-fixture","type":"flowsdn-cni"});
     let mut previous = Vec::new();
@@ -658,6 +646,15 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
         exchange(&mut first, &mut second, v6)?;
         exchange(&mut second, &mut first, v6)?;
     }
+    state.lock().map_err(|_| "state")?.restart()?;
+    for (endpoint, check) in [&first, &second].into_iter().zip(&previous) {
+        cni(&binary, &temp, "CHECK", endpoint.id, &endpoint.netns(), check, true)?;
+    }
+    for v6 in [false, true] {
+        exchange(&mut first, &mut second, v6)?;
+        exchange(&mut second, &mut first, v6)?;
+    }
+    println!("PASS: real endpoint manager restored persisted IDs, IPAM and fresh BPF ownership; CHECK and bidirectional dual-stack UDP survive manager restart inside the fixture API");
     let mut bad = previous.first().ok_or("previous result")?.clone();
     bad.get_mut("prevResult")
         .and_then(|v| v.get_mut("ips"))
@@ -679,14 +676,11 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
     );
     for endpoint in [&first, &second] {
         let host = {
-            state
-                .lock()
-                .map_err(|_| "state")?
-                .endpoints
+            let state = state.lock().map_err(|_| "state")?;
+            text(&state.manager()?
                 .get(&format!("cni-attachment-id:cid{}:eth0", endpoint.id))
                 .ok_or("endpoint state")?
-                .host
-                .clone()
+                .document, "IfName")?.to_owned()
         };
         cni(
             &binary,
@@ -716,13 +710,17 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
         )?;
     }
     {
-        let state = state.lock().map_err(|_| "state")?;
-        ensure(state.endpoints.is_empty(), "DEL leaked endpoint state")?;
+        let mut state = state.lock().map_err(|_| "state")?;
+        ensure(state.manager()?.is_empty(), "DEL leaked endpoint state")?;
+        let ipam = state.manager_mut()?.ipam_mut();
         ensure(
-            state.ipam.ipv4().ok_or("v4")?.allocated() == 0
-                && state.ipam.ipv6().ok_or("v6")?.allocated() == 0,
+            ipam.ipv4().ok_or("v4")?.allocated() == 0
+                && ipam.ipv6().ok_or("v6")?.allocated() == 0,
             "DEL leaked IPAM",
         )?;
+        for entry in fs::read_dir(&state.store)? {
+            ensure(entry?.file_name().to_str().is_none_or(|name|name.parse::<u16>().is_err()), "DEL leaked persisted endpoint directory")?;
+        }
         ensure(
             state.errors.is_empty(),
             &format!("fake agent errors: {:?}", state.errors),
