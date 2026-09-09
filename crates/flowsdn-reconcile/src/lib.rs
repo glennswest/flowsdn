@@ -3,7 +3,7 @@
 //! Desired rows and reconciliation status are separate. Revision checks reject
 //! stale results, and status reads synthesize Pending for newer desired rows.
 //! The caller owns the `run` future and its shutdown signal; no task is spawned.
-//! Atomic table write hooks, annotations, batch targets, health
+//! Atomic table write hooks, annotations, health
 //! reporting and asynchronous completion waiters remain integration work.
 //! Prune runs only after table initialization and clears a resync request only
 //! on success. Incremental updates alone cannot remove unknown target entries
@@ -18,6 +18,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod batch;
+pub use batch::{BatchDelete, BatchResult, BatchUpdate};
 mod refresh;
 use refresh::RefreshState;
 mod prune;
@@ -46,6 +48,31 @@ pub trait Target<T: Keyed>: Send {
         _hint: UpdateHint,
     ) -> impl Future<Output = Result<(), Self::Error>> + Send {
         self.update(row)
+    }
+    /// Explicitly opt into bounded batch dispatch. Defaults retain scalar calls.
+    fn supports_batches(&self) -> bool { false }
+    /// Return exactly one result for each input key and revision, in any order.
+    /// Cancellation or malformed results can replay the entire unfinished group.
+    fn update_batch(&mut self, updates: Vec<BatchUpdate<T>>) -> impl Future<Output = Vec<BatchResult>> + Send {
+        async move {
+            let mut results = Vec::with_capacity(updates.len());
+            for update in updates {
+                let result = self.update_with_hint(update.row, update.hint).await.map_err(|error| error.to_string());
+                results.push(BatchResult { key: update.key, revision: update.revision, result });
+            }
+            results
+        }
+    }
+    /// Scalar fallback for an opted-in target that only specializes updates.
+    fn delete_batch(&mut self, deletes: Vec<BatchDelete>) -> impl Future<Output = Vec<BatchResult>> + Send {
+        async move {
+            let mut results = Vec::with_capacity(deletes.len());
+            for delete in deletes {
+                let result = self.delete(delete.key.clone()).await.map_err(|error| error.to_string());
+                results.push(BatchResult { key: delete.key, revision: delete.revision, result });
+            }
+            results
+        }
     }
     fn delete(&mut self, key: Key) -> impl Future<Output = Result<(), Self::Error>> + Send;
     /// Remove target objects absent from this immutable desired snapshot.
@@ -92,6 +119,7 @@ pub enum ReconcileError {
     PruneDeadlineOverflow,
     InvalidRoundInterval,
     RoundDeadlineOverflow,
+    InvalidBatchResults,
     InvalidRefreshRate,
     RefreshDeadlineOverflow,
 }
@@ -105,6 +133,7 @@ impl fmt::Display for ReconcileError {
             Self::PruneDeadlineOverflow => "prune deadline exceeds the monotonic clock range",
             Self::InvalidRoundInterval => "round interval must be positive",
             Self::RoundDeadlineOverflow => "round deadline exceeds the monotonic clock range",
+            Self::InvalidBatchResults => "batch results must match every requested key and revision exactly once",
             Self::InvalidRefreshRate => "refresh rate must be positive when refresh is enabled",
             Self::RefreshDeadlineOverflow => "refresh deadline exceeds the monotonic clock range",
         })
@@ -466,6 +495,49 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         self.run_round_with_clock(|| now).await
     }
 
+    fn record_result(&mut self, work: &Work<T>, result: Result<(), String>, now: Instant, round: &mut Round) -> Result<(), ReconcileError> {
+            let mut status = Status::pending(work.revision, work.operation());
+            status.updated_at = Some(now);
+            match result {
+                Ok(()) => {
+                    status.kind = Kind::Done;
+                    self.retries.remove(&work.key);
+                    if work.row.is_some() {
+                        round.updated = round.updated.saturating_add(1);
+                        if work.refresh {
+                            round.refreshed = round.refreshed.saturating_add(1);
+                        }
+                    } else {
+                        round.deleted = round.deleted.saturating_add(1);
+                    }
+                }
+                Err(error) => {
+                    let failures = work.failures.saturating_add(1);
+                    let deadline = now
+                        .checked_add(self.backoff(failures))
+                        .ok_or(ReconcileError::RetryDeadlineOverflow)?;
+                    status.kind = Kind::Error;
+                    status.error = Some(error);
+                    status.retries = failures;
+                    status.next_retry = Some(deadline);
+                    self.retries.insert(Retry {
+                        key: work.key.clone(),
+                        revision: work.revision,
+                        operation: work.operation(),
+                        failures,
+                        deadline,
+                        refresh: work.refresh,
+                    });
+                }
+            }
+            if work.row.is_none() && status.kind == Kind::Done {
+                self.statuses.remove(&work.key);
+            } else {
+                self.statuses.insert(work.key.clone(), status);
+            }
+        Ok(())
+    }
+
     async fn run_round_with_clock(
         &mut self,
         clock: impl Fn() -> Instant,
@@ -475,7 +547,11 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         if self.pending.is_empty() {
             self.load_changes();
         }
-        while round.processed < self.options.round_size {
+        let batched = self.target.supports_batches();
+        if batched {
+            self.run_batch_round(&clock, &mut round).await?;
+        }
+        while !batched && round.processed < self.options.round_size {
             if self.pending.is_empty() {
                 if let Some(retry) = self.retries.due(clock()) {
                     let row = self
@@ -557,45 +633,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                 continue;
             }
             let now = clock();
-            let mut status = Status::pending(work.revision, work.operation());
-            status.updated_at = Some(now);
-            match result {
-                Ok(()) => {
-                    status.kind = Kind::Done;
-                    self.retries.remove(&work.key);
-                    if work.row.is_some() {
-                        round.updated = round.updated.saturating_add(1);
-                        if work.refresh {
-                            round.refreshed = round.refreshed.saturating_add(1);
-                        }
-                    } else {
-                        round.deleted = round.deleted.saturating_add(1);
-                    }
-                }
-                Err(error) => {
-                    let failures = work.failures.saturating_add(1);
-                    let deadline = now
-                        .checked_add(self.backoff(failures))
-                        .ok_or(ReconcileError::RetryDeadlineOverflow)?;
-                    status.kind = Kind::Error;
-                    status.error = Some(error.to_string());
-                    status.retries = failures;
-                    status.next_retry = Some(deadline);
-                    self.retries.insert(Retry {
-                        key: work.key.clone(),
-                        revision: work.revision,
-                        operation: work.operation(),
-                        failures,
-                        deadline,
-                        refresh: work.refresh,
-                    });
-                }
-            }
-            if work.row.is_none() && status.kind == Kind::Done {
-                self.statuses.remove(&work.key);
-            } else {
-                self.statuses.insert(work.key, status);
-            }
+            self.record_result(&work, result.map_err(|error| error.to_string()), now, &mut round)?;
             self.pending.pop_front();
             if work.refresh {
                 self.complete_refresh_work(now)?;

@@ -17,7 +17,7 @@ round observes the new stream generation and replaces or clears it. An absent
 row's status is therefore not evidence that its latest deletion has succeeded.
 Successful deletion releases its status entry.
 
-`run(shutdown_future)` drives work until shutdown completes or a scheduling error
+`run(shutdown_future)` drives work until shutdown completes or a scheduling or batch-protocol error
 occurs. It waits for table changes, initialization readiness, retry/prune/refresh timers,
 and explicit prune requests. The caller owns this future and may poll or spawn
 it; no worker is detached. Shutdown takes priority and cancels an in-flight
@@ -57,7 +57,7 @@ Clearing it confirms deletion-history recovery, not successful application of
 all rows: individual update failures may still be queued for retry.
 
 This slice does not install atomic status hooks into table publication.
-Annotations, batch targets,
+Annotations,
 health reporting and asynchronous completion waiters remain unimplemented.
 Prune owns its initialization gate; callers still own any extra startup gate
 needed before incremental target writes, such as restoration of allocated IDs.
@@ -76,3 +76,20 @@ The default method repeats `update`, preserving existing target implementations;
 targets that skip unchanged values should override it to honor the hint. Retries
 and cancellation replay retain the hint. Generation checks discard stale results,
 and refresh never changes desired-table revisions.
+
+Targets can opt into coalescing with `supports_batches()`. Each round gathers at
+most `round_size` changes, due retries and eligible refresh work, then calls
+`delete_batch` before `update_batch`, at most once each for nonempty groups.
+`BatchUpdate` includes the desired row, key, revision and refresh hint;
+`BatchDelete` includes the key and revision. Both methods have scalar defaults,
+so a target can specialize either operation. Existing targets keep scalar
+behavior unless they explicitly opt in.
+
+Each `BatchResult` identifies its input by key and revision and contains a
+per-entry success or diagnostic string. Results may arrive in any order, but
+must contain every requested identity exactly once. Missing, extra, duplicate
+or mismatched identities return `InvalidBatchResults` without acknowledging any
+entry in that group. The caller can fix the target and resume the retained work.
+A valid response records independent retries and discards stale generations.
+Cancellation replays the unfinished group, including any already applied target
+side effects; successfully recorded earlier groups remain complete.
