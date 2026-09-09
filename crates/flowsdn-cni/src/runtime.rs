@@ -500,7 +500,7 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
                 .as_array()
                 .ok_or_else(|| error("CHECK requires previous addresses"))?
             {
-                if field(&ip, "interface")
+                if field(ip, "interface")
                     .as_u64()
                     .and_then(|v| usize::try_from(v).ok())
                     .is_some_and(|i| selected.contains(&i))

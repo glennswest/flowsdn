@@ -315,8 +315,11 @@ fn full_unix_listener_backlog_cannot_block_connect_past_deadline() {
     let listener = UnixListener::bind(&path).expect("listener");
     // Linux can default to a backlog larger than the fixture's connection cap.
     // Set a small queue explicitly so saturation is deterministic.
-    nix::sys::socket::listen(&listener, nix::sys::socket::Backlog::new(1).expect("backlog"))
-        .expect("set backlog");
+    nix::sys::socket::listen(
+        &listener,
+        nix::sys::socket::Backlog::new(1).expect("backlog"),
+    )
+    .expect("set backlog");
     let address = UnixAddr::new(&path).expect("address");
     let mut connections = Vec::new();
     let mut full = false;
