@@ -440,7 +440,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
 
     fn pop_work(&mut self) {
         if let Some(work) = self.pending.pop_front() {
-            if !self.statuses.contains_key(&work.key) { self.forget_health_failure(&work.key); }
+            if !self.statuses.contains_key(&work.key) {
+                self.forget_health_failure(&work.key);
+            }
             let index = if work.failures > 0 {
                 Some(&mut self.pending_failures)
             } else if !work.refresh {
@@ -622,7 +624,12 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                     .ok_or(ReconcileError::RetryDeadlineOverflow)?;
                 status.kind = Kind::Error;
                 self.health_dirty = true;
-                if self.reporter.is_some() { self.health_failures.insert(work.key.clone(), (work.revision, health::retain_error(&error))); }
+                if self.reporter.is_some() {
+                    self.health_failures.insert(
+                        work.key.clone(),
+                        (work.revision, health::retain_error(&error)),
+                    );
+                }
                 status.error = Some(error);
                 status.retries = failures;
                 status.next_retry = Some(deadline);
@@ -652,7 +659,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         let result = self.run_core_round(clock).await;
         self.health_round_error = result.as_ref().err().copied();
         self.finish_health_round(self.health_round_error).await?;
-        if result.is_ok() { self.health_error = None; }
+        if result.is_ok() {
+            self.health_error = None;
+        }
         result
     }
 
@@ -694,7 +703,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                     };
                     if retry.operation == Operation::Update && work.row.is_none() {
                         self.statuses.remove(&work.key);
-                    self.forget_health_failure(&work.key);
+                        self.forget_health_failure(&work.key);
                         round.stale = round.stale.saturating_add(1);
                         round.processed = round.processed.saturating_add(1);
                         continue;

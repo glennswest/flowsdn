@@ -281,9 +281,15 @@ impl Engine {
     /// Bind a typed table to this engine. Duplicate names never replace a live
     /// fixture binding; register another Engine for an independent fixture.
     pub fn register_table<T: flowsdn_table::Keyed + flowsdn_table::TableRender>(
-        &mut self, name: &str, table: std::sync::Arc<flowsdn_table::Table<T>>,
+        &mut self,
+        name: &str,
+        table: std::sync::Arc<flowsdn_table::Table<T>>,
     ) -> Result<(), String> {
-        if !valid_name(name) || name.len() > 256 || name.chars().any(char::is_control) || self.tables.contains_key(name) {
+        if !valid_name(name)
+            || name.len() > 256
+            || name.chars().any(char::is_control)
+            || self.tables.contains_key(name)
+        {
             return Err(format!("invalid or duplicate table name: {name}"));
         }
         let binding = crate::table::bind(table)?;
