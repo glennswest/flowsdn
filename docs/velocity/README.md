@@ -7,7 +7,11 @@ All **377 tests** passed in debug and release, with formatting, Clippy, both
 Linux musl compile checks, dependency policy and identity no-default-features
 compilation. Cleanup removed **13,452 files / 3.8 GiB** and seven task logs.
 One issue closed; totals are **20 closed / 270 open**. Source validation is
-recorded in `5ec0cb3`; publication is pending. Prior releases remain in the ledger.
+recorded in `5ec0cb3`. Foundation prerelease
+[v0.14.0](https://github.com/glennswest/flowsdn/releases/tag/v0.14.0) was published
+at **16:03:02 UTC**, **21 minutes 1 second** after milestone start (1,261 seconds).
+Release commit: `9dfc33b`. Publication and final reporting are outside the fixed
+usage cutoff. Prior releases remain in the ledger.
 
 Milestone processed usage: **19,368,222 tokens** across root and
 three agents, deduplicated by response ID. Repeated context is included; these

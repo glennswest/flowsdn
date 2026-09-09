@@ -23,7 +23,7 @@
     "tunnel wire codecs",
     "loader layout planning"
   ],
-  "publication": "pending",
+  "publication": "published",
   "as_of_utc": "2026-09-09T16:01:17Z",
   "tokens": {
     "input_tokens": 19312523,
@@ -440,5 +440,10 @@
       "active_work_seconds": null,
       "note": "Includes record publication and cleanup; nested in milestone elapsed."
     }
-  ]
+  ],
+  "release": "v0.14.0",
+  "release_commit": "9dfc33bcc98f0883ad59c7947f387ff3410f1786",
+  "published_at_utc": "2026-09-09T16:03:02Z",
+  "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.14.0",
+  "elapsed_to_publication_seconds": 1261
 }

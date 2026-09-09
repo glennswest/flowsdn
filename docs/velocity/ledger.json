@@ -548,7 +548,9 @@
       },
       "commit": "07607ac",
       "validation_record_commit": "5ec0cb3",
-      "note": "Identity filters/CIDR, overlay wire codecs and loader contracts; source-only foundation."
+      "note": "Identity filters/CIDR, overlay wire codecs and loader contracts; source-only foundation.",
+      "release": "v0.14.0",
+      "release_commit": "9dfc33bcc98f0883ad59c7947f387ff3410f1786"
     }
   ],
   "crates": [
@@ -738,7 +740,8 @@
       "v0.10.0",
       "v0.11.0",
       "v0.12.0",
-      "v0.13.0"
+      "v0.13.0",
+      "v0.14.0"
     ],
     "unique_tests": 377,
     "test_profiles": [
@@ -795,16 +798,16 @@
       "flowsdn-harvest-bpf-cases": 9,
       "flowsdn-identity": 40
     },
-    "publication": "pending",
+    "publication": "published",
     "issues_closed_this_milestone": [
       55
     ],
-    "release_commit": "762bf4cd0e6bb577e1e3ded737b6d5f17cfe5ce1",
-    "published_at_utc": "2026-09-09T13:59:22Z",
-    "publication_observed_utc": "2026-09-09T13:59:22Z",
-    "release": "v0.13.0",
-    "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.13.0",
-    "elapsed_to_publication_seconds": 1068
+    "release_commit": "9dfc33bcc98f0883ad59c7947f387ff3410f1786",
+    "published_at_utc": "2026-09-09T16:03:02Z",
+    "publication_observed_utc": "2026-09-09T16:03:02Z",
+    "release": "v0.14.0",
+    "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.14.0",
+    "elapsed_to_publication_seconds": 1261
   },
   "subagent_usage_file": "subagents.json",
   "parallel_work": [
@@ -2508,7 +2511,7 @@
       "tunnel wire codecs",
       "loader layout planning"
     ],
-    "publication": "pending",
+    "publication": "published",
     "as_of_utc": "2026-09-09T16:01:17Z",
     "tokens": {
       "input_tokens": 19312523,
@@ -2926,7 +2929,12 @@
         "active_work_seconds": null,
         "note": "Includes record publication and cleanup; nested in milestone elapsed."
       }
-    ]
+    ],
+    "release": "v0.14.0",
+    "release_commit": "9dfc33bcc98f0883ad59c7947f387ff3410f1786",
+    "published_at_utc": "2026-09-09T16:03:02Z",
+    "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.14.0",
+    "elapsed_to_publication_seconds": 1261
   },
   "milestone_0_7_parallel_time": {
     "observed_agent_window_seconds": 3064.201,
