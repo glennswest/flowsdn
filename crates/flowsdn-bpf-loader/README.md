@@ -11,8 +11,14 @@ content migration or attachment. Unknown flags remain part of exact comparison;
 this planner never adds flags to make a map compatible.
 
 The caller must validate map-type/flag combinations and inner-map schemas.
-Kernel probing, Aya integration, bpffs operations, live-map compatibility,
-transaction execution and rollback are not implemented by this crate yet.
+Kernel probing, bpffs operations, live-map compatibility, and planned map
+replacement transactions are not implemented yet.
+
+The optional `kernel` feature provides Aya object ownership for the integration
+classifier: endpoint-map updates, validated endpoint addresses and MACs, ingress
+attachments, explicit detach and cleanup when the owner is dropped. Duplicate
+attachments fail without replacing the existing link. This adapter does not yet
+implement persistent pins, production policy wiring or agent restart recovery.
 
 Auxiliary scratch planning uses target-specific 64/128-byte strides, possible
 CPU counts and checked map-value sizing. It exposes patch values and clamped

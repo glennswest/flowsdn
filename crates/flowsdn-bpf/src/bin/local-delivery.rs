@@ -23,7 +23,7 @@ pub fn local_delivery(ctx: TcContext) -> i32 {
     // SAFETY: NO_PREALLOC prevents deleted entries being reused in place;
     // lookup storage is RCU protected for this invocation. Copy immediately,
     // retain no reference across helpers, and never write through the pointer.
-    let Some(endpoint) = (unsafe { CILIUM_LXC.get(&key).copied() }) else {
+    let Some(endpoint) = (unsafe { CILIUM_LXC.get(key).copied() }) else {
         return flowsdn_bpf::native_routing::route(&ctx);
     };
     deliver(&ctx, endpoint)

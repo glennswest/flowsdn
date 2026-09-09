@@ -74,3 +74,12 @@ validated, with no new release. One root agent; elapsed 503.4 seconds,
 Counters include cached/repeated context and do not measure account allowance.
 See `m1-kernel-smoke` in the ledger and
 [validation](../validation/m1-kernel-smoke.md). Milestone 1 remains in progress.
+
+## Milestone 1: local endpoints and CNI integration
+
+2026-09-09T18:36:48Z: integrated endpoint delivery, IPAM and CNI rollback
+validated at `446964c`. Elapsed: 1620.1 seconds. Root
+processed tokens: 5,261,185; allocator agent: 332,630
+through their recorded cutoffs. Agent observed elapsed was 246 seconds and
+overlaps project elapsed. Counters include repeated/cached context, not dollars.
+Milestone 1 continues into native routing; no release was made.

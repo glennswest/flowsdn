@@ -634,6 +634,75 @@
       "outcome": "Kernel BPF round trips, live UDP pass/drop/recovery, explicit and owner-drop TCX cleanup passed. Formatting, Clippy, both userspace musl compile checks and both workspace dependency policies passed. Milestone 1 remains in progress. Validation and subsequent cleanup committed; namespace is anonymous and process scoped.",
       "attribution": "Shared across BPF program, harness, dependency setup and validation; not allocated to both crates.",
       "note": "Single root session cumulative counters; no subagents. Context is processed tokens, not account quota or dollars. Build/check waits are within this wall interval; active work time unknown. Final ledger commit and reporting after cutoff excluded."
+    },
+    {
+      "id": "m1-local-endpoints-cni",
+      "scope": "project/shared",
+      "crates": [
+        "flowsdn-bpf",
+        "flowsdn-bpf-loader",
+        "flowsdn-bpftest",
+        "flowsdn-cni",
+        "flowsdn-ipam"
+      ],
+      "agent": "root",
+      "start_revision": "8b38c32",
+      "validated_revision": "446964c",
+      "start_utc": "2026-09-09T18:09:47.871Z",
+      "end_utc": "2026-09-09T18:36:48Z",
+      "elapsed_seconds": 1620.129,
+      "active_work_seconds": null,
+      "token_baseline_sample_utc": "2026-09-09T17:48:51.474Z",
+      "token_end_sample_utc": "2026-09-09T18:36:31.728Z",
+      "token_baseline": {
+        "input_tokens": 104014479,
+        "cached_input_tokens": 102667648,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 328180,
+        "reasoning_output_tokens": 80485,
+        "total_tokens": 104342659
+      },
+      "token_endpoint": {
+        "input_tokens": 109233351,
+        "cached_input_tokens": 107807360,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 370493,
+        "reasoning_output_tokens": 99616,
+        "total_tokens": 109603844
+      },
+      "tokens": {
+        "input_tokens": 5218872,
+        "cached_input_tokens": 5139712,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 42313,
+        "reasoning_output_tokens": 19131,
+        "total_tokens": 5261185,
+        "uncached_input_tokens": 79160
+      },
+      "subagents": [
+        {
+          "agent": "host_ipam",
+          "primary_crate": "flowsdn-ipam",
+          "observed_start_utc": "2026-09-09T18:22:32Z",
+          "observed_end_utc": "2026-09-09T18:26:38Z",
+          "observed_elapsed_seconds": 246,
+          "active_work_seconds": null,
+          "tokens": {
+            "input_tokens": 324914,
+            "cached_input_tokens": 289536,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 7716,
+            "reasoning_output_tokens": 367,
+            "total_tokens": 332630,
+            "uncached_input_tokens": 35378
+          },
+          "sample_count": 9,
+          "note": "Observed clock window begins after actual start. Counters include all available response samples before reported completion, deduplicated by response ID."
+        }
+      ],
+      "release": null,
+      "outcome": "16 kernel packet cases and integrated CNI IPv4/IPv6 namespace traffic, rollback/retry, map removal/reinsertion and detach/reload passed. Eight IPAM and four CNI unit tests passed. Milestone 1 continues into native routing.",
+      "note": "Root usage shared once across listed crates; child tokens separate. Overlapping child elapsed is not added to project elapsed. Build waits included; exact separate bounds unavailable. Target retained for ongoing integrated validation, cleanup pending at completion. No dollar or allowance inference."
     }
   ],
   "crates": [

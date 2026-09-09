@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Add dual-stack BPF endpoint delivery with MAC rewriting and hop/checksum
+  updates, plus optional Aya endpoint-map and attachment ownership.
+- Add sparse host-scope IPAM and CNI ADD transaction rollback, integrated with
+  live endpoint namespace tests. The installable CNI and agent are still pending.
+- Add initial native FIB routing for resolved Ethernet neighbors; unresolved
+  neighbors, fragments and IPv6 extension headers currently fail closed.
 - Add a Rust BPF classifier and privileged harness for kernel packet round
   trips, live UDP pass/drop updates and attachment cleanup in an isolated
   network namespace. This is a milestone 1 checkpoint, not a pod datapath.

@@ -32,13 +32,14 @@ layout planning and typed tail-program inventory checks.
 The identity crate adds numeric scopes, cluster ranges and tunnel encoding,
 plus canonical CIDR labels and optional identity/node label filtering.
 Fixed VXLAN/Geneve headers and Geneve DSR options have explicit wire codecs.
-There is no working networking agent or datapath. Synthetic scripts and file assertions
+There is no working networking agent. Synthetic scripts and file assertions
 execute, while the harvested networking scenarios still lack their adapters.
 
-The unreleased milestone 1 work adds a [kernel smoke harness](crates/flowsdn-bpftest/README.md):
-a Rust BPF classifier tested with kernel packet round trips and isolated live
-UDP pass/drop updates, including attachment cleanup. Pod connectivity remains
-outstanding.
+The unreleased milestone 1 work adds [privileged networking tests](crates/flowsdn-bpftest/README.md),
+dual-stack BPF endpoint delivery, host-scope IPAM and a CNI ADD transaction library.
+Isolated endpoint tests exercise live IPv4/IPv6 traffic, allocation, attachment,
+rollback and retry. An installable CNI executable, agent integration and
+two-node Kubernetes pod connectivity remain outstanding.
 
 | | |
 |---|---|

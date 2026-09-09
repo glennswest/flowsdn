@@ -31,8 +31,16 @@ it is not a concurrency-safe packet counter.
 
 Ordinary `cargo test` does not execute these privileged checks. Failure exits
 nonzero; an unavailable kernel feature is a failure, not a silent pass.
-The harness currently tests TC/IPv4 loopback, not XDP, CNI, cross-node traffic,
-production map schemas or the full harvested BPF case corpus.
+The smoke harness tests TC/IPv4 loopback. Neither harness covers XDP or the
+full harvested BPF case corpus.
+
+Run `flowsdn-endpoint-test` with the `local-delivery` BPF object to exercise
+two endpoint namespaces. Sixteen kernel packet cases check MAC rewriting,
+hop limits, IPv4 checksums and malformed-packet rejection. Live IPv4/IPv6 UDP
+checks map deletion/reinsertion, detach and fresh-object reload. The fixture
+uses the CNI ADD transaction, real host-scope allocation and an injected
+post-creation failure to verify endpoint, link and address rollback and retry.
+The test adapter invokes `ip`; it is not the production CNI executable.
 
 The BPF crate is a separate workspace with its own lockfile and toolchain.
 Format it separately with `cargo +nightly-2026-04-03 fmt --manifest-path
