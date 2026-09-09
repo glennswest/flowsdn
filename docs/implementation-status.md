@@ -267,3 +267,10 @@ Section retries and networking subsystem adapters remain forthcoming.
 
 These additions remain foundation libraries. Map creation, Aya integration,
 live datapath compatibility and an operational networking agent are not included.
+
+Validation completed against source commit `cc9ec2c`: **247 unique tests passed
+in debug and release with all features** (66 script, 51 configuration,
+50 reconciler, 30 table, 20 map ABI, 7 health, 7 fence, 7 build-selector,
+5 build-metadata and 4 harvester). Formatting, warning-free Clippy,
+x86_64/aarch64 Linux musl compile checks and dependency policy all passed.
+The locked dependency graph remains unchanged at 89 external versions.
