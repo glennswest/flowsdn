@@ -24,7 +24,7 @@ pub fn local_delivery(ctx: TcContext) -> i32 {
     // lookup storage is RCU protected for this invocation. Copy immediately,
     // retain no reference across helpers, and never write through the pointer.
     let Some(endpoint) = (unsafe { CILIUM_LXC.get(&key).copied() }) else {
-        return TC_ACT_SHOT;
+        return flowsdn_bpf::native_routing::route(&ctx);
     };
     deliver(&ctx, endpoint)
 }
