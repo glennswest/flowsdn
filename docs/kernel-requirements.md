@@ -31,6 +31,14 @@ never compare **version strings** (section 4.7).
 | Agent capabilities | `NET_ADMIN, NET_RAW, BPF, PERFMON, IPC_LOCK, SYS_ADMIN` (SYS_ADMIN only for `setns`/mounts); no `SYS_MODULE`, no `SYS_RESOURCE` (memcg accounting since 5.11) | 4.5 |
 | Test matrix | verifier + BPF unit tests on {6.6, 6.12, 6.18} × {x86-64, arm64}; e2e on 6.12 both arches, 6.6 and 6.18 nightly on x86-64 | 5.3 |
 
+**Decision reconciliation (2026-09-09, #54 and #53).** The 6.6 general minimum
+and 6.12 supported line above are the target contract, superseding the older
+6.1 recommendations in specs 01/02. Required features are checked at startup;
+legacy clsact is cleanup-only. The object policy is single-object-first with
+measured promotion (§3.3), not an unconditional feature matrix. These choices
+resolve conflicting prescriptions; they do not claim completed privileged
+loader or verifier validation.
+
 ## 1. Feature → requirement matrix
 
 Column legend. **Helpers**: `bpf_*` helpers the program(s) call (names as in
@@ -432,18 +440,20 @@ available on the 6.6 minimum).
    1.5–3× the "insns processed" of the C for a first port of the NodePort
    path. The 6.6 minimum buys the better verifier; it does not buy a bigger
    limit.
-2. **Compile-time variants replace `#ifdef`s** (Cargo features → several
-   objects per hook family), because `.rodata`-driven pruning only removes
-   branches the verifier can prove dead from a constant, and Rust keeps more
-   code reachable than the C preprocessor did. The datapath spec must decide
-   the variant set; a reasonable start is {v4, v6, dual} × {tunnel, native} ×
-   {kpr-full, kpr-basic} for `host`/`lxc`, with host-firewall, egress gateway,
-   encryption and SRv6/multicast as `.rodata` gates within a variant.
-3. **A loader-side reachability pass** (as in the reference's unused-map and
-   unused-tail-call pruning in `pkg/bpf`) is mandatory: rewrite conditional
-   jumps on known `.rodata` values into unconditional ones and drop dead
-   blocks *before* load, so the verifier never walks them and the 64-map and
-   tail-call limits are computed over live code only.
+2. **One object per hook family first (#53).** Follow datapath spec §6.2:
+   runtime configuration and pruning are the default. Each object is shared
+   by x86-64 and arm64. Add compile-time feature variants only after measured
+   all-features results on the 6.6 floor exceed 800,000 instructions or 480 B
+   stack. Address-family, tunnel and DSR dimensions remain candidates, not a
+   preselected matrix. This replaces the earlier unmeasured matrix prescription;
+   ADR-0002 explicitly leaves variant count to the datapath spec.
+3. **A loader-side reachability pass** is mandatory, using Tier A of loader
+   spec §5.2: evaluate known `.rodata` conditions conservatively and remove
+   unreachable tail programs and unused maps from the collection. The kernel
+   performs instruction dead-code elimination. Physically removing blocks and
+   rewriting branches/BTF metadata is optional Tier B, justified by measurements
+   under loader spec §12.1; it is not a prerequisite for the first object.
+   Live-map and tail-call limits remain part of verifier validation.
 4. **Use global subprograms deliberately.** A `#[inline(never)]` global
    function with BTF `func_info` is verified once; use it for CT lookup, NAT
    rewrite, policy lookup and the LB backend selection so those bodies are not
@@ -457,8 +467,9 @@ available on the 6.6 minimum).
 6. **CI gate from day one.** The verifier job (section 5.3) loads every
    object variant under the everything-on `.rodata` configuration on every
    matrix kernel, records `insns processed`, stack depth and map count, and
-   fails the PR above the reference's 70 %/90 % thresholds and warns at
-   50 %/75 %. Trend the JSON per program; the number to watch is the
+   fails above 800,000 instructions or 480 B stack and warns on a greater
+   than 10% instruction-count regression against the previous commit, matching
+   datapath spec §9.4. Hard kernel map/tail-call limits remain mandatory. Trend the JSON per program; the number to watch is the
    `bpf_host` NodePort family on the 6.6 x86-64 row, which is the oldest
    verifier in the matrix.
 7. **The panic-path problem is a verifier problem too.** A stray
@@ -683,8 +694,8 @@ Start from the reference's LVH set (`quay.io/lvh-images/kind:{5.15,6.1,6.6,
 Notes.
 
 - The verifier job is cheap (load only, no traffic) and is the right place to
-  enforce the 50 %/70 % instruction thresholds and the 75 %/90 % stack/map
-  thresholds from `tools/complexity-diff`; run it on every kernel × arch pair
+  enforce the flowsdn 800,000-instruction / 480 B-stack gate and greater
+  than 10% instruction-count regression warning from datapath spec §9.4; run it on every kernel × arch pair
   in the table on every PR for x86-64, nightly for arm64 (same verifier, so
   the arm64 run guards only JIT-support gates).
 - BPF unit tests are the reference's 141 `bpf/tests/*.c` cases re-expressed in

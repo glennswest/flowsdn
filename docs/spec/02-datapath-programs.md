@@ -1367,8 +1367,9 @@ Total: 141 files, ~600 named cases; M1 covers ~55 files / ~300 cases.
 
 CI loads every object with the all-features config (all runtime toggles
 true, `dsr_mode` each value) and with the M1 default config, after the
-loader's pruning, on: the general floor kernel (§10.2), 6.6 (tcx), and
-the stormcos kernel line, on x86-64 and arm64 (dev box + one arm64 node).
+loader's pruning, on the 6.6 general minimum, the 6.12 supported line and
+6.18, on x86-64 and arm64 per `docs/kernel-requirements.md`. This is the
+required validation matrix; it is not evidence of completed verifier runs.
 Records per program: instruction count (`verified_insns`), stack depth,
 processed states. Gate: fail if any program exceeds 800,000 instructions
 or 480 B stack; warn at +10 % vs the previous commit. This replaces the
@@ -1413,16 +1414,19 @@ and NodePort across the two MUST pass with correct identities in Hubble.
 
 ### 10.2 Minimum kernel
 
-Recommendation (decision §12.2): **general floor 6.1**, **recommended
-6.6+** (tcx links), stormcos ships one 6.x LTS line per architecture.
+Resolved contract (#54, §12.2): **general minimum 6.6 LTS**, **supported
+line 6.12 on both architectures**, matching `docs/kernel-requirements.md`.
+Startup refuses missing required capabilities using feature checks, not version
+strings. These are validation targets until the privileged matrix passes.
 Features by kernel: bounded loops 5.3, `BPF_F_RDONLY_PROG` 5.2, 1M
 instruction limit 5.2, `redirect_neigh`/`redirect_peer` 5.10, mixing
 BPF-to-BPF calls with tail calls x86-64 5.10 / arm64 6.0, `bpf_loop` 5.17,
 `XDP_HAS_FRAGS` 5.18, `xdp_load_bytes` 5.18, `map_lookup_percpu_elem` 5.19,
 `BPF_FIB_LOOKUP_SKIP_NEIGH` 6.3, `bpf_sock_destroy` 6.4, `BPF_FIB_LOOKUP_TBID`
 6.5, tcx 6.6, `BPF_FIB_LOOKUP_SRC` 6.7, netkit 6.8. 5.10 is not promised
-(ADR-0002); nothing in this spec *requires* > 6.1 for M1, and `to-verify`
-items in §11.8 may raise it.
+(ADR-0002). Historical helper introduction versions do not lower the chosen
+6.6 minimum. Features newer than that minimum retain their individual gates;
+`to-verify` items must be validated on the selected matrix.
 
 ### 10.3 x86-64 vs arm64
 
@@ -1447,7 +1451,7 @@ checksums.
 
 ### 10.5 Netlink / modules
 
-`clsact` (legacy) or tcx; VXLAN or Geneve module for the tunnel device;
+tcx (legacy owned clsact filters are removed during takeover); VXLAN or Geneve module for the tunnel device;
 `nf_tables` + `nft_tproxy`/`nft_socket` only when L7 is enabled
 (ADR-0003); `sch_fq` for EDT (M3); cgroup v2 mounted for socket LB (M2).
 
@@ -1606,21 +1610,22 @@ file (ADR-0001).
 
 ## 12. Open decisions
 
-1. **Single object per hook family vs prebuilt matrix.** Options: (a) one
-   ELF per hook family, every feature a runtime toggle pruned at load;
-   (b) a matrix (e.g. `{tunnel, native} × {v4, v6, dual} × dsr_mode`).
-   Recommendation: (a), with the §9.4 gate deciding promotions; the first
-   expected promotion is `dsr_mode` (three DSR encap bodies), then
-   `enable_ipsec`/`enable_srv6` if the host object overflows. Rationale:
-   ADR-0002 assigns pruning to the loader anyway; a matrix multiplies test
-   surface and image size and buys nothing if pruning works.
-2. **Kernel floor under Rust codegen.** Options: 5.10 (reference floor),
-   6.1 LTS, 6.6 LTS (tcx, no clsact). Recommendation: **6.1 general
-   minimum, 6.6 recommended, stormcos pinned to one 6.x line**. Rust BPF
-   output needs bounded-loop and subprogram support that is solid only in
-   5.10+ x86-64 / 6.0+ arm64; arm64 is first-class (ADR-0001), so 6.0 is
-   the real arm64 floor and 6.1 is the LTS at or above it. Legacy `clsact`
-   attach is kept until 6.6 is the floor.
+1. **Resolved policy (#53): single object per hook family first.** The
+   normative §6.2 default already selects runtime configuration plus pruning;
+   §9.4 permits measured promotion to feature variants above 800,000
+   instructions or 480 B stack on the floor kernel. Keep one BPF object shared
+   by both architectures for each selected hook family/variant. ADR-0002
+   explicitly delegates variant count here; its cross-architecture object
+   requirement does not prohibit measured feature variants. No matrix or
+   promotion dimension is selected before measurements, and no passing
+   verifier measurements are claimed by this resolution.
+2. **Resolved kernel floor (#54): 6.6 general minimum, 6.12 supported line.**
+   The kernel roll-up fixes these targets for both architectures; this replaces
+   the older 6.1 recommendation. Required features are checked at startup;
+   missing tcx is a refusal, not a reason to attach via clsact. Preserve
+   supported-kernel takeover cleanup and feature-specific gates. The remaining
+   work is implementation and privileged validation, not another user decision
+   between the superseded kernel recommendations.
 3. **Wire compatibility with Cilium nodes.** Options: (a) identical VXLAN/
    Geneve VNI = identity encoding, ports, WORLD collapse, Geneve DSR TLV;
    (b) flowsdn-private encoding (e.g. full 32-bit identity in a Geneve

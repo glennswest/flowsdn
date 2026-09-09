@@ -36,7 +36,7 @@ In scope:
 - The loader: object preparation (map renames, `.rodata.config` patching,
   registry size/flag patches, tail-call population, reachability pruning,
   `.data.aux` sizing), the pin-replace commit protocol, rollback (§3.5–3.8, §5).
-- Attach mechanics per hook: tcx, clsact fallback, netkit, XDP, cgroup socket
+- Attach mechanics per hook: tcx, legacy-filter cleanup, netkit, XDP, cgroup socket
   programs, socket iterators, and the `BPF_LINK_UPDATE` upgrade path (§3.9).
 - The monitor and signal perf-event channels: map names, per-CPU sizing,
   payload framing and the fixed notification layouts (§3.10, §4.6).
@@ -589,10 +589,10 @@ Common rules:
 |---|---|---|
 | 1 | `enable-tcx` and device type is `netkit` | netkit link (below); no tcx, no clsact |
 | 2 | `enable-tcx` | try tcx: link-update pinned link, else create tcx link (`BPF_TCX_INGRESS`/`_EGRESS`, anchor *tail*) and pin. On success remove any legacy `cil_*` clsact filters on that direction (tcx supersedes clsact evaluation) and stop |
-| 3 | tcx returned "not supported" (kernel < 6.6) or tcx disabled | legacy clsact: ensure `clsact` qdisc (handle `ffff:`), `RTM_NEWTFILTER` replace of a `bpf` filter at parent `ffff:fff2` (ingress) / `ffff:fff3` (egress), handle 1, protocol `ETH_P_ALL`, priority `--bpf-filter-priority` (default 1), name `<symbol>-<ifname>`, `direct-action`. Delete `cil_*` filters at other priorities. Then remove any tcx link pin for this symbol (downgrade path) |
+| 3 | required tcx capability is absent or tcx is disabled | refuse startup with the missing capability or unsupported setting named; do not create a legacy clsact attachment (#54) |
 | 4 | any other tcx error | fail the load (no silent fallback) |
 
-Detach mirrors this: remove the link pin (tcx/netkit) and the clsact filter.
+Detach removes the link pin (tcx/netkit) and any legacy owned clsact filter left by a previous agent. Legacy-filter cleanup is takeover compatibility, not an alternative attach mode.
 **DEVIATION** (ordering): flowsdn attaches with tcx anchor *last*, as the
 reference does. tcx *ordering* relative to third-party tcx programs is not
 guaranteed by either; see aya gap in §11.
@@ -640,11 +640,13 @@ the same option.
   IPv6 kernel support).
 - Attach per program: link-update pinned `<cilium>/socketlb/links/cgroup/<symbol>`;
   `ENOLINK` → unpin and continue; else `BPF_LINK_CREATE` on the cgroup root
-  fd and pin. If link create returns "not supported" (< 5.7) or `EPERM`
-  (a non-multi `PROG_ATTACH` from an older agent holds the hook), fall back
+  fd and pin. A missing cgroup-link capability is a startup failure under
+  the 6.6 minimum. If link create returns `EPERM` because a non-multi
+  `PROG_ATTACH` from an older agent holds the hook, fall back
   to `BPF_PROG_ATTACH` with no flags (replaces the old program in place),
   and detach with `BPF_PROG_DETACH`. Programs the feature no longer needs
-  are detached by both paths.
+  are detached by both paths. This retained path handles takeover of an old
+  attachment on a supported kernel; it does not enable older-kernel support.
 - sockops: the reference has no `sock_ops` program in 1.20; none is specified.
 
 **Socket iterators** (socket termination, deferred with socket LB per
@@ -1014,8 +1016,8 @@ fully new.
 | `bpf-map-dynamic-size-ratio` | float (0,1], 0.0025; 0 disables | §5.1 |
 | `bpf-ct-global-tcp-max`, `bpf-ct-global-any-max`, `bpf-nat-global-max`, `bpf-neigh-global-max`, `bpf-sock-rev-map-max`, `bpf-auth-map-max`, `bpf-fragments-map-max`, `egress-gateway-policy-map-max`, `bpf-policy-map-max`, `bpf-lb-*-map-max`, `bpf-lb-maglev-table-size` | int | map sizes (§2.2, §5.1); changing one recreates the map empty on next start (§3.2 step 5) |
 | `max-connected-clusters` | 255 / 511 | per-cluster outer array size and `cluster_id_bits` |
-| `enable-tcx` | bool, true | tcx vs clsact (§3.9) |
-| `bpf-filter-priority` | u16, 1 | clsact filter priority |
+| `enable-tcx` | bool, true | required for supported tc attachment; false is rejected, not a clsact fallback (§3.9, #54) |
+| `bpf-filter-priority` | u16, 1 | retained compatibility setting for legacy-filter inspection/cleanup; no new clsact filter is installed |
 | `datapath-mode` | `veth` | `netkit`/`netkit-l2` select netkit links |
 | `bpf-lb-acceleration` | `disabled` | XDP mode |
 | `cgroup-root` | `/run/cilium/cgroupv2` | socket LB attach target |
@@ -1069,7 +1071,7 @@ Flags-only: `PREALLOCATE_MAPS`, `NO_COMMON_MEM_MAPS` → registry flag patches.
 | Failure | Behavior |
 |---|---|
 | bpffs cannot be mounted anywhere | fatal at startup |
-| kernel lacks a required map type / flag (`RO` < 5.2, batch < 5.6, tcx < 6.6) | startup capability check (ADR-0001: no runtime probing beyond a refusing check) fails with the missing feature named; tcx absence is not fatal (clsact fallback) unless `datapath-mode=netkit` |
+| kernel lacks a required map type / flag (`RO` < 5.2, batch < 5.6, tcx < 6.6) | startup capability check (ADR-0001: no runtime probing beyond a refusing check) fails with the missing feature named; absence of the required tcx/netkit attach capability is fatal; no clsact fallback |
 | pinned map incompatible with spec | agent-owned: recreated empty (connections in CT/NAT lost, logged with old/new attributes); loader-owned: replaced at commit, old map serves until then |
 | `RO` mismatch | handled silently (§3.2 steps 3–4) |
 | map full (`E2BIG` on HASH/LPM) | update fails; error resolver retries; pressure metric near 1.0; LRU maps never fail but evict — GC and `*_FILL_UP` signals are the only indication |
@@ -1100,7 +1102,7 @@ reference regexps: `_v[0-9]+_reserved_N`, `_reserved_N`, `_netdev_ns_N`,
 (perf ring / observer queue), `cilium_bpf_syscall_duration_seconds{operation,outcome}`.
 
 Logs: every pin replaced, every map recreated (with old and new attributes),
-every tcx→clsact fallback, every XDP permutation tried, every defunct link,
+every missing required attach capability, every XDP permutation tried, every defunct link,
 every stale pin removed, the applied constants per object at debug level.
 
 REST: `GET /map` (all maps, `models.BPFMap`), `GET /map/{name}` (dump via key/
@@ -1162,9 +1164,10 @@ Monitor events emitted by this area: none (it carries them).
 
 ### 9.4 Attach matrix (privileged, per kernel in the verifier matrix)
 
-For each kernel of `docs/kernel-requirements.md` (at least 6.1, 6.6, latest):
-tcx attach/update/detach on veth; clsact fallback when tcx is disabled and on
-6.1; netkit attach on ≥ 6.7; XDP generic on veth with all four permutations,
+For each required kernel of `docs/kernel-requirements.md` (6.6, 6.12, 6.18):
+tcx attach/update/detach on veth; refusal when tcx is disabled or unavailable,
+and cleanup of legacy owned clsact filters; netkit attach when the required
+netkit capabilities are present (6.8 upstream minimum); XDP generic on veth with all four permutations,
 driver mode where a driver supports it, `EBUSY` netlink fallback after a
 pre-existing netlink attach; cgroup link attach/update, `EPERM` → `PROG_ATTACH`
 fallback after a pre-existing non-multi attach, defunct-link recreation after
@@ -1197,17 +1200,21 @@ Program types: `SCHED_CLS`, `XDP`, `CGROUP_SOCK_ADDR`, `CGROUP_SOCK`,
 `BPF_CGROUP_INET{4,6}_{CONNECT,BIND,POST_BIND,GETPEERNAME}`,
 `BPF_CGROUP_UDP{4,6}_{SENDMSG,RECVMSG}`, `BPF_CGROUP_INET_SOCK_RELEASE`
 (≥ 5.9), cgroup links (≥ 5.7), `BPF_TRACE_ITER` for tcp/udp (≥ 5.9) with
-kfunc `bpf_sock_destroy` (≥ 6.4). Netlink: `RTM_NEWQDISC` clsact,
-`RTM_NEWTFILTER`/`DELTFILTER` bpf filter, `IFLA_XDP`, `IFLA_NETKIT_*` (netkit
+kfunc `bpf_sock_destroy` (≥ 6.4). Netlink: inspect/delete legacy owned
+bpf filters for takeover cleanup, `IFLA_XDP`, `IFLA_NETKIT_*` (netkit
 device creation, area 03). Filesystems: bpffs, cgroup2. Sysctl:
 `net.core.bpf_jit_enable=1`, `kernel.unprivileged_bpf_disabled=1` (area 03).
 
-Minimum per feature: 5.10 for the plain datapath with clsact + `PROG_ATTACH`
-+ netlink XDP; 5.7+ for all-link attach; 6.4+ socket termination; 6.6+ tcx;
-6.7+ netkit. flowsdn's floors are set in `docs/kernel-requirements.md`; this
-spec requires that the loader implement the fallbacks above so that the
-general-use floor can be as low as 5.10 for this area, while the stormcos
-kernel (≥ 6.6) uses links everywhere.
+The general-use target is Linux 6.6 LTS; the supported kernel line is 6.12
+on both architectures, as fixed by `docs/kernel-requirements.md` (#54).
+Required capabilities are checked at startup, including tcx and cgroup links;
+version strings are not a substitute for feature checks. Features above the
+minimum, including netkit, retain their explicit capability requirements.
+Legacy clsact attachment and older-kernel cgroup fallbacks are not implemented.
+The cgroup `EPERM` takeover path and driver-specific XDP fallbacks remain
+because they address existing attachments/drivers on supported kernels.
+These are implementation and validation targets, not a claim that a working
+loader has already passed the privileged matrix.
 
 arm64: BPF bytecode and all layouts are identical to x86-64; the `.data.aux`
 stride constant is 128 (§5.4); mixing BPF-to-BPF calls with tail calls needs
@@ -1287,12 +1294,15 @@ Licenses per `docs/licensing.md`.
    with BTF.ext rewriting. Recommendation: (a) for the first milestone;
    measure instruction counts of the all-features lxc/host objects on the
    minimum kernel; adopt (b) only if a count exceeds 80% of the 1M limit.
-2. **Prebuilt object matrix.** If a single object per hook family fails the
-   verifier with everything enabled: dimensions to consider are
-   `{tunnel, native}` × `{v4, v6, dual}` × `{dsr-none, dsr-ipip, dsr-geneve}`.
-   Recommendation: start with one object; if needed, split only on
-   `{v4, v6, dual}` (3 objects) since address family is the largest code
-   multiplier; never split on per-node values.
+2. **Resolved policy (#53): one object per hook family first.** Follow
+   datapath spec §6.2: retain a shared object for x86-64 and arm64, use runtime
+   configuration/pruning, and add a prebuilt feature variant only after measured
+   all-features results on the minimum kernel exceed 800,000 instructions or
+   480 B stack. No variant dimensions are selected without measurements;
+   `{v4,v6,dual}`, DSR modes and other candidates remain experiments. ADR-0002
+   delegates variant count to the datapath spec, so this reconciles existing
+   decisions rather than requiring another user choice. No verifier result is
+   claimed by resolving this policy.
 3. **Per-endpoint objects vs one shared lxc object.** Reference model kept
    (§3.7). Revisit after the first milestone with measured load time per
    endpoint; a shared object would need `HASH_OF_MAPS` for policy maps and
@@ -1307,8 +1317,9 @@ Licenses per `docs/licensing.md`.
    Recommendation: implement the map-in-map primitive now (Maglev needs it
    anyway), create the per-cluster and multicast outer maps only when
    clustermesh / multicast are enabled.
-7. **General-use kernel floor for this area.** 5.10 is reachable with the
-   fallbacks specified; recommendation is to document 6.1 as the tested
-   general-use minimum and 6.6+ (stormcos) as the supported line, dropping
-   the clsact and `PROG_ATTACH` fallbacks only if `docs/kernel-requirements.md`
-   settles on ≥ 6.6 for every area.
+7. **Resolved kernel floor (#54).** Adopt the roll-up's Linux 6.6 LTS
+   general minimum and 6.12 supported line on both architectures. Earlier 6.1
+   recommendations in this spec were superseded by that roll-up. Require
+   feature-based startup refusal; remove the older-kernel clsact attach path,
+   retaining only legacy attachment cleanup/takeover where explicitly noted.
+   Privileged verification of the target kernel matrix remains outstanding.
