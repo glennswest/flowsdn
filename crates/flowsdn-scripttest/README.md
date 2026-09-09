@@ -25,7 +25,7 @@ reading or truncating them. FIFO paths cannot suspend fixture setup or commands.
 
 Implemented commands: `echo`, `env`, `stdout`, `stderr`, `stop`, `cmp`, `cmpenv`,
 `empty`, `cat`, `grep`, `cp`, `replace`, `sed`, `mkdir`, `cd`, `exists`, `mv`,
-`chmod`, `symlink`, `rm`, and foreground `exec` through `run_async`.
+`chmod`, `symlink`, `rm`, `exec` and `wait` through `run_async`.
 
 `mv` performs a rename, including replacement of an existing destination file.
 `exists --readonly` checks that write permission bits are absent; `--exec`
@@ -49,16 +49,16 @@ line by line; quote capture replacements such as `'$1'` so script environment
 expansion does not consume them. Comparison failures produce a whole-file
 unified diff unless quiet mode is selected.
 
-Retry sections, background jobs, networking adapters, update mode,
+Retry sections, networking adapters, update mode,
 agent fixture flags remain unimplemented. Unsupported commands and execution
 syntax fail explicitly.
 Section comments are logged, but retry prefixes are rejected. Successful
 synthetic scripts do not imply that the harvested networking corpus passes.
 
-`Engine::run_async(script, state, &RunOptions)` runs foreground Linux processes.
+`Engine::run_async(script, state, &RunOptions)` runs Linux processes.
 `RunOptions` supplies a deadline (60 seconds by default), cloneable cancellation
 handle and SIGINT grace interval (100 milliseconds by default, capped at five
-seconds). The synchronous `run` rejects `exec`, including negative assertions.
+seconds). The synchronous `run` rejects `exec` and `wait`, including negative assertions.
 Conditions, expansion and expected exit status use the same engine logic.
 
 A child starts in the state's capability-resolved current directory, with null
@@ -70,7 +70,7 @@ the grace interval, and reaps the direct child. Descendants in its process group
 are terminated before reaping, while the leader's process identity remains reserved. Dropping
 the run future triggers the same supervisor cleanup; keep the Tokio runtime
 alive until cleanup finishes and leave child wait-status ownership to the
-supervisor. Background jobs and interactive stdin are deferred.
+supervisor. Interactive stdin remains deferred.
 
 Execute only trusted scripts: subprocesses inherit the caller's operating-system
 permissions and can access files beyond WORK. Capability confinement applies to
@@ -81,3 +81,20 @@ caller's responsibility when stronger containment is required.
 Run the real-child Rust regression suite with
 `cargo test -p flowsdn-scripttest --features process-fixture`. The helper binary
 is enabled only by that feature and is not part of the normal build.
+
+A bare trailing `&` backgrounds `exec`; other implemented commands cannot be
+backgrounded. Launch clears both output buffers and snapshots the script cwd and
+environment. `wait` accepts no arguments or flags. It drains jobs in launch
+order, checks each job's original expected status, logs its output, concatenates
+stdout and stderr separately, and clears the job list. An empty wait clears both
+buffers. Ordinary failures are joined; cancellation, deadlines, ownership loss,
+and resource limits remain fatal even under a negative wait assertion.
+
+At most 32 jobs may be queued between waits. Their retained output shares an
+8 MiB combined stdout/stderr budget checked before capture appends. Output log
+entries show at most 32 KiB per stream, with an explicit truncation marker; the
+existing total log limit still applies. Script completion, stop and errors
+cancel remaining jobs and implicitly wait for cleanup, reporting unexpected
+background outcomes. Dropping the async run future also triggers cleanup of all
+remaining jobs. Explicitly wait before script end when jobs should finish
+normally. Retry sections remain unsupported.

@@ -1,6 +1,8 @@
-//! Foreground child supervision. Executables have the caller's OS permissions;
+//! Child supervision for foreground and background execution. Executables have the caller's OS permissions;
 //! directory capabilities confine fixture operations, not arbitrary child code.
-use crate::{CommandError, Control, State};
+use crate::{CommandError, Control, State, Status};
+use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+use tokio::sync::oneshot;
 use std::time::Duration;
 use tokio::{sync::watch, time::Instant};
 
@@ -72,12 +74,137 @@ pub(crate) async fn execute(
     options.check()?;
     #[cfg(target_os = "linux")]
     {
-        linux::execute(state, args, options).await
+        let output = linux::launch(state, args, options, None)?.receiver.await
+            .map_err(|_| failure("child supervisor terminated"))?;
+        let output = decode(output);
+        state.publish(output.stdout, output.stderr);
+        output.result?;
+        Ok(Control::Continue)
     }
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (state, args);
         Err(failure("foreground exec currently requires Linux"))
+    }
+}
+
+struct Output {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    result: Result<(), CommandError>,
+}
+struct Decoded {
+    stdout: String,
+    stderr: String,
+    result: Result<(), CommandError>,
+}
+fn decode(output: Output) -> Decoded {
+    match (String::from_utf8(output.stdout), String::from_utf8(output.stderr)) {
+        (Ok(stdout), Ok(stderr)) => Decoded { stdout, stderr, result: output.result },
+        _ => Decoded {
+            stdout: String::new(), stderr: String::new(),
+            // Keep nonmaskable errors ahead of malformed captured UTF-8.
+            result: output.result.and_then(|_| Err(failure("exec output is not UTF-8"))),
+        },
+    }
+}
+struct Pending {
+    receiver: oneshot::Receiver<Output>,
+    cancellation: Cancellation,
+}
+struct Job {
+    line: usize,
+    status: Status,
+    pending: Result<Pending, CommandError>,
+}
+#[derive(Default)]
+pub(crate) struct Jobs {
+    jobs: Vec<Job>,
+    budget: Arc<AtomicUsize>,
+}
+impl Jobs {
+    pub(crate) fn is_empty(&self) -> bool { self.jobs.is_empty() }
+    pub(crate) fn start(&mut self, state: &State, args: &[String], options: &RunOptions, line: usize, status: Status) -> Result<(), CommandError> {
+        if self.jobs.len() >= 32 { return Err(CommandError::LimitExceeded("background job limit of 32 exceeded")); }
+        options.check()?;
+        #[cfg(target_os = "linux")]
+        let pending = linux::launch(state, args, options, Some(self.budget.clone()));
+        #[cfg(not(target_os = "linux"))]
+        let pending = { let _ = (state, args); Err(failure("exec requires Linux")) };
+        self.jobs.push(Job { line, status, pending });
+        Ok(())
+    }
+    pub(crate) fn cancel(&self) {
+        for job in &self.jobs {
+            if let Ok(pending) = &job.pending { pending.cancellation.cancel(); }
+        }
+    }
+    pub(crate) async fn wait(&mut self, state: &mut State) -> Result<Control, CommandError> {
+        let mut stdout = String::new();
+        let mut stderr = String::new();
+        let mut errors = String::new();
+        let mut fatal = false;
+        // The owned iterator retains every remaining receiver across awaits;
+        // dropping it triggers cleanup for jobs that have not been drained.
+        let mut pending_jobs = std::mem::take(&mut self.jobs).into_iter();
+        while let Some(job) = pending_jobs.next() {
+            let output = match job.pending {
+                Ok(pending) => pending.receiver.await.unwrap_or_else(|_| Output {
+                    stdout: Vec::new(), stderr: Vec::new(), result: Err(CommandError::ProcessOwnershipLost),
+                }),
+                Err(error) => Output { stdout: Vec::new(), stderr: Vec::new(), result: Err(error) },
+            };
+            let output = decode(output);
+            // Capture reserves the shared budget before allocating; this check
+            // also protects aggregation if a future command supplies output.
+            if stdout.len().saturating_add(stderr.len()).saturating_add(output.stdout.len()).saturating_add(output.stderr.len()) > MAX_OUTPUT {
+                join_error(&mut errors, &mut fatal, job.line, CommandError::LimitExceeded("background output exceeds 8 MiB combined limit"));
+            } else {
+                stdout.push_str(&output.stdout);
+                stderr.push_str(&output.stderr);
+            }
+            for (name, text) in [("stdout", &output.stdout), ("stderr", &output.stderr)] {
+                if !text.is_empty()
+                    && let Err(error) = crate::engine::record_log(&mut state.log, &output_log(job.line, name, text)) {
+                    join_error(&mut errors, &mut fatal, job.line, error);
+                }
+            }
+            match output.result {
+                Ok(()) if job.status == Status::Failure => join_error(&mut errors, &mut fatal, job.line, failure("unexpected success")),
+                Ok(()) => {},
+                Err(CommandError::Failure(message)) if matches!(job.status, Status::Failure | Status::SuccessOrFailure) => {
+                    if let Err(error) = crate::engine::record_log(&mut state.log, &format!("line {}: expected failure: {message}", job.line)) {
+                        join_error(&mut errors, &mut fatal, job.line, error);
+                    }
+                }
+                Err(error) => join_error(&mut errors, &mut fatal, job.line, error),
+            }
+            if fatal {
+                for job in pending_jobs.as_slice() {
+                    if let Ok(pending) = &job.pending { pending.cancellation.cancel(); }
+                }
+            }
+        }
+        self.budget = Arc::default();
+        state.publish(stdout, stderr);
+        if errors.is_empty() { Ok(Control::Continue) }
+        else if fatal { Err(CommandError::BackgroundFailure(errors)) }
+        else { Err(CommandError::Failure(errors)) }
+    }
+}
+fn output_log(line: usize, name: &str, text: &str) -> String {
+    let mut end = text.len().min(32_768);
+    while !text.is_char_boundary(end) { end = end.saturating_sub(1); }
+    let suffix = if end < text.len() { "\n[output log truncated]" } else { "" };
+    format!("line {line}: [{name}]\n{}{suffix}", text.get(..end).expect("UTF-8 boundary"))
+}
+fn join_error(errors: &mut String, fatal: &mut bool, line: usize, error: CommandError) {
+    *fatal |= !matches!(error, CommandError::Failure(_));
+    let message = format!("line {line}: {error}\n");
+    if errors.len().saturating_add(message.len()) <= 60_000 { errors.push_str(&message); }
+    else if !errors.ends_with("background diagnostics exceeded limit\n") {
+        *fatal = true;
+        errors.push_str("background diagnostics exceeded limit\n");
     }
 }
 
@@ -112,17 +239,12 @@ mod linux {
             }
         }
     }
-    struct Output {
-        stdout: Vec<u8>,
-        stderr: Vec<u8>,
-        result: Result<(), CommandError>,
-    }
-
-    pub(super) async fn execute(
-        state: &mut State,
+    pub(super) fn launch(
+        state: &State,
         args: &[String],
         options: &RunOptions,
-    ) -> Result<Control, CommandError> {
+        budget: Option<Arc<AtomicUsize>>,
+    ) -> Result<Pending, CommandError> {
         let (program, arguments) = args
             .split_first()
             .ok_or_else(|| failure("exec requires a program"))?;
@@ -184,33 +306,21 @@ mod linux {
         };
         let (sender, receiver) = oneshot::channel();
         let options = options.clone();
+        let cancellation = Cancellation::default();
+        let task_cancellation = cancellation.clone();
         // This task owns the child even when the caller drops its run future.
         tokio::spawn(async move {
             let _directory = directory;
             let _workspace = workspace;
-            supervise(process, pid, options, sender).await;
+            supervise(process, pid, options, task_cancellation, budget, sender).await;
         });
-        let output = receiver
-            .await
-            .map_err(|_| failure("child supervisor terminated"))?;
-        let stdout = String::from_utf8(output.stdout);
-        let stderr = String::from_utf8(output.stderr);
-        match (stdout, stderr) {
-            (Ok(stdout), Ok(stderr)) => state.publish(stdout, stderr),
-            _ => {
-                // Cancellation and output limits must not become ordinary,
-                // negatable failures just because partial UTF-8 was captured.
-                output.result?;
-                return Err(failure("exec output is not UTF-8"));
-            }
-        }
-        output.result?;
-        Ok(Control::Continue)
+        Ok(Pending { receiver, cancellation })
     }
 
     async fn read_output(
         mut stream: impl AsyncRead + Unpin,
         bytes: &mut Vec<u8>,
+        budget: &Option<Arc<AtomicUsize>>,
     ) -> Result<(), CommandError> {
         let mut chunk = [0u8; 8192];
         loop {
@@ -222,6 +332,11 @@ mod linux {
                 return Err(CommandError::LimitExceeded(
                     "exec output exceeds 8 MiB per stream",
                 ));
+            }
+            if let Some(budget) = budget {
+                budget.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+                    used.checked_add(count).filter(|total| *total <= MAX_OUTPUT)
+                }).map_err(|_| CommandError::LimitExceeded("background output exceeds 8 MiB combined limit"))?;
             }
             bytes.extend_from_slice(chunk.get(..count).expect("read count fits buffer"));
         }
@@ -244,11 +359,13 @@ mod linux {
 
     async fn interrupted(
         options: &RunOptions,
+        cancellation: &Cancellation,
         sender: &mut oneshot::Sender<Output>,
     ) -> CommandError {
         tokio::select! {
             biased;
             _ = options.cancellation.cancelled() => CommandError::Cancelled,
+            _ = cancellation.cancelled() => CommandError::Cancelled,
             _ = tokio::time::sleep_until(options.deadline) => CommandError::Deadline,
             _ = sender.closed() => CommandError::Cancelled,
         }
@@ -258,6 +375,8 @@ mod linux {
         mut process: Process,
         pid: Pid,
         options: RunOptions,
+        cancellation: Cancellation,
+        budget: Option<Arc<AtomicUsize>>,
         mut sender: oneshot::Sender<Output>,
     ) {
         let Some(stdout_pipe) = process.child.stdout.take() else {
@@ -272,8 +391,8 @@ mod linux {
         {
             let capture = async {
                 tokio::try_join!(
-                    read_output(stdout_pipe, &mut stdout),
-                    read_output(stderr_pipe, &mut stderr)
+                    read_output(stdout_pipe, &mut stdout, &budget),
+                    read_output(stderr_pipe, &mut stderr, &budget)
                 )
                 .map(|_| ())
             };
@@ -281,14 +400,14 @@ mod linux {
             let mut captured = false;
             result = tokio::select! {
                 biased;
-                error = interrupted(&options, &mut sender) => Err(error),
+                error = interrupted(&options, &cancellation, &mut sender) => Err(error),
                 output = &mut capture => {
                     captured = true;
                     match output {
                         Err(error) => Err(error),
                         Ok(()) => tokio::select! {
                             biased;
-                            error = interrupted(&options, &mut sender) => Err(error),
+                            error = interrupted(&options, &cancellation, &mut sender) => Err(error),
                             exited = exited(pid) => exited,
                         },
                     }

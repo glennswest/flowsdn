@@ -1,6 +1,6 @@
-//! Synchronous execution slice from spec 17 §§3.2–3.3. Handlers must return
-//! promptly: this core cannot interrupt a blocking custom callback. Retry and
-//! background syntax are rejected until the asynchronous engine is available.
+//! Shared synchronous/asynchronous execution from spec 17 §§3.2–3.3. Custom
+//! handlers must return promptly: blocking callbacks cannot be interrupted.
+//! Async execution supports exec jobs and wait; section retries remain deferred.
 use crate::{Command, ExpansionMode, Line, Status, parse_script};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -84,13 +84,14 @@ pub enum CommandError {
     Cancelled,
     Deadline,
     ProcessOwnershipLost,
+    BackgroundFailure(String),
     LimitExceeded(&'static str),
 }
 
 impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Failure(message) => f.write_str(message),
+            Self::Failure(message) | Self::BackgroundFailure(message) => f.write_str(message),
             Self::Cancelled => f.write_str("command cancelled"),
             Self::Deadline => f.write_str("command deadline exceeded"),
             Self::ProcessOwnershipLost => {
@@ -172,6 +173,7 @@ impl Engine {
             ("stderr", true, stderr),
             ("stop", false, stop),
             ("exec", false, async_only),
+            ("wait", false, async_only),
             ("cmp", false, crate::files::cmp),
             ("cmpenv", false, crate::files::cmpenv),
             ("empty", false, crate::files::empty),
@@ -307,7 +309,7 @@ impl Engine {
         }
     }
 
-    /// Execute foreground processes with an explicit cancellation/deadline context.
+    /// Execute processes and background jobs with an explicit cancellation/deadline context.
     /// Synchronous custom handlers must still return promptly.
     pub async fn run_async(
         &self,
@@ -323,6 +325,30 @@ impl Engine {
         script: &str,
         state: &mut State,
         options: Option<&crate::RunOptions>,
+    ) -> Result<Execution, RunError> {
+        let mut jobs = crate::process::Jobs::default();
+        let result = self.run_commands(script, state, options, &mut jobs).await;
+        if jobs.is_empty() { return result; }
+        jobs.cancel();
+        let cleanup = jobs.wait(state).await;
+        match (result, cleanup) {
+            (result, Ok(_)) => result,
+            (Ok(_), Err(error)) => Err(RunError { line: 0, command: "wait".into(), message: error.to_string() }),
+            (Err(mut original), Err(cleanup)) => {
+                let message = format!("{}; implicit wait: {cleanup}", original.message);
+                if message.len() <= MAX_DIAGNOSTIC_BYTES { original.message = message; }
+                else { original.message = "script failed; implicit wait diagnostics exceeded 64 KiB".into(); }
+                Err(original)
+            }
+        }
+    }
+
+    async fn run_commands(
+        &self,
+        script: &str,
+        state: &mut State,
+        options: Option<&crate::RunOptions>,
+        jobs: &mut crate::process::Jobs,
     ) -> Result<Execution, RunError> {
         let lines = parse_script(script).map_err(|error| RunError {
             line: error.line,
@@ -356,8 +382,8 @@ impl Engine {
                     .check()
                     .map_err(|failure| error(failure.to_string()))?;
             }
-            if command.background {
-                return Err(error("background commands are not implemented".into()));
+            if command.background && options.is_none() {
+                return Err(error("background commands require run_async".into()));
             }
             if matches!(command.status, Status::SuccessRetry | Status::FailureRetry) {
                 return Err(error("section retries are not implemented".into()));
@@ -377,6 +403,9 @@ impl Engine {
                 .commands
                 .get(&name)
                 .ok_or_else(|| error(format!("unknown command: {name}")))?;
+            if command.background && name != "exec" {
+                return Err(error("only exec may run in the background".into()));
+            }
             if !self.selected(&command, state).map_err(error)? {
                 execution.commands_skipped = execution.commands_skipped.saturating_add(1);
                 continue;
@@ -420,14 +449,25 @@ impl Engine {
                 argument_bytes = argument_bytes.saturating_add(argument.len());
                 args.push(argument);
             }
-            if name == "exec" && options.is_none() {
-                return Err(error("exec requires run_async".into()));
+            if matches!(name.as_str(), "exec" | "wait") && options.is_none() {
+                return Err(error(format!("{name} requires run_async")));
+            }
+            if name == "wait" && !args.is_empty() {
+                return Err(error("wait takes no arguments or flags".into()));
             }
             if name == "exec" && !cfg!(target_os = "linux") {
                 return Err(error("foreground exec currently requires Linux".into()));
             }
             execution.commands_run = execution.commands_run.saturating_add(1);
-            let result = if name == "exec" {
+            if command.background {
+                jobs.start(state, &args, options.expect("checked above"), command.line, command.status)
+                    .map_err(|failure| error(failure.to_string()))?;
+                state.publish("", "");
+                continue;
+            }
+            let result = if name == "wait" {
+                jobs.wait(state).await
+            } else if name == "exec" {
                 crate::process::execute(state, &args, options.expect("checked above")).await
             } else {
                 (registered.handler)(state, &args)

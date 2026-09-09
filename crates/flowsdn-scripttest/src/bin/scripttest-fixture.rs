@@ -29,6 +29,22 @@ async fn main() {
             );
             eprintln!("diagnostic");
         }
+        "delayed-output" => {
+            let delay = args.get(1).unwrap().parse::<u64>().unwrap();
+            tokio::time::sleep(Duration::from_millis(delay)).await;
+            println!("{}", args.get(2).unwrap());
+            eprintln!("err:{}", args.get(2).unwrap());
+        }
+        "await-file" => {
+            while !std::path::Path::new(args.get(1).unwrap()).exists() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+        "bytes" => {
+            let count = args.get(1).unwrap().parse::<usize>().unwrap();
+            let chunk = [b'x'; 8192];
+            for _ in 0..count { io::stdout().write_all(&chunk).unwrap(); }
+        }
         "exit" => std::process::exit(args.get(1).unwrap().parse().unwrap()),
         "sleep" => {
             std::fs::write(args.get(1).unwrap(), std::process::id().to_string()).unwrap();
