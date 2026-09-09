@@ -1,0 +1,29 @@
+[package]
+name = "flowsdn-bpf"
+version = "0.14.0"
+edition = "2024"
+license = "BSD-2-Clause"
+publish = false
+
+[workspace]
+
+[dependencies]
+aya-ebpf = "=0.2.1"
+
+[[bin]]
+name = "smoke"
+path = "src/bin/smoke.rs"
+test = false
+bench = false
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+debug = 2
+
+[lints.clippy]
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
+unwrap_used = "deny"
+todo = "deny"

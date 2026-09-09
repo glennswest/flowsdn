@@ -1,0 +1,15 @@
+[package]
+name = "flowsdn-bpftest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aya = "=0.14.0"
+nix = { version = "=0.31.1", default-features = false, features = ["sched"] }
