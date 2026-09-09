@@ -42,10 +42,25 @@ impl Drop for Workspace {
     fn drop(&mut self) {
         // A script may have removed directory read/write permission. Repair
         // owned entries through handles before the final capability cleanup.
-        let mut remaining = usize::MAX;
-        if let Ok(entries) = self.dir.entries() {
-            for entry in entries.flatten() {
-                let _ = remove_tree(&self.dir, Path::new(&entry.file_name()), 0, &mut remaining);
+        // Walk iteratively: cleanup must also handle trees beyond the script
+        // command's depth limit, without unbounded Rust call-stack recursion.
+        if let (Ok(root), Ok(entries)) = (self.dir.try_clone(), self.dir.entries()) {
+            let mut pending = vec![(root, entries)];
+            while let Some((parent, entries)) = pending.last_mut() {
+                let Some(entry) = entries.next() else {
+                    pending.pop();
+                    continue;
+                };
+                let Ok(entry) = entry else { continue };
+                let path = entry.file_name();
+                if !parent.symlink_metadata(&path).is_ok_and(|metadata| metadata.is_dir()) {
+                    continue;
+                }
+                if let Ok(directory) = open_removable_dir(parent, Path::new(&path), &self.dir) {
+                    if let Ok(entries) = directory.entries() {
+                        pending.push((directory, entries));
+                    }
+                }
             }
         }
         // Remove through the owned directory handle; a replaced ambient path
@@ -227,7 +242,7 @@ pub(crate) fn chmod(state: &mut State, args: &[String]) -> Result<Control> {
         #[cfg(target_os = "linux")]
         {
             use cap_std::fs::OpenOptionsExt;
-            options.custom_flags(libc::O_PATH | libc::O_NONBLOCK);
+            options.custom_flags(libc::O_PATH);
         }
         let file = context
             .workspace
@@ -323,12 +338,13 @@ pub(crate) fn rm(state: &mut State, args: &[String]) -> Result<Control> {
             &mutable_entry(context, &path)?,
             0,
             &mut remaining,
+            &context.workspace.dir,
         )?;
     }
     Ok(Control::Continue)
 }
 
-fn remove_tree(parent: &Dir, path: &Path, depth: usize, remaining: &mut usize) -> Result<()> {
+fn remove_tree(parent: &Dir, path: &Path, depth: usize, remaining: &mut usize, root: &Dir) -> Result<()> {
     if depth > 128 || *remaining == 0 {
         return Err(CommandError::LimitExceeded(
             "rm exceeds 128 levels or 4096 entries",
@@ -343,6 +359,22 @@ fn remove_tree(parent: &Dir, path: &Path, depth: usize, remaining: &mut usize) -
     if !metadata.is_dir() {
         return parent.remove_file(path).map_err(io_error);
     }
+    let directory = open_removable_dir(parent, path, root)?;
+    for entry in directory.entries().map_err(io_error)? {
+        let entry = entry.map_err(io_error)?;
+        remove_tree(
+            &directory,
+            Path::new(&entry.file_name()),
+            depth.saturating_add(1),
+            remaining,
+            root,
+        )?;
+    }
+    parent.remove_dir(path).map_err(io_error)
+}
+
+// Obtain and validate the directory descriptor before repairing permissions.
+fn open_removable_dir(parent: &Dir, path: &Path, root: &Dir) -> Result<Dir> {
     let mut options = nonblocking_options();
     options.read(true);
     #[cfg(all(unix, not(target_os = "linux")))]
@@ -354,7 +386,7 @@ fn remove_tree(parent: &Dir, path: &Path, depth: usize, remaining: &mut usize) -
     {
         use cap_std::fs::OpenOptionsExt;
         options
-            .custom_flags(libc::O_PATH | libc::O_NONBLOCK | libc::O_DIRECTORY | libc::O_NOFOLLOW);
+            .custom_flags(libc::O_PATH | libc::O_DIRECTORY | libc::O_NOFOLLOW);
     }
     let file = parent.open_with(path, &options).map_err(io_error)?;
     let metadata = file.metadata().map_err(io_error)?;
@@ -363,22 +395,20 @@ fn remove_tree(parent: &Dir, path: &Path, depth: usize, remaining: &mut usize) -
     }
     #[cfg(unix)]
     {
+        use cap_std::fs::MetadataExt;
+        let protected = root.dir_metadata().map_err(io_error)?;
+        if metadata.dev() == protected.dev() && metadata.ino() == protected.ino() {
+            return Err(fail("rm cannot remove the owned WORK root through an alias"));
+        }
+    }
+    #[cfg(unix)]
+    {
         use cap_std::fs::PermissionsExt;
         set_mode(&file, metadata.permissions().mode() | 0o700)?;
     }
-    let directory = Dir::from_std_file(file.into_std())
+    Dir::from_std_file(file.into_std())
         .open_dir(".")
-        .map_err(io_error)?;
-    for entry in directory.entries().map_err(io_error)? {
-        let entry = entry.map_err(io_error)?;
-        remove_tree(
-            &directory,
-            Path::new(&entry.file_name()),
-            depth.saturating_add(1),
-            remaining,
-        )?;
-    }
-    parent.remove_dir(path).map_err(io_error)
+        .map_err(io_error)
 }
 
 fn nonblocking_options() -> OpenOptions {
