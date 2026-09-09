@@ -1,11 +1,12 @@
 //! Privileged dual-stack endpoint delivery test in three anonymous namespaces.
 use aya::programs::{SchedClassifier, TcAttachType};
-use flowsdn_bpf_abi::endpoint::EndpointInfo;
 use flowsdn_bpf_loader::kernel::LocalDelivery;
 use nix::sched::{CloneFlags, unshare};
 
 #[path = "endpoint/packets.rs"]
 mod packets;
+#[path = "endpoint/cni.rs"]
+mod cni;
 use std::{
     error::Error,
     io::{BufRead, BufReader, ErrorKind, Write},
@@ -129,7 +130,7 @@ impl Drop for Endpoint {
 }
 
 fn worker(id: u8) -> Result<()> {
-    ensure(matches!(id, 1 | 2), "invalid fixture endpoint")?;
+    ensure((1..=3).contains(&id), "invalid fixture endpoint")?;
     isolate()?;
     println!("READY");
     std::io::stdout().flush()?;
@@ -142,37 +143,16 @@ fn worker(id: u8) -> Result<()> {
     ip(&["link", "set", "eth0", "address", &mac(id, false)])?;
     ip(&["link", "set", "eth0", "mtu", "1500", "up"])?;
     ip(&["link", "set", "lo", "up"])?;
-    ip(&[
-        "addr",
-        "add",
-        &format!("{}/32", address(id, false)),
-        "dev",
-        "eth0",
-    ])?;
-    ip(&[
-        "-6",
-        "addr",
-        "add",
-        &format!("{}/128", address(id, true)),
-        "dev",
-        "eth0",
-        "nodad",
-    ])?;
-    ip(&["route", "add", "198.18.0.0/24", "dev", "eth0"])?;
-    ip(&["-6", "route", "add", "2001:db8:1::/64", "dev", "eth0"])?;
-    let other = if id == 1 { 2 } else { 1 };
-    for v6 in [false, true] {
-        ip(&[
-            "neigh",
-            "replace",
-            &address(other, v6),
-            "lladdr",
-            &mac(id, true),
-            "nud",
-            "permanent",
-            "dev",
-            "eth0",
-        ])?;
+    for v6 in [true, false] {
+        let family = if v6 { "-6" } else { "-4" };
+        let prefix = if v6 { 128 } else { 32 };
+        let local = format!("{}/{prefix}", address(id, v6));
+        if v6 { ip(&["-6", "addr", "add", &local, "dev", "eth0", "nodad"])?; }
+        else { ip(&["addr", "add", &local, "dev", "eth0"])?; }
+        let gateway = cni::gateway(v6);
+        ip(&[family,"route","add", &format!("{gateway}/{prefix}"), "dev", "eth0"])?;
+        ip(&[family,"route","add","default","via",gateway,"dev","eth0","mtu","1450"])?;
+        ip(&["neigh","replace",gateway,"lladdr",&mac(id,true),"nud","permanent","dev","eth0"])?;
     }
     let v4 = UdpSocket::bind(format!("{}:0", address(id, false)))?;
     let v6 = UdpSocket::bind(format!("[{}]:0", address(id, true)))?;
@@ -253,49 +233,47 @@ fn run(object: &str) -> Result<()> {
     isolate()?;
     let mut first = Endpoint::spawn(1)?;
     let mut second = Endpoint::spawn(2)?;
+    let v4 = flowsdn_ipam::HostScope::new("198.18.0.0".parse()?,24,Default::default())?;
+    let v6 = flowsdn_ipam::HostScope::new("2001:db8:1::".parse()?,64,Default::default())?;
+    let mut ipam = flowsdn_ipam::Ipam::new(Some(v4),Some(v6))?;
+    for v6 in [false,true] { ipam.exclude_ip(cni::gateway(v6).parse()?,"router")?; }
+    let mut driver = LocalDelivery::load(object)?;
     let mut entries = Vec::new();
     for ep in [&mut first, &mut second] {
-        let host = format!("p{}", ep.id);
-        let peer = format!("e{}", ep.id);
-        ip(&["link", "add", &host, "type", "veth", "peer", "name", &peer])?;
-        ip(&[
-            "link",
-            "set",
-            &host,
-            "address",
-            &mac(ep.id, true),
-            "mtu",
-            "1500",
-            "up",
-        ])?;
-        ip(&["link", "set", &peer, "netns", &ep.child.id().to_string()])?;
-        ep.configure()?;
-        // ip -o reports the kernel ifindex before the colon; use netlink output,
-        // not a sysfs mount that may reflect a different network namespace.
-        let output = Command::new("ip")
-            .args(["-o", "link", "show", "dev", &host])
-            .output()?;
-        ensure(output.status.success(), "cannot inspect endpoint interface")?;
-        let text = std::str::from_utf8(&output.stdout)?;
-        let ifindex: u32 = text.split(':').next().ok_or("missing ifindex")?.parse()?;
-        let info = EndpointInfo {
-            ifindex,
-            lxc_id: u16::from(ep.id),
-            mac: u64::from_le_bytes([2, 0, 0, 0, 1, ep.id, 0, 0]),
-            node_mac: u64::from_le_bytes([2, 0, 0, 0, 0, ep.id, 0, 0]),
-            ..Default::default()
+        let info = {
+            let mut backend = cni::Backend {process:ep,driver:&mut driver,ipam:&mut ipam,fail_finalize:false,info:None};
+            let request = backend.request();
+            let result = flowsdn_cni::add(&request,1450,&mut backend).map_err(|e|e.primary)?;
+            ensure(result.get("ips").and_then(|v|v.as_array()).is_some_and(|v|v.len()==2),"CNI result missing dual-stack addresses")?;
+            backend.info.ok_or("missing endpoint info")?
         };
         entries.push((key(ep.id, false)?, info));
         entries.push((key(ep.id, true)?, info));
     }
-    let mut driver = LocalDelivery::load(object)?;
-    for (key, value) in &entries {
-        driver.upsert(*key, *value)?;
+    // An ADD that fails after programming BPF must remove its endpoint, link
+    // and addresses without disturbing the two established endpoints.
+    {
+        let mut third = Endpoint::spawn(3)?;
+        let mut backend = cni::Backend {process:&mut third,driver:&mut driver,ipam:&mut ipam,fail_finalize:true,info:None};
+        let request = backend.request();
+        let error = flowsdn_cni::add(&request,1450,&mut backend).expect_err("injected post-create failure");
+        ensure(error.primary.message=="injected post-create failure" && error.rollback_errors.is_empty(),"live CNI rollback failed")?;
+    }
+    ensure(!Command::new("ip").args(["link","show","dev","p3"]).output()?.status.success(),"rollback leaked endpoint interface")?;
+    ensure(ipam.ipv4().ok_or("missing v4 pool")?.allocated()==2 && ipam.ipv6().ok_or("missing v6 pool")?.allocated()==2,"rollback leaked allocations")?;
+    // A new process can reuse the same CNI attachment and address after rollback.
+    {
+        use flowsdn_cni::AddBackend;
+        let mut third = Endpoint::spawn(3)?;
+        let mut backend = cni::Backend {process:&mut third,driver:&mut driver,ipam:&mut ipam,fail_finalize:false,info:None};
+        let request = backend.request();
+        flowsdn_cni::add(&request,1450,&mut backend).map_err(|e|e.primary)?;
+        backend.delete_endpoint(&request)?;
+        backend.delete_link(&flowsdn_cni::Link {host_name:"p3".into(),host_index:backend.info.ok_or("missing third endpoint")?.ifindex,host_mac:mac(3,true),peer_mac:mac(3,false)})?;
+        for v6 in [false,true] { backend.ipam.release(key(3,v6)?)?; }
     }
     packets::verify(driver.program()?)?;
-    for host in ["p1", "p2"] {
-        driver.attach(host)?;
-    }
+    println!("PASS: CNI ADD configures real endpoints; post-create rollback frees BPF, veth and IPAM state; retry succeeds");
     ensure(
         driver.attach("p1").is_err(),
         "duplicate attachment accepted",
@@ -353,9 +331,9 @@ fn run(object: &str) -> Result<()> {
         exchange(&mut first, &mut second, v6, "reloaded", true)?;
     }
     drop(restored);
-    for host in ["p1", "p2"] {
-        ip(&["link", "del", host])?;
-    }
+    for host in ["p1", "p2"] { ip(&["link", "del", host])?; }
+    for id in [1,2] { for v6 in [false,true] {ipam.release(key(id,v6)?)?;} }
+    ensure(ipam.ipv4().ok_or("v4 pool")?.allocated()==0 && ipam.ipv6().ok_or("v6 pool")?.allocated()==0,"final IPAM cleanup failed")?;
     println!(
         "PASS: detach blocks forwarding, fresh object/map reload restores it, endpoint links deleted"
     );

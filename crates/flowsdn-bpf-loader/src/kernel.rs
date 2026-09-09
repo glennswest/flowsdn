@@ -3,13 +3,13 @@
 use aya::{
     Ebpf,
     maps::{HashMap, MapData},
-    programs::{SchedClassifier, TcAttachType},
+    programs::{SchedClassifier, TcAttachType, links::Link, tc::SchedClassifierLink},
 };
 use flowsdn_bpf_abi::{
     MapBytes,
     endpoint::{EndpointInfo, EndpointKey},
 };
-use std::{collections::BTreeSet, error::Error, net::IpAddr, path::Path};
+use std::{collections::BTreeMap, error::Error, net::IpAddr, path::Path};
 
 pub type KernelResult<T> = Result<T, Box<dyn Error>>;
 
@@ -19,7 +19,7 @@ pub type KernelResult<T> = Result<T, Box<dyn Error>>;
 pub struct LocalDelivery {
     bpf: Ebpf,
     endpoints: HashMap<MapData, [u8; 20], [u8; 48]>,
-    interfaces: BTreeSet<String>,
+    interfaces: BTreeMap<String, SchedClassifierLink>,
 }
 impl LocalDelivery {
     pub fn load(object: impl AsRef<Path>) -> KernelResult<Self> {
@@ -34,7 +34,7 @@ impl LocalDelivery {
         Ok(Self {
             bpf,
             endpoints,
-            interfaces: BTreeSet::new(),
+            interfaces: BTreeMap::new(),
         })
     }
 
@@ -43,7 +43,7 @@ impl LocalDelivery {
         if interface.is_empty() || interface.len() >= 16 || interface.contains('\0') {
             return Err("invalid network interface name".into());
         }
-        if self.interfaces.contains(interface) {
+        if self.interfaces.contains_key(interface) {
             return Err("interface already attached".into());
         }
         let program: &mut SchedClassifier = self
@@ -51,8 +51,15 @@ impl LocalDelivery {
             .program_mut("local_delivery")
             .ok_or("missing local delivery program")?
             .try_into()?;
-        program.attach(interface, TcAttachType::Ingress)?;
-        self.interfaces.insert(interface.to_owned());
+        let id = program.attach(interface, TcAttachType::Ingress)?;
+        let link = program.take_link(id)?;
+        self.interfaces.insert(interface.to_owned(), link);
+        Ok(())
+    }
+
+    /// Remove the owned attachment; retrying an already detached name succeeds.
+    pub fn detach(&mut self, interface: &str) -> KernelResult<()> {
+        if let Some(link) = self.interfaces.remove(interface) { link.detach()?; }
         Ok(())
     }
 
