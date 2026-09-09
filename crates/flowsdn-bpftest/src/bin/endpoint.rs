@@ -237,17 +237,24 @@ fn run(object: &str) -> Result<()> {
     let original_namespace = std::fs::read_link("/proc/thread-self/ns/net")?;
     let endpoint_namespace = format!("/proc/{}/ns/net", first.child.id());
     let expected = std::fs::read_link(&endpoint_namespace)?;
-    let actual = native(flowsdn_connector::in_namespace(std::fs::File::open(&endpoint_namespace)?, || {
-        let connector = flowsdn_connector::Connector::open()?;
-        connector.require_link("lo")?;
-        Ok(std::fs::read_link("/proc/thread-self/ns/net")?)
-    }))?;
+    let actual = native(flowsdn_connector::in_namespace(
+        std::fs::File::open(&endpoint_namespace)?,
+        || {
+            let connector = flowsdn_connector::Connector::open()?;
+            connector.require_link("lo")?;
+            Ok(std::fs::read_link("/proc/thread-self/ns/net")?)
+        },
+    ))?;
     ensure(actual == expected, "connector used wrong namespace")?;
-    let failed: flowsdn_connector::Result<()> = flowsdn_connector::in_namespace(
-        std::fs::File::open(&endpoint_namespace)?, || Err("injected namespace failure".into()));
+    let failed: flowsdn_connector::Result<()> =
+        flowsdn_connector::in_namespace(std::fs::File::open(&endpoint_namespace)?, || {
+            Err("injected namespace failure".into())
+        });
     ensure(failed.is_err(), "namespace failure disappeared")?;
-    ensure(std::fs::read_link("/proc/thread-self/ns/net")? == original_namespace,
-        "namespace work changed coordinator namespace")?;
+    ensure(
+        std::fs::read_link("/proc/thread-self/ns/net")? == original_namespace,
+        "namespace work changed coordinator namespace",
+    )?;
     let v4 = flowsdn_ipam::HostScope::new("198.18.0.0".parse()?, 24, Default::default())?;
     let v6 = flowsdn_ipam::HostScope::new("2001:db8:1::".parse()?, 64, Default::default())?;
     let mut ipam = flowsdn_ipam::Ipam::new(Some(v4), Some(v6))?;
