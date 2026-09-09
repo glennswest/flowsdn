@@ -328,16 +328,26 @@ impl Engine {
     ) -> Result<Execution, RunError> {
         let mut jobs = crate::process::Jobs::default();
         let result = self.run_commands(script, state, options, &mut jobs).await;
-        if jobs.is_empty() { return result; }
+        if jobs.is_empty() {
+            return result;
+        }
         jobs.cancel();
         let cleanup = jobs.wait(state).await;
         match (result, cleanup) {
             (result, Ok(_)) => result,
-            (Ok(_), Err(error)) => Err(RunError { line: 0, command: "wait".into(), message: error.to_string() }),
+            (Ok(_), Err(error)) => Err(RunError {
+                line: 0,
+                command: "wait".into(),
+                message: error.to_string(),
+            }),
             (Err(mut original), Err(cleanup)) => {
                 let message = format!("{}; implicit wait: {cleanup}", original.message);
-                if message.len() <= MAX_DIAGNOSTIC_BYTES { original.message = message; }
-                else { original.message = "script failed; implicit wait diagnostics exceeded 64 KiB".into(); }
+                if message.len() <= MAX_DIAGNOSTIC_BYTES {
+                    original.message = message;
+                } else {
+                    original.message =
+                        "script failed; implicit wait diagnostics exceeded 64 KiB".into();
+                }
                 Err(original)
             }
         }
@@ -460,8 +470,14 @@ impl Engine {
             }
             execution.commands_run = execution.commands_run.saturating_add(1);
             if command.background {
-                jobs.start(state, &args, options.expect("checked above"), command.line, command.status)
-                    .map_err(|failure| error(failure.to_string()))?;
+                jobs.start(
+                    state,
+                    &args,
+                    options.expect("checked above"),
+                    command.line,
+                    command.status,
+                )
+                .map_err(|failure| error(failure.to_string()))?;
                 state.publish("", "");
                 continue;
             }

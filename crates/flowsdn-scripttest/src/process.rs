@@ -1,9 +1,12 @@
 //! Child supervision for foreground and background execution. Executables have the caller's OS permissions;
 //! directory capabilities confine fixture operations, not arbitrary child code.
 use crate::{CommandError, Control, State, Status};
-use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
-use tokio::sync::oneshot;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 use std::time::Duration;
+use tokio::sync::oneshot;
 use tokio::{sync::watch, time::Instant};
 
 const MAX_OUTPUT: usize = 8_388_608;
@@ -74,7 +77,9 @@ pub(crate) async fn execute(
     options.check()?;
     #[cfg(target_os = "linux")]
     {
-        let output = linux::launch(state, args, options, None)?.receiver.await
+        let output = linux::launch(state, args, options, None)?
+            .receiver
+            .await
             .map_err(|_| failure("child supervisor terminated"))?;
         let output = decode(output);
         state.publish(output.stdout, output.stderr);
@@ -99,12 +104,22 @@ struct Decoded {
     result: Result<(), CommandError>,
 }
 fn decode(output: Output) -> Decoded {
-    match (String::from_utf8(output.stdout), String::from_utf8(output.stderr)) {
-        (Ok(stdout), Ok(stderr)) => Decoded { stdout, stderr, result: output.result },
+    match (
+        String::from_utf8(output.stdout),
+        String::from_utf8(output.stderr),
+    ) {
+        (Ok(stdout), Ok(stderr)) => Decoded {
+            stdout,
+            stderr,
+            result: output.result,
+        },
         _ => Decoded {
-            stdout: String::new(), stderr: String::new(),
+            stdout: String::new(),
+            stderr: String::new(),
             // Keep nonmaskable errors ahead of malformed captured UTF-8.
-            result: output.result.and_then(|_| Err(failure("exec output is not UTF-8"))),
+            result: output
+                .result
+                .and_then(|_| Err(failure("exec output is not UTF-8"))),
         },
     }
 }
@@ -123,20 +138,42 @@ pub(crate) struct Jobs {
     budget: Arc<AtomicUsize>,
 }
 impl Jobs {
-    pub(crate) fn is_empty(&self) -> bool { self.jobs.is_empty() }
-    pub(crate) fn start(&mut self, state: &State, args: &[String], options: &RunOptions, line: usize, status: Status) -> Result<(), CommandError> {
-        if self.jobs.len() >= 32 { return Err(CommandError::LimitExceeded("background job limit of 32 exceeded")); }
+    pub(crate) fn is_empty(&self) -> bool {
+        self.jobs.is_empty()
+    }
+    pub(crate) fn start(
+        &mut self,
+        state: &State,
+        args: &[String],
+        options: &RunOptions,
+        line: usize,
+        status: Status,
+    ) -> Result<(), CommandError> {
+        if self.jobs.len() >= 32 {
+            return Err(CommandError::LimitExceeded(
+                "background job limit of 32 exceeded",
+            ));
+        }
         options.check()?;
         #[cfg(target_os = "linux")]
         let pending = linux::launch(state, args, options, Some(self.budget.clone()));
         #[cfg(not(target_os = "linux"))]
-        let pending = { let _ = (state, args); Err(failure("exec requires Linux")) };
-        self.jobs.push(Job { line, status, pending });
+        let pending = {
+            let _ = (state, args);
+            Err(failure("exec requires Linux"))
+        };
+        self.jobs.push(Job {
+            line,
+            status,
+            pending,
+        });
         Ok(())
     }
     pub(crate) fn cancel(&self) {
         for job in &self.jobs {
-            if let Ok(pending) = &job.pending { pending.cancellation.cancel(); }
+            if let Ok(pending) = &job.pending {
+                pending.cancellation.cancel();
+            }
         }
     }
     pub(crate) async fn wait(&mut self, state: &mut State) -> Result<Control, CommandError> {
@@ -150,30 +187,59 @@ impl Jobs {
         while let Some(job) = pending_jobs.next() {
             let output = match job.pending {
                 Ok(pending) => pending.receiver.await.unwrap_or_else(|_| Output {
-                    stdout: Vec::new(), stderr: Vec::new(), result: Err(CommandError::ProcessOwnershipLost),
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                    result: Err(CommandError::ProcessOwnershipLost),
                 }),
-                Err(error) => Output { stdout: Vec::new(), stderr: Vec::new(), result: Err(error) },
+                Err(error) => Output {
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                    result: Err(error),
+                },
             };
             let output = decode(output);
             // Capture reserves the shared budget before allocating; this check
             // also protects aggregation if a future command supplies output.
-            if stdout.len().saturating_add(stderr.len()).saturating_add(output.stdout.len()).saturating_add(output.stderr.len()) > MAX_OUTPUT {
-                join_error(&mut errors, &mut fatal, job.line, CommandError::LimitExceeded("background output exceeds 8 MiB combined limit"));
+            if stdout
+                .len()
+                .saturating_add(stderr.len())
+                .saturating_add(output.stdout.len())
+                .saturating_add(output.stderr.len())
+                > MAX_OUTPUT
+            {
+                join_error(
+                    &mut errors,
+                    &mut fatal,
+                    job.line,
+                    CommandError::LimitExceeded("background output exceeds 8 MiB combined limit"),
+                );
             } else {
                 stdout.push_str(&output.stdout);
                 stderr.push_str(&output.stderr);
             }
             for (name, text) in [("stdout", &output.stdout), ("stderr", &output.stderr)] {
                 if !text.is_empty()
-                    && let Err(error) = crate::engine::record_log(&mut state.log, &output_log(job.line, name, text)) {
+                    && let Err(error) =
+                        crate::engine::record_log(&mut state.log, &output_log(job.line, name, text))
+                {
                     join_error(&mut errors, &mut fatal, job.line, error);
                 }
             }
             match output.result {
-                Ok(()) if job.status == Status::Failure => join_error(&mut errors, &mut fatal, job.line, failure("unexpected success")),
-                Ok(()) => {},
-                Err(CommandError::Failure(message)) if matches!(job.status, Status::Failure | Status::SuccessOrFailure) => {
-                    if let Err(error) = crate::engine::record_log(&mut state.log, &format!("line {}: expected failure: {message}", job.line)) {
+                Ok(()) if job.status == Status::Failure => join_error(
+                    &mut errors,
+                    &mut fatal,
+                    job.line,
+                    failure("unexpected success"),
+                ),
+                Ok(()) => {}
+                Err(CommandError::Failure(message))
+                    if matches!(job.status, Status::Failure | Status::SuccessOrFailure) =>
+                {
+                    if let Err(error) = crate::engine::record_log(
+                        &mut state.log,
+                        &format!("line {}: expected failure: {message}", job.line),
+                    ) {
                         join_error(&mut errors, &mut fatal, job.line, error);
                     }
                 }
@@ -181,28 +247,44 @@ impl Jobs {
             }
             if fatal {
                 for job in pending_jobs.as_slice() {
-                    if let Ok(pending) = &job.pending { pending.cancellation.cancel(); }
+                    if let Ok(pending) = &job.pending {
+                        pending.cancellation.cancel();
+                    }
                 }
             }
         }
         self.budget = Arc::default();
         state.publish(stdout, stderr);
-        if errors.is_empty() { Ok(Control::Continue) }
-        else if fatal { Err(CommandError::BackgroundFailure(errors)) }
-        else { Err(CommandError::Failure(errors)) }
+        if errors.is_empty() {
+            Ok(Control::Continue)
+        } else if fatal {
+            Err(CommandError::BackgroundFailure(errors))
+        } else {
+            Err(CommandError::Failure(errors))
+        }
     }
 }
 fn output_log(line: usize, name: &str, text: &str) -> String {
     let mut end = text.len().min(32_768);
-    while !text.is_char_boundary(end) { end = end.saturating_sub(1); }
-    let suffix = if end < text.len() { "\n[output log truncated]" } else { "" };
-    format!("line {line}: [{name}]\n{}{suffix}", text.get(..end).expect("UTF-8 boundary"))
+    while !text.is_char_boundary(end) {
+        end = end.saturating_sub(1);
+    }
+    let suffix = if end < text.len() {
+        "\n[output log truncated]"
+    } else {
+        ""
+    };
+    format!(
+        "line {line}: [{name}]\n{}{suffix}",
+        text.get(..end).expect("UTF-8 boundary")
+    )
 }
 fn join_error(errors: &mut String, fatal: &mut bool, line: usize, error: CommandError) {
     *fatal |= !matches!(error, CommandError::Failure(_));
     let message = format!("line {line}: {error}\n");
-    if errors.len().saturating_add(message.len()) <= 60_000 { errors.push_str(&message); }
-    else if !errors.ends_with("background diagnostics exceeded limit\n") {
+    if errors.len().saturating_add(message.len()) <= 60_000 {
+        errors.push_str(&message);
+    } else if !errors.ends_with("background diagnostics exceeded limit\n") {
         *fatal = true;
         errors.push_str("background diagnostics exceeded limit\n");
     }
@@ -314,7 +396,10 @@ mod linux {
             let _workspace = workspace;
             supervise(process, pid, options, task_cancellation, budget, sender).await;
         });
-        Ok(Pending { receiver, cancellation })
+        Ok(Pending {
+            receiver,
+            cancellation,
+        })
     }
 
     async fn read_output(
@@ -334,9 +419,15 @@ mod linux {
                 ));
             }
             if let Some(budget) = budget {
-                budget.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
-                    used.checked_add(count).filter(|total| *total <= MAX_OUTPUT)
-                }).map_err(|_| CommandError::LimitExceeded("background output exceeds 8 MiB combined limit"))?;
+                budget
+                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+                        used.checked_add(count).filter(|total| *total <= MAX_OUTPUT)
+                    })
+                    .map_err(|_| {
+                        CommandError::LimitExceeded(
+                            "background output exceeds 8 MiB combined limit",
+                        )
+                    })?;
             }
             bytes.extend_from_slice(chunk.get(..count).expect("read count fits buffer"));
         }

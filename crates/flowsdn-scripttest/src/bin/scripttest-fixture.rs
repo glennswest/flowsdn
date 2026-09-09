@@ -43,7 +43,9 @@ async fn main() {
         "bytes" => {
             let count = args.get(1).unwrap().parse::<usize>().unwrap();
             let chunk = [b'x'; 8192];
-            for _ in 0..count { io::stdout().write_all(&chunk).unwrap(); }
+            for _ in 0..count {
+                io::stdout().write_all(&chunk).unwrap();
+            }
         }
         "exit" => std::process::exit(args.get(1).unwrap().parse().unwrap()),
         "sleep" => {
