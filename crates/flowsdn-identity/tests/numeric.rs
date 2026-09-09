@@ -190,7 +190,7 @@ fn both_cluster_encodings_partition_all_global_allocation_ranges() {
             Err(IdentityError::OutsideAllocationRange)
         );
         assert_eq!(
-            encoding.global(1, 65536),
+            encoding.global(1, mask.checked_add(1).expect("small fixture")),
             Err(IdentityError::OutsideAllocationRange)
         );
         assert_eq!(

@@ -52,7 +52,7 @@ NAT and neighbour defaults are fixed defaults, not dynamic sizing calculations.
 | `bpf-lb-maglev-table-size` | `16381` | [spec 05, line 928](../../docs/spec/05-service-loadbalancing.md#L928) |
 | `bpf-lb-map-max` | `65536` | [spec 05, line 917](../../docs/spec/05-service-loadbalancing.md#L917) |
 | `bpf-lb-mode` | `snat` | [spec 05, line 923](../../docs/spec/05-service-loadbalancing.md#L923) |
-| `bpf-map-event-buffers` | `(empty)` | [spec 03, line 824](../../docs/spec/03-identity-ipcache.md#L824) |
+| `bpf-map-event-buffers` | `(empty)` | [spec 03, line 851](../../docs/spec/03-identity-ipcache.md#L851) |
 | `bpf-nat-global-max` | `524288` | [spec 04, line 804](../../docs/spec/04-conntrack-nat.md#L804) |
 | `bpf-neigh-global-max` | `524288` | [spec 01, line 193](../../docs/spec/01-bpf-map-abi-loader.md#L193) |
 | `bpf-node-map-max` | `16384` | [spec 14, line 1715](../../docs/spec/14-encryption-egress.md#L1715) |
@@ -62,7 +62,7 @@ NAT and neighbour defaults are fixed defaults, not dynamic sizing calculations.
 | `enable-bbr-hostns-only` | `false` | [spec 10, line 1382](../../docs/spec/10-node-routing-nftables.md#L1382) |
 | `enable-dynamic-source-lookup-nodeport` | `false` | [spec 05, line 940](../../docs/spec/05-service-loadbalancing.md#L940) |
 | `enable-node-ipam` | `false` | [spec 12, line 1452](../../docs/spec/12-operator.md#L1452) |
-| `fixed-identity-mapping` | `(empty)` | [spec 03, line 809](../../docs/spec/03-identity-ipcache.md#L809) |
+| `fixed-identity-mapping` | `(empty)` | [spec 03, line 836](../../docs/spec/03-identity-ipcache.md#L836) |
 | `gateway-api-secrets-namespace` | `cilium-secrets` | [spec 21, line 1697](../../docs/spec/21-gateway-api-ingress.md#L1697) |
 | `hubble-drop-events-reasons` | `auth_required,policy_denied` | [spec 11, line 2523](../../docs/spec/11-hubble-monitor.md#L2523) |
 | `hubble-event-buffer-capacity` | `4095` | [spec 11, line 2474](../../docs/spec/11-hubble-monitor.md#L2474) |

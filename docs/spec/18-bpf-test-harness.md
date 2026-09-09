@@ -766,9 +766,11 @@ procedure (ADR-0005 §4).
 Stated so nobody mistakes the file for ground truth:
 
 - **The 23 formerly unresolved cases are classified in §4.3.1.** Their
-  audited evidence is checked by the Rust harvester. Unknown cases still remain
-  `unresolved`; changing an audited setup or target mapping requires a new
-  review rather than silently retaining its label.
+  syntactic evidence is checked by the Rust harvester. These presence checks
+  do not prove control flow or detect arbitrary source changes. The CLI
+  requires the exact pinned commit and a clean `bpf/tests` tree; changing
+  the reference tag requires a fresh audit. Unknown cases may remain
+  `unresolved`.
 - **`#if` expressions the evaluator cannot compute are assumed true**, which
   over-approximates the feature set of a handful of files. This is the safe
   direction (a superset of features means a superset of behaviour to test).
@@ -823,11 +825,17 @@ The audit consulted these reference paths and locations:
   `bpf/lib/policy.h`, `bpf/lib/tailcall.h` and `bpf/tests/lib/policy.h`.
 
 The harvester applies these audited resolutions only to the exact listed
-file/case identities, checking setup arguments, called helper, array targets
-and included object as applicable. Comments and quoted strings cannot satisfy
-evidence checks; ambiguous object sets are rejected. Each receives `entrypoint_resolution =
-"spec-18 §4.3.1 audited evidence"`. Missing or changed evidence is an error;
-unknown identities continue through the generic resolver and may remain
+file/case identities, checking the presence of syntactic patterns for setup
+arguments, called helper, array targets and included object as applicable.
+Comments and quoted strings are excluded from evidence searches; ambiguous
+object sets are rejected. Each receives `entrypoint_resolution =
+"spec-18 §4.3.1 audited evidence"`. Missing required patterns are an error.
+The guards do not establish reachability, associate every matching statement
+with its enclosing helper or array, or detect arbitrary source drift when
+the expected patterns remain present. The CLI requires the exact pinned
+commit and a clean `bpf/tests` tree before extraction; any future reference
+tag change requires a fresh audit, even if all patterns still match.
+Unknown identities continue through the generic resolver and may remain
 unresolved. The pinned-reference re-harvest must preserve all 625 cases and
 all unrelated fields while reproducing these 23 resolutions.
 

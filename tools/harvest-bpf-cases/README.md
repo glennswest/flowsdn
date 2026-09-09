@@ -22,9 +22,12 @@ used by the original harvester. Unsupported expressions select their branch
 conservatively; this is an inventory extractor, not a complete C preprocessor.
 The pinned reference is the compatibility test: 142 translation units and 625
 cases, with exact feature, config and milestone parity. The 23 previously
-unresolved entrypoints have guarded, evidence-based classifications recorded
-in spec 18 §4.3.1. A changed audited setup, target mapping or object fails the
-harvest for review; unknown cases still remain unresolved. Library tests may
+unresolved entrypoints have audited classifications recorded in spec 18
+§4.3.1. Guards require syntactic evidence patterns and reject missing patterns
+or mismatched objects. They do not prove control flow or detect arbitrary
+source changes that retain those patterns. The CLI requires the exact pinned
+commit and a clean `bpf/tests` tree; a future reference tag requires a fresh
+audit even when the patterns still match. Unknown cases may remain unresolved. Library tests may
 invoke the function under test from SETUP or CHECK without entering an attached
 datapath program.
 

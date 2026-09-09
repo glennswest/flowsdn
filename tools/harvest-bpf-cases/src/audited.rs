@@ -1,5 +1,6 @@
 //! Explicit resolutions recorded in spec 18 §4.3.1 after reference ambiguity reads.
-//! These are guarded classifications of known cases, not a general C evaluator.
+//! These check syntactic evidence for known cases, not arbitrary control flow.
+//! CLI use additionally requires the exact pinned commit and clean reference.
 use regex::Regex;
 
 // Evidence must occur in C code, not in comments or diagnostic strings.
