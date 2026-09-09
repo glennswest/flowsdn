@@ -9,6 +9,7 @@
 ## [0.8.0] - 2026-09-09
 
 - Reserve separate crate names for module health and active network checking.
+- Add deterministic build metadata, JSON presentation and build-info labels.
 
 ## [0.7.0] - 2026-09-08
 

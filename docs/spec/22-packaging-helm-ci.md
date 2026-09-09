@@ -790,6 +790,7 @@ Purpose and principal dependencies. "Spec" is the spec that defines it.
 | `flowsdn-nft` | 10 | the nftables residual over `NETLINK_NETFILTER` (ADR-0003) | `netlink-sys` (or `rustables`) |
 | `flowsdn-socketlb` | 05, 10 | cgroup socket program attach and lifecycle | `flowsdn-loader` |
 | `flowsdn-health-responder` | 08 | in-netns ICMP/TCP health responder thread (replaces `cilium-health`) | `flowsdn-netns`, `socket2` |
+| `flowsdn-healthcheck` | 08 | active network health probes, endpoint management and health API (ADR-0010) | `flowsdn-health`, `flowsdn-netns` |
 | `flowsdn-monitor` | 01, 11 | perf readers, event bus, gob-subset encoder, `monitor1_2.sock`, decoders, text formatter | `flowsdn-bpf-abi`, `aya` |
 | `flowsdn-hubble` | 11 | parsers, enricher, ring buffer, observer service, filters, metrics, exporter, peer service, TLS | `flowsdn-proto`, `tonic` |
 | `flowsdn-hubble-relay` | 11 | relay binary: peer pool, fan-out, sort-merge, health | `flowsdn-proto`, `tonic` |

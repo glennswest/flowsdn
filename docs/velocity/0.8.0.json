@@ -6,12 +6,19 @@
   "status": "in-progress",
   "owner": "/root",
   "active_work_seconds": null,
-  "token_baseline": null,
-  "token_baseline_note": "Will populate from latest sanitized session telemetry before task start; not an inferred zero.",
+  "token_baseline": {
+    "input_tokens": 38373471,
+    "cached_input_tokens": 37818240,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 127821,
+    "reasoning_output_tokens": 25318,
+    "total_tokens": 38501292
+  },
   "workstreams": [
     "flowsdn-config",
     "flowsdn-reconcile",
     "flowsdn-scripttest",
     "project/shared"
-  ]
+  ],
+  "token_baseline_sample_utc": "2026-09-09T01:32:23.487Z"
 }
