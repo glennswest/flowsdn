@@ -404,14 +404,21 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             .map(|(revision, _)| *revision)
             .into_iter()
             .chain(
-                self.pending_failures.first_key_value().map(|(revision, _)| *revision),
+                self.pending_failures
+                    .first_key_value()
+                    .map(|(revision, _)| *revision),
             )
             .min()
     }
 
     fn push_work(&mut self, work: Work<T>) {
-        let index = if work.failures > 0 { Some(&mut self.pending_failures) }
-            else if !work.refresh { Some(&mut self.pending_first_attempts) } else { None };
+        let index = if work.failures > 0 {
+            Some(&mut self.pending_failures)
+        } else if !work.refresh {
+            Some(&mut self.pending_first_attempts)
+        } else {
+            None
+        };
         if let Some(index) = index {
             let count = index.entry(work.revision).or_default();
             *count = count.saturating_add(1);
@@ -421,12 +428,19 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
 
     fn pop_work(&mut self) {
         if let Some(work) = self.pending.pop_front() {
-            let index = if work.failures > 0 { Some(&mut self.pending_failures) }
-                else if !work.refresh { Some(&mut self.pending_first_attempts) } else { None };
-            if let Some(index) = index {
-                if let Some(count) = index.get_mut(&work.revision) {
-                    *count = count.saturating_sub(1);
-                    if *count == 0 { index.remove(&work.revision); }
+            let index = if work.failures > 0 {
+                Some(&mut self.pending_failures)
+            } else if !work.refresh {
+                Some(&mut self.pending_first_attempts)
+            } else {
+                None
+            };
+            if let Some(index) = index
+                && let Some(count) = index.get_mut(&work.revision)
+            {
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    index.remove(&work.revision);
                 }
             }
         }
@@ -496,7 +510,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         }
         // Preserve revision order within each operation group, deletes first.
         pending.sort_by_key(|work| work.row.is_some());
-        for work in pending { self.push_work(work); }
+        for work in pending {
+            self.push_work(work);
+        }
         self.publish_progress();
     }
 
@@ -548,8 +564,12 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     /// Work stays queued across cancellation until its result is recorded.
     pub async fn run_round(&mut self, now: Instant) -> Result<Round, ReconcileError> {
         self.progress.send_if_modified(|progress| {
-            if progress.driver == DriverState::Manual { false }
-            else { progress.driver = DriverState::Manual; true }
+            if progress.driver == DriverState::Manual {
+                false
+            } else {
+                progress.driver = DriverState::Manual;
+                true
+            }
         });
         self.run_round_with_clock(|| now).await
     }

@@ -46,12 +46,17 @@ pub struct ReconcileObserver {
     receiver: watch::Receiver<ReconcileProgress>,
 }
 impl ReconcileObserver {
-    pub fn progress(&self) -> ReconcileProgress { *self.receiver.borrow() }
+    pub fn progress(&self) -> ReconcileProgress {
+        *self.receiver.borrow()
+    }
 
     /// Observe a later checkpoint, including retry resolution and loop shutdown.
     /// Watch notifications coalesce; this is a state observer, not an event log.
     pub async fn changed(&mut self) -> Result<ReconcileProgress, WaitError> {
-        self.receiver.changed().await.map_err(|_| WaitError::Closed)?;
+        self.receiver
+            .changed()
+            .await
+            .map_err(|_| WaitError::Closed)?;
         Ok(*self.receiver.borrow_and_update())
     }
 
@@ -59,19 +64,32 @@ impl ReconcileObserver {
     /// through `revision`. Failures do not block this barrier: inspect the retry
     /// low-water mark separately. This does not wait for prune or future refreshes.
     /// Cancelling this future has no effect on reconciliation or other observers.
-    pub async fn wait_until_reconciled(&self, revision: Revision) -> Result<ReconcileProgress, WaitError> {
+    pub async fn wait_until_reconciled(
+        &self,
+        revision: Revision,
+    ) -> Result<ReconcileProgress, WaitError> {
         let mut receiver = self.receiver.clone();
         loop {
             let closed = receiver.has_changed().is_err();
             let progress = *receiver.borrow_and_update();
-            if progress.attempted_revision >= revision { return Ok(progress); }
-            if closed { return Err(WaitError::Closed); }
-            if progress.driver == DriverState::Stopped { return Err(WaitError::Stopped); }
+            if progress.attempted_revision >= revision {
+                return Ok(progress);
+            }
+            if closed {
+                return Err(WaitError::Closed);
+            }
+            if progress.driver == DriverState::Stopped {
+                return Err(WaitError::Stopped);
+            }
             if receiver.changed().await.is_err() {
                 // Closing may race with the final publication. Read the retained
                 // checkpoint once more before reporting an unreachable barrier.
                 let progress = *receiver.borrow_and_update();
-                return if progress.attempted_revision >= revision { Ok(progress) } else { Err(WaitError::Closed) };
+                return if progress.attempted_revision >= revision {
+                    Ok(progress)
+                } else {
+                    Err(WaitError::Closed)
+                };
             }
         }
     }
@@ -85,25 +103,45 @@ impl DriverGuard {
     }
 }
 impl Drop for DriverGuard {
-    fn drop(&mut self) { self.0.send_modify(|progress| progress.driver = DriverState::Stopped); }
+    fn drop(&mut self) {
+        self.0
+            .send_modify(|progress| progress.driver = DriverState::Stopped);
+    }
 }
 
 impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
-    pub fn observer(&self) -> ReconcileObserver { ReconcileObserver { receiver: self.progress.subscribe() } }
+    pub fn observer(&self) -> ReconcileObserver {
+        ReconcileObserver {
+            receiver: self.progress.subscribe(),
+        }
+    }
 
     pub(crate) fn publish_progress(&mut self) {
         // Deletes can run ahead of older updates. A checkpoint must stop before
         // any queued first attempt, regardless of dispatch order. Failed retries
         // already satisfy the attempted barrier even while their future is pending.
-        let checkpoint = self.pending_first_attempts.first_key_value()
+        let checkpoint = self
+            .pending_first_attempts
+            .first_key_value()
             .map(|(revision, _)| revision.saturating_sub(1))
-            .map_or(self.stream.revision(), |limit| limit.min(self.stream.revision()));
+            .map_or(self.stream.revision(), |limit| {
+                limit.min(self.stream.revision())
+            });
         self.attempted_revision = self.attempted_revision.max(checkpoint);
         let low = self.retry_low_water_mark();
         self.progress.send_if_modified(|progress| {
-            let next = ReconcileProgress { attempted_revision: self.attempted_revision, retry_low_water_mark: low,
-                resync_required: self.resync_required, driver: progress.driver };
-            if *progress == next { false } else { *progress = next; true }
+            let next = ReconcileProgress {
+                attempted_revision: self.attempted_revision,
+                retry_low_water_mark: low,
+                resync_required: self.resync_required,
+                driver: progress.driver,
+            };
+            if *progress == next {
+                false
+            } else {
+                *progress = next;
+                true
+            }
         });
     }
 }
