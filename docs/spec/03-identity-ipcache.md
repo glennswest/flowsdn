@@ -589,6 +589,22 @@ construction; a standalone empty pattern is invalid, while `!` compiles the
 empty exclusion regex. No whitespace is trimmed. Rust regex syntax outside
 the RE2-compatible subset is not a portability guarantee.
 
+Within the shared syntax, Perl classes `\d`, `\w` and `\s` use ASCII sets:
+digits, ASCII letters/digits/underscore, and tab/newline/form-feed/carriage-return/
+space, respectively (vertical tab is excluded from `\s`). Their uppercase
+negations include Unicode characters outside those sets. `\b` and `\B` test
+ASCII word boundaries. Unicode literals, dot and explicit `\p`/`\P` classes
+retain Unicode behavior. Normalization uses regex syntax-tree spans so escaped
+backslashes and bracket expressions retain their meaning. Case-insensitive
+classes apply Unicode simple folding before negation, including Kelvin sign
+and long s in folded `\w`; word boundaries remain ASCII even in that mode.
+This is the common syntax subset, not a full Go RE2 syntax implementation.
+Sources: [RE2 syntax](https://github.com/google/re2/wiki/syntax),
+[Rust regex Unicode semantics](https://docs.rs/regex/latest/regex/#unicode),
+and Go's [regexp syntax parser](https://github.com/golang/go/blob/master/src/regexp/syntax/parse.go)
+(`parsePerlClassEscape` and `appendGroup`, inspected 2026-09-09 for the
+case-folding ambiguity). No implementation was copied.
+
 **Reference ambiguity resolution, 2026-09-09.** These details correct the
 earlier summary that every include (including defaults) enabled a whitelist,
 and clarify file literal matching and zero-length behavior. Read-only evidence:

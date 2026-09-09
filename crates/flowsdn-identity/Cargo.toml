@@ -9,10 +9,11 @@ publish.workspace = true
 
 [features]
 default = []
-filter = ["dep:regex", "dep:serde_json"]
+filter = ["dep:regex", "dep:serde_json", "dep:regex-syntax"]
 
 [dependencies]
 regex = { workspace = true, optional = true }
+regex-syntax = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 
 [lints]
