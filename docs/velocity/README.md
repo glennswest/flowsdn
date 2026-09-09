@@ -1,5 +1,9 @@
 # flowsdn velocity ledger
 
+Milestone [0.14.0](0.14.0.json) started **2026-09-09T15:42:01Z**. Identity
+filtering, CIDR labels, wire codecs and loader layout planning are in progress.
+The counters below remain the completed 0.13 snapshot until the next boundary.
+
 Milestone [0.13.0](0.13.0.json) started **2026-09-09T13:41:34Z**.
 Usage cutoff: **2026-09-09T13:58:06Z**; observed elapsed **992 seconds**.
 Validation and cleanup completed in **16 minutes 32 seconds** (992 seconds).

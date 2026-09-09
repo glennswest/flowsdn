@@ -1,0 +1,27 @@
+{
+  "task_id": "0.14.0",
+  "scope": "project/shared",
+  "agent": "/root",
+  "start_utc": "2026-09-09T15:42:01Z",
+  "end_utc": null,
+  "elapsed_seconds": null,
+  "active_work_seconds": null,
+  "start_commit": "c599d8a",
+  "status": "in_progress",
+  "token_baseline_sample_utc": "2026-09-09T15:42:00.826Z",
+  "token_baseline": {
+    "input_tokens": 89484961,
+    "cached_input_tokens": 88348928,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 276842,
+    "reasoning_output_tokens": 68166,
+    "total_tokens": 89761803
+  },
+  "work_items": [
+    "identity filter",
+    "CIDR labels",
+    "tunnel wire codecs",
+    "loader layout planning"
+  ],
+  "publication": "not_started"
+}
