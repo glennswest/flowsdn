@@ -36,10 +36,11 @@ There is no working networking agent. Synthetic scripts and file assertions
 execute, while the harvested networking scenarios still lack their adapters.
 
 The unreleased milestone 1 work adds [privileged networking tests](crates/flowsdn-bpftest/README.md),
-dual-stack BPF endpoint delivery, host-scope IPAM and a CNI ADD transaction library.
+dual-stack BPF endpoint delivery, native cross-node routing, host-scope IPAM,
+an initial CNI executable and agent endpoint persistence primitives.
 Isolated endpoint tests exercise live IPv4/IPv6 traffic, allocation, attachment,
-rollback and retry. An installable CNI executable, agent integration and
-two-node Kubernetes pod connectivity remain outstanding.
+rollback and retry. A deployable agent, Kubernetes integration and two-node
+Kubernetes pod connectivity remain outstanding.
 
 | | |
 |---|---|

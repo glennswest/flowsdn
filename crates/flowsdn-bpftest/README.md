@@ -40,7 +40,21 @@ hop limits, IPv4 checksums and malformed-packet rejection. Live IPv4/IPv6 UDP
 checks map deletion/reinsertion, detach and fresh-object reload. The fixture
 uses the CNI ADD transaction, real host-scope allocation and an injected
 post-creation failure to verify endpoint, link and address rollback and retry.
-The test adapter invokes `ip`; it is not the production CNI executable.
+Endpoint setup now uses the native Rust connector. The fixture retains `ip`
+for isolated setup/inspection; it is not the CNI executable.
+
+Run `native-routing` with the same BPF object for two router namespaces and
+two endpoints. It tests dual-stack traffic, route removal/restoration and
+object detach/reload. Mandatory namespace-local nftables FORWARD drops prevent
+ordinary Linux forwarding from masking BPF failures. This fixture additionally
+requires `nft`; routes and neighbors are provisioned explicitly, with no
+Kubernetes discovery controller.
+
+Run `cni-runtime` with the `flowsdn-cni` executable path followed by the BPF
+object path to exercise the executable's ADD/CHECK/DEL workflow. Its Unix
+test server drives real IPAM and BPF operations; checks include live dual-stack
+UDP, missing-address detection, duplicate deletion and HTTP503 offline queueing.
+The test server is not a deployable agent.
 
 The BPF crate is a separate workspace with its own lockfile and toolchain.
 Format it separately with `cargo +nightly-2026-04-03 fmt --manifest-path

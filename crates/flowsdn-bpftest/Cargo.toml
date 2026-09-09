@@ -20,6 +20,7 @@ flowsdn-bpf-loader = { path = "../flowsdn-bpf-loader", version = "=0.14.0", feat
 flowsdn-cni = { path = "../flowsdn-cni", version = "=0.14.0" }
 flowsdn-ipam = { path = "../flowsdn-ipam", version = "=0.14.0" }
 flowsdn-connector = { path = "../flowsdn-connector", version = "=0.14.0" }
+flowsdn-agent = { path = "../flowsdn-agent", version = "=0.14.0" }
 
 [[bin]]
 name = "flowsdn-endpoint-test"

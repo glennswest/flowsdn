@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Add an initial CNI executable with Unix agent transport, native Rust netlink,
+  ADD/DEL/CHECK/STATUS/VERSION, and durable offline deletion replay support.
+- Add primary endpoint state staging, ID ownership and map restoration primitives
+  for the future agent daemon.
 - Add dual-stack BPF endpoint delivery with MAC rewriting and hop/checksum
   updates, plus optional Aya endpoint-map and attachment ownership.
 - Add sparse host-scope IPAM and CNI ADD transaction rollback, integrated with
