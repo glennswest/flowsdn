@@ -16,7 +16,10 @@ fn perl_classes_use_ascii_and_negations_keep_unicode_complements() {
         assert_eq!(positive.match_length(&label("node", ascii)), Some(1));
         assert_eq!(positive.match_length(&label("node", unicode)), None);
         assert_eq!(negative.match_length(&label("node", ascii)), None);
-        assert_eq!(negative.match_length(&label("node", unicode)), Some(unicode.len()));
+        assert_eq!(
+            negative.match_length(&label("node", unicode)),
+            Some(unicode.len())
+        );
     }
     let spaces = Rule::parse(r"node:\s").expect("space");
     for character in [" ", "\t", "\n", "\r", "\u{c}"] {
@@ -39,7 +42,13 @@ fn bracket_classes_nested_negations_and_escaped_backslashes_are_distinct() {
         (r"node:[\\d]", "7", None),
         (r"node:\[\d\]", "[7]", Some(3)),
     ] {
-        assert_eq!(Rule::parse(pattern).expect("class fixture").match_length(&label("node", text)), expected, "{pattern}");
+        assert_eq!(
+            Rule::parse(pattern)
+                .expect("class fixture")
+                .match_length(&label("node", text)),
+            expected,
+            "{pattern}"
+        );
     }
 }
 
@@ -55,7 +64,13 @@ fn word_boundaries_are_ascii_without_changing_unicode_consumption() {
         (r"node:\ba\b", "a", Some(1)),
         (r"node:\\b", r"\b", Some(2)),
     ] {
-        assert_eq!(Rule::parse(pattern).expect("boundary").match_length(&label("node", text)), expected, "{pattern}");
+        assert_eq!(
+            Rule::parse(pattern)
+                .expect("boundary")
+                .match_length(&label("node", text)),
+            expected,
+            "{pattern}"
+        );
     }
 }
 
@@ -68,7 +83,12 @@ fn unicode_literals_dot_and_explicit_properties_remain_rune_based() {
         (r"node:[\d\p{Greek}]", "α", Some(2)),
         (r"node:[\d\p{Greek}]", "١", None),
     ] {
-        assert_eq!(Rule::parse(pattern).expect("Unicode").match_length(&label("node", text)), expected);
+        assert_eq!(
+            Rule::parse(pattern)
+                .expect("Unicode")
+                .match_length(&label("node", text)),
+            expected
+        );
     }
 }
 
@@ -76,9 +96,24 @@ fn unicode_literals_dot_and_explicit_properties_remain_rune_based() {
 fn case_insensitive_perl_classes_fold_before_negation_but_boundaries_stay_ascii() {
     // Go regexp/syntax appendGroup applies Unicode SimpleFold before negation.
     for text in ["K", "ſ"] {
-        assert_eq!(Rule::parse(r"node:(?i)\w").expect("fold").match_length(&label("node", text)), Some(text.len()));
-        assert_eq!(Rule::parse(r"node:(?i)\W").expect("negated fold").match_length(&label("node", text)), None);
-        assert_eq!(Rule::parse(r"node:(?i)\b\w").expect("boundary fold").match_length(&label("node", text)), None);
+        assert_eq!(
+            Rule::parse(r"node:(?i)\w")
+                .expect("fold")
+                .match_length(&label("node", text)),
+            Some(text.len())
+        );
+        assert_eq!(
+            Rule::parse(r"node:(?i)\W")
+                .expect("negated fold")
+                .match_length(&label("node", text)),
+            None
+        );
+        assert_eq!(
+            Rule::parse(r"node:(?i)\b\w")
+                .expect("boundary fold")
+                .match_length(&label("node", text)),
+            None
+        );
     }
 }
 

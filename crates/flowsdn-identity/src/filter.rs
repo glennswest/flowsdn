@@ -8,7 +8,9 @@ use alloc::{
 };
 use core::fmt;
 use regex::Regex;
-use regex_syntax::ast::{self, AssertionKind, Ast, ClassPerl, ClassPerlKind, ClassSetItem, Span, Visitor};
+use regex_syntax::ast::{
+    self, AssertionKind, Ast, ClassPerl, ClassPerlKind, ClassSetItem, Span, Visitor,
+};
 
 // AST spans distinguish real escapes from escaped backslashes and preserve
 // bracket context. The visitor uses constant stack space for nested patterns.
@@ -30,35 +32,49 @@ fn re2_ascii_classes(pattern: &str) -> Result<String, FilterError> {
     impl Visitor for Replacements {
         type Output = Vec<(Span, &'static str)>;
         type Err = FilterError;
-        fn finish(self) -> Result<Self::Output, Self::Err> { Ok(self.0) }
+        fn finish(self) -> Result<Self::Output, Self::Err> {
+            Ok(self.0)
+        }
         fn visit_pre(&mut self, ast: &Ast) -> Result<(), Self::Err> {
             match ast {
                 Ast::ClassPerl(class) => self.perl(class),
                 Ast::Assertion(assertion) => match assertion.kind {
                     AssertionKind::WordBoundary => self.0.push((assertion.span, r"(?-u:\b)")),
                     AssertionKind::NotWordBoundary => self.0.push((assertion.span, r"(?-u:\B)")),
-                    _ => {},
+                    _ => {}
                 },
-                _ => {},
+                _ => {}
             }
             Ok(())
         }
         fn visit_class_set_item_pre(&mut self, item: &ClassSetItem) -> Result<(), Self::Err> {
-            if let ClassSetItem::Perl(class) = item { self.perl(class); }
+            if let ClassSetItem::Perl(class) = item {
+                self.perl(class);
+            }
             Ok(())
         }
     }
-    let ast = ast::parse::Parser::new().parse(pattern).map_err(|error| FilterError(error.to_string()))?;
+    let ast = ast::parse::Parser::new()
+        .parse(pattern)
+        .map_err(|error| FilterError(error.to_string()))?;
     let mut replacements = ast::visit(&ast, Replacements(Vec::new()))?;
     replacements.sort_by_key(|(span, _)| span.start.offset);
     let mut result = String::new();
     let mut previous = 0;
     for (span, replacement) in replacements {
-        result.push_str(pattern.get(previous..span.start.offset).expect("ordered AST spans"));
+        result.push_str(
+            pattern
+                .get(previous..span.start.offset)
+                .expect("ordered AST spans"),
+        );
         result.push_str(replacement);
         previous = span.end.offset;
     }
-    result.push_str(pattern.get(previous..).expect("AST span ends at character boundary"));
+    result.push_str(
+        pattern
+            .get(previous..)
+            .expect("AST span ends at character boundary"),
+    );
     Ok(result)
 }
 
@@ -121,7 +137,8 @@ impl Rule {
             None => (false, pattern),
         };
         // Search then check start, rather than modifying anchors or alternation.
-        let matcher = Regex::new(&re2_ascii_classes(pattern)?).map_err(|error| FilterError(error.to_string()))?;
+        let matcher = Regex::new(&re2_ascii_classes(pattern)?)
+            .map_err(|error| FilterError(error.to_string()))?;
         Ok(Self {
             source: source.into(),
             pattern: pattern.into(),

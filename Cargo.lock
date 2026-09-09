@@ -157,6 +157,7 @@ name = "flowsdn-identity"
 version = "0.14.0"
 dependencies = [
  "regex",
+ "regex-syntax",
  "serde_json",
 ]
 
