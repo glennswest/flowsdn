@@ -1,9 +1,8 @@
 # flowsdn velocity ledger
 
 Usage cutoff: **2026-09-09T12:55:18.196Z**. Milestone 0.11.0 started
-**2026-09-09T12:46:19Z** and remains **in progress**. Elapsed through the
-cutoff is **539.196 seconds**. Full validation,
-cleanup and release publication remain pending.
+**2026-09-09T12:46:19Z** and is **awaiting validation**. Elapsed through the token cutoff is
+**539.196 seconds**. Later activity bounds are reported separately below.
 
 | Combined unique-response usage | Tokens |
 |---|---:|
@@ -22,19 +21,25 @@ milestone audit metadata. Repeated context counts as input, and these figures
 do not establish subscription dollar usage. Per-agent cutoffs are retained in
 [subagents.json](subagents.json).
 
-Five closed reported windows total **586 agent-window seconds**
-(**0.162778 hours**), with a **388-second project interval union**.
-Script work began at **12:47:04 UTC** and is still ongoing; its elapsed endpoint
-and active time are unknown, so it is excluded from the closed-window total.
-All active-work fields remain unknown.
+Seven closed reported windows total **1,229 agent-window seconds**
+(**0.341389 hours**), with a **593-second project interval union**. Script
+implementation ended at **12:56:41 UTC** after 577 elapsed seconds, including
+its review fix. A separate 66-second script review ended at 12:56:00 UTC.
+These completion bounds follow the fixed token cutoff; their later usage is
+not inferred. All active-work fields remain unknown.
 
-Focused validation passed **33 ABI tests and ABI Clippy**. The reconciler has
-12 newly added observer tests awaiting validation. Issue #13 was reported
-closed; prior issue-count snapshots remain historical. [Milestone 0.11](0.11.0.json)
-records current scope and counters; [milestone 0.10](0.10.0.json) and the ledger
-preserve previous releases and outcomes. The reporting gap is recorded with
-root-only counters and explicit sample boundaries. Usage after the cutoff,
-including these ledger edits and subsequent reporting, is excluded.
+Focused validation passed **33 ABI tests, 62 reconciler tests and Clippy**
+for both crates. Script work adds 14 tests awaiting full validation. Full
+workspace checks began at **12:57:10 UTC**, when milestone elapsed reached
+**651 seconds**; no complete-suite pass is claimed. Cleanup and publication
+are pending. Issue #13 was confirmed closed. [Milestone 0.11](0.11.0.json)
+records the separate usage/activity bounds; prior releases remain preserved in
+[0.10](0.10.0.json) and the ledger. Usage after the cutoff is excluded.
+
+A later validation checkpoint at **13:00:47 UTC** passed all **286 debug tests**,
+formatting, Clippy and both Linux musl compile checks against `7972548`.
+Release tests and dependency policy remain pending. This checkpoint is after
+the usage cutoff above.
 
 ## Recording rules
 

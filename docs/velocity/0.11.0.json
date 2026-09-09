@@ -4,7 +4,7 @@
   "start_utc": "2026-09-09T12:46:19Z",
   "start_revision": "4ac4910",
   "owner": "/root",
-  "status": "in_progress",
+  "status": "awaiting-validation",
   "active_work_seconds": null,
   "token_baseline": {
     "input_tokens": 61177805,
@@ -21,23 +21,40 @@
     "flowsdn-scripttest"
   ],
   "validation": {
-    "status": "pending-full-validation",
+    "status": "running",
     "focused_checks": {
       "flowsdn_bpf_abi_tests": 33,
-      "flowsdn_bpf_abi_clippy": "passed"
+      "flowsdn_bpf_abi_clippy": "passed",
+      "flowsdn_reconcile_tests": 62,
+      "flowsdn_reconcile_clippy": "passed"
     },
-    "observer_tests_added_not_yet_validated": 12
+    "scripttest_tests_added_not_yet_validated": 14,
+    "workspace_validation_started_at_utc": "2026-09-09T12:57:10Z",
+    "debug_checkpoint": {
+      "observed_at_utc": "2026-09-09T13:00:47Z",
+      "tests": 286,
+      "all_features": true,
+      "formatting": "passed",
+      "clippy": "passed",
+      "linux_musl_compile_checks": [
+        "x86_64",
+        "aarch64"
+      ],
+      "source_commit": "7972548",
+      "release_tests": "running",
+      "dependency_policy": "pending"
+    }
   },
   "cleanup": {
     "status": "pending"
   },
   "release": null,
   "usage_cutoff_utc": "2026-09-09T12:55:18.196Z",
-  "measurement_end_utc": "2026-09-09T12:55:18.196Z",
+  "measurement_end_utc": "2026-09-09T12:57:10Z",
   "end_utc": null,
   "completed_at_utc": null,
   "elapsed_seconds": null,
-  "measurement_elapsed_seconds": 539.196,
+  "measurement_elapsed_seconds": 651,
   "token_endpoint_sample_utc": "2026-09-09T12:55:16.010Z",
   "token_endpoint": {
     "input_tokens": 64317741,
@@ -205,8 +222,8 @@
       "crate": "flowsdn-scripttest",
       "kind": "implementation",
       "start_utc": "2026-09-09T12:47:04Z",
-      "end_utc": null,
-      "elapsed_seconds": null,
+      "end_utc": "2026-09-09T12:56:41Z",
+      "elapsed_seconds": 577,
       "active_work_seconds": null,
       "exclusive_tokens": null,
       "token_baseline_sample_utc": "2026-09-09T12:38:15.825Z",
@@ -219,31 +236,58 @@
         "reasoning_output_tokens": 3079,
         "total_tokens": 1779808
       },
-      "measurement_end_utc": "2026-09-09T12:55:18.196Z",
-      "status": "in_progress",
-      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+      "measurement_end_utc": "2026-09-09T12:56:41Z",
+      "status": "reported-complete",
+      "note": "Reported completion follows the fixed usage cutoff; elapsed window includes the fatal capture-error precedence fix. Delivery-window usage remains bounded by usage_cutoff_utc; active work unknown."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/table_streams",
+      "crate": "flowsdn-scripttest",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T12:54:54Z",
+      "end_utc": "2026-09-09T12:56:00Z",
+      "elapsed_seconds": 66,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:54:13.745Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:55:15.594Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 352675,
+        "cached_input_tokens": 345472,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 381,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 353056
+      },
+      "measurement_end_utc": "2026-09-09T12:56:00Z",
+      "status": "reported-complete",
+      "note": "Reported elapsed review includes fatal capture-limit masking finding; token allocation stops at fixed usage cutoff before review completion."
     }
   ],
   "parallel_time": {
-    "observed_agent_window_seconds": 586,
-    "observed_agent_window_hours": 0.162778,
-    "project_wall_clock_seconds": 539.196,
+    "observed_agent_window_seconds": 1229,
+    "observed_agent_window_hours": 0.341389,
+    "project_wall_clock_seconds": 651,
     "active_work_seconds": null,
     "active_agent_hours": null,
-    "project_union_of_observed_child_windows_seconds": 388,
-    "note": "Closed observed windows only; the ongoing script window is excluded from summed agent-window time. Overlaps are not summed as project elapsed."
+    "project_union_of_observed_child_windows_seconds": 593,
+    "note": "Seven closed reported windows; per-agent interval sums are not project elapsed. Some completion bounds are later than fixed usage cutoff; no extra tokens inferred."
   },
   "root_work_scope": {
     "crate": "project/shared",
     "start_utc": "2026-09-09T12:46:19Z",
     "end_utc": null,
     "active_work_seconds": null,
-    "note": "Root policy ABI implementation, coordination and validation; no separate exclusive coding window observed."
+    "note": "Root policy ABI implementation, coordination and ongoing validation; no exclusive coding window inferred."
   },
-  "implementation_commits": [],
+  "implementation_commits": [
+    "d9f196b",
+    "d860c7e"
+  ],
   "commit": null,
   "release_candidate": "v0.11.0",
-  "note": "Root baseline corrected to the latest sample at or before start; superseded after-start baseline retained for audit. Combined baseline is deduplicated responses strictly before milestone start. Fixed timestamp-aware cutoff excludes subsequent work. Script implementation is ongoing; no completion, cleanup or publication claim.",
+  "note": "Root baseline corrected to latest timestamp at or before start; superseded sample retained for audit. Combined baseline uses responses strictly before start. Fixed usage cutoff predates later reported work completion and full-validation start; no subsequent token usage inferred. Active work remains unknown; full validation, cleanup and publication pending.",
   "superseded_root_token_baseline": {
     "sample_utc": "2026-09-09T12:46:19.977Z",
     "tokens": {
@@ -255,5 +299,6 @@
       "total_tokens": 61466480
     },
     "reason": "Initial sample was after start; retained here for audit but excluded as the corrected baseline."
-  }
+  },
+  "usage_elapsed_seconds": 539.196
 }

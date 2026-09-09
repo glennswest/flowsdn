@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "project": "flowsdn",
-  "as_of_utc": "2026-09-09T12:55:18.196Z",
+  "as_of_utc": "2026-09-09T12:57:10Z",
   "measurement_start_utc": "2026-09-08T16:11:13.415Z",
-  "elapsed_seconds": 74644.781,
+  "elapsed_seconds": 74756.585,
   "historical_project_start_known": false,
   "active_work_seconds": null,
   "session": {
@@ -322,9 +322,9 @@
       "scope": "project/shared",
       "start_utc": "2026-09-09T12:46:19Z",
       "end_utc": null,
-      "measurement_end_utc": "2026-09-09T12:55:18.196Z",
+      "measurement_end_utc": "2026-09-09T12:57:10Z",
       "elapsed_seconds": null,
-      "measurement_elapsed_seconds": 539.196,
+      "measurement_elapsed_seconds": 651,
       "active_work_seconds": null,
       "token_baseline_sample_utc": "2026-09-09T12:40:13.720Z",
       "token_end_sample_utc": "2026-09-09T12:55:16.010Z",
@@ -336,8 +336,9 @@
         "reasoning_output_tokens": 1693,
         "total_tokens": 3150842
       },
-      "status": "in_progress",
-      "note": "Root-only implementation/integration/coordination/validation/reporting. Combined child usage and windows are in 0.11.0.json."
+      "status": "awaiting-validation",
+      "note": "Root-only implementation/integration/coordination/validation/reporting. Combined child usage and windows are in 0.11.0.json.",
+      "usage_cutoff_utc": "2026-09-09T12:55:18.196Z"
     }
   ],
   "crates": [
@@ -1248,8 +1249,8 @@
       "crate": "flowsdn-scripttest",
       "kind": "implementation",
       "start_utc": "2026-09-09T12:47:04Z",
-      "end_utc": null,
-      "elapsed_seconds": null,
+      "end_utc": "2026-09-09T12:56:41Z",
+      "elapsed_seconds": 577,
       "active_work_seconds": null,
       "exclusive_tokens": null,
       "token_baseline_sample_utc": "2026-09-09T12:38:15.825Z",
@@ -1262,9 +1263,33 @@
         "reasoning_output_tokens": 3079,
         "total_tokens": 1779808
       },
-      "measurement_end_utc": "2026-09-09T12:55:18.196Z",
-      "status": "in_progress",
-      "note": "Agent-reported bounds; delivery-window tokens include context/coordination, not exclusive coding. Open window has no inferred completion or active time."
+      "measurement_end_utc": "2026-09-09T12:56:41Z",
+      "status": "reported-complete",
+      "note": "Reported completion follows the fixed usage cutoff; elapsed window includes the fatal capture-error precedence fix. Delivery-window usage remains bounded by usage_cutoff_utc; active work unknown."
+    },
+    {
+      "task_id": "0.11.0",
+      "agent": "/root/table_streams",
+      "crate": "flowsdn-scripttest",
+      "kind": "cross-review",
+      "start_utc": "2026-09-09T12:54:54Z",
+      "end_utc": "2026-09-09T12:56:00Z",
+      "elapsed_seconds": 66,
+      "active_work_seconds": null,
+      "exclusive_tokens": null,
+      "token_baseline_sample_utc": "2026-09-09T12:54:13.745Z",
+      "token_endpoint_sample_utc": "2026-09-09T12:55:15.594Z",
+      "response_delivery_window_tokens": {
+        "input_tokens": 352675,
+        "cached_input_tokens": 345472,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 381,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 353056
+      },
+      "measurement_end_utc": "2026-09-09T12:56:00Z",
+      "status": "reported-complete",
+      "note": "Reported elapsed review includes fatal capture-limit masking finding; token allocation stops at fixed usage cutoff before review completion."
     }
   ],
   "combined_unique_response_tokens": {
@@ -1333,7 +1358,7 @@
   ],
   "current_milestone": {
     "id": "0.11.0",
-    "status": "in_progress",
+    "status": "awaiting-validation",
     "validated_commit": null,
     "completed_at_utc": null,
     "release_candidate": "v0.11.0",
@@ -1373,13 +1398,13 @@
     "project_union_of_observed_child_windows_seconds": 429
   },
   "milestone_0_11_parallel_time": {
-    "observed_agent_window_seconds": 586,
-    "observed_agent_window_hours": 0.162778,
-    "project_wall_clock_seconds": 539.196,
+    "observed_agent_window_seconds": 1229,
+    "observed_agent_window_hours": 0.341389,
+    "project_wall_clock_seconds": 651,
     "active_work_seconds": null,
     "active_agent_hours": null,
-    "project_union_of_observed_child_windows_seconds": 388,
-    "note": "Closed observed windows only; the ongoing script window is excluded from summed agent-window time. Overlaps are not summed as project elapsed."
+    "project_union_of_observed_child_windows_seconds": 593,
+    "note": "Seven closed reported windows; per-agent interval sums are not project elapsed. Some completion bounds are later than fixed usage cutoff; no extra tokens inferred."
   },
   "issue_events": [
     {
