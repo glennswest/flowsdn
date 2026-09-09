@@ -309,7 +309,9 @@ pub fn harvest(files: &BTreeMap<String, Vec<String>>, date: &str) -> Result<Valu
                 if section.kind == "SETUP" {
                     group.setup = section.body.clone();
                 }
-                if section.kind == "CHECK" { group.check = section.body; }
+                if section.kind == "CHECK" {
+                    group.check = section.body;
+                }
                 if section.file != *file {
                     group.source = section.file;
                 }
@@ -317,9 +319,17 @@ pub fn harvest(files: &BTreeMap<String, Vec<String>>, date: &str) -> Result<Valu
         }
         let mut cases = Vec::new();
         for group in groups.into_iter().filter(|g| g.stages.contains("CHECK")) {
-            let audited = audited::entrypoint(file, &group.name, &group.setup.join("\n"), &group.check.join("\n"), &corpus, &objects)?;
-            let entry = if let Some(entry) = audited { entry.to_owned() }
-            else if group.setup.is_empty() {
+            let audited = audited::entrypoint(
+                file,
+                &group.name,
+                &group.setup.join("\n"),
+                &group.check.join("\n"),
+                &corpus,
+                &objects,
+            )?;
+            let entry = if let Some(entry) = audited {
+                entry.to_owned()
+            } else if group.setup.is_empty() {
                 "direct".to_owned()
             } else {
                 resolve_entry(&group.setup.join("\n"), &corpus, &walk.defines, 0)?
@@ -348,7 +358,13 @@ pub fn harvest(files: &BTreeMap<String, Vec<String>>, date: &str) -> Result<Valu
                     .collect::<String>(),
             );
             text(&mut case, "entrypoint", entry);
-            if audited.is_some() { text(&mut case, "entrypoint_resolution", "spec-18 §4.3.1 audited evidence"); }
+            if audited.is_some() {
+                text(
+                    &mut case,
+                    "entrypoint_resolution",
+                    "spec-18 §4.3.1 audited evidence",
+                );
+            }
             number(&mut case, "milestone", case_stage)?;
             if group.source != *file {
                 text(
@@ -550,20 +566,42 @@ mod tests {
     }
     #[test]
     fn audited_library_setup_and_check_are_harvested_with_resolution_marker() {
-        let files = BTreeMap::from([("ipv6_test.c".to_owned(), [
-            "SETUP(\"xdp\", \"ipv6_without_extension_header\")",
-            "int arrange(void *ctx) { return 123; }",
-            "CHECK(\"xdp\", \"ipv6_without_extension_header\")",
-            "int verify(void *ctx) { return ipv6_hdrlen(ctx, &next); }",
-        ].into_iter().map(str::to_owned).collect())]);
+        let files = BTreeMap::from([(
+            "ipv6_test.c".to_owned(),
+            [
+                "SETUP(\"xdp\", \"ipv6_without_extension_header\")",
+                "int arrange(void *ctx) { return 123; }",
+                "CHECK(\"xdp\", \"ipv6_without_extension_header\")",
+                "int verify(void *ctx) { return ipv6_hdrlen(ctx, &next); }",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        )]);
         let value = harvest(&files, "2026-09-07").unwrap();
-        let case = value.get("file").and_then(|value| value.get(0))
-            .and_then(|value| value.get("case")).and_then(|value| value.get(0)).unwrap();
-        assert_eq!(case.get("entrypoint").and_then(Value::as_str), Some("direct"));
-        assert_eq!(case.get("entrypoint_resolution").and_then(Value::as_str), Some("spec-18 §4.3.1 audited evidence"));
-        let changed = BTreeMap::from([("ipv6_test.c".to_owned(), files.get("ipv6_test.c").unwrap().iter()
-            .map(|line| line.replace("ipv6_hdrlen", "different_function")).collect())]);
+        let case = value
+            .get("file")
+            .and_then(|value| value.get(0))
+            .and_then(|value| value.get("case"))
+            .and_then(|value| value.get(0))
+            .unwrap();
+        assert_eq!(
+            case.get("entrypoint").and_then(Value::as_str),
+            Some("direct")
+        );
+        assert_eq!(
+            case.get("entrypoint_resolution").and_then(Value::as_str),
+            Some("spec-18 §4.3.1 audited evidence")
+        );
+        let changed = BTreeMap::from([(
+            "ipv6_test.c".to_owned(),
+            files
+                .get("ipv6_test.c")
+                .unwrap()
+                .iter()
+                .map(|line| line.replace("ipv6_hdrlen", "different_function"))
+                .collect(),
+        )]);
         assert!(harvest(&changed, "2026-09-07").is_err());
     }
-
 }
