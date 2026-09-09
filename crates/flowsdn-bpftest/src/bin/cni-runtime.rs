@@ -227,26 +227,60 @@ impl State {
             errors: Vec::new(),
         })
     }
-    fn manager(&self) -> Result<&Manager> { self.manager.as_ref().ok_or_else(|| "endpoint manager stopped".into()) }
-    fn manager_mut(&mut self) -> Result<&mut Manager> { self.manager.as_mut().ok_or_else(|| "endpoint manager stopped".into()) }
+    fn manager(&self) -> Result<&Manager> {
+        self.manager
+            .as_ref()
+            .ok_or_else(|| "endpoint manager stopped".into())
+    }
+    fn manager_mut(&mut self) -> Result<&mut Manager> {
+        self.manager
+            .as_mut()
+            .ok_or_else(|| "endpoint manager stopped".into())
+    }
     fn restart(&mut self) -> Result<()> {
         let mut ids = Vec::new();
-        for id in [1,2] {
+        for id in [1, 2] {
             let attachment = format!("cni-attachment-id:cid{id}:eth0");
-            ids.push((attachment.clone(), self.manager()?.get(&attachment).ok_or("endpoint before restart")?.id));
+            ids.push((
+                attachment.clone(),
+                self.manager()?
+                    .get(&attachment)
+                    .ok_or("endpoint before restart")?
+                    .id,
+            ));
         }
-        ensure(self.manager()?.len() == ids.len(), "unexpected endpoint count before restart")?;
+        ensure(
+            self.manager()?.len() == ids.len(),
+            "unexpected endpoint count before restart",
+        )?;
         // Drop all old BPF/map/IPAM/store-lock ownership. The Unix fake API
         // remains alive, but no endpoint state is copied into the new manager.
         drop(self.manager.take().ok_or("manager before restart")?);
-        self.manager = Some(managed(Manager::restore(&self.store, &self.object, fresh_ipam()?))?);
-        ensure(self.manager()?.len() == ids.len(), "restored endpoint count")?;
+        self.manager = Some(managed(Manager::restore(
+            &self.store,
+            &self.object,
+            fresh_ipam()?,
+        ))?);
+        ensure(
+            self.manager()?.len() == ids.len(),
+            "restored endpoint count",
+        )?;
         for (attachment, id) in ids {
-            ensure(self.manager()?.get(&attachment).ok_or("restored attachment")?.id == id, "endpoint ID changed on restore")?;
+            ensure(
+                self.manager()?
+                    .get(&attachment)
+                    .ok_or("restored attachment")?
+                    .id
+                    == id,
+                "endpoint ID changed on restore",
+            )?;
         }
         let ipam = self.manager_mut()?.ipam_mut();
-        ensure(ipam.ipv4().ok_or("restored IPv4")?.allocated() == 2
-            && ipam.ipv6().ok_or("restored IPv6")?.allocated() == 2, "restored IP allocations")
+        ensure(
+            ipam.ipv4().ok_or("restored IPv4")?.allocated() == 2
+                && ipam.ipv6().ok_or("restored IPv6")?.allocated() == 2,
+            "restored IP allocations",
+        )
     }
     fn delete(&mut self, id: &str) -> Result<(u16, Value)> {
         if self.offline_delete {
@@ -279,7 +313,9 @@ impl State {
                 _ => return Err("unknown fixture owner".into()),
             };
             for v6 in [true, false] {
-                self.manager_mut()?.ipam_mut().allocate(address(id, v6).parse()?, &owner)?;
+                self.manager_mut()?
+                    .ipam_mut()
+                    .allocate(address(id, v6).parse()?, &owner)?;
             }
             return Ok((
                 201,
@@ -290,7 +326,9 @@ impl State {
         if method == "DELETE"
             && let Some(ip) = path.strip_prefix("/v1/ipam/")
         {
-            self.manager_mut()?.ipam_mut().release(decode(ip)?.parse()?)?;
+            self.manager_mut()?
+                .ipam_mut()
+                .release(decode(ip)?.parse()?)?;
             return Ok((200, json!({})));
         }
         if let Some(id) = path.strip_prefix("/v1/endpoint/") {
@@ -320,7 +358,14 @@ impl State {
                     "IfName":host,"IfIndex":ifindex,"LXCMAC":text(&body,"mac")?,"NodeMAC":text(&body,"host-mac")?,
                     "IPv4":text(addressing,"ipv4")?,"IPv6":text(addressing,"ipv6")?,
                     "K8sNamespace":text(&body,"k8s-namespace")?,"K8sPodName":text(&body,"k8s-pod-name")?});
-                ensure(id == format!("cni-attachment-id:{}:{}",text(&body,"container-id")?,text(&body,"container-interface-name")?), "endpoint URL/body identity mismatch")?;
+                ensure(
+                    id == format!(
+                        "cni-attachment-id:{}:{}",
+                        text(&body, "container-id")?,
+                        text(&body, "container-interface-name")?
+                    ),
+                    "endpoint URL/body identity mismatch",
+                )?;
                 let endpoint_id = managed(self.manager_mut()?.create(document))?;
                 return Ok((
                     201,
@@ -342,10 +387,12 @@ fn managed<T>(result: flowsdn_agent::state::Result<T>) -> Result<T> {
     result.map_err(|error| error as Box<dyn Error>)
 }
 fn fresh_ipam() -> Result<Ipam> {
-    let v4 = HostScope::new("198.18.0.0".parse()?,24,Default::default())?;
-    let v6 = HostScope::new("2001:db8:1::".parse()?,64,Default::default())?;
-    let mut ipam = Ipam::new(Some(v4),Some(v6))?;
-    for v6 in [false,true] { ipam.exclude_ip(gateway(v6).parse()?,"router")?; }
+    let v4 = HostScope::new("198.18.0.0".parse()?, 24, Default::default())?;
+    let v6 = HostScope::new("2001:db8:1::".parse()?, 64, Default::default())?;
+    let mut ipam = Ipam::new(Some(v4), Some(v6))?;
+    for v6 in [false, true] {
+        ipam.exclude_ip(gateway(v6).parse()?, "router")?;
+    }
     Ok(ipam)
 }
 fn decode(text: &str) -> Result<String> {
@@ -648,13 +695,23 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
     }
     state.lock().map_err(|_| "state")?.restart()?;
     for (endpoint, check) in [&first, &second].into_iter().zip(&previous) {
-        cni(&binary, &temp, "CHECK", endpoint.id, &endpoint.netns(), check, true)?;
+        cni(
+            &binary,
+            &temp,
+            "CHECK",
+            endpoint.id,
+            &endpoint.netns(),
+            check,
+            true,
+        )?;
     }
     for v6 in [false, true] {
         exchange(&mut first, &mut second, v6)?;
         exchange(&mut second, &mut first, v6)?;
     }
-    println!("PASS: real endpoint manager restored persisted IDs, IPAM and fresh BPF ownership; CHECK and bidirectional dual-stack UDP survive manager restart inside the fixture API");
+    println!(
+        "PASS: real endpoint manager restored persisted IDs, IPAM and fresh BPF ownership; CHECK and bidirectional dual-stack UDP survive manager restart inside the fixture API"
+    );
     let mut bad = previous.first().ok_or("previous result")?.clone();
     bad.get_mut("prevResult")
         .and_then(|v| v.get_mut("ips"))
@@ -677,10 +734,15 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
     for endpoint in [&first, &second] {
         let host = {
             let state = state.lock().map_err(|_| "state")?;
-            text(&state.manager()?
-                .get(&format!("cni-attachment-id:cid{}:eth0", endpoint.id))
-                .ok_or("endpoint state")?
-                .document, "IfName")?.to_owned()
+            text(
+                &state
+                    .manager()?
+                    .get(&format!("cni-attachment-id:cid{}:eth0", endpoint.id))
+                    .ok_or("endpoint state")?
+                    .document,
+                "IfName",
+            )?
+            .to_owned()
         };
         cni(
             &binary,
@@ -714,12 +776,17 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
         ensure(state.manager()?.is_empty(), "DEL leaked endpoint state")?;
         let ipam = state.manager_mut()?.ipam_mut();
         ensure(
-            ipam.ipv4().ok_or("v4")?.allocated() == 0
-                && ipam.ipv6().ok_or("v6")?.allocated() == 0,
+            ipam.ipv4().ok_or("v4")?.allocated() == 0 && ipam.ipv6().ok_or("v6")?.allocated() == 0,
             "DEL leaked IPAM",
         )?;
         for entry in fs::read_dir(&state.store)? {
-            ensure(entry?.file_name().to_str().is_none_or(|name|name.parse::<u16>().is_err()), "DEL leaked persisted endpoint directory")?;
+            ensure(
+                entry?
+                    .file_name()
+                    .to_str()
+                    .is_none_or(|name| name.parse::<u16>().is_err()),
+                "DEL leaked persisted endpoint directory",
+            )?;
         }
         ensure(
             state.errors.is_empty(),
