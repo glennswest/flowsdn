@@ -68,9 +68,15 @@ impl Label {
         Ok(label)
     }
 
-    pub fn source(&self) -> &str { &self.source }
-    pub fn key(&self) -> &str { &self.key }
-    pub fn value(&self) -> &str { &self.value }
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+    pub fn value(&self) -> &str {
+        &self.value
+    }
 }
 
 /// Identity labels indexed by key only. A later insert replaces all fields of
@@ -80,15 +86,27 @@ pub struct Labels {
     by_key: BTreeMap<String, Label>,
 }
 impl Labels {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
     pub fn insert(&mut self, label: Label) -> Option<Label> {
         self.by_key.insert(label.key.clone(), label)
     }
-    pub fn get(&self, key: &str) -> Option<&Label> { self.by_key.get(key) }
-    pub fn remove(&mut self, key: &str) -> Option<Label> { self.by_key.remove(key) }
-    pub fn len(&self) -> usize { self.by_key.len() }
-    pub fn is_empty(&self) -> bool { self.by_key.is_empty() }
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = &Label> { self.by_key.values() }
+    pub fn get(&self, key: &str) -> Option<&Label> {
+        self.by_key.get(key)
+    }
+    pub fn remove(&mut self, key: &str) -> Option<Label> {
+        self.by_key.remove(key)
+    }
+    pub fn len(&self) -> usize {
+        self.by_key.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.by_key.is_empty()
+    }
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &Label> {
+        self.by_key.values()
+    }
 
     /// Canonical identity index key, including `=` and trailing `;` per label.
     /// The specified format does not escape delimiters. Validate externally
@@ -109,7 +127,9 @@ impl Labels {
 impl FromIterator<Label> for Labels {
     fn from_iter<T: IntoIterator<Item = Label>>(iter: T) -> Self {
         let mut labels = Self::new();
-        for label in iter { labels.insert(label); }
+        for label in iter {
+            labels.insert(label);
+        }
         labels
     }
 }
