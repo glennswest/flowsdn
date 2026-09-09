@@ -511,6 +511,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             if !self.current(&work) {
                 self.statuses.remove(&work.key);
                 self.pending.pop_front();
+                if work.refresh { self.complete_refresh_work(clock())?; }
                 round.stale = round.stale.saturating_add(1);
                 continue;
             }
@@ -525,6 +526,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             if !self.current(&work) {
                 self.statuses.remove(&work.key);
                 self.pending.pop_front();
+                if work.refresh { self.complete_refresh_work(clock())?; }
                 round.stale = round.stale.saturating_add(1);
                 continue;
             }
@@ -567,6 +569,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                 self.statuses.insert(work.key, status);
             }
             self.pending.pop_front();
+            if work.refresh { self.complete_refresh_work(now)?; }
         }
         if self.pending.is_empty() {
             self.attempted_revision = self.stream.revision();

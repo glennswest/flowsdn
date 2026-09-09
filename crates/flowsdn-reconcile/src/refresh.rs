@@ -45,6 +45,13 @@ impl<T: Keyed, U: Target<T>> Reconciler<'_, T, U> {
         Ok(())
     }
 
+    pub(crate) fn complete_refresh_work(&mut self, now: Instant) -> Result<(), ReconcileError> {
+        if self.refresh.pass.as_ref().is_some_and(|pass| pass.exhausted && pass.candidates.is_empty()) {
+            self.finish_refresh_pass(now)?;
+        }
+        Ok(())
+    }
+
     fn refresh_eligible(&self, work: &Work<T>, started: Instant) -> bool {
         self.current(work) && self.statuses.get(&work.key).is_some_and(|status| {
             status.id == work.revision && status.kind == Kind::Done
