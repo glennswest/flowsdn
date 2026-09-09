@@ -59,7 +59,9 @@ impl LocalDelivery {
 
     /// Remove the owned attachment; retrying an already detached name succeeds.
     pub fn detach(&mut self, interface: &str) -> KernelResult<()> {
-        if let Some(link) = self.interfaces.remove(interface) { link.detach()?; }
+        if let Some(link) = self.interfaces.remove(interface) {
+            link.detach()?;
+        }
         Ok(())
     }
 

@@ -184,6 +184,8 @@ dependencies = [
  "aya",
  "flowsdn-bpf-abi",
  "flowsdn-bpf-loader",
+ "flowsdn-cni",
+ "flowsdn-ipam",
  "nix",
 ]
 
