@@ -360,5 +360,39 @@
   "parallel_agent_window_seconds": 1105.0,
   "parallel_agent_window_hours": 0.30694444444444446,
   "known_agent_project_interval_union_seconds": 554.0,
-  "note": "Processed counters include repeated context. Cached input and reasoning are subsets. Root coding/integration remains project/shared; agent windows overlap elapsed and are not added to it. Active work remains unknown."
+  "note": "Processed counters include repeated context. Cached input and reasoning are subsets. Root coding/integration remains project/shared; agent windows overlap elapsed and are not added to it. Active work remains unknown.",
+  "implementation_commits": [
+    "02f6f56",
+    "141c811",
+    "8afcbcf",
+    "f8ce051",
+    "07607ac"
+  ],
+  "validated_commit": "07607ac",
+  "issues_closed_this_milestone": [
+    55
+  ],
+  "issue_counts": {
+    "closed": 20,
+    "open": 270,
+    "as_of_utc": "2026-09-09T15:56:20Z"
+  },
+  "validation": {
+    "debug_tests": 377,
+    "release_tests": null,
+    "formatting": "passed",
+    "clippy": "passed",
+    "linux_musl_x86_64": "compile passed",
+    "linux_musl_aarch64": "compile passed",
+    "dependency_policy": "pending",
+    "identity_no_default_features": "passed before final regex direct dependency; final check queued",
+    "full_validation_running_observed_utc": "2026-09-09T15:52:51Z",
+    "debug_complete_observed_by_utc": "2026-09-09T15:55:37Z",
+    "release_dispatch_observed_utc": "2026-09-09T15:55:57Z",
+    "corrections": [
+      "Use checked scratch remainder for workspace arithmetic lint.",
+      "Normalize RE2 ASCII shorthand classes/word boundaries through parsed regex syntax, preserving Unicode literals/properties/case folding.",
+      "Refresh two displaced configuration provenance references; defaults unchanged."
+    ]
+  }
 }
