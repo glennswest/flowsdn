@@ -396,6 +396,10 @@ fn options_reject_rounds_and_backoffs_that_cannot_progress() {
             ..Options::default()
         },
         Options {
+            round_interval: Duration::ZERO,
+            ..Options::default()
+        },
+        Options {
             prune_interval: Duration::ZERO,
             ..Options::default()
         },

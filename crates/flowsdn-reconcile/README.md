@@ -1,6 +1,6 @@
 # flowsdn-reconcile
 
-A caller-driven reconciliation core for immutable desired tables. Each round
+Reconciliation rounds and a caller-owned async loop for immutable desired tables. Each round
 processes a bounded set of changes, applies deletes before updates in that set,
 and retries failed operations with capped exponential backoff. Targets must be
 idempotent because cancellation can replay an operation after its side effect.
@@ -17,18 +17,30 @@ round observes the new stream generation and replaces or clears it. An absent
 row's status is therefore not evidence that its latest deletion has succeeded.
 Successful deletion releases its status entry.
 
-The caller supplies the scheduling instant for a round and schedules subsequent
-rounds. `next_retry()` and `retry_low_water_mark()` expose the next retry deadline
-and oldest failed revision. A cancelled round retains queued work;
-`has_pending_work()` indicates it can resume immediately.
+`run(shutdown_future)` drives work until shutdown completes or a scheduling error
+occurs. It waits for table changes, initialization readiness, retry/prune timers,
+and explicit prune requests. The caller owns this future and may poll or spawn
+it; no worker is detached. Shutdown takes priority and cancels an in-flight
+operation. Dropping the future also cancels it, retaining queued work so the
+same reconciler can resume later.
+
+The loop waits at least `round_interval` between completed rounds (1 ms by
+default, at most 1000 rounds/s). Idle loops wait on notifications or timers;
+retries are timed from operation completion, including slow target calls. Tokio's
+monotonic clock supports paused-time tests. Refresh scheduling remains deferred.
+
+Callers can instead use `run_round(now)` to supply a fixed scheduling instant and
+drive rounds themselves. `next_retry()` and `retry_low_water_mark()` expose the
+next retry deadline and oldest failed revision. `has_pending_work()` indicates
+immediate queued work, including cancellation recovery and the initial prune.
 
 After incremental work, a round prunes only if the table is initialized. The
 first prune follows initialization, then repeats at `prune_interval` (one hour
 by default; it must be positive). `prune_now()` requests an extra pass, and a
 cloneable `prune_handle()` allows other callers to request it while a round runs.
 Requests coalesce; a request arriving during prune schedules one further pass.
-Requests made before initialization remain pending. The handle does not spawn
-or wake a task: the caller still schedules rounds and initialization wakeups.
+Requests made before initialization remain pending. The handle wakes an active
+`run` future. Callers using manual rounds still schedule their own wakeups.
 
 `Target::prune` receives an immutable snapshot of all desired rows and removes
 target objects absent from it. Its scan is separate from the incremental round
@@ -44,8 +56,8 @@ A resync caused by discarded deletion history requests prune automatically.
 Clearing it confirms deletion-history recovery, not successful application of
 all rows: individual update failures may still be queued for retry.
 
-This slice does not run an autonomous task or timer and does not install atomic
-status hooks into table publication. Refresh, annotations, batch targets,
+This slice does not install atomic status hooks into table publication.
+Refresh, annotations, batch targets,
 health reporting and asynchronous completion waiters remain unimplemented.
 Prune owns its initialization gate; callers still own any extra startup gate
 needed before incremental target writes, such as restoration of allocated IDs.

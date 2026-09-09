@@ -1,5 +1,5 @@
-//! Confined fixture files and synchronous generic commands. Update mode, mv,
-//! rm, chmod, exists and symlink commands remain unimplemented. File reads and
+//! Confined fixture files and synchronous generic commands. Update mode remains
+//! unimplemented. File reads and
 //! writes are bounded to 8 MiB each; cat also bounds aggregate output. Text
 //! commands reject non-UTF-8 input rather than changing bytes silently.
 use crate::{
@@ -40,6 +40,12 @@ struct Workspace {
 
 impl Drop for Workspace {
     fn drop(&mut self) {
+        // A script may have removed directory read/write permission. Repair
+        // owned entries through handles before the final capability cleanup.
+        let mut remaining = usize::MAX;
+        if let Ok(entries) = self.dir.entries() {
+            for entry in entries.flatten() { let _ = remove_tree(&self.dir, Path::new(&entry.file_name()), 0, &mut remaining); }
+        }
         // Remove through the owned directory handle; a replaced ambient path
         // must not redirect cleanup into another tree. Symlinks are not followed.
         if let Ok(dir) = self.dir.try_clone() {
@@ -61,6 +67,14 @@ impl PartialEq for Context {
 impl Eq for Context {}
 
 impl Context {
+    fn metadata(&self, name: &str) -> Result<cap_std::fs::Metadata> {
+        let path = Path::new(name);
+        if path.is_absolute() && !path.starts_with(&self.workspace.root) {
+            let relative = path.strip_prefix(&self.workspace.data_root)
+                .map_err(|_| fail("read path is outside WORK and DATADIR"))?;
+            self.workspace.data.metadata(relative).map_err(io_error)
+        } else { self.workspace.dir.metadata(self.relative(name)?).map_err(io_error) }
+    }
     fn relative(&self, name: &str) -> Result<PathBuf> {
         let path = Path::new(name);
         if name.is_empty() {
@@ -127,6 +141,139 @@ impl Context {
         file.set_len(0).map_err(io_error)?;
         file.write_all(bytes).map_err(io_error)
     }
+}
+
+/// Do not rename, unlink or chmod the owned root itself. Trailing `..` also
+/// names a directory by its parent traversal rather than an owned entry.
+fn mutable_entry(context: &Context, name: &str) -> Result<PathBuf> {
+    let path = context.relative(name)?;
+    if path.file_name().is_none() { return Err(fail("operation requires an entry below WORK")); }
+    Ok(path)
+}
+
+pub(crate) fn exists(state: &mut State, args: &[String]) -> Result<Control> {
+    let (flags, paths) = options(args, &["--readonly", "--exec"])?;
+    if paths.is_empty() { return Err(fail("exists requires paths")); }
+    let context = state.context()?;
+    for path in paths {
+        let metadata = context.metadata(&path)?;
+        if flags.iter().any(|flag| flag == "--readonly") && !metadata.permissions().readonly() {
+            return Err(fail("path has writable permission bits"));
+        }
+        if flags.iter().any(|flag| flag == "--exec") {
+            #[cfg(unix)]
+            {
+                use cap_std::fs::PermissionsExt;
+                if metadata.permissions().mode() & 0o111 == 0 { return Err(fail("path has no executable permission bits")); }
+            }
+            #[cfg(not(unix))]
+            { return Err(fail("exists --exec requires Unix permission semantics")); }
+        }
+    }
+    Ok(Control::Continue)
+}
+
+pub(crate) fn mv(state: &mut State, args: &[String]) -> Result<Control> {
+    let (_, paths) = options(args, &[])?;
+    let [old, new] = paths.as_slice() else { return Err(fail("mv requires old and new paths")); };
+    let context = state.context()?;
+    context.workspace.dir.rename(mutable_entry(context, old)?, &context.workspace.dir, mutable_entry(context, new)?).map_err(io_error)?;
+    Ok(Control::Continue)
+}
+
+pub(crate) fn chmod(state: &mut State, args: &[String]) -> Result<Control> {
+    let (_, words) = options(args, &[])?;
+    let (mode, paths) = words.split_first().ok_or_else(|| fail("chmod requires an octal mode and paths"))?;
+    if paths.is_empty() || mode.is_empty() || !mode.bytes().all(|byte| matches!(byte, b'0'..=b'7')) {
+        return Err(fail("chmod requires an octal mode and paths"));
+    }
+    let mode = u32::from_str_radix(mode, 8).ok().filter(|mode| *mode <= 0o7777)
+        .ok_or_else(|| fail("chmod mode must fit 07777"))?;
+    let context = state.context()?;
+    for path in paths {
+        let mut options = nonblocking_options(); options.read(true);
+        #[cfg(target_os = "linux")]
+        { use cap_std::fs::OpenOptionsExt; options.custom_flags(libc::O_PATH | libc::O_NONBLOCK); }
+        let file = context.workspace.dir.open_with(mutable_entry(context, path)?, &options).map_err(io_error)?;
+        let metadata = file.metadata().map_err(io_error)?;
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let root = context.workspace.dir.dir_metadata().map_err(io_error)?;
+            if metadata.dev() == root.dev() && metadata.ino() == root.ino() {
+                return Err(fail("chmod cannot change the owned WORK root through an alias"));
+            }
+        }
+        set_mode(&file, mode)?;
+    }
+    Ok(Control::Continue)
+}
+
+fn set_mode(file: &cap_std::fs::File, mode: u32) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::{fd::AsRawFd, unix::fs::PermissionsExt};
+        // O_PATH grants no read/write access and cannot block on FIFO opens.
+        // procfs addresses this still-owned descriptor; it does not re-resolve
+        // the script pathname. Do not fall back to a potentially blocking open.
+        fs::set_permissions(format!("/proc/self/fd/{}", file.as_raw_fd()), fs::Permissions::from_mode(mode)).map_err(io_error)
+    }
+    #[cfg(all(unix, not(target_os = "linux")))]
+    {
+        use cap_std::fs::PermissionsExt;
+        file.set_permissions(cap_std::fs::Permissions::from_mode(mode)).map_err(io_error)
+    }
+    #[cfg(not(unix))]
+    { let _ = (file, mode); Err(fail("numeric chmod requires Unix permission semantics")) }
+}
+
+pub(crate) fn symlink(state: &mut State, args: &[String]) -> Result<Control> {
+    let words = if args.first().map(String::as_str) == Some("--") { args.get(1..).unwrap_or_default() } else { args };
+    let [link, arrow, target] = words else { return Err(fail("symlink requires path -> target")); };
+    if arrow != "->" || target.is_empty() { return Err(fail("symlink requires path -> target")); }
+    if Path::new(target).is_absolute() { return Err(fail("absolute symlink targets are not supported by the capability workspace")); }
+    let context = state.context()?;
+    #[cfg(unix)]
+    { context.workspace.dir.symlink(target, mutable_entry(context, link)?).map_err(io_error)?; }
+    #[cfg(not(unix))]
+    { let _ = context; return Err(fail("symlink command currently requires Unix")); }
+    Ok(Control::Continue)
+}
+
+pub(crate) fn rm(state: &mut State, args: &[String]) -> Result<Control> {
+    let (_, paths) = options(args, &[])?;
+    if paths.is_empty() { return Err(fail("rm requires paths")); }
+    let context = state.context()?;
+    let mut remaining = 4096usize;
+    for path in paths { remove_tree(&context.workspace.dir, &mutable_entry(context, &path)?, 0, &mut remaining)?; }
+    Ok(Control::Continue)
+}
+
+fn remove_tree(parent: &Dir, path: &Path, depth: usize, remaining: &mut usize) -> Result<()> {
+    if depth > 128 || *remaining == 0 { return Err(CommandError::LimitExceeded("rm exceeds 128 levels or 4096 entries")); }
+    *remaining = remaining.saturating_sub(1);
+    let metadata = match parent.symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(io_error(error)),
+    };
+    if !metadata.is_dir() { return parent.remove_file(path).map_err(io_error); }
+    let mut options = nonblocking_options(); options.read(true);
+    #[cfg(all(unix, not(target_os = "linux")))]
+    { use cap_std::fs::OpenOptionsExt; options.custom_flags(libc::O_NONBLOCK | libc::O_DIRECTORY | libc::O_NOFOLLOW); }
+    #[cfg(target_os = "linux")]
+    { use cap_std::fs::OpenOptionsExt; options.custom_flags(libc::O_PATH | libc::O_NONBLOCK | libc::O_DIRECTORY | libc::O_NOFOLLOW); }
+    let file = parent.open_with(path, &options).map_err(io_error)?;
+    let metadata = file.metadata().map_err(io_error)?;
+    if !metadata.is_dir() { return Err(fail("directory changed during rm")); }
+    #[cfg(unix)]
+    { use cap_std::fs::PermissionsExt; set_mode(&file, metadata.permissions().mode() | 0o700)?; }
+    let directory = Dir::from_std_file(file.into_std()).open_dir(".").map_err(io_error)?;
+    for entry in directory.entries().map_err(io_error)? {
+        let entry = entry.map_err(io_error)?;
+        remove_tree(&directory, Path::new(&entry.file_name()), depth.saturating_add(1), remaining)?;
+    }
+    parent.remove_dir(path).map_err(io_error)
 }
 
 fn nonblocking_options() -> OpenOptions {

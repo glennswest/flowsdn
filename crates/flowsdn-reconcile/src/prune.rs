@@ -8,16 +8,21 @@ use std::{
 };
 
 /// A coalescing request that can be shared with callers while a round runs.
-/// It records work only; the caller remains responsible for scheduling a round.
+/// It wakes an active `Reconciler::run` future; it never spawns a task.
 #[derive(Clone, Default)]
 pub struct PruneHandle {
     requested: Arc<AtomicBool>,
+    notify: Arc<tokio::sync::Notify>,
 }
 impl PruneHandle {
     /// Multiple requests before the next prune become one operation. Requests
     /// arriving during that operation schedule one further pass.
     pub fn prune_now(&self) {
         self.requested.store(true, Ordering::Release);
+        self.notify.notify_one();
+    }
+    pub(crate) async fn notified(&self) {
+        self.notify.notified().await;
     }
     pub(crate) fn requested(&self) -> bool {
         self.requested.load(Ordering::Acquire)

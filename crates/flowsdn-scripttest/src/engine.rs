@@ -177,6 +177,11 @@ impl Engine {
             ("sed", true, crate::files::sed),
             ("mkdir", false, crate::files::mkdir),
             ("cd", false, crate::files::cd),
+            ("exists", false, crate::files::exists),
+            ("mv", false, crate::files::mv),
+            ("chmod", false, crate::files::chmod),
+            ("symlink", false, crate::files::symlink),
+            ("rm", false, crate::files::rm),
         ] {
             engine.commands.insert(
                 name.into(),

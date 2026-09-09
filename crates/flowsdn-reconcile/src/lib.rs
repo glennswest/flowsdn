@@ -1,10 +1,10 @@
-//! Caller-driven reconciler rounds from spec 00 §3.2.
+//! Reconciler rounds and a caller-owned async loop from spec 00 §3.2.
 //!
 //! Desired rows and reconciliation status are separate. Revision checks reject
 //! stale results, and status reads synthesize Pending for newer desired rows.
-//! This slice does not install atomic table write hooks or run a background
-//! task. Timers, rate limiting, annotations, batch targets, refresh,
-//! health reporting and asynchronous completion waiters remain integration work.
+//! The caller owns the `run` future and its shutdown signal; no task is spawned.
+//! Atomic table write hooks, annotations, batch targets, refresh, health
+//! reporting and asynchronous completion waiters remain integration work.
 //! Prune runs only after table initialization and clears a resync request only
 //! on success. Incremental updates alone cannot remove unknown target entries
 //! after deletion history has been discarded.
@@ -18,6 +18,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod run;
 mod prune;
 use prune::PruneState;
 pub use prune::{PruneHandle, PruneStatus};
@@ -42,6 +43,8 @@ pub struct Options {
     pub min_backoff: Duration,
     pub max_backoff: Duration,
     pub prune_interval: Duration,
+    /// Minimum gap between loop rounds; `run_round` itself remains unthrottled.
+    pub round_interval: Duration,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -50,6 +53,7 @@ impl Default for Options {
             min_backoff: Duration::from_millis(100),
             max_backoff: Duration::from_secs(60),
             prune_interval: Duration::from_secs(3600),
+            round_interval: Duration::from_millis(1),
         }
     }
 }
@@ -61,6 +65,8 @@ pub enum ReconcileError {
     RetryDeadlineOverflow,
     InvalidPruneInterval,
     PruneDeadlineOverflow,
+    InvalidRoundInterval,
+    RoundDeadlineOverflow,
 }
 impl fmt::Display for ReconcileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -70,6 +76,8 @@ impl fmt::Display for ReconcileError {
             Self::RetryDeadlineOverflow => "retry deadline exceeds the monotonic clock range",
             Self::InvalidPruneInterval => "prune interval must be positive",
             Self::PruneDeadlineOverflow => "prune deadline exceeds the monotonic clock range",
+            Self::InvalidRoundInterval => "round interval must be positive",
+            Self::RoundDeadlineOverflow => "round deadline exceeds the monotonic clock range",
         })
     }
 }
@@ -204,6 +212,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         if options.prune_interval.is_zero() {
             return Err(ReconcileError::InvalidPruneInterval);
         }
+        if options.round_interval.is_zero() {
+            return Err(ReconcileError::InvalidRoundInterval);
+        }
         Ok(Self {
             table,
             stream: table.watch(0),
@@ -327,6 +338,10 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
 
     fn load_changes(&mut self) {
         let changes = self.stream.drain(self.options.round_size);
+        self.enqueue_changes(changes);
+    }
+
+    fn enqueue_changes(&mut self, changes: impl IntoIterator<Item = Change<T>>) {
         let mut pending = Vec::new();
         for change in changes {
             match change {
@@ -362,7 +377,8 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         self.pending.extend(pending);
     }
 
-    async fn run_prune(&mut self, now: Instant) -> Result<Option<PruneStatus>, ReconcileError> {
+    async fn run_prune(&mut self, clock: &impl Fn() -> Instant) -> Result<Option<PruneStatus>, ReconcileError> {
+        let now = clock();
         if !self.table.initialized() {
             return Ok(None);
         }
@@ -372,9 +388,6 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         {
             return Ok(None);
         }
-        let next_due = now
-            .checked_add(self.options.prune_interval)
-            .ok_or(ReconcileError::PruneDeadlineOverflow)?;
         // Retain in_flight across cancellation, so an interrupted target side
         // effect is replayed. Consume requests before awaiting: a request made
         // during this call must survive for the following round.
@@ -383,6 +396,9 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
         let desired = self.table.snapshot();
         let revision = desired.revision();
         let result = self.target.prune(desired).await;
+        let now = clock();
+        let next_due = now.checked_add(self.options.prune_interval)
+            .ok_or(ReconcileError::PruneDeadlineOverflow)?;
         let status = PruneStatus {
             revision,
             updated_at: now,
@@ -402,13 +418,17 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
     /// startup gating for incremental writes, timers and repeat scheduling.
     /// Work stays queued across cancellation until its result is recorded.
     pub async fn run_round(&mut self, now: Instant) -> Result<Round, ReconcileError> {
+        self.run_round_with_clock(|| now).await
+    }
+
+    async fn run_round_with_clock(&mut self, clock: impl Fn() -> Instant) -> Result<Round, ReconcileError> {
         let mut round = Round::default();
         if self.pending.is_empty() {
             self.load_changes();
         }
         while round.processed < self.options.round_size {
             if self.pending.is_empty() {
-                let Some(retry) = self.retries.due(now) else {
+                let Some(retry) = self.retries.due(clock()) else {
                     break;
                 };
                 let row = self
@@ -463,6 +483,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
                 round.stale = round.stale.saturating_add(1);
                 continue;
             }
+            let now = clock();
             let mut status = Status::pending(work.revision, work.operation());
             status.updated_at = Some(now);
             match result {
@@ -504,7 +525,7 @@ impl<'a, T: Keyed, U: Target<T>> Reconciler<'a, T, U> {
             self.attempted_revision = self.stream.revision();
             self.stream.ack(self.attempted_revision);
         }
-        round.prune = self.run_prune(now).await?;
+        round.prune = self.run_prune(&clock).await?;
         round.attempted_revision = self.attempted_revision;
         round.remaining_retries = self.retries.entries.len();
         round.resync_required = self.resync_required;
