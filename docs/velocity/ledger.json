@@ -412,7 +412,8 @@
       "v0.5.0",
       "v0.6.0",
       "v0.7.0",
-      "v0.8.0"
+      "v0.8.0",
+      "v0.9.0"
     ],
     "unique_tests": 211,
     "test_profiles": [
@@ -441,8 +442,8 @@
       "closed_this_session": 6,
       "as_of_utc": "2026-09-08T21:55:39Z"
     },
-    "release_commit": "2b36e54fc20aad2b0f64b484c21ba906283e1b9e",
-    "publication_observed_utc": "2026-09-09T11:45:38Z",
+    "release_commit": "749cd12b3464bd930c79c1fff53f41ac19c6618d",
+    "publication_observed_utc": "2026-09-09T12:14:01Z",
     "release_candidate": "v0.9.0",
     "repository_closed_issues": 10,
     "repository_open_issues": 280
@@ -998,8 +999,10 @@
     "validated_commit": "48a7d19",
     "completed_at_utc": "2026-09-09T12:11:00.810Z",
     "release_candidate": "v0.9.0",
-    "publication": "pending",
-    "cleanup": "complete"
+    "publication": "published",
+    "cleanup": "complete",
+    "release": "v0.9.0",
+    "publication_observed_utc": "2026-09-09T12:14:01Z"
   },
   "milestone_0_7_parallel_time": {
     "observed_agent_window_seconds": 3064.201,

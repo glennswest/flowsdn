@@ -22,8 +22,8 @@ active coding time.
 
 Commit `48a7d19` passed **211 tests in debug and release with all features**,
 formatting, Clippy, both Linux musl compile checks and dependency policy.
-Cleanup removed **11,035 files / 3.1 GiB**. Release candidate v0.9.0 awaits
-publication. Repository issue counts remain **10 closed / 280 open**.
+Cleanup removed **11,035 files / 3.1 GiB**. [v0.9.0](https://github.com/glennswest/flowsdn/releases/tag/v0.9.0) was published
+at 12:14 UTC, after the usage cutoff. Repository issue counts remain **10 closed / 280 open**.
 [Milestone details](0.9.0.json) retain crate windows, baseline/endpoint counters
 and validation. Later publication and reporting are outside this cutoff.
 

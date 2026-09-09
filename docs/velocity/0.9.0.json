@@ -205,7 +205,7 @@
     "completed_at_utc": "2026-09-09T12:11:00.810Z"
   },
   "commit": "48a7d19",
-  "release": null,
+  "release": "v0.9.0",
   "release_candidate": "v0.9.0",
   "cleanup": {
     "status": "complete",
@@ -214,5 +214,8 @@
     "completed_at_utc": "2026-09-09T12:11:00.810Z"
   },
   "note": "Source validated and cleanup complete. Usage cutoff records the latest completed responses at the completion observation, excluding later publication/reporting. Root baseline preserved; combined baseline deduplicated before task start. Active work remains unknown.",
-  "validated_commit": "48a7d19"
+  "validated_commit": "48a7d19",
+  "release_commit": "749cd12b3464bd930c79c1fff53f41ac19c6618d",
+  "release_url": "https://github.com/glennswest/flowsdn/releases/tag/v0.9.0",
+  "publication_observed_utc": "2026-09-09T12:14:01Z"
 }
