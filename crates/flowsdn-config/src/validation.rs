@@ -34,7 +34,7 @@ impl std::error::Error for Error {}
 fn effective<'a>(config: &'a Resolved, key: &str) -> Option<&'a Value> {
     config
         .get(key)
-        .filter(|entry| matches!(entry.class, Class::Active | Class::Immutable))
+        .filter(|entry| !matches!(entry.class, Class::Ignored | Class::Script))
         .map(|entry| &entry.value)
 }
 

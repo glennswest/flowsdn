@@ -1,11 +1,12 @@
 //! Typed configuration layering from foundation specification §3.3.
 //!
-//! Callers supply the schema and raw source entries. This core does not yet
-//! supply the complete agent key catalogue or every cross-key validation rule.
+//! Callers supply raw source entries and a schema. `catalogue` declares all
+//! agent keys while exposing unresolved defaults and other metadata gaps.
 //! Source adapters are available in `sources`; runtime snapshots in `runtime`.
 #![forbid(unsafe_code)]
 
 pub mod immutable;
+pub mod catalogue;
 mod parse;
 pub mod runtime;
 pub mod sources;
@@ -58,6 +59,10 @@ pub enum Class {
     Active,
     /// Compared with the previous run before restoring existing endpoints.
     Immutable,
+    /// Read once to seed an independently mutable runtime option.
+    Runtime,
+    /// Read through a dynamic-config owner; the registry itself stays frozen.
+    Dynamic,
     Ignored,
     Script,
 }

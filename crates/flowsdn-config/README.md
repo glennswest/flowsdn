@@ -5,6 +5,21 @@ Callers provide a `Registry` of `KeySpec` entries and source-tagged `Entry`
 values. Resolution applies defaults, file, directory, environment and flag
 values in that order, preserving the winning source for each key.
 
+The `catalogue` module declares all 539 keys in specification §6.4, including
+their original default expressions, pflag types, six behavior classes, three
+deprecated aliases and four inventory-name renames. **488 defaults are resolved;
+51 remain explicit gaps.** [The gap list](REGISTRY-GAPS.md) records unresolved
+expressions, missing help/hidden metadata and area-validator requirements.
+
+`complete_registry` refuses construction until every missing default has an
+explicit, typed resolution with provenance. It returns the constructed schema
+and an audit list of supplied resolutions; success does not replace domain
+validation or make an agent production-ready. `partial_known_defaults_registry`
+is explicitly incomplete, exposes omitted keys, and rejects input for a known
+omitted key instead of treating it as unknown. It is intended for staged owners
+and tests. Runtime and dynamic classifications preserve ownership semantics;
+neither makes the immutable registry hot-reloadable.
+
 The core supports key normalization, the three deprecated key aliases, all
 specified textual value kinds, numeric range checking and warnings for unknown
 keys, ignored keys and bare integer durations. List flags append within their
@@ -69,7 +84,7 @@ state directory and check previous state before publishing a changed config.
 Temporary files are cleaned on completion/failure. Unix snapshot files use
 mode 0600, and final-path symlinks are replaced without writing their targets.
 
-This core does not yet include the complete 539-key agent catalogue,
+This core still requires the 51 unresolved production defaults,
 CLI argument parsing, area-specific map validators, all cross-key rules,
 derived settings or dynamic config reflection. Legacy alias
 definitions are supplied by the owning area's schema.

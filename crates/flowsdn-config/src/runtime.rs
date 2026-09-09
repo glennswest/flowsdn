@@ -372,10 +372,13 @@ pub fn decode(text: &str, registry: &Registry) -> Result<Snapshot, Error> {
         };
         let class = if immutable_keys.contains(key.as_str()) {
             Class::Immutable
-        } else if spec.is_some_and(|spec| spec.class == Class::Ignored) {
-            Class::Ignored
         } else {
-            Class::Active
+            match spec.map(|spec| spec.class) {
+                Some(Class::Ignored) => Class::Ignored,
+                Some(Class::Runtime) => Class::Runtime,
+                Some(Class::Dynamic) => Class::Dynamic,
+                _ => Class::Active,
+            }
         };
         let source = source(
             sources
