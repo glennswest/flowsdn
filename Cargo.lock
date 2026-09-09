@@ -240,7 +240,9 @@ dependencies = [
  "flowsdn-cni",
  "flowsdn-connector",
  "flowsdn-ipam",
+ "httparse",
  "nix",
+ "serde_json",
 ]
 
 [[package]]

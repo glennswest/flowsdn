@@ -30,7 +30,9 @@ fn response(response: std::result::Result<Response, flowsdn_api_client::Error>) 
     }
     Ok(response.json.unwrap_or(Value::Null))
 }
-fn field<'a>(value: &'a Value, key: &str) -> &'a Value { value.get(key).unwrap_or(&Value::Null) }
+fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
+    value.get(key).unwrap_or(&Value::Null)
+}
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or("")
 }
@@ -100,8 +102,11 @@ impl AddBackend for Platform {
                     address,
                     gateway: address,
                     pool: text(field(&value, "address"), &format!("{family}-pool-name")).into(),
-                    expiration_uuid: text(field(&value, "address"), &format!("{family}-expiration-uuid"))
-                        .into(),
+                    expiration_uuid: text(
+                        field(&value, "address"),
+                        &format!("{family}-expiration-uuid"),
+                    )
+                    .into(),
                 });
             }
             for lease in &mut leases {
@@ -110,7 +115,9 @@ impl AddBackend for Platform {
                 } else {
                     "ipv6"
                 };
-                if field(field(field(&value, "host-addressing"), family), "enabled") != &Value::Bool(true) {
+                if field(field(field(&value, "host-addressing"), family), "enabled")
+                    != &Value::Bool(true)
+                {
                     return Err(error("allocated address family is disabled"));
                 }
                 lease.gateway = text(field(field(&value, "host-addressing"), family), "ip")
