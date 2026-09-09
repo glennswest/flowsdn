@@ -39,7 +39,7 @@ execute, while the harvested networking scenarios still lack their adapters.
 | Inventories | 17 files, ~12.5k lines — the reference measured at v1.20.1 (`7d68cfb394`) |
 | Decision records | 10 (`docs/decisions/`) |
 | Harvested test corpora | 1,444 files — 168 txtar scenarios, 625 BPF cases, 1,196 golden fixtures, 30 fuzz seeds |
-| Open backlog | 279 issues as checked 2026-09-09, indexed in `docs/open-decisions-index.md` |
+| Open backlog | 271 issues as checked 2026-09-09, indexed in `docs/open-decisions-index.md` |
 
 Read in this order: `docs/decisions/` for what was decided and why,
 `docs/inventory/README.md` for the scope table and build order,
