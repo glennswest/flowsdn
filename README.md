@@ -17,7 +17,7 @@ Goals:
 
 ## Status
 
-**Foundation implementation started (2026-09-08), version 0.12.0.**
+**Foundation implementation started (2026-09-08), version 0.13.0.**
 
 The workspace includes indexed tables, initialization gates, a reconciler with
 pruning, optional batching and a caller-owned scheduling loop, configuration snapshots, module
@@ -28,6 +28,8 @@ reporting. Typed script table bindings support `db/show` and `db/empty`.
 The map ABI crate defines connection tuples, conntrack/NAT values, service
 and policy layouts, plus endpoint, node, subnet and ipcache byte layouts.
 The loader crate begins with pure pinned-map compatibility planning.
+The identity crate adds numeric scopes, cluster ranges and tunnel encoding,
+plus label parsing and canonical identity keys.
 There is no working networking agent or datapath. Synthetic scripts and file assertions
 execute, while the harvested networking scenarios still lack their adapters.
 
@@ -49,9 +51,9 @@ from the specifications and 18 require explicit values; see the
 is available for future binaries.
 
 Next steps include extending the map ABI, resolving catalogue gaps and adding script subsystem adapters; see
-[implementation assessment](docs/implementation-status.md). Before the datapath crates are written, the three decisions at the top
-of `docs/open-decisions-index.md` need settling: the kernel floor, the
-single-object-versus-matrix question, and wire compatibility with Cilium nodes.
+[implementation assessment](docs/implementation-status.md). The kernel target and measured object-variant policy are reconciled in the
+specifications. Wire compatibility with Cilium nodes remains a decision to settle
+before datapath integration.
 
 ## Layout
 

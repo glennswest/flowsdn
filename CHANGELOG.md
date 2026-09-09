@@ -4,6 +4,13 @@
 
 No unreleased changes.
 
+## [0.13.0] - 2026-09-09
+
+- Add validated numeric identity scopes, cluster ranges, aggregation and tunnel encoding.
+- Add label parsing, key-only label sets and canonical identity keys.
+- Resolve the 23 previously unclassified BPF test entrypoints with guarded Rust harvesting.
+- Reconcile the kernel floor and measured object-variant policy across specifications.
+
 ## [0.12.0] - 2026-09-09
 
 - Add explicit pinned-map compatibility and replacement planning.

@@ -350,3 +350,20 @@ compile checks and dependency advisories/bans/licenses/sources all passed.
 External dependencies remain pinned to the previous 89-version graph.
 After validation was recorded, cleanup removed 12,819 build files / 3.9 GiB and
 this milestone's six temporary logs. The release is source-only.
+
+## Version 0.13.0 implementation
+
+The initial identity crate validates supported numeric scopes independently of
+allocation permissions. It provides reserved identities, 255/511-cluster ranges,
+aggregation and explicit 24-bit tunnel conversion. Label data supports source
+parsing, selector source defaults, replacement by key and deterministic canonical
+keys. Identity allocation, Kubernetes synthesis, label filtering and selector
+matching remain forthcoming; external label grammars require caller validation.
+
+The BPF harvester records audited entrypoints for the 23 previously unresolved
+cases, guarded by source evidence checks. This classifies test routing; it does
+not execute the BPF assertions. Kernel and object-policy specifications now
+consistently use the existing 6.6 minimum, 6.12 supported target and measured
+object promotion gate. Privileged loader and verifier validation remain pending.
+
+Validation is pending for this milestone.
