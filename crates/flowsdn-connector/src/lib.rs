@@ -118,7 +118,11 @@ impl Connector {
                 Ok(link) => link.map(link_info).transpose(),
                 // A named RTM_GETLINK can report ENODEV/ENOENT rather than an
                 // empty dump. Both mean the interface is already absent.
-                Err(rtnetlink::Error::NetlinkError(error)) if matches!(error.raw_code(), -19 | -2) => Ok(None),
+                Err(rtnetlink::Error::NetlinkError(error))
+                    if matches!(error.raw_code(), -19 | -2) =>
+                {
+                    Ok(None)
+                }
                 Err(error) => Err(error.into()),
             }
         })
