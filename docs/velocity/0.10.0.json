@@ -4,7 +4,7 @@
   "start_utc": "2026-09-09T12:21:58Z",
   "start_revision": "8911172",
   "owner": "/root",
-  "status": "in_progress",
+  "status": "validated",
   "active_work_seconds": null,
   "workstreams": [
     "flowsdn-bpf-abi",
@@ -20,28 +20,28 @@
     "total_tokens": 56210155
   },
   "token_baseline_sample_utc": "2026-09-09T12:14:39.435Z",
-  "usage_cutoff_utc": "2026-09-09T12:32:20.664Z",
-  "measurement_end_utc": "2026-09-09T12:32:20.664Z",
-  "end_utc": null,
-  "completed_at_utc": null,
-  "elapsed_seconds": null,
-  "measurement_elapsed_seconds": 622.664,
-  "token_endpoint_sample_utc": "2026-09-09T12:32:19.122Z",
+  "usage_cutoff_utc": "2026-09-09T12:36:15Z",
+  "measurement_end_utc": "2026-09-09T12:36:15Z",
+  "end_utc": "2026-09-09T12:36:15Z",
+  "completed_at_utc": "2026-09-09T12:36:15Z",
+  "elapsed_seconds": 857,
+  "measurement_elapsed_seconds": 857,
+  "token_endpoint_sample_utc": "2026-09-09T12:36:09.340Z",
   "token_endpoint": {
-    "input_tokens": 58443544,
-    "cached_input_tokens": 57588608,
+    "input_tokens": 59792234,
+    "cached_input_tokens": 58921728,
     "cache_write_input_tokens": 0,
-    "output_tokens": 194864,
-    "reasoning_output_tokens": 42936,
-    "total_tokens": 58638408
+    "output_tokens": 198333,
+    "reasoning_output_tokens": 43886,
+    "total_tokens": 59990567
   },
   "root_unique_response_tokens": {
-    "input_tokens": 2412709,
-    "cached_input_tokens": 2346496,
+    "input_tokens": 3761399,
+    "cached_input_tokens": 3679616,
     "cache_write_input_tokens": 0,
-    "output_tokens": 15544,
-    "reasoning_output_tokens": 855,
-    "total_tokens": 2428253
+    "output_tokens": 19013,
+    "reasoning_output_tokens": 1805,
+    "total_tokens": 3780412
   },
   "combined_token_baseline": {
     "input_tokens": 98501911,
@@ -53,18 +53,18 @@
   },
   "combined_token_baseline_cutoff_utc": "2026-09-09T12:21:58Z",
   "combined_unique_response_tokens": {
-    "input_tokens": 7764598,
-    "cached_input_tokens": 7513216,
+    "input_tokens": 9552669,
+    "cached_input_tokens": 9276800,
     "cache_write_input_tokens": 0,
-    "output_tokens": 52364,
-    "reasoning_output_tokens": 8476,
-    "total_tokens": 7816962
+    "output_tokens": 56703,
+    "reasoning_output_tokens": 9580,
+    "total_tokens": 9609372
   },
   "agent_cutoffs": {
-    "/root": "2026-09-09T12:32:19.122Z",
+    "/root": "2026-09-09T12:36:09.340Z",
     "/root/table_streams": "2026-09-09T12:29:46.764Z",
     "/root/config_core": "2026-09-09T12:30:12.730Z",
-    "/root/review": "2026-09-09T12:32:20.664Z"
+    "/root/review": "2026-09-09T12:33:08.287Z"
   },
   "reported_work_windows": [
     {
@@ -181,7 +181,7 @@
   "parallel_time": {
     "observed_agent_window_seconds": 1025.0,
     "observed_agent_window_hours": 0.284722,
-    "project_wall_clock_seconds": 622.664,
+    "project_wall_clock_seconds": 857,
     "active_work_seconds": null,
     "note": "Closed observed agent windows only; overlapping intervals are not summed as project elapsed. Root CT/NAT coding start was approximate and is not assigned an invented exclusive window.",
     "active_agent_hours": null,
@@ -190,31 +190,80 @@
   "root_work_scope": {
     "crate": "project/shared",
     "start_utc": "2026-09-09T12:21:58Z",
-    "end_utc": null,
+    "end_utc": "2026-09-09T12:36:15Z",
     "active_work_seconds": null,
     "note": "Includes CT/NAT implementation, coordination and validation. CT/NAT coding was reported to begin approximately 12:24 UTC; no exact crate-only start or elapsed duration is claimed."
   },
   "validation": {
-    "status": "awaiting-validation",
-    "focused_abi_tests": {
-      "status": "passed",
-      "new_tests": 14,
-      "existing_tests": 6,
-      "clippy": "passed",
-      "provenance": "Coordinator report; no exact completion timestamp recorded."
-    },
-    "full_checks": "running; no result recorded"
+    "status": "passed",
+    "unique_tests": 247,
+    "profiles": [
+      "debug",
+      "release"
+    ],
+    "all_features": true,
+    "checks": [
+      "formatting",
+      "Clippy -D warnings",
+      "x86_64 Linux musl compile",
+      "aarch64 Linux musl compile",
+      "cargo-deny"
+    ],
+    "validated_commit": "cc9ec2c",
+    "validation_record_commit": "c590a07",
+    "completed_at_utc": "2026-09-09T12:35:45Z",
+    "test_counts": {
+      "flowsdn-scripttest": 66,
+      "flowsdn-config": 51,
+      "flowsdn-reconcile": 50,
+      "flowsdn-table": 30,
+      "flowsdn-bpf-abi": 20,
+      "flowsdn-health": 7,
+      "flowsdn-fence": 7,
+      "xtask-selector": 7,
+      "flowsdn-version": 5,
+      "harvest-bpf-cases": 4
+    }
   },
   "implementation_commits": [
     "ff1bf0a",
     "214c6d7",
     "99b1057"
   ],
-  "commit": null,
+  "commit": "cc9ec2c",
   "release": null,
   "release_candidate": "v0.10.0",
   "cleanup": {
-    "status": "pending"
+    "status": "complete",
+    "cargo_removed": "2.7 GiB",
+    "files_removed": 9880,
+    "task_log_files_removed": 5,
+    "device_check": "passed",
+    "disk_free_before": {
+      "root": "31 GiB",
+      "build_volume": "1.5 TiB"
+    },
+    "disk_free_after": {
+      "root": "31 GiB",
+      "build_volume": "1.5 TiB"
+    },
+    "completed_at_utc": "2026-09-09T12:36:15Z"
   },
-  "note": "Provisional sanitized telemetry snapshot. No completion, full validation, cleanup or release is claimed. Baselines include only responses delivered at or before milestone start; endpoints use the stated cutoff. This response and subsequent validation/reporting are not fully included."
+  "note": "Source validated and cleanup complete at the observed completion bound. Responses are deduplicated across root and three agents with timestamps at or before the cutoff; later publication/reporting and this refresh are excluded. Active work remains unknown.",
+  "validated_commit": "cc9ec2c",
+  "validation_record_commit": "c590a07",
+  "release_commit": null,
+  "publication": "ready; not published",
+  "observed_validation_windows": [
+    {
+      "scope": "project/shared",
+      "agent": "/root",
+      "kind": "release-build-and-dependency-policy",
+      "start_utc": "2026-09-09T12:32:52Z",
+      "end_utc": "2026-09-09T12:35:45Z",
+      "elapsed_seconds": 173,
+      "active_work_seconds": null,
+      "note": "Observed checkpoint-to-completion interval only. The actual build began slightly before the checkpoint; its exact start was not observed. This is not a coding-time allocation."
+    }
+  ]
 }

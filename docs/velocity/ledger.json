@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "project": "flowsdn",
-  "as_of_utc": "2026-09-09T12:32:20.664Z",
+  "as_of_utc": "2026-09-09T12:36:15Z",
   "measurement_start_utc": "2026-09-08T16:11:13.415Z",
-  "elapsed_seconds": 73267.249,
+  "elapsed_seconds": 73501.585,
   "historical_project_start_known": false,
   "active_work_seconds": null,
   "session": {
     "id": "01a081c9-5ae6-72e3-a2f7-1a103e3c6703",
     "source": "Local Codex token_usage_record; deduplicated by response_id; payload content excluded",
-    "completed_response_records": 528,
+    "completed_response_records": 547,
     "tokens": {
-      "input_tokens": 58443544,
-      "cached_input_tokens": 57588608,
+      "input_tokens": 59792234,
+      "cached_input_tokens": 58921728,
       "cache_write_input_tokens": 0,
-      "output_tokens": 194864,
-      "reasoning_output_tokens": 42936,
-      "total_tokens": 58638408
+      "output_tokens": 198333,
+      "reasoning_output_tokens": 43886,
+      "total_tokens": 59990567
     }
   },
   "phases": [
@@ -278,23 +278,23 @@
       "id": "0.10.0",
       "scope": "project/shared",
       "start_utc": "2026-09-09T12:21:58Z",
-      "end_utc": null,
-      "measurement_end_utc": "2026-09-09T12:32:20.664Z",
-      "elapsed_seconds": null,
-      "measurement_elapsed_seconds": 622.664,
+      "end_utc": "2026-09-09T12:36:15Z",
+      "measurement_end_utc": "2026-09-09T12:36:15Z",
+      "elapsed_seconds": 857,
+      "measurement_elapsed_seconds": 857,
       "active_work_seconds": null,
       "token_baseline_sample_utc": "2026-09-09T12:14:39.435Z",
-      "token_end_sample_utc": "2026-09-09T12:32:19.122Z",
+      "token_end_sample_utc": "2026-09-09T12:36:09.340Z",
       "tokens": {
-        "input_tokens": 2412709,
-        "cached_input_tokens": 2346496,
+        "input_tokens": 3761399,
+        "cached_input_tokens": 3679616,
         "cache_write_input_tokens": 0,
-        "output_tokens": 15544,
-        "reasoning_output_tokens": 855,
-        "total_tokens": 2428253
+        "output_tokens": 19013,
+        "reasoning_output_tokens": 1805,
+        "total_tokens": 3780412
       },
-      "status": "in_progress",
-      "note": "Root-only implementation/integration/coordination/validation/reporting. Combined unique child usage is in 0.10.0.json; full validation remains pending."
+      "status": "validated",
+      "note": "Root-only implementation/integration/coordination/validation/reporting; source validated and cleanup complete. Combined unique child usage is in 0.10.0.json; publication has not happened."
     }
   ],
   "crates": [
@@ -437,7 +437,7 @@
       "v0.8.0",
       "v0.9.0"
     ],
-    "unique_tests": 211,
+    "unique_tests": 247,
     "test_profiles": [
       "debug",
       "release"
@@ -446,7 +446,7 @@
     "embedded_files": 1444,
     "parsed_commands": 3537,
     "networking_scenarios_executed": 0,
-    "validated_commit": "48a7d19",
+    "validated_commit": "cc9ec2c",
     "closed_issues_this_session": [
       42,
       205,
@@ -456,19 +456,20 @@
       265,
       122
     ],
-    "validation_completed_at_utc": "2026-09-08T21:55:39Z",
-    "validated_release_candidate": "v0.7.0",
+    "validation_completed_at_utc": "2026-09-09T12:35:45Z",
+    "validated_release_candidate": "v0.10.0",
     "issue_counts": {
       "closed": 9,
       "open": 281,
       "closed_this_session": 6,
       "as_of_utc": "2026-09-08T21:55:39Z"
     },
-    "release_commit": "749cd12b3464bd930c79c1fff53f41ac19c6618d",
-    "publication_observed_utc": "2026-09-09T12:14:01Z",
-    "release_candidate": "v0.9.0",
+    "release_commit": null,
+    "publication_observed_utc": null,
+    "release_candidate": "v0.10.0",
     "repository_closed_issues": 10,
-    "repository_open_issues": 280
+    "repository_open_issues": 280,
+    "validation_record_commit": "c590a07"
   },
   "subagent_usage_file": "subagents.json",
   "parallel_work": [
@@ -1078,12 +1079,12 @@
     }
   ],
   "combined_unique_response_tokens": {
-    "input_tokens": 106266509,
-    "cached_input_tokens": 103463424,
+    "input_tokens": 108054580,
+    "cached_input_tokens": 105227008,
     "cache_write_input_tokens": 0,
-    "output_tokens": 487975,
-    "reasoning_output_tokens": 121303,
-    "total_tokens": 106754484
+    "output_tokens": 492314,
+    "reasoning_output_tokens": 122407,
+    "total_tokens": 108546894
   },
   "cleanup": [
     {
@@ -1122,16 +1123,35 @@
       "cargo_removed": "3.1 GiB",
       "files_removed": 11035,
       "completed_at_utc": "2026-09-09T12:11:00.810Z"
+    },
+    {
+      "release_candidate": "v0.10.0",
+      "status": "complete",
+      "cargo_removed": "2.7 GiB",
+      "files_removed": 9880,
+      "task_log_files_removed": 5,
+      "device_check": "passed",
+      "disk_free_before": {
+        "root": "31 GiB",
+        "build_volume": "1.5 TiB"
+      },
+      "disk_free_after": {
+        "root": "31 GiB",
+        "build_volume": "1.5 TiB"
+      },
+      "completed_at_utc": "2026-09-09T12:36:15Z"
     }
   ],
   "current_milestone": {
     "id": "0.10.0",
-    "status": "in_progress",
-    "start_utc": "2026-09-09T12:21:58Z",
+    "status": "validated",
+    "unique_tests": 247,
+    "validated_commit": "cc9ec2c",
+    "validation_record_commit": "c590a07",
+    "completed_at_utc": "2026-09-09T12:36:15Z",
     "release_candidate": "v0.10.0",
-    "publication": "not published",
-    "cleanup": "pending",
-    "validation": "awaiting validation"
+    "publication": "ready; not published",
+    "cleanup": "complete"
   },
   "milestone_0_7_parallel_time": {
     "observed_agent_window_seconds": 3064.201,
@@ -1140,8 +1160,8 @@
     "project_union_of_observed_child_windows_seconds": 1875.201,
     "note": "Per-agent interval unions are summed only as observed agent-window hours. They include waits and reviews, exclude unobserved intervals, and are not active agent-hours or project wall time."
   },
-  "usage_cutoff_utc": "2026-09-09T12:32:20.664Z",
-  "elapsed_at_usage_cutoff_seconds": 73267.249,
+  "usage_cutoff_utc": "2026-09-09T12:36:15Z",
+  "elapsed_at_usage_cutoff_seconds": 73501.585,
   "milestone_0_8_parallel_time": {
     "observed_agent_window_seconds": 1915.0,
     "observed_agent_window_hours": 0.531944,
@@ -1159,7 +1179,7 @@
   "milestone_0_10_parallel_time": {
     "observed_agent_window_seconds": 1025.0,
     "observed_agent_window_hours": 0.284722,
-    "project_wall_clock_seconds": 622.664,
+    "project_wall_clock_seconds": 857,
     "active_work_seconds": null,
     "note": "Closed observed agent windows only; overlapping intervals are not summed as project elapsed. Root CT/NAT coding start was approximate and is not assigned an invented exclusive window.",
     "active_agent_hours": null,

@@ -1,35 +1,39 @@
 # flowsdn velocity ledger
 
-Usage cutoff: **2026-09-09T12:32:20.664Z**. Milestone **v0.10.0 is in progress**;
-full validation, cleanup and publication are pending.
-Observed project elapsed through the cutoff is **622.664 seconds**,
-with **7,816,962 processed tokens** across root and three
-agents during this milestone. Active work time is unknown.
+Usage cutoff and observed completion: **2026-09-09T12:36:15Z**.
+Milestone **v0.10.0 is validated and cleaned up**, ready for publication.
+Elapsed project time was **857 seconds (14m 17s)**, with
+**9,609,372 processed tokens** across root and three agents
+through the cutoff. Active work time is unknown.
 
 | Combined unique-response usage | Tokens |
 |---|---:|
-| Input | 106,266,509 |
-| Cached input (subset) | 103,463,424 |
-| Uncached input | 2,803,085 |
-| Output | 487,975 |
-| Reasoning output (subset) | 121,303 |
-| Total processed | 106,754,484 |
+| Input | 108,054,580 |
+| Cached input (subset) | 105,227,008 |
+| Uncached input | 2,827,572 |
+| Output | 492,314 |
+| Reasoning output (subset) | 122,407 |
+| Total processed | 108,546,894 |
 
-Totals are deduplicated by response ID across the root and three agent sessions
-and include repeated context; they do not establish subscription dollars.
-[Subagent records](subagents.json) retain sanitized counters and cutoff timestamps.
-Closed observed agent windows total **1025 seconds**
-(**0.284722 agent-window hours**). Overlapping agent windows are
-kept separate from project wall-clock elapsed; these are not measured active
-coding hours. The root's approximate CT/NAT start is not presented as an exact
-crate-only interval.
+Totals are deduplicated by response ID across root and three agent sessions and
+include repeated context; they do not establish subscription dollars.
+[Subagent records](subagents.json) preserve sanitized counters and cutoffs.
+Closed observed agent windows total **1,025 seconds (0.284722 agent-window
+hours)**; their project interval union is **429 seconds**. These are separate
+from the 857-second milestone wall time and are not measured active coding hours.
+The root's approximate CT/NAT start is not assigned an exact crate-only window.
+An additional 173-second validation checkpoint interval is recorded separately;
+the actual build began slightly before that observed checkpoint.
 
-The coordinator reported 14 new ABI tests plus six existing tests and focused
-Clippy passing. Full checks are running; no v0.10.0 validation outcome or release
-is claimed. [Milestone details](0.10.0.json) record the baseline, provisional
-endpoint and reported crate windows. The latest validated release remains
-[v0.9.0](https://github.com/glennswest/flowsdn/releases/tag/v0.9.0), with
-[its validation record](0.9.0.json). Later work is outside this cutoff.
+Source commit `cc9ec2c` passed **247 unique tests in both debug and release with
+all features**, formatting, Clippy, both Linux musl compile checks and dependency
+policy. Validation was observed complete at **12:35:45 UTC** and recorded in
+`c590a07`. Cleanup removed **9,880 files / 2.7 GiB** and the five task logs;
+completion was observed at **12:36:15 UTC**. Device and before/after disk checks
+passed. Publication has not occurred; the latest published release remains
+[v0.9.0](https://github.com/glennswest/flowsdn/releases/tag/v0.9.0).
+[Milestone details](0.10.0.json) retain baselines, endpoints, crate windows and
+validation evidence. Later publication and reporting are outside this cutoff.
 
 ## Recording rules
 

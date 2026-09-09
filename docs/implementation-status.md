@@ -274,3 +274,5 @@ in debug and release with all features** (66 script, 51 configuration,
 5 build-metadata and 4 harvester). Formatting, warning-free Clippy,
 x86_64/aarch64 Linux musl compile checks and dependency policy all passed.
 The locked dependency graph remains unchanged at 89 external versions.
+Build output was cleaned after validation: 9,880 files / 2.7 GiB removed, along
+with this milestone's temporary logs. The release is source-only.
