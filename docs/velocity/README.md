@@ -83,3 +83,14 @@ processed tokens: 5,261,185; allocator agent: 332,630
 through their recorded cutoffs. Agent observed elapsed was 246 seconds and
 overlaps project elapsed. Counters include repeated/cached context, not dollars.
 Milestone 1 continues into native routing; no release was made.
+
+## Milestone 1: native routing and executable CNI
+
+Cutoff 2026-09-09T19:22:09Z; elapsed 2721 seconds (45m21s) since
+the previous integration boundary. Root processed tokens: 12,875,856;
+shared coding agent: 8,715,057. Counter windows and unknown
+agent elapsed bounds are in `m1-native-routing-cni-runtime`. This includes
+cached context and early daemon preparation, not account dollars.
+[Validation](../validation/m1-cni-routing.md) is committed at `4b8f8ca`.
+Cleanup removed 11,106 files / 3.5 GiB and one failed-test socket.
+No release; milestone 1 continues into standalone daemon integration.
