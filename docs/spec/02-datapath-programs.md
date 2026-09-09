@@ -196,8 +196,8 @@ present and treat absence as "no XDP ran".
 
 ### 2.5 Overlay wire format
 
-**Decision (recommend yes, see §12.3): wire compatibility with Cilium nodes
-is a goal.** A mixed cluster during migration MUST forward pod traffic in
+**Resolved decision (#55, see §12.3): use the reference-compatible
+wire encoding.** A mixed cluster during migration MUST forward pod traffic in
 both directions with correct identities.
 
 - VXLAN (UDP dst `tunnel_port`, default 8472) and Geneve (default 6081):
@@ -218,6 +218,49 @@ both directions with correct identities.
   Destination Options header, option type `0x1B`, option length 20.
 - Because identities are 24 bits on the wire, spec 03 MUST keep identity
   numbering within 24 bits and MUST keep the reference reserved values.
+
+#### 2.5.1 Fixed codec contract and implementation boundary
+
+The initial allocation-free ABI codecs cover the ordinary 8-byte VXLAN
+header, version-zero Ethernet Geneve base header, and individual IPv4/IPv6
+Geneve DSR options. They do not parse IP/UDP packets, validate complete
+option chains, perform peer authorization, or establish mixed-cluster
+interoperability. These remain datapath integration and validation work.
+
+VXLAN has the network-order flag word `0x08000000`, followed by the VNI
+word described above; extensions and other flag combinations are unsupported
+by this initial codec. Geneve's first byte contains a two-bit zero version
+and six-bit option length in four-byte units. Its second byte contains OAM
+(bit 7, unsupported here), critical (bit 6), and six reserved zero bits.
+The protocol is Ethernet bridging (`0x6558`, network order). The next three
+bytes contain the VNI and the final reserved byte is zero. The base codec
+preserves either critical-flag value and exposes the option word count;
+callers must separately validate the indicated options and packet length.
+
+The DSR option header is four bytes: network-order class `0x014b`, type
+`0x81`, and a byte with three reserved zero bits followed by five length
+bits. Length excludes the option header: IPv4 uses two words (12 total
+bytes), IPv6 five words (24 total bytes). Addresses and ports are network
+order; encoders zero the two padding bytes. These initial fixed-option
+codecs require zero reserved bits/padding and reject other classes/types
+or inconsistent lengths. This is an explicit bounded codec subset, not a
+claim that every reference receive path rejects nonzero padding. Fixed
+array input sizes prevent truncated option/header inputs from being passed
+without a prior checked conversion by the packet parser.
+
+Identity input exceeding 24 bits is rejected before any rewrite or shift;
+HOST is rewritten to 6 on transmit and rejected on receive. WORLD is split
+into 9/10 by inner IP family on dual-stack decapsulation and retained as 2
+for single-stack operation. This layer does not validate identity ownership.
+
+Reference ambiguity clarification (2026-09-09): the pinned reference
+`7d68cfb394`, `bpf/lib/tunnel.h` established the base/option bit layouts
+and padding sizes; `bpf/lib/overloadable_xdp.h` established the VXLAN flag,
+Ethernet protocol and Geneve option-word accounting. Its DSR insertion does
+not consistently set the base critical flag, despite the critical option
+type. Therefore the base codec must not reject a known DSR option solely
+because that base flag is clear. These reads resolved missing wire details;
+implementation is independently written Rust from this contract.
 
 ### 2.6 Tail-call slot table
 
@@ -1626,12 +1669,15 @@ file (ADR-0001).
    supported-kernel takeover cleanup and feature-specific gates. The remaining
    work is implementation and privileged validation, not another user decision
    between the superseded kernel recommendations.
-3. **Wire compatibility with Cilium nodes.** Options: (a) identical VXLAN/
-   Geneve VNI = identity encoding, ports, WORLD collapse, Geneve DSR TLV;
-   (b) flowsdn-private encoding (e.g. full 32-bit identity in a Geneve
-   option). Recommendation: **(a)** — migration of a live cluster node by
-   node is the adoption path; (b) would also force spec 03 to renumber
-   identities. Revisit only with a `flowsdn`-only cluster flag.
+3. **Wire compatibility with Cilium nodes — resolved (#55).** Use identical
+   VXLAN/Geneve identity encoding, default ports, HOST rewrite, WORLD
+   collapse and Geneve DSR TLV (§2.5). ADR-0001 boundary compatibility and
+   spec 03's frozen identity allocation already select this policy; no
+   private identity option or renumbering is introduced. Node-by-node
+   migration remains the goal. Fixed wire codecs are not evidence of
+   mixed-cluster forwarding: that requires packet-path integration and
+   bidirectional identity/DSR tests against reference nodes. Any future
+   private cluster mode requires a separate explicit decision.
 4. **Legacy host routing.** Options: (a) keep the reference's
    `enable_bpf_host_routing=false` path (pass pod-bound traffic to the
    stack, deliver via `cilium_host` routes); (b) BPF host routing only,

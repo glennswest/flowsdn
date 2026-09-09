@@ -45,6 +45,7 @@ pub mod endpoint;
 pub mod lb;
 pub mod policy;
 pub mod tailcall;
+pub mod tunnel;
 
 pub mod ct_flags {
     pub const OUT: u8 = 0;
