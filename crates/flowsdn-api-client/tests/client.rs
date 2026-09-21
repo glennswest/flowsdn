@@ -120,8 +120,10 @@ fn helpers_emit_exact_paths_headers_and_bodies() {
     );
     let request = capture(|client| client.release("2001:db8::1".parse().expect("IP"), "pool/a"));
     assert!(request.starts_with("DELETE /v1/ipam/2001%3Adb8%3A%3A1?pool=pool%2Fa HTTP/1.1\r\n"));
-    assert!(capture(|client| client.get_endpoint("cni-attachment-id:cid:eth0"))
-        .starts_with("GET /v1/endpoint/cni-attachment-id%3Acid%3Aeth0 HTTP/1.1\r\n"));
+    assert!(
+        capture(|client| client.get_endpoint("cni-attachment-id:cid:eth0"))
+            .starts_with("GET /v1/endpoint/cni-attachment-id%3Acid%3Aeth0 HTTP/1.1\r\n")
+    );
     let body = json!({"state":"ready"});
     let request = capture(|client| client.put_endpoint("cni-attachment-id:cid:eth0", &body));
     assert!(request.starts_with("PUT /v1/endpoint/cni-attachment-id%3Acid%3Aeth0 HTTP/1.1\r\n"));

@@ -217,27 +217,50 @@ fn flowsdn_extensions_match_their_separate_specification_table() {
         assert_eq!(entry.default_expression, fields[2]);
         assert_eq!(entry.class, Class::Active);
         assert_eq!(fields[3], "active");
-        assert!(!catalogue::ENTRIES.iter().any(|known| known.name == entry.name));
+        assert!(
+            !catalogue::ENTRIES
+                .iter()
+                .any(|known| known.name == entry.name)
+        );
         assert!(entry.help().is_some());
         assert_eq!(entry.hidden(), Some(false));
     }
-    assert_eq!(names, catalogue::EXTENSIONS.iter().map(|entry| entry.name).collect());
+    assert_eq!(
+        names,
+        catalogue::EXTENSIONS
+            .iter()
+            .map(|entry| entry.name)
+            .collect()
+    );
     let complete = catalogue::complete_registry(&fixture_resolutions()).unwrap();
     assert!(matches!(complete.registry.resolve([
         Entry::new(Source::Flag, "strict-config", "true"),
         Entry::new(Source::Dir, "enable-ipv44", "false"),
     ]), Err(error) if error.key == "enable-ipv44"));
-    let snapshot = complete.registry.resolve([
-        Entry::new(Source::Flag, "strict-config", "true"),
-        Entry::new(Source::Flag, "endpoint-id-max", "65535"),
-    ]).unwrap();
-    let encoded = flowsdn_config::runtime::encode(&snapshot, &flowsdn_config::runtime::Metadata {
-        version: "extension-test".into(),
-        written_at: "2026-09-21T21:15:00Z".into(),
-    }).unwrap();
+    let snapshot = complete
+        .registry
+        .resolve([
+            Entry::new(Source::Flag, "strict-config", "true"),
+            Entry::new(Source::Flag, "endpoint-id-max", "65535"),
+        ])
+        .unwrap();
+    let encoded = flowsdn_config::runtime::encode(
+        &snapshot,
+        &flowsdn_config::runtime::Metadata {
+            version: "extension-test".into(),
+            written_at: "2026-09-21T21:15:00Z".into(),
+        },
+    )
+    .unwrap();
     let decoded = flowsdn_config::runtime::decode(&encoded, &complete.registry).unwrap();
-    assert_eq!(decoded.resolved.get("strict-config").unwrap().value, Value::Bool(true));
-    assert_eq!(decoded.resolved.get("endpoint-id-max").unwrap().value, Value::UInt(65535));
+    assert_eq!(
+        decoded.resolved.get("strict-config").unwrap().value,
+        Value::Bool(true)
+    );
+    assert_eq!(
+        decoded.resolved.get("endpoint-id-max").unwrap().value,
+        Value::UInt(65535)
+    );
 }
 
 #[test]

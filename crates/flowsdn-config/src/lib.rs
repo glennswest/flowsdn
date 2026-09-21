@@ -260,7 +260,10 @@ impl Registry {
                 ));
             }
             if name == "strict-config" && (spec.kind != Kind::Bool || spec.class != Class::Active) {
-                return Err(Error::new(name, "strict-config must be an active boolean key"));
+                return Err(Error::new(
+                    name,
+                    "strict-config must be an active boolean key",
+                ));
             }
             parse::parse(&spec.kind, &spec.default)
                 .map_err(|message| Error::new(&name, message))?;

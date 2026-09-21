@@ -111,7 +111,9 @@ impl Definition {
     pub fn default_provenance(self) -> Option<&'static str> {
         self.default?;
         Some(match self.name {
-            "strict-config" | "endpoint-id-max" => "docs/spec/00-foundation-table-config.md#flowsdn-extension-keys",
+            "strict-config" | "endpoint-id-max" => {
+                "docs/spec/00-foundation-table-config.md#flowsdn-extension-keys"
+            }
             "agent-not-ready-taint-key" => "docs/spec/12-operator.md:1415",
             "bpf-lb-algorithm" => "docs/spec/05-service-loadbalancing.md:929",
             "bpf-lb-dsr-dispatch" => "docs/spec/05-service-loadbalancing.md:928",
@@ -151,7 +153,9 @@ impl Definition {
     /// The table does not supply help text or hidden-flag metadata.
     pub fn help(self) -> Option<&'static str> {
         match self.name {
-            "strict-config" => Some("Reject unknown configuration keys after resolving source precedence"),
+            "strict-config" => {
+                Some("Reject unknown configuration keys after resolving source precedence")
+            }
             "endpoint-id-max" => Some("Maximum newly allocated endpoint ID (1 through 65535)"),
             _ => None,
         }
@@ -183,7 +187,10 @@ pub fn get(name: &str) -> Option<&'static Definition> {
         .iter()
         .find(|(alias, _)| *alias == name)
         .map_or(name.as_str(), |(_, key)| *key);
-    ENTRIES.iter().chain(EXTENSIONS).find(|entry| entry.name == canonical)
+    ENTRIES
+        .iter()
+        .chain(EXTENSIONS)
+        .find(|entry| entry.name == canonical)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

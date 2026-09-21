@@ -144,8 +144,11 @@ impl Config {
         };
         let endpoint_id_max = match value.get("endpoint-id-max") {
             None => u32::from(crate::state::DEFAULT_ENDPOINT_ID_MAX),
-            Some(value) => value.as_u64().and_then(|n| u32::try_from(n).ok())
-                .filter(|n| (1..=65535).contains(n)).ok_or("endpoint-id-max must be an integer in 1..=65535")?,
+            Some(value) => value
+                .as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .filter(|n| (1..=65535).contains(n))
+                .ok_or("endpoint-id-max must be an integer in 1..=65535")?,
         };
         let device_mtu = mtu("device-mtu")?;
         let route_mtu = mtu("route-mtu")?;
@@ -800,7 +803,12 @@ pub fn run(config_path: &Path) -> Result<()> {
     let config = Config::read(config_path)?;
     // The manager's exclusive state lock is acquired before inspecting or
     // removing a stale socket, preventing a second owner of this state tree.
-    let manager = Manager::restore_with_id_max(&config.state, &config.object, config.ipam()?, config.endpoint_id_max)?;
+    let manager = Manager::restore_with_id_max(
+        &config.state,
+        &config.object,
+        config.ipam()?,
+        config.endpoint_id_max,
+    )?;
     let mut api = Api {
         config,
         manager,

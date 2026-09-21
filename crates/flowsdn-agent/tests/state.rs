@@ -186,7 +186,10 @@ fn restored_high_ids_survive_reopen_with_a_lower_allocation_limit() {
     assert_eq!(pool.allocate().expect("remaining low ID"), 2);
     assert!(pool.allocate().is_err());
     pool.release(4096);
-    assert!(pool.allocate().is_err(), "released high ID stays out of range");
+    assert!(
+        pool.allocate().is_err(),
+        "released high ID stays out of range"
+    );
 }
 
 #[test]
@@ -202,11 +205,10 @@ fn manager_rejects_invalid_id_limit_before_opening_state_or_loading_bpf() {
         )
         .expect("scope");
         let ipam = flowsdn_ipam::Ipam::new(Some(scope), None).expect("IPAM");
-        let error = flowsdn_agent::endpoints::Manager::restore_with_id_max(
-            &state, &object, ipam, maximum,
-        )
-        .err()
-        .expect("invalid bound");
+        let error =
+            flowsdn_agent::endpoints::Manager::restore_with_id_max(&state, &object, ipam, maximum)
+                .err()
+                .expect("invalid bound");
         assert_eq!(error.to_string(), "endpoint-id-max must be in 1..=65535");
         assert!(!state.exists(), "invalid config must not create state");
     }

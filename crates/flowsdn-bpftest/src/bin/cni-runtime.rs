@@ -343,14 +343,19 @@ impl State {
             }
             let id = decode(id)?;
             if method == "GET" {
-                let Some(record)=self.manager()?.get(&id) else {return Ok((404,json!({"error":"missing endpoint"})));};
-                let d=&record.document;
-                return Ok((200,json!({"id":record.id,"status":{"state":"ready","networking":{
-                    "interface-name":d.get("IfName"),"interface-index":d.get("IfIndex"),
-                    "container-interface-name":d.get("ContainerIfName"),"mac":d.get("LXCMAC"),"host-mac":d.get("NodeMAC"),
-                    "netns-cookie":d.get("NetnsCookie").and_then(Value::as_u64).unwrap_or(0).to_string(),"host-addressing":d.get("CNIHostAddressing"),"route-mtu":d.get("CNIRouteMTU"),
-                    "addressing":[{"ipv4":d.get("IPv4"),"ipv6":d.get("IPv6")}]
-                }}})));
+                let Some(record) = self.manager()?.get(&id) else {
+                    return Ok((404, json!({"error":"missing endpoint"})));
+                };
+                let d = &record.document;
+                return Ok((
+                    200,
+                    json!({"id":record.id,"status":{"state":"ready","networking":{
+                        "interface-name":d.get("IfName"),"interface-index":d.get("IfIndex"),
+                        "container-interface-name":d.get("ContainerIfName"),"mac":d.get("LXCMAC"),"host-mac":d.get("NodeMAC"),
+                        "netns-cookie":d.get("NetnsCookie").and_then(Value::as_u64).unwrap_or(0).to_string(),"host-addressing":d.get("CNIHostAddressing"),"route-mtu":d.get("CNIRouteMTU"),
+                        "addressing":[{"ipv4":d.get("IPv4"),"ipv6":d.get("IPv6")}]
+                    }}}),
+                ));
             }
             if method == "DELETE" {
                 return self.delete(&id);

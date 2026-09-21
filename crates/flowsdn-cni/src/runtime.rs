@@ -85,12 +85,20 @@ struct Platform {
 /// Only a confirmed 404 permits a new allocation. All malformed, forbidden or
 /// unavailable lookups fail closed before touching either sandbox or IPAM.
 fn existing_endpoint(client: &Client, request: &AddRequest) -> Result<Option<Value>> {
-    let reply = client.get_endpoint(&request.attachment_id()).map_err(error)?;
+    let reply = client
+        .get_endpoint(&request.attachment_id())
+        .map_err(error)?;
     match reply.status {
         404 => Ok(None),
-        200 => reply.json.filter(Value::is_object).map(Some)
+        200 => reply
+            .json
+            .filter(Value::is_object)
+            .map(Some)
             .ok_or_else(|| error("endpoint lookup returned invalid JSON object")),
-        _ => Err(error(format!("endpoint lookup returned HTTP {}", reply.status))),
+        _ => Err(error(format!(
+            "endpoint lookup returned HTTP {}",
+            reply.status
+        ))),
     }
 }
 
@@ -110,12 +118,16 @@ impl ExistingAttachment {
         if text(network, "container-interface-name") != request.ifname {
             return Err(error("existing endpoint has a different sandbox interface"));
         }
-        let cookie = text(network, "netns-cookie").parse::<u64>().map_err(error)?;
+        let cookie = text(network, "netns-cookie")
+            .parse::<u64>()
+            .map_err(error)?;
         if cookie == 0 {
             return Err(error("existing endpoint has no usable namespace cookie"));
         }
-        let index = field(network, "interface-index").as_u64()
-            .and_then(|v| u32::try_from(v).ok()).filter(|v| *v != 0)
+        let index = field(network, "interface-index")
+            .as_u64()
+            .and_then(|v| u32::try_from(v).ok())
+            .filter(|v| *v != 0)
             .ok_or_else(|| error("existing endpoint has no host interface index"))?;
         let link = Link {
             host_name: text(network, "interface-name").into(),
@@ -125,32 +137,51 @@ impl ExistingAttachment {
         };
         mac_bytes(&link.host_mac)?;
         mac_bytes(&link.peer_mac)?;
-        let rows = field(network, "addressing").as_array()
+        let rows = field(network, "addressing")
+            .as_array()
             .filter(|rows| rows.len() == 1)
             .ok_or_else(|| error("existing endpoint has invalid addressing"))?;
-        let address = rows.first().ok_or_else(|| error("existing endpoint has no addressing"))?;
-        let route_mtu = field(network, "route-mtu").as_u64()
-            .and_then(|v| u32::try_from(v).ok()).filter(|v| *v >= 1280)
+        let address = rows
+            .first()
+            .ok_or_else(|| error("existing endpoint has no addressing"))?;
+        let route_mtu = field(network, "route-mtu")
+            .as_u64()
+            .and_then(|v| u32::try_from(v).ok())
+            .filter(|v| *v >= 1280)
             .ok_or_else(|| error("existing endpoint has no creation-time route MTU"))?;
         let mut leases = Vec::new();
         for family in ["ipv6", "ipv4"] {
             let raw = text(address, family);
-            if raw.is_empty() { continue; }
+            if raw.is_empty() {
+                continue;
+            }
             let ip: IpAddr = raw.parse().map_err(error)?;
             let host = field(field(network, "host-addressing"), family);
             if ip.is_ipv6() != (family == "ipv6") || field(host, "enabled") != &Value::Bool(true) {
-                return Err(error("existing endpoint has disabled or invalid address family"));
+                return Err(error(
+                    "existing endpoint has disabled or invalid address family",
+                ));
             }
             let gateway: IpAddr = text(host, "ip").parse().map_err(error)?;
             if gateway.is_ipv6() != ip.is_ipv6() {
                 return Err(error("existing endpoint gateway has wrong family"));
             }
-            leases.push(Lease { address: ip, gateway,
+            leases.push(Lease {
+                address: ip,
+                gateway,
                 pool: text(address, &format!("{family}-pool-name")).into(),
-                expiration_uuid: String::new() });
+                expiration_uuid: String::new(),
+            });
         }
-        if leases.is_empty() { return Err(error("existing endpoint has no addresses")); }
-        Ok(Self { cookie, route_mtu, link, leases })
+        if leases.is_empty() {
+            return Err(error("existing endpoint has no addresses"));
+        }
+        Ok(Self {
+            cookie,
+            route_mtu,
+            link,
+            leases,
+        })
     }
     fn result(&self, request: &AddRequest) -> Value {
         result(request, &self.link, &self.leases, self.route_mtu)
@@ -162,7 +193,11 @@ impl ExistingAttachment {
         if peer_mac != mac_bytes(&self.link.peer_mac)? {
             return Err(error("existing endpoint sandbox MAC does not match"));
         }
-        if self.leases.iter().any(|lease| !addresses.contains(&lease.address)) {
+        if self
+            .leases
+            .iter()
+            .any(|lease| !addresses.contains(&lease.address))
+        {
             return Err(error("existing endpoint sandbox address does not match"));
         }
         Ok(())
@@ -175,8 +210,10 @@ impl Platform {
         if text(&health, "overallHealth") != "OK" {
             return Err(error("existing endpoint is not healthy"));
         }
-        let host = system(Connector::open().and_then(|c| c.require_link(&existing.link.host_name)))?;
-        if host.index != existing.link.host_index || host.mac != mac_bytes(&existing.link.host_mac)? {
+        let host =
+            system(Connector::open().and_then(|c| c.require_link(&existing.link.host_name)))?;
+        if host.index != existing.link.host_index || host.mac != mac_bytes(&existing.link.host_mac)?
+        {
             return Err(error("existing endpoint host interface does not match"));
         }
         let namespace = self.namespace.try_clone().map_err(error)?;
@@ -775,7 +812,11 @@ mod tests {
                         assert!(bytes.len() < 16_384);
                     }
                     let header = std::str::from_utf8(&bytes).expect("header text");
-                    let request_line = header.split("\r\n").next().expect("request line").to_owned();
+                    let request_line = header
+                        .split("\r\n")
+                        .next()
+                        .expect("request line")
+                        .to_owned();
                     let length: usize = header
                         .split("\r\n")
                         .find_map(|h| h.strip_prefix("Content-Length: "))
@@ -785,8 +826,13 @@ mod tests {
                     assert!(length < 65_536);
                     let mut request_body = vec![0; length];
                     stream.read_exact(&mut request_body).expect("body");
-                    requests.push(if request_body.is_empty() { request_line } else {
-                        format!("{request_line}\n{}", String::from_utf8(request_body).expect("JSON body"))
+                    requests.push(if request_body.is_empty() {
+                        request_line
+                    } else {
+                        format!(
+                            "{request_line}\n{}",
+                            String::from_utf8(request_body).expect("JSON body")
+                        )
                     });
                     let body = body.to_string();
                     write!(
@@ -886,17 +932,31 @@ mod tests {
     }
     #[test]
     fn attachment_lookup_only_treats_404_as_absent() {
-        for (status, body, absent) in [(404, json!({}), true), (503, json!({}), false),
-            (403, json!({}), false), (201, json!({}), false), (200, Value::Null, false)] {
+        for (status, body, absent) in [
+            (404, json!({}), true),
+            (503, json!({}), false),
+            (403, json!({}), false),
+            (201, json!({}), false),
+            (200, Value::Null, false),
+        ] {
             let mut agent = Agent::new(vec![(status, body)]);
             let outcome = existing_endpoint(&agent.platform().client, &request());
-            if absent { assert!(outcome.expect("404 absent").is_none()); }
-            else { assert!(outcome.is_err()); }
-            assert_eq!(agent.requests(), ["GET /v1/endpoint/cni-attachment-id%3Acid%3Aeth0 HTTP/1.1"]);
+            if absent {
+                assert!(outcome.expect("404 absent").is_none());
+            } else {
+                assert!(outcome.is_err());
+            }
+            assert_eq!(
+                agent.requests(),
+                ["GET /v1/endpoint/cni-attachment-id%3Acid%3Aeth0 HTTP/1.1"]
+            );
         }
         let endpoint = existing_fixture();
         let mut agent = Agent::new(vec![(200, endpoint.clone())]);
-        assert_eq!(existing_endpoint(&agent.platform().client, &request()).expect("found"), Some(endpoint));
+        assert_eq!(
+            existing_endpoint(&agent.platform().client, &request()).expect("found"),
+            Some(endpoint)
+        );
         assert_eq!(agent.requests().len(), 1);
     }
     #[test]
@@ -904,14 +964,27 @@ mod tests {
         let endpoint = existing_fixture();
         let attachment = ExistingAttachment::parse(&request(), &endpoint).expect("parse");
         let cookie = 9_007_199_254_740_993;
-        let peer = [2,0,0,0,0,2];
-        let ips = ["198.18.0.1".parse().expect("v4"), "2001:db8::1".parse().expect("v6")];
-        attachment.validate_sandbox(cookie, &peer, &ips).expect("same live sandbox");
+        let peer = [2, 0, 0, 0, 0, 2];
+        let ips = [
+            "198.18.0.1".parse().expect("v4"),
+            "2001:db8::1".parse().expect("v6"),
+        ];
+        attachment
+            .validate_sandbox(cookie, &peer, &ips)
+            .expect("same live sandbox");
         for wrong in [0, cookie - 1, cookie + 1] {
             assert!(attachment.validate_sandbox(wrong, &peer, &ips).is_err());
         }
-        assert!(attachment.validate_sandbox(cookie, &[2,0,0,0,0,3], &ips).is_err());
-        assert!(attachment.validate_sandbox(cookie, &peer, &ips[..1]).is_err());
+        assert!(
+            attachment
+                .validate_sandbox(cookie, &[2, 0, 0, 0, 0, 3], &ips)
+                .is_err()
+        );
+        assert!(
+            attachment
+                .validate_sandbox(cookie, &peer, &ips[..1])
+                .is_err()
+        );
         let result = attachment.result(&request());
         assert_eq!(result["ips"][0]["address"], "2001:db8::1/128");
         assert_eq!(result["ips"][1]["address"], "198.18.0.1/32");
@@ -924,7 +997,10 @@ mod tests {
         for (pointer, invalid) in [
             ("/status/state", json!("waiting-for-identity")),
             ("/status/networking/netns-cookie", json!("0")),
-            ("/status/networking/netns-cookie", json!(9007199254740993u64)),
+            (
+                "/status/networking/netns-cookie",
+                json!(9007199254740993u64),
+            ),
             ("/status/networking/container-interface-name", json!("eth1")),
             ("/status/networking/interface-index", json!(0)),
             ("/status/networking/route-mtu", Value::Null),
@@ -936,40 +1012,58 @@ mod tests {
         ] {
             let mut invalid_endpoint = endpoint.clone();
             *invalid_endpoint.pointer_mut(pointer).expect("field") = invalid;
-            assert!(ExistingAttachment::parse(&request(), &invalid_endpoint).is_err(), "{pointer}");
+            assert!(
+                ExistingAttachment::parse(&request(), &invalid_endpoint).is_err(),
+                "{pointer}"
+            );
         }
-
     }
     #[test]
     fn duplicate_result_uses_creation_time_routes_after_config_change() {
         let endpoint = existing_fixture();
-        let expected = ExistingAttachment::parse(&request(), &endpoint).expect("original").result(&request());
+        let expected = ExistingAttachment::parse(&request(), &endpoint)
+            .expect("original")
+            .result(&request());
         let changed_config = json!({"route-mtu":1350,"host-addressing":{
             "ipv4":{"enabled":true,"ip":"198.18.0.253"},
             "ipv6":{"enabled":true,"ip":"2001:db8::fffe"}}});
         // Current configuration is deliberately not an input to parsing or
         // rendering an existing attachment: it describes a future ADD.
-        let restored = ExistingAttachment::parse(&request(), &endpoint).expect("restored").result(&request());
+        let restored = ExistingAttachment::parse(&request(), &endpoint)
+            .expect("restored")
+            .result(&request());
         assert_eq!(restored, expected);
         assert_eq!(restored["routes"][1]["mtu"], 1450);
         assert_eq!(restored["ips"][0]["gateway"], "2001:db8::ffff");
         assert_eq!(restored["ips"][1]["gateway"], "198.18.0.254");
         assert_ne!(restored["routes"][1]["mtu"], changed_config["route-mtu"]);
-        assert_ne!(restored["ips"][1]["gateway"], changed_config["host-addressing"]["ipv4"]["ip"]);
+        assert_ne!(
+            restored["ips"][1]["gateway"],
+            changed_config["host-addressing"]["ipv4"]["ip"]
+        );
         for field in ["route-mtu", "host-addressing"] {
             let mut older = endpoint.clone();
-            older["status"]["networking"].as_object_mut().expect("networking").remove(field);
+            older["status"]["networking"]
+                .as_object_mut()
+                .expect("networking")
+                .remove(field);
             assert!(ExistingAttachment::parse(&request(), &older).is_err());
         }
     }
     #[test]
     fn endpoint_put_omits_uncreated_namespace_mount() {
         let mut agent = Agent::new(vec![(201, json!({}))]);
-        let link = Link { host_name: "lxcfixture".into(), host_index: 7,
-            host_mac: "02:00:00:00:00:01".into(), peer_mac: "02:00:00:00:00:02".into() };
+        let link = Link {
+            host_name: "lxcfixture".into(),
+            host_index: 7,
+            host_mac: "02:00:00:00:00:01".into(),
+            peer_mac: "02:00:00:00:00:02".into(),
+        };
         let mut platform = agent.platform();
         platform.cookie = 9_007_199_254_740_993;
-        platform.create_endpoint(&request(), &link, &[]).expect("created");
+        platform
+            .create_endpoint(&request(), &link, &[])
+            .expect("created");
         let requests = agent.requests();
         let (_, body) = requests[0].split_once('\n').expect("body");
         let body: Value = serde_json::from_str(body).expect("JSON");

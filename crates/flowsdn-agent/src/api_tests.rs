@@ -159,15 +159,36 @@ fn configuration_excludes_gateways_and_validates_families_and_mtu() {
 
 #[test]
 fn endpoint_id_limit_is_bounded_and_cookie_keeps_full_u64_precision() {
-    let temp=Temp::new();let path=temp.0.join("config.json");
-    let mut config=json!({"socket-path":temp.0.join("agent.sock"),"state-dir":temp.0.join("state"),"bpf-object":"object","ipv4-pool":"198.18.0.0/29","ipv4-gateway":"198.18.0.1","device-mtu":1500,"route-mtu":1450});
-    fs::write(&path,serde_json::to_vec(&config).expect("JSON")).expect("config");
-    assert_eq!(Config::read(&path).expect("default config").endpoint_id_max,4095);
-    for (value, valid) in [(json!(1),true),(json!(65535),true),(json!(0),false),(json!(65536),false),(json!(-1),false),(json!(1.5),false),(json!("4095"),false),(Value::Null,false)] {
-        config.as_object_mut().expect("config object").insert("endpoint-id-max".into(),value);
-        fs::write(&path,serde_json::to_vec(&config).expect("JSON")).expect("config");
-        assert_eq!(Config::read(&path).is_ok(),valid);
+    let temp = Temp::new();
+    let path = temp.0.join("config.json");
+    let mut config = json!({"socket-path":temp.0.join("agent.sock"),"state-dir":temp.0.join("state"),"bpf-object":"object","ipv4-pool":"198.18.0.0/29","ipv4-gateway":"198.18.0.1","device-mtu":1500,"route-mtu":1450});
+    fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
+    assert_eq!(
+        Config::read(&path).expect("default config").endpoint_id_max,
+        4095
+    );
+    for (value, valid) in [
+        (json!(1), true),
+        (json!(65535), true),
+        (json!(0), false),
+        (json!(65536), false),
+        (json!(-1), false),
+        (json!(1.5), false),
+        (json!("4095"), false),
+        (Value::Null, false),
+    ] {
+        config
+            .as_object_mut()
+            .expect("config object")
+            .insert("endpoint-id-max".into(), value);
+        fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
+        assert_eq!(Config::read(&path).is_ok(), valid);
     }
-    let response=endpoint_response(1,&json!({"NetnsCookie":u64::MAX}));
-    assert_eq!(response.pointer("/status/networking/netns-cookie").and_then(Value::as_str),Some("18446744073709551615"));
+    let response = endpoint_response(1, &json!({"NetnsCookie":u64::MAX}));
+    assert_eq!(
+        response
+            .pointer("/status/networking/netns-cookie")
+            .and_then(Value::as_str),
+        Some("18446744073709551615")
+    );
 }
