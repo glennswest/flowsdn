@@ -57,17 +57,10 @@ impl NamedPortState {
                 .and_modify(|value| *value = (*value).max(contribution.precedence))
                 .or_insert(contribution.precedence);
         }
-        let upserts = desired
-            .iter()
-            .filter(|(key, value)| self.desired.get(key) != Some(value))
-            .map(|(key, value)| (*key, *value))
-            .collect();
-        let deletes = self
-            .desired
-            .keys()
-            .filter(|key| !desired.contains_key(key))
-            .copied()
-            .collect();
+        let upserts = desired.iter().filter_map(|(key, value)|
+            (self.desired.get(key) != Some(value)).then_some((*key, *value))).collect();
+        let deletes = self.desired.keys().filter_map(|key|
+            (!desired.contains_key(key)).then_some(*key)).collect();
         self.desired = desired;
         Ok(Changes { upserts, deletes })
     }

@@ -269,7 +269,10 @@ prefix requirements, including exception-only ones; `pkg/policy/cidr.go` unions
 them; `pkg/policy/cell/policy_importer.go:updatePrefixes` allocates them before
 repository updates and prunes stale prefixes afterward. `flowsdn-policy`'s
 `CidrRule` and `PrefixUpdate` implement the validated planning sets, not the
-ipcache publication barrier itself.
+ipcache publication barrier itself. These library types currently require a
+base prefix: a selector containing only exception requirements still needs an
+importer planning path. That implementation gap does not relax the requirement
+to allocate its exception prefixes before publication.
 
 A CIDR selector matches an identity only if that identity is *eligible*:
 it has a world label; or it is a node identity and
@@ -1885,7 +1888,7 @@ Closed design choices do not claim Kubernetes, REST or datapath integration.
    a separately versioned compatibility decision.
 5. **Resolved #96.** Recompute resolved egress named-port contributions from surviving selectors after deletion. NamedPortState returns one replacement changeset and restores lower-precedence surviving contributions. This is a deliberate deviation; full compiler/kernel synchronization remains required.
 
-6. **Resolved #97.** Allocate exception-only prefixes as well as allow prefixes before policy publication; prune after replacement. Pinned-reference evidence and library prefix planning are in §3.2.4. Actual ipcache barriers remain required.
+6. **Resolved #97.** Allocate exception-only prefixes as well as allow prefixes before policy publication; prune after replacement. Pinned-reference evidence and library base-plus-exceptions planning are in §3.2.4. Exception-only selector planning and actual ipcache barriers remain required.
 
 7. **Resolved #98.** Reject numeric zero with an explicit endPort at API validation, keeping zero-without-endPort as wildcard. PortRange implements this validation; tests/corpus/port-ranges.tsv includes zero-start regression seeds and masked-port tests exhaustively check accepted ranges. Accurate zero-based low-level ABI encoding is retained. No upstream report was filed; this selects the issue's validation alternative.
 

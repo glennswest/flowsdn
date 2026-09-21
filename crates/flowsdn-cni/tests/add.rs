@@ -23,6 +23,7 @@ struct Backend {
     ipam: Ipam,
     fail: &'static str,
     cleanup_fail: bool,
+    uncertain: bool,
     calls: Vec<String>,
 }
 impl Backend {
@@ -43,6 +44,7 @@ impl Backend {
             ipam: Ipam::new(Some(v4), Some(v6)).expect("IPAM"),
             fail,
             cleanup_fail: false,
+            uncertain: false,
             calls: Vec::new(),
         }
     }
@@ -117,6 +119,7 @@ impl AddBackend for Backend {
         link.peer_mac = ep.mac_override.clone().expect("override");
         Ok(())
     }
+    fn may_release_resources(&self) -> bool { !self.uncertain }
     fn delete_endpoint(&mut self, _: &AddRequest) -> Result<()> {
         self.step("delete_endpoint")
     }
@@ -243,4 +246,15 @@ fn unsupported_versions_and_missing_environment_fail_before_allocation() {
     let mut backend = Backend::new("");
     assert!(add(&r, 1450, &mut backend).is_err());
     assert!(backend.calls.is_empty());
+}
+
+#[test]
+fn ambiguous_endpoint_publication_retains_owned_backing_resources() {
+    let mut backend=Backend::new("create_endpoint");
+    backend.uncertain=true;
+    let failure=add(&request(),1450,&mut backend).expect_err("ambiguous PUT");
+    assert!(failure.rollback_errors.iter().any(|e| e.message.contains("retaining")));
+    assert!(!backend.calls.iter().any(|c| c == "delete_link" || c.starts_with("release")));
+    assert_eq!(backend.ipam.ipv4().expect("v4").allocated(),1);
+    assert_eq!(backend.ipam.ipv6().expect("v6").allocated(),1);
 }

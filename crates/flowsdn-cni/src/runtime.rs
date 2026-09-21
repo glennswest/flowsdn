@@ -80,6 +80,7 @@ struct Platform {
     device_mtu: u32,
     route_mtu: u32,
     cookie: u64,
+    endpoint_may_exist: bool,
     gateways: Vec<IpAddr>,
 }
 /// Only a confirmed 404 permits a new allocation. All malformed, forbidden or
@@ -403,11 +404,18 @@ impl AddBackend for Platform {
             "k8s-pod-name":request.pod_name,"k8s-namespace":request.pod_namespace,"k8s-uid":request.pod_uid,
             "state":"waiting-for-identity","labels":[],"addressing":addressing,"datapath-configuration":{},"properties":{},
             "netns-cookie":self.cookie.to_string(),"cni-route-mtu":self.route_mtu,"sync-build-endpoint":true});
+        // A transport error can occur after the server committed. Do not free
+        // backing resources until deletion is confirmed; a duplicate ADD can
+        // reconcile a complete committed attachment, otherwise DEL can recover.
+        self.endpoint_may_exist = true;
         let reply = self
             .client
             .put_endpoint_unbounded_response(&request.attachment_id(), &body)
             .map_err(error)?;
         if !(200..300).contains(&reply.status) {
+            // Client errors mean this request was rejected before publication.
+            // Server failures are ambiguous and preserve ownership for recovery.
+            if (400..500).contains(&reply.status) { self.endpoint_may_exist = false; }
             return response(Ok(reply)).map(|_| Endpoint { mac_override: None });
         }
         let endpoint = match endpoint_response(reply) {
@@ -471,8 +479,12 @@ impl AddBackend for Platform {
         }
         Ok(())
     }
+    fn may_release_resources(&self) -> bool { !self.endpoint_may_exist }
     fn delete_endpoint(&mut self, request: &AddRequest) -> Result<()> {
-        response(self.client.delete_endpoint(&request.attachment_id())).map(|_| ())
+        let reply = self.client.delete_endpoint(&request.attachment_id()).map_err(error)?;
+        if reply.status != 404 { response(Ok(reply))?; }
+        self.endpoint_may_exist = false;
+        Ok(())
     }
     fn delete_link(&mut self, link: &Link) -> Result<()> {
         system(Connector::open().and_then(|c| c.delete(&link.host_name)))
@@ -588,6 +600,7 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
                 route_mtu: mtu("route-mtu")?,
                 config,
                 cookie: 0,
+                endpoint_may_exist: false,
                 gateways: Vec::new(),
             };
             if let Some(existing) = existing_endpoint(&platform.client, &request)? {
@@ -894,6 +907,8 @@ mod tests {
                             String::from_utf8(request_body).expect("JSON body")
                         )
                     });
+                    // Zero simulates a server that consumed PUT then disconnected.
+                    if status == 0 { continue; }
                     let body = body.to_string();
                     write!(
                         stream,
@@ -917,6 +932,7 @@ mod tests {
                 device_mtu: 1500,
                 route_mtu: 1450,
                 cookie: 0,
+                endpoint_may_exist: false,
                 gateways: Vec::new(),
             }
         }
@@ -989,6 +1005,25 @@ mod tests {
                 "ipv4":{"enabled":true,"ip":"198.18.0.254"},
                 "ipv6":{"enabled":true,"ip":"2001:db8::ffff"}}
         }}})
+    }
+    #[test]
+    fn ambiguous_put_and_failed_cleanup_preserve_backing_ownership() {
+        let link=Link {host_name:"lxcfixture".into(),host_index:7,host_mac:"02:00:00:00:00:01".into(),peer_mac:"02:00:00:00:00:02".into()};
+        for (replies, releasable) in [
+            (vec![(0,json!({}))],false),
+            (vec![(503,json!({}))],false),
+            (vec![(400,json!({}))],true),
+            (vec![(201,json!({"status":null})),(503,json!({}))],false),
+            (vec![(201,json!({"status":null})),(200,json!({}))],true),
+            (vec![(201,json!({"status":null})),(404,json!({}))],true),
+        ] {
+            let expected=replies.len();
+            let mut agent=Agent::new(replies);
+            let mut platform=agent.platform();
+            assert!(platform.create_endpoint(&request(),&link,&[]).is_err());
+            assert_eq!(platform.may_release_resources(),releasable);
+            assert_eq!(agent.requests().len(),expected);
+        }
     }
     #[test]
     fn route_check_reports_drift_without_changing_the_check_verdict() {

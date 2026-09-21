@@ -1302,3 +1302,9 @@ delete only that endpoint, reverse its link/IP allocation transaction, and keep
 other endpoints usable. The privileged fixture exercises this with two surviving
 endpoints and dual-stack traffic. Shared controller acceptance is still required
 for future identity/policy integration.
+
+Ambiguous endpoint PUT completion (transport loss or server failure) MUST NOT
+release backing addresses or remove the link until ownership is resolved. The
+initial plugin retains them for duplicate ADD reconciliation or explicit DEL;
+it reports the uncertainty. Failed endpoint cleanup likewise retains resources.
+A definite pre-publication client rejection permits ordinary rollback.

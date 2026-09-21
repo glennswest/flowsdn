@@ -14,6 +14,9 @@ Policy-library building blocks from spec 06:
 
 The oracle does not implement authentication inheritance or L7 content matching.
 It refuses authentication inputs rather than reporting an unverified verdict.
+CIDR planning currently requires a base prefix. Selectors containing only
+exception requirements still require an importer planning path; the normative
+contract includes allocating those prefixes before policy publication.
 There is no Kubernetes importer, label-selector compiler, complete optimized
 mapstate builder, BPF map writer, policy REST handler, or controller here. Kernel
 publication and its atomicity remain the caller's responsibility. Full policy
