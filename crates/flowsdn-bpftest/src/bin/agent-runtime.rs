@@ -368,14 +368,28 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     let state_dir = fs::read_dir(temp.0.join("state"))?
         .filter_map(|entry| entry.ok())
         .find(|entry| entry.file_name().to_string_lossy().parse::<u16>().is_ok())
-        .ok_or("remaining endpoint state")?.path();
+        .ok_or("remaining endpoint state")?
+        .path();
     let obstruction = state_dir.join("fixture-owned-resource");
     fs::write(&obstruction, b"preserve until fixture releases ownership")?;
-    ensure(client.delete_endpoint("cni-attachment-id:sandbox2:eth0")?.status == 500,
-        "injected persistence deletion failure not reported")?;
+    ensure(
+        client
+            .delete_endpoint("cni-attachment-id:sandbox2:eth0")?
+            .status
+            == 500,
+        "injected persistence deletion failure not reported",
+    )?;
     let health = client.endpoint_health("cni-attachment-id:sandbox2:eth0")?;
-    ensure(health.status == 200 && health.json.as_ref().and_then(|value| value.get("overallHealth")).and_then(Value::as_str) == Some("Failure"),
-        "partially deleted endpoint reported healthy")?;
+    ensure(
+        health.status == 200
+            && health
+                .json
+                .as_ref()
+                .and_then(|value| value.get("overallHealth"))
+                .and_then(Value::as_str)
+                == Some("Failure"),
+        "partially deleted endpoint reported healthy",
+    )?;
     fs::remove_file(&obstruction)?;
     cni(&cni_binary, &temp, "DEL", &second, &conf)?;
     cni(&cni_binary, &temp, "DEL", &second, &conf)?;
