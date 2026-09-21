@@ -280,12 +280,19 @@ pub fn readiness(snapshot: &Snapshot<HealthStatus>, input: &Readiness) -> Verdic
 /// Connectivity scheduler primitive from endpoint-agent spec §3.13.
 /// Count discovered probe IPs, not nodes. Active probe execution is separate.
 #[allow(clippy::arithmetic_side_effects)]
-pub fn connectivity_probe_interval(ratio: f64, probe_ip_count: u32) -> Result<std::time::Duration, &'static str> {
+pub fn connectivity_probe_interval(
+    ratio: f64,
+    probe_ip_count: u32,
+) -> Result<std::time::Duration, &'static str> {
     if !ratio.is_finite() || !(0.0..=1.0).contains(&ratio) {
         return Err("connectivity probe frequency ratio must be finite and in 0..=1");
     }
     let base_ns = ((10.0 + ratio * 100.0) * 1_000_000_000.0).trunc();
-    let factor = if probe_ip_count == 0 { 1.0 } else { f64::from(probe_ip_count).ln_1p() };
+    let factor = if probe_ip_count == 0 {
+        1.0
+    } else {
+        f64::from(probe_ip_count).ln_1p()
+    };
     // Validated ratio and u32 count bound the product below u64::MAX.
     Ok(std::time::Duration::from_nanos((base_ns * factor) as u64))
 }

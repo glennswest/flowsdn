@@ -103,13 +103,17 @@ impl Connector {
     pub fn routes(&self, index: u32) -> Result<Vec<Route>> {
         self.run(async {
             let mut result = Vec::new();
-            for family in [rtnetlink::packet_route::AddressFamily::Inet,
-                rtnetlink::packet_route::AddressFamily::Inet6] {
+            for family in [
+                rtnetlink::packet_route::AddressFamily::Inet,
+                rtnetlink::packet_route::AddressFamily::Inet6,
+            ] {
                 let mut request = RouteMessage::default();
                 request.header.address_family = family;
                 let mut stream = self.handle.route().get(request).execute();
                 while let Some(message) = stream.try_next().await? {
-                    if let Some(route) = route_info(message, index) { result.push(route); }
+                    if let Some(route) = route_info(message, index) {
+                        result.push(route);
+                    }
                 }
             }
             Ok(result)
@@ -339,7 +343,9 @@ fn route_info(message: RouteMessage, index: u32) -> Option<Route> {
             AddressFamily::Inet6 => IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED),
             _ => return None,
         },
-        prefix: message.header.destination_prefix_length, gateway: None, mtu: None,
+        prefix: message.header.destination_prefix_length,
+        gateway: None,
+        mtu: None,
     };
     let mut output = None;
     let mut table = u32::from(message.header.table);
@@ -351,11 +357,16 @@ fn route_info(message: RouteMessage, index: u32) -> Option<Route> {
             RouteAttribute::Destination(RouteAddress::Inet6(ip)) => route.destination = ip.into(),
             RouteAttribute::Gateway(RouteAddress::Inet(ip)) => route.gateway = Some(ip.into()),
             RouteAttribute::Gateway(RouteAddress::Inet6(ip)) => route.gateway = Some(ip.into()),
-            RouteAttribute::Metrics(metrics) => for metric in metrics {
-                if let RouteMetric::Mtu(value) = metric { route.mtu = Some(value); }
-            },
-            _ => {},
+            RouteAttribute::Metrics(metrics) => {
+                for metric in metrics {
+                    if let RouteMetric::Mtu(value) = metric {
+                        route.mtu = Some(value);
+                    }
+                }
+            }
+            _ => {}
         }
     }
-    (output == Some(index) && table == 254 && message.header.kind == RouteType::Unicast).then_some(route)
+    (output == Some(index) && table == 254 && message.header.kind == RouteType::Unicast)
+        .then_some(route)
 }
