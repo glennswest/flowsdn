@@ -19,7 +19,7 @@ regex = "=1.13.1"
 regex-syntax = "=0.8.11"
 toml = "=1.1.5"
 arc-swap = "=1.9.2"
-imbl = { version = "=7.0.1", default-features = false }
+imbl = { version = "=7.0.2", default-features = false }
 tokio = { version = "=1.53.1", default-features = false, features = ["sync"] }
 tracing = { version = "=0.1.44", default-features = false, features = ["std"] }
 
