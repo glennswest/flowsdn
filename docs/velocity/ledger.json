@@ -1346,6 +1346,261 @@
         131
       ],
       "cleanup": "17737 files / 6.5 GiB and eleven task logs removed"
+    },
+    {
+      "id": "issue-batch3-2026-09-21",
+      "scope": "project/shared",
+      "agent": "/root with control_decisions, integration_decisions, review_agent",
+      "start_utc": "2026-09-21T22:10:29.022Z",
+      "active_work_seconds": null,
+      "baseline_commit": "784831e",
+      "validated_revision": "337b006",
+      "status": "complete",
+      "issues_closed": [
+        4,
+        15,
+        16,
+        17,
+        18,
+        34,
+        44,
+        45,
+        52,
+        62,
+        65,
+        67,
+        68,
+        71,
+        72,
+        78,
+        92,
+        93,
+        96,
+        97,
+        98,
+        99,
+        101,
+        102,
+        125,
+        126,
+        129,
+        135,
+        248,
+        261
+      ],
+      "commits": [
+        "a5c0d64",
+        "540a862",
+        "11fac8a",
+        "2cd699d",
+        "e642f7c",
+        "9170edb",
+        "337b006"
+      ],
+      "release": null,
+      "validation_record": "docs/workcycles/2026-09-21-batch3.md",
+      "outcomes": [
+        "30 issues closed with implementation/planning/decision boundaries documented",
+        "482 workspace tests plus 2 new rollback regressions; final affected suites passed",
+        "Clippy, both musl compile checks, identity no-default-features, dependency policy passed",
+        "Three privileged fixtures passed including cross-endpoint rollback and MTU drift",
+        "Cleanup removed 20074 files / 7.5 GiB and 14 task logs"
+      ],
+      "observed_agent_windows": [
+        {
+          "agent": "control_decisions",
+          "start_utc": "2026-09-21T22:11:19Z",
+          "end_utc": "2026-09-21T22:20:22Z",
+          "elapsed_seconds": 543
+        },
+        {
+          "agent": "integration_decisions",
+          "start_utc": "2026-09-21T22:11:28Z",
+          "end_utc": "2026-09-21T22:22:25Z",
+          "elapsed_seconds": 657
+        },
+        {
+          "agent": "review_agent",
+          "start_utc": "2026-09-21T22:11:39Z",
+          "end_utc": "2026-09-21T22:19:22Z",
+          "elapsed_seconds": 463
+        }
+      ],
+      "observed_agent_hours": 0.46194444444444444,
+      "agent_time_note": "Overlapping implementation/review windows are not project elapsed or active time. Later short reviews have incomplete observed bounds; all response usage is included once.",
+      "validation_intervals": [
+        {
+          "kind": "final live/cross-target validation and coordination",
+          "start_utc": "2026-09-21T22:22:25Z",
+          "end_utc": "2026-09-21T22:29:15Z",
+          "elapsed_seconds": 410,
+          "note": "Observed enclosing interval includes review fixes, fixture troubleshooting and waits. Earlier focused/workspace runs preceded this interval; not exclusive build time."
+        }
+      ],
+      "end_utc": "2026-09-21T22:31:14.101093Z",
+      "elapsed_seconds": 1245.079093,
+      "usage_samples": [
+        {
+          "thread_id": "01a0c594-3b67-7722-a326-e5e4720f8977",
+          "completed_response_records": 83,
+          "baseline": {
+            "timestamp": "2026-09-21T22:03:41.601Z",
+            "counters": {
+              "input_tokens": 22959543,
+              "cached_input_tokens": 22656512,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 69206,
+              "reasoning_output_tokens": 14108,
+              "total_tokens": 23028749,
+              "uncached_input_tokens": 303031
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T22:31:12.942Z",
+            "counters": {
+              "input_tokens": 34788886,
+              "cached_input_tokens": 34310016,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 100013,
+              "reasoning_output_tokens": 20405,
+              "total_tokens": 34888899,
+              "uncached_input_tokens": 478870
+            }
+          },
+          "delta": {
+            "input_tokens": 11829343,
+            "cached_input_tokens": 11653504,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 30807,
+            "reasoning_output_tokens": 6297,
+            "total_tokens": 11860150,
+            "uncached_input_tokens": 175839
+          }
+        },
+        {
+          "thread_id": "01a0c594-fdd8-73f1-bfae-b99f121daab8",
+          "completed_response_records": 34,
+          "baseline": {
+            "timestamp": "2026-09-21T21:27:24.276Z",
+            "counters": {
+              "input_tokens": 8550519,
+              "cached_input_tokens": 8345600,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 21925,
+              "reasoning_output_tokens": 3375,
+              "total_tokens": 8572444,
+              "uncached_input_tokens": 204919
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T22:26:17.569Z",
+            "counters": {
+              "input_tokens": 12024556,
+              "cached_input_tokens": 11723904,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 38033,
+              "reasoning_output_tokens": 5318,
+              "total_tokens": 12062589,
+              "uncached_input_tokens": 300652
+            }
+          },
+          "delta": {
+            "input_tokens": 3474037,
+            "cached_input_tokens": 3378304,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 16108,
+            "reasoning_output_tokens": 1943,
+            "total_tokens": 3490145,
+            "uncached_input_tokens": 95733
+          }
+        },
+        {
+          "thread_id": "01a0c597-0d0b-71c0-ac97-9c29efef5916",
+          "completed_response_records": 27,
+          "baseline": {
+            "timestamp": "2026-09-21T21:22:02.733Z",
+            "counters": {
+              "input_tokens": 6854007,
+              "cached_input_tokens": 6707712,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 22238,
+              "reasoning_output_tokens": 2302,
+              "total_tokens": 6876245,
+              "uncached_input_tokens": 146295
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T22:20:38.696Z",
+            "counters": {
+              "input_tokens": 12067109,
+              "cached_input_tokens": 11870336,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 37157,
+              "reasoning_output_tokens": 4225,
+              "total_tokens": 12104266,
+              "uncached_input_tokens": 196773
+            }
+          },
+          "delta": {
+            "input_tokens": 5213102,
+            "cached_input_tokens": 5162624,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 14919,
+            "reasoning_output_tokens": 1923,
+            "total_tokens": 5228021,
+            "uncached_input_tokens": 50478
+          }
+        },
+        {
+          "thread_id": "01a0c597-33e5-7872-8318-3d290208f997",
+          "completed_response_records": 32,
+          "baseline": {
+            "timestamp": "2026-09-21T21:22:18.252Z",
+            "counters": {
+              "input_tokens": 6870984,
+              "cached_input_tokens": 6697600,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 19459,
+              "reasoning_output_tokens": 1716,
+              "total_tokens": 6890443,
+              "uncached_input_tokens": 173384
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T22:22:37.955Z",
+            "counters": {
+              "input_tokens": 11908028,
+              "cached_input_tokens": 11658368,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 38401,
+              "reasoning_output_tokens": 3314,
+              "total_tokens": 11946429,
+              "uncached_input_tokens": 249660
+            }
+          },
+          "delta": {
+            "input_tokens": 5037044,
+            "cached_input_tokens": 4960768,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 18942,
+            "reasoning_output_tokens": 1598,
+            "total_tokens": 5055986,
+            "uncached_input_tokens": 76276
+          }
+        }
+      ],
+      "usage_totals": {
+        "input_tokens": 25553526,
+        "cached_input_tokens": 25155200,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 80776,
+        "reasoning_output_tokens": 11761,
+        "total_tokens": 25634302,
+        "uncached_input_tokens": 398326
+      },
+      "usage_note": "token_usage_record globally deduplicated by response_id. Prior cumulative baselines exclude the preceding cycle and intervening reporting. Cached input is a subset of input; reasoning is a subset of output. Includes repeated context, not account cost. Excludes this snapshot commit and subsequent reporting.",
+      "github_open_final": 136,
+      "github_closed_final": 159
     }
   ],
   "crates": [

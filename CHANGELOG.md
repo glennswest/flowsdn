@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+- Add configuration-change overrides with explicit diagnostics, reference-snapshot
+  detection, configurable ipcache capacity and reserved fixed-identity validation.
+- Add policy primitives for atomic subject validation, named-port ownership,
+  CIDR exceptions, port ranges, pressure assessment and a limited L3/L4 oracle.
+- Preserve pinned LRU capacity during size-only upgrades and add nested-map and
+  node-ID replacement planning safeguards.
+- Add diagnostic CNI CHECK route/MTU inspection, incompatible-mode restore checks,
+  and rollback tests that preserve other endpoints. Retain backing resources
+  when endpoint publication or deletion is uncertain.
+- Specify control-plane golden tests and resolve the associated compatibility,
+  identity, policy and map-lifecycle decisions as one issue batch.
+
 - Add opt-in strict configuration-key validation and a configurable endpoint ID
   allocation ceiling, preserving restored IDs when the ceiling is lowered.
 - Reuse verified CNI attachments on duplicate ADD, preserving creation-time

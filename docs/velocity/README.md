@@ -134,3 +134,15 @@ closed. Cleanup removed 17,737 files / 6.5 GiB and eleven task logs. Counters
 include repeated context, exclude this commit/reporting, and do not measure
 cost. Known overlapping agent windows: 364 seconds; active time unknown.
 No release. Future accounting is consolidated once per completed batch.
+
+## Issue batch 3: 30 resolutions
+
+2026-09-21T22:10:29.022Z–2026-09-21T22:31:14.101093Z: **1245.1 seconds**
+(20.8 minutes). Thirty issues closed; **136 open / 159 closed**.
+[Batch results](../workcycles/2026-09-21-batch3.md) separate implementation,
+planning and decision evidence. All checks passed; no release. Cleanup removed
+20,074 files / 7.5 GiB. Processed usage **25,634,302**,
+including **25,155,200 cached input**. Deduplicated
+response deltas exclude previous cycles and this final publication/reporting.
+Known overlapping agent windows total 1663 seconds (0.462 hours); active time
+unknown. Counts include repeated context and do not measure account cost.

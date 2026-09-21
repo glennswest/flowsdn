@@ -29,6 +29,9 @@ The map ABI crate defines connection tuples, conntrack/NAT values, service
 and policy layouts, plus endpoint, node, subnet and ipcache byte layouts.
 The loader crate provides pinned-map compatibility planning, auxiliary scratch
 layout planning and typed tail-program inventory checks.
+The policy crate now supplies validated L3/L4 building blocks and an initial
+independent oracle; Kubernetes policy import and enforcement remain outstanding.
+The loader also plans capacity-preserving LRU reuse and feature-gated nested maps.
 The identity crate adds numeric scopes, cluster ranges and tunnel encoding,
 plus canonical CIDR labels and optional identity/node label filtering.
 Fixed VXLAN/Geneve headers and Geneve DSR options have explicit wire codecs.
