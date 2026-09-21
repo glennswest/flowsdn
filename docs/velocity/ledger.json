@@ -853,7 +853,7 @@
       "start_utc": "2026-09-21T20:07:01Z",
       "end_utc": null,
       "active_work_seconds": null,
-      "status": "validation-in-progress",
+      "status": "validated; final issue publication pending",
       "baseline_commit": "a6ca6e1",
       "baseline_open_issues": 270,
       "selected_decision_issues": 101,
@@ -873,24 +873,24 @@
             }
           },
           "endpoint": {
-            "timestamp": "2026-09-21T20:18:44.201Z",
+            "timestamp": "2026-09-21T21:01:37.925Z",
             "counters": {
-              "input_tokens": 3828378,
-              "cached_input_tokens": 3712640,
+              "input_tokens": 12090791,
+              "cached_input_tokens": 11925504,
               "cache_write_input_tokens": 0,
-              "output_tokens": 12645,
-              "reasoning_output_tokens": 1219,
-              "total_tokens": 3841023
+              "output_tokens": 31685,
+              "reasoning_output_tokens": 6624,
+              "total_tokens": 12122476
             }
           },
           "delta": {
-            "input_tokens": 3810454,
-            "cached_input_tokens": 3700736,
+            "input_tokens": 12072867,
+            "cached_input_tokens": 11913600,
             "cache_write_input_tokens": 0,
-            "output_tokens": 12512,
-            "reasoning_output_tokens": 1219,
-            "total_tokens": 3822966,
-            "uncached_input_tokens": 109718
+            "output_tokens": 31552,
+            "reasoning_output_tokens": 6624,
+            "total_tokens": 12104419,
+            "uncached_input_tokens": 159267
           }
         },
         {
@@ -908,24 +908,24 @@
             }
           },
           "endpoint": {
-            "timestamp": "2026-09-21T20:17:12.626Z",
+            "timestamp": "2026-09-21T20:57:39.127Z",
             "counters": {
-              "input_tokens": 3257119,
-              "cached_input_tokens": 3115648,
+              "input_tokens": 5446720,
+              "cached_input_tokens": 5276544,
               "cache_write_input_tokens": 0,
-              "output_tokens": 13619,
-              "reasoning_output_tokens": 1332,
-              "total_tokens": 3270738
+              "output_tokens": 16321,
+              "reasoning_output_tokens": 1812,
+              "total_tokens": 5463041
             }
           },
           "delta": {
-            "input_tokens": 3239120,
-            "cached_input_tokens": 3103744,
+            "input_tokens": 5428721,
+            "cached_input_tokens": 5264640,
             "cache_write_input_tokens": 0,
-            "output_tokens": 13521,
-            "reasoning_output_tokens": 1332,
-            "total_tokens": 3252641,
-            "uncached_input_tokens": 135376
+            "output_tokens": 16223,
+            "reasoning_output_tokens": 1812,
+            "total_tokens": 5444944,
+            "uncached_input_tokens": 164081
           }
         },
         {
@@ -1000,16 +1000,25 @@
         }
       ],
       "outcomes": [
-        "Recovered and wired standalone agent implementation",
-        "42 focused agent/CNI/IPAM tests passed; focused Clippy passed",
-        "Live dual-stack process restart and offline deletion replay passed",
-        "101 design/spec/default issues reviewed; closure pending committed evidence and config validation"
+        "101 existing design/spec/default issues closed with committed evidence; 129 and 261 remain open",
+        "Created open milestone acceptance trackers 291\u2013294",
+        "428 workspace tests passed, zero failed/ignored; workspace Clippy and formatting passed",
+        "Full workspace x86-64/arm64 Linux musl compilation passed",
+        "Privileged standalone process restart, offline deletion, partial teardown health and retry passed",
+        "Fixed RUSTSEC-2026-0292 with imbl 7.0.2 / imbl-sized-chunks 0.2.0; dependency policy passed without exception",
+        "Cleanup removed 18889 files / 6.7 GiB plus six task logs; no release"
       ],
       "commits": [
         "2dbf86b",
         "e722854",
         "6c0226d",
-        "fbe971d"
+        "fbe971d",
+        "9f93c0d",
+        "86e3b5a",
+        "c69e170",
+        "835273f",
+        "7505b8e",
+        "dd65674"
       ],
       "release": null,
       "usage_note": "Counters include cached and repeated context; no account-cost inference. First response and reporting beyond cutoff excluded. Shared usage assigned once to project/shared.",
@@ -1034,7 +1043,46 @@
         }
       ],
       "observed_agent_hours": 0.3138888888888889,
-      "agent_time_note": "Overlapping observed agent windows include review and waits; not active time or project elapsed. Earlier agent work unmeasured."
+      "agent_time_note": "Overlapping observed agent windows include review and waits; not active time or project elapsed. Earlier agent work unmeasured. Later runtime/queue review windows have incomplete observations and are excluded from the known-window sum; their usage is included once in each session endpoint.",
+      "validated_revision": "dd65674",
+      "latest_observed_utc": "2026-09-21T21:02:43.847741Z",
+      "elapsed_to_validation_record_seconds": 3342.847741,
+      "approval_wait_seconds": null,
+      "validation_record": "docs/validation/m1-agent-issue-cycle.md",
+      "validation_intervals": [
+        {
+          "kind": "final-workspace-validation-and-coordination",
+          "start_utc": "2026-09-21T20:58:35.750Z",
+          "end_utc": "2026-09-21T21:01:02.603Z",
+          "elapsed_seconds": 146.853,
+          "active_work_seconds": null,
+          "note": "Observed dispatch to subsequent cleanup dispatch; includes result collection. Nested in cycle elapsed."
+        },
+        {
+          "kind": "cleanup-and-result-collection",
+          "start_utc": "2026-09-21T21:01:02.603Z",
+          "end_utc": "2026-09-21T21:01:37Z",
+          "elapsed_seconds": 34.397,
+          "active_work_seconds": null,
+          "note": "Observed upper bound includes result collection; nested in cycle elapsed."
+        }
+      ],
+      "validation_failures_resolved": [
+        "initial agent type/borrow errors",
+        "configuration table metadata and stale source line references",
+        "existing immutable collection advisory",
+        "durable concurrency test timeout on shared disk"
+      ],
+      "infrastructure_note": "Builds serialized with two Cargo jobs on shared disk; final test functions serialized while internal concurrency remains. Initial missing linker resolved using the existing installed tool. Approval waits were observed but cannot be separated accurately from dispatch windows.",
+      "usage_totals": {
+        "input_tokens": 23303874,
+        "cached_input_tokens": 22757376,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 69051,
+        "reasoning_output_tokens": 9635,
+        "total_tokens": 23372925,
+        "uncached_input_tokens": 546498
+      }
     }
   ],
   "crates": [

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Update the immutable collection dependency to address RUSTSEC-2026-0292.
+
 - Resolve foundation, control-plane and integration design questions in ADRs
   0011–0013, with outstanding implementation and validation recorded separately.
 - Correct the load-balancer retry maximum default to one minute.

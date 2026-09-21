@@ -23,7 +23,9 @@ without following `docs/licensing.md`.
 
 The current execution plan is `docs/milestones.md`: four remaining milestones.
 The historical phase checklist below is background, not the active work queue.
-Use one coding agent by default; delegate only bounded independent work with
+Drive the next cycle from GitHub issues and milestone acceptance trackers #291–#294.
+A closed decision issue does not establish delivered functionality; ADRs 0011–0013
+record remaining implementation. Use bounded parallel implementation/review with
 narrow context. Commit completed steps frequently. Batch releases at milestone
 acceptance, with focused checks during implementation and the full required
 matrix before release. Repeat checks only after relevant changes or failures.

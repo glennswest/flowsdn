@@ -408,3 +408,25 @@ identity no-default-features compilation passed. External dependencies remain
 at the previous 89-version set. Cleanup removed 13,452 files / 3.8 GiB and seven
 task logs. Issue #55 is closed; repository totals are 20 closed / 270 open.
 The release remains source-only.
+
+## Unreleased: standalone agent and issue-driven cycle (2026-09-21)
+
+The initial standalone endpoint agent now serves the local CNI workflow with
+host-scope leases, persisted endpoint state, process restoration and offline
+deletion replay. Live tests demonstrate dual-stack traffic before and after
+process restart, stale-link cleanup, partial-teardown health failure and retry.
+Forwarding stops during agent downtime; pinned ownership, Kubernetes watches,
+identity/policy controllers and two-node cluster acceptance remain outstanding.
+This is progress within milestone 1, not an operational Kubernetes release.
+
+The issue cycle resolves bounded design/specification questions in ADRs 0011–0013
+and corrects the load-balancer retry maximum default to one minute. Every
+resolved decision retains its implementation/validation obligations. Milestone
+trackers #291–#294 keep those obligations visible; #129 and #261 remain open
+because their verification/specification requirements are not fully satisfied.
+The exact issue outcomes are in [the cycle record](workcycles/2026-09-21-issues.json).
+
+Dependency validation also identified RUSTSEC-2026-0292 in the existing immutable
+collection chain. The workspace pin and lockfile move to imbl 7.0.2 and
+imbl-sized-chunks 0.2.0, without suppressing the advisory. See
+[validation](validation/m1-agent-issue-cycle.md) for final checks and limitations.

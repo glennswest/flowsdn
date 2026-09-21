@@ -97,9 +97,17 @@ No release; milestone 1 continues into standalone daemon integration.
 
 ## Issue-driven cycle: 2026-09-21
 
-Started 20:07:01 UTC with 270 open issues. Three bounded review agents completed
-101 design/specification resolutions; closure awaits committed evidence and the
-configuration regression. Root integrated the standalone endpoint agent, with
-42 focused tests, Clippy and live restart/offline deletion checks passing.
-Final validation, publication and accounting remain in progress. Usage samples
-and observed overlapping agent windows are in `issue-cycle-2026-09-21`.
+Started 20:07:01 UTC with 270 open issues. Three bounded review agents and root
+resolved 101 existing design/spec/default issues and retained explicit remaining
+implementation in trackers #291–#294. Source `dd65674` passes 428 workspace tests,
+Clippy, both musl architecture compile checks and dependency policy. Standalone
+agent restart/offline deletion/partial teardown checks pass. Cleanup removed
+18,889 files / 6.7 GiB and six logs. No release was made.
+
+Observed through 2026-09-21T21:02:43.847741Z: 3342.8 seconds.
+Processed-token delta: 23,372,925, including
+22,757,376 cached input; counts include repeated
+context and do not measure account cost. Known overlapping agent windows total
+1,130 seconds (0.314 hours); later review windows are not fully observed. Active
+work time remains null. Counter baselines/cutoffs and validation intervals are in
+`issue-cycle-2026-09-21`. Final issue publication/accounting follows this cutoff.

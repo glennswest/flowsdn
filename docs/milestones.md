@@ -51,3 +51,15 @@ moving an issue or documenting a gap does not make the feature complete.
 
 Versions are selected when a milestone passes its acceptance gates. Until then,
 the latest published release remains v0.14.0. Earlier release history is retained.
+
+## Issue-driven acceptance tracking
+
+The 2026-09-21 cycle separates resolved design choices from delivered features.
+Track remaining implementation and measured milestone acceptance in
+[#291](https://github.com/glennswest/flowsdn/issues/291),
+[#292](https://github.com/glennswest/flowsdn/issues/292),
+[#293](https://github.com/glennswest/flowsdn/issues/293), and
+[#294](https://github.com/glennswest/flowsdn/issues/294), respectively.
+Existing feature, verification and infrastructure issues remain requirements;
+the trackers do not replace or close them. Decisions and their unfulfilled
+implementation obligations are recorded in ADRs 0011–0013.

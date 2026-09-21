@@ -48,7 +48,7 @@ Kubernetes pod connectivity remain outstanding.
 |---|---|
 | Specifications | 24 files, ~40k lines — every area, normative, with compatibility contracts and test plans |
 | Inventories | 17 files, ~12.5k lines — the reference measured at v1.20.1 (`7d68cfb394`) |
-| Decision records | 10 (`docs/decisions/`) |
+| Decision records | 13 (`docs/decisions/`) |
 | Harvested test corpora | 1,444 files — 168 txtar scenarios, 625 BPF cases, 1,196 golden fixtures, 30 fuzz seeds |
 | Open backlog | 270 issues as checked 2026-09-09, indexed in `docs/open-decisions-index.md` |
 
