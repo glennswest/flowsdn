@@ -1533,7 +1533,9 @@ All are MIT/Apache-2.0/BSD; `cargo deny` per `docs/licensing.md`.
 
 ---
 
-## 12. Open decisions
+## 12. Decisions and remaining questions
+
+Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integration-issue-resolutions.md); their implementation and acceptance tests remain required.
 
 **12.1 Resolved by ADR-0008 (#205): explicit `TableRender`.** Spec 00 §4.3a and `flowsdn-table` now define ordered headers and cells; a convenience derive remains optional future work. Original decision context: `db/cmp`, `db/show` and the query commands
 need each row type to expose an ordered header and ordered rendered cells.
@@ -1545,25 +1547,25 @@ become accidents of the struct definition and the 478 harvested `.table` files
 pin both. **Recommendation: (a)**, with a derive macro for the common case.
 This is a change to spec 00 and should be made before any table is written.
 
-**12.2 One fixture builder per area vs one composable builder.** (a) One
-builder per area (§3.5.1) — simple, independent, some duplication across the
-three LB areas; (b) a layered builder where areas opt into subsystems.
-**Recommendation: (a) to start**, refactoring to (b) if the LB/redirect-policy
-/health-server builders converge, which they probably will.
+**12.2 Resolved — #206.** Use one explicit fixture builder per area (§3.5.1), sharing
+ordinary helper functions where useful. Do not require a generic dependency-injection or
+composable-builder framework.
 
-**12.3 Flag parsing.** `clap` vs hand-rolled (§11.3). **Recommendation:
-hand-rolled**, ~150 lines, because the harness must match the reference's
-lenient behavior (a command with no declared flags ignores parse errors and
-does its own argument handling — three commands rely on this) and clap fights
-that. Revisit if the flag surface grows.
+
+**12.3 Resolved — #207.** Use command-owned Rust flag parsing, not a global clap parser
+for script commands. Preserve lenient handling for commands that declare no flags and
+let their registered handler interpret arguments. This does not constrain CLI parsing
+outside the script language.
+
 
 **12.4 BGP test peer.** Rust peer reusing spec 15's speaker vs driving an
 external `gobgpd` (§3.6.6). **Recommendation: build the Rust peer**, and keep
 an `[exec:gobgpd]`-gated cross-check job so a shared bug is caught.
 
-**12.5 Are the 51 LB scripts run on both map backends in CI?** Doubling the
-run time buys a real invariant (§9.3). **Recommendation: in-memory on every
-PR, both backends nightly on `<build-host>`.**
+**12.5 Resolved — #209.** Run all 51 load-balancer scripts with the in-memory map
+backend on every applicable PR and with both in-memory and real BPF map backends
+nightly. Compare the same normalized output and report backend identity.
+
 
 **12.6 Line endings.** Implementation decision, 2026-09-08 (#210): reject
 CRLF with a line-numbered error, following recommendation (a). Never normalize
@@ -1578,11 +1580,11 @@ exactly what must not happen, and a hard error surfaces it.
 **Recommendation: ship the dump first** (it is what CI needs and what most
 failures need), add `break` behind a feature flag once the LB area is green.
 
-**12.8 Where do flowsdn-authored scripts live?** New scenarios for
-flowsdn-specific behavior must not be mixed into the harvested corpus, or the
-re-harvest becomes a merge. **Recommendation:
-`tests/scripttest/flowsdn/<area>/*.txtar`, run by the same harness**, with the
-corpus directory declared read-only in CI (a checksum gate, §9.4).
+**12.8 Resolved — #212.** Store flowsdn-authored scripts in
+tests/scripttest/flowsdn/<area>/*.txtar and run them through the same engine. Keep
+tests/scripttest/corpus as the provenance-bearing harvested input, protected by the §9.4
+checksum gate.
+
 
 **12.9 Naming rewrites (ADR-0005 §4).** The harvested scripts name
 `cilium`-specific config keys and map names. flowsdn keeps most of them for
@@ -1591,11 +1593,13 @@ yet enumerated. **Recommendation: run the §9.4 static gate as soon as the
 config registry exists; the keys it reports as unknown are exactly the rewrite
 set, and that list belongs in `tools/harvest-txtar.sh`.**
 
-**12.10 Corpus tag bump policy.** ADR-0005 says bumping the reference tag is
-"deliberate and reviewed". Concretely: who reviews, and what is the diff
-budget? **Recommendation: a bump is its own PR containing only the corpus
-diff and the `PROVENANCE`/`DIVERGENCES` updates, with the harness run before
-and after and the delta in XFAIL count stated in the description.**
+**12.10 Resolved — #214.** A reference-tag bump is a dedicated PR containing corpus,
+provenance, divergence and generated-index changes only. The repository maintainer
+reviews it, with review by each affected area owner. Report before/after harness
+outcomes and XFAIL deltas. The diff budget is the explained harvest delta, not an
+arbitrary line limit: every addition, removal and changed expectation must be accounted
+for. Fix harness incompatibilities separately before accepting the bump.
+
 
 ### Variable-expansion implementation clarification (0.5.0)
 

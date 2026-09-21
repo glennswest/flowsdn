@@ -259,12 +259,11 @@ for the 409/400 semantics the CNI relies on.
 4. Parse `EndpointChangeRequest` into an endpoint (state MUST be
    `waiting-for-identity`; `id` is allocated by the manager in step 9, an
    `id` in the body is ignored). Parse errors → `400`, endpoint set `invalid`.
-5. Conflicts → `400` (the reference reports "already exists" with code 400,
-   the swagger's `409` is reserved for a future exact-duplicate path;
-   flowsdn MUST return **`409`** when the CNI attachment id or an IP already
+5. The reference reports conflicts as `400`; flowsdn MUST return **`409`**
+   when the CNI attachment id or an IP already
    belongs to a live endpoint and `400` for everything else — **DEVIATION**:
    the reference returns 400 for both; `cilium-cni` treats any non-2xx as
-   failure so the distinction is free and the swagger already documents 409).
+   failure so the distinction is free and the swagger already documents 409.
    Checks in order: `id` taken (only when the body carries one), CNI
    attachment id taken, IPv4 taken, IPv6 taken.
 6. Labels from the API (`labels[]`): reserved labels → `400`; generated
@@ -572,6 +571,13 @@ existing endpoints are treated as unknown (their `cilium_lxc` entries are
 
 ### 3.8 Deletion
 
+**Rollback ownership (ADR-0012 #129):** teardown MUST affect only the target
+endpoint generation and allocations it still owns. Shared identity release
+is reference-counted (spec 03); another live endpoint's identity or policy
+must not be removed. A rollback attempt must not delete a replacement endpoint
+that reused the same attachment ID; the API/controller must validate the
+creation identity or serialize creation and rollback under that identity.
+
 Triggered by `DELETE /endpoint/{id}` (CNI DEL, `cilium-dbg endpoint
 disconnect`), `DELETE /endpoint` (by container id), the deletion queue
 replay, GC (3.9.3), restore cleanup, or health endpoint relaunch.
@@ -776,8 +782,12 @@ there, and hands the socket to the async runtime (a socket stays in the
 namespace it was created in). No child process, no orphan on crash, one
 image binary. `health-endpoint.pid` is still written and contains the
 **agent's** PID so tooling that reads it finds a live process; on start the
-agent treats a pidfile naming a PID that is not itself as a leftover from a
-reference agent and kills it (ADR-0001 in-place swap). Open decision 12.4.
+agent MUST NOT signal a process solely because a stale pidfile names it.
+Before stopping a former responder, verify its executable identity and expected
+health namespace and guard against PID reuse (for example with a verified
+pidfd). An unrelated or unverifiable process is left alone and reported.
+Namespace switching occurs only on the dedicated thread, never on a runtime
+worker (ADR-0012 #117).
 
 ### 3.11 REST API server
 
@@ -1645,39 +1655,50 @@ detection in debug builds.
 Sizing: endpoint + regeneration + restore ~5k lines, manager + CEP ~1.5k,
 API server + models + limiter ~5k, healthcheck ~2k, status ~0.8k, tests ~5k.
 
-## 12. Open decisions
+## 12. Decision register (resolved and open)
 
-1. **Read Cilium-written state directories (in-place migration).** (a) yes:
-   parse `ep_config.json` exactly as 4.2 including `dockerID`, `DNSRules`
-   v1, `OpLabels`, tolerate the extra `ep_config.h`, kill a foreign
-   `health-endpoint.pid` (this spec); (b) only flowsdn-written state, freeing
-   the JSON schema. Recommendation: (a) — ADR-0001 promises drop-in swap and
-   the cost is a handful of serde renames; pair with spec 00 decision 12.4
-   (ignore the reference `agent-runtime-config.json`).
+1. **Reference endpoint restore — resolved #114.** Read reference-written
+   `ep_config.json` using §4.2, including `dockerID`, `OpLabels`, legacy `DNSRules`
+   (accepted and ignored), and `DNSRulesV2`; tolerate unrelated `ep_config.h`. Restore
+   does not import the reference runtime configuration. Responder cleanup follows the
+   process-ownership safeguards in decision #117.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
 2. **Widen the id pool to 1..65535.** (a) keep 4095 (reference; some
    dashboards assume it, `%05d` unaffected); (b) 65535 (u16 max; every map
    and name format admits it; `cilium_call_policy` already has 65536 slots).
    Recommendation: (b) behind a flowsdn-only key `endpoint-id-max` defaulting
    to 4095 until an e2e run with > 4095 endpoints per node is meaningful;
    `reuse()` accepts either regardless.
-3. **409 vs 400 for duplicate PUT.** (a) 409 for attachment-id/IP conflicts
-   (this spec, matches swagger); (b) 400 like the reference. Recommendation:
-   (a); the CNI treats both as failure.
-4. **In-process health responder thread vs separate binary.** (a) thread with
-   `setns` (this spec; one binary, no orphan process); (b) spawn
-   `flowsdn-health-responder` like the reference (isolates a crash of the
-   responder from the agent, matches `ps` expectations of bugtool).
-   Recommendation: (a); keep the pidfile with the agent PID.
+3. **Endpoint conflict status — resolved #116.** Return 409 with the API Error body for
+   live attachment-ID or IP ownership conflicts on endpoint PUT. Preserve 400 for
+   malformed or otherwise invalid requests. This is the existing documented deviation
+   from the reference implementation.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+4. **Health responder process model — resolved #117.** Create the health namespace
+   socket on a dedicated OS thread using `setns`, then hand the socket to the runtime.
+   Do not change a shared runtime worker namespace. Keep the agent PID in the
+   compatibility pidfile. A stale PID alone never authorizes signalling: verify the
+   process is the former health responder in the expected namespace, protect against PID
+   reuse, and otherwise report/leave the unrelated process alone.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
 5. **`/statedb/query` for the `health` table.** Conditional on spec 00
    decision 12.5; if (a) there, the route in 3.12 is normative here. If it is
    dropped, `cilium-dbg status` from upstream exits non-zero after printing
    the status; `flowsdn-dbg` becomes P0.
-6. **Deferred routes return 501 vs unregistered.** (a) 501 with `Error`
-   body (this spec); (b) unregistered (go-swagger style 404 "path not
-   found"). Recommendation: (a).
-7. **Adaptive API limiter.** (a) implement auto-adjust (this spec; upstream
-   defaults assume it); (b) fixed limits. Recommendation: (a) — the
-   algorithm is small and its metrics are on upstream dashboards.
+6. **Unimplemented API routes — resolved #118.** Register recognized but
+   not-yet-implemented method/path pairs and return 501 with the standard Error body.
+   Unknown paths remain 404; invalid methods are handled separately. A 501 explicitly
+   reports an unfinished feature and does not remove it from scope.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+7. **Adaptive API limiting — resolved #119.** Implement the adaptive auto-adjust
+   algorithm specified in §3.11 with its configuration and metrics; fixed limits are not
+   a replacement for that contract.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
 8. **Endpoint-hash scope.** (a) hash `.rodata.config` values + rename table
    (this spec); (b) additionally hash the object identity so a flowsdn
    upgrade forces `rewrite+load` on every endpoint. Recommendation: (b) is

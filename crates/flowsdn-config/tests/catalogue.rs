@@ -12,6 +12,7 @@ fn owning_defaults_resolve_typed_values_without_requiring_overrides() {
     let resolved = schema.resolve([]).unwrap();
     for (key, expected) in [
         ("bpf-lb-map-max", Value::Int(65536)),
+        ("lb-retry-backoff-max", Value::Duration(60_000_000_000)),
         ("bpf-nat-global-max", Value::Int(524288)),
         ("bpf-neigh-global-max", Value::Int(524288)),
         ("bpf-lb-maglev-table-size", Value::UInt(16381)),

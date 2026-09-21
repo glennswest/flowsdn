@@ -70,8 +70,8 @@ Out of scope (owned by sibling specs; referenced, never duplicated):
 
 Non-goal: reproducing the reference's `cilium connectivity test` test *names*
 one-for-one. flowsdn's scenario ids are its own (§4.4), and the mapping to
-reference names is recorded in §4.5 as documentation only, so that a person
-comparing a flowsdn CI run to an upstream CI run can find the same scenario.
+reference names is recorded in §4.5 and accepted as explicit --test aliases
+(§5.2), so comparisons use canonical flowsdn scenario IDs in reports.
 
 ---
 
@@ -1204,6 +1204,10 @@ selected = catalogue
   |> expand: one instance per family in scenario.families ∩ enabled
 ```
 
+Pinned upstream aliases are expanded to canonical scenario IDs before name
+filters are evaluated; expansion is deduplicated and applies equally to negated
+selectors. The mapping revision is included in the report (#233).
+
 `--test` accepts the reference's shape: comma-separated, prefix match on
 `group/` or on the id, and `!` negation (`--test='!pod-to-world'`,
 `--test='policy/,l7/'`). A `--test` expression matching **nothing** is an error,
@@ -1309,7 +1313,7 @@ file passed with `--config`; precedence is flag > env > file > default.
 | `--require-feature` | string, repeatable | — | §5.2; a skip for this feature becomes a failure |
 | `--require-hubble` | bool | false | a skipped flow assertion becomes a failure |
 | `--hubble` | bool | auto | use Hubble assertions at all |
-| `--hubble-mode` | `relay`\|`per-node` | auto | §3.4.3 |
+| `--hubble-mode` | `relay`\|`per-node` | `relay` | §3.4.3; CI explicitly selects `per-node` (#227) |
 | `--flow-settle` | duration | 2s | §3.4.3 |
 | `--flow-timeout` | duration | 30s | max wait for a flow assertion's cardinality |
 | `--external-ip`, `--external-other-ip`, `--external-ipv6`, `--external-other-ipv6` | IP | discovered | §3.1.4 |
@@ -1718,8 +1722,8 @@ initially.** Naming these so nobody discovers them by being surprised:
 9. **Cloud-provider scenarios** (EKS/ENI, GKE, AKS): no flowsdn CI runs against
    a cloud provider. **Narrowed 2026-09-07 by ADR-0007**, which closes the half
    of this gap that mattered most: the cloud IPAM *control plane* — every mode
-   of spec 07 §3.9–3.12, including the error and exhaustion paths — is now a
-   pull-request gate, tested against recorded provider responses replayed at the
+   of spec 07 §3.9–3.12, including the error and exhaustion paths — MUST become a
+   pull-request gate using recorded provider responses replayed at the
    HTTP layer (spec 07 §9.1), with a weekly live-cloud drift check as the only
    credentialed job. What remains out of scope is genuinely end-to-end
    *datapath* testing on a cloud provider: no job runs this suite's §3.2 matrix
@@ -1727,12 +1731,15 @@ initially.** Naming these so nobody discovers them by being surprised:
    LoadBalancer Services, cloud-native routing MTUs and the per-endpoint policy
    routing of spec 07 §3.20 are exercised only in the `E` lane, which is
    manual. The gap therefore narrows rather than disappears, and the residual
-   is stated precisely: **flowsdn proves that it asks the cloud for the right
-   addresses, not yet that packets flow once it has them.**
+   is stated precisely: **recorded replay must prove that flowsdn asks for the
+   right addresses; it cannot prove that packets flow once allocated. Neither
+   CI implementation nor live-cloud datapath validation is claimed here.**
 
 ---
 
-## 12. Open decisions
+## 12. Decisions and remaining questions
+
+Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integration-issue-resolutions.md); their implementation and acceptance tests remain required.
 
 1. **Hubble stream lifetime.** Per-scenario-group streams (simple, bounded
    memory, but repeated stream setup) versus one long-lived stream per node with
@@ -1748,17 +1755,15 @@ initially.** Naming these so nobody discovers them by being surprised:
    bring-up and set the default at p99.9 + 50%. Until measured, treat every
    flow-assertion flake as a settle-time question first.
 
-3. **Relay versus per-node streams as the default.** Relay is one connection and
-   gives `node_name` on every flow; per-node is immune to relay being the thing
-   that is broken. *Recommendation*: default to per-node in CI (fewer moving
-   parts in the assertion path, and it tests the agent's own listener) and to
-   relay interactively. This inverts the obvious choice deliberately.
+3. **Resolved — #227.** Default interactive use to relay; CI explicitly sets per-node
+   mode and obtains node membership from Kubernetes. Relay behavior has its own tests,
+   so a broken relay cannot silently invalidate datapath assertions. Explicit user flags
+   override the interactive default.
 
-4. **Where the negative-capture assertion runs for encryption.** A privileged
-   pod per node (portable, needs privilege) versus asking the agent to do the
-   capture through an API only enabled in test builds (no extra privilege, but
-   test-only code in the agent). *Recommendation*: the privileged pod. Test-only
-   code paths in a production agent are a durable liability.
+4. **Resolved — #228.** Perform encryption negative captures in a privileged test pod on
+   each participating node using the Rust test probe. Do not add a test-only capture API
+   to the production agent. Bound capture duration and size and clean up the pod after
+   failures.
 
 5. **arm64 e2e on Rose nodes versus a cloud arm64 VM.** Rose gives the real
    kernel, the real NIC and no recurring cost, but couples CI to lab hardware
@@ -1767,10 +1772,10 @@ initially.** Naming these so nobody discovers them by being surprised:
    of nodes whose only job is CI, and a cloud VM added only if Rose availability
    proves to be the binding constraint.
 
-6. **Whether `e2e-encryption` belongs on the PR gate.** It costs ~25 min ×2 and
-   it is the most environment-sensitive of the gating jobs. *Recommendation*:
-   keep it on the gate. Encryption bugs are silent — traffic still flows — and
-   a nightly catch means a day of merged changes to bisect.
+6. **Resolved — #230.** Keep e2e-encryption as a required PR gate once the encryption
+   lane is implemented: both WireGuard and IPsec must verify confidentiality, not just
+   successful traffic. Missing required encryption capability is a failed gate, not a
+   passing skip.
 
 7. **Upstream cross-check.** Should CI ever run the real `cilium connectivity
    test` against a flowsdn cluster? It is the strongest available evidence that
@@ -1784,11 +1789,10 @@ initially.** Naming these so nobody discovers them by being surprised:
    `flowsdn-dbg` is not yet settled in spec 04. *Recommendation*: expose the
    creation timestamp in the CT dump JSON; it is useful for support regardless.
 
-9. **Test-name mapping to upstream.** §1 says the mapping is documentation only.
-   An alternative is to accept upstream's names as aliases in `--test` so that CI
-   configuration can be copied verbatim from the reference's workflows.
-   *Recommendation*: provide the aliases (a static table, ~70 entries); it costs
-   nothing and it makes side-by-side comparison during bring-up much easier.
+9. **Resolved — #233.** Accept pinned upstream connectivity-test names as aliases in
+   --test through an explicit mapping to canonical flowsdn scenario IDs. Expand aliases
+   before applying inclusion/exclusion filters, deduplicate IDs, and retain the no-match
+   error. Report canonical IDs and the alias mapping revision.
 
 10. **Scale-row cluster size.** Five nodes is enough to see churn effects but not
     enough to see anything about a 100-node control plane. *Recommendation*:

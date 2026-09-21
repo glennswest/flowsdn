@@ -845,6 +845,196 @@
       },
       "outcome": "CNI executable ADD/CHECK/DEL and dual-stack traffic passed with real endpoint manager; fresh-manager restoration preserved IDs/IPAM and recovered traffic. Two-router native routing passed with kernel FORWARD blocked. Focused tests, Clippy, architecture compilation and dependency policy passed. Milestone 1 continues into standalone daemon process integration.",
       "note": "Counters contain cached/repeated context and are not dollars or subscription allowance. Shared root/child usage each counted once; overlapping agent time is not added to project elapsed. Build/test/cleanup waits included, separate exact bounds unavailable. Top-level historic release counters retain their old cutoff. Daemon preparation overlapped cleanup; these sanitized counters include it through the cutoff."
+    },
+    {
+      "id": "issue-cycle-2026-09-21",
+      "scope": "project/shared",
+      "agent": "/root",
+      "start_utc": "2026-09-21T20:07:01Z",
+      "end_utc": null,
+      "active_work_seconds": null,
+      "status": "validation-in-progress",
+      "baseline_commit": "a6ca6e1",
+      "baseline_open_issues": 270,
+      "selected_decision_issues": 101,
+      "usage_samples": [
+        {
+          "session_id": "01a0c594-3b67-7722-a326-e5e4720f8977",
+          "source": "cumulative token_count telemetry; endpoint minus first observed baseline, not summed responses",
+          "baseline": {
+            "timestamp": "2026-09-21T20:07:28.985Z",
+            "counters": {
+              "input_tokens": 17924,
+              "cached_input_tokens": 11904,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 133,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 18057
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T20:18:44.201Z",
+            "counters": {
+              "input_tokens": 3828378,
+              "cached_input_tokens": 3712640,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 12645,
+              "reasoning_output_tokens": 1219,
+              "total_tokens": 3841023
+            }
+          },
+          "delta": {
+            "input_tokens": 3810454,
+            "cached_input_tokens": 3700736,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 12512,
+            "reasoning_output_tokens": 1219,
+            "total_tokens": 3822966,
+            "uncached_input_tokens": 109718
+          }
+        },
+        {
+          "session_id": "01a0c594-fdd8-73f1-bfae-b99f121daab8",
+          "source": "cumulative token_count telemetry; endpoint minus first observed baseline, not summed responses",
+          "baseline": {
+            "timestamp": "2026-09-21T20:07:57.339Z",
+            "counters": {
+              "input_tokens": 17999,
+              "cached_input_tokens": 11904,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 98,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 18097
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T20:17:12.626Z",
+            "counters": {
+              "input_tokens": 3257119,
+              "cached_input_tokens": 3115648,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 13619,
+              "reasoning_output_tokens": 1332,
+              "total_tokens": 3270738
+            }
+          },
+          "delta": {
+            "input_tokens": 3239120,
+            "cached_input_tokens": 3103744,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 13521,
+            "reasoning_output_tokens": 1332,
+            "total_tokens": 3252641,
+            "uncached_input_tokens": 135376
+          }
+        },
+        {
+          "session_id": "01a0c597-0d0b-71c0-ac97-9c29efef5916",
+          "source": "cumulative token_count telemetry; endpoint minus first observed baseline, not summed responses",
+          "baseline": {
+            "timestamp": "2026-09-21T20:10:12.882Z",
+            "counters": {
+              "input_tokens": 18247,
+              "cached_input_tokens": 16000,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 137,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 18384
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T20:17:06.794Z",
+            "counters": {
+              "input_tokens": 2678407,
+              "cached_input_tokens": 2576000,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 11232,
+              "reasoning_output_tokens": 521,
+              "total_tokens": 2689639
+            }
+          },
+          "delta": {
+            "input_tokens": 2660160,
+            "cached_input_tokens": 2560000,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 11095,
+            "reasoning_output_tokens": 521,
+            "total_tokens": 2671255,
+            "uncached_input_tokens": 100160
+          }
+        },
+        {
+          "session_id": "01a0c597-33e5-7872-8318-3d290208f997",
+          "source": "cumulative token_count telemetry; endpoint minus first observed baseline, not summed responses",
+          "baseline": {
+            "timestamp": "2026-09-21T20:10:21.321Z",
+            "counters": {
+              "input_tokens": 18253,
+              "cached_input_tokens": 16000,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 62,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 18315
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T20:16:54.256Z",
+            "counters": {
+              "input_tokens": 3160379,
+              "cached_input_tokens": 3035136,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 10243,
+              "reasoning_output_tokens": 678,
+              "total_tokens": 3170622
+            }
+          },
+          "delta": {
+            "input_tokens": 3142126,
+            "cached_input_tokens": 3019136,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 10181,
+            "reasoning_output_tokens": 678,
+            "total_tokens": 3152307,
+            "uncached_input_tokens": 122990
+          }
+        }
+      ],
+      "outcomes": [
+        "Recovered and wired standalone agent implementation",
+        "42 focused agent/CNI/IPAM tests passed; focused Clippy passed",
+        "Live dual-stack process restart and offline deletion replay passed",
+        "101 design/spec/default issues reviewed; closure pending committed evidence and config validation"
+      ],
+      "commits": [
+        "2dbf86b",
+        "e722854",
+        "6c0226d",
+        "fbe971d"
+      ],
+      "release": null,
+      "usage_note": "Counters include cached and repeated context; no account-cost inference. First response and reporting beyond cutoff excluded. Shared usage assigned once to project/shared.",
+      "observed_agent_windows": [
+        {
+          "agent": "review_agent",
+          "start_utc": "2026-09-21T20:10:00Z",
+          "end_utc": "2026-09-21T20:17:07Z",
+          "elapsed_seconds": 427
+        },
+        {
+          "agent": "control_decisions",
+          "start_utc": "2026-09-21T20:11:26Z",
+          "end_utc": "2026-09-21T20:16:51Z",
+          "elapsed_seconds": 325
+        },
+        {
+          "agent": "integration_decisions",
+          "start_utc": "2026-09-21T20:10:26Z",
+          "end_utc": "2026-09-21T20:16:44Z",
+          "elapsed_seconds": 378
+        }
+      ],
+      "observed_agent_hours": 0.3138888888888889,
+      "agent_time_note": "Overlapping observed agent windows include review and waits; not active time or project elapsed. Earlier agent work unmeasured."
     }
   ],
   "crates": [

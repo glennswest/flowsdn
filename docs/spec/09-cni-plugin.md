@@ -311,7 +311,11 @@ if it fails:
 **DEVIATION** (last row): the reference does not delete the endpoint when
 steps 13–15 fail; the endpoint lingers until `endpoint-gc-interval` (5 m)
 notices the link is gone and the IP is double-released or leaked. flowsdn
-deletes it explicitly. Same observable end state, sooner.
+deletes it explicitly. Same observable end state, sooner. Rollback MUST check
+that the endpoint still belongs to this ADD attempt before deletion and that
+released allocations are still owned by that attempt. The agent applies
+spec 08 §3.8 generation/ownership checks; identities shared with other
+endpoints remain reference-counted (ADR-0012 #129).
 
 The per-ENI host rules of step 9 are not rolled back by the plugin; the
 agent's `DELETE /endpoint` path removes them (`07-ipam`) and a later ADD for
@@ -624,10 +628,11 @@ shell). Behaviour, identical to the reference script:
 - `HOST_PREFIX` (default `/host`), `CNI_DIR` (default
   `$HOST_PREFIX/opt/cni`); `mkdir -p $CNI_DIR/bin`.
 - Copy `loopback` if `OVERWRITE_LOOPBACK=true` or absent; failure is
-  ignored (rarely needed). The reference builds `loopback` from
-  `containernetworking/plugins` with `CGO_ENABLED=0`; flowsdn ships the
-  upstream binary unchanged in the image (Apache-2.0, NOTICE entry) — open
-  decision 12.2 for a Rust loopback.
+  ignored (rarely needed). flowsdn implements loopback in Rust as an entry
+  point of the same CNI executable, dispatching by invocation name and config
+  type with standard CNI version/error handling. Install it as `loopback`;
+  `flowsdn-loopback` may be an additional name. No Go binary is bundled
+  (ADR-0002; ADR-0012 #124).
 - Copy the plugin to `$CNI_DIR/bin/.cilium-cni.new`, then `rename` to
   `$CNI_DIR/bin/cilium-cni` (atomic replace of a binary the kubelet may be
   executing right now) unless `OVERWRITE_CILIUM=false` and it exists.
@@ -1204,19 +1209,19 @@ status so DEL can distinguish 503 (queue) from 404 (ignore).
 same four as a `trait Hooks` with default no-op methods, wired at compile
 time, so the ADD function can be tested with a recording implementation.
 
-## 12. Open decisions
+## 12. Decision register (resolved and open)
 
-1. **Binary name.** Options: (a) install only `cilium-cni` and write
-   `type: cilium-cni` (maximum compatibility with custom conflists and the
-   upstream migration story); (b) `flowsdn-cni` everywhere and require users
-   to change custom conflists; (c) install both names, write `cilium-cni`.
-   Recommendation: (c) now, revisit (b) at 1.0 when a Helm major can carry
-   the change. Nominative use of the name is covered by `docs/licensing.md`.
-2. **`loopback` plugin.** Ship the upstream Go binary (Apache-2.0, NOTICE
-   entry; violates the spirit of "one static Rust binary" but is 2 MB and
-   rarely used) or write the 60-line Rust equivalent in `flowsdn-cni`
-   (`type: loopback` dispatch on `argv[0]`/conf `type`). Recommendation:
-   Rust, as a second entry point of the same binary, after M1.
+1. **CNI installation names — resolved #123.** Install both `cilium-cni` and
+   `flowsdn-cni` as names for the same executable; generated conflists retain `type:
+   cilium-cni`. Custom conflists using either name remain valid.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+2. **Rust loopback plugin — resolved #124.** Implement loopback in Rust as an entry
+   point of the CNI executable, installed under `loopback` (with `flowsdn-loopback`
+   permitted as an additional name). Dispatch by invocation name and configuration type,
+   with normal CNI version/error handling. Do not bundle the Go loopback binary.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
 3. **CNI GC verb.** Not implemented by the reference. Implementing it would
    let flowsdn delete endpoints whose attachment is not in
    `cni.dev/valid-attachments` and replace part of the endpoint GC.
@@ -1236,11 +1241,13 @@ time, so the ADD function can be tested with a recording implementation.
 6. **Log rotation threshold.** The reference caps at 7 compressed backups
    with the hook's default size. Fix a size (recommendation 100 MB) in this
    spec once the log volume of a busy node is measured.
-7. **Rollback deletes the endpoint (3.4.1 DEVIATION).** Confirm with spec 08
-   that `DELETE /endpoint` on an endpoint whose first regeneration just
-   completed has no side effect on other endpoints (policy map
-   recomputation is per endpoint; identity release is refcounted).
-   Recommendation: keep the deviation.
+7. **Rollback endpoint ownership — contract recorded, #129 verification open.** Keep explicit endpoint deletion
+   after successful PUT followed by CNI failure. Rollback targets only the endpoint
+   created by that attempt, uses attachment/generation ownership checks against
+   replacement races, and releases only its own allocations. Endpoint-local policy
+   removal and reference-counted identity release must preserve every other endpoint.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
 8. **`container-netns-path` semantics.** The plugin reports
    `/var/run/cilium/netns/<basename>`; the reference agent does not create
    that mount at this tag (field kept for the health/infra endpoints).

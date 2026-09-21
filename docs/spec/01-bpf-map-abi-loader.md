@@ -1310,16 +1310,18 @@ Licenses per `docs/licensing.md`.
    delegates variant count to the datapath spec, so this reconciles existing
    decisions rather than requiring another user choice. No verifier result is
    claimed by resolving this policy.
-3. **Per-endpoint objects vs one shared lxc object.** Reference model kept
-   (§3.7). Revisit after the first milestone with measured load time per
-   endpoint; a shared object would need `HASH_OF_MAPS` for policy maps and
-   changes the `cilium_policy_v3_%05d` contract that cilium-dbg uses.
-4. **Perf array vs ring buffer for `cilium_events`.** Keep perf (compat).
-   A `RINGBUF` alternative would need a new map name and a Hubble-side
-   reader; only worth it if lost-event rates under load are shown to matter.
-5. **Value cache vs table reconciler per map.** Recommendation in §3.11:
-   reconciler for table-backed maps, cache for lxc and ipcache. Confirm when
-   `flowsdn-table` (area 00) exists.
+3. **Resolved (#58, ADR-0011): per-endpoint policy-capable lxc objects.**
+   Keep §3.7 per-endpoint map names and rodata. A shared local-delivery smoke
+   object does not supersede this production policy-object contract. Any future
+   shared design requires measured load/memory evidence and tooling compatibility.
+4. **Resolved (#57, ADR-0011): `cilium_events` remains `PERF_EVENT_ARRAY`.**
+   Preserve §3.10 framing and per-CPU lost-event accounting. A ring-buffer
+   replacement needs a separate measured proposal, map name and reader.
+5. **Resolved (#51, ADR-0011): §3.11 owns the map-writer split.**
+   Table-backed desired state uses the table reconciler. Endpoint/ipcache
+   multi-writer maps retain one shared value-cache/retry primitive; do not layer
+   two independent retry owners on one map. The foundation table and reconciler
+   now exist; live map adapters remain implementation work.
 6. **Per-cluster CT/NAT and multicast map-in-map in the first release.**
    Recommendation: implement the map-in-map primitive now (Maglev needs it
    anyway), create the per-cluster and multicast outer maps only when

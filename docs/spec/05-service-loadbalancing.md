@@ -151,7 +151,8 @@ Backend states (ordering matters for slot sorting):
 | `Maintenance` | 4 | 3 | ¬ready ∧ ¬terminating, or weight 0 | **no** (map only) | no |
 
 `alive(be) := ¬Unhealthy ∧ State ∈ {Active, Terminating}`. `Unhealthy` is an
-overlay from an active health checker; it MUST NOT change `State` (a backend
+overlay supplied through the health integration hook (no in-tree active
+TCP/HTTP prober, #84); it MUST NOT change `State` (a backend
 may be healthy for one service and not for another) but it places the backend
 in the quarantined range (§3.4 step 6).
 
@@ -465,13 +466,15 @@ the module.
 
 `kube-proxy-replacement=true` **forces** `bpf-lb-sock=true`. Socket LB itself
 is datapath (spec 02: cgroup `connect/sendmsg/recvmsg/getpeername/bind/
-post_bind/sock_release` hooks). Userspace obligations:
+post_bind/sock_release` hooks). Userspace obligations (**socket LB retained for milestone 2**, #2, ADR-0011):
 
-- Program the surrogate `0.0.0.0`/`::` NodePort entries (§3.5) — the socket
+- Program the surrogate `0.0.0.0`/`::` NodePort entries (§3.5; resolved #11) — the socket
   programs look them up for host-namespace connects to `<nodeIP>:<nodePort>`.
 - `bpf-lb-sock-hostns-only` (default false) selects the program variant that
   only translates sockets whose netns cookie is the host's; pods then rely on
-  tc-level LB. It also disables pod-netns socket termination.
+  tc-level LB. It also disables pod-netns socket termination (#12), including
+  when the termination flag is true; retain the LRP skip-LB checks before
+  service translation. Host-netns termination is unaffected by this restriction.
 - `cilium_skip_lb{4,6}` (hash, **100** entries, key `(netns_cookie, addr,
   port)`): a socket in that netns connecting to that frontend is not
   translated. Written only by the LRP controller (§3.9). Entries whose cookie
@@ -1164,14 +1167,13 @@ Sizing: `flowsdn-lb` ~7k lines + ~5k tests/golden data; `flowsdn-lb-maps`
 
 ## 12. Open decisions
 
-1. **Bit-exact Maglev with Cilium nodes.** (a) freeze §5.1 bit-exact (this
-   spec) so mixed Cilium/flowsdn clusters agree during migration; (b) hash the
-   binary `L3n4Addr` key instead (cheaper, no string building).
-   Recommendation: (a) — the cost is a few hundred bytes per backend per
-   update and it keeps the migration story open.
-2. **Weighted Maglev float semantics.** The reference's counter is an f64
-   compared after truncation; (a) reproduce exactly (this spec); (b) use
-   integer fixed-point. Recommendation: (a), covered by the vector tests.
+1. **Resolved (#80, ADR-0011): freeze §5.1 bit-exact Maglev.**
+   Retain canonical backend strings, ordering and MurmurHash3 x64-128.
+   Binary-key hashing is not an alternative within the compatible mode.
+2. **Resolved (#81, ADR-0011): reproduce IEEE-754 f64 counters.**
+   Use §5.1 initialization, arithmetic and truncation; do not substitute
+   fixed point. Golden weighted vectors remain required before implementation
+   can claim mixed-node equivalence.
 3. **Socket termination.** Deferred in inventory 04. (a) implement in phase 2
    with UDP only; (b) never. Recommendation: (a) — without it UDP clients
    pinned to a removed backend hang until their own timeout; keep TCP behind
@@ -1179,29 +1181,28 @@ Sizing: `flowsdn-lb` ~7k lines + ~5k tests/golden data; `flowsdn-lb-maps`
 4. **`lb-state-file` reflector.** (a) implement (cheap, invaluable for
    standalone tests); (b) rely on the golden harness only. Recommendation:
    (a) after the core lands; the serde types already exist for `GET /service`.
-5. **Active backend health checker.** Reference exposes only a hook. (a) hook
-   only (this spec); (b) in-tree TCP/HTTP prober writing `Unhealthy`.
-   Recommendation: (a) now; (b) as a separate spec if users ask.
-6. **LB class strings.** Keep `io.cilium/*` (this spec, drop-in
-   compatibility) vs. also accept `flowsdn.io/*` aliases. Recommendation:
-   keep only `io.cilium/*` until a migration need appears.
-7. **`enable-service-topology` default.** Reference `false`; kube-proxy
-   honors hints by default. Recommendation: keep `false` for parity; revisit
-   in the Helm mapping spec.
+5. **Resolved (#84, ADR-0011): expose the active-health hook only.**
+   No built-in periodic TCP/HTTP backend prober is part of this contract.
+   External health integrations/API updates may supply `Unhealthy`; Kubernetes
+   readiness continues to select the ordinary backend lifecycle state.
+6. **Resolved (#85, ADR-0011): retain only the specified `io.cilium/*` classes.**
+   Do not add implicit `flowsdn.io/*` aliases. Existing Service manifests
+   retain the ownership behavior in §3.
+7. **Resolved (#86, ADR-0011): `enable-service-topology` defaults false.**
+   Explicit enablement applies the specified hints; chart mappings preserve
+   the default unless the user selects a value.
 8. **`bpf-lb-sock-terminate-pod-connections` default.** Inventory 04 says
    `false`, the daemon registers `true`; this spec follows the daemon.
    Confirm with the Helm values (`socketLB.terminatePodConnections`).
-9. **Quarantined flag on backend slots.** Bit 14 is defined for slots but
-   never written at v1.20.1 while spec 02 §3.12 mentions the datapath honoring
-   it. (a) never set it (this spec, parity); (b) set it for quarantined-range
-   slots if the datapath spec wants an explicit signal. Needs alignment with
-   spec 02 before M2.
+9. **Resolved (#88, ADR-0011): backend-slot bit 14 is never written.**
+   Quarantine is conveyed by slot range and backend state, as §4 requires.
+   Spec 02 §3.12 no longer makes this bit a condition for correct selection.
 10. **LB IPAM pool ordering.** Reference iterates a Go map (nondeterministic).
     This spec mandates `creationTimestamp, name` order (§5.6 step 5).
     Confirm no consumer depends on the previous behavior (none known).
-11. **`lb-retry-backoff-max` default** — resolved to `1m` (§6); spec 00 §6.4
-    to be edited accordingly.
-12. **Health-server bind address.** Reference binds `:<port>` on all
-    addresses. (a) same; (b) bind only NodePort addresses. Recommendation: (a)
-    — cloud health checkers probe node IPs the agent may not classify as
-    NodePort addresses.
+11. **Resolved (#90/#47, ADR-0011): retry maximum is `1m`.**
+   Spec 00 §6.4 and §3.2.3 now agree with §6; the minimum remains `1s`.
+12. **Resolved (#91, ADR-0011): bind healthCheckNodePort on all addresses.**
+   Preserve `:<port>` from §3.7; restricting the listener to classified
+   NodePort addresses could exclude cloud health-check destinations.
+   This does not change the separately configured KPR healthz bind address.

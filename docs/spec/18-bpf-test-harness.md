@@ -545,7 +545,7 @@ test file:
 so that `bpf_fib_lookup` returns a scripted neighbour, `bpf_redirect` reports
 whether the *intended* ifindex was right without a real device, and so on.
 **Rust has no preprocessor**, and ADR-0002 forbids adding one. Three options
-were considered; the decision is open (§12.1) and the M1 plan is (a):
+were considered; ADR-0013 selects (a) (§12.1):
 
 (a) **Feature-gated indirection shim (M1 plan).** Every helper the corpus mocks
 is called through a single `#[inline(always)]` wrapper in
@@ -896,8 +896,9 @@ cost of re-verifying an object (tens of milliseconds each, times 625):
    by `BPF_MAP_LOOKUP_AND_DELETE_BATCH` (or iterate-and-delete where batch is
    unavailable), array-family maps by writing zeroes, LPM tries by iterate and
    delete, program arrays left alone (they are wiring, not state). It then
-   **asserts the clear succeeded** by re-counting every map; a non-empty map
-   after clearing fails the *next* case immediately with a distinctive error,
+   **asserts the reset succeeded**: hash/trie maps are empty, every array
+   value is zero, and program-array wiring is unchanged. Unresettable state
+   requires reloading. A failed reset fails the *next* case with a distinctive error,
    rather than corrupting it.
 3. `FLOWSDN_BPFTEST_ISOLATION=reload` forces a fresh load per case. CI runs the
    grouped mode on the PR gate and the `reload` mode nightly; a case that
@@ -1335,42 +1336,27 @@ large — measured, and only where it matters.
 
 ---
 
-## 12. Open decisions
+## 12. Decisions and remaining questions
 
-1. **Helper mocking mechanism (§3.6).** Options: (a) feature-gated
-   `#[inline(always)]` shim reading mock maps under `--features testmock`;
-   (b) `freplace`/`BPF_PROG_TYPE_EXT` over non-inlined helper wrappers;
-   (c) no mocking, netns for everything. **Recommendation: (a) for M1**, with
-   the 5 % verifier-statistics divergence check and the netns cross-check per
-   pipeline as the fidelity guard, and (b) re-evaluated at M2 once the
-   datapath's subprogram structure is settled. Rationale: (a) is the only
-   option that is cheap now and does not force production code shape; (b) is
-   strictly better on fidelity but costs hot-path inlining and contradicts
-   spec 02 §1.1's decision to drop `freplace`; (c) is a 40× slowdown on the
-   majority of the corpus.
+Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integration-issue-resolutions.md); their implementation and acceptance tests remain required.
 
-2. **Map isolation strategy (§5.1).** Options: (a) group by config signature
-   and clear between cases (fast, needs correct clearing); (b) reload per case
-   (slow, trivially correct); (c) the reference's model of sharing per file
-   with alphabetical ordering. **Recommendation: (a) as the default with (b)
-   nightly and available by env var**, and (c) explicitly rejected — the
-   reference's own cases that delete their own entries in the CHECK stage are
-   the evidence that shared state costs more than it saves.
+1. **Resolved — #215.** Use the feature-gated, inline helper shim of §3.6. Keep
+   production objects free of testmock, load both object forms, enforce the specified 5%
+   verifier-statistics divergence gate, and cross-check redirect pipelines with
+   production objects in network namespaces. No freplace dependency is introduced.
 
-3. **`CASES.toml` vs `CASES.md`.** Decided in favour of TOML (§4.1) with
-   generated Markdown views. Recorded here rather than silently, because
-   ADR-0005 left it open and a future re-harvest maintainer will want the
-   reasoning. Revisit only if the file stops being machine-consumed.
+2. **Resolved — #216.** Group by configuration signature and reset all mutable state
+   between cases; run fresh-load isolation nightly and on explicit request. Verify
+   hash/trie emptiness, array values reset, and stable program-array wiring. Randomize
+   order with a recorded seed. If a map cannot be demonstrably reset, reload it instead.
 
-4. **How much of the reference's `pktgen` default-value set to adopt.**
-   Options: (a) adopt the defaults exactly (§3.2.1), so ported expectations —
-   especially checksums — match the reference's numerically; (b) choose
-   flowsdn defaults and recompute every expectation. **Recommendation: (a)**,
-   because it makes the two suites' failures comparable during bring-up, which
-   is the entire reason for keeping the case names. Cost: flowsdn inherits a
-   few arbitrary constants (TTL 64, TCP window 65535, `default_data`) for no
-   reason other than lineage; acceptable, and documented as such in the fixture
-   file.
+3. **Resolved — #217.** CASES.toml is the authoritative machine-readable harvested case
+   inventory; Markdown is a generated view. TOML enables schema validation, automated
+   scheduling and coverage joins without parsing prose.
+
+4. **Resolved — #218.** Use the reference packet-generator defaults in §3.2.1 exactly,
+   including TTL, TCP window and payload bytes, with provenance. Keep rendered packet
+   bytes and checksums as independently reviewed golden data.
 
 5. **Socket-LB cases at M2 (§3.9).** Options: (a) keep the reference's
    direct-call-in-an-XDP-wrapper form; (b) run the real `CGROUP_SOCK_ADDR`
@@ -1380,12 +1366,9 @@ large — measured, and only where it matters.
    wait until the socket-LB spec lands. Note that (b) tests something upstream
    does not test at all.
 
-6. **BPF code coverage (§8.5).** Options: (a) none, rely on the case inventory;
-   (b) port the reference's `coverbee` approach; (c) wait for a verifier-safe
-   Rust/BPF coverage tool. **Recommendation: (a) now, (c) watched.** (b) is
-   rejected: CFG-rewriting instrumentation changes the program the verifier
-   sees, which is why the reference needs a regex to disable it per file and a
-   log to debug when it breaks the verifier.
+6. **Resolved — #220.** Report case-inventory coverage, not BPF line or branch coverage.
+   Do not port CFG-rewriting coverbee instrumentation. A future verifier-safe tool needs
+   a separate fidelity assessment before its output can support a coverage claim.
 
 7. **Netns-tier packet injection.** Options: (a) `AF_PACKET` `SOCK_RAW` send on
    the ingress device; (b) a `tc` action that injects; (c) a userspace TAP.
@@ -1393,24 +1376,15 @@ large — measured, and only where it matters.
    side is symmetric. Revisit if `AF_PACKET` send turns out to bypass the tcx
    ingress hook on some kernel (to-verify in §9.1's netns lifecycle test).
 
-8. **Where the packet fixtures live relative to spec 19.** Options: (a) one
-   `tests/fixtures/packets/` shared by bpftest and the e2e traffic generator;
-   (b) separate sets. **Recommendation: (a)**, per spec 02 §9.2's requirement
-   that fixtures be data files shareable with the e2e suite; the risk is that
-   an e2e-driven change to a fixture silently changes a bpftest expectation,
-   mitigated by the golden test in §9.2 that pins every fixture's rendered
-   hex.
+8. **Resolved — #222.** Share tests/fixtures/packets/*.toml between bpftest and the
+   connectivity traffic generator. Each fixture contains the builder description and
+   pinned rendered hex; changes require both consumers to pass their golden checks.
 
-9. **Whether `flowsdn-bpf-testprogs` may use the datapath's own library
-   modules.** Options: (a) yes, so a direct-call wrapper calls the real
-   function; (b) no, to keep the test crate from constraining the datapath's
-   internal API. **Recommendation: (a)** — the whole point of the 109
-   `direct` cases is to call the real function — with the constraint that
-   `flowsdn-bpf` exposes those functions behind a `#[doc(hidden)] pub mod
-   testable` so the surface is explicit and its growth is visible in review.
+9. **Resolved — #223.** Permit test programs to call the real datapath library through
+   an explicit doc-hidden testable module. This is an internal workspace interface, not
+   a stable external API. Expected outcomes must come from independently specified
+   fixtures, not the function under test.
 
-10. **Reference tag bump cadence.** Options: (a) pin `v1.20.1` until M1 ships;
-    (b) track upstream minor releases. **Recommendation: (a)** — ADR-0005 says
-    a harvested corpus tracks one tag and bumping is deliberate; bumping mid-M1
-    would churn `CASES.toml` and `PORTED.toml` for cases that are not yet
-    ported anyway. Re-harvest once after M1, as a single reviewed commit.
+10. **Resolved — #224.** Keep the BPF case corpus on reference v1.20.1 through milestone
+   1. At that boundary, review a re-harvest as one dedicated change under the review and
+   diff-accounting policy in spec 17 §12.10. Never follow upstream tags automatically.

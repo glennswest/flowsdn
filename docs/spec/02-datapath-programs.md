@@ -129,6 +129,9 @@ external-facing and MUST match the reference bit-for-bit unless marked
 +-------------------+------+------+----------+
 ```
 
+**Resolved (#1, ADR-0011):** the entire mark layout below remains bit-compatible,
+including internal magics; no private 32-bit identity packing is introduced.
+
 - Bits 8..11 = magic, mask `0x0F00` (`MARK_MAGIC_HOST_MASK`).
 - Bits 8..15 = "key mask" `0xFF00` (`MARK_MAGIC_KEY_MASK`); bits 12..15 carry
   the IPsec key index for `MARK_MAGIC_ENCRYPT`.
@@ -911,8 +914,11 @@ allow can never share a precedence value (deny verdict byte 255 vs allow 1).
 
 `lb_local(svc, key, tuple)`: CT(SERVICE, FORWARD) lookup keyed by
 `{daddr = service, dport, proto, TUPLE_F_SERVICE}`. `ESTABLISHED` with a
-`backend_id` whose backend still exists and is active (or terminating and
-`SVC_FLAG_QUARANTINED` not set) → reuse. Otherwise select: session
+`backend_id` whose backend still exists and is active (or terminating under
+the service fallback rules) → reuse. **Resolved (#88, ADR-0011):** flowsdn
+MUST NOT depend on the aliased service-slot `SVC_FLAG_QUARANTINED` bit 14:
+writers leave it zero. Quarantine eligibility comes from the backend state
+and active/quarantined slot ranges in spec 05 §3.4 and §4. Otherwise select: session
 affinity (`cilium_lb4_affinity[{client_ip, rev_nat_id}]` if within
 `affinity_timeout & 0xFFFFFF` seconds and `cilium_lb_affinity_match`
 confirms membership) → else algorithm per `lb_selection_per_service ?
@@ -922,7 +928,7 @@ backend_slot}]` → backend id; `MAGLEV 2` (M2) = `cilium_lb4_maglev
 [rev_nat_index][jhash(tuple, hash_init4_seed) % LUT_SIZE]` with sport
 zeroed when affinity is on; `FIRST 3` = slot 1. `count == 0` →
 `DROP_NO_SERVICE`. Backend lookup miss → `DROP_NO_SERVICE`; quarantined
-slot → re-select once. New selection → `ct_create(SERVICE)` /
+backend/slot-range membership → re-select once. New selection → `ct_create(SERVICE)` /
 `ct_update_svc_entry` with `backend_id`, `rev_nat_index`; write affinity.
 Two-scope services (`SVC_FLAG_TWO_SCOPES`): `east_west` callers use scope
 INT, NodePort callers scope EXT.
@@ -1206,15 +1212,17 @@ Patched at load per spec 01 (`set_global`). Names are the reference's
 (+len), `ENCAP_IFINDEX` (`encap4_ifindex`, `encap6_ifindex`),
 `HOST_NETNS_COOKIE`, `IPV4/6_RSS_PREFIX(_BITS)`, `EGRESS_GATEWAY_RT_TBID`,
 `IPV4_ENCRYPT_IFACE`, `STRICT_IPV4_NET(_SIZE)`, `STRICT_IPV4_OVERLAPPING_CIDR`,
-all `CT_*` timeouts (`ct_lifetime_tcp 21600`, `_nontcp 60`,
-`ct_service_lifetime_tcp/nontcp`, `ct_service_close_rebalance 30`,
+all `CT_*` timeouts (`ct_lifetime_tcp 8000`, `_nontcp 60`,
+`ct_service_lifetime_tcp 8000` / `_nontcp 60`, `ct_service_close_rebalance 30`,
 `ct_syn_timeout 60`, `ct_close_timeout 10`, `ct_report_interval 5`,
 `ct_report_flags 0xff`), `monitor_aggregation` (u8), `VLAN_FILTER` (becomes
 the `cilium_vlan_filter` HASH map keyed `{ifindex, vlan}` — **DEVIATION**:
 the reference generates a `switch` into `node_config.h`; a map is the only
 option without a compiler on the node, ADR-0002), `LB_MAGLEV_LUT_SIZE`
 (`maglev_lut_size`, also a map size in spec 01). Map sizes are loader
-parameters (spec 01), not program constants.
+parameters (spec 01), not program constants. The TCP values above are
+the effective configured defaults (spec 04 §6; ADR-0011, #74); 21600 seconds
+is the reference BPF fallback, not a flowsdn runtime default.
 
 ### 6.2 Feature toggles: what becomes a patched global, what becomes a build dimension
 
@@ -1657,6 +1665,16 @@ file (ADR-0001).
 
 ---
 
+### Identity scope classification
+
+**Resolved (#66, ADR-0011):** local CIDR identity classification MUST follow
+[spec 03 §4.5](03-identity-ipcache.md#45-bit-layout-and-clustermesh-ranges):
+classify by the high scope byte for the supported nonzero-index identities,
+including values above `0x0100_FFFF`. Do not cap classification at 65,535.
+Local scoped identities are never encoded into identity marks or tunnel VNIs.
+This is a documented deviation from the reference datapath bound, not a
+claim that the full packet path has been validated.
+
 ## 12. Open decisions
 
 1. **Resolved policy (#53): single object per hook family first.** The
@@ -1695,25 +1713,24 @@ file (ADR-0001).
    Consequence: `enable_bpf_host_routing` becomes a constant `true` in
    `.rodata` for one release (so config dumps stay comparable) and is then
    removed.
-5. **Perf event array vs ring buffer for monitor events.** Recommendation:
-   keep `PERF_EVENT_ARRAY` in M1 (fixture parity, per-CPU ordering
-   semantics the Hubble decoders assume); evaluate `BPF_MAP_TYPE_RINGBUF`
-   in M2 behind the same decoder.
-6. **Per-endpoint lxc object vs one shared lxc object keyed by ifindex.**
-   Recommendation: per-endpoint object in M1 (per-endpoint policy map and
-   `.rodata` patching are already required by spec 01; the shared design
-   needs `HASH_OF_MAPS` policy selection which is an aya gap). Reconsider
-   when endpoint counts per node exceed ~500.
-7. **veth vs netkit default pod device.** Recommendation: veth default,
-   netkit supported when the floor is ≥ 6.8; the `enable_netkit` toggle
-   and `should_redirect_peer` conditions are specified so both work.
-8. **Tail-call slots vs `#[inline(never)]` subprograms.** Recommendation:
-   keep the reference slot table for M1 (test parity, `ext_error`
-   compatibility); use subprograms for cold paths (ICMP error generation,
-   drop notify body) where the floor kernel allows mixing; measure whether
-   the CT→policy split can become a subprogram call in M2.
-9. **`cilium_*` map and pin names.** Owned by spec 01; this spec assumes
-   they are kept so `cilium-dbg bpf` tooling and in-place takeover work.
+5. **Resolved (#57, ADR-0011): retain `PERF_EVENT_ARRAY`.**
+   The monitor map and per-CPU framing follow spec 01 §3.10. No ring-buffer
+   migration is implied by the current service milestone.
+6. **Resolved (#58, ADR-0011): per-endpoint lxc objects for policy.**
+   Preserve per-endpoint policy maps and rodata as specified in spec 01 §3.7.
+   The shared initial local-delivery program is a foundation primitive, not
+   evidence that the production policy-object contract has changed.
+7. **Resolved (#59, ADR-0011): veth is the default pod device.**
+   Netkit remains an explicit optional mode, gated on kernel support and
+   successful feature probes (supported gate at least 6.8); it does not raise
+   the general 6.6 minimum. Runtime validation of netkit remains outstanding.
+8. **Resolved (#60, ADR-0011): preserve the specified tail-call slots.**
+   Subprograms may implement internal cold helpers without replacing observable
+   slot/error contracts. Moving a CT→policy edge requires later verifier and
+   stack measurements on both architectures; no such optimization is assumed.
+9. **Resolved (#61, ADR-0011): retain `cilium_*` map and pin names.**
+   Spec 01 §2–3 owns the names and directories used by diagnostic tools.
+   Compatible names alone do not establish safe live takeover.
 10. **ICMP time-exceeded generation (TTL 0 in `fib_redirect`).** Reference
     drops in most paths; generating the ICMP error is cheap in Rust with
     the §3.15 builder. Recommendation: drop in M1 (parity), generate in M2.

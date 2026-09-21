@@ -240,12 +240,11 @@ entries (spec 03), and the local node's `InternalIP` fallback.
 
 Per device, candidate addresses are the device's addresses filtered by:
 
-- scope `<= address-scope-max` (default `RT_SCOPE_LINK`... **the reference
-  default is `RT_SCOPE_HOST` in the flag help but the effective filter keeps
-  everything with scope less than or equal to the configured maximum**; flowsdn
-  uses default 253 = `RT_SCOPE_LINK` ... see open decision 12.6 for the exact
-  numeric default; the behavior that matters: `cilium_host`'s `RT_SCOPE_LINK`
-  addresses are **always** included regardless of the maximum);
+- scope `<= address-scope-max`, default **254 (`RT_SCOPE_HOST`)**, matching
+  pinned reference `pkg/defaults/defaults_linux.go` and
+  `pkg/defaults/defaults_unspecified.go` at `7d68cfb394` (ADR-0012 #136).
+  `cilium_host`'s `RT_SCOPE_LINK` addresses are **always** included regardless
+  of the maximum;
 - not loopback;
 - IPv6 link-local addresses are included only for `cilium_host` (IPv6 router LL)
   and are never `primary`/`node_port`.
@@ -1341,7 +1340,7 @@ requires agent restart with map/state migration per spec 00 §6.7.
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `devices` | list | `[]` | §3.1.2 grammar |
+| `devices` | list | `[]` | immutable filter; §3.1.2 grammar; hotplug discovery remains dynamic |
 | `force-device-detection` | bool | false | run auto-detection for devices unmatched by the filter |
 | `force-device-required` | bool | false | make an empty device set fatal (hidden) |
 | `direct-routing-device` | string | `""` | §3.1.5 |
@@ -1359,7 +1358,7 @@ requires agent restart with map/state migration per spec 00 §6.7.
 | `route-metric` | int | 0 | metric on node routes |
 | `local-router-ipv4`, `local-router-ipv6` | IP | `""` | pin router IP; native only; not with IPsec |
 | `ipv4-node`, `ipv6-node` | IP\|`auto` | `auto` | node IP override |
-| `address-scope-max` (`local-max-addr-scope`) | int | 252 (`RT_SCOPE_LINK` − 1: i.e. up to site... see 12.6) | node-address scope filter |
+| `address-scope-max` (`local-max-addr-scope`) | int | 254 (`RT_SCOPE_HOST`; ADR-0012 #136) | node-address scope filter |
 | `nodeport-addresses` | list of CIDR | `[]` | §3.1.6 |
 | `enable-ipv4`, `enable-ipv6` | bool | true | immutable |
 | `enable-ipv6-ndp`, `ipv6-mcast-device` | bool, string | false, `""` | solicited-node multicast join (L2 spec) |
@@ -1428,7 +1427,7 @@ the message
 | `nf_tables` unavailable (compiled out, `nfnetlink` returns `EOPNOTSUPP`/`ENOENT`) | if no residual rule is configured: nothing happens. If one is: startup error naming the feature (`"L7 proxy requires nf_tables with nft_tproxy and nft_socket"`); at runtime (module removed): health degraded, previous table (if any) is gone with the module; retry with backoff |
 | nftables transaction rejected (`EINVAL` on an expression, quota) | table unchanged (atomic); health `Degraded` with the netlink error and the offending message index; retry with backoff; full resync in 30 min |
 | Someone deletes/flushes `inet flowsdn` | `NFNLGRP_NFTABLES` event → immediate re-render and replace; counter `flowsdn_nft_external_changes_total` |
-| Kernel local rule (pref 0) reappears (e.g. `ip rule flush`… `systemd-networkd` restart) | the 30 min rule resync deletes pref 0 again after re-asserting 100; between the two the node still works (both rules resolve local) — `ip rule flush` itself removes our rules 1/9/10/100 and breaks local delivery for everyone until resync; a `RTNLGRP_IPV4_RULE`/`IPV6_RULE` subscription (**SHOULD**) triggers immediate reconcile |
+| Kernel local rule (pref 0) reappears (e.g. `ip rule flush`… `systemd-networkd` restart) | the 30 min rule resync deletes pref 0 again after re-asserting 100; between the two the node still works (both rules resolve local) — `ip rule flush` itself removes our rules 1/9/10/100 and breaks local delivery for everyone until resync; a `RTNLGRP_IPV4_RULE`/`IPV6_RULE` subscription (**MUST**, ADR-0012 #139) enqueues prompt reconcile; coalesce event bursts and retain periodic full resync for missed events |
 | Router IP cannot be restored | new IP allocated; old address removed from `cilium_host`; routes rewritten; existing pod connections through the router IP break (warned) |
 | CiliumNode create/update fails persistently | fatal after 10 × 500 ms (operator cannot function without it) |
 | Node map full (16384 IPs) | `mapNodeID` error → node handled without ID; IPsec to that node fails; health degraded; `flowsdn_node_id_map_errors_total` |
@@ -1966,7 +1965,7 @@ Testing: netns-based privileged tests use `nix::sched::unshare(CLONE_NEWNET)`
 in a dedicated thread per test; the nft decoder makes golden tests possible
 without root by encoding then decoding.
 
-## 12. Open decisions
+## 12. Decision register (resolved and open)
 
 1. **ADR-0003 wording on accept rules.** The ADR lists "nftables forward chain
    accept, only when the host runs a default-drop policy". §3.10.6 shows a
@@ -1974,9 +1973,12 @@ without root by encoding then decoding.
    rules; detection + documented allow-list" (this spec's behavior); (b) offer
    an opt-in `nft-host-firewall-integration=firewalld` that adds rules to the
    host firewall's own table (violates ownership; firewalld-specific). **Recommend (a).**
-2. **Managed neighbors only** (§3.4 DEVIATION). Keep the `NTF_USE` refresher
-   out; restore it only if a supported kernel line lacks `NTF_EXT_MANAGED`
-   (none does at 6.6+). **Recommend: accept the deviation.**
+2. **Managed neighbors — resolved #132.** Use kernel-managed neighbors with
+   `NTF_EXT_MANAGED` on the supported kernel floor. Do not add the `NTF_USE` refresher
+   fallback. Fail the startup capability check when enabled neighbor management cannot
+   be supported.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
 3. **Host mark rule gating** (§3.10.3). Options: always install (one rule,
    matches the reference; contradicts "installs nothing when no feature is
    on"); gate on host firewall / legacy routing / no KPR (this spec). Depends on
@@ -1997,22 +1999,29 @@ without root by encoding then decoding.
    `<state-dir>` so IDs survive a map recreation (layout change upgrade).
    **Recommend: map only for parity; add the checkpoint when spec 01's
    upgrade protocol needs to recreate the node map.**
-6. **`address-scope-max` default.** The reference flag help says default
-   `RT_SCOPE_HOST` while the effective behavior includes link-scope
-   addresses of `cilium_host` unconditionally; implementers must read
-   `defaults.AddressScopeMax` at implementation time and pin the numeric
-   default here. **Action: resolve before Phase 2, write the number into §6.**
-7. **Runtime `devices` changes.** The reference treats `devices` as
-   restart-only while the table is dynamic. Should flowsdn honor a runtime
-   change of the filter (via `CiliumNodeConfig`)? **Recommend: no; immutable,
-   dynamic detection only.**
-8. **Endpoint routes mode support.** Inventory 03 asks whether to support it
-   at all; it is required for AWS-CNI/GKE chaining and Azure IPAM. **Recommend:
-   support; it costs the `<lxc>` delivery-interface variants here and the
-   per-endpoint routes in spec 08.**
-9. **`RTNLGRP_*_RULE` subscription.** The reference does not subscribe to rule
-   events; §7 marks it SHOULD for faster recovery from `ip rule flush`.
-   **Recommend: subscribe (cheap).**
+6. **Address scope default — resolved #136.** Set `address-scope-max` to 254
+   (`RT_SCOPE_HOST`). Retain the unconditional `cilium_host` link-scope exception and
+   the independent loopback/IPv6-link-local filtering rules.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+7. **Device filter lifetime — resolved #137.** Keep `devices` immutable after startup
+   while continuing dynamic device discovery and hotplug reconciliation. Preserve
+   ordered first-match exact names, trailing `+` prefix matching, and `!` exclusions
+   from §3.1.2; reject other glob syntax.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+8. **Endpoint routes — resolved #138.** Support `enable-endpoint-routes` as specified,
+   including per-endpoint delivery routes, encryption delivery variants, hairpin
+   handling and netkit scrub attributes. It remains a full feature obligation for cloud
+   IPAM and chaining.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+9. **Rule event reconciliation — resolved #139.** Subscribe to IPv4 and IPv6 rule
+   notifications to enqueue prompt reconciliation after rule changes. Keep periodic full
+   resync to recover missed events, coalesce bursts, and avoid self-triggered busy
+   loops.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
 10. **`rustables` vs own nft encoder** (§11). Decide at Phase 2 start after a
     one-day evaluation against the golden files in §9. **Recommend: own
     encoder unless `rustables` passes licensing and covers every expression.**

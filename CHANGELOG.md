@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Resolve foundation, control-plane and integration design questions in ADRs
+  0011–0013, with outstanding implementation and validation recorded separately.
+- Correct the load-balancer retry maximum default to one minute.
+
 - Add an initial standalone endpoint agent with a bounded Unix HTTP API,
   host-scope IPAM leases, persisted endpoint restart and offline CNI deletion replay.
   Kubernetes discovery, identity/policy controllers and uninterrupted forwarding
@@ -14,7 +18,7 @@
 - Add dual-stack BPF endpoint delivery with MAC rewriting and hop/checksum
   updates, plus optional Aya endpoint-map and attachment ownership.
 - Add sparse host-scope IPAM and CNI ADD transaction rollback, integrated with
-  live endpoint namespace tests. The installable CNI and agent are still pending.
+  live endpoint namespace tests. Kubernetes installation remains pending.
 - Add initial native FIB routing for resolved Ethernet neighbors; unresolved
   neighbors, fragments and IPv6 extension headers currently fail closed.
 - Add a Rust BPF classifier and privileged harness for kernel packet round

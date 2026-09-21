@@ -719,9 +719,9 @@ Notes.
 
 - Exact object-variant set per hook family (section 3.3 item 2) and the
   loader's reachability pass design.
-- Whether `cilium_events` stays `PERF_EVENT_ARRAY` (Hubble decoder
-  compatibility) or moves to `RINGBUF` — no kernel constraint at 6.6; purely a
-  compatibility choice.
+- Resolved (#57, ADR-0011): `cilium_events` remains `PERF_EVENT_ARRAY`,
+  preserving decoder framing and per-CPU ordering/loss accounting. No ring
+  buffer replacement is selected by the kernel floor.
 - bpffs and cgroup2: host-mounted contract (stormcos can guarantee it) versus
   the privileged init container for general Kubernetes.
 - Verify the Rocky 10 `el10` config against section 2.6 on dev

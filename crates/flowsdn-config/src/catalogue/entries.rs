@@ -3161,8 +3161,8 @@ pub static ENTRIES: &[Definition] = &[
     Definition {
         name: "lb-retry-backoff-max",
         pflag: Pflag::Duration,
-        default_expression: "time.Second",
-        default: Some("1s"),
+        default_expression: "time.Minute",
+        default: Some("1m"),
         class: Class::Active,
         inventory_name: None,
     },

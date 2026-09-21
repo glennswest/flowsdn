@@ -473,7 +473,8 @@ other side are supported; Cilium 1.19 is not.
   on `DescribeSubnets` (and the `subnet-id` filter is reused for ENI GC).
   `--aws-max-results-per-call` (0): page size for `DescribeNetworkInterfaces`;
   on `OperationNotPermitted` with page size 0 the client MUST switch to 1000 for
-  the rest of its life and retry (warning log).
+  the rest of its life and retry (one warning when switching). An explicit
+  nonzero page size MUST NOT be overwritten by this heuristic (ADR-0012 #108).
 - ENI creation tags = `--eni-tags` merged with the GC tags (GC tags win). GC
   tags = `--eni-gc-tags` if set, else `{io.cilium/cilium-managed: "true",
   io.cilium/cluster-name: <name>}` where `<name>` is `--cluster-name` if not
@@ -674,8 +675,13 @@ Operator:
   permission errors), `BeginUpdate` and poll to completion. Standalone VM →
   `Interfaces.Get`, append ipconfigs, `BeginCreateOrUpdate`, poll. Updates to
   one VM MUST be serialized per node (the node manager guarantees one
-  maintenance at a time per node); flowsdn SHOULD additionally serialize per
-  VMSS (open decision 12.4).
+  maintenance at a time per node); flowsdn MUST additionally serialize
+  mutating operations by full VMSS resource ID across nodes, retaining the
+  async permit through confirmed terminal LRO completion/failure/cancellation.
+  Cancelling a caller only stops its wait: the owning reconciler retains the
+  permit while the remote operation runs. After restart, reconcile in-flight
+  remote operations before issuing another mutation (ADR-0012 #107). Different
+  scale sets remain independent.
 - `AllocateStaticIP(tags)`: find a `PublicIPPrefix` whose tags match,
   attach a public IP from it to the primary ipconfig of the primary NIC (VMSS
   model update or NIC update), return the resulting public address (reads it
@@ -684,7 +690,8 @@ Operator:
 - `PrepareIPRelease` returns an empty action; `ReleaseIPs` is "not implemented";
   the node manager is started with release disabled. The deprecated mirror
   fields `interfaces[].cidr` and `addresses[].subnet` MUST be read (fallback)
-  and SHOULD be written for one release (open decision 12.3).
+  and MUST be written as mirrors of the current fields (ADR-0012 #106).
+  Removing these fields requires a separate migration decision.
 
 Required RBAC actions: `Microsoft.Network/networkInterfaces/read`,
 `Microsoft.Network/virtualNetworks/read`, `.../subnets/read`,
@@ -763,9 +770,9 @@ Operator:
   until `Status == "InUse"` (6 × 2.5 s); on attach/wait failure delete the ENI.
 - `PrepareIPRelease(excess)`: iterate secondary ENIs; free = non-primary
   `private-ipsets` addresses not in `status.ipam.used`; the **last** ENI with
-  free addresses wins (map order — flowsdn MUST iterate in sorted ENI id order
-  and pick the ENI with the most free addresses, matching AWS behavior; this is
-  an internal choice, not a wire contract); `IPsToRelease = free[:min(free,
+  free addresses wins in the reference (map order). flowsdn MUST instead pick
+  the ENI with the most free addresses, breaking ties by ascending ENI ID, and
+  sort candidate IPs numerically (ADR-0012 #111; an internal choice); `IPsToRelease = free[:min(free,
   excess)]`, `PoolID = vpc id`. `ReleaseIPs` → `UnassignPrivateIpAddresses`.
   Release is enabled by `--alibaba-cloud-release-excess-ips` with the release
   delay fixed at 0 s.
@@ -1666,38 +1673,58 @@ None: this area uses netlink and sysctl only. `rtnetlink` lacks rule `to`
 selector helpers for some versions; a small `netlink-packet-route` encoder for
 `FRA_SRC`/`FRA_DST`/`FRA_TABLE`/`FRA_PRIORITY`/`FRA_PROTOCOL` is expected.
 
-## 12. Open decisions
+## 12. Decision register (resolved and open)
 
-1. **Write `spec.ipam.pool` in ENI mode?** Options: (a) keep writing the per-IP
-   map as the reference does (identical CR contents, ~16 entries per /28,
-   readable by tooling, needed only by 1.19 agents); (b) stop writing it.
-   Recommendation: (a) for the first release, revisit when Cilium removes it
-   (announced for 1.21).
+1. **ENI pool compatibility — resolved #104.** Keep writing `spec.ipam.pool` in ENI mode
+   alongside status and multi-pool fields. Preserve status-before-spec ordering; remove
+   no compatibility field merely because the flowsdn agent does not consume it.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
 2. **Azure client library.** (a) `azure_mgmt_network`/`azure_mgmt_compute`
    generated crates; (b) direct ARM REST over `azure_core` pipelines (~1k
    lines, the eight operations of 3.10). Recommendation: prototype (a); switch
    to (b) if the LRO poller or pinning proves fragile.
-3. **Azure deprecated mirror fields** (`interfaces[].cidr`, `addresses[].subnet`).
-   (a) read and write for one release (byte-identical CRs, mixed-cluster safe);
-   (b) read only. Recommendation: (a), flag-less, remove with the next major.
-4. **Serialize VMSS updates across nodes of one scale set.** The reference
-   serializes per node only; concurrent `BeginUpdate` on two instances of one
-   VMSS is accepted by Azure but occasionally fails with a conflict that the
-   backoff absorbs. Recommendation: add a per-VMSS `Mutex` (cheap, removes a
-   known failure class).
-5. **`--aws-max-results-per-call` auto-switch to 1000.** Keep the incident-driven
-   heuristic (compat) or require explicit config. Recommendation: keep, log once.
+3. **Azure mirror fields — resolved #106.** Read and write `interfaces[].cidr` and
+   `addresses[].subnet` as mirrors of the current fields, without a feature flag. A
+   future incompatible removal requires a separate migration decision.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+4. **VMSS update serialization — resolved #107.** Serialize mutating Azure operations
+   per full VMSS resource ID, across all nodes of that scale set, retaining per-node
+   serialization. Hold the asynchronous permit through long-running-operation completion
+   or terminal failure. Caller cancellation stops waiting but does not release
+   the owning reconciler's permit until remote completion or confirmed remote
+   cancellation. Recover in-flight operations before new mutations on restart.
+   Different scale sets remain independent.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+5. **AWS pagination fallback — resolved #108.** Keep the `OperationNotPermitted`
+   fallback from page size 0 to 1000 for the provider client lifetime. Log once when
+   switching and retry; do not override an explicitly configured nonzero size.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
 6. **GKE real integration** (alias IP ranges via the Compute API). No
    precedent; recommendation: none until a concrete need (`ipam=kubernetes`
    covers GKE).
-7. **ENI IPv6 parity.** Reference: one /80 prefix per node, no IPv6 secondary
-   IPs, prefix never released. Recommendation: parity now; a per-ENI prefix
-   model later if IPv6-only EKS demands it.
-8. **Alibaba `PrepareIPRelease` interface choice.** Reference picks the last
-   ENI iterated (map order). Recommendation (adopted above): most-free ENI in
-   sorted id order; not wire-visible.
-9. **Alibaba credential chain scope.** Env AK/SK + ECS RAM role are required;
-   OIDC RRSA from day one adds a token exchange (`AssumeRoleWithOIDC`).
-   Recommendation: include RRSA; ACK clusters default to it.
-10. **`status.ipam.pod-cidrs`.** Dead schema at 1.20. Recommendation: never
-    write; keep the type for wire compatibility.
+7. **ENI IPv6 compatibility — resolved #110.** Keep the reference model: one /80 prefix
+   per node, no IPv6 secondary-address allocation, and no IPv6-prefix release. This
+   preserves the specified API behavior and does not assert that IPv6-only EKS is
+   validated.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+8. **Deterministic Alibaba release — resolved #111.** Choose the eligible secondary ENI
+   with the most free releasable addresses; break ties by ascending ENI ID. Sort
+   candidate IPs numerically before taking the requested count. Primary and used
+   addresses remain excluded.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+9. **Alibaba credentials — resolved #112.** Support environment access keys, ECS
+   RAM-role metadata credentials, and OIDC RRSA from the initial Alibaba implementation.
+   RRSA exchanges the projected token with `AssumeRoleWithOIDC`; refresh expiring
+   credentials and never log tokens or signing material.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+10. **Unused pod CIDR status field — resolved #113.** Retain the `status.ipam.pod-cidrs`
+   type for wire decoding and schema compatibility. No flowsdn controller writes or uses
+   it as allocation authority.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).

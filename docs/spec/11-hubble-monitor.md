@@ -1001,8 +1001,10 @@ output for L7 flows):
 | `SAMPLE` | empty |
 
 flowsdn MUST populate `Summary` for L7 flows. For L3/L4 flows it is the last
-decoded layer's description (§3.9) and SHOULD also be populated, because
-`hubble observe -o compact` falls back to it. See §12.4.
+decoded layer's description (§3.9) and MUST also be populated, because
+`hubble observe -o compact` falls back to it (ADR-0012 #144). Lazy generation
+or a bounded cache may reduce cost without changing output strings or field
+presence.
 
 ### 3.13 The ring buffer
 
@@ -3208,7 +3210,7 @@ into the ring, which is §12.3, not a lock.
 
 ---
 
-## 12. Open decisions
+## 12. Decision register (resolved and open)
 
 **12.1 Does flowsdn ship a `monitor1_2` *client*?** This spec commits to the
 server side, which is what `cilium-dbg monitor` needs; a client would also need
@@ -3229,11 +3231,10 @@ enrichment (this spec); (b) shard by CPU with per-shard ring writes;
 **Recommend (a)** with a CI benchmark gate; (c) is the fallback, because the
 ring's single-writer invariant is load-bearing.
 
-**12.4 Populate `Summary` for L3/L4 flows?** Deprecated (field 100000) but the
-CLI's compact output still prefers it, and it is a per-flow string. Options:
-(a) both L7 and L3/L4 (reference); (b) L7 only; (c) on demand via field mask.
-**Recommend (a)**, with the string built lazily behind an `Arc<str>` cache
-keyed on the L4 shape.
+**12.4. Flow Summary compatibility — resolved #144.** Populate deprecated `Summary` for
+both L3/L4 and L7 flows using the existing layer-derived strings. Lazy generation or a
+bounded cache may optimize cost but must not change field presence or text.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
 **12.5 CEL filters.** Options: (a) reject with `InvalidArgument` (§6.5);
 (b) implement behind an off-by-default feature; (c) implement and enable.
@@ -3241,10 +3242,11 @@ keyed on the L4 shape.
 tool emits it, and silently ignoring a filter returns *more* data than
 requested.
 
-**12.6 The two mismatched drop-reason proto names** (136, 161). Options:
-(a) keep both the proto name and the monitor string (this spec); (b) rename in
-flowsdn's proto; (c) add aliases. **Recommend (a)** — the CLI prints and
-filters on the enum name; renaming breaks every saved query and dashboard.
+**12.6. Drop reason names — resolved #146.** Keep numeric values, protobuf enum names,
+and monitor display strings separately as specified. In particular 136 retains
+`CT_MISSING_TCP_ACK_FLAG` with monitor text `Fragmentation needed`; 161 retains
+`FAILED_TO_INSERT_INTO_PROXYMAP` with `NAT 46/64 not enabled`.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
 **12.7 `drop_notify.ifindex` is decoded but never surfaced.** The reference
 sets `Flow.interface` only from traces and debug captures. Options: (a) match

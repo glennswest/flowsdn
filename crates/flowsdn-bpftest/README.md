@@ -56,6 +56,12 @@ test server drives real IPAM and BPF operations; checks include live dual-stack
 UDP, missing-address detection, duplicate deletion and HTTP503 offline queueing.
 The test server is not a deployable agent.
 
+Run `agent-runtime` with the CNI executable, agent executable and BPF object
+paths to exercise the real standalone process. It checks dual-stack ADD/CHECK,
+restart recovery, offline deletion replay, partial teardown health, retries and
+persisted-state cleanup. Traffic loss during agent downtime is an explicit
+current limitation, not a continuity claim.
+
 The BPF crate is a separate workspace with its own lockfile and toolchain.
 Format it separately with `cargo +nightly-2026-04-03 fmt --manifest-path
 crates/flowsdn-bpf/Cargo.toml`. Its dependency policy must also be checked

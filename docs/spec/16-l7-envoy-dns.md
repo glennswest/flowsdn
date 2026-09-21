@@ -150,7 +150,7 @@ The reference offers `envoy-xds-mode = split | ads | strict-ads`, default
 - `ads` and `strict-ads` are **deferred**. The flag MUST be accepted; values
   other than `split` MUST be rejected at startup with
   `envoy-xds-mode=<v> is not supported; only "split" is implemented`
-  (**DEVIATION**, recorded in §12 open decision 1 — upstream is moving toward
+  (**DEVIATION**, recorded in §12 decision 1 — upstream is moving toward
   ADS and flowsdn will follow when the image requires it). The bootstrap
   generator MUST already be able to emit either config source so the switch is
   a code change in one function, not a redesign.
@@ -1069,7 +1069,7 @@ its rule table while the agent is down. It cannot allocate identities for
 *new* names while the agent is down (the response hold has no one to talk to), so
 lookups of already-known names keep working and genuinely new names fail closed.
 
-**Recommendation: flowsdn ships it.** The DNS proxy MUST be built as a library
+**Decision (#201): flowsdn ships it.** The DNS proxy MUST be built as a library
 crate (`flowsdn-dnsproxy`) with a `PolicySource` trait from the first commit; the
 in-agent proxy implements it against the policy engine and the SDP implements it
 against the gRPC stream. Building the library first and the binary second costs
@@ -1841,33 +1841,27 @@ what buys the option.
 
 ---
 
-## 12. Open decisions
+## 12. Decisions and remaining questions
 
-1. **xDS mode.** flowsdn implements split only (§3.1.3). Options: (a) split only,
-   with a bootstrap generator ready for ADS; (b) implement ADS now.
-   *Recommendation: (a).* Split is one cache per type with no cross-type
-   consistency rule, and the current `cilium-envoy` image supports both. Revisit
-   when an image drops the split services — the bootstrap generator makes the
-   switch a one-function change.
+Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integration-issue-resolutions.md); their implementation and acceptance tests remain required.
 
-2. **Envoy image pin.** The reference pins
-   `quay.io/cilium/cilium-envoy:v1.37.5-<build>` by digest. Options: (a) pin the
-   same digest and move it deliberately; (b) track a tag.
-   *Recommendation: (a),* and make the pinned digest and the vendored `.proto`
-   set a single unit in the build so they cannot drift.
+1. **Resolved — #193.** Implement split SOTW xDS first, with split as the default and a
+   bootstrap builder supporting both config-source shapes. Reject unimplemented ADS
+   modes explicitly. ADS remains in the full compatibility scope; implementing it is
+   required before claiming parity for those modes.
 
-3. **Embedded Envoy.** Currently refused (§3.1.1). Options: (a) DaemonSet only;
-   (b) also support the embedded process.
-   *Recommendation: (a).* Process supervision inside the agent conflicts with
-   one-static-binary-per-component and with `scratch` images, and the DaemonSet
-   is upstream's default. Revisit only if a user needs single-container nodes.
+2. **Resolved — #194.** Pin the external Envoy image by immutable digest. Review the
+   digest, source revision, vendored protobuf set and generated bindings together; a tag
+   alone is insufficient.
 
-4. **`enable-bpf-tproxy` as the only mode.** `sk_assign` removes the nftables
-   TPROXY rules on the ingress path but not on host egress, and needs ≥ 5.7.
-   Options: (a) keep both, default off (reference behaviour); (b) default on;
-   (c) BPF only. *Recommendation: (a) for M1, (b) once the datapath tests cover
-   it,* because the mark path is the one every existing deployment runs and the
-   nftables residual exists regardless.
+3. **Resolved — #195.** Use the external Envoy DaemonSet, as ADR-0001 already specifies.
+   Reject embedded mode and chart settings that would require it; preserve the xDS and
+   admin socket interfaces.
+
+4. **Resolved — #196.** Keep both BPF socket assignment and the nftables mark/TPROXY
+   path. Default enable-bpf-tproxy to false; enabling it does not remove required host-
+   egress residual rules. A later default change requires explicit validation and a
+   documented config migration.
 
 5. **DNS proxy transparent mode default.** Off upstream, but the SDP and
    source-attribution in Hubble both assume it. Options: (a) keep the default
@@ -1876,11 +1870,10 @@ what buys the option.
    servers see for every cluster; tying it to the SDP keeps the change scoped to
    deployments that already opted into a different DNS topology.
 
-6. **Inline TLS secret modes.** Options: (a) support all three modes (§3.5.4);
-   (b) support SDS with secret sync only.
-   *Recommendation: (a) for compatibility, but default to (b)* — mode 2 requires
-   cluster-wide Secret read, which is exactly the permission the sync mode was
-   built to remove. Document mode 2 as discouraged.
+6. **Resolved — #198.** Support all three secret-source modes in §3.5.4. New chart
+   installations should explicitly select SDS with secret sync, while retaining the raw
+   agent flag default and existing configuration precedence. Grant cluster-wide Secret
+   reads only for the selected read-all mode.
 
 7. **Access log buffer size default.** 4096 bytes truncates header-heavy
    requests, and a truncated record is dropped entirely. Options: (a) keep 4096;
@@ -1889,21 +1882,18 @@ what buys the option.
    larger per-connection read buffer; the benefit is not silently losing the
    exact flows an operator is most likely to be investigating.
 
-8. **NPHDS.** Disabled in production, served for tests. Options: (a) keep serving
-   it; (b) drop it and rely on Envoy reading the ipcache.
-   *Recommendation: (a).* It is a small cache feed and it is the only fallback if
-   the pinned map layout ever has to change ahead of the Envoy image.
+8. **Resolved — #200.** Keep NPHDS serving alongside direct ipcache access. Production
+   defaults may continue to use the pinned map, but the fallback and test feed must stay
+   available.
 
-9. **Standalone DNS proxy.** *Recommendation: ship it* (§3.7.1), and build the
-   proxy as a library with a `PolicySource` trait from the first commit. The
-   binary is small; the availability gain during agent restarts is the single
-   biggest operational improvement available in this area.
+9. **Resolved — #201.** Include the standalone DNS proxy in the feature scope. Build the
+   DNS engine as flowsdn-dnsproxy with a PolicySource interface shared by in-agent and
+   standalone consumers. Preserve the response-hold and fail-closed ordering of §3.7.
 
-10. **Mutual authentication.** Deferred (§3.8). Options: (a) defer and reject
-    `authentication.mode: required` at validation; (b) defer and silently treat
-    it as an allow. *Recommendation: (a).* Silently downgrading an authentication
-    requirement to a plain allow is a security regression that would not surface
-    until an audit.
+10. **Resolved — #202.** Until mutual authentication is implemented, reject required and
+   test-always-fail authentication modes at policy validation. Never convert an
+   authentication requirement into allow. This rejection does not remove mutual
+   authentication from the full feature scope.
 
 11. **ztunnel.** Deferred (§3.9). It is the sanctioned mTLS successor, but its
     in-pod iptables conflicts with ADR-0003. *Recommendation: defer, and when it

@@ -777,9 +777,9 @@ Notes that carry consequences:
   decrypted packet then emerges with `skb->mark == 0` so netfilter and
   conntrack are not confused and the stack routes it. In the reference it is
   only plumbed through the *subnet-encryption* paths; the single-CIDR paths
-  hard-code false. flowsdn SHOULD plumb it through both — the single-CIDR path
+  hard-code false. flowsdn MUST plumb it through both — the single-CIDR path
   with endpoint routes is otherwise inconsistent with the datapath's
-  endpoint-routes branch (§3.2.7). **DEVIATION**, recorded as open decision 4.
+  endpoint-routes branch (§3.2.7). **DEVIATION**, accepted by ADR-0012 #176.
 - **(g)/(h) use the underlay node IPs**, not the Cilium internal IPs; this is
   what encrypts the VXLAN/Geneve packet so the identity in the VNI is not on
   the wire in clear. Installed only when encapsulation is on and
@@ -2073,14 +2073,12 @@ holding its own netlink socket. XFRM writes are serialized behind one handle —
 the EEXIST recovery in §3.2.9 is a read-modify-write and is not safe to run
 concurrently with itself.
 
-## 12. Open decisions
+## 12. Decision register (resolved and open)
 
-1. **Fixed WireGuard port and fixed IPsec reqid.** Port 51871 and reqid 1 are
-   hard-coded in the reference. Options: (a) keep both fixed; (b) make the port
-   configurable; (c) make both configurable. **Recommendation: (a).** Both are
-   interoperability constants — a peer running the reference will not find a
-   flowsdn node on another port, and reqid 1 is what `cilium-dbg` and every
-   runbook filter on. Revisit only if a second XFRM consumer needs to coexist.
+1. **Encryption constants — resolved #173.** Keep WireGuard UDP port 51871 and IPsec
+   reqid 1 fixed. Do not add configuration that silently changes interoperability or
+   diagnostic selectors.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
 2. **The legacy `cilium_egress_gw_policy_v4` map.** It exists only so an older
    loaded program keeps working across an upgrade. Options: (a) write it in
@@ -2098,18 +2096,15 @@ concurrently with itself.
    needs its own leak testing and should not ride along with the initial IPsec
    work.
 
-4. **Zero-output-mark plumbing.** The reference honours `enable-endpoint-routes`
-   for the IN state's output mark only on the subnet-encryption paths.
-   Options: (a) reproduce exactly; (b) plumb it through both paths.
-   **Recommendation: (b)** (§3.2.5). The single-CIDR path with endpoint routes
-   is otherwise inconsistent with the datapath's own endpoint-routes branch,
-   which hands the decrypted packet to the stack expecting a clean mark.
+4. **IPsec endpoint-route mark — resolved #176.** Apply zero output mark for enabled
+   endpoint routes on both subnet-encryption and single-CIDR IN-state paths. Preserve
+   the existing non-endpoint-route mark and mask behavior.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-5. **Node ID width.** `u16` caps a cluster at 65535 nodes (limitation L3), and
-   the width is fixed by the mark layout shared with the whole datapath.
-   Options: (a) keep it; (b) widen with a different mark scheme.
-   **Recommendation: (a).** Changing it means changing spec 02's mark contract
-   and breaking every peer; the cap is far above any plausible deployment.
+5. **Node ID width — resolved #177.** Retain u16 node IDs and the existing mark layout.
+   Allocate only 1..65535; zero remains local-node sentinel, never an overflow
+   substitute. Exhaustion reports failure and must not install unsafe encryption state.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
 6. **Egress-gateway assignment stability.** The multi-gateway modulo reshuffles
    every endpoint whenever the gateway set changes (GH-39245), and health-based
@@ -2123,19 +2118,17 @@ concurrently with itself.
    on an endpoint's gateway is a black hole. Enable it only when every agent
    in the cluster is flowsdn.
 
-7. **Per-entry vs flattened node selectors.** §3.4.2's cross-product is
-   surprising and is arguably a reference bug. Options: (a) reproduce it;
-   (b) pair each `nodeSelector` with its own entry's pod and namespace
-   selectors. **Recommendation: (a) for the CRD as specified, and raise (b)
-   upstream.** A policy written against the reference must mean the same thing
-   here; changing it silently changes which pods egress through a gateway.
+7. **Egress selectors — resolved #179.** Keep the reference globally flattened
+   node-selector cross-product with pod/namespace matches from §3.4.2. Do not silently
+   reinterpret selectors as paired per entry. An upstream proposal, if desired, is
+   separate from this local decision.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-8. **Ownership of table 200 and `cilium_node_map_v2`.** In the reference both
-   live in the node handler, not the encryption code. Options: (a) mirror that
-   (spec 10 owns them, this spec states the contract); (b) move them here.
-   **Recommendation: (a)** — already the arrangement in §3.2.6 and §3.3. Routes
-   and node IDs have non-encryption consumers, and the node handler is where
-   node lifecycle already lives.
+8. **Node and encryption ownership — resolved #180.** Spec 10 owns routing table 200,
+   its IP rules, node-ID allocation and `cilium_node_map_v2` lifecycle. Spec 14 supplies
+   encryption inputs and owns XFRM/WireGuard state; it does not introduce a second
+   route/map writer.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
 9. **VTEP and SRv6.** Both deferred (§1.2). Options: (a) leave them out;
    (b) implement VTEP; (c) implement SRv6 maps with no control plane.
@@ -2143,9 +2136,8 @@ concurrently with itself.
    open-source control plane to mirror, so implementing the maps would produce
    an untestable feature. Revisit SRv6 if a BGP/VRF integration lands.
 
-10. **Which key file forms to accept.** The reference accepts both the AEAD and
-    the auth+crypt forms and ignores `+`. Options: (a) accept both;
-    (b) accept AEAD only. **Recommendation: (a).** The pair form is what
-    FIPS-constrained deployments use, and rejecting it would break an existing
-    `cilium-ipsec-keys` secret on migration. flowsdn SHOULD warn when a key
-    file uses a form or algorithm that is slower than `rfc4106(gcm(aes))`.
+10. **IPsec key forms — resolved #182.** Accept both AEAD and auth+crypt key-file forms
+   with the §3.2.2 validation and key derivation. Preserve accepted legacy syntax
+   including the ignored `+` suffix; do not narrow migration input to AEAD only. Warn
+   about nonpreferred algorithms without exposing key material.
+   See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).

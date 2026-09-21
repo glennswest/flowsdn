@@ -2111,21 +2111,14 @@ half. Budget the status work as the schedule risk, not the Envoy work.
 
 ---
 
-## 12. Open decisions
+## 12. Decisions and remaining questions
 
-1. **Ship Ingress at all?** Gateway API supersedes Ingress; the Ingress API is
-   frozen upstream and its controller here is ~1.4k reference lines plus a
-   share of the model, the annotation surface, two LB modes, and a second
-   conformance suite in CI. Options: (a) ship both, as the reference does;
-   (b) ship Gateway API only and document Ingress as unsupported; (c) ship
-   Ingress first as the staging vehicle (§1.3) and then keep it.
-   **Recommendation: (c), which is what §1.3 specifies.** Ingress is the
-   cheapest possible end-to-end proof of the translator, and it is the API
-   that existing manifests in real clusters actually use — dropping it means
-   every migrating user must rewrite their manifests before flowsdn can serve
-   any HTTP at all. Revisit at 1.0: if the Gateway API conformance report is
-   green and no user is on Ingress, deprecating it is a small, clean removal
-   because everything but the front end is shared.
+Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integration-issue-resolutions.md); their implementation and acceptance tests remain required.
+
+1. **Resolved — #280.** Ship and retain both Ingress and Gateway API, with Ingress first
+   to exercise the shared translator. This follows ADR-0001 boundary compatibility; a
+   green Gateway API report does not itself authorize dropping Ingress.
+
 2. **The HTTPS-redirect matcher bug.** In the reference, the code path that
    builds routes for a force-HTTPS virtual host passes the header and query
    matcher lists in the wrong argument order, so query parameters are emitted
@@ -2135,27 +2128,18 @@ half. Budget the status work as the schedule risk, not the Envoy work.
    and file the bug upstream (cross-project rule 11). Reproducing a matcher
    bug means a user's query-parameter match silently does not work on exactly
    the routes that redirect.
-3. **Shared Ingress mode's cluster-wide CEC.** One CEC built from every shared
-   Ingress means any one Ingress can break the config for all of them, and a
-   single reconcile rebuilds the whole thing. Options: keep it (compatible);
-   or split into one CEC per Ingress that all reference the same shared
-   Service. **Recommendation: keep it for now** — the shared Service's
-   listeners genuinely are one Envoy listener set, and splitting would need
-   per-CEC listener merging in the agent, which is spec 16's contract to
-   change. Revisit if shared mode sees real use at scale.
-4. **Ingress class precedence.** The reference lets the deprecated
-   `kubernetes.io/ingress.class` annotation override `spec.ingressClassName`,
-   which is backwards relative to Kubernetes' own rule. Options: keep, or
-   invert and accept the annotation only when the field is unset.
-   **Recommendation: keep the reference's order**, because inverting it
-   silently changes which controller serves an Ingress that has both — the
-   worst possible failure for a migration. Document it loudly.
-5. **The force-HTTPS status code.** 301 is emitted; 308 is documented (§5.7).
-   Options: (a) fix the documentation; (b) change to 308; (c) add a config key
-   defaulting to 301. **Recommendation: (a) now, (c) later if asked.** 308
-   preserves the request method where 301 historically does not, so 308 is the
-   better default — but changing it changes what every browser and CDN has
-   cached, and that is not a change to make on a spec's initiative.
+3. **Resolved — #282.** Keep one combined CEC for shared Ingress mode and the common
+   listener set. Do not split per Ingress without an agent-side listener-merge contract.
+   Preserve validation and last accepted configuration when a replacement is rejected.
+
+4. **Resolved — #283.** Preserve annotation-over-field Ingress class precedence from
+   §3.9. Document the precedence and test the case where both values conflict so
+   migration does not silently move ownership to a different controller.
+
+5. **Resolved — #284.** Force-HTTPS redirects use 301. Sections 5.7 and 6.2 already
+   document this value; help text and chart descriptions must say 301 as well. Do not
+   silently change to 308 or introduce a new setting in this decision.
+
 6. **Non-standard reason strings.** `Invalid<Kind>` on route `Accepted`, and
    the GAMMA conditions whose reason does not vary with status (§3.11.5,
    §3.11.6). Options: keep for fixture compatibility; or emit the upstream
@@ -2177,15 +2161,11 @@ half. Budget the status work as the schedule risk, not the Envoy work.
    **Recommendation: keep, and make the controller name a config key** so a
    cluster running both implementations can disambiguate. Defer the key until
    that need is real (this matches spec 12 Open decision 5).
-9. **Access-log configuration surface.** `CiliumGatewayClassConfig.telemetry`
-   ships large default format strings that become part of the CRD schema.
-   Options: vendor them verbatim (spec 13's rule); or ship a smaller default
-   and document the difference. **Recommendation: vendor verbatim** — a
-   different default access-log format is a silent, invisible incompatibility
-   for anyone parsing those logs.
-10. **Where GAMMA lives.** GAMMA is service-mesh behavior in a spec about
-    ingress. It shares the model and translator, which is why it is here.
-    Options: keep it here; or move it into spec 16 alongside the rest of the
-    mesh story once ztunnel is specified. **Recommendation: keep it here**
-    while its only implementation is "an HTTPRoute translated to a CEC", and
-    move it when it grows a data path of its own.
+9. **Resolved — #287.** Vendor the reference access-log default format strings verbatim
+   with the CRD schema, source revision and licensing provenance, as required by spec
+   13. Keep log parsers compatible across migration.
+
+10. **Resolved — #288.** Spec 21 owns GAMMA route ingestion, the shared model/CEC
+   translator, status behavior and MESH-HTTP/MESH-GRPC profile requirements. Spec 16
+   owns proxy execution and mesh transport; a new transport does not silently transfer
+   the route contract.

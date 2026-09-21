@@ -325,8 +325,7 @@ L2 announcer) not wake on status-only writes. ADR-0004 §2.
   key, clears the entry.
 - Defaults: `min_backoff` 100 ms, `max_backoff` 1 min (StateDB defaults). Areas
   MAY override: the LB reconciler uses `lb-retry-backoff-min`/`-max` (1 s / 1 min
-  in inventory 04's flag table; note the registry default of `lb-retry-backoff-max`
-  is `1s` in section 6.4 — the datapath/LB spec decides which is right).
+  as resolved by spec 05 §6 and ADR-0011, #47/#90).
 - Failed `prune` is not retried; it runs again at the next prune interval and
   is reported through health.
 
@@ -1370,7 +1369,7 @@ literals by the owning area spec. Types are pflag names; the kind mapping is
 | `lb-init-wait-timeout` | Duration | `1 * time.Minute` |  |
 | `lb-pressure-metrics-interval` | Duration | `5 * time.Minute` |  |
 | `lb-reflector-wait-time` | Duration | `500 * time.Millisecond` |  |
-| `lb-retry-backoff-max` | Duration | `time.Second` |  |
+| `lb-retry-backoff-max` | Duration | `time.Minute` (`1m`) | resolved by spec 05 §6, ADR-0011 |
 | `lb-retry-backoff-min` | Duration | `time.Second` |  |
 | `lb-sock-terminate-all-protos` | Bool | `false` |  |
 | `lb-state-file` | String | `` |  |
@@ -1793,9 +1792,8 @@ registry + generator + build-config ~3k, fence + health ~1k.
    checking is enabled — which makes the upstream tool unusable, so (b) is not
    really an option; (c) also serve `/statedb/dump` for `cilium-dbg statedb`.
    Recommendation: (a); (c) only if `flowsdn-dbg` is delayed.
-6. **`lb-retry-backoff-max` default.** Inventory 06 records `1s`, inventory 04
-   records `1m`. Resolve in the LB spec from `pkg/loadbalancer/config.go`;
-   the registry table follows inventory 06 until then.
+6. **Resolved (#47/#90, ADR-0011): `lb-retry-backoff-max` is `1m`.**
+   The §6.4 registry follows spec 05 §6; `lb-retry-backoff-min` remains `1s`.
 7. **Unknown keys: warn vs. fail in CI.** Add a `--strict-config` flowsdn key
    (default false) that turns unknown keys into a fatal error, for CI charts.
    Recommendation: yes, S effort.

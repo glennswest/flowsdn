@@ -32,14 +32,16 @@ layout planning and typed tail-program inventory checks.
 The identity crate adds numeric scopes, cluster ranges and tunnel encoding,
 plus canonical CIDR labels and optional identity/node label filtering.
 Fixed VXLAN/Geneve headers and Geneve DSR options have explicit wire codecs.
-There is no working networking agent. Synthetic scripts and file assertions
+The released foundation has no working networking agent. Synthetic scripts and file assertions
 execute, while the harvested networking scenarios still lack their adapters.
 
 The unreleased milestone 1 work adds [privileged networking tests](crates/flowsdn-bpftest/README.md),
 dual-stack BPF endpoint delivery, native cross-node routing, host-scope IPAM,
-an initial CNI executable and agent endpoint persistence primitives.
+initial CNI and standalone endpoint agent executables, with persisted state.
 Isolated endpoint tests exercise live IPv4/IPv6 traffic, allocation, attachment,
-rollback and retry. A deployable agent, Kubernetes integration and two-node
+rollback, retry, process restart and offline deletion replay. The standalone
+agent uses explicit local configuration; Kubernetes discovery, identity/policy
+controllers, uninterrupted forwarding across agent downtime and two-node
 Kubernetes pod connectivity remain outstanding.
 
 | | |

@@ -119,10 +119,11 @@ build artifact so the trend is visible (§9).
 **Why one multi-call agent binary.** The reference's agent image carries eleven
 Go binaries totalling ~450 MB because each statically links its own copy of the
 runtime, the k8s client and the API models. One multi-call binary shares all of
-that. `argv[0]`-style dispatch is *not* used (no symlink farm); dispatch is on
+that. For the agent, `argv[0]`-style dispatch is not used; dispatch is on
 `argv[1]`, and every init container's `command` is `["/flowsdn", "<subcommand>",
 ...]`. `flowsdn-cni` is the one binary excluded from the merge, because its cost
-model is per-pod-operation exec latency, not image size.
+model is per-pod-operation exec latency, not image size. Its loopback entry
+point uses executable-name dispatch as specified in spec `09` (#240).
 
 ### 3.2 Init and lifecycle subcommands
 
@@ -160,7 +161,7 @@ layer, no shell, no package manager, no `clang`, no `iptables`, no `bpftool`.
 
 | Image | Contents | Est. uncompressed size |
 |---|---|---|
-| `flowsdn` (agent) | `/flowsdn` (multi-call), `/flowsdn-cni`, `/flowsdn-dbg`, `/cni/loopback` (upstream `containernetworking/plugins` v1.9.x binary, Apache-2.0, NOTICE entry), `/etc/ssl/certs/ca-certificates.crt`, `/etc/passwd` + `/etc/group` (two lines each, so `runAsUser` works for the non-root containers of other images that share this base pattern), `/LICENSE`, `/NOTICE` | **~100 MiB** (vs ~500–650 MiB for `quay.io/cilium/cilium`) |
+| `flowsdn` (agent) | `/flowsdn` (multi-call), `/flowsdn-cni`, `/flowsdn-dbg`, `/cni/loopback` (the Rust `flowsdn-cni` artifact installed under its loopback entry point; spec `09`), `/etc/ssl/certs/ca-certificates.crt`, `/etc/passwd` + `/etc/group` (two lines each, so `runAsUser` works for the non-root containers of other images that share this base pattern), `/LICENSE`, `/NOTICE` | **~100 MiB** (vs ~500–650 MiB for `quay.io/cilium/cilium`) |
 | `flowsdn-operator{,-aws,-azure,-alibabacloud}` | `/flowsdn-operator`, CA bundle, licences | 45–95 MiB |
 | `flowsdn-relay` | `/flowsdn-relay`, CA bundle, licences | ~25 MiB |
 | `flowsdn-dnsproxy` | `/flowsdn-dnsproxy`, CA bundle, licences | ~20 MiB |
@@ -270,7 +271,7 @@ ARG REVISION
 COPY ${TRIPLE}/release/flowsdn        /flowsdn
 COPY ${TRIPLE}/release/flowsdn-cni    /flowsdn-cni
 COPY ${TRIPLE}/release/flowsdn-dbg    /flowsdn-dbg
-COPY assets/${TRIPLE}/loopback        /cni/loopback
+COPY ${TRIPLE}/release/flowsdn-cni    /cni/loopback
 COPY assets/ca-certificates.crt       /etc/ssl/certs/ca-certificates.crt
 COPY assets/passwd                    /etc/passwd
 COPY assets/group                     /etc/group
@@ -1116,6 +1117,13 @@ Every `<build-host>` job MUST:
 
 #### 3.10.2 Workflow set
 
+This matrix is normative planned acceptance, not a report that every workflow
+exists. In particular, cloud replay and the weekly live drift job still require
+implementation and validation; #259 resolves their documentation, not #260.
+Encryption acceptance also requires the `e2e-encryption` PR gate of spec 19:
+both WireGuard and IPsec with positive encrypted and negative plaintext capture
+assertions (#230). A missing required capability must fail, not pass by skipping.
+
 | Workflow | Trigger | Gates | Approx. runtime |
 |---|---|---|---|
 | `lint` | PR | `cargo fmt --check`, `cargo clippy --all-targets --all-features -D warnings`, `cargo deny check`, `xtask notice`, `xtask version check`, `taplo fmt --check`, spec cross-reference check | 6 min |
@@ -1559,7 +1567,9 @@ templates, `values.yaml`, `values.schema.json`, the vendored CRD YAML) are
 types, the typed `Config`, `bpf_objects.rs`) live in `OUT_DIR` and are not
 committed. The line is "would a reviewer want to see this change in a diff?".
 
-## 12. Open decisions
+## 12. Decisions and remaining questions
+
+Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integration-issue-resolutions.md); their implementation and acceptance tests remain required.
 
 1. **GHCR.** Options: (a) never; (b) mirror only, once the repo is public;
    (c) primary. **Recommendation: (b).** Tarballs on releases plus
@@ -1569,12 +1579,9 @@ committed. The line is "would a reviewer want to see this change in a diff?".
    public CNI whose only distribution is a tarball is not installable by
    strangers, and that is a real cost with no offsetting benefit.
 
-2. **Object names in the chart.** Options: (a) keep `cilium`, `cilium-config`,
-   `cilium-operator` (compatibility); (b) rename to `flowsdn*` with a
-   compatibility shim; (c) rename outright. **Recommendation: (a)** for v1. It
-   is what makes `cilium-cli`, the dashboards and the mixed-cluster migration
-   work. Revisit at 1.0 with an explicit `--rename` migration path, once
-   flowsdn has its own CLI (`flowsdn-dbg` already exists) and its own dashboards.
+2. **Resolved — #237.** Keep cilium, cilium-config and cilium-operator chart object
+   names and existing selectors for compatibility. A branding rename requires a
+   separately designed migration; no automatic rename is planned at 1.0.
 
 3. **ClusterMesh apiserver image.** Options: (a) reuse upstream until spec `20`;
    (b) ship a Rust apiserver + upstream `etcd` binary immediately; (c) replace
@@ -1589,12 +1596,9 @@ committed. The line is "would a reviewer want to see this change in a diff?".
    path. (b) removes the last non-flowsdn image from a default-ish install and is
    ~1k lines, so it is worth doing eventually, just not first.
 
-5. **Loopback CNI plugin.** Options: (a) ship the upstream Go `loopback` binary
-   (Apache-2.0, ~3 MiB); (b) write `flowsdn-loopback` in Rust (~100 lines).
-   **Recommendation: (b)**, deferred to whenever someone is annoyed by the 3 MiB
-   and the one Go binary in a Rust image. It is genuinely trivial — set `lo` up
-   and return a result — and it removes the only non-Rust executable flowsdn
-   ships. Tracked in spec `09` §12.2.
+5. **Resolved — #240.** Ship a Rust loopback entry point from the flowsdn-cni
+   executable, installed as loopback (also addressable as flowsdn-loopback). Spec 09
+   owns dispatch and CNI semantics. Do not bundle the upstream Go loopback executable.
 
 6. **arm64 e2e hardware.** Options: (a) Rose cluster nightly (current plan);
    (b) a cloud arm64 runner (Graviton) per PR; (c) QEMU TCG for e2e too.
@@ -1624,9 +1628,7 @@ committed. The line is "would a reviewer want to see this change in a diff?".
    because the registry is already there, Pages for public consumption because
    `helm repo add` is what people type.
 
-10. **Where `bpf-objects.lock` lives when the datapath is under active
-    development.** Committing it means every datapath commit touches it, which
-    is noisy but correct. Options: (a) commit it (current plan); (b) generate it
-    in CI and store as an artifact. **Recommendation: (a).** The noise is the
-    point: a change to the loaded bytecode should never be invisible in review,
-    and it is the key the verifier baseline is joined on.
+10. **Resolved — #245.** Commit bpf-objects.lock alongside source changes that alter the
+   produced bytecode. CI rebuilds with pinned inputs and verifies hashes; the same hash
+   identifies verifier baselines and release objects. CI artifacts supplement, not
+   replace, the reviewed lock.

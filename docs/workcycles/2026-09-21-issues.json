@@ -1,0 +1,815 @@
+{
+  "baseline_open": 270,
+  "selected_count": 101,
+  "issues": [
+    {
+      "issue": 1,
+      "title": "[inv 01] Which parts of the `skb->mark` contract must stay bit-compatible?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 2,
+      "title": "[inv 01] Socket LB: keep the `cgroup/*` hooks, or start with per-packet LB only?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 5,
+      "title": "[inv 02] Who owns stale-map cleanup after a versioned rename?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 8,
+      "title": "[inv 03] Confirm ADR-0003 settles nftables-native vs shelling out to iptables",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 10,
+      "title": "[inv 04] Confirm ADR-0004's table crate answers the LB table-store question",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 11,
+      "title": "[inv 04] Confirm the NodePort 0.0.0.0/:: surrogate entry is needed by socket LB",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 12,
+      "title": "[inv 04] Carry the `bpf-lb-sock-hostns-only` interaction with LRP skip-LB and termination",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 14,
+      "title": "[inv 05] How much of the reference's statedb mapstate diffing is needed for parity?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 47,
+      "title": "[spec 00] Resolve the conflicting `lb-retry-backoff-max` default (1s vs 1m)",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "default-fix",
+      "github_state": "open",
+      "validation": "pending Linux configuration regression"
+    },
+    {
+      "issue": 51,
+      "title": "[spec 01] Value cache or table reconciler, per BPF map?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 57,
+      "title": "[spec 02] Keep `PERF_EVENT_ARRAY` for monitor events, or move to `RINGBUF`?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 58,
+      "title": "[spec 02] Per-endpoint lxc object, or one shared lxc object keyed by ifindex?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 59,
+      "title": "[spec 02] veth or netkit as the default pod device?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 60,
+      "title": "[spec 02] Tail-call slots, or `#[inline(never)]` subprograms?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 61,
+      "title": "[spec 02] Keep `cilium_*` map and pin names, or use a `flowsdn_*` namespace?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 64,
+      "title": "[spec 03] Duplicate-identity convergence: keep the reference's GC-only behaviour?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 66,
+      "title": "[spec 03] Local identity bound in the datapath: scope byte, or the reference's 0xFFFF-per-scope cap?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 69,
+      "title": "[spec 03] Well-known identities: default on (reference) or off?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 73,
+      "title": "[spec 04] Bounded loops or const-generic unrolling for NAT port allocation?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 74,
+      "title": "[spec 04] Effective TCP conntrack lifetime default: 8000 s or 21600 s?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 75,
+      "title": "[spec 04] Expose a clean CT-result enum instead of the reference's `Existing`/`CT_REPLY` quirk?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 76,
+      "title": "[spec 04] Purge NAT orphans only on signals, or also periodically?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 79,
+      "title": "[spec 04] Where does NAT46/64 land in the milestone order?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 80,
+      "title": "[spec 05] Bit-exact Maglev with Cilium nodes, or hash the binary key?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 81,
+      "title": "[spec 05] Weighted Maglev: reproduce the reference's f64 counter exactly, or use fixed point?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 84,
+      "title": "[spec 05] Ship an in-tree active backend health checker, or only the hook?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 85,
+      "title": "[spec 05] Keep `io.cilium/*` LB class strings, or also accept `flowsdn.io/*`?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 86,
+      "title": "[spec 05] `enable-service-topology` default: false (reference) or true (kube-proxy parity)?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 88,
+      "title": "[spec 05] Quarantined flag (bit 14) on backend slots: never written, or set explicitly?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 90,
+      "title": "[spec 05] Edit spec 00 \u00a76.4 to the resolved `lb-retry-backoff-max` default of 1m",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "specification",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 91,
+      "title": "[spec 05] Health-server bind address: all addresses, or NodePort addresses only?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 94,
+      "title": "[spec 06] `toServices` and ClusterMesh global services: add remote backends?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 95,
+      "title": "[spec 06] `fromRequires`/`toRequires`: accept-and-ignore, or remove from the schema?",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 100,
+      "title": "[spec 06] Reserved flag bits 1-2 of `policy_entry`: never reclaim before 1.0",
+      "resolution": "docs/decisions/0011-foundation-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 104,
+      "title": "[spec 07] Keep writing `spec.ipam.pool` in ENI mode?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 106,
+      "title": "[spec 07] Azure deprecated mirror fields: read and write, or read only?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 107,
+      "title": "[spec 07] Serialize VMSS updates across nodes of one scale set?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 108,
+      "title": "[spec 07] Keep the `--aws-max-results-per-call` auto-switch to 1000?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 110,
+      "title": "[spec 07] ENI IPv6: parity with the reference's one-/80-prefix model, or a per-ENI prefix model?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 111,
+      "title": "[spec 07] Alibaba `PrepareIPRelease` ENI choice: most-free in sorted id order",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 112,
+      "title": "[spec 07] Alibaba credential chain: include RRSA (OIDC) from day one?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 113,
+      "title": "[spec 07] `status.ipam.pod-cidrs`: never write, but keep the type?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 114,
+      "title": "[spec 08] Read Cilium-written endpoint state directories for in-place migration?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 116,
+      "title": "[spec 08] 409 or 400 for a duplicate endpoint PUT?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 117,
+      "title": "[spec 08] Health responder: in-process thread with `setns`, or a separate binary?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 118,
+      "title": "[spec 08] Deferred REST routes: return 501, or leave them unregistered?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 119,
+      "title": "[spec 08] Implement the adaptive API rate limiter, or use fixed limits?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 123,
+      "title": "[spec 09] CNI binary name: `cilium-cni`, `flowsdn-cni`, or both?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 124,
+      "title": "[spec 09] `loopback` plugin: ship the upstream Go binary, or write the Rust equivalent?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 132,
+      "title": "[spec 10] Managed neighbors only: accept the deviation and drop the `NTF_USE` refresher?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 136,
+      "title": "[spec 10] Pin the numeric `address-scope-max` default",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "specification",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 137,
+      "title": "[spec 10] Are runtime `devices` changes honoured, and what is the `--devices` grammar?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 138,
+      "title": "[spec 10] Support endpoint-routes mode at all?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 139,
+      "title": "[spec 10] Subscribe to `RTNLGRP_*_RULE` events for faster recovery?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 144,
+      "title": "[spec 11] Populate the deprecated `Summary` field for L3/L4 flows?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 146,
+      "title": "[spec 11] The two mismatched drop-reason proto names (136, 161)",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 173,
+      "title": "[spec 14] Keep the fixed WireGuard port 51871 and IPsec reqid 1?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 176,
+      "title": "[spec 14] Plumb the zero output mark through both IPsec IN paths?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 177,
+      "title": "[spec 14] Keep the u16 node ID (65535-node cap)?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 179,
+      "title": "[spec 14] Egress-gateway per-entry vs flattened node selectors",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 180,
+      "title": "[spec 14] Confirm spec 10 owns table 200 and `cilium_node_map_v2`",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 182,
+      "title": "[spec 14] Which IPsec key file forms to accept?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 188,
+      "title": "[spec 15] Preserve the reference's BGP policy naming exactly?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 189,
+      "title": "[spec 15] `CiliumBGPNodeConfigOverride.peers[].localPort`: keep the dead field?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 190,
+      "title": "[spec 15] ClusterIP advertisement when `bpf.lbExternalClusterIP` is off",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 192,
+      "title": "[spec 15] Per-peer BGP backend selection, or node-level only?",
+      "resolution": "docs/decisions/0012-control-plane-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 193,
+      "title": "[spec 16] xDS: split mode only, or implement ADS now?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 194,
+      "title": "[spec 16] Pin the Envoy image by digest, or track a tag?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 195,
+      "title": "[spec 16] Support embedded Envoy, or DaemonSet only?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 196,
+      "title": "[spec 16] `enable-bpf-tproxy`: keep both modes, default on, or BPF only?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 198,
+      "title": "[spec 16] Support all three inline TLS secret modes, or SDS with secret sync only?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 200,
+      "title": "[spec 16] NPHDS: keep serving it, or rely on Envoy reading the ipcache?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 201,
+      "title": "[spec 16] Ship the standalone DNS proxy?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 202,
+      "title": "[spec 16] Mutual authentication: reject `authentication.mode: required`, or treat it as allow?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 206,
+      "title": "[spec 17] One scripttest fixture builder per area, or one composable builder?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 207,
+      "title": "[spec 17] scripttest flag parsing: `clap` or hand-rolled?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 209,
+      "title": "[spec 17] Run the 51 LB scripts on both map backends in CI?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 212,
+      "title": "[spec 17] Where do flowsdn-authored `.txtar` scripts live?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 214,
+      "title": "[spec 17] Corpus tag bump policy: who reviews, and what is the diff budget?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 215,
+      "title": "[spec 18] BPF helper mocking: feature-gated shim, `freplace`, or netns only?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 216,
+      "title": "[spec 18] BPF map isolation: clear between cases, reload per case, or share per file?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 217,
+      "title": "[spec 18] `CASES.toml` over `CASES.md`, recorded so a future re-harvest maintainer sees the reasoning",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 218,
+      "title": "[spec 18] Adopt the reference's `pktgen` default-value set exactly?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 220,
+      "title": "[spec 18] BPF code coverage: none, port `coverbee`, or wait for a verifier-safe tool?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 222,
+      "title": "[spec 18] Share one packet fixture set between bpftest and the e2e traffic generator?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 223,
+      "title": "[spec 18] May `flowsdn-bpf-testprogs` use the datapath's own library modules?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 224,
+      "title": "[spec 18] Reference tag bump cadence for the BPF case corpus",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 227,
+      "title": "[spec 19] Relay or per-node Hubble streams as the e2e default?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 228,
+      "title": "[spec 19] Encryption negative-capture assertion: privileged pod, or a test-only agent API?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 230,
+      "title": "[spec 19] Does `e2e-encryption` belong on the PR gate?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 233,
+      "title": "[spec 19] Accept upstream connectivity-test names as `--test` aliases?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 237,
+      "title": "[spec 22] Keep `cilium`, `cilium-config`, `cilium-operator` as the chart's object names?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 240,
+      "title": "[spec 22] Loopback CNI plugin: upstream Go binary, or a Rust `flowsdn-loopback`?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 245,
+      "title": "[spec 22] Commit `bpf-objects.lock`, or generate it in CI?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 259,
+      "title": "[ADR-0007] Amend spec 07's test plan and spec 22's CI matrix to name the recorded-response fakes",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "specification",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 280,
+      "title": "[spec 21] Ship Ingress at all, or Gateway API only?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 282,
+      "title": "[spec 21] Shared Ingress mode's cluster-wide CEC: keep one CEC, or split per Ingress?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 283,
+      "title": "[spec 21] Ingress class precedence: keep the reference's annotation-over-field order?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 284,
+      "title": "[spec 21] The force-HTTPS redirect status code: 301 or 308?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 287,
+      "title": "[spec 21] Access-log configuration surface: vendor the reference's default format strings verbatim?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    },
+    {
+      "issue": 288,
+      "title": "[spec 21] Where GAMMA lives: this spec, or spec 16 with the rest of the mesh story?",
+      "resolution": "docs/decisions/0013-integration-issue-resolutions.md",
+      "kind": "design",
+      "github_state": "open",
+      "validation": "full issue body and normative specification cross-reviewed"
+    }
+  ],
+  "implementation_trackers": []
+}

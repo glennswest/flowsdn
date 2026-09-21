@@ -94,3 +94,12 @@ cached context and early daemon preparation, not account dollars.
 [Validation](../validation/m1-cni-routing.md) is committed at `4b8f8ca`.
 Cleanup removed 11,106 files / 3.5 GiB and one failed-test socket.
 No release; milestone 1 continues into standalone daemon integration.
+
+## Issue-driven cycle: 2026-09-21
+
+Started 20:07:01 UTC with 270 open issues. Three bounded review agents completed
+101 design/specification resolutions; closure awaits committed evidence and the
+configuration regression. Root integrated the standalone endpoint agent, with
+42 focused tests, Clippy and live restart/offline deletion checks passing.
+Final validation, publication and accounting remain in progress. Usage samples
+and observed overlapping agent windows are in `issue-cycle-2026-09-21`.

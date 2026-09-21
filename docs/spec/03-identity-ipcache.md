@@ -1174,19 +1174,16 @@ writing. Startup fences: `initial_cid_list`, `k8s_caches_synced`,
 
 ## 12. Open decisions
 
-1. **Duplicate-identity convergence.** Keep reference behavior (duplicates
-   persist until GC) — recommended — or add an active "prefer oldest,
-   re-resolve endpoints on the newer id after a grace period" step? The
-   latter renumbers running endpoints and reintroduces churn; not
-   recommended.
+1. **Resolved (#64, ADR-0011): retain duplicate identities until GC.**
+   Do not actively renumber live endpoints to prefer the oldest duplicate.
+   Normal reference-counted release and allocator GC reclaim unused entries.
 2. **kvstore backend timing.** Ship the `IdentityBackend` stub now and the
    `etcd-client` backend with the ClusterMesh spec (recommended), or never
    and require CRD mode plus clustermesh-apiserver's CRD mirroring for
    meshes? Depends on whether ClusterMesh spec needs kvstore identities.
-3. **Local identity bound in the datapath.** Section 4.5 chooses
-   scope-byte classification (full 24-bit local range). Alternative: cap the
-   userspace local allocator at `0xFFFF` per scope to match the reference
-   BPF constant. Recommendation: scope byte; record in the datapath spec.
+3. **Resolved (#66, ADR-0011): scope-byte classification.**
+   Preserve the full supported 24-bit local index range and §4.5 deviation;
+   the datapath spec explicitly references this contract.
 4. **Assigned-identity resource ids.** Section 3.10 uses `<source>//<ip>`;
    alternative is one resource per writer (`ep/<ns>/<pod>` for CEP, which
    also enables `DeleteOnMetadataMatch` by ns/name without a k8s-metadata
@@ -1195,8 +1192,9 @@ writing. Startup fences: `initial_cid_list`, `k8s_caches_synced`,
 5. **ipcache map size.** Constant 512 000 as in the reference, or a config
    key (`bpf-ipcache-map-max`) with the same default? Recommendation: add
    the key; no compatibility cost.
-6. **Well-known identities default.** Inventory 05 suggests flag-off;
-   section 4.4 keeps the reference default (on). Decide before 1.0.
+6. **Resolved (#69, ADR-0011): well-known identities default on.**
+   `enable-well-known-identities=true` follows §4.4 and the config catalogue.
+   Explicit false disables the shortcut; no inventory suggestion overrides it.
 7. **Envoy `ipcache_name`.** Confirm against the cilium/proxy image that
    the bootstrap field must name `cilium_ipcache_v2` (section 4.8); if the
    proxy hard-codes the legacy name, a symlink pin or NPHDS mode is needed.

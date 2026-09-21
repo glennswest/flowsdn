@@ -388,7 +388,7 @@ Service CT entry:
 
 1. Look up the Service key (Reverse scope, filter `Svc` with the service's
    `rev_nat_index`). Existing entry → `Existing` (the reference's lookup
-   primitive reports this as `CT_REPLY`; the flowsdn API SHOULD name it
+   primitive reports this as `CT_REPLY`; the flowsdn internal API MUST name it
    `Existing`). If `svc.count == 0` on `New` → `DROP_NO_SERVICE`.
 2. `New`: choose `backend_id` (session affinity map first if the service has
    affinity and the backend still exists; else the service's algorithm),
@@ -629,7 +629,9 @@ LB; CT tracks the converted IPv6 flow; the reply is converted back. The
 RFC 6052 stateless gateway (`nat_46x64_prefix`, `CILIUM_CALL_IPV46_RFC6052` /
 `IPV64_RFC6052`) translates without CT state. Both set `DROP_NAT46`/`DROP_NAT64`
 on header conversion failure and `DROP_NAT_46X64_DISABLED` when compiled out.
-This spec will be extended when the milestone is scheduled.
+Service translation is scheduled with milestone 2 load balancing (#79);
+stateless RFC 6052 gateway support belongs to milestone 3. This scope
+paragraph is not a complete translation algorithm or implementation claim.
 
 ## 4. Data model
 
@@ -747,7 +749,8 @@ counterpart (global maps and per-cluster maps; not network-scoped maps):
 
 ### 5.5 Orphan NAT purge
 
-Run only on signal-triggered passes (NAT or CT fill-up), once per
+Run on signal-triggered passes (NAT or CT fill-up), or an explicit
+`flowsdn-dbg bpf nat gc` request using the same scan, once per
 (TCP map, any map) pair sharing a NAT map. Walk the NAT map (reliable dump):
 
 - `IN` key `k` with value `v`: the owning CT Egress key is `{daddr=v.to_daddr,
@@ -1039,9 +1042,8 @@ e2e:
   Scratch: `PerCpuArray<CtEntry>`, `PerCpuArray<CtTuple6>`,
   `PerCpuArray<SnatArgs>`. Time via `bpf_ktime_get_ns`/`bpf_jiffies64`
   behind a `.rodata` `enable_jiffies` global; timeouts as `.rodata` u32
-  seconds converted once per packet. The unrolled 32-iteration allocation
-  loop needs bounded-loop support (kernel 5.3+) or manual unrolling via a
-  const-generic recursion; decide in the datapath spec.
+  seconds converted once per packet. The allocation loop is verifier-bounded
+  to 32 attempts; source-level unrolling is not required (ADR-0011, #73).
 - **Userspace `flowsdn-ctgc`** (agent task, no Hive per ADR-0004): owns the
   opened CT/NAT/frag `aya::maps::MapData`, an `EndpointIps` snapshot source, a
   `Signals` receiver (perf reader for `cilium_signals`), a `Fence` for "endpoints
@@ -1061,23 +1063,20 @@ e2e:
 
 ## 12. Open decisions
 
-1. **Bounded loops vs unrolling for port allocation.** Options: (a) rely on
-   verifier bounded loops (5.3+), simplest in Rust; (b) const-generic unroll
-   to 32 like the reference. Recommendation: (a), since the datapath spec is
-   unlikely to promise < 5.10.
-2. **Effective TCP lifetime default.** The reference's flag default (8000 s)
-   differs from its BPF fallback (21600 s) and from the documented value in
-   inventory 01. Options: keep 8000 s (behavioral compatibility) or 21600 s.
-   Recommendation: 8000 s; document it.
-3. **`Existing` vs `CT_REPLY` for Service lookups.** Keep the reference's
-   internal quirk or expose a clean enum. Recommendation: clean enum
-   internally; the trace `reason` byte emitted for service lookups is
-   unaffected (the reference deliberately ignores the service lookup's
-   monitor result).
-4. **Orphan purge frequency.** Reference: only on signals. Option: also on
-   every Nth periodic pass to catch orphans without port pressure.
-   Recommendation: keep signal-only; add a `flowsdn-dbg bpf nat gc` manual
-   trigger.
+1. **Resolved (#73, ADR-0011): verifier-bounded allocation loops.**
+   Retain the 32-attempt bound; use bounded loops on the 6.6 floor rather than
+   requiring source-level unrolling. Both architectures still require live
+   verifier tests; a failed verifier result must be fixed before shipping.
+2. **Resolved (#74, ADR-0011): effective TCP lifetime is 8000 seconds.**
+   Both regular and service TCP defaults use §6 values. Patch them into BPF
+   configuration; the 21600-second reference fallback is not the runtime default.
+3. **Resolved (#75, ADR-0011): use `Existing` in the internal service CT API.**
+   Preserve emitted CT/trace reason encodings; the internal enum name does not
+   reinterpret the monitor result ignored by service lookups.
+4. **Resolved (#76, ADR-0011): signal-triggered orphan scans.**
+   Keep §5.5 scheduling, with an explicit `flowsdn-dbg bpf nat gc` manual
+   trigger using the same scan. Do not add every-Nth-periodic scans. The CLI
+   trigger and live signal integration remain implementation obligations.
 5. **Batch delete.** Use `BPF_MAP_DELETE_BATCH` for expired keys instead of
    per-key deletes. Recommendation: yes, behind the same fallback; report the
    count of `ENOENT` from the batch result as `skipped`.
@@ -1085,6 +1084,8 @@ e2e:
    recreate the map (reference) or be tolerated by reusing the pinned map at
    its old size with a warning. Recommendation: tolerate for LRU maps and
    warn; recreate only on key/value/flags change.
-7. **NAT46/64 milestone placement**: after DSR, before egress gateway, or
-   folded into the LB milestone. Recommendation: with the LB milestone that
-   adds `SVC_FLAG_NAT_46X64`.
+7. **Resolved (#79, ADR-0011): service NAT46/64 belongs to milestone 2.**
+   Implement it with the load-balancer flag `SVC_FLAG_NAT_46X64`; translation
+   and return traffic are acceptance requirements, not completed features.
+   The independent stateless RFC 6052 gateway remains advanced networking
+   in milestone 3; extending §3.15 is required before its implementation.

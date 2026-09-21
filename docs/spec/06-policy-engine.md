@@ -81,7 +81,7 @@ is **deferred**, inventory 05); `--static-cnp-path` (deferred).
 | Config keys (§6) | `cilium-config` ConfigMap, Helm | names and defaults |
 | Endpoint runtime option `PolicyAuditMode`, `PolicyVerdictNotification` | `cilium-dbg endpoint config` | option names (spec 00 §2) |
 
-Not compatible, by decision: `cilium-dbg shell` commands
+Not compatible, by decision (ADR-0004; confirmed #14 by ADR-0011): `cilium-dbg shell` commands
 `policy/mapstate/{entries,topk,stage}`, `policyrepo/*`, `policy/import`
 (ADR-0004, no hive shell); the hive-script `.txtar` harness (replaced by Rust
 integration tests, §9). `GET /policy` is kept even though the reference marks
@@ -139,6 +139,10 @@ the entry `Node = true` (host firewall subject, §3.6.4); its keys are
 prefixed `node:` at injection time (§3.2.9).
 
 #### 3.2.1 Subject and peers
+
+**Resolved (#95, ADR-0011):** `fromRequires` and `toRequires` remain accepted
+schema fields, are ignored in compilation, and produce one warning per
+affected rule on import. They do not constrain peers.
 
 Ingress peers (`IngressCommonRule`): `fromEndpoints[]`, `fromRequires[]`
 (**deprecated, no effect at 1.20** — accepted, ignored; the reference has no
@@ -1825,13 +1829,14 @@ its `PolicyOwner` callbacks; the ipcache registers the `IdentityUpdater`.
    KCNP/CNP combination at import so the subject keeps its previous policy.
    Recommendation: (b), with a clear status condition — silent partial
    enforcement is worse than a rejected object.
-3. **`toServices` and ClusterMesh global services.** Only local LB backends
-   are used (matches reference). Decide with the ClusterMesh spec whether
-   remote backends should be added; recommendation: no change until a user
-   need appears.
-4. **`fromRequires`/`toRequires`.** Accepted and ignored at 1.20 (no
-   consumer). Recommendation: accept, ignore, and emit a warning per rule;
-   remove from the schema only with a MAJOR version.
+3. **Resolved (#94, ADR-0011): `toServices` uses the local LB-table view.**
+   Keep §3.2.5 selector/headless behavior and re-resolution on service changes.
+   Do not add a separate remote-cluster backend query or union. This does not
+   discard entries already present in the selected local table view.
+4. **Resolved (#95, ADR-0011): accept and ignore `fromRequires`/`toRequires`.**
+   Keep the schema fields and emit one warning per affected rule on import.
+   They must not become effective allow/deny constraints; schema removal needs
+   a separately versioned compatibility decision.
 5. **Egress named-port re-resolution.** Deleting by identity for named ports
    (reference) can transiently remove a port that another selector still
    allows for the same identity until the next full distill. Options: keep;
@@ -1854,10 +1859,10 @@ its `PolicyOwner` callbacks; the ipcache registers the `IdentityUpdater`.
    `log.value` → cookie → verdict event now (`RuleOrigin` already carries
    the log string). Recommendation: wire it behind a config key defaulting
    off, since Hubble at 1.20 does not resolve cookies.
-9. **Reserved flag bits 1–2 of `policy_entry`.** Write 0, ignore on read
-   (required). Reclaiming them for flowsdn (e.g. an `audit-this-entry` bit)
-   would break mixed reference/flowsdn tooling reading the map;
-   recommendation: do not reclaim before 1.0.
+9. **Resolved (#100, ADR-0011): preserve reserved flag bits 1–2.**
+   Write zero and ignore them on read; do not reclaim them before 1.0.
+   A version number alone does not authorize incompatible reuse afterward:
+   any reuse requires an explicit versioned map/tooling migration contract.
 10. **`GET /policy` 404-on-empty.** Reference returns 404 when no rules
     exist; `cilium-dbg policy get` tolerates it. Recommendation: keep.
 11. **Lockdown default.** `enable-endpoint-lockdown-on-policy-overflow`
