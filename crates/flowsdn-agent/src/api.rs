@@ -294,8 +294,10 @@ impl Api {
                 }
                 let healthy = self.manager.healthy(&decode(id)?)?;
                 let status = if healthy { "OK" } else { "Failure" };
-                return Ok((200, json!({"overallHealth":status,"bpf":status,"policy":"Disabled","connected":healthy})));
-
+                return Ok((
+                    200,
+                    json!({"overallHealth":status,"bpf":status,"policy":"Disabled","connected":healthy}),
+                ));
             }
             let id = decode(id)?;
             return match request.method.as_str() {
@@ -771,7 +773,7 @@ fn bind(path: &Path) -> Result<(UnixListener, SocketGuard)> {
 }
 
 fn replay_pending(
-    guard: &flowsdn_cni::queue::ExclusiveGuard,
+    guard: &mut flowsdn_cni::queue::ExclusiveGuard,
     mut delete: impl FnMut(&ReplayRequest) -> Result<()>,
 ) -> Result<()> {
     for entry in guard.entries()? {
@@ -799,18 +801,29 @@ pub fn run(config_path: &Path) -> Result<()> {
     };
     // Without endpoint GC, never advertise readiness after skipping a deletion.
     // Preserve failed entries and fail startup so a supervisor can retry safely.
-    let replay = Queue::open(&api.config.queue)?
-        .lock_exclusive(Duration::from_millis(1500))?;
-    replay_pending(&replay, |request| {
+    let mut replay = Queue::open(&api.config.queue)?.lock_exclusive(Duration::from_millis(1500))?;
+    replay_pending(&mut replay, |request| {
         match request {
-            ReplayRequest::Attachment { container_id, ifname } => {
-                api.manager.delete(&format!("cni-attachment-id:{container_id}:{ifname}"))?;
+            ReplayRequest::Attachment {
+                container_id,
+                ifname,
+            } => {
+                api.manager
+                    .delete(&format!("cni-attachment-id:{container_id}:{ifname}"))?;
             }
             ReplayRequest::Container { container_id } => {
-                let ids: Vec<_> = api.manager.records()
-                    .filter(|record| record.document.get("dockerID").and_then(Value::as_str) == Some(container_id))
-                    .map(|record| record.attachment.clone()).collect();
-                for id in ids { api.manager.delete(&id)?; }
+                let ids: Vec<_> = api
+                    .manager
+                    .records()
+                    .filter(|record| {
+                        record.document.get("dockerID").and_then(Value::as_str)
+                            == Some(container_id)
+                    })
+                    .map(|record| record.attachment.clone())
+                    .collect();
+                for id in ids {
+                    api.manager.delete(&id)?;
+                }
             }
         }
         Ok(())

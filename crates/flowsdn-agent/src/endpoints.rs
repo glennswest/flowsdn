@@ -6,7 +6,11 @@ use flowsdn_bpf_loader::kernel::LocalDelivery;
 use flowsdn_connector::Connector;
 use flowsdn_ipam::Ipam;
 use serde_json::{Value, json};
-use std::{collections::{BTreeMap, BTreeSet}, net::IpAddr, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    net::IpAddr,
+    path::Path,
+};
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or("")
@@ -130,9 +134,15 @@ impl Manager {
     /// Initial health checks live host-link identity and incomplete teardown.
     /// It does not claim policy convergence or detect external BPF replacement.
     pub fn healthy(&self, attachment: &str) -> Result<bool> {
-        let Some(record) = self.records.get(attachment) else { return Ok(false); };
-        if self.deleting.contains(attachment) { return Ok(false); }
-        let Some(link) = Connector::open()?.link(text(&record.document, "IfName"))? else { return Ok(false); };
+        let Some(record) = self.records.get(attachment) else {
+            return Ok(false);
+        };
+        if self.deleting.contains(attachment) {
+            return Ok(false);
+        }
+        let Some(link) = Connector::open()?.link(text(&record.document, "IfName"))? else {
+            return Ok(false);
+        };
         let endpoint = info(record)?;
         Ok(link.index == endpoint.ifindex && mac_value(&link.mac)? == endpoint.node_mac)
     }
