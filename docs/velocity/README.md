@@ -128,9 +128,9 @@ one implementation and documentation cycle with three independent agents.
 Source `34fc3a1` passes 447 workspace tests, Clippy, formatting, both Linux musl
 compile checks, BPF build and both privileged CNI/agent fixtures.
 
-Interim cutoff 21:44:43 UTC: 1904.3 seconds (31.7 minutes), 19,070,873 processed
-tokens including 18,773,120 cached input. Final publication/cleanup accounting
-follows. Counters are deduplicated by response ID and exclude the preceding
-cycle; cached input is a subset, and repeated context does not measure dollars.
-Known overlapping agent windows total 364 seconds (0.101 hours); unobserved
-intervals remain unassigned. Active work time remains null. No release.
+Final cutoff 2026-09-21T22:01:25.727Z: 2906.8 seconds (48.4 minutes),
+19,540,806 processed tokens including 19,235,456 cached input. Seven issues
+closed. Cleanup removed 17,737 files / 6.5 GiB and eleven task logs. Counters
+include repeated context, exclude this commit/reporting, and do not measure
+cost. Known overlapping agent windows: 364 seconds; active time unknown.
+No release. Future accounting is consolidated once per completed batch.

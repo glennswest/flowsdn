@@ -1120,8 +1120,8 @@
       "scope": "project/shared",
       "agent": "/root with control_decisions, integration_decisions, review_agent",
       "start_utc": "2026-09-21T21:12:58.897Z",
-      "end_utc": "2026-09-21T21:44:43.149758Z",
-      "elapsed_seconds": 1904.252758,
+      "end_utc": "2026-09-21T22:01:25.726746Z",
+      "elapsed_seconds": 2906.829746,
       "active_work_seconds": null,
       "baseline_commit": "229f94c",
       "issues": [
@@ -1133,11 +1133,11 @@
         130,
         131
       ],
-      "status": "validated; issue publication pending",
+      "status": "complete",
       "usage_samples": [
         {
           "thread_id": "01a0c594-3b67-7722-a326-e5e4720f8977",
-          "completed_response_records": 73,
+          "completed_response_records": 79,
           "baseline": {
             "timestamp": "2026-09-21T21:12:13.569Z",
             "counters": {
@@ -1151,25 +1151,25 @@
             }
           },
           "endpoint": {
-            "timestamp": "2026-09-21T21:44:42.957Z",
+            "timestamp": "2026-09-21T22:01:23.712Z",
             "counters": {
-              "input_tokens": 22167920,
-              "cached_input_tokens": 21872640,
+              "input_tokens": 22635382,
+              "cached_input_tokens": 22334976,
               "cache_write_input_tokens": 0,
-              "output_tokens": 65937,
-              "reasoning_output_tokens": 13920,
-              "total_tokens": 22233857,
-              "uncached_input_tokens": 295280
+              "output_tokens": 68408,
+              "reasoning_output_tokens": 14075,
+              "total_tokens": 22703790,
+              "uncached_input_tokens": 300406
             }
           },
           "delta": {
-            "input_tokens": 8027793,
-            "cached_input_tokens": 7909888,
+            "input_tokens": 8495255,
+            "cached_input_tokens": 8372224,
             "cache_write_input_tokens": 0,
-            "output_tokens": 27250,
-            "reasoning_output_tokens": 4911,
-            "total_tokens": 8055043,
-            "uncached_input_tokens": 117905
+            "output_tokens": 29721,
+            "reasoning_output_tokens": 5066,
+            "total_tokens": 8524976,
+            "uncached_input_tokens": 123031
           }
         },
         {
@@ -1285,20 +1285,21 @@
         }
       ],
       "usage_totals": {
-        "input_tokens": 19017797,
-        "cached_input_tokens": 18773120,
+        "input_tokens": 19485259,
+        "cached_input_tokens": 19235456,
         "cache_write_input_tokens": 0,
-        "output_tokens": 53076,
-        "reasoning_output_tokens": 9293,
-        "total_tokens": 19070873,
-        "uncached_input_tokens": 244677
+        "output_tokens": 55547,
+        "reasoning_output_tokens": 9448,
+        "total_tokens": 19540806,
+        "uncached_input_tokens": 249803
       },
       "usage_note": "token_usage_record globally deduplicated by response_id. Prior cumulative baselines exclude the preceding cycle and intervening reporting. Cached input is a subset of input; reasoning is a subset of output. Includes repeated context, not account cost. Excludes this snapshot commit and subsequent reporting.",
       "commits": [
         "8a6ecb7",
         "f8139f4",
         "335ede3",
-        "34fc3a1"
+        "34fc3a1",
+        "7f7b824"
       ],
       "validated_revision": "34fc3a1",
       "release": null,
@@ -1334,7 +1335,17 @@
           "active_work_seconds": null,
           "note": "Observed bounds include coordination, lint correction and infrastructure/approval waits; not exclusive build time. Initial workspace run preceded this interval. Nested in project elapsed."
         }
-      ]
+      ],
+      "issues_closed": [
+        48,
+        115,
+        120,
+        121,
+        127,
+        130,
+        131
+      ],
+      "cleanup": "17737 files / 6.5 GiB and eleven task logs removed"
     }
   ],
   "crates": [

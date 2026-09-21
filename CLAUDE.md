@@ -29,8 +29,9 @@ record remaining implementation. Use bounded parallel implementation/review with
 narrow context. Commit completed steps frequently. Batch releases at milestone
 acceptance, with focused checks during implementation and the full required
 matrix before release. Repeat checks only after relevant changes or failures.
-Keep accounting concise at work boundaries; do not create a release merely to
-report counters. Continue the disk cleanup requirements in AGENTS.md.
+Keep accounting to one compact update per completed issue batch. Prioritize
+implementation and testing; consolidate documentation and issue publication at
+the batch boundary. Do not create a release merely to report counters. Continue the disk cleanup requirements in AGENTS.md.
 
 ### Phase 0 — Inventory (COMPLETE 2026-09-07, except kernel-requirements roll-up)
 - [x] Repo, license, NOTICE, clean-room protocol, ADR-0001 scope

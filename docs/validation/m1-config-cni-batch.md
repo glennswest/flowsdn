@@ -53,3 +53,6 @@ Cross-endpoint rollback verification (#129), connectivity specification (#261),
 Kubernetes controllers, persistent forwarding through agent downtime and the
 two-node networking gate remain outstanding in milestone tracker #291. No new
 release or arm64 runtime claim is made.
+
+All seven listed issues were closed with links to this record. Cleanup removed
+17,737 build files / 6.5 GiB and eleven task logs.
