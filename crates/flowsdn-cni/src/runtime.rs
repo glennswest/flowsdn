@@ -482,7 +482,9 @@ impl AddBackend for Platform {
     fn may_release_resources(&self) -> bool { !self.endpoint_may_exist }
     fn delete_endpoint(&mut self, request: &AddRequest) -> Result<()> {
         let reply = self.client.delete_endpoint(&request.attachment_id()).map_err(error)?;
-        if reply.status != 404 { response(Ok(reply))?; }
+        if !matches!(reply.status, 200 | 404) {
+            return Err(error(format!("endpoint deletion not confirmed: HTTP {}", reply.status)));
+        }
         self.endpoint_may_exist = false;
         Ok(())
     }
@@ -1014,6 +1016,7 @@ mod tests {
             (vec![(503,json!({}))],false),
             (vec![(400,json!({}))],true),
             (vec![(201,json!({"status":null})),(503,json!({}))],false),
+            (vec![(201,json!({"status":null})),(206,json!({}))],false),
             (vec![(201,json!({"status":null})),(200,json!({}))],true),
             (vec![(201,json!({"status":null})),(404,json!({}))],true),
         ] {
