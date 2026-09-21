@@ -1024,5 +1024,16 @@
   "known_unclosed_acceptance": [
     129,
     261
-  ]
+  ],
+  "final_open": 173,
+  "final_closed": 122,
+  "new_remediation": {
+    "issue": 295,
+    "state": "closed",
+    "closed_at_utc": "2026-09-21T21:09:49Z",
+    "source_revision": "dd65674",
+    "validation_revision": "a8f9d06"
+  },
+  "verified_utc": "2026-09-21T21:11:32.977159Z",
+  "release": null
 }

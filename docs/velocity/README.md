@@ -97,17 +97,26 @@ No release; milestone 1 continues into standalone daemon integration.
 
 ## Issue-driven cycle: 2026-09-21
 
-Started 20:07:01 UTC with 270 open issues. Three bounded review agents and root
-resolved 101 existing design/spec/default issues and retained explicit remaining
-implementation in trackers #291–#294. Source `dd65674` passes 428 workspace tests,
-Clippy, both musl architecture compile checks and dependency policy. Standalone
-agent restart/offline deletion/partial teardown checks pass. Cleanup removed
-18,889 files / 6.7 GiB and six logs. No release was made.
+20:07:01 UTC–2026-09-21T21:11:32.977159Z: **3872.0 seconds** (64.5 minutes).
+Root and three bounded review agents resolved **101 of 270 existing issues**
+(37.4%), closed dependency remediation #295, and created open milestone acceptance
+trackers #291–#294. Final totals: **173 open / 122 closed**. Design closures do
+not claim feature delivery; implementation obligations remain in the trackers.
 
-Observed through 2026-09-21T21:02:43.847741Z: 3342.8 seconds.
-Processed-token delta: 23,372,925, including
-22,757,376 cached input; counts include repeated
-context and do not measure account cost. Known overlapping agent windows total
-1,130 seconds (0.314 hours); later review windows are not fully observed. Active
-work time remains null. Counter baselines/cutoffs and validation intervals are in
-`issue-cycle-2026-09-21`. Final issue publication/accounting follows this cutoff.
+Source `dd65674` passes **428 workspace tests**, Clippy, formatting, both musl
+architecture compile checks and dependency policy. Standalone agent restart,
+offline deletion and partial teardown checks pass. Cleanup removed 18,889 files /
+6.7 GiB and six task logs. No release was made.
+
+Processed tokens: **25,151,714**, including
+**24,503,296 cached input**. Preferred
+`token_usage_record` telemetry is deduplicated by response ID across all four
+threads; initial-response usage is included, superseding the interim token-count
+estimate. Baselines, per-thread endpoints and subsets are in the ledger. Counts
+include repeated context and do not measure account cost; this cutoff excludes
+its own commit and subsequent reporting.
+
+Known overlapping agent windows total 1,130 seconds (0.314 hours); later review
+windows are incompletely observed and not added to that time sum. Their token
+usage is included once. Active work time remains null. Final validation intervals
+are nested within project elapsed, never added to it.

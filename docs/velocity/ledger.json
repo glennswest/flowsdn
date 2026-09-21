@@ -851,151 +851,167 @@
       "scope": "project/shared",
       "agent": "/root",
       "start_utc": "2026-09-21T20:07:01Z",
-      "end_utc": null,
+      "end_utc": "2026-09-21T21:11:32.977159Z",
       "active_work_seconds": null,
-      "status": "validated; final issue publication pending",
+      "status": "complete",
       "baseline_commit": "a6ca6e1",
       "baseline_open_issues": 270,
       "selected_decision_issues": 101,
       "usage_samples": [
         {
-          "session_id": "01a0c594-3b67-7722-a326-e5e4720f8977",
-          "source": "cumulative token_count telemetry; endpoint minus first observed baseline, not summed responses",
+          "thread_id": "01a0c594-3b67-7722-a326-e5e4720f8977",
+          "source": "token_usage_record; globally deduplicated by response_id",
+          "completed_response_records": 114,
           "baseline": {
-            "timestamp": "2026-09-21T20:07:28.985Z",
+            "timestamp": "2026-09-21T20:07:21.292Z",
             "counters": {
-              "input_tokens": 17924,
-              "cached_input_tokens": 11904,
+              "input_tokens": 0,
+              "cached_input_tokens": 0,
               "cache_write_input_tokens": 0,
-              "output_tokens": 133,
+              "output_tokens": 0,
               "reasoning_output_tokens": 0,
-              "total_tokens": 18057
-            }
+              "total_tokens": 0,
+              "uncached_input_tokens": 0
+            },
+            "note": "Thread creation; first cumulative record equals first response usage."
           },
           "endpoint": {
-            "timestamp": "2026-09-21T21:01:37.925Z",
+            "timestamp": "2026-09-21T21:11:32.971Z",
             "counters": {
-              "input_tokens": 12090791,
-              "cached_input_tokens": 11925504,
+              "input_tokens": 13790162,
+              "cached_input_tokens": 13615616,
               "cache_write_input_tokens": 0,
-              "output_tokens": 31685,
-              "reasoning_output_tokens": 6624,
-              "total_tokens": 12122476
+              "output_tokens": 38250,
+              "reasoning_output_tokens": 8787,
+              "total_tokens": 13828412,
+              "uncached_input_tokens": 174546
             }
           },
           "delta": {
-            "input_tokens": 12072867,
-            "cached_input_tokens": 11913600,
+            "input_tokens": 13790162,
+            "cached_input_tokens": 13615616,
             "cache_write_input_tokens": 0,
-            "output_tokens": 31552,
-            "reasoning_output_tokens": 6624,
-            "total_tokens": 12104419,
-            "uncached_input_tokens": 159267
+            "output_tokens": 38250,
+            "reasoning_output_tokens": 8787,
+            "total_tokens": 13828412,
+            "uncached_input_tokens": 174546
           }
         },
         {
-          "session_id": "01a0c594-fdd8-73f1-bfae-b99f121daab8",
-          "source": "cumulative token_count telemetry; endpoint minus first observed baseline, not summed responses",
+          "thread_id": "01a0c594-fdd8-73f1-bfae-b99f121daab8",
+          "source": "token_usage_record; globally deduplicated by response_id",
+          "completed_response_records": 46,
           "baseline": {
-            "timestamp": "2026-09-21T20:07:57.339Z",
+            "timestamp": "2026-09-21T20:07:51.044Z",
             "counters": {
-              "input_tokens": 17999,
-              "cached_input_tokens": 11904,
+              "input_tokens": 0,
+              "cached_input_tokens": 0,
               "cache_write_input_tokens": 0,
-              "output_tokens": 98,
+              "output_tokens": 0,
               "reasoning_output_tokens": 0,
-              "total_tokens": 18097
-            }
+              "total_tokens": 0,
+              "uncached_input_tokens": 0
+            },
+            "note": "Thread creation; first cumulative record equals first response usage."
           },
           "endpoint": {
-            "timestamp": "2026-09-21T20:57:39.127Z",
+            "timestamp": "2026-09-21T20:57:39.125Z",
             "counters": {
               "input_tokens": 5446720,
               "cached_input_tokens": 5276544,
               "cache_write_input_tokens": 0,
               "output_tokens": 16321,
               "reasoning_output_tokens": 1812,
-              "total_tokens": 5463041
+              "total_tokens": 5463041,
+              "uncached_input_tokens": 170176
             }
           },
           "delta": {
-            "input_tokens": 5428721,
-            "cached_input_tokens": 5264640,
+            "input_tokens": 5446720,
+            "cached_input_tokens": 5276544,
             "cache_write_input_tokens": 0,
-            "output_tokens": 16223,
+            "output_tokens": 16321,
             "reasoning_output_tokens": 1812,
-            "total_tokens": 5444944,
-            "uncached_input_tokens": 164081
+            "total_tokens": 5463041,
+            "uncached_input_tokens": 170176
           }
         },
         {
-          "session_id": "01a0c597-0d0b-71c0-ac97-9c29efef5916",
-          "source": "cumulative token_count telemetry; endpoint minus first observed baseline, not summed responses",
+          "thread_id": "01a0c597-0d0b-71c0-ac97-9c29efef5916",
+          "source": "token_usage_record; globally deduplicated by response_id",
+          "completed_response_records": 30,
           "baseline": {
-            "timestamp": "2026-09-21T20:10:12.882Z",
+            "timestamp": "2026-09-21T20:10:06.023Z",
             "counters": {
-              "input_tokens": 18247,
-              "cached_input_tokens": 16000,
+              "input_tokens": 0,
+              "cached_input_tokens": 0,
               "cache_write_input_tokens": 0,
-              "output_tokens": 137,
+              "output_tokens": 0,
               "reasoning_output_tokens": 0,
-              "total_tokens": 18384
-            }
+              "total_tokens": 0,
+              "uncached_input_tokens": 0
+            },
+            "note": "Thread creation; first cumulative record equals first response usage."
           },
           "endpoint": {
-            "timestamp": "2026-09-21T20:17:06.794Z",
+            "timestamp": "2026-09-21T20:17:06.793Z",
             "counters": {
               "input_tokens": 2678407,
               "cached_input_tokens": 2576000,
               "cache_write_input_tokens": 0,
               "output_tokens": 11232,
               "reasoning_output_tokens": 521,
-              "total_tokens": 2689639
+              "total_tokens": 2689639,
+              "uncached_input_tokens": 102407
             }
           },
           "delta": {
-            "input_tokens": 2660160,
-            "cached_input_tokens": 2560000,
+            "input_tokens": 2678407,
+            "cached_input_tokens": 2576000,
             "cache_write_input_tokens": 0,
-            "output_tokens": 11095,
+            "output_tokens": 11232,
             "reasoning_output_tokens": 521,
-            "total_tokens": 2671255,
-            "uncached_input_tokens": 100160
+            "total_tokens": 2689639,
+            "uncached_input_tokens": 102407
           }
         },
         {
-          "session_id": "01a0c597-33e5-7872-8318-3d290208f997",
-          "source": "cumulative token_count telemetry; endpoint minus first observed baseline, not summed responses",
+          "thread_id": "01a0c597-33e5-7872-8318-3d290208f997",
+          "source": "token_usage_record; globally deduplicated by response_id",
+          "completed_response_records": 32,
           "baseline": {
-            "timestamp": "2026-09-21T20:10:21.321Z",
+            "timestamp": "2026-09-21T20:10:15.959Z",
             "counters": {
-              "input_tokens": 18253,
-              "cached_input_tokens": 16000,
+              "input_tokens": 0,
+              "cached_input_tokens": 0,
               "cache_write_input_tokens": 0,
-              "output_tokens": 62,
+              "output_tokens": 0,
               "reasoning_output_tokens": 0,
-              "total_tokens": 18315
-            }
+              "total_tokens": 0,
+              "uncached_input_tokens": 0
+            },
+            "note": "Thread creation; first cumulative record equals first response usage."
           },
           "endpoint": {
-            "timestamp": "2026-09-21T20:16:54.256Z",
+            "timestamp": "2026-09-21T20:16:54.254Z",
             "counters": {
               "input_tokens": 3160379,
               "cached_input_tokens": 3035136,
               "cache_write_input_tokens": 0,
               "output_tokens": 10243,
               "reasoning_output_tokens": 678,
-              "total_tokens": 3170622
+              "total_tokens": 3170622,
+              "uncached_input_tokens": 125243
             }
           },
           "delta": {
-            "input_tokens": 3142126,
-            "cached_input_tokens": 3019136,
+            "input_tokens": 3160379,
+            "cached_input_tokens": 3035136,
             "cache_write_input_tokens": 0,
-            "output_tokens": 10181,
+            "output_tokens": 10243,
             "reasoning_output_tokens": 678,
-            "total_tokens": 3152307,
-            "uncached_input_tokens": 122990
+            "total_tokens": 3170622,
+            "uncached_input_tokens": 125243
           }
         }
       ],
@@ -1018,10 +1034,11 @@
         "c69e170",
         "835273f",
         "7505b8e",
-        "dd65674"
+        "dd65674",
+        "a8f9d06"
       ],
       "release": null,
-      "usage_note": "Counters include cached and repeated context; no account-cost inference. First response and reporting beyond cutoff excluded. Shared usage assigned once to project/shared.",
+      "usage_note": "Preferred token_usage_record telemetry replaces interim cumulative token_count estimates. Globally deduplicated by response_id and summed once by thread. Includes initial completed responses, repeated context and cached input. Reasoning is a subset of output; cached input a subset of input. Excludes this final ledger commit and later reporting; not account cost.",
       "observed_agent_windows": [
         {
           "agent": "review_agent",
@@ -1075,14 +1092,28 @@
       ],
       "infrastructure_note": "Builds serialized with two Cargo jobs on shared disk; final test functions serialized while internal concurrency remains. Initial missing linker resolved using the existing installed tool. Approval waits were observed but cannot be separated accurately from dispatch windows.",
       "usage_totals": {
-        "input_tokens": 23303874,
-        "cached_input_tokens": 22757376,
+        "input_tokens": 25075668,
+        "cached_input_tokens": 24503296,
         "cache_write_input_tokens": 0,
-        "output_tokens": 69051,
-        "reasoning_output_tokens": 9635,
-        "total_tokens": 23372925,
-        "uncached_input_tokens": 546498
-      }
+        "output_tokens": 76046,
+        "reasoning_output_tokens": 11798,
+        "total_tokens": 25151714,
+        "uncached_input_tokens": 572372
+      },
+      "elapsed_seconds": 3871.977159,
+      "github_open_final": 173,
+      "github_closed_final": 122,
+      "existing_issues_closed": 101,
+      "new_remediation_issues_closed": [
+        295
+      ],
+      "implementation_trackers_open": [
+        291,
+        292,
+        293,
+        294
+      ],
+      "closed_at_cutoff_note": "Decision publication, dependency closure and link corrections verified. Final accounting commit and host synchronization follow this cutoff."
     }
   ],
   "crates": [
