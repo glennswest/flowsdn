@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Add an initial standalone endpoint agent with a bounded Unix HTTP API,
+  host-scope IPAM leases, persisted endpoint restart and offline CNI deletion replay.
+  Kubernetes discovery, identity/policy controllers and uninterrupted forwarding
+  during agent downtime remain outstanding.
+
 - Add an initial CNI executable with Unix agent transport, native Rust netlink,
   ADD/DEL/CHECK/STATUS/VERSION, and durable offline deletion replay support.
 - Add primary endpoint state staging, ID ownership and map restoration primitives
