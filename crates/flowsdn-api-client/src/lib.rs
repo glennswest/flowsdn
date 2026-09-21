@@ -220,6 +220,9 @@ impl Client {
             None,
         )
     }
+    pub fn get_endpoint(&self, id: &str) -> Result<Response> {
+        self.request(Method::Get, &endpoint_path(id), None)
+    }
     pub fn put_endpoint(&self, id: &str, body: &Value) -> Result<Response> {
         self.request(Method::Put, &endpoint_path(id), Some(body))
     }

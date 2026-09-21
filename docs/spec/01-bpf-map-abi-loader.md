@@ -516,6 +516,19 @@ security id `2` (world), endpoint id `65535`, IPv4 `192.0.2.3`, IPv6
 The alternative (one shared lxc object, endpoint selected by a
 `HASH_OF_MAPS` keyed on endpoint id) is open decision §12.3.
 
+**Object identity and restart invalidation (resolved #120).** The loader owns
+this identity independently of the endpoint-configuration hash in spec 08 §5.4.
+Compute SHA-256 over a versioned, length-delimited encoding of the embedded ELF
+bytes, selected object variant and loader transformation/ABI version. A changed
+input invalidates prepared-template reuse even if endpoint rodata and map names
+are unchanged. The generation's `template.txt` records this digest as lowercase
+hex plus newline; publish it atomically only after successful load/attachment.
+On restore a missing, malformed or different digest requires `rewrite+load`;
+never infer compatibility from timestamps or an equal endpoint-value hash.
+Retain the prior working generation on load failure under §3.4's commit protocol.
+This is a normative loader obligation; the initial anonymous local-delivery
+owner still reloads unconditionally and does not implement pinned-generation reuse.
+
 **Layer 3 — runtime map.** `cilium_runtime_config[0]` = Unix-time offset in
 512 ns units (`utime`), `[1]` = agent liveness timestamp (written every 1 s).
 Values that change while programs run go here, never into `.rodata`.

@@ -259,6 +259,9 @@ impl Registry {
                     "deprecated alias cannot be registered as a canonical key",
                 ));
             }
+            if name == "strict-config" && (spec.kind != Kind::Bool || spec.class != Class::Active) {
+                return Err(Error::new(name, "strict-config must be an active boolean key"));
+            }
             parse::parse(&spec.kind, &spec.default)
                 .map_err(|message| Error::new(&name, message))?;
             spec.name = name.clone();
@@ -272,6 +275,8 @@ impl Registry {
     /// Parse every supplied known value, including values shadowed by a stronger
     /// layer. Explicit canonical keys suppress deprecated aliases across sources;
     /// defaults do not suppress aliases. Repeated list flags append in input order.
+    /// If the schema registers `strict-config`, its effective boolean value
+    /// decides whether unknown keys are fatal after all source layers resolve.
     pub fn resolve(&self, entries: impl IntoIterator<Item = Entry>) -> Result<Resolved, Error> {
         let mut entries: Vec<_> = entries.into_iter().collect();
         let canonical: BTreeSet<_> = entries
@@ -323,6 +328,19 @@ impl Registry {
                     source: entry.source,
                 });
             }
+        }
+        if resolved
+            .get("strict-config")
+            .is_some_and(|effective| effective.value == Value::Bool(true))
+            && let Some((key, unknown)) = resolved.unknown_values.first_key_value()
+        {
+            return Err(Error::new(
+                key,
+                format!(
+                    "unknown configuration key (source {}); strict-config is enabled",
+                    unknown.source
+                ),
+            ));
         }
         Ok(resolved)
     }

@@ -1114,6 +1114,27 @@
         294
       ],
       "closed_at_cutoff_note": "Decision publication, dependency closure and link corrections verified. Final accounting commit and host synchronization follow this cutoff."
+    },
+    {
+      "id": "issue-batch2-2026-09-21",
+      "scope": "project/shared",
+      "agent": "/root with control_decisions, integration_decisions, review_agent",
+      "start_utc": "2026-09-21T21:12:58.897Z",
+      "end_utc": null,
+      "elapsed_seconds": null,
+      "active_work_seconds": null,
+      "baseline_commit": "229f94c",
+      "issues": [
+        48,
+        115,
+        120,
+        121,
+        127,
+        130,
+        131
+      ],
+      "status": "implementation complete; Linux validation pending",
+      "usage": null
     }
   ],
   "crates": [

@@ -182,9 +182,23 @@ step 7 the rollback of section 3.4.1 runs and the error is returned.
 3. **Open the sandbox netns** at `CNI_NETNS` (a bind-mount path such as
    `/var/run/netns/cni-…` or `/proc/<pid>/ns/net`). Failure → error
    `opening netns pinned at <path>`.
-4. **Remove a stale interface**: inside the netns, delete any link named
-   `CNI_IFNAME` if it exists (a previous ADD that failed after moving the
-   peer, or a runtime retry). "Not found" is success.
+4. **Check attachment ownership before mutation (#127).** GET the endpoint by
+   `cni-attachment-id:<CNI_CONTAINERID>:<CNI_IFNAME>` before IPAM allocation or
+   link changes. Only HTTP 404 authorizes the new-attachment path; transport,
+   authorization, malformed-response and other HTTP failures abort without
+   mutation. An existing endpoint is reusable only when it is ready and healthy,
+   its nonzero decimal-string namespace cookie matches the open live sandbox,
+   its container interface name, peer MAC and assigned addresses match, and its
+   host interface index/name/MAC still match. Return a current CNI result using
+   the existing addresses and persisted creation-time family gateways and route
+   MTU, without allocation,
+   endpoint PUT/DELETE or link reconfiguration. A cookie mismatch, incomplete
+   state (including missing creation-time route data) or unhealthy endpoint
+   fails safely; never substitute current configuration or delete the old sandbox to
+   make a new ADD succeed. With no endpoint, an already-present sandbox interface
+   also fails rather than being deleted without ownership evidence. Concurrent
+   new ADDs still use exclusive link creation and ordinary rollback of only the
+   resources created by that attempt.
 5. **IPAM.**
    - `conf.ipam-mode == "delegated-plugin"` → delegated IPAM (section 3.10).
    - otherwise → `POST /ipam?owner=<K8S_POD_NAMESPACE>/<K8S_POD_NAME>`
@@ -261,11 +275,13 @@ step 7 the rollback of section 3.4.1 runs and the error is returned.
     (kernel < 5.14) → `"0"` and an info log; the reference remembers the
     failure per process, which is meaningless for a one-shot binary and MUST
     NOT be reproduced.
-12. **Create the endpoint**: set `sync-build-endpoint = true`,
-    `container-netns-path = /var/run/cilium/netns/<basename(CNI_NETNS)>`
-    (the path the agent will later use to re-enter the namespace — the agent
-    bind-mounts under `/var/run/cilium/netns`; if it does not, the field is
-    informational), then `PUT /endpoint/{id}` with `id =
+12. **Create the endpoint**: set `sync-build-endpoint = true` and omit
+    `container-netns-path` (#130). The CNI does not create a persistent namespace
+    bind mount and MUST NOT invent a path implying one exists. The open sandbox
+    descriptor and kernel namespace cookie identify this invocation; the CNI
+    result retains the observed `CNI_NETNS` path. Spec 08 retains the optional
+    API field for other endpoint producers, without trusting it as proof of
+    namespace ownership. Then `PUT /endpoint/{id}` with `id =
     cni-attachment-id:<CNI_CONTAINERID>:<CNI_IFNAME>` and the request body.
     The call blocks until the agent has finished the first regeneration
     (BPF programs attached, `cilium_lxc` and ipcache written, policy
@@ -766,7 +782,7 @@ node do not rewrite the file on every start (the byte-compare in 3.11 step
 | `GET /healthz` | — | 200 | STATUS code 50 |
 
 `EndpointChangeRequest` fields sent by the primary ADD (all others omitted):
-`container-id`, `container-netns-path`, `container-interface-name`,
+`container-id`, `container-interface-name`,
 `interface-name`, `interface-index`, `parent-interface-index` (ENI),
 `mac`, `host-mac` (L2 modes), `addressing{ipv4, ipv4-pool-name,
 ipv4-expiration-uuid, ipv6, ipv6-pool-name, ipv6-expiration-uuid}`,
@@ -957,7 +973,7 @@ resources.
 | Agent down | STATUS | code 50; node NotReady |
 | Queue has > 256 entries | DEL | error, kubelet retries later |
 | IPAM exhausted / pool missing | ADD | `POST /ipam` 502 → fatal; nothing to roll back |
-| `PUT /endpoint` 400 "already exists" (duplicate ADD for same cid:ifname) | ADD | fatal, rollback releases the *new* IP and deletes the *new* veth; the existing endpoint is untouched (its device has a different name only if `CNI_IFNAME` differs — same name means the reference and flowsdn both deleted the old sandbox interface at step 4, leaving the old endpoint on a dead device until GC; open decision 12.5) |
+| Existing attachment or sandbox interface (#127) | ADD | Reuse only after ready/healthy state, live namespace cookie, interface identity and address checks. Otherwise fail before allocation/link mutation. A raced PUT conflict rolls back only the resources allocated by the new attempt; never delete the existing endpoint. |
 | `PUT /endpoint` 400 "IP already in use" | ADD | fatal, rollback |
 | Regeneration fails or exceeds the agent's bound | ADD | 500 or connection cut at 60 s → rollback; agent removes the endpoint without releasing the IP (the plugin releases it) |
 | veth create `EEXIST` on `lxc<hash>` | ADD | fatal: a previous endpoint for the same `cid:ifname` still exists — its DEL has not happened; rollback releases IP; kubelet retries |
@@ -1230,14 +1246,14 @@ time, so the ADD function can be tested with a recording implementation.
    stricter CHECK can make a runtime tear down pods after an agent MTU
    change. Recommendation: verify MTU and the two routes, but only report
    (debug log) until conformance behaviour of runtimes is understood.
-5. **Duplicate ADD for an existing `cid:ifname`.** Reference behaviour is a
-   400 with a leaked veth until GC when `CNI_IFNAME` matches. Options: (a)
-   keep; (b) make the plugin treat "endpoint exists" as success and return
-   the existing endpoint's addressing (idempotent ADD, which CNI 1.1.0
-   encourages); (c) delete the old endpoint first. Recommendation: (b) when
-   the existing endpoint's netns cookie matches the current sandbox,
-   otherwise (c). Needs `GET /endpoint/cni-attachment-id:…` before PUT and a
-   spec 08 change to expose the cookie.
+5. **Duplicate ADD — implemented contract #127.** Reuse a verified live
+   attachment without mutation (§3.4 step 4). A different namespace or unverifiable
+   attachment fails safely, rather than deleting the old endpoint automatically.
+   GET endpoint supplies the namespace cookie as a decimal string and creation-time
+   `status.networking.host-addressing` and `route-mtu`. These fields are persisted
+   with the endpoint and never reconstructed from a changed current configuration. Unit tests cover lookup errors, large cookie values and
+   ownership mismatches; privileged regressions must cover duplicate ADD and a
+   different live namespace, including agent restart.
 6. **Log rotation threshold.** The reference caps at 7 compressed backups
    with the hook's default size. Fix a size (recommendation 100 MB) in this
    spec once the log volume of a busy node is measured.
@@ -1248,12 +1264,11 @@ time, so the ADD function can be tested with a recording implementation.
    removal and reference-counted identity release must preserve every other endpoint.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-8. **`container-netns-path` semantics.** The plugin reports
-   `/var/run/cilium/netns/<basename>`; the reference agent does not create
-   that mount at this tag (field kept for the health/infra endpoints).
-   Decide in spec 08 whether flowsdn's agent bind-mounts sandbox namespaces
-   there (useful for re-entering pods after a plugin crash) or the field is
-   dropped from the request.
+8. **Namespace path — resolved #130.** Omit `container-netns-path` from CNI
+   endpoint PUT because the plugin creates no persistent namespace mount. Preserve
+   the actual input path only in the CNI result. The API's optional field remains
+   available to endpoint producers that actually own such a mount; the agent
+   never treats an arbitrary path as sandbox ownership proof.
 
 Implementation clarification (2026-09-09): expiration is an HTTP header,
 not a query parameter. Confirmed against reference `api/v1/openapi.yaml`

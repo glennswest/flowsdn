@@ -73,6 +73,7 @@ struct Config {
     gateway6: Option<IpAddr>,
     device_mtu: u32,
     route_mtu: u32,
+    endpoint_id_max: u32,
 }
 impl Config {
     fn read(path: &Path) -> Result<Self> {
@@ -141,6 +142,11 @@ impl Config {
                 .filter(|v| *v >= 1280)
                 .ok_or_else(|| format!("invalid {key}").into())
         };
+        let endpoint_id_max = match value.get("endpoint-id-max") {
+            None => u32::from(crate::state::DEFAULT_ENDPOINT_ID_MAX),
+            Some(value) => value.as_u64().and_then(|n| u32::try_from(n).ok())
+                .filter(|n| (1..=65535).contains(n)).ok_or("endpoint-id-max must be an integer in 1..=65535")?,
+        };
         let device_mtu = mtu("device-mtu")?;
         let route_mtu = mtu("route-mtu")?;
         if route_mtu > device_mtu {
@@ -157,6 +163,7 @@ impl Config {
             gateway6,
             device_mtu,
             route_mtu,
+            endpoint_id_max,
         })
     }
     fn ipam(&self) -> Result<Ipam> {
@@ -220,7 +227,7 @@ impl Api {
                 return Ok((
                     200,
                     json!({"status":{"datapath-mode":"veth","ipam-mode":"kubernetes",
-                "device-mtu":self.config.device_mtu,"route-mtu":self.config.route_mtu}}),
+                "device-mtu":self.config.device_mtu,"route-mtu":self.config.route_mtu,"host-addressing":self.config.addressing()}}),
                 ));
             }
             ("GET", "/v1/healthz") => {
@@ -496,7 +503,7 @@ impl Api {
             "SecLabel":null,"Options":{},"DNSHistory":null,"DNSZombies":null,
             "K8sPodName":pod,"K8sNamespace":namespace,"K8sUID":optional(body,"k8s-uid")?,
             "DatapathConfiguration":{"require-arp-passthrough":false,"require-egress-prog":false,"external-ipam":false,"require-routing":null,"install-endpoint-route":false,"disable-sip-verification":false},
-            "CiliumEndpointUID":"","Properties":{},"NetnsCookie":cookie,"RTInfo":0});
+            "CiliumEndpointUID":"","Properties":{},"NetnsCookie":cookie,"RTInfo":0,"CNIHostAddressing":self.config.addressing(),"CNIRouteMTU":self.config.route_mtu});
         let id = self.manager.create(document.clone())?;
         for ip in ips {
             self.leases.remove(&ip);
@@ -507,7 +514,7 @@ impl Api {
 
 fn endpoint_response(id: u16, document: &Value) -> Value {
     json!({"id":id,"status":{"state":"ready","networking":{"mac":document.get("LXCMAC"),"host-mac":document.get("NodeMAC"),
-        "interface-name":document.get("IfName"),"interface-index":document.get("IfIndex"),"container-interface-name":document.get("ContainerIfName"),
+        "interface-name":document.get("IfName"),"interface-index":document.get("IfIndex"),"container-interface-name":document.get("ContainerIfName"),"netns-cookie":document.get("NetnsCookie").and_then(Value::as_u64).unwrap_or(0).to_string(),"host-addressing":document.get("CNIHostAddressing"),"route-mtu":document.get("CNIRouteMTU"),
         "addressing":[{"ipv4":document.get("IPv4"),"ipv6":document.get("IPv6"),"ipv4-pool-name":document.get("IPv4IPAMPool"),"ipv6-pool-name":document.get("IPv6IPAMPool")} ]}}})
 }
 fn check_pool(pool: &str, empty_allowed: bool) -> Result<()> {
@@ -793,7 +800,7 @@ pub fn run(config_path: &Path) -> Result<()> {
     let config = Config::read(config_path)?;
     // The manager's exclusive state lock is acquired before inspecting or
     // removing a stale socket, preventing a second owner of this state tree.
-    let manager = Manager::restore(&config.state, &config.object, config.ipam()?)?;
+    let manager = Manager::restore_with_id_max(&config.state, &config.object, config.ipam()?, config.endpoint_id_max)?;
     let mut api = Api {
         config,
         manager,

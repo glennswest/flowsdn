@@ -195,6 +195,52 @@ fn every_normative_declaration_has_exact_metadata_and_unique_canonical_name() {
 }
 
 #[test]
+fn flowsdn_extensions_match_their_separate_specification_table() {
+    let table = SPEC
+        .split_once("### Flowsdn extension keys")
+        .unwrap()
+        .1
+        .split_once("## 7. Failure modes")
+        .unwrap()
+        .0;
+    let mut names = BTreeSet::new();
+    for line in table.lines().filter(|line| line.starts_with("| `")) {
+        let fields: Vec<_> = line
+            .trim_matches('|')
+            .split('|')
+            .map(|field| field.trim().trim_matches('`'))
+            .collect();
+        assert_eq!(fields.len(), 4);
+        assert!(names.insert(fields[0]));
+        let entry = catalogue::get(fields[0]).unwrap();
+        assert_eq!(entry.pflag.name(), fields[1]);
+        assert_eq!(entry.default_expression, fields[2]);
+        assert_eq!(entry.class, Class::Active);
+        assert_eq!(fields[3], "active");
+        assert!(!catalogue::ENTRIES.iter().any(|known| known.name == entry.name));
+        assert!(entry.help().is_some());
+        assert_eq!(entry.hidden(), Some(false));
+    }
+    assert_eq!(names, catalogue::EXTENSIONS.iter().map(|entry| entry.name).collect());
+    let complete = catalogue::complete_registry(&fixture_resolutions()).unwrap();
+    assert!(matches!(complete.registry.resolve([
+        Entry::new(Source::Flag, "strict-config", "true"),
+        Entry::new(Source::Dir, "enable-ipv44", "false"),
+    ]), Err(error) if error.key == "enable-ipv44"));
+    let snapshot = complete.registry.resolve([
+        Entry::new(Source::Flag, "strict-config", "true"),
+        Entry::new(Source::Flag, "endpoint-id-max", "65535"),
+    ]).unwrap();
+    let encoded = flowsdn_config::runtime::encode(&snapshot, &flowsdn_config::runtime::Metadata {
+        version: "extension-test".into(),
+        written_at: "2026-09-21T21:15:00Z".into(),
+    }).unwrap();
+    let decoded = flowsdn_config::runtime::decode(&encoded, &complete.registry).unwrap();
+    assert_eq!(decoded.resolved.get("strict-config").unwrap().value, Value::Bool(true));
+    assert_eq!(decoded.resolved.get("endpoint-id-max").unwrap().value, Value::UInt(65535));
+}
+
+#[test]
 fn semantic_classification_census_and_aliases_match_foundation_contract() {
     for (class, expected) in [
         (Class::Immutable, 41),
@@ -286,7 +332,7 @@ fn literal_defaults_are_typed_and_evaluated_without_inventing_symbolic_values() 
     let partial = catalogue::partial_known_defaults_registry().unwrap();
     assert_eq!(partial.omitted().len(), 18);
     let resolved = partial.resolve([]).unwrap();
-    assert_eq!(resolved.values().len(), 521);
+    assert_eq!(resolved.values().len(), 521 + catalogue::EXTENSIONS.len());
     assert_eq!(
         resolved.get("bpf-auth-map-max").unwrap().value,
         Value::Int(524_288)
@@ -375,7 +421,7 @@ fn complete_schema_fails_closed_then_requires_explicit_typed_resolutions() {
     let mut overrides = fixture_resolutions();
     let built = catalogue::complete_registry(&overrides).unwrap();
     let resolved = built.registry.resolve([]).unwrap();
-    assert_eq!(resolved.values().len(), 539);
+    assert_eq!(resolved.values().len(), 539 + catalogue::EXTENSIONS.len());
     assert!(resolved.unknown_keys().is_empty());
     assert_eq!(built.default_overrides.len(), 18);
     assert!(
@@ -456,8 +502,8 @@ fn runtime_snapshot_retains_runtime_and_dynamic_classification() {
     let decoded = flowsdn_config::runtime::decode(&serialized, &built.registry).unwrap();
     assert_eq!(
         decoded.resolved.values().len(),
-        512,
-        "all 539 declarations minus 27 script keys"
+        512 + catalogue::EXTENSIONS.len(),
+        "all 539 reference declarations minus 27 script keys, plus flowsdn extensions"
     );
     assert_eq!(decoded.resolved.get("debug").unwrap().class, Class::Runtime);
     assert_eq!(

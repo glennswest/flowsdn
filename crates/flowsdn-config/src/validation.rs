@@ -83,6 +83,11 @@ fn enum_value(config: &Resolved, key: &str, allowed: &[&str]) -> Result<(), Erro
 /// area references. Native-routing CIDR derivation and map-specific sizing
 /// outside the policy map remain area responsibilities.
 pub fn foundation(config: &Resolved) -> Result<(), Error> {
+    if let Some(maximum) = integer(config, "endpoint-id-max")?
+        && !(1..=65535).contains(&maximum)
+    {
+        return Err(Error::new("endpoint-id-max", "must be between 1 and 65535"));
+    }
     enum_value(config, "routing-mode", &["tunnel", "native"])?;
     enum_value(config, "allow-localhost", &["auto", "always", "policy"])?;
     let ipv4 = boolean(config, "enable-ipv4")?;

@@ -432,14 +432,31 @@ config-dir values against the flag type before merging and exits on failure).
 
 #### 3.3.4 Unknown keys
 
-A key present in any source but absent from the table is **accepted and
-ignored with one warning** `unknown configuration key <key> (source <src>)`;
+By default, a key present in any source but absent from the reference table
+and flowsdn extension keys is **accepted and ignored with one warning** `unknown configuration key <key> (source <src>)`;
 it does not fail startup, so a newer Helm chart or a downstream ConfigMap does
 not brick the node. All unknown keys are listed under
 `GET /config` → `status.daemon-configuration-map.unknown-keys[]` and in the
 Helm mapping document. **DEVIATION**: the reference silently skips unknown
 config-dir keys (`validateConfigMap` `continue`s on `flags.Lookup == nil`) and
 viper keeps them unused; flowsdn warns. Reason: operability; ADR-0004 §3.
+
+**flowsdn extension (#48):** `strict-config` is an active boolean, default
+`false`, resolved through the same default < file < directory < environment <
+flag precedence as other keys. Only its effective value controls unknown-key
+handling, after all layers and aliases have been resolved. `true` makes any
+unknown normalized key fatal; `false` preserves the warning/diagnostic behavior
+above. A typo in a weaker layer remains unknown even if a stronger layer
+provides the correctly spelled key. Registered aliases, ignored keys and script
+keys are known and do not trigger strict rejection. Invalid known values,
+including shadowed values of `strict-config`, remain fatal under ordinary type
+validation. The error names the first unknown key in sorted normalized order
+and its effective source, without echoing its raw value. Source adapters still
+report their own load errors; strictness does not suppress or replace them.
+
+A caller using a custom `Registry` opts in by registering `strict-config` as an
+active boolean. Both complete and partial catalogue registries include it.
+This is a flowsdn extension, not an additional reference declaration.
 
 Keys classed `script` in 6.4 are hive-shell command flags that the inventory's
 extractor picked up; they are registered so the count matches and so an
@@ -451,7 +468,9 @@ warning rather than a fatal error.
 ```
 load():  defaults → file → dir → env → flags     (each layer overrides)
          normalize keys; map deprecated aliases; parse each known key by kind
-         (fatal on parse error); collect unknown keys (warn)
+         (fatal on parse error); collect unknown keys
+         enforce effective strict-config (fatal if true and unknown keys remain;
+         otherwise warn)
 derive(): compute derived fields (BpfDir = lib-dir/bpf, StateDir = state-dir/state,
          dynamic map sizes from bpf-map-dynamic-size-ratio, tunnel-port default
          by protocol, …) — owned by the area specs, executed here
@@ -609,7 +628,7 @@ kept as the shutdown deadline; `hive-log-threshold` is accepted and ignored
 
 | Condition | HTTP | `cilium.state` |
 |---|---|---|
-| not every status probe has run once (`status-collector-probe-check-timeout` 5 m) | 500 | `Failure`, msg `Not all probes executed at least once` |
+| not every status probe has run once (`status-collector-probe-check-timeout` 5 m) | 500 | `Warning`, msg `Not all probes executed at least once` (#121; probe completeness, still not ready) |
 | `agent-ready` fence not released | 500 | `Warning`, msg names the pending waiter |
 | kvstore probe `Failure` when kvstore is configured | 500 | `Failure` |
 | kubernetes probe `Failure` and header `require-k8s-connectivity: true` (or `agent-health-require-k8s-connectivity`, default true) | 500 | `Failure` |
@@ -875,6 +894,7 @@ for layer in [defaults, file, dir, env, flags]:           # ascending precedence
         key = canonical(raw_key)                          # lower, '_'→'-', alias map
         if key not in KEYS: unknown[key] = (raw_val, layer.source); continue
         resolved[key] = (parse(KEYS[key].kind, raw_val)?, layer.source)   # error is fatal
+if resolved["strict-config"].value and unknown: fail_first_sorted_unknown()
 ```
 
 Flags are pre-parsed by `clap` into strings (or lists) and fed as the top
@@ -1550,6 +1570,24 @@ Area specs MAY add keys to the set; they MUST NOT remove these.
 
 ### 6.8 Runtime options — see 3.3.8.  6.9 Dynamic keys — see 3.3.6.
 
+### Flowsdn extension keys
+
+These keys are registered alongside the 539 reference declarations in §6.4,
+kept separately in `catalogue::EXTENSIONS`. They do not change the reference
+coverage count. Both are startup settings, not runtime-mutable options.
+
+| Key | Type | Default | Class |
+|---|---|---|---|
+| `strict-config` | Bool | `false` | active |
+| `endpoint-id-max` | Uint | `4095` | active |
+
+`strict-config` follows §3.3.4. `endpoint-id-max` is validated in the inclusive
+range 1..65535 and bounds newly allocated endpoint IDs (spec 08, #115).
+Restoration reserves existing IDs even above the configured allocation bound;
+this key does not renumber restored endpoints. Neither option changes the
+41-key immutable migration set. Endpoint restore and wider-pool acceptance
+remain governed by spec 08.
+
 ## 7. Failure modes
 
 | Failure | Behavior |
@@ -1574,7 +1612,7 @@ Area specs MAY add keys to the set; they MUST NOT remove these.
 | Module `start()` errors | agent exits non-zero; state on disk untouched |
 | Health history file unwritable | warn once; in-memory table unaffected |
 | Restart mid-operation | tables are rebuilt from sources; reconcilers restore realized state from targets (maps) before first reconcile; revisions restart at 0 |
-| Upgrade with new keys | new keys default; old unknown keys warn |
+| Upgrade with new keys | new keys default; old unknown keys warn unless effective strict-config=true, which rejects them |
 | Upgrade with a key removed by flowsdn | key moved to `ignored` with a changelog entry; never removed from the table |
 
 ## 8. Observability
@@ -1672,7 +1710,7 @@ Config registry:
 - [ ] every kind parses its accepted forms and rejects garbage (table-driven); Duration bare-integer warning
 - [ ] List splitting: `foo,bar`, `"foo bar"`, `foo,bar baz`, env and flag repetition
 - [ ] Map validators for `fixed-identity-mapping`, `bpf-map-event-buffers`
-- [ ] unknown key → warning, listed, not fatal; `script` keys likewise; ignored keys still type-checked
+- [ ] unknown key → warning by default; strict-config=true rejects after precedence resolution; stronger false restores warnings; weaker-layer typos still fail; known aliases/script/ignored keys remain accepted and type-checked
 - [ ] config-dir: symlinked `..data` layout, directory entries skipped, unreadable file skipped, missing dir fatal
 - [ ] cross-key validation table 3.3.7, one negative test per rule
 - [ ] runtime-config written, rotated `-1`/`-2`, content matches 4.5; unwritable → continues
@@ -1794,9 +1832,10 @@ registry + generator + build-config ~3k, fence + health ~1k.
    Recommendation: (a); (c) only if `flowsdn-dbg` is delayed.
 6. **Resolved (#47/#90, ADR-0011): `lb-retry-backoff-max` is `1m`.**
    The §6.4 registry follows spec 05 §6; `lb-retry-backoff-min` remains `1s`.
-7. **Unknown keys: warn vs. fail in CI.** Add a `--strict-config` flowsdn key
-   (default false) that turns unknown keys into a fatal error, for CI charts.
-   Recommendation: yes, S effort.
+7. **Resolved (#48):** `strict-config` defaults false and rejects unknown
+   keys only when the effective layered value is true (§3.3.4). The generic
+   configuration core and catalogue expose it; chart-lint and executable CLI
+   integration must use that contract.
 8. **Resolved (#49): duration bare integers are nanoseconds with a warning.** The implemented parser and regression tests preserve Go's nanosecond interpretation (this spec,
    with warning) or treat bare integers as seconds. Recommendation: keep Go
    semantics for compatibility; Helm never emits bare integers for durations.

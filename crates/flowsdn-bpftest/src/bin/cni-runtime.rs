@@ -296,7 +296,7 @@ impl State {
         if method == "GET" && path == "/v1/config" {
             return Ok((
                 200,
-                json!({"status":{"datapath-mode":"veth","ipam-mode":"kubernetes","device-mtu":1500,"route-mtu":1450}}),
+                json!({"status":{"datapath-mode":"veth","ipam-mode":"kubernetes","device-mtu":1500,"route-mtu":1450,"host-addressing":{"ipv4":{"enabled":true,"ip":gateway(false)},"ipv6":{"enabled":true,"ip":gateway(true)}}}}),
             ));
         }
         if method == "POST" && path == "/v1/ipam" {
@@ -342,6 +342,16 @@ impl State {
                 });
             }
             let id = decode(id)?;
+            if method == "GET" {
+                let Some(record)=self.manager()?.get(&id) else {return Ok((404,json!({"error":"missing endpoint"})));};
+                let d=&record.document;
+                return Ok((200,json!({"id":record.id,"status":{"state":"ready","networking":{
+                    "interface-name":d.get("IfName"),"interface-index":d.get("IfIndex"),
+                    "container-interface-name":d.get("ContainerIfName"),"mac":d.get("LXCMAC"),"host-mac":d.get("NodeMAC"),
+                    "netns-cookie":d.get("NetnsCookie").and_then(Value::as_u64).unwrap_or(0).to_string(),"host-addressing":d.get("CNIHostAddressing"),"route-mtu":d.get("CNIRouteMTU"),
+                    "addressing":[{"ipv4":d.get("IPv4"),"ipv6":d.get("IPv6")}]
+                }}})));
+            }
             if method == "DELETE" {
                 return self.delete(&id);
             }
@@ -357,7 +367,7 @@ impl State {
                 let document = json!({"dockerID":text(&body,"container-id")?,"ContainerIfName":text(&body,"container-interface-name")?,
                     "IfName":host,"IfIndex":ifindex,"LXCMAC":text(&body,"mac")?,"NodeMAC":text(&body,"host-mac")?,
                     "IPv4":text(addressing,"ipv4")?,"IPv6":text(addressing,"ipv6")?,
-                    "K8sNamespace":text(&body,"k8s-namespace")?,"K8sPodName":text(&body,"k8s-pod-name")?});
+                    "K8sNamespace":text(&body,"k8s-namespace")?,"K8sPodName":text(&body,"k8s-pod-name")?,"NetnsCookie":text(&body,"netns-cookie")?.parse::<u64>()?,"CNIRouteMTU":1450,"CNIHostAddressing":{"ipv4":{"enabled":true,"ip":gateway(false)},"ipv6":{"enabled":true,"ip":gateway(true)}}});
                 ensure(
                     id == format!(
                         "cni-attachment-id:{}:{}",

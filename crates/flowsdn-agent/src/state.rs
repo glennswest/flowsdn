@@ -10,6 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
+pub const DEFAULT_ENDPOINT_ID_MAX: u16 = 4095;
 
 /// State records retain unknown fields so restoration does not erase another
 /// subsystem's persisted metadata. Validation only covers identity/index keys.
@@ -202,13 +203,32 @@ impl Drop for Staged<'_> {
 
 /// Lowest-free allocation for new endpoints; restore reserves the entire u16
 /// namespace, including historical IDs above the current new-allocation limit.
-#[derive(Default)]
 pub struct IdPool {
     used: BTreeSet<u16>,
+    max: u16,
+}
+impl Default for IdPool {
+    fn default() -> Self {
+        Self {
+            used: BTreeSet::new(),
+            max: DEFAULT_ENDPOINT_ID_MAX,
+        }
+    }
 }
 impl IdPool {
+    /// Set the inclusive limit for new allocations. Restored IDs may exceed it.
+    pub fn new(max: u32) -> Result<Self> {
+        let max = u16::try_from(max)
+            .ok()
+            .filter(|max| *max != 0)
+            .ok_or("endpoint-id-max must be in 1..=65535")?;
+        Ok(Self {
+            used: BTreeSet::new(),
+            max,
+        })
+    }
     pub fn allocate(&mut self) -> Result<u16> {
-        let id = (1..=4095)
+        let id = (1..=self.max)
             .find(|id| !self.used.contains(id))
             .ok_or("endpoint ID pool exhausted")?;
         self.used.insert(id);

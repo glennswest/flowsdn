@@ -120,3 +120,10 @@ Known overlapping agent windows total 1,130 seconds (0.314 hours); later review
 windows are incompletely observed and not added to that time sum. Their token
 usage is included once. Active work time remains null. Final validation intervals
 are nested within project elapsed, never added to it.
+
+## Issue batch 2: configuration and CNI ownership
+
+Started 2026-09-21T21:12:58.897Z from `229f94c`. Seven issues are grouped into
+one implementation and documentation cycle with three independent agents.
+Linux validation and the final deduplicated usage snapshot are pending; no
+issues are claimed closed and no release is planned at this boundary.

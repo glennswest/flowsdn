@@ -1,6 +1,6 @@
 //! Primary endpoint creation, deletion and restoration with real map ownership.
 //! Identity/policy reconciliation and API request authorization remain caller work.
-use crate::state::{IdPool, Record, Result, Store};
+use crate::state::{DEFAULT_ENDPOINT_ID_MAX, IdPool, Record, Result, Store};
 use flowsdn_bpf_abi::endpoint::EndpointInfo;
 use flowsdn_bpf_loader::kernel::LocalDelivery;
 use flowsdn_connector::Connector;
@@ -71,11 +71,22 @@ impl Manager {
     /// Restore into a fresh object before the caller exposes its API. Stale or
     /// incompatible links fail startup; this layer cannot decide Kubernetes GC.
     pub fn restore(path: &Path, object: &Path, ipam: Ipam) -> Result<Self> {
+        Self::restore_with_id_max(path, object, ipam, u32::from(DEFAULT_ENDPOINT_ID_MAX))
+    }
+    /// Restore all persisted nonzero u16 IDs, limiting only new allocations.
+    /// Invalid limits fail before acquiring state ownership or loading BPF.
+    pub fn restore_with_id_max(
+        path: &Path,
+        object: &Path,
+        ipam: Ipam,
+        id_max: u32,
+    ) -> Result<Self> {
+        let ids = IdPool::new(id_max)?;
         let store = Store::open(path)?;
         let records = store.restore()?;
         let mut manager = Self {
             store,
-            ids: IdPool::default(),
+            ids,
             records: BTreeMap::new(),
             addresses: BTreeMap::new(),
             deleting: BTreeSet::new(),

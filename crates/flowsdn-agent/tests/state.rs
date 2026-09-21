@@ -115,3 +115,99 @@ fn lowest_free_ids_exhaust_and_restore_supports_historical_high_ids() {
     pool.release(17);
     assert_eq!(pool.allocate().expect("reuse"), 17);
 }
+
+#[test]
+fn configured_id_limits_validate_and_exhaust_at_the_inclusive_bound() {
+    for invalid in [0, 65536, u32::MAX] {
+        assert!(IdPool::new(invalid).is_err(), "accepted {invalid}");
+    }
+    let mut single = IdPool::new(1).expect("smallest pool");
+    assert_eq!(single.allocate().expect("only ID"), 1);
+    assert!(single.allocate().is_err());
+    single.release(1);
+    assert_eq!(single.allocate().expect("released ID"), 1);
+
+    let mut pool = IdPool::new(3).expect("small pool");
+    pool.reserve(2).expect("restored within bound");
+    pool.reserve(65535).expect("restored above bound");
+    assert_eq!(pool.allocate().expect("lowest gap"), 1);
+    assert_eq!(pool.allocate().expect("upper bound"), 3);
+    assert!(pool.allocate().is_err());
+    pool.release(65535);
+    assert!(pool.allocate().is_err(), "high release must not widen pool");
+    pool.release(2);
+    assert_eq!(pool.allocate().expect("recycled gap"), 2);
+    assert!(pool.allocate().is_err());
+}
+
+#[test]
+fn widened_id_pool_allocates_above_legacy_limit_and_at_u16_max() {
+    for maximum in [4096u16, u16::MAX] {
+        let mut pool = IdPool::new(u32::from(maximum)).expect("widened pool");
+        // Reserve the prefix efficiently; this tests allocation boundaries,
+        // not creation or live networking at this endpoint count.
+        for id in 1..maximum {
+            pool.reserve(id).expect("reserved prefix");
+        }
+        assert_eq!(pool.allocate().expect("inclusive upper bound"), maximum);
+        assert!(pool.allocate().is_err());
+        assert!(pool.reserve(maximum).is_err(), "allocated ID is reserved");
+        pool.release(maximum);
+        assert_eq!(pool.allocate().expect("upper bound recycled"), maximum);
+        pool.release(1);
+        assert_eq!(pool.allocate().expect("lowest ID recycled"), 1);
+        assert!(pool.allocate().is_err());
+    }
+}
+
+#[test]
+fn restored_high_ids_survive_reopen_with_a_lower_allocation_limit() {
+    let temp = Temp::new();
+    let store = Store::open(&temp.0).expect("store");
+    for (id, cid) in [(1, "one"), (4096, "above-default"), (65535, "maximum")] {
+        store
+            .stage(&record(id, cid))
+            .expect("stage")
+            .publish()
+            .expect("publish");
+    }
+    drop(store);
+    let store = Store::open(&temp.0).expect("reopen");
+    let records = store.restore().expect("restore full u16 namespace");
+    assert_eq!(
+        records.iter().map(|record| record.id).collect::<Vec<_>>(),
+        vec![1, 4096, 65535]
+    );
+    let mut pool = IdPool::new(2).expect("lowered limit");
+    for record in records {
+        pool.reserve(record.id).expect("restore ID above new limit");
+        assert!(pool.reserve(record.id).is_err(), "duplicate restored ID");
+    }
+    assert_eq!(pool.allocate().expect("remaining low ID"), 2);
+    assert!(pool.allocate().is_err());
+    pool.release(4096);
+    assert!(pool.allocate().is_err(), "released high ID stays out of range");
+}
+
+#[test]
+fn manager_rejects_invalid_id_limit_before_opening_state_or_loading_bpf() {
+    let temp = Temp::new();
+    let state = temp.0.join("unopened-state");
+    let object = temp.0.join("missing-object");
+    for maximum in [0, 65536] {
+        let scope = flowsdn_ipam::HostScope::new(
+            "198.18.0.0".parse().expect("pool address"),
+            24,
+            Default::default(),
+        )
+        .expect("scope");
+        let ipam = flowsdn_ipam::Ipam::new(Some(scope), None).expect("IPAM");
+        let error = flowsdn_agent::endpoints::Manager::restore_with_id_max(
+            &state, &object, ipam, maximum,
+        )
+        .err()
+        .expect("invalid bound");
+        assert_eq!(error.to_string(), "endpoint-id-max must be in 1..=65535");
+        assert!(!state.exists(), "invalid config must not create state");
+    }
+}

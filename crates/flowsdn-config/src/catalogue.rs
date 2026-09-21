@@ -12,6 +12,26 @@ use std::fmt;
 pub const SPECIFICATION: &str =
     "docs/spec/00-foundation-table-config.md#64-the-registry-key-table-539-keys";
 
+/// flowsdn-only keys, deliberately excluded from reference catalogue coverage.
+pub const EXTENSIONS: &[Definition] = &[
+    Definition {
+        name: "strict-config",
+        pflag: Pflag::Bool,
+        default_expression: "false",
+        default: Some("false"),
+        class: Class::Active,
+        inventory_name: None,
+    },
+    Definition {
+        name: "endpoint-id-max",
+        pflag: Pflag::Uint,
+        default_expression: "4095",
+        default: Some("4095"),
+        class: Class::Active,
+        inventory_name: None,
+    },
+];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Pflag {
     Bool,
@@ -91,6 +111,7 @@ impl Definition {
     pub fn default_provenance(self) -> Option<&'static str> {
         self.default?;
         Some(match self.name {
+            "strict-config" | "endpoint-id-max" => "docs/spec/00-foundation-table-config.md#flowsdn-extension-keys",
             "agent-not-ready-taint-key" => "docs/spec/12-operator.md:1415",
             "bpf-lb-algorithm" => "docs/spec/05-service-loadbalancing.md:929",
             "bpf-lb-dsr-dispatch" => "docs/spec/05-service-loadbalancing.md:928",
@@ -103,9 +124,9 @@ impl Definition {
             "bpf-neigh-global-max" => "docs/spec/01-bpf-map-abi-loader.md:193",
             "bpf-node-map-max" => "docs/spec/14-encryption-egress.md:1715",
             "clustermesh-service-v2" => "docs/spec/20-clustermesh-kvstore.md:1548",
-            "enable-bandwidth-manager" => "docs/spec/10-node-routing-nftables.md:1380",
-            "enable-bbr" => "docs/spec/10-node-routing-nftables.md:1381",
-            "enable-bbr-hostns-only" => "docs/spec/10-node-routing-nftables.md:1381",
+            "enable-bandwidth-manager" => "docs/spec/10-node-routing-nftables.md:1379",
+            "enable-bbr" => "docs/spec/10-node-routing-nftables.md:1380",
+            "enable-bbr-hostns-only" => "docs/spec/10-node-routing-nftables.md:1380",
             "enable-dynamic-source-lookup-nodeport" => "docs/spec/05-service-loadbalancing.md:943",
             "enable-node-ipam" => "docs/spec/12-operator.md:1452",
             "fixed-identity-mapping" => "docs/spec/03-identity-ipcache.md:909",
@@ -123,16 +144,20 @@ impl Definition {
             "node-port-range" => "docs/spec/05-service-loadbalancing.md:922",
             "policy-secrets-namespace" => "docs/spec/12-operator.md:1449",
             "policy-secrets-only-from-secrets-namespace" => "docs/spec/16-l7-envoy-dns.md:1479",
-            "socket-path" => "docs/spec/08-endpoint-agent-api.md:1334",
+            "socket-path" => "docs/spec/08-endpoint-agent-api.md:1338",
             _ => SPECIFICATION,
         })
     }
     /// The table does not supply help text or hidden-flag metadata.
     pub fn help(self) -> Option<&'static str> {
-        None
+        match self.name {
+            "strict-config" => Some("Reject unknown configuration keys after resolving source precedence"),
+            "endpoint-id-max" => Some("Maximum newly allocated endpoint ID (1 through 65535)"),
+            _ => None,
+        }
     }
     pub fn hidden(self) -> Option<bool> {
-        None
+        matches!(self.name, "strict-config" | "endpoint-id-max").then_some(false)
     }
     pub fn needs_area_validator(self) -> bool {
         self.pflag == Pflag::Var
@@ -158,7 +183,7 @@ pub fn get(name: &str) -> Option<&'static Definition> {
         .iter()
         .find(|(alias, _)| *alias == name)
         .map_or(name.as_str(), |(_, key)| *key);
-    ENTRIES.iter().find(|entry| entry.name == canonical)
+    ENTRIES.iter().chain(EXTENSIONS).find(|entry| entry.name == canonical)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -251,7 +276,8 @@ pub struct BuiltRegistry {
     pub default_overrides: Vec<AppliedDefault>,
 }
 
-/// Construct a 539-key typed schema only when every default is resolved.
+/// Construct the 539 reference keys plus flowsdn extensions only when every
+/// default is resolved.
 /// Area validators, cross-key validation, hidden metadata and help generation
 /// remain separate requirements; success is not a production-readiness claim.
 pub fn complete_registry(overrides: &[DefaultOverride<'_>]) -> Result<BuiltRegistry, Error> {
@@ -282,7 +308,7 @@ pub fn complete_registry(overrides: &[DefaultOverride<'_>]) -> Result<BuiltRegis
     if !gaps.is_empty() {
         return Err(Error::UnresolvedDefaults(gaps));
     }
-    let specs = ENTRIES.iter().map(|entry| {
+    let specs = ENTRIES.iter().chain(EXTENSIONS).map(|entry| {
         entry.spec(
             supplied
                 .get(entry.name)
@@ -328,6 +354,7 @@ pub fn partial_known_defaults_registry() -> Result<PartialKnownDefaultsRegistry,
     let registry = Registry::new(
         ENTRIES
             .iter()
+            .chain(EXTENSIONS)
             .filter_map(|entry| entry.default.map(|default| entry.spec(default))),
     )
     .map_err(Error::InvalidValue)?;

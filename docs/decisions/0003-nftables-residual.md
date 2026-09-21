@@ -19,7 +19,7 @@ disposition in flowsdn:
 | Tunnel traffic NOTRACK / ACCEPT | nftables `notrack` on the tunnel port, or none if conntrack is not loaded |
 | TPROXY redirect to Envoy + `xt_socket` mark | nftables `tproxy` + `socket transparent` in a prerouting chain |
 | Proxy return-path NOTRACK / ACCEPT | nftables `notrack` |
-| FORWARD accepts for cilium_host / cilium_net | nftables forward chain accept, only when the host runs a default-drop policy |
+| FORWARD accepts for cilium_host / cilium_net | no accept rules; detect conflicting default-drop host policy and document the required allow-list |
 | "mark as from host" 0xC00 | nftables `meta mark set` |
 | iptables MASQUERADE / SNAT / hairpin / node ipset | **none** — BPF masquerade is the only masquerade path (ADR-0001) |
 | Encryption NOTRACK | nftables `notrack` |
@@ -42,3 +42,11 @@ out to `nft`, no `iptables` binary in the image.
 - The `--install-iptables-rules`, `--iptables-*` and `enable-ipv4-masquerade`
   (iptables variant) options have no effect and are documented as such in the
   Helm values mapping.
+
+## Clarification: 2026-09-21 (#131)
+
+An accept in the owned table cannot override a drop in another base chain.
+Spec 10 §3.10.6 owns read-only conflict detection and the documented allow-list;
+flowsdn does not modify another firewall's table or install ineffective accept
+rules. This corrects the former FORWARD row without widening table ownership.
+The detection/coexistence runtime tests remain required before claiming support.

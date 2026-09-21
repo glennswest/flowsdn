@@ -205,6 +205,9 @@ fn cni(
     endpoint: &Endpoint,
     config: &Value,
 ) -> Result<Value> {
+    cni_outcome(binary,temp,verb,endpoint,config,true)
+}
+fn cni_outcome(binary:&Path,temp:&Temp,verb:&str,endpoint:&Endpoint,config:&Value,expected_success:bool)->Result<Value> {
     let mut process = Process(
         Command::new(binary)
             .env("CNI_COMMAND", verb)
@@ -242,7 +245,7 @@ fn cni(
     let output = out.join().map_err(|_| "stdout reader")??;
     let stderr = err.join().map_err(|_| "stderr reader")??;
     ensure(
-        status.success(),
+        status.success()==expected_success,
         &format!(
             "CNI {verb}: {} {}",
             String::from_utf8_lossy(&output),
@@ -304,7 +307,7 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         temp.0.join("config.json"),
         serde_json::to_vec(
             &json!({"socket-path":temp.0.join("agent.sock"),"state-dir":temp.0.join("state"),"bpf-object":object,
-        "ipv4-pool":"198.18.0.0/24","ipv6-pool":"2001:db8:1::/64","ipv4-gateway":"198.18.0.254","ipv6-gateway":"2001:db8:1::ffff","device-mtu":1500,"route-mtu":1450}),
+        "ipv4-pool":"198.18.0.0/24","ipv6-pool":"2001:db8:1::/64","ipv4-gateway":"198.18.0.254","ipv6-gateway":"2001:db8:1::ffff","device-mtu":1500,"route-mtu":1450,"endpoint-id-max":2}),
         )?,
     )?;
     let mut first = Endpoint::new(1)?;
@@ -315,6 +318,8 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     for endpoint in [&mut first, &mut second] {
         let result = cni(&cni_binary, &temp, "ADD", endpoint, &conf)?;
         endpoint.configure(&result)?;
+        let duplicate=cni(&cni_binary,&temp,"ADD",endpoint,&conf)?;
+        ensure(duplicate==result,"duplicate ADD changed CNI result")?;
         let mut check = conf.clone();
         check
             .as_object_mut()
@@ -322,6 +327,13 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
             .insert("prevResult".into(), result);
         previous.push(check);
     }
+    // Use a populated foreign namespace, so rejection reaches the cookie check.
+    second.id=1;
+    cni_outcome(&cni_binary,&temp,"ADD",&second,&conf,false)?;
+    second.id=2;
+    let exhausted=Endpoint::new(3)?;
+    cni_outcome(&cni_binary,&temp,"ADD",&exhausted,&conf,false)?;
+    drop(exhausted);
     for v6 in [false, true] {
         exchange(&mut first, &mut second, v6, true)?;
         exchange(&mut second, &mut first, v6, true)?;
@@ -330,16 +342,21 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     for v6 in [false, true] {
         exchange(&mut first, &mut second, v6, false)?;
     }
+    let mut restored_config:Value=serde_json::from_slice(&fs::read(temp.0.join("config.json"))?)?;
+    *restored_config.get_mut("route-mtu").ok_or("route MTU")?=json!(1400);
+    fs::write(temp.0.join("config.json"),serde_json::to_vec(&restored_config)?)?;
     let agent = start_agent(&agent_binary, &temp)?;
     for (endpoint, check) in [&first, &second].into_iter().zip(&previous) {
         cni(&cni_binary, &temp, "CHECK", endpoint, check)?;
+        let duplicate=cni(&cni_binary,&temp,"ADD",endpoint,&conf)?;
+        ensure(check.get("prevResult")==Some(&duplicate),"restored duplicate ADD changed result")?;
     }
     for v6 in [false, true] {
         exchange(&mut first, &mut second, v6, true)?;
         exchange(&mut second, &mut first, v6, true)?;
     }
     println!(
-        "PASS: standalone agent and CNI create dual-stack endpoints; process restart restores CHECK and bidirectional traffic"
+        "PASS: dual-stack endpoints and same-sandbox duplicate ADD preserve results; foreign sandbox rejected; restart restores ADD/CHECK and traffic"
     );
     drop(agent);
     cni(&cni_binary, &temp, "DEL", &first, &conf)?;
@@ -364,6 +381,15 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         &second,
         previous.get(1).ok_or("second previous result")?,
     )?;
+    let mut replacement=Endpoint::new(3)?;
+    let result=cni(&cni_binary,&temp,"ADD",&replacement,&conf)?;
+    replacement.configure(&result)?;
+    for v6 in [false,true] {
+        exchange(&mut second,&mut replacement,v6,true)?;
+        exchange(&mut replacement,&mut second,v6,true)?;
+    }
+    cni(&cni_binary,&temp,"DEL",&replacement,&conf)?;
+    drop(replacement);
     // Make persistence teardown fail after the live datapath has been detached.
     let state_dir = fs::read_dir(temp.0.join("state"))?
         .filter_map(|entry| entry.ok())

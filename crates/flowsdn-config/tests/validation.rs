@@ -14,6 +14,21 @@ fn config(keys: &[(&str, Kind, &str)]) -> Resolved {
 }
 
 #[test]
+fn endpoint_id_max_accepts_u16_nonzero_range_and_rejects_invalid_limits() {
+    for value in ["1", "4095", "4096", "65535"] {
+        assert!(validation::foundation(&config(&[("endpoint-id-max", Kind::UInt { bits: 64 }, value)])).is_ok());
+    }
+    for value in ["0", "65536", "18446744073709551615"] {
+        let error = validation::foundation(&config(&[("endpoint-id-max", Kind::UInt { bits: 64 }, value)])).unwrap_err();
+        assert_eq!(error.key, "endpoint-id-max");
+    }
+    assert!(validation::foundation(&config(&[("endpoint-id-max", Kind::String, "4095")])).is_err());
+    let catalogue = flowsdn_config::catalogue::partial_known_defaults_registry().unwrap();
+    assert_eq!(catalogue.resolve([]).unwrap().get("endpoint-id-max").unwrap().value, flowsdn_config::Value::UInt(4095));
+    assert!(catalogue.resolve([Entry::new(Source::Flag, "endpoint-id-max", "-1")]).is_err());
+}
+
+#[test]
 fn address_families_and_ndp_dependencies_are_checked() {
     for (v4, v6, ndp, device, expected) in [
         ("true", "false", "false", "", None),

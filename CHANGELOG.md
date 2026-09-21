@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- Add opt-in strict configuration-key validation and a configurable endpoint ID
+  allocation ceiling, preserving restored IDs when the ceiling is lowered.
+- Reuse verified CNI attachments on duplicate ADD, preserving creation-time
+  gateways and route MTU across restarts; reject foreign or incomplete ownership.
+- Omit nonexistent namespace mount paths from CNI endpoint requests.
+- Align loader identity, incomplete health status and nftables ownership contracts
+  in ADR-0014 and the related specifications.
+
 - Update the immutable collection dependency to address RUSTSEC-2026-0292.
 
 - Resolve foundation, control-plane and integration design questions in ADRs

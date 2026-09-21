@@ -13,6 +13,12 @@ expressions, owning-spec provenance, conflicts, missing help/hidden metadata
 and area-validator requirements. `Definition::default_provenance()` preserves
 the source of each resolved default without changing its original expression.
 
+Two flowsdn-only keys are declared separately in `catalogue::EXTENSIONS`:
+`strict-config=false` and `endpoint-id-max=4095`. Complete and partial
+catalogue registries include both without changing the 539-key reference
+coverage count. Foundation validation limits `endpoint-id-max` to 1–65535;
+the endpoint manager applies it only to newly allocated IDs.
+
 `complete_registry` refuses construction until every missing default has an
 explicit, typed resolution with provenance. It returns the constructed schema
 and an audit list of supplied resolutions; success does not replace domain
@@ -28,7 +34,14 @@ keys, ignored keys and bare integer durations. List flags append within their
 layer; values from different layers replace each other. Canonical input keys
 take priority over aliases even when the alias comes from a higher source.
 Defaults alone do not suppress aliases. Invalid known values are rejected even
-if a stronger source would replace them.
+if a stronger source would replace them. With effective `strict-config=true`,
+resolution rejects unknown keys after all source layers resolve; a stronger
+`false` restores warning behavior. A typo in a weaker source still fails even
+when a stronger source supplies the correctly spelled key. Registered aliases,
+ignored keys and script keys remain known. Errors name the unknown key and its
+source without echoing its raw value. Custom registries opt in by registering
+`strict-config` as an active boolean. CLI and chart-lint callers must feed their
+configuration through this resolver to obtain these checks.
 
 `Resolved` exposes immutable values and diagnostics for callers to validate,
 derive and share. Ignored and script keys remain visible with their class so

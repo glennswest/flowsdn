@@ -1204,7 +1204,8 @@ JSON-only description was incomplete.
 
 ### 5.1 Endpoint id allocation
 
-- Pool `1..4095` (reference `maxID`), free-list semantics: allocate the
+- Pool `1..=endpoint-id-max`, with a flowsdn extension default of `4095`
+  and validated range `1..=65535` (resolved #115). Free-list semantics: allocate the
   **lowest** free id? — the reference `idpool` returns an arbitrary free id
   (map iteration); flowsdn MUST return the lowest free id so that ids are
   stable across implementations in tests (**DEVIATION**, harmless: nothing
@@ -1215,8 +1216,9 @@ JSON-only description was incomplete.
   leased (duplicate directory) → the endpoint goes to `toClean`.
 - Exhaustion → `PUT` fails `500` "no more endpoint IDs available".
 - The type is u16 and every consumer (`%05d` names, `cilium_call_policy`
-  65536 slots, `endpoint_info.lxc_id`) admits `1..65535`; widening the pool
-  is open decision 12.2.
+  65536 slots, `endpoint_info.lxc_id`) admits `1..65535`. Lowering the allocation
+  limit on restart does not evict restored IDs above it; those IDs remain leased
+  and cannot be reissued. This is not a live-scale claim for more than 4095 pods.
 
 ### 5.2 Regeneration coalescing
 
@@ -1261,8 +1263,10 @@ lxc-object `.rodata.config` value for this endpoint (spec 01 §3.7 table,
 including the option-derived ones) plus the map rename table. Stored in
 memory as `bpf_headerfile_hash`; differs → level promoted to `rewrite+load`.
 Because it hashes values, not header text, two agents produce equal hashes
-for equal configuration; nothing on disk depends on it (the reference's
-`template.txt` stores the *object identity* hash, spec 01, not this one).
+for equal configuration. Spec 01 §3.7 separately owns object identity and its
+persisted `template.txt` record. A changed or missing object identity forces
+`rewrite+load` even when this endpoint-configuration hash is unchanged (resolved
+#120); endpoint equality cannot bypass loader upgrade detection.
 
 ### 5.5 Policy-map diff on first build
 
@@ -1664,12 +1668,9 @@ API server + models + limiter ~5k, healthcheck ~2k, status ~0.8k, tests ~5k.
    process-ownership safeguards in decision #117.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-2. **Widen the id pool to 1..65535.** (a) keep 4095 (reference; some
-   dashboards assume it, `%05d` unaffected); (b) 65535 (u16 max; every map
-   and name format admits it; `cilium_call_policy` already has 65536 slots).
-   Recommendation: (b) behind a flowsdn-only key `endpoint-id-max` defaulting
-   to 4095 until an e2e run with > 4095 endpoints per node is meaningful;
-   `reuse()` accepts either regardless.
+2. **Resolved #115:** `endpoint-id-max` selects the inclusive allocation ceiling
+   in `1..=65535`, default `4095`. Restoration still accepts all nonzero u16 IDs.
+   See §5.1 and ADR-0014; high-endpoint-count runtime acceptance remains outstanding.
 3. **Endpoint conflict status — resolved #116.** Return 409 with the API Error body for
    live attachment-ID or IP ownership conflicts on endpoint PUT. Preserve 400 for
    malformed or otherwise invalid requests. This is the existing documented deviation
@@ -1699,14 +1700,35 @@ API server + models + limiter ~5k, healthcheck ~2k, status ~0.8k, tests ~5k.
    a replacement for that contract.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-8. **Endpoint-hash scope.** (a) hash `.rodata.config` values + rename table
-   (this spec); (b) additionally hash the object identity so a flowsdn
-   upgrade forces `rewrite+load` on every endpoint. Recommendation: (b) is
-   already implied by spec 01's object identity hash stored in
-   `template.txt`; confirm in spec 01 that a changed embedded object
-   triggers reload on restore and drop the duplication here.
-9. **Status verdict severity of "not all probes executed".** Reference:
-   `Warning`; spec 00 §3.4.2: `Failure`. Both yield 500 on 9879. This spec
-   follows the reference; spec 00 should be amended.
+8. **Resolved #120:** spec 01 §3.7 owns object-identity invalidation. Changed
+   embedded bytes/loader ABI force rewrite+load on restore regardless of equal
+   endpoint values; §5.4 owns only the endpoint-configuration hash.
+9. **Resolved #121:** incomplete status probes report `Warning`, with HTTP500
+   readiness unchanged. Spec 00 now uses the same status-prober contract.
 10. **Resolved by ADR-0010 (#122):** the module health registry keeps
     `flowsdn-health`; this spec's checker is `flowsdn-healthcheck`.
+
+## Initial CNI ownership additions (ADR-0014)
+
+The primary workload CNI request omits `container-netns-path` rather than
+reporting a synthetic mount the agent never created (#130). Missing/empty values
+remain accepted for compatibility. The field is informational for workload
+endpoints, never proof of ownership or authorization to enter a namespace.
+Health/infra endpoint namespace ownership remains a separate contract.
+
+For safe repeated ADD (#127), GET endpoint exposes the full u64 namespace cookie
+as decimal text in `status.networking.netns-cookie`, alongside the host interface
+name/index, container interface name, both MAC addresses and addressing rows.
+The endpoint additionally persists creation-time `CNIHostAddressing` and
+`CNIRouteMTU` and exposes them as networking `host-addressing` and `route-mtu`.
+Repeated ADD uses this saved result metadata, not changed agent defaults.
+Older state lacking these fields cannot support idempotent ADD and fails safely.
+GET config also supplies `status.host-addressing` using the IPAM host-addressing
+shape. These fields are initial flowsdn additions, not a claim about the complete
+reference endpoint schema. The plugin requires nonzero matching cookies plus
+live links/addresses and healthy ownership; mismatch fails without deleting or
+reallocating the existing endpoint. The client must not treat arbitrary GET
+errors as endpoint absence; only 404 allows a fresh create.
+
+The standalone JSON agent configuration accepts optional integer
+`endpoint-id-max` with the same bound/default as the foundation extension.

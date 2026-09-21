@@ -1104,9 +1104,8 @@ other tables. Therefore an `accept` in `inet flowsdn` cannot override a `drop`
 policy or rule in `inet firewalld`, `ip filter` (iptables-nft) or a
 distribution firewall — unlike the reference, whose `ACCEPT` in
 `CILIUM_FORWARD` terminated the very `FORWARD` chain whose policy was `DROP`.
-**DEVIATION** from ADR-0003 row "FORWARD accepts … only when the host runs a
-default-drop policy": flowsdn installs **no accept rules** because they would
-be dead code (open decision 12.1 proposes the ADR wording change). Instead:
+**Resolved #131:** ADR-0003 now agrees that flowsdn installs **no accept rules**
+to override another table. They would not bypass its drop policy. Instead:
 
 - **Detection**: at startup and on every `NFNLGRP_NFTABLES` event, dump all
   base chains (read-only `NFT_MSG_GETCHAIN`); if any chain of another table
@@ -1967,12 +1966,10 @@ without root by encoding then decoding.
 
 ## 12. Decision register (resolved and open)
 
-1. **ADR-0003 wording on accept rules.** The ADR lists "nftables forward chain
-   accept, only when the host runs a default-drop policy". §3.10.6 shows a
-   cross-table accept is a no-op. Options: (a) amend ADR-0003 to "no accept
-   rules; detection + documented allow-list" (this spec's behavior); (b) offer
-   an opt-in `nft-host-firewall-integration=firewalld` that adds rules to the
-   host firewall's own table (violates ownership; firewalld-specific). **Recommend (a).**
+1. **Resolved #131:** ADR-0003 is amended to no accept rules, read-only
+   detection and documented allow-list. Other firewall tables remain unowned.
+   Runtime detection/coexistence tests N31/N32 remain required.
+
 2. **Managed neighbors — resolved #132.** Use kernel-managed neighbors with
    `NTF_EXT_MANAGED` on the supported kernel floor. Do not add the `NTF_USE` refresher
    fallback. Fail the startup capability check when enabled neighbor management cannot
