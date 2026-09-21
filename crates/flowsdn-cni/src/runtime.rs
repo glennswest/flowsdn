@@ -415,7 +415,9 @@ impl AddBackend for Platform {
         if !(200..300).contains(&reply.status) {
             // Client errors mean this request was rejected before publication.
             // Server failures are ambiguous and preserve ownership for recovery.
-            if (400..500).contains(&reply.status) { self.endpoint_may_exist = false; }
+            if (400..500).contains(&reply.status) {
+                self.endpoint_may_exist = false;
+            }
             return response(Ok(reply)).map(|_| Endpoint { mac_override: None });
         }
         let endpoint = match endpoint_response(reply) {
@@ -479,11 +481,19 @@ impl AddBackend for Platform {
         }
         Ok(())
     }
-    fn may_release_resources(&self) -> bool { !self.endpoint_may_exist }
+    fn may_release_resources(&self) -> bool {
+        !self.endpoint_may_exist
+    }
     fn delete_endpoint(&mut self, request: &AddRequest) -> Result<()> {
-        let reply = self.client.delete_endpoint(&request.attachment_id()).map_err(error)?;
+        let reply = self
+            .client
+            .delete_endpoint(&request.attachment_id())
+            .map_err(error)?;
         if !matches!(reply.status, 200 | 404) {
-            return Err(error(format!("endpoint deletion not confirmed: HTTP {}", reply.status)));
+            return Err(error(format!(
+                "endpoint deletion not confirmed: HTTP {}",
+                reply.status
+            )));
         }
         self.endpoint_may_exist = false;
         Ok(())
@@ -910,7 +920,9 @@ mod tests {
                         )
                     });
                     // Zero simulates a server that consumed PUT then disconnected.
-                    if status == 0 { continue; }
+                    if status == 0 {
+                        continue;
+                    }
                     let body = body.to_string();
                     write!(
                         stream,
@@ -1010,22 +1022,27 @@ mod tests {
     }
     #[test]
     fn ambiguous_put_and_failed_cleanup_preserve_backing_ownership() {
-        let link=Link {host_name:"lxcfixture".into(),host_index:7,host_mac:"02:00:00:00:00:01".into(),peer_mac:"02:00:00:00:00:02".into()};
+        let link = Link {
+            host_name: "lxcfixture".into(),
+            host_index: 7,
+            host_mac: "02:00:00:00:00:01".into(),
+            peer_mac: "02:00:00:00:00:02".into(),
+        };
         for (replies, releasable) in [
-            (vec![(0,json!({}))],false),
-            (vec![(503,json!({}))],false),
-            (vec![(400,json!({}))],true),
-            (vec![(201,json!({"status":null})),(503,json!({}))],false),
-            (vec![(201,json!({"status":null})),(206,json!({}))],false),
-            (vec![(201,json!({"status":null})),(200,json!({}))],true),
-            (vec![(201,json!({"status":null})),(404,json!({}))],true),
+            (vec![(0, json!({}))], false),
+            (vec![(503, json!({}))], false),
+            (vec![(400, json!({}))], true),
+            (vec![(201, json!({"status":null})), (503, json!({}))], false),
+            (vec![(201, json!({"status":null})), (206, json!({}))], false),
+            (vec![(201, json!({"status":null})), (200, json!({}))], true),
+            (vec![(201, json!({"status":null})), (404, json!({}))], true),
         ] {
-            let expected=replies.len();
-            let mut agent=Agent::new(replies);
-            let mut platform=agent.platform();
-            assert!(platform.create_endpoint(&request(),&link,&[]).is_err());
-            assert_eq!(platform.may_release_resources(),releasable);
-            assert_eq!(agent.requests().len(),expected);
+            let expected = replies.len();
+            let mut agent = Agent::new(replies);
+            let mut platform = agent.platform();
+            assert!(platform.create_endpoint(&request(), &link, &[]).is_err());
+            assert_eq!(platform.may_release_resources(), releasable);
+            assert_eq!(agent.requests().len(), expected);
         }
     }
     #[test]

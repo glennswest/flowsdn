@@ -160,7 +160,9 @@ pub trait AddBackend {
     ) -> Result<()>;
     /// False when endpoint publication or deletion is unresolved. Preserve link
     /// and addresses until the adapter confirms they cannot belong to an endpoint.
-    fn may_release_resources(&self) -> bool { true }
+    fn may_release_resources(&self) -> bool {
+        true
+    }
     fn delete_endpoint(&mut self, request: &AddRequest) -> Result<()>;
     fn delete_link(&mut self, link: &Link) -> Result<()>;
     fn release(&mut self, lease: &Lease) -> Result<()>;
@@ -221,7 +223,10 @@ pub fn add(
             }
             if !backend.may_release_resources() {
                 errors.push(CniError::internal("endpoint ownership unresolved; retaining link and IP allocations for retry or DEL"));
-                return Err(AddFailure { primary, rollback_errors: errors });
+                return Err(AddFailure {
+                    primary,
+                    rollback_errors: errors,
+                });
             }
             if let Some(link) = link
                 && let Err(e) = backend.delete_link(&link)

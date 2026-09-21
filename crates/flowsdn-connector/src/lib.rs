@@ -205,6 +205,20 @@ impl Connector {
             Ok(())
         })
     }
+    /// Change MTU without touching link identity or flushing neighbors.
+    pub fn set_mtu(&self, index: u32, mtu: u32) -> Result<()> {
+        if index == 0 || mtu < 1280 {
+            return Err("invalid link index or dual-stack MTU".into());
+        }
+        self.run(async {
+            self.handle
+                .link()
+                .set(LinkUnspec::new_with_index(index).mtu(mtu).build())
+                .execute()
+                .await?;
+            Ok(())
+        })
+    }
     pub fn move_to_namespace(&self, index: u32, namespace: &File) -> Result<()> {
         self.run(async {
             self.handle

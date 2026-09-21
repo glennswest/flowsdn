@@ -152,7 +152,7 @@ impl Endpoint {
 }
 
 fn endpoint_worker(id: u8) -> Result<()> {
-    ensure((1..=2).contains(&id), "invalid endpoint id")?;
+    ensure((1..=3).contains(&id), "invalid endpoint id")?;
     isolate()?;
     say("READY")?;
     let mut lines = std::io::stdin().lock().lines();
@@ -739,8 +739,7 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
     flowsdn_connector::in_namespace(netns, || {
         let connector = flowsdn_connector::Connector::open()?;
         let link = connector.require_link("eth0")?;
-        let mac: [u8; 6] = link.mac.try_into().map_err(|_| "peer MAC")?;
-        connector.configure(link.index, "eth0", mac, 1400)
+        connector.set_mtu(link.index, 1400)
     })
     .map_err(|e| e as Box<dyn Error>)?;
     cni(
