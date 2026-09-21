@@ -123,7 +123,7 @@ impl Definition {
             "node-port-range" => "docs/spec/05-service-loadbalancing.md:922",
             "policy-secrets-namespace" => "docs/spec/12-operator.md:1449",
             "policy-secrets-only-from-secrets-namespace" => "docs/spec/16-l7-envoy-dns.md:1479",
-            "socket-path" => "docs/spec/08-endpoint-agent-api.md:1329",
+            "socket-path" => "docs/spec/08-endpoint-agent-api.md:1334",
             _ => SPECIFICATION,
         })
     }
