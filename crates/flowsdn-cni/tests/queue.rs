@@ -1,4 +1,5 @@
 use flowsdn_cni::{
+    CniError,
     delete::DeleteRequest,
     queue::{MAX_ENTRIES, Queue, ReplayRequest},
 };
@@ -16,6 +17,9 @@ use std::{
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 const WAIT: Duration = Duration::from_secs(3);
+// Durable publication serializes fsyncs; allow slow storage without changing
+// the explicit timeout assertions or the production deletion-client budget.
+const IO_WAIT: Duration = Duration::from_secs(60);
 
 struct Temp {
     path: PathBuf,
@@ -61,7 +65,7 @@ fn durable_wire_names_modes_deduplication_and_replay() {
     let single = request("container-one", "eth0");
     let batch = request("container-two", "");
     {
-        let mut guard = queue.lock_shared(WAIT).expect("shared");
+        let mut guard = queue.lock_shared(IO_WAIT).expect("shared");
         guard.enqueue(&single).expect("single");
         guard.enqueue(&single).expect("duplicate");
         guard.enqueue(&batch).expect("batch");
@@ -91,7 +95,7 @@ fn durable_wire_names_modes_deduplication_and_replay() {
     }
     drop(queue);
     let queue = temp.queue();
-    let mut replay = queue.lock_exclusive(WAIT).expect("exclusive");
+    let mut replay = queue.lock_exclusive(IO_WAIT).expect("exclusive");
     let entries = replay.entries().expect("entries");
     assert_eq!(entries.len(), 2);
     assert!(entries.iter().any(|e| e.request
@@ -148,7 +152,7 @@ fn concurrent_shared_writers_cannot_exceed_the_cap_and_duplicates_still_succeed(
     let temp = Temp::new();
     let queue = temp.queue();
     {
-        let mut guard = queue.lock_shared(WAIT).expect("shared");
+        let mut guard = queue.lock_shared(IO_WAIT).expect("shared");
         for number in 0..MAX_ENTRIES.saturating_sub(1) {
             guard
                 .enqueue(&request(&format!("prefill-{number}"), "eth0"))
@@ -161,29 +165,41 @@ fn concurrent_shared_writers_cannot_exceed_the_cap_and_duplicates_still_succeed(
         let queue = queue.clone();
         let barrier = barrier.clone();
         threads.push(std::thread::spawn(move || {
-            let mut guard = queue.lock_shared(WAIT).expect("parallel shared");
+            let guard = queue.lock_shared(IO_WAIT);
+            // Reach the barrier even if acquiring the protocol lock failed.
             barrier.wait();
-            guard
-                .enqueue(&request(&format!("racer-{number}"), "eth0"))
-                .is_ok()
+            guard?.enqueue(&request(&format!("racer-{number}"), "eth0"))
         }));
     }
-    let successes = threads
-        .into_iter()
-        .map(|thread| thread.join().expect("writer"))
-        .filter(|won| *won)
-        .count();
+    // Join every worker before assertions can unwind the temporary directory.
+    let results: Vec<_> = threads.into_iter().map(|thread| thread.join()).collect();
+    let mut successes = 0_usize;
+    for result in results {
+        match result.expect("writer") {
+            Ok(()) => successes = successes.saturating_add(1),
+            Err(error) => assert_eq!(
+                error,
+                CniError::internal("deletion queue directory has too many entries; aborting"),
+                "race loser must report capacity exhaustion, not a lock or I/O failure"
+            ),
+        }
+    }
     assert_eq!(successes, 1);
     // Wait for exclusive access, which cannot succeed until every writer has
     // left its shared guard. Exactly one race winner can publish the last slot.
-    let replay = queue.lock_exclusive(WAIT).expect("writers finished");
+    let replay = queue.lock_exclusive(IO_WAIT).expect("writers finished");
     assert_eq!(replay.entries().expect("entries").len(), MAX_ENTRIES);
     drop(replay);
-    let mut guard = queue.lock_shared(WAIT).expect("shared");
+    let mut guard = queue.lock_shared(IO_WAIT).expect("shared");
     guard
         .enqueue(&request("prefill-0", "eth0"))
         .expect("dedupe even at capacity");
-    assert!(guard.enqueue(&request("overflow", "eth0")).is_err());
+    assert_eq!(
+        guard.enqueue(&request("overflow", "eth0")),
+        Err(CniError::internal(
+            "deletion queue directory has too many entries; aborting"
+        ))
+    );
 }
 
 #[test]
@@ -195,18 +211,17 @@ fn concurrent_duplicate_writers_publish_one_complete_entry() {
         let queue = queue.clone();
         threads.push(std::thread::spawn(move || {
             queue
-                .lock_shared(WAIT)
-                .expect("shared")
+                .lock_shared(IO_WAIT)?
                 .enqueue(&request("same", "eth0"))
-                .expect("dedupe");
         }));
     }
-    for thread in threads {
-        thread.join().expect("writer");
+    let results: Vec<_> = threads.into_iter().map(|thread| thread.join()).collect();
+    for result in results {
+        result.expect("writer").expect("dedupe");
     }
     assert_eq!(
         queue
-            .lock_exclusive(WAIT)
+            .lock_exclusive(IO_WAIT)
             .expect("exclusive")
             .entries()
             .expect("entries")
@@ -227,7 +242,7 @@ fn invalid_entries_are_individual_errors_removable_without_following_symlinks() 
     let outside = temp.path.join("outside");
     fs::write(&outside, b"outside:eth0").expect("outside");
     symlink(&outside, directory.join("link.delete")).expect("symlink");
-    let mut replay = queue.lock_exclusive(WAIT).expect("exclusive");
+    let mut replay = queue.lock_exclusive(IO_WAIT).expect("exclusive");
     let entries = replay.entries().expect("entries including invalid");
     assert_eq!(entries.len(), 4);
     for entry in entries {
@@ -261,17 +276,17 @@ fn conflicting_contents_and_cross_queue_removal_are_rejected() {
     fs::write(first.path.join("queue").join(filename), b"different:eth0").expect("corrupt entry");
     assert!(
         queue
-            .lock_shared(WAIT)
+            .lock_shared(IO_WAIT)
             .expect("shared")
             .enqueue(&req)
             .is_err()
     );
-    let replay = queue.lock_exclusive(WAIT).expect("exclusive");
+    let replay = queue.lock_exclusive(IO_WAIT).expect("exclusive");
     let entry = replay.entries().expect("entries").pop().expect("entry");
     let other = second.queue();
     assert!(
         other
-            .lock_exclusive(WAIT)
+            .lock_exclusive(IO_WAIT)
             .expect("other")
             .remove(&entry)
             .is_err()
