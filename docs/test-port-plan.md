@@ -920,11 +920,15 @@ fastetcd at step 1, not step 12.** They are 2,280 Go test lines that answer
    of the reference assertions with no equivalent because BPF does the job
    (the whole `ipset` package, the masquerade/SNAT/hairpin rules, ruleset-as-
    proxy-port-store) naming what proves each of those instead.
-3. **`pkg/policy` port granularity.** 21,034 lines in one package. Port it as one
-   unit, or file by file with the deny files first? Recommendation: file by
-   file, deny first (`mapstate`, `distillery_precedence`, `repository_deny`,
-   `resolve_deny`, `l4_filter_deny`), because those five files are the part with
-   no second source of truth.
+3. **Policy port granularity — resolved #248.** Implement and validate file-sized
+   behavior groups, with deny/mapstate semantics first: `mapstate`,
+   `distillery_precedence`, `repository_deny`, `resolve_deny`, and
+   `l4_filter_deny`. Preserve scenario provenance and independently specified
+   expectations; do not transliterate Go implementation code. The initial Rust
+   policy library provides atomic validation and a limited independent L3/L4
+   oracle, not completion of these five suites. Full mapstate optimization and
+   fuzz agreement remain tracked by #103.
+
 4. **BGP protocol correctness.** The reference gets it from GoBGP and therefore
    does not test it; `pkg/bgp/gobgp` is **replace** and leaves a hole. flowsdn's
    own speaker needs session state-machine, OPEN/UPDATE encoding and error-path

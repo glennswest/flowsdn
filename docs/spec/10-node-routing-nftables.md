@@ -614,6 +614,10 @@ listed labels (spec 03).
   marks (`nodeID << 16`) and in-flight encrypted traffic depend on stable IDs
   across agent restarts. After the first full node sync, mappings for IPs that
   belong to no known node are pruned.
+- Pinned-map state is the sole ID authority. An incompatible existing node
+  map MUST cause startup refusal before unpinning; automatic empty recreation
+  is forbidden. A layout upgrade needs an explicit ID-preserving migration
+  (spec 01 §3.2; decision #135).
 - `GET /node/ids` returns `[{id, ips[]}]` grouped by ID; `GetNodeIP(0)` is the
   local node's IP.
 
@@ -1991,11 +1995,16 @@ without root by encoding then decoding.
    (the chains live in `ip filter` etc. as nft objects) — cannot help
    iptables-legacy hosts. **Recommend: Helm pre-upgrade job + document; no
    agent code.**
-5. **Node ID persistence.** Keep restore-from-pinned-map as the only source of
-   truth (this spec), or additionally checkpoint `(ip → id)` in
-   `<state-dir>` so IDs survive a map recreation (layout change upgrade).
-   **Recommend: map only for parity; add the checkpoint when spec 01's
-   upgrade protocol needs to recreate the node map.**
+5. **Resolved (#135): pinned node map is the sole persistence source.**
+   Restore IDs before allocating IDs or programming routes, marks and IPsec.
+   Do not introduce a second checkpoint authority. Since live encryption marks
+   encode these IDs, automatic recreation of an incompatible existing node map
+   is forbidden: startup fails before unpinning or mutation. A future layout
+   upgrade must supply an explicit ID-preserving migration before it can ship.
+   The loader's `plan_node_id_map` guard rejects every incompatible replacement,
+   including capacity-only changes. Missing pins permit fresh creation but do
+   not prove recovery after external pin loss; live restore and migration
+   integration remain required.
 6. **Address scope default — resolved #136.** Set `address-scope-max` to 254
    (`RT_SCOPE_HOST`). Retain the unconditional `cilium_host` link-scope exception and
    the independent loopback/IPv6-link-local filtering rules.

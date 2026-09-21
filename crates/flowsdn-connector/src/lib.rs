@@ -370,3 +370,6 @@ fn route_info(message: RouteMessage, index: u32) -> Option<Route> {
     (output == Some(index) && table == 254 && message.header.kind == RouteType::Unicast)
         .then_some(route)
 }
+
+#[cfg(test)]
+mod route_tests;

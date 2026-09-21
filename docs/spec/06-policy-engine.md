@@ -256,8 +256,20 @@ identities whose `cidr:` label is inside an excepted prefix are not
 selected. Because a peer identity carries exactly one `cidr:` label (its
 own prefix), an identity for a prefix that *straddles* an `except` (e.g.
 `10.0.0.0/8` allowed except `10.1.0.0/16`, peer identity `10.0.0.0/9`) is
-**selected** — the reference does the same and flowsdn keeps it (it is how
-`ipBlock.except` behaves observably today; see §12 item 6).
+**selected** by the selector. This does not permit skipping allocation of the
+excepted prefix: the importer MUST allocate both the allow and exception
+prefixes and wait for their identity/policy synchronization before publishing
+rules. Longest-prefix ipcache lookup then assigns traffic in the exception its
+more-specific identity, which the selector excludes (#97). Missing that
+allocation would incorrectly let excepted addresses use the covering identity.
+
+Pinned-reference confirmation (`7d68cfb394`):
+`pkg/policy/types/selector.go:CIDRSelector.GetCIDRPrefixes` enumerates all
+prefix requirements, including exception-only ones; `pkg/policy/cidr.go` unions
+them; `pkg/policy/cell/policy_importer.go:updatePrefixes` allocates them before
+repository updates and prunes stale prefixes afterward. `flowsdn-policy`'s
+`CidrRule` and `PrefixUpdate` implement the validated planning sets, not the
+ipcache publication barrier itself.
 
 A CIDR selector matches an identity only if that identity is *eligible*:
 it has a world label; or it is a node identity and
@@ -312,6 +324,12 @@ ports of that protocol" (`0/ANY` = everything). `endPort` ≥ `port` defines a
 range; ranges are not allowed with DNS rules (`DNS rules do not support port
 ranges`) nor with named ports. Protocol defaults to `TCP` when omitted in
 KNP; in CNP an omitted protocol means `ANY`.
+
+**Validation decision #98:** an explicit `endPort` together with numeric
+`port: "0"` MUST be rejected, including an explicit zero or 65535 end. Port
+zero without `endPort` remains the wildcard. The low-level map ABI still
+encodes zero-based masked blocks correctly; rejecting ambiguous API ranges
+prevents the reference's zero-start wildcard bug entering the importer.
 
 `PortRule` also carries the L7 handoff, which this spec only classifies:
 
@@ -381,7 +399,13 @@ entries with `auth_type = 1` that the datapath drops with
 policy behaves as written even without an authenticator. Two rules for the
 same peer/port with different explicit modes fail to compile
 (`cannot merge conflicting authentication types`). Pass rules combined with
-auth rules in one policy are unsupported (logged error, §5.6).
+auth rules selecting the same subject are rejected before import publication
+(#93), including combinations spread across KCNP/CNP resources. The candidate
+resource replacement is validated together with the surviving subject rules;
+rejection leaves the previous rules and revision intact. Emit a clear import
+error/status explaining the unsupported Pass/authentication combination instead
+of partially enforcing it. The resolved-subject repository primitive implements
+this atomic validation; Kubernetes status propagation remains controller work.
 
 #### 3.2.8 `enableDefaultDeny`, `labels`, `description`, `log`
 
@@ -400,7 +424,7 @@ what `cilium-dbg policy delete --labels` (removed) used to key on.
 `description` is stored and echoed only. `log.value` is stored on the
 entry; the reference's cookie allocator (§5.13) is present but **not wired**
 at 1.20.1, so every map entry carries `cookie = 0` and the verdict event's
-`cookie` is 0. flowsdn MUST do the same until §12 item 8 is decided.
+`cookie` is 0. flowsdn MUST keep cookie zero for the reference-compatible verdict contract (#99).
 
 #### 3.2.9 CRD → rule: namespace and cluster injection (`ParseToCiliumRule`)
 
@@ -915,6 +939,15 @@ allocation — spec 03 §3.3/3.4/3.8):
    with `endpoint-policy-update-timeout` (10 s; timeouts are logged and
    counted, not fatal).
 
+**Egress named-port deviation (#96):** selector changes that remove contributions
+for an identity MUST recompute that identity's named-port keys from every surviving
+selector and the committed named-port snapshot before producing the changeset.
+Do not blindly delete a shared key and wait for a later full distill to restore
+it. The `NamedPortState` library implements selector-owned resolved contributions
+and atomically computes upserts/deletes, including restoration of a shadowed
+lower-precedence contribution. Full mapstate values, named-port resolution and
+kernel writes still belong to the endpoint policy compiler/controller.
+
 A **mutated** identity (labels changed under the same number) bypasses
 incremental deltas: the updater triggers a full recompute of all identity
 policies and regeneration of all endpoints (only the host identity does
@@ -933,7 +966,13 @@ needs reinstating when the covering key goes away.
 Each endpoint map holds `bpf-policy-map-max` entries (default 16384,
 clamped to 256..65536). The endpoint tracks *desired* (map state) and
 *realized* (last successful sync) states and a pressure gauge
-`desired.len / max`. On apply:
+`desired.len / max`. Emit an alarm when `desired.len / max >= 0.9`, including
+before overflow; compute the boundary exactly as `ceil(9 * max / 10)` (#102).
+Keep `enable-endpoint-lockdown-on-policy-overflow=false` for configuration
+compatibility. This does not imply that missing denies are safe: report failed
+application as degraded/incomplete, retain retries, and retain the pre-1.0
+security review. `flowsdn-policy::pressure` computes the alarm/overflow/action
+plan; it does not install lockdown keys or emit runtime metrics. On apply:
 
 - if `enable-endpoint-lockdown-on-policy-overflow` is set and
   `desired.len > max`: **lockdown** — delete every existing entry and
@@ -1133,8 +1172,10 @@ starting at 0 (e.g. `0–1023`, one masked port `{0, /6}`) is written with
 prefix 48 — *all ports* — while userspace believes it wrote ports 0–1023
 (fail-open). flowsdn MUST derive `prefixlen` from the key's port prefix
 length field: `40 + (nexthdr != 0 ? 8 + port_prefix_len : 0)`, and MUST
-reject (validation) or handle identically on both sides; §12 item 7 records
-the choice to fix rather than mirror.
+handle the key identically on both sides. At the API import boundary,
+§3.2.6 rejects explicit ranges beginning at zero (#98). The lower-level codec
+fix remains useful for accurate dumps/restores and internally constructed keys;
+it does not authorize accepting a rejected API range.
 
 The `reserved:2` bits (bits 1–2 of the flags byte) were `wildcard_protocol`
 and `wildcard_dport` in Cilium 1.16 and are kept zero "for 1.17"
@@ -1268,7 +1309,7 @@ Inputs: `tierMax` (the tier's deny precedence at its base priority), `key`,
 
 ```
 if aggregateIsEquivalent(key, entry): return         # §5.7
-if features.pass:  insertWithPasses(...) ; return    # §5.6 (auth+pass together: log error)
+if features.pass:  insertWithPasses(...) ; return    # §5.6 (auth+pass rejected at import, #93)
 if entry.is_deny():
     for (k, v) in CoveringBroaderOrEqualKeys(key):
         if v.valid && (v.precedence > entry.precedence
@@ -1507,7 +1548,11 @@ with `toServices`; otherwise only CNPs indexed for that Service name.
 A per-agent bakery maps `log.value` strings to 32-bit cookies (`cookie =
 bitset index + 1`, never 0), with generation-based sweeping of unused values.
 At 1.20.1 no caller allocates cookies and every entry has `cookie = 0`.
-flowsdn ships the bakery type but MUST NOT set cookies until §12 item 8.
+flowsdn MUST retain cookie zero in the compatibility implementation (#99).
+Preserve `log.value` in rule metadata. A nonzero-cookie feature needs an explicit
+producer/consumer protocol decision and Hubble resolution before activation;
+it is not silently enabled or declared implemented by this choice. The full
+log feature remains in scope; there is currently no bakery implementation.
 
 ## 6. Configuration
 
@@ -1798,7 +1843,7 @@ Crates (building on spec 03's `flowsdn-labels`, `flowsdn-identity`,
     `identity → (Arc<SelectorPolicy>, revision)` with `watch()` for endpoint
     waits), `IdentityUpdater` implementing spec 03's trait (batched wait
     groups, `endpoint-policy-update-timeout`).
-  - `cookie`: the bakery (bitset + two maps), unused until §12 item 8.
+  - `cookie`: future bakery support; the compatibility path keeps cookie zero (#99).
   - `rest`: handlers for the three GET routes producing spec 03-style models.
 - **`flowsdn-policy-k8s`**: `kube-rs` watchers for KNP, KCNP, CNP, CCNP,
   CiliumCIDRGroup; `toServices` resolver over the LB tables
@@ -1819,16 +1864,17 @@ No Hive (ADR-0004): construction order — selector caches → repository →
 identity computer → importer → k8s watchers; the endpoint manager registers
 its `PolicyOwner` callbacks; the ipcache registers the `IdentityUpdater`.
 
-## 12. Open decisions
+## 12. Decisions and remaining implementation
 
-1. **KCNP API version.** Target v1alpha2 as the reference does
-   (recommended; it is the only implemented successor of ANP/BANP), and
-   re-translate when v1beta1 ships. Keep the gate default off.
-2. **Pass + auth.** The reference logs an error and proceeds when a policy
-   mixes Pass rules and authentication. Options: (a) same; (b) reject the
-   KCNP/CNP combination at import so the subject keeps its previous policy.
-   Recommendation: (b), with a clear status condition — silent partial
-   enforcement is worse than a rejected object.
+The policy library is an initial implementation of the primitives named below.
+Closed design choices do not claim Kubernetes, REST or datapath integration.
+
+
+
+1. **Resolved #92.** Pin the KCNP watcher contract to policy.networking.k8s.io/v1alpha2 and keep enable-k8s-cluster-network-policy off by default. Do not silently reinterpret a future API version; its translation requires review. The library publishes the target/default constants; watcher and CRD integration remain required.
+
+2. **Resolved #93.** Reject Pass plus explicit authentication across the candidate policy for a subject before replacement. SubjectRepository validates the complete replacement and preserves the prior contents/revision on error; CRD import/status wiring remains required.
+
 3. **Resolved (#94, ADR-0011): `toServices` uses the local LB-table view.**
    Keep §3.2.5 selector/headless behavior and re-resolution on service changes.
    Do not add a separate remote-cluster backend query or union. This does not
@@ -1837,38 +1883,27 @@ its `PolicyOwner` callbacks; the ipcache registers the `IdentityUpdater`.
    Keep the schema fields and emit one warning per affected rule on import.
    They must not become effective allow/deny constraints; schema removal needs
    a separately versioned compatibility decision.
-5. **Egress named-port re-resolution.** Deleting by identity for named ports
-   (reference) can transiently remove a port that another selector still
-   allows for the same identity until the next full distill. Options: keep;
-   or recompute the identity's named-port keys after the delete.
-   Recommendation: recompute (cheap, correctness win); mark **DEVIATION** if
-   adopted.
-6. **`except` semantics for straddling prefixes** (§3.2.4). The selector
-   model cannot express "deny the excepted sub-range" for an identity whose
-   own prefix straddles it. Options: keep (reference); or split the peer
-   identity's prefix at import time by inserting the excepted prefixes into
-   the ipcache so their identities exist and are excluded. Recommendation:
-   the second (the ipcache already receives the excepts as prefixes in the
-   reference — confirm in the importer's `GetCIDRPrefixes` and document).
-7. **Port ranges starting at 0** (§4.4 DEVIATION). Recommendation: encode the
-   prefix from the key's prefix field (fix) *and* file a reference issue;
-   alternatively reject `port: "0"` with `endPort` at validation. Choose
-   before the first release; the fuzz corpus must include the case.
-8. **Log cookies.** The bakery exists but is unwired at 1.20.1. Options: keep
-   cookie 0 (compatible with the reference's actual behavior); or wire
-   `log.value` → cookie → verdict event now (`RuleOrigin` already carries
-   the log string). Recommendation: wire it behind a config key defaulting
-   off, since Hubble at 1.20 does not resolve cookies.
+5. **Resolved #96.** Recompute resolved egress named-port contributions from surviving selectors after deletion. NamedPortState returns one replacement changeset and restores lower-precedence surviving contributions. This is a deliberate deviation; full compiler/kernel synchronization remains required.
+
+6. **Resolved #97.** Allocate exception-only prefixes as well as allow prefixes before policy publication; prune after replacement. Pinned-reference evidence and library prefix planning are in §3.2.4. Actual ipcache barriers remain required.
+
+7. **Resolved #98.** Reject numeric zero with an explicit endPort at API validation, keeping zero-without-endPort as wildcard. PortRange implements this validation; tests/corpus/port-ranges.tsv includes zero-start regression seeds and masked-port tests exhaustively check accepted ranges. Accurate zero-based low-level ABI encoding is retained. No upstream report was filed; this selects the issue's validation alternative.
+
+8. **Resolved #99.** Keep cookie zero in the reference-compatible verdict-event contract and retain log.value metadata. A future nonzero-cookie option requires matched Hubble resolution and its own activation contract; no unsupported runtime cookie feature is claimed.
+
 9. **Resolved (#100, ADR-0011): preserve reserved flag bits 1–2.**
    Write zero and ignore them on read; do not reclaim them before 1.0.
    A version number alone does not authorize incompatible reuse afterward:
    any reuse requires an explicit versioned map/tooling migration contract.
-10. **`GET /policy` 404-on-empty.** Reference returns 404 when no rules
-    exist; `cilium-dbg policy get` tolerates it. Recommendation: keep.
-11. **Lockdown default.** `enable-endpoint-lockdown-on-policy-overflow`
-    defaults false (fail-open on overflow) in the reference. Recommendation:
-    keep the default for compatibility, alarm at pressure ≥ 0.9, and revisit
-    with the security review before 1.0.
-12. **Simulator as the oracle.** Port the brute-force simulator first and gate
-    every mapstate optimization on fuzz agreement (recommended); the
-    alternative — trusting the ported algorithm — has no independent check.
+10. **Resolved #101.** Keep HTTP 404 when an initialized policy repository contains no rules. SubjectRepository::read_status provides the empty/nonempty decision, while the actual agent handler and compatible JSON rendering remain unimplemented (501 until that route is implemented).
+
+11. **Resolved #102.** Retain lockdown default false for compatibility and alarm at pressure >= 0.9 with exact integer rounding. pressure() provides the tested planning primitive, not a live metric or map write. Overflow must remain a reported enforcement failure; runtime lockdown and pre-1.0 security review remain required.
+
+12. **Simulator — #103 remains open.** The new independent `oracle::evaluate`
+    scans resolved L3/L4 rules directly for tier, priority, Pass, deny and redirect
+    precedence, without using the optimized mapstate algorithm. Exhaustive-port
+    and ordering tests cover this subset. Authentication inheritance, L7 matching,
+    full selector/distillation inputs and fuzz agreement against the eventual
+    optimized mapstate builder are still required. Unsupported authentication is
+    an error, not an oracle success. Do not close #103 or gate an optimization
+    solely on this partial oracle.

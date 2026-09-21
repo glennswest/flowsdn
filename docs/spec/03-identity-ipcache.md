@@ -152,6 +152,18 @@ Given a label set `L` the scope is determined first, then the allocator:
 
 Local and reserved resolutions never touch the API server.
 
+**Fixed mappings (#72).** Before publishing any fixed mapping, validate every
+ID as decimal 128..255 and every name as nonempty. Names are case-sensitive,
+opaque values of `io.cilium.fixed-identity`, not parsed source-prefixed labels.
+Reject every built-in reserved name in §4.4, including well-known and named
+deprecated entries (`etcd-operator`, `cilium-kvstore`, `kube-dns`, `eks-kube-dns`,
+`coredns`, `cilium-operator`, `eks-coredns`). Reject repeated numeric IDs even
+when spelled with leading zeros, and reject one name assigned to multiple IDs.
+Return no partially validated mapping. `flowsdn-identity::fixed` supplies the
+validator; foundation config validation invokes it for `fixed-identity-mapping`.
+This validation does not implement the identity allocator.
+
+
 ### 3.3 Global allocation (CRD mode)
 
 The allocator MUST implement the following, observable by peers through the
@@ -264,7 +276,11 @@ requested, so a restarted node normally reuses the existing
 
 Runs in the operator every `identity-gc-interval` (15 m), only when
 `CiliumEndpoint` GC is enabled (`cilium-endpoint-gc-interval != 0`) and the
-`CiliumEndpoint` CRD exists (or CES is enabled).
+`CiliumEndpoint` CRD exists (or CES is enabled). **Resolved #71:** retain this
+coupling with CES enabled, consistent with spec 12 §3.2 startup validation.
+CES contributes aliveness; it does not exempt CRD/doublewrite mode from the
+nonzero CEP-GC interval prerequisite. No CES-only scheduling shortcut is
+introduced. Operator integration and safe-GC tests remain required.
 
 - **Alive:** a `CiliumIdentity` is alive at time `t` if any `CiliumEndpoint`
   has `status.identity.id` equal to its name (informer index), or, with CES
@@ -367,6 +383,14 @@ in CRD mode: they arrive through the CEP watcher (own node's CEP) and the pod
 watcher, exactly as for remote pods. The endpoint publishes to the kvstore
 only in kvstore mode (deferred).
 
+**Policy prefix ownership (#97):** policy-importer prefix plans include CIDR
+base prefixes and every exception prefix, including except-only selector
+requirements. Preserve separate longest-prefix identities; do not collapse
+exceptions into their base or silently drop them. Acquire metadata references
+and await the injection revision before publishing a policy using the plan;
+release superseded references only after policy replacement. Spec 06 owns the
+policy prefix planner and its acceptance tests.
+
 ### 3.8 Update pipeline and revision fence
 
 All metadata writes are batched (`UpsertMetadataBatch` / `RemoveMetadataBatch`)
@@ -445,8 +469,19 @@ The reference keeps a second write API for entries whose identity is decided
 elsewhere (CEP, Pod, kvstore, ClusterMesh) and tracks per entry whether it is
 owned by that API, the metadata API, or both. flowsdn represents such writes
 as a metadata field `AssignedIdentity(id)` on resource
-`<source>//<ip>` (**DEVIATION**: internal representation only; observable
-precedence, shadowing and notifications are unchanged). Rules:
+writer-owned resources: `ep/<namespace>/<name>` for CEP, `pod/<namespace>/<name>`
+for Pod, and `kvstore/<cluster>/<ip>` or `clustermesh/<cluster>/<ip>` for remote
+pairs (empty cluster component for local keys). Prefix/cluster is still the
+metadata outer key. Object UID or remote-watch generation is a delete/update
+precondition so an old event cannot remove a replacement resource. Namespaces,
+object names and cluster identifiers are validated before building these IDs.
+
+**Resolved #15/#67:** all writers use this metadata representation; there is no
+second independently owned legacy ipcache store. A compatibility adapter may
+accept legacy operations but must translate them into the same resources and
+revision-fenced injector. This changes no external source priority, shadowing,
+map format or notification contract. Implementation and watcher-race tests
+remain required. Rules:
 
 - An `AssignedIdentity` resource short-circuits resolution: no labels are
   merged, no local identity is allocated, `k8s metadata` (namespace, pod
@@ -456,8 +491,10 @@ precedence, shadowing and notifications are unchanged). Rules:
   precedence write is refused and counted in
   `cilium_ipcache_errors_total{error="cannot_overwrite_by_source"}`; equal
   precedence overwrites.
-- A delete from source `S` is honored only if the effective source is `S`
-  (`no_such_prefix` / `cannot_overwrite_by_source` otherwise).
+- A legacy source-scoped delete from `S` is honored only if the effective
+  source is `S` (`no_such_prefix` / `cannot_overwrite_by_source` otherwise).
+  Metadata-owner removal instead removes only that owner's matching-generation
+  resource and re-resolves the prefix; it cannot erase another writer's data.
 - Remote (`kvstore`/`clustermesh`) pairs with identity 1 are stored as 6.
   Every remote pair MUST pass the identity validator for its cluster
   (section 4.5) before insertion; the `remote-cluster` flag is set when the
@@ -803,7 +840,7 @@ mirrored under `cilium/cache/{identities,ip}/v1/<cluster>/...`.
 Layout owned by `01-bpf-map-abi-loader` (LPM trie, 24-byte packed key
 `{prefixlen u32, cluster_id u16, pad u8, family u8, ip[16]}`, 24-byte value
 `{sec_identity u32, tunnel_endpoint[16], pad u16, key u8, flags u8}`,
-512 000 entries, `NO_PREALLOC | RDONLY_PROG`, pinned under
+`bpf-ipcache-map-max` entries (default 512000), `NO_PREALLOC | RDONLY_PROG`, pinned under
 `/sys/fs/bpf/tc/globals/`). This spec fixes the values written:
 
 - `prefixlen = 32 + prefix bits` (the 32 static bits cover cluster id, pad
@@ -922,9 +959,12 @@ identity 1 (whose labels may have changed).
 | `cilium-endpoint-gc-interval` (operator) | duration | 30m | 0 disables identity GC too |
 | `enable-cilium-endpoint-slice` | bool | false | CES ids count as alive |
 | `bpf-map-event-buffers` | map | empty | event buffer for `cilium_ipcache_v2` (debug) |
+| `bpf-ipcache-map-max` | uint, immutable extension | 512000 | inclusive 1..4294967295; map capacity |
 
-The ipcache map size (512 000) is a constant in the reference; flowsdn keeps
-it constant (no key).
+The reference fixes ipcache capacity at 512000; flowsdn exposes the same default
+through `bpf-ipcache-map-max` (#68). Config validation only checks its nonzero
+u32 capacity. The loader must apply it to map creation/reuse planning (spec 01);
+resource allocation and pinned-map incompatibilities remain explicit errors.
 
 ## 7. Failure modes
 
@@ -1177,31 +1217,31 @@ writing. Startup fences: `initial_cid_list`, `k8s_caches_synced`,
 1. **Resolved (#64, ADR-0011): retain duplicate identities until GC.**
    Do not actively renumber live endpoints to prefer the oldest duplicate.
    Normal reference-counted release and allocator GC reclaim unused entries.
-2. **kvstore backend timing.** Ship the `IdentityBackend` stub now and the
-   `etcd-client` backend with the ClusterMesh spec (recommended), or never
-   and require CRD mode plus clustermesh-apiserver's CRD mirroring for
-   meshes? Depends on whether ClusterMesh spec needs kvstore identities.
+2. **Resolved (#65): retain CRD and kvstore identity backends.** CRD is the
+   default. The kvstore backend ships with ClusterMesh in milestone 3 under
+   the shared IdentityBackend protocol; spec 20 §3.6/§5.6 requires it. A
+   construction-failing placeholder is not shipped functionality. KV locks,
+   leases, restore and failure tests remain prerequisites; no support claim
+   is made by this ordering decision.
 3. **Resolved (#66, ADR-0011): scope-byte classification.**
    Preserve the full supported 24-bit local index range and §4.5 deviation;
    the datapath spec explicitly references this contract.
-4. **Assigned-identity resource ids.** Section 3.10 uses `<source>//<ip>`;
-   alternative is one resource per writer (`ep/<ns>/<pod>` for CEP, which
-   also enables `DeleteOnMetadataMatch` by ns/name without a k8s-metadata
-   lookup). Recommendation: per-writer resource ids
-   (`ep/<ns>/<name>`, `pod/<ns>/<name>`, `kvstore//<ip>`); unobservable.
-5. **ipcache map size.** Constant 512 000 as in the reference, or a config
-   key (`bpf-ipcache-map-max`) with the same default? Recommendation: add
-   the key; no compatibility cost.
+4. **Resolved (#67, also #15): writer-owned metadata resources.** Section
+   3.10 defines CEP/Pod and cluster-aware remote resource IDs, generation-safe
+   removal, and one metadata pipeline for every writer. Watcher integration
+   and precedence/delete-race tests remain implementation obligations.
+5. **Resolved (#68): configurable ipcache capacity.** The immutable
+   `bpf-ipcache-map-max` extension defaults 512000 (§6); map creation/reuse
+   must consume the validated bound under spec 01.
 6. **Resolved (#69, ADR-0011): well-known identities default on.**
    `enable-well-known-identities=true` follows §4.4 and the config catalogue.
    Explicit false disables the shortcut; no inventory suggestion overrides it.
 7. **Envoy `ipcache_name`.** Confirm against the cilium/proxy image that
    the bootstrap field must name `cilium_ipcache_v2` (section 4.8); if the
    proxy hard-codes the legacy name, a symlink pin or NPHDS mode is needed.
-8. **GC and CES.** With CES enabled the reference still requires the CEP
-   GC interval to be non-zero; keep that coupling or allow identity GC with
-   CES only? Recommendation: keep, until CES is specified.
-9. **Fixed identity validator.** The reference validates `128..255` at flag
-   parse; should flowsdn also reject a `--fixed-identity-mapping` label
-   that collides with a reserved name (`host`, `world`, ...)? Recommended
-   yes (fatal); the reference silently overrides.
+8. **Resolved (#71): retain CEP-GC interval prerequisite with CES.**
+   Section 3.6 follows spec 12 startup validation; CES identities still count
+   as alive. Operator scheduling/GC tests remain required.
+9. **Resolved (#72): reject reserved fixed-identity names.** The shared
+   validator enforces the numeric range, built-in-name exclusion and unique
+   ID/name ownership described in §3.2 before a mapping is usable.

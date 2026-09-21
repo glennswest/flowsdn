@@ -259,10 +259,10 @@ impl Registry {
                     "deprecated alias cannot be registered as a canonical key",
                 ));
             }
-            if name == "strict-config" && (spec.kind != Kind::Bool || spec.class != Class::Active) {
+            if matches!(name.as_str(), "strict-config" | "force-config-change") && (spec.kind != Kind::Bool || spec.class != Class::Active) {
                 return Err(Error::new(
-                    name,
-                    "strict-config must be an active boolean key",
+                    &name,
+                    format!("{name} must be an active boolean key"),
                 ));
             }
             parse::parse(&spec.kind, &spec.default)

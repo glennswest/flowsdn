@@ -215,8 +215,12 @@ fn flowsdn_extensions_match_their_separate_specification_table() {
         let entry = catalogue::get(fields.first().unwrap()).unwrap();
         assert_eq!(entry.pflag.name(), *fields.get(1).unwrap());
         assert_eq!(entry.default_expression, *fields.get(2).unwrap());
-        assert_eq!(entry.class, Class::Active);
-        assert_eq!(*fields.get(3).unwrap(), "active");
+        let class = match *fields.get(3).unwrap() {
+            "active" => Class::Active,
+            "immutable" => Class::Immutable,
+            other => panic!("unexpected extension class {other}"),
+        };
+        assert_eq!(entry.class, class);
         assert!(
             !catalogue::ENTRIES
                 .iter()

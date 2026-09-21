@@ -568,13 +568,26 @@ flowsdn:
   the **immutable set** (keys classed `immutable` in 6.4) between the previous
   and the current run. Any difference is logged at error level with old/new
   values; if endpoints are being restored (`restore=true` and at least one
-  `<state-dir>/<id>/ep_config.json` exists) the agent MUST refuse to start,
-  otherwise it continues. Reason: changing these keys with live endpoints
+  `<state-dir>/<id>/ep_config.json` exists) the agent MUST refuse to start
+  unless the current effective `force-config-change` is true. A bypass retains
+  every immutable difference and emits `ForcedImmutableChange`; it does not
+  rewrite restored state or disable subsequent datapath compatibility checks.
+  The prior snapshot cannot enable the bypass. Without restored endpoints it
+  continues with the ordinary changed-without-restored-endpoints warning. Reason: changing these keys with live endpoints
   silently breaks the datapath (map layouts, address families, encapsulation);
   the reference only catches `datapath-mode`. Open decision 12.3 covers the
-  refuse-vs-warn choice.
+  refuse-vs-warn choice, resolved by #44 as refusal with an explicit bypass.
 - A previous file that fails to parse (schema change across versions) MUST be
   logged at warning level and skipped, never fatal.
+- **Reference migration (#45):** do not translate PascalCase `DaemonConfig`
+  fields into flowsdn settings or immutable comparisons. Recognize the JSON
+  object with string `DatapathMode` and boolean `EnableIPv4`/`EnableIPv6`, absent
+  flowsdn envelope markers (`flowsdn-version`, `reference-compat`, `config`),
+  and report `ReferenceConfigurationIgnored`. Other incompatible files retain
+  `PreviousUnparseable`. Neither path imports settings, including a force flag.
+  Reading reference endpoint state remains required by spec 08; this runtime
+  diagnostic file cannot establish endpoint/map compatibility or migration
+  safety. Those restore checks remain independent acceptance gates.
 
 ### 3.4 Fences and health (C)
 
@@ -1574,19 +1587,25 @@ Area specs MAY add keys to the set; they MUST NOT remove these.
 
 These keys are registered alongside the 539 reference declarations in §6.4,
 kept separately in `catalogue::EXTENSIONS`. They do not change the reference
-coverage count. Both are startup settings, not runtime-mutable options.
+coverage count. These are startup settings, not runtime-mutable options.
 
 | Key | Type | Default | Class |
 |---|---|---|---|
 | `strict-config` | Bool | `false` | active |
 | `endpoint-id-max` | Uint | `4095` | active |
+| `force-config-change` | Bool | `false` | active |
+| `bpf-ipcache-map-max` | Uint | `512000` | immutable |
 
 `strict-config` follows §3.3.4. `endpoint-id-max` is validated in the inclusive
 range 1..65535 and bounds newly allocated endpoint IDs (spec 08, #115).
 Restoration reserves existing IDs even above the configured allocation bound;
-this key does not renumber restored endpoints. Neither option changes the
-41-key immutable migration set. Endpoint restore and wider-pool acceptance
-remain governed by spec 08.
+this key does not renumber restored endpoints. `force-config-change` follows
+§3.3.9. `bpf-ipcache-map-max` accepts 1..4294967295, defaults to 512000, and
+adds an immutable extension alongside the 41 reference immutable keys. The
+kernel may reject a requested capacity because of memory or implementation
+limits; validation does not promise successful allocation. Spec 03 owns its
+meaning and spec 01 the map creation/reuse contract. Endpoint restore and
+wider-pool acceptance remain governed by spec 08.
 
 ## 7. Failure modes
 
@@ -1812,17 +1831,14 @@ registry + generator + build-config ~3k, fence + health ~1k.
    (b) embed `ReconcileStatus` in rows as the reference does, simpler for
    `GET /service`. Recommendation: (a); the LB REST handler joins two tables,
    which is trivial with shared primary keys.
-3. **Immutable-key change with endpoints present: refuse or warn.**
-   (a) refuse (this spec); (b) warn and continue, relying on the datapath's own
-   incompatibility detection. Recommendation: (a), matching the reference's
-   `datapath-mode` precedent; provide `--force-config-change` escape hatch
-   (flowsdn-specific key, defaults false) for operators who drained by hand.
-4. **Read Cilium's `agent-runtime-config.json` for in-place migration.**
-   The reference file is PascalCase field names of `DaemonConfig`. (a) ignore
-   it (this spec: warn "unparsable previous", skip); (b) implement a one-time
-   translator for the immutable subset. Recommendation: (a) unless the
-   migration story (agent core spec open question 1) commits to live
-   Cilium → flowsdn swaps.
+3. **Resolved (#44): refuse immutable changes during endpoint restoration**
+   unless current effective `force-config-change=true`; preserve the diff and
+   distinct bypass warning. The default is false (§3.3.9).
+4. **Resolved (#45): explicitly ignore reference runtime configuration.**
+   Recognized PascalCase snapshots produce a distinct warning and do not seed
+   configuration or immutable comparisons (§3.3.9). Endpoint state migration
+   remains supported in scope; its datapath compatibility tests are not replaced
+   by this diagnostic-file decision.
 5. **`/statedb/query` compat for the `health` table.** (a) provide it (this
    spec) so upstream `cilium-dbg status` prints module health; (b) drop it and
    accept that `cilium-dbg status` prints the status but exits with a

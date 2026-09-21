@@ -1738,3 +1738,34 @@ actually installed by CNI. Missing/malformed values return 400 and a value that
 differs from current agent configuration returns 409 before lease consumption
 or endpoint creation. CNI rolls back and a subsequent ADD rereads configuration.
 This closes a restart race between GET config and IPAM allocation.
+
+## Issue batch 3: compatibility and ownership decisions
+
+- **#16:** Retain one node-wide datapath mode. Missing historical endpoint mode
+  metadata means veth; explicit `DatapathMode` must match the selected driver.
+  The initial veth-only manager rejects netkit, unknown and malformed modes before
+  map restoration. Live mixed-mode migration is unsupported; drain first.
+- **#17/#34:** Preserve upstream CLI/API semantics rather than fork a replacement
+  CLI. At usable-networking acceptance, P0 commands are status, endpoint list/get,
+  config, identity list, ip list, service list, policy get, node list and debuginfo;
+  BPF commands require the compatible map schemas and permissions. Match field
+  values, errors and omitted/null distinctions; JSON object whitespace/order is
+  not a compatibility promise. P0 status includes module health via `/statedb/query`
+  (#46). Unsupported recognized routes return 501 until implemented; they must
+  not fabricate empty successful state. `GET /policy` returns 404 only for an
+  initialized empty policy repository, never to conceal a missing subsystem.
+  These are acceptance priorities, not a claim that the initial daemon serves
+  all routes. Upstream CLI integration checks remain #291/#294.
+- **#18:** Retain §3.13's IP-count-dependent probe schedule. Zero IPs uses the
+  base interval; otherwise use `base * ln(1 + ipCount)`, truncating nanoseconds.
+  The ratio must be finite in [0,1]. The count is probe IPs, not nodes; two IPs
+  yield about 65.9 seconds at default ratio. Confirmed against reference
+  `pkg/health/server/prober.go:setProbeInterval` and `pkg/backoff/backoff.go` at
+  7d68cfb394. `flowsdn-health` implements the schedule primitive; active probes
+  and controller wiring remain #291.
+- **#129:** Keep endpoint-deleting rollback. §3.8's target ownership and spec03's
+  reference-counted identity release are mandatory. The live fixture injects a
+  malformed successful creation response after installing a third endpoint, then
+  verifies its rollback preserves two existing endpoints, allocations and traffic.
+  This validates current endpoint/map/IPAM isolation. Shared policy and identity
+  controller lifecycle verification remains required when those controllers ship.

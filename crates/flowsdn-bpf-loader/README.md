@@ -10,7 +10,15 @@ staged until the program-attachment commit. A decision performs no mutation,
 content migration or attachment. Unknown flags remain part of exact comparison;
 this planner never adds flags to make a map compatible.
 
-The caller must validate map-type/flag combinations and inner-map schemas.
+Standalone LRU capacity changes retain the pinned capacity and return warning
+metadata; structural changes still replace. Node-ID map planning instead refuses
+incompatible replacement to preserve IDs encoded in encryption marks.
+
+Nested-map planning gates CT/NAT, multicast and Maglev by their own features,
+validates supported outer/inner shapes and compares complete inner templates.
+Inner capacity remains exact, including for LRU inner maps. Cluster arrays reserve
+the inclusive cluster-zero slot. The caller must validate map-type/flag
+combinations, BTF compatibility and actual kernel descriptor operations.
 Kernel probing, bpffs operations, live-map compatibility, and planned map
 replacement transactions are not implemented yet.
 

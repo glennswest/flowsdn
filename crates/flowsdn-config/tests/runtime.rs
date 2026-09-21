@@ -386,6 +386,30 @@ fn previous_file_validation_feeds_restart_immutability_without_failing_bad_histo
     );
 }
 
+#[test]
+fn reference_configuration_is_explicitly_ignored_and_never_imports_force_or_settings() {
+    let fixture = Fixture::new();
+    let registry = schema();
+    let current = registry.resolve([]).unwrap();
+    let path = fixture.path().join(runtime::CURRENT);
+    let reference = json!({"DatapathMode":"netkit", "EnableIPv4":false, "EnableIPv6":true, "ForceConfigChange":true});
+    fs::write(&path, reference.to_string()).unwrap();
+    assert!(runtime::decode(&reference.to_string(), &registry).is_err());
+    let report = runtime::check_previous(&path, &registry, &current, true, true).unwrap();
+    assert_eq!(report.warnings, [immutable::Warning::ReferenceConfigurationIgnored]);
+    assert!(report.changes.is_empty());
+    for invalid in [
+        json!({"DatapathMode":"netkit", "EnableIPv4":"false", "EnableIPv6":true}),
+        json!({"DatapathMode":"netkit", "EnableIPv4":false, "EnableIPv6":true, "flowsdn-version":"broken"}),
+        json!({"EnableIPv4":false}),
+        json!([]),
+    ] {
+        fs::write(&path, invalid.to_string()).unwrap();
+        assert_eq!(runtime::check_previous(&path, &registry, &current, true, true).unwrap().warnings,
+            [immutable::Warning::PreviousUnparseable]);
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn previous_special_files_and_symlinks_are_nonfatal_without_blocking() {

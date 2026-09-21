@@ -739,12 +739,16 @@ sysctls ~2.5k, monitor decode ~1.5k, tests ~3k.
 - aya specifics to verify on the target kernel/toolchain: `set_global` on
   `.rodata.config`, `prog_flags` for `BPF_F_XDP_HAS_FRAGS`, kfunc relocation
   for `bpf_sock_destroy`, tcx link pinning and update.
-- `.data.aux` stride: Go uses `cpu.CacheLinePad` (128 B on arm64); confirm the
-  C side has no hidden assumption so Rust can pick the real cache line size.
+- **Resolved #4:** spec 01 §5.4 records reference source evidence: the C
+  accessor uses only patched stride/max-offset; retain Go-compatible 64 B
+  x86-64 and 128 B arm64 constants rather than runtime hardware cache lines.
+  The Rust scratch planner tests aligned sizes, CPU clamping and overflow.
 - Which maps need the value cache + error resolver in Rust (Cilium enables it
   on lxc, ipcache, ipmasq, encrypt, vtep, NAT, egress) versus statedb-style
   reconciliation (`bpf.NewMapOps`: bwmap, subnet)? Prefer one model.
-- Per-cluster CT/NAT array-of-maps and multicast hash-of-maps: in scope for
-  the first release, or deferred with clustermesh/multicast?
+- **Resolved #52:** keep the shared map-in-map primitive in scope; create
+  per-cluster CT/NAT and multicast outer maps only with their respective
+  features. Maglev independently uses the primitive. Spec 01 §12 records the
+  implemented pure planning and remaining kernel integration.
 - Stale-map cleanup after a versioned rename (`_v2`/`_v3`) lives outside this
   area (`pkg/datapath/linux` startup); confirm during the datapath-init inventory.

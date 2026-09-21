@@ -744,7 +744,7 @@ flowsdn uses **BPF host routing** as the primary forwarding mechanism
 2. Result `SUCCESS` or `NO_NEIGH` → continue; anything else →
    drop(`NO_FIB` 169).
 3. Decrement TTL / hop limit with incremental csum (`TTL_EXCEEDED` 196 →
-   ICMP time exceeded in M2; drop in M1).
+   drop in M1; ICMP time-exceeded generation is a later M2 obligation).
 4. L3 output device (`cilium_devices[oif].l3` or this program on an L3
    device): push a 14-byte Ethernet header (`skb_change_head`) with the
    ethertype; failure → drop(`INVALID` 134 / `WRITE_ERROR` 141).
@@ -1731,9 +1731,15 @@ claim that the full packet path has been validated.
 9. **Resolved (#61, ADR-0011): retain `cilium_*` map and pin names.**
    Spec 01 §2–3 owns the names and directories used by diagnostic tools.
    Compatible names alone do not establish safe live takeover.
-10. **ICMP time-exceeded generation (TTL 0 in `fib_redirect`).** Reference
-    drops in most paths; generating the ICMP error is cheap in Rust with
-    the §3.15 builder. Recommendation: drop in M1 (parity), generate in M2.
+10. **Resolved (#62): drop expired forwarding packets in M1.** IPv4 TTL
+    and IPv6 hop limit of 0 or 1 must produce `TC_ACT_SHOT` before decrement
+    can wrap; do not generate an ICMP error in the initial datapath. This
+    retains the reference expiry-drop behavior. ICMP time-exceeded generation
+    remains M2 work, requiring routing, rate limiting and packet-builder tests.
+    `local_delivery::rewrite` implements both expiry checks and native routing
+    shares that delivery helper. The endpoint kernel fixture tests both 0 and
+    1 for IPv4 and IPv6 (`bpftest/src/bin/endpoint/packets.rs`); it does not
+    establish ICMP generation or full production-path coverage.
 11. **Debug events as a build dimension.** Recommendation: yes
     (`debug-events` feature); release images ship without them. The
     `cilium-dbg monitor --type debug` surface is documented as "requires

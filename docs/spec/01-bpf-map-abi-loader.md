@@ -115,12 +115,14 @@ under `tc/globals` unless marked. Layouts are in §4.
 | `cilium_ct_any4_global` | LRU_HASH | 14 | 56 | 256Ki | LRUF | `bpf-ct-global-any-max` | same |
 | `cilium_ct6_global` | LRU_HASH | `ipv6_ct_tuple` 38 | 56 | TCP size | LRUF | TCP key | same |
 | `cilium_ct_any6_global` | LRU_HASH | 38 | 56 | ANY size | LRUF | ANY key | same |
-| `cilium_per_cluster_ct_{tcp4,any4,tcp6,any6}` | ARRAY_OF_MAPS | u32 cluster id | u32 (inner fd) | 256 | 0 | `max-connected-clusters` | agent (clustermesh); inner = same key/value/flags as global, unpinned |
+| `cilium_per_cluster_ct_{tcp4,any4,tcp6,any6}` | ARRAY_OF_MAPS | u32 cluster id | u32 (inner fd) | 256 | 0 | `bpf-ipcache-map-max` | u32, 512000 | immutable; positive capacity for `cilium_ipcache_v2`; exact non-LRU compatibility |
+| `max-connected-clusters` | agent (clustermesh); inner = same key/value/flags as global, unpinned |
 | `cilium_snat_v4_external` | LRU_HASH | `ipv4_ct_tuple` 14 | `ipv4_nat_entry` 40 | 512Ki | LRUF | `bpf-nat-global-max` | DP; agent GC; cilium-dbg bpf nat |
 | `cilium_snat_v6_external` | LRU_HASH | 38 | `ipv6_nat_entry` 56 | 512Ki | LRUF | same | same |
 | `cilium_snat_v4_alloc_retries` | PERCPU_ARRAY | u32 | u32 | 33 | 0 | fixed (`SNAT_COLLISION_RETRIES`+1) | DP histogram; cilium-dbg bpf nat retries |
 | `cilium_snat_v6_alloc_retries` | PERCPU_ARRAY | u32 | u32 | 33 | 0 | fixed | **unpinned in the reference ELF** (no `pinning`); flowsdn MUST pin it (§3.4 note) |
-| `cilium_per_cluster_snat_v{4,6}_external` | ARRAY_OF_MAPS | u32 | u32 | 256 | 0 | `max-connected-clusters` | agent; inner = SNAT layout, unpinned |
+| `cilium_per_cluster_snat_v{4,6}_external` | ARRAY_OF_MAPS | u32 | u32 | 256 | 0 | `bpf-ipcache-map-max` | u32, 512000 | immutable; positive capacity for `cilium_ipcache_v2`; exact non-LRU compatibility |
+| `max-connected-clusters` | agent; inner = SNAT layout, unpinned |
 | `cilium_ipmasq_v4` | LPM_TRIE | `lpm_v4_key` 8 | `lpm_val` 1 | 16384 | NP,RO | fixed | agent (ip-masq-agent); cilium-dbg bpf ipmasq |
 | `cilium_ipmasq_v6` | LPM_TRIE | `lpm_v6_key` 20 | 1 | 16384 | NP,RO | fixed | same |
 
@@ -158,7 +160,7 @@ under `tc/globals` unless marked. Layouts are in §4.
 | `cilium_call_policy` | PROG_ARRAY | u32 endpoint id | prog | 65536 | 0 | fixed | loader inserts `cil_lxc_policy`/`cil_host_policy` at slot = EPID |
 | `cilium_egresscall_policy` | PROG_ARRAY | u32 | prog | 65536 | 0 | fixed | loader inserts `cil_lxc_policy_egress` |
 | `cilium_lxc` | HASH | `endpoint_key` 20 | `endpoint_info` 48 | 65536 | CP,RO | fixed | agent; cilium-dbg bpf endpoint |
-| `cilium_ipcache_v2` | LPM_TRIE | `ipcache_key` 24 | `remote_endpoint_info` 24 | 512000 | NP,RO | fixed | agent; cilium-dbg bpf ipcache; **Envoy `cilium.bpf_metadata`** (`ipcache_name` = `cilium_ipcache_v2`, **CONFIRMED** `pkg/envoy/model.go:167` passes `ipcache.Name`) |
+| `cilium_ipcache_v2` | LPM_TRIE | `ipcache_key` 24 | `remote_endpoint_info` 24 | 512000 | NP,RO | `bpf-ipcache-map-max` | agent; cilium-dbg bpf ipcache; **Envoy `cilium.bpf_metadata`** (`ipcache_name` = `cilium_ipcache_v2`, **CONFIRMED** `pkg/envoy/model.go:167` passes `ipcache.Name`) |
 | `cilium_node_map_v2` | HASH | `node_key` 20 | `node_value` 4 | 16384 | NP,RO | fixed | agent node IDs; cilium-dbg bpf nodeid; IPsec |
 | `cilium_subnet_map` | LPM_TRIE | `subnet_key` 24 | `subnet_value` 4 | 1024 | NP,RO | fixed | agent |
 
@@ -282,6 +284,21 @@ keeps them so a node can be taken over from a running reference agent without
 recreating agent-owned maps. Memory flags (`BPF_F_MMAPABLE` and similar) are
 never added; the kernel rejects `RO` on per-CPU and LRU types, so the flag is
 only ever set on the maps marked RO in §2.2.
+
+**Capacity preservation (#78).** For standalone `LRU_HASH` and
+`LRU_PERCPU_HASH` maps, a positive `max_entries`-only difference MUST reuse the
+pin and preserve contents. Report the requested and retained capacities in a
+warning and expose the retained capacity as the effective specification. This
+applies to increases and decreases; it does not resize the kernel map. A
+capacity change requires an explicit disruptive recreation to take effect.
+Type, key/value layout and non-relaxed flags remain incompatible. Other map
+types retain exact capacity comparison. Inner templates in map-in-map remain
+exact, including capacity, because outer-map compatibility constrains insertion.
+
+**Node-ID exception (#135).** `cilium_node_map_v2` MUST NOT follow automatic
+incompatible-map replacement. Refuse startup before unpinning or mutating it;
+§3.3.5 of spec 10 owns the migration requirement. The pure loader policy
+`plan_node_id_map` implements this guard; live pin integration remains required.
 
 ### 3.3 Per-object map renames
 
@@ -1007,6 +1024,16 @@ C side reads `_aux_stride` and has no other assumption; the Go side uses
 same per-target constants (64 / 128) rather than the runtime cache line, so
 a Rust and a Go agent produce identical map value sizes on the same node.
 
+**Reference evidence (#4, inspected 2026-09-21):** pinned Cilium v1.20.1
+`7d68cfb394`, `bpf/lib/auxvars.h:12–20` reads only the patched stride and
+maximum offset. `pkg/bpf/collection.go:442–484` rounds by
+`unsafe.Sizeof(cpu.CacheLinePad{})` and patches both globals.
+`vendor/golang.org/x/sys/cpu/cpu_x86.go:11` and `cpu_arm64.go:12` define
+64 and 128 respectively. No hardware-cache-line query or additional C-side
+alignment constant participates in the indexing contract. The Rust layout
+planner and its alignment, clamping and overflow tests preserve this behavior;
+this evidence does not claim a live arm64 load.
+
 The initial pure layout planner accepts only existing nonempty sections and
 nonzero possible-CPU counts, rejects rounding or multiplication beyond the u32
 map-value size ABI, and returns stride, total value size and maximum offset.
@@ -1035,6 +1062,7 @@ fully new.
 | `bpf-distributed-lru` | bool, false | sets `NCL` on LRUF maps; rounds sizes to possible CPUs |
 | `bpf-map-dynamic-size-ratio` | float (0,1], 0.0025; 0 disables | §5.1 |
 | `bpf-ct-global-tcp-max`, `bpf-ct-global-any-max`, `bpf-nat-global-max`, `bpf-neigh-global-max`, `bpf-sock-rev-map-max`, `bpf-auth-map-max`, `bpf-fragments-map-max`, `egress-gateway-policy-map-max`, `bpf-policy-map-max`, `bpf-lb-*-map-max`, `bpf-lb-maglev-table-size` | int | map sizes (§2.2, §5.1); changing one recreates the map empty on next start (§3.2 step 5) |
+| `bpf-ipcache-map-max` | u32, 512000 | immutable; positive capacity for `cilium_ipcache_v2`; exact non-LRU compatibility |
 | `max-connected-clusters` | 255 / 511 | per-cluster outer array size and `cluster_id_bits` |
 | `enable-tcx` | bool, true | required for supported tc attachment; false is rejected, not a clsact fallback (§3.9, #54) |
 | `bpf-filter-priority` | u16, 1 | retained compatibility setting for legacy-filter inspection/cleanup; no new clsact filter is installed |
@@ -1153,7 +1181,8 @@ Monitor events emitted by this area: none (it carries them).
 ### 9.2 Pin / rename / migrate (privileged, kernel)
 
 - Create-or-open: fresh create pins; reopen reuses and keeps contents;
-  changed `max_entries` recreates empty and logs; `RO` add → reuse without
+  changed `max_entries` retains standalone LRU pins and warns, but recreates
+  other map types; node-ID incompatibility refuses startup; `RO` add → reuse without
   flag; `RO` remove → recreate.
 - Per-object rename produces exactly the names of §3.3 for endpoint id 1,
   65535, ifindex 1..; sweep removes malformed and dead-endpoint pins, deletes
@@ -1309,11 +1338,13 @@ Licenses per `docs/licensing.md`.
 
 ## 12. Open decisions
 
-1. **Tier B instruction elision.** Options: (a) Tier A only, rely on the
-   kernel's frozen-rodata pruning for verifier state; (b) implement Tier B
-   with BTF.ext rewriting. Recommendation: (a) for the first milestone;
-   measure instruction counts of the all-features lxc/host objects on the
-   minimum kernel; adopt (b) only if a count exceeds 80% of the 1M limit.
+1. **Tier B instruction elision (#50 remains open).** Initial policy is
+   Tier A only (§5.2 MUST obligations remain), relying on frozen-rodata
+   kernel pruning for verifier state. Do not physically rewrite instructions
+   or BTF.ext yet. All-feature lxc/host instruction counts and verifier
+   permutations on the minimum kernel remain unmeasured; smoke objects cannot
+   satisfy that acceptance. Reconsider Tier B if counts exceed 800,000 of the
+   1M limit. This policy does not close the measurement issue.
 2. **Resolved policy (#53): one object per hook family first.** Follow
    datapath spec §6.2: retain a shared object for x86-64 and arm64, use runtime
    configuration/pruning, and add a prebuilt feature variant only after measured
@@ -1335,10 +1366,17 @@ Licenses per `docs/licensing.md`.
    multi-writer maps retain one shared value-cache/retry primitive; do not layer
    two independent retry owners on one map. The foundation table and reconciler
    now exist; live map adapters remain implementation work.
-6. **Per-cluster CT/NAT and multicast map-in-map in the first release.**
-   Recommendation: implement the map-in-map primitive now (Maglev needs it
-   anyway), create the per-cluster and multicast outer maps only when
-   clustermesh / multicast are enabled.
+6. **Resolved (#52): feature-gated map-in-map.** Keep the shared primitive
+   in scope for Maglev. Create per-cluster CT/NAT outer maps only with
+   clustermesh, multicast outer maps only with multicast, and Maglev outer
+   maps only with Maglev. Disabled features must not create or open their
+   outer maps; the startup sweep owns stale pins. Per-cluster arrays contain
+   256 or 512 slots for inclusive cluster IDs 0..255 or 0..511. The loader's
+   `nested` planner validates outer shape and inner template, compares both
+   for reuse, and preserves agent versus loader replacement timing. Inner
+   templates require exact type/key/value/capacity/flags. Actual creation,
+   FD-based insertion, BTF checks and privileged map-in-map tests remain
+   runtime implementation obligations; this resolves scope, not feature readiness.
 7. **Resolved kernel floor (#54).** Adopt the roll-up's Linux 6.6 LTS
    general minimum and 6.12 supported line on both architectures. Earlier 6.1
    recommendations in this spec were superseded by that roll-up. Require

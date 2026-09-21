@@ -439,7 +439,11 @@ pub fn check_previous(
                 has_endpoint_state,
             ),
             Err(_) => immutable::check(
-                immutable::Previous::Unparseable,
+                if reference_configuration(&text) {
+                    immutable::Previous::Reference
+                } else {
+                    immutable::Previous::Unparseable
+                },
                 current,
                 restore,
                 has_endpoint_state,
@@ -458,6 +462,20 @@ pub fn check_previous(
             has_endpoint_state,
         ),
     }
+}
+
+// Recognize a reference DaemonConfig envelope without treating it as current
+// settings. Do not reinterpret a damaged flowsdn envelope as a migration file.
+fn reference_configuration(text: &str) -> bool {
+    let Ok(Json::Object(document)) = serde_json::from_str::<Json>(text) else {
+        return false;
+    };
+    ["flowsdn-version", "reference-compat", "config"]
+        .iter()
+        .all(|key| !document.contains_key(*key))
+        && document.get("DatapathMode").is_some_and(Json::is_string)
+        && document.get("EnableIPv4").is_some_and(Json::is_boolean)
+        && document.get("EnableIPv6").is_some_and(Json::is_boolean)
 }
 
 fn read_previous(path: &Path) -> std::io::Result<String> {

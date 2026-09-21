@@ -655,9 +655,11 @@ IPsec XFRM collector, node manager event/emit metrics.
   a supported configuration at all? If not, the whole `CILIUM_POST_nat`
   masquerade family, node ipsets, `xt_socket` fallback and the KPR downgrade
   path disappear.
-- Node ID persistence: keep the "restore from pinned `cilium_node_map_v2`"
-  approach, or persist the ID allocation in flowsdn's own state store and
-  rewrite the map on start?
+- Resolved #135: pinned `cilium_node_map_v2` remains authoritative. Refuse
+  incompatible replacement until an explicit ID-preserving migration exists;
+  never silently reallocate node IDs used in encryption marks. Spec 10 owns
+  the migration gate.
+
 - Which kernel floor is flowsdn targeting? If ≥ 6.6/6.7 is assumed, tcx and
   managed neighbors are unconditional, and the `NTF_USE` refresher, PROG_ATTACH
   fallback and many probes can be dropped.

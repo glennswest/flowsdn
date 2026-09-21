@@ -10,6 +10,8 @@ pub enum Previous<'a> {
     Parsed(&'a Resolved),
     /// A schema or decoding failure is a warning, never a startup failure.
     Unparseable,
+    /// Recognized reference DaemonConfig JSON, deliberately not translated.
+    Reference,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -23,6 +25,8 @@ pub struct Change {
 pub enum Warning {
     PreviousUnparseable,
     ChangedWithoutRestoredEndpoints,
+    ForcedImmutableChange,
+    ReferenceConfigurationIgnored,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -56,7 +60,8 @@ impl std::error::Error for Incompatible {}
 /// the immutable set. The union of both snapshots' immutable sets prevents a
 /// removed key or changed classification from silently bypassing comparison.
 /// Callers must derive `has_endpoint_state` from actual endpoint state files.
-/// There is no force bypass: that remains an open specification decision.
+/// The current effective `force-config-change=true` is an explicit bypass;
+/// previous snapshots cannot enable it. Every bypass retains the diff and warning.
 pub fn check(
     previous: Previous<'_>,
     current: &Resolved,
@@ -69,6 +74,12 @@ pub fn check(
             return Ok(Report {
                 changes: Vec::new(),
                 warnings: vec![Warning::PreviousUnparseable],
+            });
+        }
+        Previous::Reference => {
+            return Ok(Report {
+                changes: Vec::new(),
+                warnings: vec![Warning::ReferenceConfigurationIgnored],
             });
         }
         Previous::Parsed(previous) => previous,
@@ -92,11 +103,17 @@ pub fn check(
             })
         })
         .collect();
-    if !changes.is_empty() && restore && has_endpoint_state {
+    let blocked = !changes.is_empty() && restore && has_endpoint_state;
+    let force = current.get("force-config-change").is_some_and(|entry| {
+        entry.class == Class::Active && entry.value == Value::Bool(true)
+    });
+    if blocked && !force {
         return Err(Incompatible { changes });
     }
     let warnings = if changes.is_empty() {
         Vec::new()
+    } else if blocked {
+        vec![Warning::ForcedImmutableChange]
     } else {
         vec![Warning::ChangedWithoutRestoredEndpoints]
     };

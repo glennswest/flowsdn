@@ -1280,3 +1280,25 @@ Implementation clarification (2026-09-09): endpoint health uses camel-case
 `Disabled`. Confirmed against pinned reference `api/v1/openapi.yaml` and
 `api/v1/models/endpoint_health_status.go`; aligns with spec 08 §4.5. Missing
 or malformed health responses are retrieval errors, never healthy results.
+
+## Issue batch 3 resolutions
+
+**#125:** Keep GC explicitly unsupported with CNI error code 1
+(ErrIncompatibleCNIVersion), without socket, namespace or endpoint mutation.
+GC support remains future milestone work; valid-attachment lists must never
+trigger partial deletion through a nominally unsupported operation.
+
+**#126:** CHECK retains fatal missing-interface/address and agent-health failures.
+Inspect current interface MTU and main-table unicast gateway/default routes,
+including route MTU, using native netlink. Compare routes with prevResult and
+interface MTU with current agent configuration. Additional drift or route-dump
+errors produce stderr diagnostics only; no new CNI failure code or stdout text.
+This avoids runtime teardown due to a configuration change before runtime
+conformance establishes a safe stricter policy. Wrong table/interface or gateway
+does not count as a matching route.
+
+**#129:** Spec08 owns target-only rollback. Post-create response failure must
+delete only that endpoint, reverse its link/IP allocation transaction, and keep
+other endpoints usable. The privileged fixture exercises this with two surviving
+endpoints and dual-stack traffic. Shared controller acceptance is still required
+for future identity/policy integration.

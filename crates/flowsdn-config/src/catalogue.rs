@@ -15,6 +15,22 @@ pub const SPECIFICATION: &str =
 /// flowsdn-only keys, deliberately excluded from reference catalogue coverage.
 pub const EXTENSIONS: &[Definition] = &[
     Definition {
+        name: "force-config-change",
+        pflag: Pflag::Bool,
+        default_expression: "false",
+        default: Some("false"),
+        class: Class::Active,
+        inventory_name: None,
+    },
+    Definition {
+        name: "bpf-ipcache-map-max",
+        pflag: Pflag::Uint,
+        default_expression: "512000",
+        default: Some("512000"),
+        class: Class::Immutable,
+        inventory_name: None,
+    },
+    Definition {
         name: "strict-config",
         pflag: Pflag::Bool,
         default_expression: "false",
@@ -111,7 +127,7 @@ impl Definition {
     pub fn default_provenance(self) -> Option<&'static str> {
         self.default?;
         Some(match self.name {
-            "strict-config" | "endpoint-id-max" => {
+            "strict-config" | "endpoint-id-max" | "force-config-change" | "bpf-ipcache-map-max" => {
                 "docs/spec/00-foundation-table-config.md#flowsdn-extension-keys"
             }
             "agent-not-ready-taint-key" => "docs/spec/12-operator.md:1415",
@@ -121,17 +137,17 @@ impl Definition {
             "bpf-lb-maglev-table-size" => "docs/spec/05-service-loadbalancing.md:931",
             "bpf-lb-map-max" => "docs/spec/05-service-loadbalancing.md:920",
             "bpf-lb-mode" => "docs/spec/05-service-loadbalancing.md:926",
-            "bpf-map-event-buffers" => "docs/spec/03-identity-ipcache.md:924",
+            "bpf-map-event-buffers" => "docs/spec/03-identity-ipcache.md:961",
             "bpf-nat-global-max" => "docs/spec/04-conntrack-nat.md:807",
-            "bpf-neigh-global-max" => "docs/spec/01-bpf-map-abi-loader.md:193",
+            "bpf-neigh-global-max" => "docs/spec/01-bpf-map-abi-loader.md:1064",
             "bpf-node-map-max" => "docs/spec/14-encryption-egress.md:1715",
             "clustermesh-service-v2" => "docs/spec/20-clustermesh-kvstore.md:1548",
-            "enable-bandwidth-manager" => "docs/spec/10-node-routing-nftables.md:1379",
-            "enable-bbr" => "docs/spec/10-node-routing-nftables.md:1380",
-            "enable-bbr-hostns-only" => "docs/spec/10-node-routing-nftables.md:1380",
+            "enable-bandwidth-manager" => "docs/spec/10-node-routing-nftables.md:1383",
+            "enable-bbr" => "docs/spec/10-node-routing-nftables.md:1384",
+            "enable-bbr-hostns-only" => "docs/spec/10-node-routing-nftables.md:1384",
             "enable-dynamic-source-lookup-nodeport" => "docs/spec/05-service-loadbalancing.md:943",
             "enable-node-ipam" => "docs/spec/12-operator.md:1452",
-            "fixed-identity-mapping" => "docs/spec/03-identity-ipcache.md:909",
+            "fixed-identity-mapping" => "docs/spec/03-identity-ipcache.md:946",
             "gateway-api-secrets-namespace" => "docs/spec/21-gateway-api-ingress.md:1697",
             "hubble-drop-events-reasons" => "docs/spec/11-hubble-monitor.md:2525",
             "hubble-event-buffer-capacity" => "docs/spec/11-hubble-monitor.md:2476",
@@ -153,6 +169,8 @@ impl Definition {
     /// The table does not supply help text or hidden-flag metadata.
     pub fn help(self) -> Option<&'static str> {
         match self.name {
+            "force-config-change" => Some("Allow immutable configuration changes during endpoint restoration"),
+            "bpf-ipcache-map-max" => Some("Maximum ipcache map entries (1 through 4294967295)"),
             "strict-config" => {
                 Some("Reject unknown configuration keys after resolving source precedence")
             }
@@ -161,7 +179,7 @@ impl Definition {
         }
     }
     pub fn hidden(self) -> Option<bool> {
-        matches!(self.name, "strict-config" | "endpoint-id-max").then_some(false)
+        matches!(self.name, "strict-config" | "endpoint-id-max" | "force-config-change" | "bpf-ipcache-map-max").then_some(false)
     }
     pub fn needs_area_validator(self) -> bool {
         self.pflag == Pflag::Var

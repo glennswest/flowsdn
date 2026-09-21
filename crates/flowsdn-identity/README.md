@@ -2,7 +2,7 @@
 
 Identity foundations from identity specification §§4.4–4.5.
 The default features have no dependencies: numeric primitives use `core`, while
-labels and CIDR conversion use `alloc` without requiring `std`.
+labels, fixed mappings and CIDR conversion use `alloc` without requiring `std`.
 
 `NumericIdentity` validates the supported global, local and remote-node scopes.
 Reserved holes remain readable but are classified separately from numbers that
@@ -32,3 +32,8 @@ prefix-file decoding, using the workspace regex and JSON libraries. Built-in
 include rules are exclusion exceptions; user includes enable whitelist mode.
 File prefixes are literal, CLI additions are regular expressions. The caller
 loads files, handles diagnostics and validates source-specific label grammars.
+
+`fixed::FixedIdentities` validates complete user-reserved mappings in 128–255
+before exposing lookups. It rejects built-in identity names, duplicate numeric
+IDs, duplicate names and empty names. Names are case-sensitive opaque values;
+validation neither allocates identities nor grants endpoint ownership.

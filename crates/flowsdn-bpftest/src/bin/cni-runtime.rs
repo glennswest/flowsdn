@@ -734,6 +734,15 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
     println!(
         "PASS: real endpoint manager restored persisted IDs, IPAM and fresh BPF ownership; CHECK and bidirectional dual-stack UDP survive manager restart inside the fixture API"
     );
+    // Additional CHECK depth is diagnostic, even after a real interface change.
+    let netns=fs::File::open(first.netns())?;
+    flowsdn_connector::in_namespace(netns, || {
+        let connector=Connector::open()?;
+        let link=connector.require_link("eth0")?;
+        let mac: [u8;6]=link.mac.try_into().map_err(|_| "peer MAC")?;
+        connector.configure(link.index,"eth0",mac,1400)
+    }).map_err(|e| e as Box<dyn Error>)?;
+    cni(&binary,&temp,"CHECK",1,&first.netns(),previous.first().ok_or("first previous")?,true)?;
     let rollback = Endpoint::spawn(3)?;
     cni(&binary, &temp, "ADD", 3, &rollback.netns(), &conf, false)?;
     {

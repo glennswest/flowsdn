@@ -1,5 +1,5 @@
 [package]
-name = "flowsdn-config"
+name = "flowsdn-policy"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,12 +8,8 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-serde_json.workspace = true
-yaml-rust2.workspace = true
 flowsdn-identity = { path = "../flowsdn-identity", version = "=0.14.0" }
-
-[target.'cfg(unix)'.dependencies]
-libc.workspace = true
+flowsdn-bpf-abi = { path = "../flowsdn-bpf-abi", version = "=0.14.0" }
 
 [lints]
 workspace = true

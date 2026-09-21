@@ -1080,10 +1080,13 @@ e2e:
 5. **Batch delete.** Use `BPF_MAP_DELETE_BATCH` for expired keys instead of
    per-key deletes. Recommendation: yes, behind the same fallback; report the
    count of `ENOENT` from the batch result as `skipped`.
-6. **Layout versioning trigger.** Whether a `max_entries`-only change should
-   recreate the map (reference) or be tolerated by reusing the pinned map at
-   its old size with a warning. Recommendation: tolerate for LRU maps and
-   warn; recreate only on key/value/flags change.
+6. **Resolved (#78): retain standalone LRU capacity on restart.** A positive
+   capacity-only change for LRU CT/NAT maps reuses the pinned map, preserves
+   entries, and warns with requested and actual capacities. Both increases and
+   decreases retain the existing capacity; no resize is implied. Type, layout
+   or incompatible flags still require replacement. Map-in-map inner templates
+   remain exact, including capacity. Spec 01 §3.2 and the loader planner own
+   this policy; live pin/recreation integration remains required.
 7. **Resolved (#79, ADR-0011): service NAT46/64 belongs to milestone 2.**
    Implement it with the load-balancer flag `SVC_FLAG_NAT_46X64`; translation
    and return traffic are acceptance requirements, not completed features.

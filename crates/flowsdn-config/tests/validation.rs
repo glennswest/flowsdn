@@ -14,6 +14,28 @@ fn config(keys: &[(&str, Kind, &str)]) -> Resolved {
 }
 
 #[test]
+fn ipcache_size_bounds_and_reserved_fixed_names_are_foundation_errors() {
+    for value in ["1", "512000", "4294967295"] {
+        assert!(validation::foundation(&config(&[("bpf-ipcache-map-max", Kind::UInt { bits: 64 }, value)])).is_ok());
+    }
+    for value in ["0", "4294967296"] {
+        assert_eq!(validation::foundation(&config(&[("bpf-ipcache-map-max", Kind::UInt { bits: 64 }, value)])).unwrap_err().key, "bpf-ipcache-map-max");
+    }
+    for mapping in ["128=host", "255=world-ipv6", "128=aggregate-world", "128=coredns", "127=tenant", "256=tenant", "128=a,129=a", "128=a,0128=b"] {
+        let configuration = config(&[("fixed-identity-mapping", Kind::Map, mapping)]);
+        assert_eq!(validation::foundation(&configuration).unwrap_err().key, "fixed-identity-mapping", "{mapping}");
+    }
+    for mapping in ["", "128=tenant-a,255=tenant-b"] {
+        assert!(validation::foundation(&config(&[("fixed-identity-mapping", Kind::Map, mapping)])).is_ok());
+    }
+    let registry = flowsdn_config::catalogue::partial_known_defaults_registry().unwrap();
+    let resolved = registry.resolve([]).unwrap();
+    assert_eq!(resolved.get("bpf-ipcache-map-max").unwrap().value, flowsdn_config::Value::UInt(512000));
+    assert_eq!(resolved.get("bpf-ipcache-map-max").unwrap().class, Class::Immutable);
+    assert_eq!(resolved.get("force-config-change").unwrap().value, flowsdn_config::Value::Bool(false));
+}
+
+#[test]
 fn endpoint_id_max_accepts_u16_nonzero_range_and_rejects_invalid_limits() {
     for value in ["1", "4095", "4096", "65535"] {
         assert!(

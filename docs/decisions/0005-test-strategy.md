@@ -76,3 +76,10 @@ tag is cheap.
   expected-divergence marker rather than deleted, so a re-harvest still works.
 - A harvested corpus tracks one reference tag. Bumping the tag is a
   deliberate, reviewed operation.
+
+## Control-plane harness contract (2026-09-21, #261)
+
+The fourth harness is specified in [spec 23](../spec/23-control-plane-golden-tests.md).
+Its deterministic event/fence protocol, manifest, state comparison, normalization,
+failure and cleanup behavior are normative. The spec resolves the missing
+contract; implementing adapters and demonstrating corpus coverage remain #294.

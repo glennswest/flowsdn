@@ -13,8 +13,9 @@ expressions, owning-spec provenance, conflicts, missing help/hidden metadata
 and area-validator requirements. `Definition::default_provenance()` preserves
 the source of each resolved default without changing its original expression.
 
-Two flowsdn-only keys are declared separately in `catalogue::EXTENSIONS`:
-`strict-config=false` and `endpoint-id-max=4095`. Complete and partial
+Four flowsdn-only keys are declared separately in `catalogue::EXTENSIONS`:
+`strict-config=false`, `endpoint-id-max=4095`, `force-config-change=false`,
+and immutable `bpf-ipcache-map-max=512000`. Complete and partial
 catalogue registries include both without changing the 539-key reference
 coverage count. Foundation validation limits `endpoint-id-max` to 1–65535;
 the endpoint manager applies it only to newly allocated IDs.
@@ -75,10 +76,14 @@ Validation of a VTEP mask does not enable the deferred VTEP feature.
 
 Keys marked `Class::Immutable` are compared across parsed snapshots using
 `immutable::check`. Changes refuse startup when restoration is enabled and
-endpoint state exists; other changes are reported for diagnostics. Missing
+endpoint state exists unless current effective `force-config-change=true`;
+the bypass preserves the full diff and a distinct warning. A previous snapshot
+cannot enable it. Other changes are reported for diagnostics. Missing
 previous state is accepted, and an unparseable previous snapshot produces a
-warning. The caller provides decoded snapshots and actual endpoint-state
-presence.
+warning. Recognized reference PascalCase runtime configuration produces a
+distinct ignored-reference warning; it never supplies values or an immutable
+comparison. Endpoint migration still needs its own compatibility checks. The
+caller provides decoded snapshots and actual endpoint-state presence.
 
 `runtime` serializes and decodes snapshots with version, RFC3339 timestamp and
 reference compatibility metadata. It retains typed values and source provenance,
@@ -103,3 +108,8 @@ This core still requires the 18 unresolved production defaults,
 CLI argument parsing, area-specific map validators, all cross-key rules,
 derived settings or dynamic config reflection. Legacy alias
 definitions are supplied by the owning area's schema.
+
+Foundation validation also checks nonzero u32 ipcache capacity and delegates
+fixed identity mappings to `flowsdn-identity::fixed`, rejecting built-in names,
+invalid user-reserved IDs and duplicate ID/name ownership. Map creation, memory
+availability and allocator integration remain their owners' responsibilities.
