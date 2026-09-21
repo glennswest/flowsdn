@@ -211,12 +211,12 @@ fn flowsdn_extensions_match_their_separate_specification_table() {
             .map(|field| field.trim().trim_matches('`'))
             .collect();
         assert_eq!(fields.len(), 4);
-        assert!(names.insert(fields[0]));
-        let entry = catalogue::get(fields[0]).unwrap();
-        assert_eq!(entry.pflag.name(), fields[1]);
-        assert_eq!(entry.default_expression, fields[2]);
+        assert!(names.insert(*fields.first().unwrap()));
+        let entry = catalogue::get(fields.first().unwrap()).unwrap();
+        assert_eq!(entry.pflag.name(), *fields.get(1).unwrap());
+        assert_eq!(entry.default_expression, *fields.get(2).unwrap());
         assert_eq!(entry.class, Class::Active);
-        assert_eq!(fields[3], "active");
+        assert_eq!(*fields.get(3).unwrap(), "active");
         assert!(
             !catalogue::ENTRIES
                 .iter()

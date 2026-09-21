@@ -196,10 +196,15 @@ fn endpoint_id_limit_is_bounded_and_cookie_keeps_full_u64_precision() {
 #[test]
 fn stale_cni_route_configuration_is_rejected_before_creation() {
     check_cni_route_mtu(&json!({"cni-route-mtu":1450}), 1450).expect("same configuration");
-    for value in [json!({}), json!({"cni-route-mtu":"1450"}), json!({"cni-route-mtu":null})] {
+    for value in [
+        json!({}),
+        json!({"cni-route-mtu":"1450"}),
+        json!({"cni-route-mtu":null}),
+    ] {
         let error = check_cni_route_mtu(&value, 1450).expect_err("missing or malformed");
         assert_eq!(error.downcast_ref::<Failure>().expect("HTTP").status, 400);
     }
-    let error = check_cni_route_mtu(&json!({"cni-route-mtu":1450}), 1400).expect_err("stale config");
+    let error =
+        check_cni_route_mtu(&json!({"cni-route-mtu":1450}), 1400).expect_err("stale config");
     assert_eq!(error.downcast_ref::<Failure>().expect("HTTP").status, 409);
 }

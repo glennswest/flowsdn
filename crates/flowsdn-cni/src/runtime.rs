@@ -982,14 +982,28 @@ mod tests {
         );
         assert!(
             attachment
-                .validate_sandbox(cookie, &peer, &ips[..1])
+                .validate_sandbox(cookie, &peer, ips.get(..1).expect("first address"))
                 .is_err()
         );
         let result = attachment.result(&request());
-        assert_eq!(result["ips"][0]["address"], "2001:db8::1/128");
-        assert_eq!(result["ips"][1]["address"], "198.18.0.1/32");
-        assert_eq!(result["interfaces"][1]["sandbox"], "/fixture/netns");
-        assert_eq!(result["routes"][1]["mtu"], 1450);
+        assert_eq!(
+            result.pointer("/ips/0/address").expect("fixture field"),
+            "2001:db8::1/128"
+        );
+        assert_eq!(
+            result.pointer("/ips/1/address").expect("fixture field"),
+            "198.18.0.1/32"
+        );
+        assert_eq!(
+            result
+                .pointer("/interfaces/1/sandbox")
+                .expect("fixture field"),
+            "/fixture/netns"
+        );
+        assert_eq!(
+            result.pointer("/routes/1/mtu").expect("fixture field"),
+            1450
+        );
     }
     #[test]
     fn incomplete_or_unready_attachment_is_not_reused() {
@@ -1033,17 +1047,33 @@ mod tests {
             .expect("restored")
             .result(&request());
         assert_eq!(restored, expected);
-        assert_eq!(restored["routes"][1]["mtu"], 1450);
-        assert_eq!(restored["ips"][0]["gateway"], "2001:db8::ffff");
-        assert_eq!(restored["ips"][1]["gateway"], "198.18.0.254");
-        assert_ne!(restored["routes"][1]["mtu"], changed_config["route-mtu"]);
+        assert_eq!(
+            restored.pointer("/routes/1/mtu").expect("fixture field"),
+            1450
+        );
+        assert_eq!(
+            restored.pointer("/ips/0/gateway").expect("fixture field"),
+            "2001:db8::ffff"
+        );
+        assert_eq!(
+            restored.pointer("/ips/1/gateway").expect("fixture field"),
+            "198.18.0.254"
+        );
         assert_ne!(
-            restored["ips"][1]["gateway"],
-            changed_config["host-addressing"]["ipv4"]["ip"]
+            restored.pointer("/routes/1/mtu").expect("fixture field"),
+            changed_config.pointer("/route-mtu").expect("fixture field")
+        );
+        assert_ne!(
+            restored.pointer("/ips/1/gateway").expect("fixture field"),
+            changed_config
+                .pointer("/host-addressing/ipv4/ip")
+                .expect("fixture field")
         );
         for field in ["route-mtu", "host-addressing"] {
             let mut older = endpoint.clone();
-            older["status"]["networking"]
+            older
+                .pointer_mut("/status/networking")
+                .expect("fixture field")
                 .as_object_mut()
                 .expect("networking")
                 .remove(field);
@@ -1065,11 +1095,18 @@ mod tests {
             .create_endpoint(&request(), &link, &[])
             .expect("created");
         let requests = agent.requests();
-        let (_, body) = requests[0].split_once('\n').expect("body");
+        let (_, body) = requests
+            .first()
+            .expect("request")
+            .split_once('\n')
+            .expect("body");
         let body: Value = serde_json::from_str(body).expect("JSON");
         assert!(body.get("container-netns-path").is_none());
-        assert_eq!(body["netns-cookie"], "9007199254740993");
-        assert_eq!(body["cni-route-mtu"], 1450);
+        assert_eq!(
+            body.pointer("/netns-cookie").expect("fixture field"),
+            "9007199254740993"
+        );
+        assert_eq!(body.pointer("/cni-route-mtu").expect("fixture field"), 1450);
     }
 
     #[test]

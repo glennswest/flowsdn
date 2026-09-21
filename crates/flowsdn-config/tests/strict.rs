@@ -23,7 +23,7 @@ fn effective_strictness_uses_all_source_layers_and_last_scalar_within_layer() {
         Source::Flag,
     ];
     for (index, weaker) in layers.iter().enumerate() {
-        for stronger in &layers[index..] {
+        for stronger in layers.iter().skip(index) {
             for enabled in [false, true] {
                 let entries = [
                     Entry::new(*weaker, "strict-config", (!enabled).to_string()),
