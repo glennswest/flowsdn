@@ -1732,3 +1732,9 @@ errors as endpoint absence; only 404 allows a fresh create.
 
 The standalone JSON agent configuration accepts optional integer
 `endpoint-id-max` with the same bound/default as the foundation extension.
+
+The initial standalone endpoint PUT requires numeric `cni-route-mtu`, the MTU
+actually installed by CNI. Missing/malformed values return 400 and a value that
+differs from current agent configuration returns 409 before lease consumption
+or endpoint creation. CNI rolls back and a subsequent ADD rereads configuration.
+This closes a restart race between GET config and IPAM allocation.

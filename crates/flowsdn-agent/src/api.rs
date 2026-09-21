@@ -447,6 +447,7 @@ impl Api {
         {
             return fail(501, "endpoint properties are not implemented");
         }
+        check_cni_route_mtu(body, self.config.route_mtu)?;
         let namespace = string(body, "k8s-namespace")?;
         let pod = string(body, "k8s-pod-name")?;
         let owner = format!("{namespace}/{pod}");
@@ -879,3 +880,14 @@ pub fn run(config_path: &Path) -> Result<()> {
 #[cfg(test)]
 #[path = "api_tests.rs"]
 mod tests;
+
+// Reject configuration changes between CNI GET config and endpoint PUT before
+// consuming the pending lease or publishing endpoint state.
+fn check_cni_route_mtu(body: &Value, expected: u32) -> Result<()> {
+    let actual = body.get("cni-route-mtu").and_then(Value::as_u64)
+        .ok_or_else(|| Failure { status: 400, message: "cni-route-mtu is required".into() })?;
+    if actual != u64::from(expected) {
+        return fail(409, "CNI route MTU changed; retry ADD with current configuration");
+    }
+    Ok(())
+}

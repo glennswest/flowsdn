@@ -23,3 +23,7 @@ changed route MTU, bounded endpoint exhaustion, and released-ID reuse.
 Remaining milestone obligations are tracked by #291. CHECK route/MTU depth
 (#126), cross-endpoint rollback verification (#129), and connectivity-suite
 specification (#261) are not resolved by this batch.
+
+CNI also sends its installed `cni-route-mtu` with endpoint PUT. The standalone
+agent rejects stale configuration before creating the endpoint, covering restart
+between configuration discovery and lease allocation.

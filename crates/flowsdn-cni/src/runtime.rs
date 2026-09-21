@@ -402,7 +402,7 @@ impl AddBackend for Platform {
             "interface-name":link.host_name,"interface-index":link.host_index,"mac":link.peer_mac,"host-mac":link.host_mac,
             "k8s-pod-name":request.pod_name,"k8s-namespace":request.pod_namespace,"k8s-uid":request.pod_uid,
             "state":"waiting-for-identity","labels":[],"addressing":addressing,"datapath-configuration":{},"properties":{},
-            "netns-cookie":self.cookie.to_string(),"sync-build-endpoint":true});
+            "netns-cookie":self.cookie.to_string(),"cni-route-mtu":self.route_mtu,"sync-build-endpoint":true});
         let reply = self
             .client
             .put_endpoint_unbounded_response(&request.attachment_id(), &body)
@@ -1069,6 +1069,7 @@ mod tests {
         let body: Value = serde_json::from_str(body).expect("JSON");
         assert!(body.get("container-netns-path").is_none());
         assert_eq!(body["netns-cookie"], "9007199254740993");
+        assert_eq!(body["cni-route-mtu"], 1450);
     }
 
     #[test]
