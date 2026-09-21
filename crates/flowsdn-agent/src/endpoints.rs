@@ -122,7 +122,9 @@ impl Manager {
     pub fn get(&self, attachment: &str) -> Option<&Record> {
         self.records.get(attachment)
     }
-    pub fn records(&self) -> impl Iterator<Item = &Record> { self.records.values() }
+    pub fn records(&self) -> impl Iterator<Item = &Record> {
+        self.records.values()
+    }
     pub fn len(&self) -> usize {
         self.records.len()
     }

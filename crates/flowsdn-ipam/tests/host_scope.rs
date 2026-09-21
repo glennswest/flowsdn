@@ -231,10 +231,25 @@ fn ipv6_failure_does_not_allocate_ipv4_and_disabled_families_are_explicit() {
 fn explicit_family_allocation_ignores_an_exhausted_other_pool() {
     use flowsdn_ipam::{HostScope, Ipam};
     let mut ipam = Ipam::new(
-        Some(HostScope::new("198.18.0.1".parse().expect("ip"),32,Default::default()).expect("pool")),
-        Some(HostScope::new("2001:db8::1".parse().expect("ip"),128,Default::default()).expect("pool")),
-    ).expect("IPAM");
-    assert!(ipam.allocate_next_family(true,"v6").expect("IPv6").is_ipv6());
-    assert!(ipam.allocate_next_family(false,"v4").expect("IPv4 independent of full IPv6").is_ipv4());
-    assert!(ipam.allocate_next_family(true,"full").is_err());
+        Some(
+            HostScope::new("198.18.0.1".parse().expect("ip"), 32, Default::default())
+                .expect("pool"),
+        ),
+        Some(
+            HostScope::new("2001:db8::1".parse().expect("ip"), 128, Default::default())
+                .expect("pool"),
+        ),
+    )
+    .expect("IPAM");
+    assert!(
+        ipam.allocate_next_family(true, "v6")
+            .expect("IPv6")
+            .is_ipv6()
+    );
+    assert!(
+        ipam.allocate_next_family(false, "v4")
+            .expect("IPv4 independent of full IPv6")
+            .is_ipv4()
+    );
+    assert!(ipam.allocate_next_family(true, "full").is_err());
 }
