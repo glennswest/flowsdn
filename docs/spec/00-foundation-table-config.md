@@ -1369,7 +1369,7 @@ literals by the owning area spec. Types are pflag names; the kind mapping is
 | `lb-init-wait-timeout` | Duration | `1 * time.Minute` |  |
 | `lb-pressure-metrics-interval` | Duration | `5 * time.Minute` |  |
 | `lb-reflector-wait-time` | Duration | `500 * time.Millisecond` |  |
-| `lb-retry-backoff-max` | Duration | `time.Minute` (`1m`) | resolved by spec 05 §6, ADR-0011 |
+| `lb-retry-backoff-max` | Duration | `time.Minute` |  |
 | `lb-retry-backoff-min` | Duration | `time.Second` |  |
 | `lb-sock-terminate-all-protos` | Bool | `false` |  |
 | `lb-state-file` | String | `` |  |
