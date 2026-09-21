@@ -112,7 +112,7 @@ impl Config {
         if v4.is_none() && v6.is_none() {
             return fail(400, "at least one IP pool is required");
         }
-        let gateway = |key, v6, enabled| -> Result<Option<IpAddr>> {
+        let gateway = |key, v6, enabled: bool| -> Result<Option<IpAddr>> {
             let raw = optional(&value, key)?;
             if !enabled {
                 if raw.is_empty() {
@@ -292,10 +292,10 @@ impl Api {
                 if self.manager.get(&decode(id)?).is_none() {
                     return fail(404, "endpoint not found");
                 }
-                return Ok((
-                    200,
-                    json!({"overallHealth":"OK","bpf":"OK","policy":"Disabled","connected":true}),
-                ));
+                let healthy = self.manager.healthy(&decode(id)?)?;
+                let status = if healthy { "OK" } else { "Failure" };
+                return Ok((200, json!({"overallHealth":status,"bpf":status,"policy":"Disabled","connected":healthy})));
+
             }
             let id = decode(id)?;
             return match request.method.as_str() {
@@ -770,6 +770,20 @@ fn bind(path: &Path) -> Result<(UnixListener, SocketGuard)> {
     Ok((listener, guard))
 }
 
+fn replay_pending(
+    guard: &flowsdn_cni::queue::ExclusiveGuard,
+    mut delete: impl FnMut(&ReplayRequest) -> Result<()>,
+) -> Result<()> {
+    for entry in guard.entries()? {
+        match &entry.request {
+            Ok(request) => delete(request)?,
+            Err(error) => eprintln!("discarding malformed deletion entry: {error}"),
+        }
+        guard.remove(&entry)?;
+    }
+    Ok(())
+}
+
 /// Restore state and replay offline deletions before exposing the local API.
 /// The listener is root-only and intentionally supports one bounded request
 /// per connection. It does not provide authentication, watches or Kubernetes.
@@ -783,59 +797,24 @@ pub fn run(config_path: &Path) -> Result<()> {
         manager,
         leases: BTreeMap::new(),
     };
-    let mut replay = match Queue::open(&api.config.queue)
-        .and_then(|queue| queue.lock_exclusive(Duration::from_millis(1500)))
-    {
-        Ok(guard) => Some(guard),
-        Err(error) => {
-            eprintln!("deletion queue lock unavailable: {error}");
-            None
-        }
-    };
-    if let Some(guard) = replay.as_mut() {
-        match guard.entries() {
-            Ok(entries) => {
-                for entry in entries {
-                    let outcome: Result<()> = match &entry.request {
-                        Ok(ReplayRequest::Attachment {
-                            container_id,
-                            ifname,
-                        }) => api
-                            .manager
-                            .delete(&format!("cni-attachment-id:{container_id}:{ifname}"))
-                            .map(|_| ()),
-                        Ok(ReplayRequest::Container { container_id }) => {
-                            let ids: Vec<_> = api
-                                .manager
-                                .records()
-                                .filter(|record| {
-                                    record.document.get("dockerID").and_then(Value::as_str)
-                                        == Some(container_id)
-                                })
-                                .map(|record| record.attachment.clone())
-                                .collect();
-                            let mut result = Ok(());
-                            for id in ids {
-                                if let Err(error) = api.manager.delete(&id) {
-                                    eprintln!("queued endpoint deletion failed: {error}");
-                                    result = Err(error);
-                                }
-                            }
-                            result
-                        }
-                        Err(error) => Err(error.to_string().into()),
-                    };
-                    if let Err(error) = outcome {
-                        eprintln!("deletion queue replay failed: {error}");
-                    }
-                    if let Err(error) = guard.remove(&entry) {
-                        eprintln!("deletion queue removal failed: {error}");
-                    }
-                }
+    // Without endpoint GC, never advertise readiness after skipping a deletion.
+    // Preserve failed entries and fail startup so a supervisor can retry safely.
+    let replay = Queue::open(&api.config.queue)?
+        .lock_exclusive(Duration::from_millis(1500))?;
+    replay_pending(&replay, |request| {
+        match request {
+            ReplayRequest::Attachment { container_id, ifname } => {
+                api.manager.delete(&format!("cni-attachment-id:{container_id}:{ifname}"))?;
             }
-            Err(error) => eprintln!("deletion queue listing failed: {error}"),
+            ReplayRequest::Container { container_id } => {
+                let ids: Vec<_> = api.manager.records()
+                    .filter(|record| record.document.get("dockerID").and_then(Value::as_str) == Some(container_id))
+                    .map(|record| record.attachment.clone()).collect();
+                for id in ids { api.manager.delete(&id)?; }
+            }
         }
-    }
+        Ok(())
+    })?;
     let (listener, _socket) = bind(&api.config.socket)?;
     // Writers that waited for replay recheck a now-listening API under their
     // shared lock, so they cannot enqueue a deletion missed by this replay.
@@ -868,3 +847,7 @@ pub fn run(config_path: &Path) -> Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "api_tests.rs"]
+mod tests;

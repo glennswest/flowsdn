@@ -6,7 +6,7 @@ use flowsdn_bpf_loader::kernel::LocalDelivery;
 use flowsdn_connector::Connector;
 use flowsdn_ipam::Ipam;
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, net::IpAddr, path::Path};
+use std::{collections::{BTreeMap, BTreeSet}, net::IpAddr, path::Path};
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or("")
@@ -59,6 +59,7 @@ pub struct Manager {
     ids: IdPool,
     records: BTreeMap<String, Record>,
     addresses: BTreeMap<IpAddr, String>,
+    deleting: BTreeSet<String>,
     driver: LocalDelivery,
     ipam: Ipam,
 }
@@ -73,6 +74,7 @@ impl Manager {
             ids: IdPool::default(),
             records: BTreeMap::new(),
             addresses: BTreeMap::new(),
+            deleting: BTreeSet::new(),
             driver: kernel(LocalDelivery::load(object))?,
             ipam,
         };
@@ -124,6 +126,15 @@ impl Manager {
     }
     pub fn records(&self) -> impl Iterator<Item = &Record> {
         self.records.values()
+    }
+    /// Initial health checks live host-link identity and incomplete teardown.
+    /// It does not claim policy convergence or detect external BPF replacement.
+    pub fn healthy(&self, attachment: &str) -> Result<bool> {
+        let Some(record) = self.records.get(attachment) else { return Ok(false); };
+        if self.deleting.contains(attachment) { return Ok(false); }
+        let Some(link) = Connector::open()?.link(text(&record.document, "IfName"))? else { return Ok(false); };
+        let endpoint = info(record)?;
+        Ok(link.index == endpoint.ifindex && mac_value(&link.mac)? == endpoint.node_mac)
     }
     pub fn len(&self) -> usize {
         self.records.len()
@@ -192,6 +203,7 @@ impl Manager {
             return Ok(false);
         };
         // Keep indexes and ID reserved on any error so deletion can be retried.
+        self.deleting.insert(attachment.to_owned());
         uninstall(&mut self.driver, &record)?;
         Connector::open()?.delete(text(&record.document, "IfName"))?;
         self.store.remove(record.id)?;
@@ -200,6 +212,7 @@ impl Manager {
             self.addresses.remove(&ip);
         }
         self.records.remove(attachment);
+        self.deleting.remove(attachment);
         self.ids.release(record.id);
         Ok(true)
     }
