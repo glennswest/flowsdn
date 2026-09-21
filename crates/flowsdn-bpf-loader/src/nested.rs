@@ -65,7 +65,8 @@ impl NestedSpec {
         if !matches!(self.outer.map_type, ARRAY_OF_MAPS | HASH_OF_MAPS) {
             return Err(Error::InvalidOuterType);
         }
-        if self.outer.key_size == 0 || self.outer.value_size != 4
+        if self.outer.key_size == 0
+            || self.outer.value_size != 4
             || self.outer.max_entries == 0
             || (self.outer.map_type == ARRAY_OF_MAPS && self.outer.key_size != 4)
         {
@@ -74,7 +75,8 @@ impl NestedSpec {
         if !matches!(self.inner.map_type, 1 | 2 | crate::LRU_HASH) {
             return Err(Error::UnsupportedInnerType);
         }
-        if self.inner.key_size == 0 || self.inner.value_size == 0
+        if self.inner.key_size == 0
+            || self.inner.value_size == 0
             || self.inner.max_entries == 0
             || (self.inner.map_type == 2 && self.inner.key_size != 4)
         {
@@ -84,13 +86,21 @@ impl NestedSpec {
             Purpose::PerClusterConntrack | Purpose::PerClusterNat => {
                 self.outer.map_type == ARRAY_OF_MAPS && self.inner.map_type == crate::LRU_HASH
             }
-            Purpose::Multicast => self.outer.map_type == HASH_OF_MAPS
-                && self.outer.key_size == 4 && self.inner.map_type == 1,
-            Purpose::Maglev => self.outer.map_type == HASH_OF_MAPS
-                && self.outer.key_size == 2 && self.inner.map_type == 2
-                && self.inner.max_entries == 1,
+            Purpose::Multicast => {
+                self.outer.map_type == HASH_OF_MAPS
+                    && self.outer.key_size == 4
+                    && self.inner.map_type == 1
+            }
+            Purpose::Maglev => {
+                self.outer.map_type == HASH_OF_MAPS
+                    && self.outer.key_size == 2
+                    && self.inner.map_type == 2
+                    && self.inner.max_entries == 1
+            }
         };
-        if !correct { return Err(Error::WrongPurpose); }
+        if !correct {
+            return Err(Error::WrongPurpose);
+        }
         Ok(())
     }
 }
@@ -108,7 +118,9 @@ pub const fn cluster_outer_entries(maximum: u32) -> Result<u32, Error> {
 pub enum Plan {
     /// Do not create/open a map; stale pin removal belongs to the startup sweep.
     Disabled,
-    Create { spec: NestedSpec },
+    Create {
+        spec: NestedSpec,
+    },
     Reuse {
         effective_spec: NestedSpec,
         relaxed_program_read_only: bool,
@@ -132,16 +144,27 @@ pub fn plan(
     purpose: Purpose,
     features: Features,
 ) -> Result<Plan, Error> {
-    if !purpose.enabled(features) { return Ok(Plan::Disabled); }
+    if !purpose.enabled(features) {
+        return Ok(Plan::Disabled);
+    }
     spec.validate(purpose)?;
-    let Some(existing) = existing else { return Ok(Plan::Create { spec }); };
+    let Some(existing) = existing else {
+        return Ok(Plan::Create { spec });
+    };
     let outer = plan_map(spec.outer, Some(existing.outer), owner);
     let inner_changes = spec.inner.differences(existing.inner);
     if !inner_changes.any()
-        && let MapPlan::Reuse { effective_spec, relaxed_program_read_only, .. } = outer
+        && let MapPlan::Reuse {
+            effective_spec,
+            relaxed_program_read_only,
+            ..
+        } = outer
     {
         return Ok(Plan::Reuse {
-            effective_spec: NestedSpec { outer: effective_spec, inner: spec.inner },
+            effective_spec: NestedSpec {
+                outer: effective_spec,
+                inner: spec.inner,
+            },
             relaxed_program_read_only,
         });
     }

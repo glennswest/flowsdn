@@ -85,10 +85,17 @@ fn enum_value(config: &Resolved, key: &str, allowed: &[&str]) -> Result<(), Erro
 pub fn foundation(config: &Resolved) -> Result<(), Error> {
     if let Some(mapping) = effective(config, "fixed-identity-mapping") {
         let Value::Map(mapping) = mapping else {
-            return Err(Error::new("fixed-identity-mapping", "expected a map in the schema"));
+            return Err(Error::new(
+                "fixed-identity-mapping",
+                "expected a map in the schema",
+            ));
         };
-        flowsdn_identity::fixed::FixedIdentities::parse(mapping.iter().map(|(id, name)| (id.as_str(), name.as_str())))
-            .map_err(|error| Error::new("fixed-identity-mapping", error.to_string()))?;
+        flowsdn_identity::fixed::FixedIdentities::parse(
+            mapping
+                .iter()
+                .map(|(id, name)| (id.as_str(), name.as_str())),
+        )
+        .map_err(|error| Error::new("fixed-identity-mapping", error.to_string()))?;
     }
     if let Some(maximum) = integer(config, "endpoint-id-max")?
         && !(1..=65535).contains(&maximum)
@@ -193,15 +200,18 @@ pub fn foundation(config: &Resolved) -> Result<(), Error> {
     }
     map_sizes(
         config,
-        &[MapBounds {
-            key: "bpf-policy-map-max",
-            minimum: 256,
-            maximum: 65_536,
-        }, MapBounds {
-            key: "bpf-ipcache-map-max",
-            minimum: 1,
-            maximum: u64::from(u32::MAX),
-        }],
+        &[
+            MapBounds {
+                key: "bpf-policy-map-max",
+                minimum: 256,
+                maximum: 65_536,
+            },
+            MapBounds {
+                key: "bpf-ipcache-map-max",
+                minimum: 1,
+                maximum: u64::from(u32::MAX),
+            },
+        ],
     )?;
     if text(config, "ipam")? == Some("delegated-plugin") {
         for key in ["enable-ipv4-masquerade", "enable-endpoint-health-checking"] {

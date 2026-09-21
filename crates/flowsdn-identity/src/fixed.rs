@@ -34,20 +34,34 @@ pub struct FixedIdentities {
 impl FixedIdentities {
     /// Validate the entire mapping before returning a usable result. Distinct
     /// decimal spellings of the same number still collide.
-    pub fn parse<'a>(entries: impl IntoIterator<Item = (&'a str, &'a str)>) -> Result<Self, FixedIdentityError> {
+    pub fn parse<'a>(
+        entries: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Result<Self, FixedIdentityError> {
         let mut result = Self::default();
         for (raw_id, name) in entries {
             if raw_id.is_empty() || !raw_id.bytes().all(|byte| byte.is_ascii_digit()) {
                 return Err(FixedIdentityError::InvalidId);
             }
-            let id = raw_id.parse::<u8>().ok().filter(|id| *id >= 128)
+            let id = raw_id
+                .parse::<u8>()
+                .ok()
+                .filter(|id| *id >= 128)
                 .ok_or(FixedIdentityError::InvalidId)?;
             if name.is_empty() {
                 return Err(FixedIdentityError::EmptyName);
             }
-            if ReservedIdentity::from_name(name).is_some() || matches!(name,
-                "etcd-operator" | "cilium-kvstore" | "kube-dns" | "eks-kube-dns" |
-                "coredns" | "cilium-operator" | "eks-coredns") {
+            if ReservedIdentity::from_name(name).is_some()
+                || matches!(
+                    name,
+                    "etcd-operator"
+                        | "cilium-kvstore"
+                        | "kube-dns"
+                        | "eks-kube-dns"
+                        | "coredns"
+                        | "cilium-operator"
+                        | "eks-coredns"
+                )
+            {
                 return Err(FixedIdentityError::ReservedName);
             }
             if result.by_id.insert(id, String::from(name)).is_some() {

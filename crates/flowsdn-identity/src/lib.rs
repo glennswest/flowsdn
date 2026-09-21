@@ -4,8 +4,8 @@
 
 extern crate alloc;
 
-pub mod labels;
 pub mod fixed;
+pub mod labels;
 pub mod numeric;
 pub use numeric::*;
 

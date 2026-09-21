@@ -5,13 +5,29 @@ use crate::{Error, ports::PortRange};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub enum Tier { Admin = 100, Normal = 200, Baseline = 250, Default = 255 }
+pub enum Tier {
+    Admin = 100,
+    Normal = 200,
+    Baseline = 250,
+    Default = 255,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Verdict { Allow, Deny, Pass }
+pub enum Verdict {
+    Allow,
+    Deny,
+    Pass,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Peer { Any, Identity(u32) }
+pub enum Peer {
+    Any,
+    Identity(u32),
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Authentication { Disabled, Required, TestAlwaysFail }
+pub enum Authentication {
+    Disabled,
+    Required,
+    TestAlwaysFail,
+}
 #[derive(Clone, Debug, PartialEq)]
 pub struct Rule {
     pub tier: Tier,
@@ -27,17 +43,26 @@ pub struct Rule {
 }
 impl Rule {
     pub fn validate(&self) -> Result<(), Error> {
-        if !self.priority.is_finite() || self.priority < 0.0 { return Err(Error::InvalidPriority); }
-        if self.protocol == 0 && !self.ports.is_any() { return Err(Error::InvalidProtocol); }
-        if self.listener_priority > 126 || (self.proxy_port == 0 && self.listener_priority != 0)
-            || (self.verdict != Verdict::Allow && (self.proxy_port != 0 || self.authentication.is_some())) {
+        if !self.priority.is_finite() || self.priority < 0.0 {
+            return Err(Error::InvalidPriority);
+        }
+        if self.protocol == 0 && !self.ports.is_any() {
+            return Err(Error::InvalidProtocol);
+        }
+        if self.listener_priority > 126
+            || (self.proxy_port == 0 && self.listener_priority != 0)
+            || (self.verdict != Verdict::Allow
+                && (self.proxy_port != 0 || self.authentication.is_some()))
+        {
             return Err(Error::InvalidRedirect);
         }
         Ok(())
     }
     fn matches(&self, packet: Packet) -> bool {
-        self.egress == packet.egress && (self.peer == Peer::Any || self.peer == Peer::Identity(packet.identity))
-            && (self.protocol == 0 || self.protocol == packet.protocol) && self.ports.contains(packet.port)
+        self.egress == packet.egress
+            && (self.peer == Peer::Any || self.peer == Peer::Identity(packet.identity))
+            && (self.protocol == 0 || self.protocol == packet.protocol)
+            && self.ports.contains(packet.port)
     }
     // Ranking within a tier/priority directly expresses §3.5.3; it is not the
     // BPF packed precedence representation the oracle is meant to check.
@@ -52,13 +77,20 @@ impl Rule {
     }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Packet { pub identity: u32, pub egress: bool, pub protocol: u8, pub port: u16 }
+pub struct Packet {
+    pub identity: u32,
+    pub egress: bool,
+    pub protocol: u8,
+    pub port: u16,
+}
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Decision {
     Deny,
     /// Equal-rank rules may contain different equivalent redirect instances.
     /// Return all candidate ports instead of inventing an ordering guarantee.
-    Allow { proxy_ports: std::collections::BTreeSet<u16> },
+    Allow {
+        proxy_ports: std::collections::BTreeSet<u16>,
+    },
 }
 /// Reject unsupported Pass/auth combinations before a repository update is
 /// published, across all resources selecting this one subject/direction set.
@@ -70,24 +102,49 @@ pub fn validate_subject<'a>(rules: impl IntoIterator<Item = &'a Rule>) -> Result
         pass |= rule.verdict == Verdict::Pass;
         auth |= rule.authentication.is_some();
     }
-    if pass && auth { return Err(Error::PassWithAuthentication); }
+    if pass && auth {
+        return Err(Error::PassWithAuthentication);
+    }
     Ok(())
 }
 /// Rules must already include any synthesized default policy. Absence of a
 /// match is deny. Explicit Pass ignores the rest of its tier and resumes below.
 pub fn evaluate(rules: &[Rule], packet: Packet) -> Result<Decision, Error> {
     validate_subject(rules)?;
-    if rules.iter().any(|r| r.authentication.is_some()) { return Err(Error::OracleAuthenticationUnsupported); }
+    if rules.iter().any(|r| r.authentication.is_some()) {
+        return Err(Error::OracleAuthenticationUnsupported);
+    }
     for tier in [Tier::Admin, Tier::Normal, Tier::Baseline, Tier::Default] {
-        let matches: Vec<_> = rules.iter().filter(|rule| rule.tier == tier && rule.matches(packet)).collect();
-        let Some(priority) = matches.iter().map(|rule| rule.priority).min_by(f64::total_cmp) else { continue; };
-        let peers: Vec<_> = matches.into_iter().filter(|rule| rule.priority == priority).collect();
-        let Some(rank) = peers.iter().map(|rule| rule.verdict_rank()).max() else { continue; };
-        let winners: Vec<_> = peers.into_iter().filter(|rule| rule.verdict_rank() == rank).collect();
+        let matches: Vec<_> = rules
+            .iter()
+            .filter(|rule| rule.tier == tier && rule.matches(packet))
+            .collect();
+        let Some(priority) = matches
+            .iter()
+            .map(|rule| rule.priority)
+            .min_by(f64::total_cmp)
+        else {
+            continue;
+        };
+        let peers: Vec<_> = matches
+            .into_iter()
+            .filter(|rule| rule.priority == priority)
+            .collect();
+        let Some(rank) = peers.iter().map(|rule| rule.verdict_rank()).max() else {
+            continue;
+        };
+        let winners: Vec<_> = peers
+            .into_iter()
+            .filter(|rule| rule.verdict_rank() == rank)
+            .collect();
         match winners.first().map(|rule| rule.verdict) {
             Some(Verdict::Pass) => continue,
             Some(Verdict::Deny) => return Ok(Decision::Deny),
-            Some(Verdict::Allow) => return Ok(Decision::Allow { proxy_ports: winners.iter().map(|r| r.proxy_port).collect() }),
+            Some(Verdict::Allow) => {
+                return Ok(Decision::Allow {
+                    proxy_ports: winners.iter().map(|r| r.proxy_port).collect(),
+                });
+            }
             None => continue,
         }
     }

@@ -89,25 +89,45 @@ fn removed_new_and_reclassified_immutable_keys_are_compared() {
 fn force_is_current_explicit_and_keeps_the_immutable_diff_visible() {
     let mut routing = KeySpec::new("routing-mode", Kind::String, "tunnel");
     routing.class = Class::Immutable;
-    let registry = Registry::new([routing, KeySpec::new("force-config-change", Kind::Bool, "false")]).unwrap();
-    let previous = registry.resolve([Entry::new(Source::Flag, "force-config-change", "true")]).unwrap();
-    let current = registry.resolve([Entry::new(Source::Flag, "routing-mode", "native")]).unwrap();
+    let registry = Registry::new([
+        routing,
+        KeySpec::new("force-config-change", Kind::Bool, "false"),
+    ])
+    .unwrap();
+    let previous = registry
+        .resolve([Entry::new(Source::Flag, "force-config-change", "true")])
+        .unwrap();
+    let current = registry
+        .resolve([Entry::new(Source::Flag, "routing-mode", "native")])
+        .unwrap();
     assert!(immutable::check(Previous::Parsed(&previous), &current, true, true).is_err());
-    let forced = registry.resolve([
-        Entry::new(Source::Flag, "routing-mode", "native"),
-        Entry::new(Source::Env, "force-config-change", "true"),
-    ]).unwrap();
+    let forced = registry
+        .resolve([
+            Entry::new(Source::Flag, "routing-mode", "native"),
+            Entry::new(Source::Env, "force-config-change", "true"),
+        ])
+        .unwrap();
     let report = immutable::check(Previous::Parsed(&previous), &forced, true, true).unwrap();
     assert_eq!(report.warnings, [Warning::ForcedImmutableChange]);
     assert_eq!(report.changes.len(), 1);
     assert_eq!(report.changes.first().unwrap().key, "routing-mode");
-    let cancelled = registry.resolve([
-        Entry::new(Source::Flag, "routing-mode", "native"),
-        Entry::new(Source::File, "force-config-change", "true"),
-        Entry::new(Source::Flag, "force-config-change", "false"),
-    ]).unwrap();
+    let cancelled = registry
+        .resolve([
+            Entry::new(Source::Flag, "routing-mode", "native"),
+            Entry::new(Source::File, "force-config-change", "true"),
+            Entry::new(Source::Flag, "force-config-change", "false"),
+        ])
+        .unwrap();
     assert!(immutable::check(Previous::Parsed(&previous), &cancelled, true, true).is_err());
-    assert!(immutable::check(Previous::Parsed(&previous), &previous, true, true).unwrap().warnings.is_empty());
+    assert!(
+        immutable::check(Previous::Parsed(&previous), &previous, true, true)
+            .unwrap()
+            .warnings
+            .is_empty()
+    );
     let no_restore = immutable::check(Previous::Parsed(&previous), &forced, false, true).unwrap();
-    assert_eq!(no_restore.warnings, [Warning::ChangedWithoutRestoredEndpoints]);
+    assert_eq!(
+        no_restore.warnings,
+        [Warning::ChangedWithoutRestoredEndpoints]
+    );
 }

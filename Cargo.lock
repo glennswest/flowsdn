@@ -278,6 +278,7 @@ dependencies = [
 name = "flowsdn-config"
 version = "0.14.0"
 dependencies = [
+ "flowsdn-identity",
  "libc",
  "serde_json",
  "yaml-rust2",
@@ -329,6 +330,14 @@ dependencies = [
 [[package]]
 name = "flowsdn-ipam"
 version = "0.14.0"
+
+[[package]]
+name = "flowsdn-policy"
+version = "0.14.0"
+dependencies = [
+ "flowsdn-bpf-abi",
+ "flowsdn-identity",
+]
 
 [[package]]
 name = "flowsdn-reconcile"

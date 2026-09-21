@@ -169,7 +169,9 @@ impl Definition {
     /// The table does not supply help text or hidden-flag metadata.
     pub fn help(self) -> Option<&'static str> {
         match self.name {
-            "force-config-change" => Some("Allow immutable configuration changes during endpoint restoration"),
+            "force-config-change" => {
+                Some("Allow immutable configuration changes during endpoint restoration")
+            }
             "bpf-ipcache-map-max" => Some("Maximum ipcache map entries (1 through 4294967295)"),
             "strict-config" => {
                 Some("Reject unknown configuration keys after resolving source precedence")
@@ -179,7 +181,11 @@ impl Definition {
         }
     }
     pub fn hidden(self) -> Option<bool> {
-        matches!(self.name, "strict-config" | "endpoint-id-max" | "force-config-change" | "bpf-ipcache-map-max").then_some(false)
+        matches!(
+            self.name,
+            "strict-config" | "endpoint-id-max" | "force-config-change" | "bpf-ipcache-map-max"
+        )
+        .then_some(false)
     }
     pub fn needs_area_validator(self) -> bool {
         self.pflag == Pflag::Var

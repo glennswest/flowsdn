@@ -104,9 +104,9 @@ pub fn check(
         })
         .collect();
     let blocked = !changes.is_empty() && restore && has_endpoint_state;
-    let force = current.get("force-config-change").is_some_and(|entry| {
-        entry.class == Class::Active && entry.value == Value::Bool(true)
-    });
+    let force = current
+        .get("force-config-change")
+        .is_some_and(|entry| entry.class == Class::Active && entry.value == Value::Bool(true));
     if blocked && !force {
         return Err(Incompatible { changes });
     }
