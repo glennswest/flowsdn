@@ -1120,8 +1120,8 @@
       "scope": "project/shared",
       "agent": "/root with control_decisions, integration_decisions, review_agent",
       "start_utc": "2026-09-21T21:12:58.897Z",
-      "end_utc": null,
-      "elapsed_seconds": null,
+      "end_utc": "2026-09-21T21:44:43.149758Z",
+      "elapsed_seconds": 1904.252758,
       "active_work_seconds": null,
       "baseline_commit": "229f94c",
       "issues": [
@@ -1133,8 +1133,208 @@
         130,
         131
       ],
-      "status": "implementation complete; Linux validation pending",
-      "usage": null
+      "status": "validated; issue publication pending",
+      "usage_samples": [
+        {
+          "thread_id": "01a0c594-3b67-7722-a326-e5e4720f8977",
+          "completed_response_records": 73,
+          "baseline": {
+            "timestamp": "2026-09-21T21:12:13.569Z",
+            "counters": {
+              "input_tokens": 14140127,
+              "cached_input_tokens": 13962752,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 38687,
+              "reasoning_output_tokens": 9009,
+              "total_tokens": 14178814,
+              "uncached_input_tokens": 177375
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T21:44:42.957Z",
+            "counters": {
+              "input_tokens": 22167920,
+              "cached_input_tokens": 21872640,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 65937,
+              "reasoning_output_tokens": 13920,
+              "total_tokens": 22233857,
+              "uncached_input_tokens": 295280
+            }
+          },
+          "delta": {
+            "input_tokens": 8027793,
+            "cached_input_tokens": 7909888,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 27250,
+            "reasoning_output_tokens": 4911,
+            "total_tokens": 8055043,
+            "uncached_input_tokens": 117905
+          }
+        },
+        {
+          "thread_id": "01a0c594-fdd8-73f1-bfae-b99f121daab8",
+          "completed_response_records": 16,
+          "baseline": {
+            "timestamp": "2026-09-21T20:57:39.125Z",
+            "counters": {
+              "input_tokens": 5446720,
+              "cached_input_tokens": 5276544,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 16321,
+              "reasoning_output_tokens": 1812,
+              "total_tokens": 5463041,
+              "uncached_input_tokens": 170176
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T21:27:24.276Z",
+            "counters": {
+              "input_tokens": 8550519,
+              "cached_input_tokens": 8345600,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 21925,
+              "reasoning_output_tokens": 3375,
+              "total_tokens": 8572444,
+              "uncached_input_tokens": 204919
+            }
+          },
+          "delta": {
+            "input_tokens": 3103799,
+            "cached_input_tokens": 3069056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 5604,
+            "reasoning_output_tokens": 1563,
+            "total_tokens": 3109403,
+            "uncached_input_tokens": 34743
+          }
+        },
+        {
+          "thread_id": "01a0c597-0d0b-71c0-ac97-9c29efef5916",
+          "completed_response_records": 28,
+          "baseline": {
+            "timestamp": "2026-09-21T20:17:06.793Z",
+            "counters": {
+              "input_tokens": 2678407,
+              "cached_input_tokens": 2576000,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 11232,
+              "reasoning_output_tokens": 521,
+              "total_tokens": 2689639,
+              "uncached_input_tokens": 102407
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T21:22:02.733Z",
+            "counters": {
+              "input_tokens": 6854007,
+              "cached_input_tokens": 6707712,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 22238,
+              "reasoning_output_tokens": 2302,
+              "total_tokens": 6876245,
+              "uncached_input_tokens": 146295
+            }
+          },
+          "delta": {
+            "input_tokens": 4175600,
+            "cached_input_tokens": 4131712,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 11006,
+            "reasoning_output_tokens": 1781,
+            "total_tokens": 4186606,
+            "uncached_input_tokens": 43888
+          }
+        },
+        {
+          "thread_id": "01a0c597-33e5-7872-8318-3d290208f997",
+          "completed_response_records": 22,
+          "baseline": {
+            "timestamp": "2026-09-21T20:16:54.254Z",
+            "counters": {
+              "input_tokens": 3160379,
+              "cached_input_tokens": 3035136,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 10243,
+              "reasoning_output_tokens": 678,
+              "total_tokens": 3170622,
+              "uncached_input_tokens": 125243
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-21T21:22:18.252Z",
+            "counters": {
+              "input_tokens": 6870984,
+              "cached_input_tokens": 6697600,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 19459,
+              "reasoning_output_tokens": 1716,
+              "total_tokens": 6890443,
+              "uncached_input_tokens": 173384
+            }
+          },
+          "delta": {
+            "input_tokens": 3710605,
+            "cached_input_tokens": 3662464,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 9216,
+            "reasoning_output_tokens": 1038,
+            "total_tokens": 3719821,
+            "uncached_input_tokens": 48141
+          }
+        }
+      ],
+      "usage_totals": {
+        "input_tokens": 19017797,
+        "cached_input_tokens": 18773120,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 53076,
+        "reasoning_output_tokens": 9293,
+        "total_tokens": 19070873,
+        "uncached_input_tokens": 244677
+      },
+      "usage_note": "token_usage_record globally deduplicated by response_id. Prior cumulative baselines exclude the preceding cycle and intervening reporting. Cached input is a subset of input; reasoning is a subset of output. Includes repeated context, not account cost. Excludes this snapshot commit and subsequent reporting.",
+      "commits": [
+        "8a6ecb7",
+        "f8139f4",
+        "335ede3",
+        "34fc3a1"
+      ],
+      "validated_revision": "34fc3a1",
+      "release": null,
+      "validation_record": "docs/validation/m1-config-cni-batch.md",
+      "outcomes": [
+        "447 all-feature workspace tests pass; zero failed/ignored",
+        "Clippy and formatting pass; focused tests rerun after test lint corrections",
+        "Both Linux musl architectures compile",
+        "BPF build and both privileged CNI/agent fixtures pass"
+      ],
+      "observed_agent_windows": [
+        {
+          "agent": "review_agent",
+          "start_utc": "2026-09-21T21:14:29Z",
+          "end_utc": "2026-09-21T21:16:06Z",
+          "elapsed_seconds": 97
+        },
+        {
+          "agent": "control_decisions",
+          "start_utc": "2026-09-21T21:14:36Z",
+          "end_utc": "2026-09-21T21:19:03Z",
+          "elapsed_seconds": 267
+        }
+      ],
+      "observed_agent_hours": 0.10111111111111111,
+      "agent_time_note": "Only fully observed implementation windows included; later reviews and integration-agent timing incomplete. All agent token usage included once. Agent time overlaps project elapsed and is not added to it. Active time unknown.",
+      "validation_intervals": [
+        {
+          "kind": "observed final validation and coordination",
+          "start_utc": "2026-09-21T21:30:08Z",
+          "end_utc": "2026-09-21T21:44:43Z",
+          "elapsed_seconds": 875,
+          "active_work_seconds": null,
+          "note": "Observed bounds include coordination, lint correction and infrastructure/approval waits; not exclusive build time. Initial workspace run preceded this interval. Nested in project elapsed."
+        }
+      ]
     }
   ],
   "crates": [

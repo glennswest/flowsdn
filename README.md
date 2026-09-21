@@ -40,7 +40,10 @@ dual-stack BPF endpoint delivery, native cross-node routing, host-scope IPAM,
 initial CNI and standalone endpoint agent executables, with persisted state.
 Isolated endpoint tests exercise live IPv4/IPv6 traffic, allocation, attachment,
 rollback, retry, process restart and offline deletion replay. The standalone
-agent uses explicit local configuration; Kubernetes discovery, identity/policy
+agent verifies ownership before reusing duplicate CNI attachments and preserves
+their original route settings across restart. Endpoint allocation has a configurable
+ceiling (4095 by default); the configuration library supports opt-in strict
+unknown-key validation. The agent uses explicit local configuration; Kubernetes discovery, identity/policy
 controllers, uninterrupted forwarding across agent downtime and two-node
 Kubernetes pod connectivity remain outstanding.
 

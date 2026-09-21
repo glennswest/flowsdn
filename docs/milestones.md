@@ -63,3 +63,8 @@ Track remaining implementation and measured milestone acceptance in
 Existing feature, verification and infrastructure issues remain requirements;
 the trackers do not replace or close them. Decisions and their unfulfilled
 implementation obligations are recorded in ADRs 0011–0013.
+
+The second issue batch adds strict configuration validation, bounded endpoint ID
+allocation and verified duplicate CNI ADD. ADR-0014 aligns the associated API,
+loader and nftables contracts. Its smaller issue count reflects implementation
+and live regression work; it does not reduce the two-node acceptance gate.
