@@ -8,7 +8,7 @@ use rtnetlink::{
         address::AddressHeaderFlags,
         link::{LinkAttribute, LinkMessage},
         neighbour::NeighbourState,
-        route::{RouteAttribute, RouteMetric, RouteScope},
+        route::{RouteAddress, RouteAttribute, RouteMessage, RouteMetric, RouteScope, RouteType},
     },
 };
 use std::{error::Error, fs::File, future::Future, net::IpAddr, os::fd::AsRawFd, time::Duration};
@@ -58,6 +58,16 @@ pub struct Link {
     pub index: u32,
     pub name: String,
     pub mac: Vec<u8>,
+    pub mtu: u32,
+}
+
+/// A main-table unicast route belonging to one output interface.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Route {
+    pub destination: IpAddr,
+    pub prefix: u8,
+    pub gateway: Option<IpAddr>,
+    pub mtu: Option<u32>,
 }
 
 /// A synchronous facade with one namespace-bound socket and a bounded request
@@ -88,6 +98,21 @@ impl Connector {
                 }
             }
             Ok(addresses)
+        })
+    }
+    pub fn routes(&self, index: u32) -> Result<Vec<Route>> {
+        self.run(async {
+            let mut result = Vec::new();
+            for family in [rtnetlink::packet_route::AddressFamily::Inet,
+                rtnetlink::packet_route::AddressFamily::Inet6] {
+                let mut request = RouteMessage::default();
+                request.header.address_family = family;
+                let mut stream = self.handle.route().get(request).execute();
+                while let Some(message) = stream.try_next().await? {
+                    if let Some(route) = route_info(message, index) { result.push(route); }
+                }
+            }
+            Ok(result)
         })
     }
     pub fn open() -> Result<Self> {
@@ -271,10 +296,12 @@ fn validate_name(name: &str) -> Result<()> {
 fn link_info(message: LinkMessage) -> Result<Link> {
     let mut name = None;
     let mut mac = Vec::new();
+    let mut mtu = None;
     for attr in message.attributes {
         match attr {
             LinkAttribute::IfName(value) => name = Some(value),
             LinkAttribute::Address(value) => mac = value,
+            LinkAttribute::Mtu(value) => mtu = Some(value),
             _ => {}
         }
     }
@@ -282,6 +309,7 @@ fn link_info(message: LinkMessage) -> Result<Link> {
         index: message.header.index,
         name: name.ok_or("link response has no name")?,
         mac,
+        mtu: mtu.ok_or("link response has no MTU")?,
     })
 }
 
@@ -301,4 +329,33 @@ pub fn in_namespace<T: Send + 'static>(
     })
     .join()
     .map_err(|_| "namespace worker panicked")?
+}
+
+fn route_info(message: RouteMessage, index: u32) -> Option<Route> {
+    use rtnetlink::packet_route::AddressFamily;
+    let mut route = Route {
+        destination: match message.header.address_family {
+            AddressFamily::Inet => IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+            AddressFamily::Inet6 => IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED),
+            _ => return None,
+        },
+        prefix: message.header.destination_prefix_length, gateway: None, mtu: None,
+    };
+    let mut output = None;
+    let mut table = u32::from(message.header.table);
+    for attribute in message.attributes {
+        match attribute {
+            RouteAttribute::Oif(value) => output = Some(value),
+            RouteAttribute::Table(value) => table = value,
+            RouteAttribute::Destination(RouteAddress::Inet(ip)) => route.destination = ip.into(),
+            RouteAttribute::Destination(RouteAddress::Inet6(ip)) => route.destination = ip.into(),
+            RouteAttribute::Gateway(RouteAddress::Inet(ip)) => route.gateway = Some(ip.into()),
+            RouteAttribute::Gateway(RouteAddress::Inet6(ip)) => route.gateway = Some(ip.into()),
+            RouteAttribute::Metrics(metrics) => for metric in metrics {
+                if let RouteMetric::Mtu(value) = metric { route.mtu = Some(value); }
+            },
+            _ => {},
+        }
+    }
+    (output == Some(index) && table == 254 && message.header.kind == RouteType::Unicast).then_some(route)
 }

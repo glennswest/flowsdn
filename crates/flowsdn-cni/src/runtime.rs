@@ -656,7 +656,7 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
                     .remove("prevResult");
                 AddRequest::parse(&serde_json::to_vec(&primary).map_err(error)?, env)
             })?;
-            let (client, _) = connect(&socket).map_err(|mut e| {
+            let (client, configuration) = connect(&socket).map_err(|mut e| {
                 e.code = 11;
                 e
             })?;
@@ -700,15 +700,27 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
                     );
                 }
             }
+            let expected_mtu = field(field(&configuration, "status"), "device-mtu").as_u64();
+            let previous_routes = field(field(&conf, "prevResult"), "routes").clone();
             let namespace = File::open(&request.netns).map_err(error)?;
             let name = request.ifname;
             system(in_namespace(namespace, move || {
                 let connector = Connector::open()?;
-                let addresses = connector.addresses(connector.require_link(&name)?.index)?;
+                let link = connector.require_link(&name)?;
+                let addresses = connector.addresses(link.index)?;
                 for ip in expected {
                     if !addresses.contains(&ip) {
                         return Err(format!("expected ip {ip} on interface {name}").into());
                     }
+                }
+                if expected_mtu.is_some_and(|expected| expected != u64::from(link.mtu)) {
+                    eprintln!("CNI CHECK diagnostic: interface MTU differs from current agent configuration");
+                }
+                match connector.routes(link.index) {
+                    Ok(routes) => for warning in route_diagnostics(&previous_routes, &routes) {
+                        eprintln!("CNI CHECK diagnostic: {warning}");
+                    },
+                    Err(error) => eprintln!("CNI CHECK diagnostic: route inspection failed: {error}"),
                 }
                 Ok(())
             }))?;
@@ -929,6 +941,27 @@ mod tests {
                 "ipv4":{"enabled":true,"ip":"198.18.0.254"},
                 "ipv6":{"enabled":true,"ip":"2001:db8::ffff"}}
         }}})
+    }
+    #[test]
+    fn route_check_reports_drift_without_changing_the_check_verdict() {
+        let previous = json!([{"dst":"198.18.0.254/32"},{"dst":"0.0.0.0/0","gw":"198.18.0.254","mtu":1450}]);
+        let mut routes = vec![
+            flowsdn_connector::Route { destination:"198.18.0.254".parse().expect("IP"),prefix:32,gateway:None,mtu:None },
+            flowsdn_connector::Route { destination:"0.0.0.0".parse().expect("IP"),prefix:0,gateway:Some("198.18.0.254".parse().expect("IP")),mtu:Some(1450) },
+        ];
+        assert!(route_diagnostics(&previous,&routes).is_empty());
+        routes.last_mut().expect("default").mtu=Some(1400);
+        assert_eq!(route_diagnostics(&previous,&routes).len(),1);
+        routes.clear();
+        assert_eq!(route_diagnostics(&previous,&routes).len(),2);
+        assert_eq!(route_diagnostics(&json!([{"dst":"bad"}]),&routes).len(),1);
+    }
+    #[test]
+    fn gc_is_explicitly_incompatible_without_mutation() {
+        let input=br#"{"cniVersion":"1.1.0","name":"test","type":"flowsdn-cni"}"#;
+        let error=run("GC",input,&BTreeMap::new()).expect_err("unsupported GC");
+        assert_eq!(error.code,1);
+        assert!(error.message.contains("GC"));
     }
     #[test]
     fn attachment_lookup_only_treats_404_as_absent() {
@@ -1197,4 +1230,32 @@ mod tests {
         assert!(backend.namespace.is_none());
         assert!(!backend.enter_namespace(None).expect("missing namespace"));
     }
+}
+
+// Supplemental CHECK diagnostics never change the historical success verdict.
+fn route_diagnostics(previous: &Value, actual: &[flowsdn_connector::Route]) -> Vec<String> {
+    let mut warnings = Vec::new();
+    let Some(routes) = previous.as_array() else { return vec!["previous routes unavailable".into()]; };
+    for expected in routes {
+        let raw = text(expected, "dst");
+        let Some((address, prefix)) = raw.split_once('/') else {
+            warnings.push("previous route destination is invalid".into()); continue;
+        };
+        let (Ok(destination), Ok(prefix)) = (address.parse::<IpAddr>(), prefix.parse::<u8>()) else {
+            warnings.push("previous route destination is invalid".into()); continue;
+        };
+        let gateway = match expected.get("gw") {
+            None => None,
+            Some(value) => match value.as_str().and_then(|v| v.parse::<IpAddr>().ok()) {
+                Some(ip) => Some(ip),
+                None => { warnings.push("previous route gateway is invalid".into()); continue; }
+            },
+        };
+        let mtu = expected.get("mtu").and_then(Value::as_u64);
+        if !actual.iter().any(|route| route.destination == destination && route.prefix == prefix
+            && route.gateway == gateway && mtu.is_none_or(|n| route.mtu.map(u64::from) == Some(n))) {
+            warnings.push(format!("route {raw} gateway or MTU differs from previous result"));
+        }
+    }
+    warnings
 }

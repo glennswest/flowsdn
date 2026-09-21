@@ -213,3 +213,17 @@ fn manager_rejects_invalid_id_limit_before_opening_state_or_loading_bpf() {
         assert!(!state.exists(), "invalid config must not create state");
     }
 }
+
+#[test]
+fn incompatible_persisted_datapath_mode_is_rejected() {
+    let original = record(1, "mode").document;
+    for mode in [serde_json::Value::Null, json!("netkit"), json!("unknown"), json!(3)] {
+        let mut value = original.clone();
+        value.as_object_mut().expect("object").insert("DatapathMode".into(), mode);
+        assert!(Record::parse(value).is_err());
+    }
+    let mut value = original.clone();
+    value.as_object_mut().expect("object").insert("DatapathMode".into(), json!("veth"));
+    Record::parse(value).expect("explicit veth");
+    Record::parse(original).expect("historical veth");
+}

@@ -22,6 +22,11 @@ pub struct Record {
 }
 impl Record {
     pub fn parse(document: Value) -> Result<Self> {
+        // Missing legacy metadata means veth; an explicit incompatible mode
+        // must never be silently restored with a different attachment driver.
+        if let Some(mode) = document.get("DatapathMode") {
+            if mode.as_str() != Some("veth") { return Err("unsupported persisted endpoint datapath mode".into()); }
+        }
         let id = document
             .get("ID")
             .and_then(Value::as_u64)

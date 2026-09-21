@@ -310,6 +310,7 @@ impl State {
             let id = match owner.as_str() {
                 "fixture/pod1" => 1,
                 "fixture/pod2" => 2,
+                "fixture/pod3" => 3,
                 _ => return Err("unknown fixture owner".into()),
             };
             for v6 in [true, false] {
@@ -382,6 +383,12 @@ impl State {
                     "endpoint URL/body identity mismatch",
                 )?;
                 let endpoint_id = managed(self.manager_mut()?.create(document))?;
+                if text(&body, "container-id")? == "cid3" {
+                    // Success followed by malformed networking response forces
+                    // CNI rollback after the real endpoint was installed.
+                    return Ok((201,json!({"id":endpoint_id,"status":{"networking":null}})));
+                }
+
                 return Ok((
                     201,
                     json!({"id":endpoint_id,"status":{"networking":{"mac":text(&body,"mac")?}}}),
@@ -727,6 +734,20 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
     println!(
         "PASS: real endpoint manager restored persisted IDs, IPAM and fresh BPF ownership; CHECK and bidirectional dual-stack UDP survive manager restart inside the fixture API"
     );
+    let rollback = Endpoint::spawn(3)?;
+    cni(&binary,&temp,"ADD",3,&rollback.netns(),&conf,false)?;
+    {
+        let mut guard=state.lock().map_err(|_| "state lock")?;
+        ensure(guard.manager()?.get("cni-attachment-id:cid3:eth0").is_none(),"rollback endpoint leaked")?;
+        let ipam=guard.manager_mut()?.ipam_mut();
+        ensure(ipam.ipv4().ok_or("v4")?.allocated()==2 && ipam.ipv6().ok_or("v6")?.allocated()==2,"rollback touched another allocation")?;
+    }
+    for v6 in [false,true] {
+        exchange(&mut first,&mut second,v6)?;
+        exchange(&mut second,&mut first,v6)?;
+    }
+    drop(rollback);
+    println!("PASS: post-create ADD rollback preserves both other endpoints, allocations and dual-stack traffic");
     let mut bad = previous.first().ok_or("previous result")?.clone();
     bad.get_mut("prevResult")
         .and_then(|v| v.get_mut("ips"))

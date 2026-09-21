@@ -499,7 +499,7 @@ impl Api {
                 message: "invalid namespace cookie".into(),
             })?;
         let document = json!({"dockerID":cid,"ContainerNetnsPath":optional(body,"container-netns-path")?,"IfName":string(body,"interface-name")?,"IfIndex":index,
-            "ParentIfIndex":0,"ContainerIfName":interface,"IsSecondaryInterface":false,
+            "DatapathMode":"veth","ParentIfIndex":0,"ContainerIfName":interface,"IsSecondaryInterface":false,
             "OpLabels":{"Custom":{},"OrchestrationIdentity":{},"Disabled":{},"OrchestrationInfo":{}},
             "LXCMAC":string(body,"mac")?,"NodeMAC":string(body,"host-mac")?,
             "IPv4":optional(addressing,"ipv4")?,"IPv4IPAMPool":optional(addressing,"ipv4-pool-name")?,
