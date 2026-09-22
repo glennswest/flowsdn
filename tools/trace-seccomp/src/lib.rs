@@ -56,6 +56,7 @@ fn errno(value: &Value, name: &str, numeric: &str) -> Result<Option<Value>, Stri
     {
         let number = match symbol {
             "EPERM" => 1,
+            "EINVAL" => 22,
             "ENOSYS" => 38,
             _ => symbol
                 .parse::<u32>()

@@ -475,6 +475,7 @@ dependencies = [
 name = "flowsdn-trace-seccomp"
 version = "0.14.0"
 dependencies = [
+ "libc",
  "serde_json",
 ]
 

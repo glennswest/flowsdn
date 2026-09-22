@@ -165,7 +165,9 @@ fn probe(program: &mut CgroupSockAddr, ipv6: bool) -> Result<bool> {
             println!("PASS invalid address family rejected by kernel")
         }
         other => {
-            return Err(format!("invalid-family test produced unexpected result: {other:?}").into());
+            return Err(
+                format!("invalid-family test produced unexpected result: {other:?}").into(),
+            );
         }
     }
     let mut output = [0; CONTEXT_SIZE];
