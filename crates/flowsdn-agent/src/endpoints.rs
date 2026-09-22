@@ -152,7 +152,7 @@ impl Manager {
                 // endpoint's map value after interrupted publication/reuse.
                 if let Some(old) = kernel(manager.driver.snapshot(ip))? {
                     use flowsdn_bpf_abi::MapBytes;
-                    if old != info(&record)?.to_bytes() {
+                    if old != info(record)?.to_bytes() {
                         return Err(
                             "stale endpoint map ownership differs; preserve forwarding".into()
                         );
