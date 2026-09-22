@@ -164,3 +164,22 @@ are excluded. Known overlapping agent windows total 1880 seconds (0.522 hours),
 not added to project elapsed. Active work time remains unknown. Counters include
 repeated context, do not measure account cost, and are not allocated to multiple
 crates.
+
+## Issue batch 5: 30 protocol, Gateway and ClusterMesh resolutions
+
+2026-09-22T11:42:08.943Z–2026-09-22T12:05:12.150897Z: **1383.2 seconds**
+(23.1 minutes). Thirty closures verified on GitHub;
+**76 open / 219 closed**. [Batch results](../workcycles/2026-09-22-batch5.md)
+separate executable libraries, compatibility decisions and pending runtime gates.
+541 workspace tests (32 new), the final affected suite, Clippy, both Linux musl
+compile checks, dependency policy and the 168-script naming audit passed.
+No datapath changes or fresh privileged-fixture claim; no release. Cleanup
+removed 21,811 files / 6.8 GiB and fourteen task logs.
+
+Processed usage **23,172,530**, including
+**22,207,360 cached input**. Response IDs are
+globally deduplicated; prior cycles and this snapshot's final publication/reporting
+are excluded. Known overlapping agent windows total 1769 seconds (0.491 hours),
+not added to project elapsed. Active work time remains unknown. Counters include
+repeated context, do not measure account cost, and are not allocated to multiple
+crates.

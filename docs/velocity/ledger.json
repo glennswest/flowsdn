@@ -1863,6 +1863,272 @@
         "uncached_input_tokens": 403012
       },
       "usage_note": "token_usage_record globally deduplicated by response_id. Prior cumulative baselines exclude the preceding cycle and intervening reporting. Cached input is a subset of input; reasoning is a subset of output. Includes repeated context, not account cost. Excludes this snapshot commit and subsequent reporting."
+    },
+    {
+      "id": "issue-batch5-2026-09-22",
+      "scope": "project/shared",
+      "primary_crate": "project/shared",
+      "agent": "/root with control_decisions, integration_decisions, review_agent",
+      "start_utc": "2026-09-22T11:42:08.943Z",
+      "active_work_seconds": null,
+      "baseline_commit": "6ab5d0b",
+      "validated_revision": "91c9e2c",
+      "status": "complete",
+      "issues_closed": [
+        20,
+        21,
+        27,
+        28,
+        33,
+        38,
+        152,
+        183,
+        185,
+        186,
+        187,
+        191,
+        208,
+        211,
+        213,
+        235,
+        236,
+        239,
+        242,
+        244,
+        253,
+        273,
+        274,
+        276,
+        277,
+        279,
+        285,
+        286,
+        289,
+        290
+      ],
+      "issue_totals": {
+        "open": 76,
+        "closed": 219
+      },
+      "commits": [
+        "2f7c211",
+        "c4e5608",
+        "3987539",
+        "919d497",
+        "75edf73",
+        "5bec83d",
+        "91c9e2c",
+        "65621dd"
+      ],
+      "release": null,
+      "validation_record": "docs/workcycles/2026-09-22-batch5.md",
+      "outcomes": [
+        "30 issue scopes resolved with implementation/decision boundaries and remaining runtime gates documented",
+        "541 workspace tests (32 new), final affected ClusterMesh suite, Clippy and formatting passed",
+        "All-target checks for both Linux musl architectures passed; existing health time_t deprecation noted",
+        "Dependency policy and reviewed 168-script naming audit passed; no new external package versions",
+        "No datapath changes; prior privileged fixtures not represented as new validation",
+        "Cleanup removed 21811 files / 6.8 GiB and 14 task logs"
+      ],
+      "observed_agent_windows": [
+        {
+          "agent": "control_decisions",
+          "primary_crate": "flowsdn-clustermesh",
+          "start_utc": "2026-09-22T11:42:54Z",
+          "end_utc": "2026-09-22T11:54:38Z",
+          "elapsed_seconds": 704.0,
+          "active_work_seconds": null
+        },
+        {
+          "agent": "integration_decisions",
+          "primary_crate": "flowsdn-gateway",
+          "start_utc": "2026-09-22T11:43:10Z",
+          "end_utc": "2026-09-22T11:50:38Z",
+          "elapsed_seconds": 448.0,
+          "active_work_seconds": null
+        },
+        {
+          "agent": "review_agent",
+          "primary_crate": "flowsdn-bgp-proto",
+          "start_utc": "2026-09-22T11:43:18Z",
+          "end_utc": "2026-09-22T11:53:35Z",
+          "elapsed_seconds": 617.0,
+          "active_work_seconds": null
+        }
+      ],
+      "observed_agent_hours": 0.4913888888888889,
+      "agent_time_note": "Overlapping implementation/review windows are not project elapsed or active time. Later short review windows have incomplete bounds; all usage included once in shared accounting. Primary crate identifies delivery ownership, not token allocation.",
+      "validation_intervals": [
+        {
+          "kind": "Linux focused/full tests, compilation, lint fixes, cross-target and dependency/corpus gates",
+          "start_utc": "2026-09-22T11:49:39.273032Z",
+          "end_utc": "2026-09-22T12:02:25.368375Z",
+          "elapsed_seconds": 766.095343,
+          "note": "Observed enclosing interval from first focused build log creation to final affected suite completion includes coordinator work and waits; not exclusive build time."
+        }
+      ],
+      "end_utc": "2026-09-22T12:05:12.150897Z",
+      "elapsed_seconds": 1383.207897,
+      "usage_samples": [
+        {
+          "thread_id": "01a0c594-3b67-7722-a326-e5e4720f8977",
+          "completed_response_records": 75,
+          "baseline": {
+            "timestamp": "2026-09-22T01:17:16.141Z",
+            "counters": {
+              "input_tokens": 44456202,
+              "cached_input_tokens": 43815936,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 134791,
+              "reasoning_output_tokens": 26736,
+              "total_tokens": 44590993,
+              "uncached_input_tokens": 640266
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-22T12:04:34.606Z",
+            "counters": {
+              "input_tokens": 57288400,
+              "cached_input_tokens": 56207360,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 165231,
+              "reasoning_output_tokens": 35630,
+              "total_tokens": 57453631,
+              "uncached_input_tokens": 1081040
+            }
+          },
+          "delta": {
+            "input_tokens": 12832198,
+            "cached_input_tokens": 12391424,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 30440,
+            "reasoning_output_tokens": 8894,
+            "total_tokens": 12862638,
+            "uncached_input_tokens": 440774
+          }
+        },
+        {
+          "thread_id": "01a0c594-fdd8-73f1-bfae-b99f121daab8",
+          "completed_response_records": 21,
+          "baseline": {
+            "timestamp": "2026-09-22T01:06:26.006Z",
+            "counters": {
+              "input_tokens": 15812940,
+              "cached_input_tokens": 15429376,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 55846,
+              "reasoning_output_tokens": 8014,
+              "total_tokens": 15868786,
+              "uncached_input_tokens": 383564
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-22T11:53:52.420Z",
+            "counters": {
+              "input_tokens": 19272266,
+              "cached_input_tokens": 18707328,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 71326,
+              "reasoning_output_tokens": 10450,
+              "total_tokens": 19343592,
+              "uncached_input_tokens": 564938
+            }
+          },
+          "delta": {
+            "input_tokens": 3459326,
+            "cached_input_tokens": 3277952,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 15480,
+            "reasoning_output_tokens": 2436,
+            "total_tokens": 3474806,
+            "uncached_input_tokens": 181374
+          }
+        },
+        {
+          "thread_id": "01a0c597-0d0b-71c0-ac97-9c29efef5916",
+          "completed_response_records": 25,
+          "baseline": {
+            "timestamp": "2026-09-22T01:08:52.851Z",
+            "counters": {
+              "input_tokens": 16372363,
+              "cached_input_tokens": 16072448,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 55855,
+              "reasoning_output_tokens": 5076,
+              "total_tokens": 16428218,
+              "uncached_input_tokens": 299915
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-22T11:55:07.572Z",
+            "counters": {
+              "input_tokens": 19113360,
+              "cached_input_tokens": 18694528,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 69622,
+              "reasoning_output_tokens": 6285,
+              "total_tokens": 19182982,
+              "uncached_input_tokens": 418832
+            }
+          },
+          "delta": {
+            "input_tokens": 2740997,
+            "cached_input_tokens": 2622080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 13767,
+            "reasoning_output_tokens": 1209,
+            "total_tokens": 2754764,
+            "uncached_input_tokens": 118917
+          }
+        },
+        {
+          "thread_id": "01a0c597-33e5-7872-8318-3d290208f997",
+          "completed_response_records": 29,
+          "baseline": {
+            "timestamp": "2026-09-22T01:06:08.658Z",
+            "counters": {
+              "input_tokens": 14699615,
+              "cached_input_tokens": 14387712,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 53121,
+              "reasoning_output_tokens": 4712,
+              "total_tokens": 14752736,
+              "uncached_input_tokens": 311903
+            }
+          },
+          "endpoint": {
+            "timestamp": "2026-09-22T11:53:10.552Z",
+            "counters": {
+              "input_tokens": 18765274,
+              "cached_input_tokens": 18303616,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 67784,
+              "reasoning_output_tokens": 7362,
+              "total_tokens": 18833058,
+              "uncached_input_tokens": 461658
+            }
+          },
+          "delta": {
+            "input_tokens": 4065659,
+            "cached_input_tokens": 3915904,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 14663,
+            "reasoning_output_tokens": 2650,
+            "total_tokens": 4080322,
+            "uncached_input_tokens": 149755
+          }
+        }
+      ],
+      "usage_totals": {
+        "input_tokens": 23098180,
+        "cached_input_tokens": 22207360,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 74350,
+        "reasoning_output_tokens": 15189,
+        "total_tokens": 23172530,
+        "uncached_input_tokens": 890820
+      },
+      "usage_note": "token_usage_record globally deduplicated by response_id. Prior cumulative baselines exclude the preceding cycle and intervening reporting. Cached input is a subset of input; reasoning is a subset of output. Includes repeated context, not account cost. Excludes this snapshot commit and subsequent reporting."
     }
   ],
   "crates": [
