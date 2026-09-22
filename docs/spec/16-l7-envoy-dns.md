@@ -1473,7 +1473,7 @@ Keys are reference-compatible names. "Ignored" keys are accepted so existing
 | `proxy-prometheus-port` | int | 0 | chart-rendered Envoy metrics listener; 0 disables |
 | `proxy-admin-port` | int | 0 | chart-rendered Envoy admin listener; 0 disables |
 | `envoy-access-log-enabled` | bool | true | access log server + filter paths |
-| `envoy-access-log-buffer-size` | uint | 4096 | seqpacket read buffer |
+| `envoy-access-log-buffer-size` | uint | 16384 | seqpacket read buffer; valid range 1–1048576 bytes |
 | `envoy-policy-restore-timeout` | duration | 3m | restore barrier (§3.1.4) |
 | `envoy-http-upstream-linger-timeout` | int (s) | -1 | `original_source_so_linger_time`; -1 = unset |
 | `envoy-node-locality-enabled` | bool | false | zone-aware bootstrap; requires the zone label |
@@ -1898,9 +1898,21 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    agent flag default and existing configuration precedence. Grant cluster-wide Secret
    reads only for the selected read-all mode.
 
-7. **Access log buffer size default.** 4096 bytes truncates header-heavy
-   requests, and a truncated record is dropped entirely. Options: (a) keep 4096;
-   (b) raise the default to 16384.
+7. **Access log buffer size default — resolved #199.** Use 16384 bytes,
+   configurable in 1–1048576. `flowsdn-proxy::accesslog::Reader` owns a Unix
+   datagram socket or accepted SOCK_SEQPACKET connection and uses `recvmsg`
+   flags to distinguish truncation from an exactly full record. Truncated
+   records are discarded in full, increment a saturating drop counter, and
+   invoke a warning hook naming the configured buffer size; the server adapter
+   logs `envoy-access-log-buffer-size` with this warning. Bytes remain binary,
+   with no UTF-8 conversion. EINTR retries and WouldBlock remains caller-visible.
+   Zero-length seqpacket reads report EmptyOrClosed because recvmsg cannot
+   distinguish an empty packet from orderly shutdown; datagram empty records
+   remain valid binary records. Tests cover header-heavy 8192-byte records,
+   exactly 16384, over-limit 20000, legacy 4096 and independent following messages.
+   Listener permissions, protobuf decoding, Hubble forwarding and operational
+   warning rate limiting remain adapter work; this primitive is not wired to
+   the Hubble server.
    *Recommendation: (b),* with the metric and warning retained. The cost is a
    larger per-connection read buffer; the benefit is not silently losing the
    exact flows an operator is most likely to be investigating.

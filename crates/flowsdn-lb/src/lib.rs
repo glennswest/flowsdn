@@ -1,4 +1,5 @@
 //! Load-balancer input contracts from spec 05. No kernel or controller adapter yet.
+pub mod maglev;
 use serde_json::Value;
 use std::collections::BTreeMap;
 

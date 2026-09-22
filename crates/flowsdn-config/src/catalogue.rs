@@ -169,6 +169,7 @@ impl Definition {
             | "bgp-status-report-prefixes" => {
                 "docs/spec/00-foundation-table-config.md#flowsdn-extension-keys"
             }
+            "envoy-access-log-buffer-size" => "docs/spec/16-l7-envoy-dns.md:1476",
             "identity-allocation-mode" => "docs/spec/20-clustermesh-kvstore.md:1575",
             "agent-not-ready-taint-key" => "docs/spec/12-operator.md:1434",
             "bpf-lb-algorithm" => "docs/spec/05-service-loadbalancing.md:937",

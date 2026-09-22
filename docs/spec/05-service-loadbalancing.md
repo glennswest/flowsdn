@@ -828,6 +828,12 @@ Supported `M`: {251, 509, 1021, 2039, 4093, 8191, **16381**, 32749, 65521,
 tables; §9 pins vectors from the reference. Property: any permutation of the
 input list yields the same table.
 
+Calibration #250 freezes the pinned `pkg/maglev/maglev_test.go::TestReproducible`
+RLE data in `flowsdn-lb/tests/maglev-weighted.rle`: M251, seed 0x24b7ef82,
+TCP addresses/ports 1,3,4,5 (0.0.0.1:1 etc.), weights 2,13,111,10,
+IDs 0,1,2,3. Zero weights must be removed before the bounded builder;
+duplicate IDs/hash strings and unsupported sizes are rejected.
+
 ### 5.2 Backend sort order for slots
 
 Healthy (`¬Unhealthy`) before unhealthy; then ascending `State` value

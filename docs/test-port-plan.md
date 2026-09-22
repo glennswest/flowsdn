@@ -938,7 +938,17 @@ fastetcd at step 1, not step 12.** They are 2,280 Go test lines that answer
    does not test it; `pkg/bgp/gobgp` is **replace** and leaves a hole. flowsdn's
    own speaker needs session state-machine, OPEN/UPDATE encoding and error-path
    tests that have no reference counterpart. Not costed in §1.
-5. **Effort model calibration.** The ×0.45 port factor is a guess anchored on one
-   data point. Recommendation: port `pkg/maglev` (249 lines) and `pkg/ipam/cidrset`
-   (764 lines) first and measure the real ratio, then restate §1's totals.
+5. **Effort model calibration — #250 partial implementation, measurement pending.**
+   `flowsdn-lb::maglev` and `flowsdn-ipam::cidrset` now implement the pure
+   algorithms with bounded inputs. Pinned Go test files contain 249 and 764
+   physical lines respectively. The Rust tests port the weighted RLE vector,
+   removal behavior and CIDR allocation/occupancy categories, but do not yet
+   exhaust every upstream table case or permutation backend-count combination.
+   Therefore no full-port factor is measured yet: ×0.45 remains unvalidated,
+   and §1 totals must not be re-labelled calibrated. Count Rust test physical
+   lines only after standard formatting and successful Linux validation;
+   record numerator, denominator and coverage scope together. The ratio for
+   a selected subset is not a project effort conversion. Remaining gates are
+   exhaustive case mapping, independent vector passes and formatted LOC.
+
 

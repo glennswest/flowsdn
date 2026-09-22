@@ -168,3 +168,10 @@ from cilium/cilium v1.16.0 (82999990bc954699cf24853ef9747d9166ee24c8) and v1.17.
 (c2bbf787eab9b7f728fcc861904d9bcf17e4ba9b). Copyright Authors of Cilium,
 Apache-2.0. Exact paths/blob IDs and deduplication mapping are in MANIFEST.tsv;
 the original license is retained alongside the static fixtures.
+
+Maglev weighted lookup-table fixture
+-----------------------------------
+crates/flowsdn-lb/tests/maglev-weighted.rle retains static expected data from
+cilium/cilium v1.20.1, commit 7d68cfb394, pkg/maglev/maglev_test.go.
+Copyright Authors of Cilium. Licensed under Apache-2.0. The Rust algorithm
+is independently implemented from the specification.

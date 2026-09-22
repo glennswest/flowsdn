@@ -1169,9 +1169,9 @@ sync.
 A CIDR set carves fixed-size node prefixes of `nodeMask` bits from one cluster
 prefix: `maxCIDRs = 2^(nodeMask − clusterMask)` (≤ 2^16), a bitmap of that
 size, a `nextCandidate` cursor. `AllocateNext` scans from the cursor for the
-first free bit (wrapping) → prefix at that index; `Occupy(prefix)` sets the bit
-of a prefix inside the range (error if outside or already set);
-`Release(prefix)` clears it; `IsFull`, `InRange`, `IsAllocated`,
+first free bit (wrapping) → prefix at that index; `Occupy(prefix)` idempotently sets every intersecting node-block bit,
+including all blocks for a covering supernet (error if disjoint or wrong family);
+`Release(prefix)` idempotently clears the same interval; `IsFull`, `InRange` (any overlap), `IsAllocated` (all overlapping blocks set),
 `IsClusterCIDR(p)` (p equals the cluster prefix). IPv6 index→prefix uses the
 upper 64 bits when the node mask ≤ 64 (k8s-derived layout). Errors:
 "there are no remaining CIDRs left to allocate", "subnet mask size too big",

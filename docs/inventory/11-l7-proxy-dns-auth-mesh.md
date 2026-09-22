@@ -165,7 +165,7 @@ CECs; `pkg/hubble/parser/seven` decodes access logs.
   egress}`, `envoy-policy-restore-timeout` (3m), `envoy-http-upstream-
   linger-timeout` (-1), `envoy-log`, `envoy-default-log-level`, `envoy-base-
   id`, `envoy-keep-cap-netbindservice`, `envoy-node-locality-enabled`,
-  `envoy-access-log-buffer-size` (4096), `disable-envoy-version-check`,
+  `envoy-access-log-buffer-size` (reference 4096; flowsdn 16384 per spec 16 #199), `disable-envoy-version-check`,
   `proxy-use-original-source-address` (bpf_metadata `use_original_source_
   address` for policy listeners), `proxy-portrange-min/max` (10000-20000),
   `restored-proxy-ports-age-limit` (15m), `enable-bpf-tproxy` (default false:
@@ -810,7 +810,8 @@ Surface the replacement must cover to drop `cilium-envoy`:
   Socket behavior and Hubble source-attribution tests remain required.
 - How the Hubble flow record for L7 is produced when Envoy is external:
   reuse `LogEntry` protobuf over the unix datagram socket (keeps cilium/proxy
-  unchanged) — confirm that datagram sizes stay under the 4096 default for
+  unchanged) — the flowsdn default is now 16384 (#199), with detected truncation
+  dropped and counted; validate runtime datagram sizes for
   header-heavy requests or raise the default.
 - Whether to support the SDS-less "inline secrets" TLS modes at all, or only
   SDS (`enable-policy-secrets-sync`), which is the documented default for new

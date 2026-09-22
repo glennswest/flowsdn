@@ -13,6 +13,7 @@ fn owning_defaults_resolve_typed_values_without_requiring_overrides() {
     for (key, expected) in [
         ("identity-allocation-mode", Value::String("crd".into())),
         ("bpf-lb-map-max", Value::Int(65536)),
+        ("envoy-access-log-buffer-size", Value::UInt(16384)),
         ("lb-retry-backoff-max", Value::Duration(60_000_000_000)),
         ("bpf-nat-global-max", Value::Int(524288)),
         ("bpf-neigh-global-max", Value::Int(524288)),
@@ -137,7 +138,7 @@ fn resolved_provenance_points_to_the_actual_owning_declaration() {
             definition.name
         );
     }
-    assert_eq!(cross_spec_count, 34);
+    assert_eq!(cross_spec_count, 35);
     assert_eq!(catalogue::coverage().literal_defaults, 521);
 }
 

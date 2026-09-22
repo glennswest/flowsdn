@@ -504,34 +504,41 @@ Build chain: `cilium-llvm` (clang/llc 19.1.7, BPF backend only) + `cilium-bpftoo
 (runtime + Go 1.26.5 + cross gcc/binutils + protoc + scapy/jinja2) → **`cilium/cilium`** (builder output
 copied onto runtime, Envoy copied from `cilium-envoy` image).
 
-Contents of the final `quay.io/cilium/cilium` image (sizes are estimates for amd64, unstripped Go binaries
-are stripped with debug symbols kept out-of-image):
+Measured `quay.io/cilium/cilium:v1.20.1`, Linux amd64, on 2026-09-22
+(#37). Platform manifest SHA-256:
+`f70030cc1ee5aad3e15a5b37324a5f3dd4ec039c082a22c589d439fbaf3ac68d`.
+The compressed layers total **257,673,835 bytes**; this is not the installed
+filesystem size. [Measurement record](../validation/cilium-image-sizes-2026-09-22.json).
 
-| Path | Origin | Est. size | Role |
-|---|---|---|---|
-| Ubuntu 26.04 userland (bash, coreutils, libc, jq, ca-certificates, tzdata, libatomic1) | runtime `apt-get` | ~80–100 MB | shell for init containers/probes, troubleshooting |
-| `iproute2` (`ip`, `tc`, `ss`), `iptables` 1.8.8 (`iptables-nft`, `iptables-legacy`, `xtables-nft-multi`, save/restore), `ipset`, `kmod` (`modprobe`, `lsmod`) | runtime apt + cilium/iptables debs | ~10 MB | runtime tooling; `iptables`, `ip6tables`, `ipset` are *executed by the agent* |
-| `/usr/sbin/iptables-wrapper` (kubernetes-sigs v3, static Go) | runtime | ~3 MB | on first call detects host legacy vs nft backend and re-points `iptables*` symlinks |
-| `/usr/local/bin/clang`, `/usr/local/bin/llc` (LLVM 19.1.7) | cilium-llvm | ~100–150 MB combined | **executed by the agent** to compile `bpf/*.c` per endpoint/config at runtime |
-| `/usr/local/bin/bpftool` 7.7.0 | cilium-bpftool | ~3 MB | debugging (bugtool); not used by the agent |
-| `/usr/bin/gops` | runtime | ~6 MB | Go runtime introspection (agent listens on 9890) |
-| `/cni/loopback` (containernetworking/plugins v1.9.1) | runtime | ~3 MB | installed to host if missing |
-| `/usr/bin/cilium-agent` | `daemon/` | ~100–140 MB | the agent |
-| `/usr/bin/cilium-dbg` (+ `cilium` symlink/bash completion) | `cilium-dbg/` | ~80–100 MB | CLI over the agent unix API; also `build-config`, `post-uninstall-cleanup`, `preflight validate-cnp`, `monitor`, `bugtool` wrappers |
-| `/usr/bin/cilium-health` | `cilium-health/` | ~40 MB | health probe server, spawned per node in the `lxc_health` netns |
-| `/usr/bin/cilium-bugtool` | `bugtool/` | ~40 MB | sysdump collector (shells out to ip/ss/tc/bpftool/iptables-save/…) |
-| `/usr/bin/hubble` | `hubble/` | ~40–50 MB | Hubble CLI (`HUBBLE_SERVER=unix:///var/run/cilium/hubble.sock`) |
-| `/usr/bin/cilium-mount`, `/usr/bin/cilium-sysctlfix`, `/usr/bin/cilium-envoy-bootstrap-locality` | `tools/` | ~5–10 MB each | init-container helpers (static Go) |
-| `/opt/cni/bin/cilium-cni` | `plugins/cilium-cni/` | ~30–40 MB | CNI plugin (ADD/DEL over the agent API) |
-| `/usr/bin/cilium-envoy`, `/usr/bin/cilium-envoy-starter` | `quay.io/cilium/cilium-envoy:v1.37.5` | ~100–150 MB | Envoy with Cilium filters (used when Envoy DaemonSet is disabled = embedded mode; starter drops caps) |
-| `/var/lib/cilium/bpf/**` (`bpf/*.c`, `bpf/lib/*.h`, `bpf/include/**`) | `make install-bpf` | ~2–3 MB | BPF C sources compiled at runtime |
-| `/init-container.sh`, `/install-plugin.sh`, `/cni-uninstall.sh` | `images/cilium`, `plugins/cilium-cni` | <10 KB | init/lifecycle scripts |
-| `/LICENSE.all`, bash completion | | | |
+| Path | Measured regular-file bytes |
+|---|---:|
+| `/usr/bin/cilium-agent` | 133,639,800 |
+| `/usr/bin/cilium-dbg` | 98,423,408 |
+| `/usr/bin/cilium-health` | 12,820,128 |
+| `/usr/bin/cilium-health-responder` | 5,919,568 |
+| `/usr/bin/cilium-bugtool` | 11,638,504 |
+| `/usr/bin/hubble` | 74,596,544 |
+| `/usr/bin/cilium-mount` | 7,643,008 |
+| `/usr/bin/cilium-sysctlfix` | 2,953,544 |
+| `/usr/bin/cilium-envoy-bootstrap-locality` | 26,305,592 |
+| `/opt/cni/bin/cilium-cni` | 17,270,840 |
+| `/usr/bin/cilium-envoy` | 75,271,288 |
+| `/usr/bin/cilium-envoy-starter` | 574,592 |
+| `/usr/local/bin/clang` | 85,062,048 |
+| `/usr/local/bin/llc` | 39,595,000 |
+| `/usr/local/bin/bpftool` | 6,726,832 |
+| `/usr/bin/gops` | 3,858,594 |
+| `/cni/loopback` | 2,965,666 |
+| `/usr/sbin/iptables-wrapper` | 2,265,250 |
 
-Total is on the order of 500–650 MB uncompressed. `cilium-operator-*` (scratch + ca-certs + gops + one
-binary, ~100 MB), `hubble-relay` (distroless static nonroot, ~60 MB), `clustermesh-apiserver` (distroless +
-`etcd` v3.7.1 + `/var/lib/cilium/etcd-config.yaml`, ~90 MB), `standalone-dns-proxy` (scratch) are already
-minimal. Only the agent image carries an OS.
+`/usr/bin/cilium` is a symlink to `cilium-dbg`, not another binary copy.
+Measurements use manifest-ordered tar headers from the pulled image; selected
+paths occur once and no whiteout entries occur. These replace the previous
+binary estimates. Grouped userland, BPF-source and script footprints were not
+measured; no estimate of their total or of other component images is retained.
+The agent image also contains runtime Ubuntu tooling and BPF C sources;
+operator, relay, ClusterMesh and standalone DNS images require separate pulls
+before publishing their sizes. Contents and execution roles are catalogued in F8.
 
 ### F8. External binaries the agent executes at runtime
 

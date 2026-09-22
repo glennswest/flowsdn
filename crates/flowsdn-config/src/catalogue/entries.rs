@@ -1978,7 +1978,7 @@ pub static ENTRIES: &[Definition] = &[
         name: "envoy-access-log-buffer-size",
         pflag: Pflag::Uint,
         default_expression: "4096",
-        default: Some("4096"),
+        default: Some("16384"),
         class: Class::Active,
         inventory_name: None,
     },

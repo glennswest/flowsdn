@@ -1,6 +1,8 @@
 //! Host-scope allocation from spec 07 §§3.1, 3.4 and 5.5.
 //! Callers serialize access through exclusive mutable borrows or their own lock.
 
+pub mod cidrset;
+
 use std::collections::{BTreeMap, hash_map::RandomState};
 use std::fmt;
 use std::hash::BuildHasher;

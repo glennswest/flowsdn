@@ -1,0 +1,29 @@
+{
+  "image": "quay.io/cilium/cilium:v1.20.1",
+  "architecture": "amd64",
+  "os": "linux",
+  "platform_manifest_sha256": "f70030cc1ee5aad3e15a5b37324a5f3dd4ec039c082a22c589d439fbaf3ac68d",
+  "config_sha256": "b8cd0c85554c5ef32804bdb5a03f2d66fe47ee673d301a590a19005ba763a313",
+  "compressed_layer_bytes": 257673835,
+  "method": "Skopeo pull on Linux; inspect regular file byte sizes in manifest-ordered tar layer headers. Selected paths each occur once; no whiteout entries present. No image executables run for size measurement. Symlink cilium -> cilium-dbg counted once. Not total installed footprint or other image sizes.",
+  "regular_file_bytes": {
+    "/usr/bin/cilium-agent": 133639800,
+    "/usr/bin/cilium-dbg": 98423408,
+    "/usr/bin/cilium-health": 12820128,
+    "/usr/bin/cilium-health-responder": 5919568,
+    "/usr/bin/cilium-bugtool": 11638504,
+    "/usr/bin/hubble": 74596544,
+    "/usr/bin/cilium-mount": 7643008,
+    "/usr/bin/cilium-sysctlfix": 2953544,
+    "/usr/bin/cilium-envoy-bootstrap-locality": 26305592,
+    "/opt/cni/bin/cilium-cni": 17270840,
+    "/usr/bin/cilium-envoy": 75271288,
+    "/usr/bin/cilium-envoy-starter": 574592,
+    "/usr/local/bin/clang": 85062048,
+    "/usr/local/bin/llc": 39595000,
+    "/usr/local/bin/bpftool": 6726832,
+    "/usr/bin/gops": 3858594,
+    "/cni/loopback": 2965666,
+    "/usr/sbin/iptables-wrapper": 2265250
+  }
+}

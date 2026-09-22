@@ -386,6 +386,7 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         nix::mount::MsFlags::empty(),
         None::<&str>,
     )?;
+    let initial_bpf_entries = fs::read_dir(&pin_root)?.map(|e| e.map(|e| e.file_name())).collect::<std::io::Result<std::collections::BTreeSet<_>>>()?;
     fs::write(
         temp.0.join("config.json"),
         serde_json::to_vec(
@@ -551,11 +552,9 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     println!(
         "PASS: offline CNI deletion survives process restart, does not resurrect stale links, drains durable queue and tears down remaining endpoint"
     );
-    ensure(
-        fs::read_dir(&pin_root)?.count() == 1,
-        "endpoint deletion left pinned links",
-    )?;
     fs::remove_file(pin_root.join("cilium_lxc"))?;
+    let remaining_bpf_entries = fs::read_dir(&pin_root)?.map(|e| e.map(|e| e.file_name())).collect::<std::io::Result<std::collections::BTreeSet<_>>>()?;
+    ensure(remaining_bpf_entries==initial_bpf_entries, "endpoint deletion left pinned links")?;
     nix::mount::umount(&pin_root)?;
     Ok(())
 }
