@@ -399,3 +399,18 @@ async fn binding_retains_its_validated_headers_even_if_the_trait_changes() {
             .contains("cells/header count mismatch")
     );
 }
+
+#[test]
+fn diagnostic_dump_is_bounded_utf8_and_does_not_expose_environment() {
+    let engine = Engine::new();
+    let mut state = State::default();
+    state.environment.insert("TOKEN".into(), "not-for-artifacts".into());
+    state.publish("visible", "failure");
+    let text = engine.diagnostic_dump(&state);
+    assert!(text.contains("visible") && text.contains("failure"));
+    assert!(!text.contains("not-for-artifacts"));
+    state.stdout = "界".repeat(400_000);
+    let text = engine.diagnostic_dump(&state);
+    assert!(text.len() <= 1_048_576);
+    assert!(text.ends_with("[diagnostic truncated]\n"));
+}

@@ -1801,8 +1801,8 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
     lands, since that is where node count actually matters and it needs no real
     datapath.
 
-11. **Sysdump retention and size.** 2 GiB per run × a nightly matrix is real
-    storage. *Recommendation*: retain full sysdumps only for failures, keep a
-    10 MB "quick set" for every run, and drop the flow ring to 100 000 flows for
-    nightly matrix jobs while keeping 1 000 000 for the PR gate, where a failure
-    is most likely to be a real regression somebody will investigate today.
+11. **Resolved #235: bounded evidence retention.** Keep a 10 MB decimal quick
+    set for every run (seven days on success, fourteen on failure), plus full
+    failure-only sysdumps capped at 2 GiB (fourteen days). Nightly flow capacity
+    is 100,000; PR capacity 1,000,000. Existing truncation manifests remain
+    required. Planning helpers are implemented; collection/upload wiring is not.

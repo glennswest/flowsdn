@@ -722,8 +722,9 @@ Notes.
 - Resolved (#57, ADR-0011): `cilium_events` remains `PERF_EVENT_ARRAY`,
   preserving decoder framing and per-CPU ordering/loss accounting. No ring
   buffer replacement is selected by the kernel floor.
-- bpffs and cgroup2: host-mounted contract (stormcos can guarantee it) versus
-  the privileged init container for general Kubernetes.
+- Resolved #38: support verified host-managed mounts and configured init
+  helpers for general installations (spec 22 packaging policy). Wrong filesystem
+  types fail closed; a directory alone does not satisfy the contract.
 - Verify the Rocky 10 `el10` config against section 2.6 on dev
   (`ssh <build-user>@<build-host> 'grep -E "..." /boot/config-$(uname -r)'` on a Rocky
   10 VM) and record the result in stormcos's kernel README; in particular

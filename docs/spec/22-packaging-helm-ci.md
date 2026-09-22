@@ -1574,13 +1574,10 @@ committed. The line is "would a reviewer want to see this change in a diff?".
 
 Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integration-issue-resolutions.md); their implementation and acceptance tests remain required.
 
-1. **GHCR.** Options: (a) never; (b) mirror only, once the repo is public;
-   (c) primary. **Recommendation: (b).** Tarballs on releases plus
-   `sbregistry:5100` satisfy the stormcos supply chain exactly (preload,
-   `IfNotPresent`/`Never`, no pull on the start path); GHCR added as a mirror at
-   the moment the repo goes public serves everyone who is not on this fleet. A
-   public CNI whose only distribution is a tarball is not installable by
-   strangers, and that is a real cost with no offsetting benefit.
+1. **Resolved #236: GHCR is a public mirror.** Keep release archives and a
+   configured deployment registry as the primary distribution paths. Enable the
+   GHCR mirror only when the repository is public; mirror the same digest.
+   The planning library does not upload images or change repository visibility.
 
 2. **Resolved — #237.** Keep cilium, cilium-config and cilium-operator chart object
    names and existing selectors for compatibility. A branding rename requires a
@@ -1593,11 +1590,11 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    lands. (c) is a separate project (the contract is the etcd key space and the
    remote-cluster protocol, and replacing etcd changes both).
 
-4. **certgen.** Options: (a) reuse `quay.io/cilium/certgen`; (b) `flowsdn
-   certgen` subcommand with `rcgen`. **Recommendation: (a) now, (b) at 1.0.**
-   The default TLS method is `helm` (no image at all); `cronJob` is the minority
-   path. (b) removes the last non-flowsdn image from a default-ish install and is
-   ~1k lines, so it is worth doing eventually, just not first.
+4. **Resolved #239/#152: certificate ownership follows TLS method.** Helm is
+   the default issuer; cert-manager and user-provided Secrets remain supported.
+   CronJob mode uses the upstream certgen image pinned by digest. No new Rust
+   issuer ships in this stage; revisit after milestone 4 acceptance. Every
+   issuer must honor spec 11 server names and client-auth requirements.
 
 5. **Resolved — #240.** Ship a Rust loopback entry point from the flowsdn-cni
    executable, installed as loopback (also addressable as flowsdn-loopback). Spec 09
@@ -1609,12 +1606,13 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    start reaching releases. (c) is too slow for e2e and would test QEMU's
    virtio-net rather than a real driver.
 
-7. **Self-hosted runner exposure.** A self-hosted runner on `<build-host>`
-   executing PR workflows from forks is a code-execution risk. **Recommendation:**
-   restrict the `dev-g8` runner to `pull_request_target`-free workflows on
-   branches of this repository only, require `workflow_dispatch` approval for
-   fork PRs, and keep hosted runners for everything that does not need a kernel.
-   The repository is private today, which defers but does not remove the issue.
+7. **Resolved #242: privileged runners accept trusted dispatch only.**
+   Hosted runners handle pull requests. The privileged lane requires an
+   approved workflow_dispatch from this repository on refs/heads/main; it
+   never checks out an arbitrary ref or fork input. Reject pull_request_target
+   and automatic PR/push events for this lane. Promotion of a reviewed fork
+   change to trusted main precedes privileged testing. The Rust policy helper
+   fails closed; actual workflow wiring remains a milestone 4 gate.
 
 8. **seccomp profile.** The reference ships `seccompProfile: Unconfined` for the
    agent. flowsdn's syscall surface is much smaller (no exec of anything, ever)
@@ -1625,13 +1623,35 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    anger. A scratch image with no shell and no exec is the ideal case for this,
    and it is a genuine security improvement over the reference.
 
-9. **Chart repository hosting.** Options: (a) GitHub Pages `gh-pages` branch;
-   (b) an OCI chart in the same registry as the images; (c) both.
-   **Recommendation: (c)** — OCI charts (`helm push oci://`) for the fleet
-   because the registry is already there, Pages for public consumption because
-   `helm repo add` is what people type.
+9. **Resolved #244: publish charts through OCI and public Pages.** OCI is
+   the primary chart transport; enable Pages for helm repo add when the
+   repository is public. Both transports publish the same validated chart.
+   Signing, index updates and publication remain release-pipeline work.
 
 10. **Resolved — #245.** Commit bpf-objects.lock alongside source changes that alter the
    produced bytecode. CI rebuilds with pinned inputs and verifies hashes; the same hash
    identifies verifier baselines and release objects. CI artifacts supplement, not
    replace, the reviewed lock.
+
+### Packaging policy implementation (#33/#38/#235/#236/#239/#242/#244)
+
+`flowsdn-packaging` provides pure deployment and CI plans. Renderers, mount
+helpers, dispatchers and uploaders must consume and enforce these plans before
+runtime support is claimed. It does not invoke external programs or mutate hosts.
+
+For #33, preserve §3.6 ignored-with-warning keys and nftables NOTRACK behavior.
+Reject disabled BPF masquerade whenever either address family requests
+masquerading. Do not conflate this with banning all kube-proxy coexistence:
+that remains governed by routing validation. No iptables fallback is provided.
+
+For #38, both installation models are supported: host-managed filesystems must
+already have the correct statfs type; missing/wrong types fail without a mount
+fallback. General installations may schedule the configured init helper, but
+must verify filesystem type afterward. Directory existence is insufficient.
+Optional cgroup features may be disabled independently; required bpffs must pass.
+
+For #235, retain a 10,000,000-byte quick set on every run for seven days and full
+failure evidence up to 2 GiB for fourteen days. Failure quick sets share the
+fourteen-day retention. Use 100,000 retained flows nightly and 1,000,000 for PR
+runs. Existing manifest/truncation ordering remains mandatory; these are caps,
+not a claim that the collector or upload workflow exists.

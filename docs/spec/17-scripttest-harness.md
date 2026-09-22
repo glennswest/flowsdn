@@ -972,7 +972,8 @@ line, so an editor jumps to the right place.
 
 #### 3.8.5 Interactive debugging
 
-`break` opens a prompt on the controlling terminal, executing single command
+When the deferred interactive feature is implemented, `break` opens a prompt
+on the controlling terminal, executing single command
 lines against the live fixture with the full command table, until EOF. It
 requires `--no-parallel` (a raw-mode terminal shared with parallel logging is
 unusable). A `--break-on-error` switch MUST enter the prompt at the point of
@@ -1576,9 +1577,12 @@ CRLF? (a) reject with a clear error; (b) normalize. **Recommendation: (a)** —
 a CRLF `.txtar` in this repo means someone edited a harvested file, which is
 exactly what must not happen, and a hard error surfaces it.
 
-**12.7 Interactive `break`.** Ship it, or ship only the non-interactive dump?
-**Recommendation: ship the dump first** (it is what CI needs and what most
-failures need), add `break` behind a feature flag once the LB area is green.
+**12.7 Resolved #211: non-interactive diagnostics first.** The engine exposes
+`diagnostic_dump` for fixture failure handling: current stdout/stderr and all
+registered tables, stable ordering, one-MiB UTF-8 cap, explicit render errors
+and truncation. Environment values are excluded. External map adapters and
+automatic area failure wiring remain pending. Interactive break remains deferred
+until the LB area is green, behind an explicit feature flag.
 
 **12.8 Resolved — #212.** Store flowsdn-authored scripts in
 tests/scripttest/flowsdn/<area>/*.txtar and run them through the same engine. Keep
@@ -1586,12 +1590,15 @@ tests/scripttest/corpus as the provenance-bearing harvested input, protected by 
 checksum gate.
 
 
-**12.9 Naming rewrites (ADR-0005 §4).** The harvested scripts name
-`cilium`-specific config keys and map names. flowsdn keeps most of them for
-compatibility (spec 00 §2), so the rewrite set should be small — but it is not
-yet enumerated. **Recommendation: run the §9.4 static gate as soon as the
-config registry exists; the keys it reports as unknown are exactly the rewrite
-set, and that list belongs in `tools/harvest-txtar.sh`.**
+**12.9 Resolved #213: preserve reference naming; audit mechanically.**
+`cargo xtask audit-corpus` parses all harvested archives without execution,
+inventories command symbols, startup flag names and preserved cilium_ symbols,
+and compares flags with the configuration catalogue. `--check` compares the
+reviewed `tests/scripttest/naming-audit.json` snapshot. The rewrite set is empty:
+compatibility names stay stable. Flags outside the agent catalogue must be
+classified as area-fixture inputs or remaining adapter work, not renamed blindly.
+This inventory does not claim all commands are registered or runnable; those
+separate §9.4 gates remain open. No Go/shell harvester is introduced.
 
 **12.10 Resolved — #214.** A reference-tag bump is a dedicated PR containing corpus,
 provenance, divergence and generated-index changes only. The repository maintainer

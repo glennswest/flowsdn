@@ -1,5 +1,6 @@
 //! Initial Linux build driver. Packaging and BPF commands arrive with their crates.
 mod changed;
+mod corpus;
 
 use std::{env, error::Error, path::Path, process::Command};
 
@@ -16,9 +17,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let command = args.first().map(String::as_str).unwrap_or("help");
     if command == "help" || command == "--help" {
         println!(
-            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|check-changed> BASE\nRun build tasks on Linux; see README.md."
+            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|check-changed> BASE\ncargo xtask audit-corpus [--check]\nRun build tasks on Linux; see README.md."
         );
         return Ok(());
+    }
+    if command == "audit-corpus" {
+        if args.len() > 2 || args.get(1).is_some_and(|s| s != "--check") { return Err("expected audit-corpus [--check]".into()); }
+        env::set_current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).parent().ok_or("workspace")?)?;
+        return corpus::run(args.len() == 2);
     }
     if !((args.len() == 1 && matches!(command, "build" | "test" | "check" | "deny"))
         || (args.len() == 2 && matches!(command, "plan" | "check-changed")))

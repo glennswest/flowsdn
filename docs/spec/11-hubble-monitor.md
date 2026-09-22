@@ -3341,10 +3341,10 @@ not yet exported, failed writes and volatile filesystem buffers can still be
 lost. Ring unit tests cover bounded retention, per-position in-band loss, newest
 slot reservation, sequence wrap and construction of a fresh empty instance.
 
-**12.12 Who generates Hubble certificates?** Decide in the packaging spec; this
-spec only fixes the **name derivation** (§3.17.4), which every option must
-satisfy. Note that the per-node scheme means one wildcard
-`*.<cluster>.hubble-grpc.cilium.io` covers every node.
+**12.12 Resolved #152: packaging owns certificate issuance.** Spec 22 #239
+keeps Helm default, cert-manager/user Secrets and digest-pinned upstream certgen
+for CronJob mode. Every issuer preserves §3.17.4 names and authentication.
+The planning helper does not generate certificates or render the chart.
 
 **12.13 Kubernetes `PacketDrop` event emitter.** Deferred (§1) — alpha
 upstream, ~500 lines, needs a k8s event recorder plus dedupe and rate limiting.

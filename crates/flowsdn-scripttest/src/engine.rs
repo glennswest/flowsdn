@@ -259,6 +259,32 @@ impl Engine {
     /// Pattern commands regex-escape substitutions in their first non-option
     /// argument (or the argument following `--`). Argument indices exclude the
     /// command name. Flags themselves are parsed by the registered handler.
+    /// Non-interactive failure snapshot for fixture callers. Only registered
+    /// tables and current output are included; environment values and external
+    /// maps are not implicitly read. Rendering errors remain visible. The
+    /// complete UTF-8 output is bounded to one MiB, including truncation notice.
+    pub fn diagnostic_dump(&self, state: &State) -> String {
+        const LIMIT: usize = 1_048_576;
+        const NOTICE: &str = "\n[diagnostic truncated]\n";
+        fn append(out: &mut String, text: &str) -> bool {
+            let remaining = LIMIT.saturating_sub(NOTICE.len()).saturating_sub(out.len());
+            let mut end = text.len().min(remaining);
+            while !text.is_char_boundary(end) { end = end.saturating_sub(1); }
+            out.push_str(text.get(..end).expect("UTF-8 boundary"));
+            if end < text.len() { out.push_str(NOTICE); false } else { true }
+        }
+        let mut output = String::new();
+        for (name, value) in [("stdout", state.stdout.as_str()), ("stderr", state.stderr.as_str())] {
+            if !append(&mut output, &format!("== {name} ==\n")) || !append(&mut output, value) || !append(&mut output, "\n") { return output; }
+        }
+        for (name, table) in &self.tables {
+            if !append(&mut output, &format!("== table {name} ==\n")) { return output; }
+            let rendered = table.render(None).unwrap_or_else(|error| format!("[render failed: {error}]\n"));
+            if !append(&mut output, &rendered) || !append(&mut output, "\n") { return output; }
+        }
+        output
+    }
+
     pub fn register_command(
         &mut self,
         name: &str,
