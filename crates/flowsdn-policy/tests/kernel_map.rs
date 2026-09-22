@@ -72,10 +72,10 @@ fn compare(records: &[Record], identities: &[u32], all_ports: bool) {
 }
 #[test]
 fn aggregate_auth_explicit_disable_and_wildcard_fallback() {
-    // Ordinary cluster-local identities map to aggregate cluster14.
+    // Ordinary cluster-local identities map to aggregate cluster11.
     let mut records = vec![
         record(1000, 6, 80, 16, 0x101, 0, false),
-        record(14, 6, 80, 16, 0x101, 1, true),
+        record(flowsdn_identity::numeric::ReservedIdentity::AggregateCluster as u32, 6, 80, 16, 0x101, 1, true),
         record(0, 0, 0, 0, 0x2ff, 0, false),
     ];
     assert_eq!(
@@ -106,7 +106,7 @@ fn aggregate_auth_explicit_disable_and_wildcard_fallback() {
 fn longer_aggregate_prefix_wins_tie_but_precedence_wins_before_length() {
     let mut records = vec![
         record(1000, 0, 0, 0, 0x101, 0, false),
-        record(14, 6, 80, 16, 0x101, 2, true),
+        record(flowsdn_identity::numeric::ReservedIdentity::AggregateCluster as u32, 6, 80, 16, 0x101, 2, true),
     ];
     assert!(matches!(
         scan(&records, context(), packet(1000, 80)),
@@ -146,7 +146,7 @@ fn explicit_auth_boundaries_propagate_only_as_derived_and_preserve_disable() {
 fn conservative_pruning_preserves_origins_and_rejects_invalid_kernel_keys() {
     let records = vec![
         record(1000, 6, 80, 16, 0x101, 1, true),
-        record(14, 6, 80, 16, 0x101, 1, true),
+        record(flowsdn_identity::numeric::ReservedIdentity::AggregateCluster as u32, 6, 80, 16, 0x101, 1, true),
     ];
     let pruned = prune_aggregate_duplicates(&records, context()).expect("prune");
     assert_eq!(pruned.len(), 1);
@@ -225,5 +225,30 @@ fn deterministic_soak_gates_index_across_category_identities() {
         compare(&records, &ids, false);
         records.reverse();
         compare(&records, &ids, false);
+    }
+}
+
+#[test]
+fn canonical_records_reject_unsupported_identity_scopes_and_redirect_rank_mismatch() {
+    for id in [0x01000000,0x02000000,0x03000001,u32::MAX] {
+        let invalid=record(id,6,80,16,0x101,0,false);
+        assert!(Index::new(std::slice::from_ref(&invalid)).is_err());
+        assert!(scan(&[invalid],context(),packet(1000,80)).is_err());
+    }
+    for id in [0,1,11,12,13,14,1000,0x01000001,0x02000001,0x00ffffff] {
+        assert!(Index::new(&[record(id,6,80,16,0x101,0,false)]).is_ok());
+    }
+    let mut plain_redirect=record(1000,6,80,16,0x101,0,false);
+    plain_redirect.entry.proxy_port=flowsdn_bpf_abi::Be16::new(15000);
+    let redirect_without_port=record(1000,6,80,16,0x102,0,false);
+    for invalid in [plain_redirect,redirect_without_port] {
+        assert!(Index::new(std::slice::from_ref(&invalid)).is_err());
+        assert!(scan(&[invalid],context(),packet(1000,80)).is_err());
+    }
+    for rank in [2,129,254] {
+        let mut valid=record(1000,6,80,16,0x100|rank,0,false);
+        valid.entry.proxy_port=flowsdn_bpf_abi::Be16::new(15000);
+        let index=Index::new(std::slice::from_ref(&valid)).expect("valid redirect");
+        assert_eq!(index.lookup(context(),packet(1000,80)),Ok(Outcome::Allow {proxy_port:15000,authentication:0,cookie:0}));
     }
 }

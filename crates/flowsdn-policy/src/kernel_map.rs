@@ -38,6 +38,7 @@ impl Context {
 fn canonical(record: &Record) -> Result<(), &'static str> {
     let k = record.key;
     let v = record.entry;
+    NumericIdentity::new(k.sec_label).map_err(|_| "invalid key identity")?;
     let prefix = if k.protocol == 0 {
         0
     } else {
@@ -63,6 +64,9 @@ fn canonical(record: &Record) -> Result<(), &'static str> {
     }
     if v.denies() && (v.auth != 0 || v.proxy_port.get() != 0 || v.precedence & 255 != 255) {
         return Err("noncanonical deny");
+    }
+    if !v.denies() && ((v.precedence & 255 == 1) != (v.proxy_port.get() == 0)) {
+        return Err("redirect precedence and proxy port disagree");
     }
     if !v.denies() && v.precedence & 255 == 255 {
         return Err("deny precedence on allow");
