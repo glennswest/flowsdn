@@ -1,6 +1,6 @@
 # Observer primitives
 
-Dependency-free building blocks from the Hubble/monitor specification:
+Building blocks with no external dependencies from the Hubble/monitor specification:
 
 - Numeric IP/CIDR filters, allow/deny composition and explicit CEL rejection.
 - Checked v0–v3 drop headers with packet-length boundaries. Raw ifindex remains

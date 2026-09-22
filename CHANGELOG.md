@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- Add read-only module health queries compatible with the StateDB wire format,
+  including explicit degraded status for unavailable agent controllers.
+- Add Kubernetes version/CRD registration plans and guarded Node patch creation.
+- Add operator leadership/readiness, taint and CES rate-selection primitives.
+- Add Hubble IP/CIDR filtering, checked drop decoding, bounded ring behavior and
+  realized-policy correlation contracts, with metrics migration guidance.
+  Controller, observer server and live cluster integration remain outstanding.
+
 - Add configuration-change overrides with explicit diagnostics, reference-snapshot
   detection, configurable ipcache capacity and reserved fixed-identity validation.
 - Add policy primitives for atomic subject validation, named-port ownership,

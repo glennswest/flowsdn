@@ -59,7 +59,8 @@ The test server is not a deployable agent.
 Run `agent-runtime` with the CNI executable, agent executable and BPF object
 paths to exercise the real standalone process. It checks dual-stack ADD/CHECK,
 restart recovery, offline deletion replay, partial teardown health, retries and
-persisted-state cleanup. Traffic loss during agent downtime is an explicit
+persisted-state cleanup. It also checks module-health query wire rows, native
+health JSON and rejection of other table queries across process restarts. Traffic loss during agent downtime is an explicit
 current limitation, not a continuity claim.
 
 The BPF crate is a separate workspace with its own lockfile and toolchain.

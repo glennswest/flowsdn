@@ -50,6 +50,15 @@ unknown-key validation. The agent uses explicit local configuration; Kubernetes 
 controllers, uninterrupted forwarding across agent downtime and two-node
 Kubernetes pod connectivity remain outstanding.
 
+The agent also exposes read-only module health through the reference query wire
+format and a native JSON route, reporting missing controllers as degraded.
+New Kubernetes and operator libraries provide guarded Node patch plans, CRD
+registration/version checks, leadership/readiness gates and CES rate selection.
+Hubble primitives cover IP/CIDR filters, drop decoding, ring behavior and realized
+policy correlation. These libraries do not yet provide live controllers or an
+Observer server. See the [metrics migration guide](docs/compatibility/metrics.md)
+for the documented dashboard changes.
+
 | | |
 |---|---|
 | Specifications | 24 files, ~40k lines — every area, normative, with compatibility contracts and test plans |
