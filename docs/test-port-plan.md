@@ -19,8 +19,9 @@ as this plan required.
 
 ## 1. The measurements
 
-Every number below is a measurement, not an estimate. The commands are given so
-they can be re-run at a newer tag.
+The source counts immediately below are measurements of the pinned reference.
+The later planning factors and extrapolated totals are explicitly separate.
+The commands allow the source survey to be repeated at a newer tag.
 
 ```
 $ grep -rhoE '^func Test[A-Za-z0-9_]*\(' --include='*_test.go' pkg daemon operator | wc -l
@@ -63,23 +64,51 @@ and not wishful thinking.
 | _long tail_ | 176 packages under 245 test lines each, mixed disposition, rolled up per area. | 18,968 | 6.9% |
 | | | **275,545** | 100% |
 
-### Effort model
+### Measured port ratios and conditional planning model
 
-Effort is quoted in **lines of Rust test code to write**. There is no way to
-measure this in advance, so it is a model, stated openly:
+The former ×0.45 port factor is withdrawn. The earlier claim that a faithful
+Rust port of the policy suite had measured about 9,500 lines was unsupported;
+that policy port is not complete and provides no calibration observation.
 
-| Disposition | Factor | Reasoning |
+The completed Maglev and CIDRset unit-test ports provide two actual observations
+(§6.5 records the case mapping and Linux validation):
+
+| Port | Rust test code lines | Static fixture lines | Pinned Go test lines | Code ratio | Code plus data ratio |
+|---|---:|---:|---:|---:|---:|
+| Maglev | 122 | 1 | 249 | 0.490 | 0.494 |
+| CIDRset | 193 | 55 | 764 | 0.253 | 0.325 |
+| Combined | **315** | **56** | **1013** | **315/1013 = 0.311** | **371/1013 = 0.366** |
+
+These are physical-line ratios for two algorithmic test ports, not engineering
+hours, a representative project sample, or a confidence interval. The Go Maglev
+denominator includes a benchmark/harness that was not ported. Fixture formatting
+also affects the count. Do not use these ratios to assert a measured total for
+policy, controllers, networking integration, or the project as a whole.
+
+For sensitivity analysis only, retain the following explicit planning inputs:
+
+| Disposition | Conditional factor | Evidence or assumption |
 |---|---:|---|
-| port | ×0.45 | Go test code is verbose in ways Rust is not (`if err != nil { t.Fatal(err) }` per call becomes `?`; anonymous struct tables become `rstest` cases or `const` arrays). A large fraction of the reference's test lines is fixture construction that flowsdn expresses as data. |
-| harvest | ×0.10 | One comparison runner per fixture family. The data is already in the tree. |
-| replace | ×0.35 | flowsdn's design is smaller here by construction (no Hive, no StateDB, no iptables), so the equivalent test surface is smaller. |
-| drop | ×0 | |
-| long tail | ×0.35 | Blended. |
+| port | 315/1013 code-only; 371/1013 including static data | Measured on the two ports above; applying either to other packages is an **unvalidated extrapolation**. |
+| harvest | ×0.10 | Unvalidated historical runner-size assumption. |
+| replace | ×0.35 | Unvalidated historical replacement-suite assumption. |
+| drop | ×0 | No test port in this disposition; no statement about implementation work. |
+| long tail | ×0.35 | Unvalidated historical blended assumption. |
 
-**Do not quote these numbers as fact.** They are calibrated against the
-observation that a faithful Rust port of `pkg/policy`'s 21,034 test lines lands
-near 9,500 lines, and the model is linear from there. The rank order between
-areas is much more trustworthy than the absolute totals.
+Using the disposition counts above, the arithmetic is reproducible:
+
+- Conditional port component: `188730 × 315 / 1013 = 58687.019` code lines,
+  or `188730 × 371 / 1013 = 69120.267` lines including static data.
+- Other modeled components: `31557 × 0.10 + 22161 × 0.35 + 18968 × 0.35
+  = 17550.850` lines; these factors have not been calibrated.
+- Conditional totals, rounded only after summation: **76,238 code-only** or
+  **86,671 with the port component's static data included**. The latter is not
+  a complete fixture inventory: other disposition factors remain unchanged.
+
+These totals replace the old aggregate calculation as labeled planning
+scenarios, not validated effort estimates. No per-area redistribution is
+supported by this two-module sample. Broader calibration must measure actual
+completed ports before changing that conclusion.
 
 The model also excludes, deliberately:
 
@@ -88,9 +117,13 @@ The model also excludes, deliberately:
 - the **397 `CHECK` cases** in `bpf/tests` (`flowsdn-bpftest`, sibling agent);
 - `flowsdn-cptest` and `flowsdn-connectivity`, both specified by ADR-0005 §3.
 
-### Totals
+### Reference counts and withdrawn historical area estimates
 
-| Area | Packages | `Test*` | Go test lines | flowsdn effort (Rust test lines) |
+Reference counts below remain the original survey. The last column is retained
+only to identify the withdrawn historical allocation; it must not be used as a
+current estimate or summed into the conditional scenarios above.
+
+| Area | Packages | `Test*` | Go test lines | Historical Rust-line allocation (**withdrawn**) |
 |---|---:|---:|---:|---:|
 | 01 BPF datapath programs | 0 | 0 | 0 | 0 (owned by `flowsdn-bpftest`) |
 | 02 BPF maps + loader | 20 | 122 | 9,935 | 3,700 |
@@ -109,20 +142,19 @@ The model also excludes, deliberately:
 | 15 Helm, images, CI, tests | 8 | 11 | 623 | 200 |
 | **Total** | **385** | **3,080** | **275,545** | **~102,600** |
 
-Roughly **102,000 lines of Rust test code** for the full 15-area scope, against
-`docs/inventory/README.md`'s 200–260k-line estimate for flowsdn *including*
-tests. Those two numbers are in tension, and the tension is real: ADR-0005 makes
-the test corpus a first-class deliverable, which the inventory's estimate
-predates. Either the inventory's total rises, or scope is cut. The honest
-reading is that **tests are about a third of the work**, and the ranking in §3 is
-how to spend the first third of that third.
+The old ~102,600-line allocation and its inferred “third of the work” claim
+are withdrawn. Test LOC cannot establish engineering effort or reconcile the
+inventory's implementation-size estimate. The reference scope and required
+test behaviors remain unchanged; this calibration does not authorize scope cuts.
 
 ---
 
 ## 2. Per-area plan
 
 Each table lists every package in the area with at least 245 test lines,
-individually; smaller packages are rolled up. Counts are exact.
+individually; smaller packages are rolled up. Reference counts are exact for
+the pinned survey. Any effort figures in these historical area descriptions
+are withdrawn planning allocations as explained in §1, not calibrated results.
 
 
 ### Area 01 — BPF datapath programs
@@ -878,8 +910,10 @@ Against `docs/inventory/README.md`'s build order:
 | 11. Envoy, DNS proxy | `pkg/envoy` (NPDS), `pkg/fqdn*` | ~9,700 |
 | 12. ClusterMesh | `pkg/kvstore` (**run against fastetcd before writing ClusterMesh code**), `pkg/clustermesh*` | ~4,100 |
 
-The right-hand column is the effort for the packages *named on that row*, not
-the area total, so it sums to ~82,400 rather than ~102,600; the remainder is the
+The right-hand column is the withdrawn historical allocation for packages
+*named on that row*, not
+the historical area total, so it sums to ~82,400 rather than ~102,600; both
+allocations are withdrawn by the §1 calibration update. The remainder was the
 long tail and the `replace` work that follows the code it tests.
 
 The one out-of-order recommendation: **port `pkg/kvstore`'s 28 tests against
@@ -934,10 +968,16 @@ fastetcd at step 1, not step 12.** They are 2,280 Go test lines that answer
    oracle, not completion of these five suites. Full mapstate optimization and
    fuzz agreement remain tracked by #103.
 
-4. **BGP protocol correctness.** The reference gets it from GoBGP and therefore
-   does not test it; `pkg/bgp/gobgp` is **replace** and leaves a hole. flowsdn's
-   own speaker needs session state-machine, OPEN/UPDATE encoding and error-path
-   tests that have no reference counterpart. Not costed in §1.
+4. **BGP protocol unit-suite gap — #249 validated.** Independent Rust wire
+   codecs, OPEN/UPDATE encoders, session FSM, timers, connection ownership and
+   error transcripts now have a passing focused `flowsdn-bgp-proto` suite.
+   Spec15 §9.2 maps the cases to `tests/wire.rs`, `encoders.rs`, `session.rs`
+   and `ownership.rs`, including malformed-frame notification bytes and a
+   100001-announcement bounded-observation transcript. This closes the missing
+   protocol-unit-suite item, not the complete speaker milestone. Real socket
+   transport, TCP authentication, export/reconciler integration and independent
+   GoBGP interoperability remain required. This replacement work is not measured
+   by the Maglev/CIDRset calibration or added to its conditional totals.
 5. **Effort model calibration — #250 validated 2026-09-22.**
    The pure algorithms and Rust ports now cover every named upstream unit-test
    category. Calibration mapping:

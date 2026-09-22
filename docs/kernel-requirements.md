@@ -725,11 +725,10 @@ Notes.
 - Resolved #38: support verified host-managed mounts and configured init
   helpers for general installations (spec 22 packaging policy). Wrong filesystem
   types fail closed; a directory alone does not satisfy the contract.
-- Verify the Rocky 10 `el10` config against section 2.6 on dev
-  (`ssh <build-user>@<build-host> 'grep -E "..." /boot/config-$(uname -r)'` on a Rocky
-  10 VM) and record the result in stormcos's kernel README; in particular
-  `NETKIT`, `NET_SCH_FQ`, `TCP_CONG_BBR`, `NFT_TPROXY`, `NFT_SOCKET`,
-  `INET_DIAG_DESTROY`, `XFRM_STATISTICS`.
+- **Resolved #39:** the booted Rocky 10.0 x86-64 kernel supplies all 73
+  symbols in §2.6. `VETH=m` requires module packaging; thirteen other options
+  are built in instead of modular. The [full comparison](validation/rocky-kernel-config-2026-09-22.md)
+  records the exact image/kernel, and stormcos’s kernel README records the result.
 - arm64 NIC driver of the MikroTik RDS-class boards (`al_eth` or successor):
   confirm no `ndo_bpf` → XDP disabled by default on that hardware.
 - Measure, not estimate: first Rust `bpf_host` NodePort build's `insns

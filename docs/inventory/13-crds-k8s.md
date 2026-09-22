@@ -1346,7 +1346,10 @@ None (pure control-plane). `hostfirewallbypass` sets `SO_MARK` on outgoing socke
 
 ## Open questions
 
-- rustkube feature matrix: does it implement CEL validation, defaulting, `x-kubernetes-list-type=map`, strategic-merge patch, status subresources, field selectors on `spec.nodeName`/`status.phase`, `PartialObjectMetadata` negotiation, watch bookmarks/410 relist, protobuf content type, Leases and CRD `Established` conditions? Each "no" moves logic into flowsdn (client-side defaulting/validation, client-side pod filtering, JSON-only, etc.).
+- **Resolved #30:** the [audited capability matrix](../validation/dependency-capabilities-2026-09-22.md)
+  records each requested capability and its missing probes. 184 existing unit
+  tests passed; CEL/schema defaulting/list-map, CRD status isolation and stale
+  watch recovery still have gaps. This is an audit result, not server conformance.
 - Should flowsdn serve `v2alpha1` for the five graduated BGP/LB/CIDRGroup CRDs at all, or only `v2`? Serving both with strategy `None` costs nothing on a store that does not convert, but rustkube must accept two served versions with one storage version.
 - Resolved #20: CRD identities are primary; kvstore remains optional scope.
   API-server uniqueness of metadata.name is still a required CRD allocation gate.

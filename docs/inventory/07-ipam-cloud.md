@@ -730,9 +730,9 @@ client), routing S (~1k). Overall XL (~23k lines of Rust).
 
 - Alibaba: community crate vs. hand-written signer; also whether to support
   RRSA (OIDC) from day one.
-- Egress gateway on ENI: the reference has removed the compat flags; confirm
-  with the egress-gateway inventory that priority 111 alone is sufficient and
-  no route installation is expected from IPAM.
+- **Resolved #19:** priority 111 is insufficient alone. IPAM supplies routing
+  metadata; CNI Configure installs pod rules/gateway routes and the agent
+  reconciles ENI gateway routes. Specs 07/10/14 record the ownership boundary.
 - `--aws-max-results-per-call` auto-fallback to 1000 on `OperationNotPermitted`
   is an incident response baked into code; keep or replace with explicit config?
 - GKE: do we want a real GCP integration (alias IP ranges via compute API) or

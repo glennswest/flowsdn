@@ -15,8 +15,9 @@ fn b(n: u32, id: u32, weight: u16) -> Backend {
 #[test]
 fn weighted_vector_and_permutation() {
     let expected: Vec<u32> = include_str!("maglev-weighted.rle")
-        .trim()
-        .split(',')
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .flat_map(|line| line.trim().split(','))
         .flat_map(|r| {
             let (id, count) = r.split_once('(').expect("run");
             std::iter::repeat_n(

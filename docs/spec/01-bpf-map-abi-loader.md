@@ -1321,7 +1321,7 @@ aya gaps and how each is filled:
 | BTF decl tags | not used (§3.7, §3.8 DEVIATIONS); tables in the ABI crate |
 | `.rodata.config` `set_global` | Aya 0.14 aliases this deprecated API to `override_global`; kernel map-observation probe must confirm default and overridden values, with wrong-size/missing-symbol negative controls; loader additionally validates the datasec name |
 | reachability analysis | new code over `aya_obj::Object` instruction slices (`Vec<Instruction>` with relocation info); ~1.5k lines |
-| kfunc/ksym relocation for `bpf_sock_destroy` | **Unconfirmed gap:** pinned aya-obj 0.3 ordinary call relocation resolves object-local functions, not kernel BTF kfunc IDs. A dedicated relocation path or validated alternative is required; do not claim support from generated kfunc constants or generic CO-RE support |
+| kfunc/ksym relocation for `bpf_sock_destroy` | **Confirmed gap (2026-09-22):** pinned aya-obj 0.3 ordinary call relocation resolves object-local functions, not kernel BTF kfunc IDs. A dedicated relocation path or validated alternative is required; do not claim support from generated kfunc constants or generic CO-RE support |
 | `PROG_ATTACH` without flags | shim (aya's `CgroupAttachMode` always sets a flag) |
 | possible-CPU count | `aya::util::nr_cpus()` reads `possible`; used for perf arrays, per-CPU maps and `.data.aux` |
 
@@ -1408,3 +1408,15 @@ available only as a migration plan while an old program may still read the
 legacy IPv4 map; map retirement requires proof those readers are detached.
 The encryption library plans this requirement; atomic runtime mirroring and
 migration validation remain implementation work.
+
+
+### Loader probe results (2026-09-22)
+
+Linux 6.17.1 x86-64 passed default/patched `.rodata.config`, missing/wrong-size
+rejection, and 9000-byte XDP execution (total 9000, linear 3520). The actual
+BPF_PROG_LOAD syscall carried `BPF_F_XDP_HAS_FRAGS`; ordinary XDP also accepted
+the jumbo test input, so rejection is not a valid negative control. TCX pinning,
+link update, same-map restart and foreign-interface rejection passed in the
+agent lifecycle fixture. The separate kfunc object failed Aya relocation with
+`UnknownFunction` in `sock_destroy_probe`; no socket was destroyed. #3 remains
+open for a validated kfunc relocation implementation.

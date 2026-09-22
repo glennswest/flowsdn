@@ -181,3 +181,10 @@ CIDR allocator test vectors
 crates/flowsdn-ipam/tests/cidrset-upstream.txt retains static test data from
 cilium/cilium v1.20.1, commit 7d68cfb394, pkg/ipam/cidrset/cidr_set_test.go.
 Copyright Authors of Cilium and The Kubernetes Authors. Apache-2.0.
+
+Opt-in seccomp profile
+----------------------
+deploy/seccomp/agent-amd64.json derives from containers/common's Apache-2.0
+seccomp baseline, distributed in containers-common 0.64.2-1.fc43. Copyright
+containers/common contributors. The exact baseline digest, transformation and
+validation limits are recorded in deploy/seccomp/PROVENANCE.md.

@@ -653,10 +653,10 @@ apiserver synchronizers **M** (~3k), MCS-API/EndpointSlice v2 **L** if taken.
 
 ## Open questions
 
-- Does fastetcd implement Txn compares on `version`, `Count`/`More` for
-  limited ranges, `ErrCompacted` on stale watch revisions, per-key `lease`
-  and `mod_revision`, and `ResponseHeader.cluster_id`? Each is load-bearing
-  above.
+- **Resolved #25:** all named primitives exist at the audited fastetcd
+  revision, supported by 73 passing storage/server tests. See the
+  [capability matrix](../validation/dependency-capabilities-2026-09-22.md).
+  This does not establish flowsdn’s live backend or multi-node acceptance.
 - **Resolved #26:** mTLS with explicit verified-CN binding to the in-process
   prefix front. Binding and byte-range checks are implemented primitives;
   TLS/gRPC enforcement, watch revocation and backend isolation remain required.
@@ -666,9 +666,11 @@ apiserver synchronizers **M** (~3k), MCS-API/EndpointSlice v2 **L** if taken.
   `prefer-legacy` until slice-consumer interoperability tests pass (spec 20 §12.4).
 - **Resolved #28:** cross-cluster PodCIDRs must not overlap; topology replacement
   checks preserve prior state on conflict. Live admission remains pending (spec 20 §12.7).
-- The cilium-cli (`cilium clustermesh connect`) is out of tree; flowsdn needs
-  its own tool to exchange endpoints/certs and write the
-  `/var/lib/cilium/clustermesh/<name>` files or an equivalent config source.
+- **Resolved #29:** `flowsdn-cli clustermesh connect` installs an explicitly
+  supplied offline peer bundle with private immutable credential generations,
+  an atomic configuration switch and explicit replacement. Transport, automatic
+  Kubernetes Secret exchange and live mesh connections remain separate work.
+
 
 Spec 20 §12 also resolves #273 (5m resync pending an evidence-gated default
 change), #274 (reject double-write, offline migration), #276 (stable UUID plus

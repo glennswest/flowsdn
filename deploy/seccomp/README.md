@@ -78,3 +78,11 @@ conditions, unsupported flags and syscall names. It does not silently discard
 rules that cannot be represented. It is a single-process validation utility,
 not a container-runtime integration. The system libseccomp shared library is
 LGPL-2.1; it is dynamically loaded, not bundled into this tool.
+
+## Validated opt-in artifact
+
+[agent-amd64.json](agent-amd64.json) passed the complete isolated agent lifecycle
+fixture under an installed seccomp filter on Linux x86-64. See
+[provenance and limits](PROVENANCE.md). This artifact is opt-in; arm64 enforcement
+and Helm integration remain outstanding. It does not change the default
+security context or establish complete syscall coverage for future controllers.

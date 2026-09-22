@@ -1365,15 +1365,18 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    including TTL, TCP window and payload bytes, with provenance. Keep rendered packet
    bytes and checksums as independently reviewed golden data.
 
-5. **Socket-LB strategy — #219 capability experiment.** Keep direct pure helper
+5. **Resolved #219: direct helper tests plus real socket hooks.** Keep direct pure helper
    tests plus genuine hook execution. The latter must use a demonstrated execution
    path, not the former unverified 5.12 test-run assumption. `socket-context`
    contains actual `cgroup/connect4` and `cgroup/connect6` programs and a userspace
    syscall probe because pinned Aya0.14 does not implement `TestRun` for
    `CgroupSockAddr`. No cgroup attach or connect syscall occurs in this probe.
-   A nonzero result remains a failed/unsupported capability observation until the
-   kernel validation record records its errno. On unsupported kernels, integration
-   coverage requires real local socket operations in a disposable cgroup/netns.
+   On Linux 6.17.1 both test-run calls returned errno 524 (not supported).
+   `socket-live` instead attaches both programs to a dedicated cgroup, moves
+   only its own process, and exercises TCP in an anonymous network namespace.
+   IPv4/IPv6 destination rewrite, unmatched preservation, payload exchange and
+   membership/attachment cleanup passed. Aya’s Single attachment mode supplies
+   the zero flags accepted by BPF_LINK_CREATE; AllowMultiple returned EINVAL.
    The strategy decision does not claim the socket-LB feature is implemented.
 
 6. **Resolved — #220.** Report case-inventory coverage, not BPF line or branch coverage.
