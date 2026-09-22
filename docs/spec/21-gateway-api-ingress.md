@@ -174,8 +174,8 @@ discovery API returns. flowsdn names its constants after the plurals.
 | Shared Ingress Service name | `cilium-ingress` (key `ingress-shared-lb-service-name`) | Helm creates this Service, not the operator |
 | Secrets namespace | `cilium-secrets` | agent RBAC is scoped to it |
 
-Open decision 8 revisits whether the `io.cilium/` controller name and the
-`cilium-*` object prefixes should become configurable.
+Decision #159 retains these names. No controller-name override is added
+until a coexistence contract defines distinct ownership and object names.
 
 ### 2.3 Generated objects
 
@@ -2154,13 +2154,10 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    Nothing else depends on it, the `ListenerSet` feature is simply not
    advertised while it is absent, and the conflict machinery is easier to get
    right for one source before it is generalized to many.
-8. **Controller and object names.** `io.cilium/gateway-controller`,
-   `cilium-gateway-*`, `cilium-ingress-*`, `cilium-secrets`. Keeping them means
-   existing manifests work unchanged; changing them to `flowsdn` equivalents is
-   honest but breaks every `GatewayClass` in the world.
-   **Recommendation: keep, and make the controller name a config key** so a
-   cluster running both implementations can disambiguate. Defer the key until
-   that need is real (this matches spec 12 Open decision 5).
+8. **Resolved (#159): retain controller and object names.** Keep
+   `io.cilium/gateway-controller`, `cilium-gateway-*`, `cilium-ingress-*`, and
+   `cilium-secrets`. Defer a controller-name config key until a coexistence
+   contract covers ownership, generated names, watches and status writes.
 9. **Resolved — #287.** Vendor the reference access-log default format strings verbatim
    with the CRD schema, source revision and licensing provenance, as required by spec
    13. Keep log parsers compatible across migration.

@@ -964,22 +964,20 @@ lines: decoders 1.5k, dissection 0.8k, parser+enrichment 2.5k, ring+observer
 socket+gob 0.8k). **keep** metrics and exporter with the same names/format
 (dashboards and log shippers depend on them). **keep** the relay as a separate
 binary — effort **M** (~2.5k). **defer** drop-event-emitter (alpha upstream,
-small, needs k8s event plumbing) and CEL filters. **replace** the Go-only gob
-monitor socket only if `cilium-dbg monitor` compatibility is explicitly dropped;
-otherwise implement the gob subset. **do not** reimplement the pcap recorder —
+small, needs k8s event plumbing) and CEL filters. **keep** the gob monitor server subset for `cilium-dbg monitor`;
+flowsdn's own monitor client uses Observer RPCs (#141), with no gob decoder. **do not** reimplement the pcap recorder —
 it is gone from the reference. Do not port `cilium-dbg monitor`'s text
 formatter beyond what is needed for debugging (JSON output via Hubble covers
 it), and fix the `DBG_SKIP_POLICY` off-by-one rather than copying it.
 
 ## Open questions
 
-- Is `cilium-dbg monitor` (gob unix socket) a required compatibility surface
-  for flowsdn, or is Hubble the only external event interface? Decides whether
-  the gob encoder is written.
-- Who owns the shared numeric tables (message types, drop reasons, trace
-  points, debug codes, file ids)? Proposal: one TOML/Rust table in the
-  datapath crate that generates both the BPF header constants and the
-  userspace enums, with a test asserting equality with `flow.proto`.
+- **Resolved #141:** retain the gob socket server compatibility surface;
+  implement flowsdn's own monitor client over Observer, without a gob decoder.
+  Runtime server and client implementation remain outstanding (spec 11 §12.1).
+- **Resolved #22:** `flowsdn-bpf-abi` owns shared Rust numeric tables for BPF
+  and userspace. No C headers under ADR-0002. Complete table generation and
+  independent pinned-protobuf parity tests remain required (spec 11 §11.6).
 - `flow.proto` field 136/161 names (`CT_MISSING_TCP_ACK_FLAG`,
   `FAILED_TO_INSERT_INTO_PROXYMAP`) no longer match the monitor strings
   ("Fragmentation needed", "NAT 46/64 not enabled"). Keep the proto names for
@@ -988,11 +986,14 @@ it), and fix the `DBG_SKIP_POLICY` off-by-one rather than copying it.
 - Should the Rust observer keep Go's `Summary` (deprecated field 100000)
   populated? The Hubble CLI compact output still prefers it when present for
   L7 flows.
-- Network policy correlation (`ingress/egress_allowed_by`) depends on the
-  endpoint policy map representation in flowsdn's policy inventory — confirm a
-  `GetPolicyCorrelationInfoForKey`-equivalent will exist.
-- `hubble-prefer-ipv6` is deprecated in favour of the global `--prefer-ipv6`
-  (removal announced for v1.20); adopt only the global flag.
+- **Resolved #23:** `PolicySnapshot::correlation_info` is the Hubble-facing
+  contract over the realized endpoint policy map and `RuleOrigin` (spec 06
+  §§4.3–4.4). The policy owner supplies specificity resolution, labels, logs
+  and the realized revision; missing state yields no correlation. The trait
+  and verdict projection exist, while its live adapter remains outstanding.
+- **Resolved #150:** accept both preferences and warn on explicit legacy
+  input. Explicit global wins, including false; otherwise legacy, then false.
+  Preserve provenance until resolution (spec 11 §12.10).
 - Relay TLS: the reference derives the per-node server name
   `<node>.<cluster>.hubble-grpc.cilium.io` and expects certificates issued
   accordingly (Helm `hubble.tls.auto`). Does flowsdn ship a certificate

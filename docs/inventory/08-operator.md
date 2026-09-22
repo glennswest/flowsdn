@@ -925,28 +925,26 @@ replicas per node in small clusters.
 Total in-scope effort: **L** (≈ 20k lines Rust) counting Gateway API; **M**
 without it.
 
-## Open questions
+## Decisions and remaining questions
 
-1. Do flowsdn agents write CEPs at all, or do we go straight to CES **slim**
-   mode + operator-managed identities (no CEP CRD, agents watch CES + CID
-   only)? That removes CEP GC and halves identity-GC complexity but breaks
-   mixed-version rollout with Go agents.
+1. **Resolved #156:** agents publish CEPs; default CES mode ships first. Slim
+   remains a required second mode with operator identities and shared derivation
+   fixtures. No slim controller is delivered by the current planning library.
 2. Identity allocation mode default: Cilium's operator default is `kvstore`
-   while Helm defaults to `crd`. Pick one for flowsdn (CRD needs no etcd;
-   kvstore needs the allocator GC).
+   while Helm defaults to `crd`. The normative choice belongs to spec03/12;
+   this is distinct from the identity-management ownership default (#161).
 3. Gateway API: target `gateway-api` crate vs hand-derived types for
    `ListenerSet`/`BackendTLSPolicy`/`TCPRoute`/`UDPRoute`; which conformance
    profiles are must-pass for first release?
-4. Should the taint key stay `node.cilium.io/agent-not-ready` (compat with
-   existing kubeadm/cloud-init that pre-taint nodes) or become
-   `node.flowsdn.io/...` with a Helm-controlled alias?
-5. CRD schema-version label: keep `io.cilium.k8s.crd.schema.version` and
-   continue the `1.33.x` line (needed to upgrade an existing Cilium cluster in
-   place), or fork the label and require a clean install?
-6. Is the operator REST API (`:9234`) worth keeping beyond `/healthz` for
-   probes? `/metrics/` JSON and `/cluster` are used only by `cilium-operator
-   status`/`cilium-dbg`.
-7. Which dynamic-rate-limit and CES bin-packing parameters matter for the
-   target scale (MikroTik/rustkube clusters are small; a single
-   `{nodes:0,limit:10,burst:20}` step may suffice and the whole dynamic table
-   could be dropped).
+4. **Resolved #158:** keep `node.cilium.io/agent-not-ready`, including the
+   existing custom-key option. Key-only removal preserves unrelated taints.
+   Any future default-key migration must remove both keys.
+5. **Resolved #157:** retain `io.cilium.k8s.crd.schema.version` and 1.33.x,
+   initially 1.33.11. The canonical constant belongs to `flowsdn-k8s`; YAML hash
+   coupling and live upgrade checks remain registration release gates.
+6. **Resolved #160:** keep `/healthz`, `/v1/metrics/` and `/v1/cluster`; HTTP
+   handlers remain required. Spec12 adds `/readyz` so missing external CRDs
+   cannot turn a readiness failure into a liveness restart (#164).
+7. **Resolved #162:** retain multi-step CES rate configuration at all cluster
+   sizes. The operator library implements validated selection; controller,
+   token-bucket integration and CES bin-packing remain required by spec12.

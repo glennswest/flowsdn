@@ -11,6 +11,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+tokio = { workspace = true, features = ["rt"] }
+flowsdn-health = { path = "../flowsdn-health", version = "=0.14.0" }
 serde_json.workspace = true
 nix = { version = "=0.30.1", default-features = false, features = ["fs", "socket"] }
 httparse = "=1.10.1"

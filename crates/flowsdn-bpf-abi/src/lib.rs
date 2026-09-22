@@ -39,6 +39,15 @@ pub trait MapBytes<const N: usize>: Sized {
     fn from_bytes(bytes: [u8; N]) -> Self;
 }
 
+/// Monitor notification values owned by the shared datapath ABI (spec 11 §11.6).
+/// Interface constants from Cilium v1.20.1, commit 7d68cfb394,
+/// pkg/monitor/api/types.go and api/v1/flow/flow.proto (Apache-2.0).
+pub mod notify {
+    pub const MESSAGE_TYPE_DROP: u8 = 1;
+    pub const DROP_POLICY_DENIED: u32 = 133;
+    pub const DROP_POLICY_DENY: u32 = 181;
+}
+
 pub mod affinity;
 pub mod ct;
 pub mod endpoint;

@@ -155,3 +155,10 @@ zmij 1.0.23 — MIT
 
 These crates are consumed through Cargo, not copied from Cilium. Their
 license and copyright notices accompany their upstream source distributions.
+
+Monitor interface constants
+---------------------------
+crates/flowsdn-bpf-abi/src/lib.rs notify constants retain numeric interface
+values from Cilium v1.20.1, commit 7d68cfb394, pkg/monitor/api/types.go and
+api/v1/flow/flow.proto, Apache License 2.0. Decoder and correlation logic are
+independent Rust implementations from the specifications.

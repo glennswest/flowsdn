@@ -134,7 +134,7 @@ provide the feature; "Degraded" = flowsdn works with the stated fallback.
 | C12 | **Status subresource** on the CRDs listed in §4.1, with `UpdateStatus`/`PatchStatus` semantics (spec writes ignored on the status endpoint and vice versa) | CiliumNode, CNP/CCNP, LB pool, L2 policy, BGP, GatewayClassConfig | Required |
 | C13 | **No** status subresource on `CiliumEndpoint`: `status` is a plain field, written by a whole-object JSON patch | agent CEP writer (§3.9) | Required |
 | C14 | **JSON Patch** (`application/json-patch+json`, RFC 6902) including the `test` op with a structured value, and atomic failure of the whole patch when `test` fails | CEP status, node taints, LB pool status, L2 policy status, BGP node status | Required |
-| C15 | **Strategic merge patch** (`application/strategic-merge-patch+json`) on `nodes/status` for `metadata.annotations` (map merge) and `status.conditions` (merge on key `type`) | `annotateK8sNode`, `NetworkUnavailable=False` | Required (fallback §12.3) |
+| C15 | **Strategic merge patch** (`application/strategic-merge-patch+json`) on `nodes/status` for `metadata.annotations` (map merge) and `status.conditions` (merge on key `type`) | `annotateK8sNode`, `NetworkUnavailable=False` | Default; guarded JSON fallback permitted (§12.3) |
 | C16 | **Merge patch** (`application/merge-patch+json`) | operator BGP manager | Required for BGP |
 | C17 | **Server-side apply is NOT used.** flowsdn MUST NOT issue `PATCH` with `application/apply-patch+yaml`. `fieldManager` is set on some writes for attribution only | — | Must-not |
 | C18 | Field selectors: `spec.nodeName=<name>` on pods; `status.phase=Running` on pods (operator); `metadata.name=` | agent pod watch (the single biggest memory lever), operator kube-dns restarter | Required |
@@ -754,10 +754,8 @@ at `v2alpha1`; graduation adds a `v2` served + storage version with a
 **byte-identical schema** and marks `v2alpha1` `served: true, storage: false,
 deprecated: true` with no `deprecationWarning` and no conversion webhook.
 Removal of a served version has not happened for any CRD and MUST NOT happen in
-flowsdn without a decision record. Five CRDs have graduated: CiliumCIDRGroup,
-CiliumLoadBalancerIPPool, and four of the five BGP CRDs plus
-CiliumBGPNodeConfigOverride (six documents, seven kinds counting
-`CiliumBGPNodeConfig`).
+flowsdn without a decision record. Seven CRDs have graduated: CiliumCIDRGroup,
+CiliumLoadBalancerIPPool, and all five BGP CRDs listed above.
 
 `CiliumDatapathPlugin` is served as `v2alpha1` **and** flagged `deprecated:
 true` in the same (only) version; this is intentional in the reference and
@@ -1307,7 +1305,7 @@ compiled out.
 |---|---|---|
 | Refused | < 1.26 | Fatal at startup (§3.10 step 5), message names the detected version and the floor |
 | Accepted, untested | 1.26 – 1.32 | One warning at startup; `flowsdn_k8s_version_unsupported = 1` |
-| Supported and e2e tested | 1.33, 1.34, 1.35, 1.36 | No warning |
+| Reference e2e range (flowsdn verification pending) | 1.33, 1.34, 1.35, 1.36 | No warning |
 | Accepted, untested | > 1.36 | One informational log; Kubernetes' own forward compatibility applies |
 
 **DEVIATION:** the reference's floor is 1.21.0. flowsdn raises it to **1.26**.
@@ -1427,64 +1425,69 @@ numbers as an optimization behind a config key.
 count on a 5,000-pod cluster; if it is under ~50 MB per agent, (a) is fine.
 Blocked on whether rustkube speaks protobuf at all (C21).
 
-**12.2 Serve `v2alpha1` for the six graduated CRD documents.** The vendored
-YAML serves both `v2` and a deprecated `v2alpha1` for CIDRGroup, LB IP pool and
-the BGP CRDs.
-(a) Vendor verbatim (both served) — byte-identical, requires the server to
-accept two served versions with one storage version and strategy `None` (C10).
-(b) Strip `v2alpha1` from the registration payload — simpler for a minimal
-server, but breaks any stored CR or user manifest still using `v2alpha1`, and
-violates §2.1.
-*Recommendation:* (a). (b) is only reconsidered if rustkube cannot do C10, and
-then it becomes a documented incompatibility, not a silent one.
+**12.2 Resolved #166: preserve every served version.** All seven graduated
+CRDs (CIDRGroup, LB IP pool and all five BGP kinds) MUST retain served `v2`
+and deprecated served `v2alpha1`, with `v2` the sole storage version and no
+conversion webhook (strategy `None`). Registration MUST preserve the complete
+vendored versions array. C10 is required; absence is an explicit incompatibility,
+never permission to strip a version. Existing stored versions must be migrated
+before any future served-version removal. This also resolves BGP #184.
 
-**12.3 Strategic merge patch dependency.** C15 is the one capability that needs
-the server to know the *Go struct tags* of `core/v1.Node`, which is the hardest
-row for a non-Kubernetes server.
-(a) Keep strategic merge patch — matches the reference exactly.
-(b) Use a JSON patch for node annotations (`add /metadata/annotations/<escaped
-key>`) and a JSON patch with a `test` for conditions, dropping C15 entirely.
-*Recommendation:* implement (b) as a fallback selected by a startup probe, and
-keep (a) as the default. (b) is strictly more portable and only marginally more
-code; the reason not to make it the default is that concurrent writers to
-`status.conditions` are safer under strategic merge.
+**12.3 Resolved #167: guarded JSON patch fallback.** Strategic merge remains
+the default for node annotations and conditions on `nodes/status`. Only an
+explicit unsupported result from the startup strategic-merge probe plus a
+successful JSON-patch/test probe permits fallback; authentication, transport
+and unknown results are errors, not evidence of unsupported merge semantics.
+Fallback MUST test both `/metadata/uid` and `/metadata/resourceVersion` before
+mutating the snapshot, escape annotation keys as JSON pointers, ignore nil
+annotation updates, create absent parent objects, and preserve other annotations
+and condition types. Conditions are merged by matching `type` (omitted fields retained, explicit null
+fields removed) or appended;
+malformed or duplicate condition types are rejected. Any precondition failure
+requires rereading and rebuilding the patch, never replaying stale operations.
 
-**12.4 Client-side validation when the server has no CEL.** F15 currently says
-"do not compensate".
-(a) No client-side validation — a non-conformant server accepts garbage and
-flowsdn rejects it at import time with a status condition.
-(b) Ship a CEL evaluator (`cel-rust`) and validate CRs on read.
-*Recommendation:* (a) for the first cut, with the policy importer already
-producing `status.conditions[Valid]` (spec 06) as the user-visible signal.
-Revisit if rustkube ships without CEL.
+**12.4 Resolved #168: no client CEL evaluator.** Server CEL remains required
+(C3); absence fails conformance and cannot be disguised by local CEL evaluation.
+The importer must still perform its own semantic validation and emit the spec 06
+`Valid` condition for invalid policies. That validation does not substitute for
+admission validation or authorize a nonconformant server. No `cel-rust` dependency.
 
-**12.5 Gateway API, Ingress, MCS-API and ClusterMesh EndpointSlice sync.**
-Deferred from the first cut (§3.4).
-(a) Defer, register `ciliumgatewayclassconfigs` anyway so enabling later is a
-restart. (b) Do not register it either.
-*Recommendation:* (a).
+**12.5 Resolved #169: registration independent of enabled controllers.** Register
+all 22 CRDs, including `ciliumgatewayclassconfigs`, regardless of Gateway API,
+Ingress, MCS or ClusterMesh controller enablement. Feature ordering in §3.4 does
+not remove schemas from the registration set or reduce the final project scope.
 
-**12.6 `CiliumEndpoint` per pod vs `CiliumEndpointSlice` only.** N objects each
-JSON-patched on every regeneration is the largest API write load flowsdn
-generates.
-(a) CEP per pod (reference default) — `kubectl get cep` works.
-(b) `--disable-endpoint-crd` + CES by default — roughly halves write load,
-changes what `kubectl get cep` shows, and makes spec 08's CEP writer dead code
-in the default configuration.
-*Recommendation:* (a) as the default, (b) documented and tested, decision
-revisited after measuring write QPS on a 100-node cluster. This interacts with
-spec 12's CES batching parameters.
+**12.6 Resolved #170: CEP by default.** Per-pod CEP remains the default. Enabling
+CES in its default mode still requires CEP, which supplies the slice controller.
+Opt-in slim CES requires CES enabled, CEP disabled, operator-managed identities,
+and no mixed reference agents (spec 12). Reject inconsistent combinations.
+Runtime controllers and 100-node write-QPS comparison remain required future
+work; the library option tests establish no API-load improvement measurement.
 
-**12.7 Namespace scope for the operator's namespaced CRD listing.**
-`CiliumNodeConfig` and `CiliumGatewayClassConfig` are the only namespaced
-non-policy CRDs.
-(a) List cluster-wide. (b) List only `--cilium-namespace`.
-*Recommendation:* (a) for `CiliumNodeConfig` (spec 00's config resolver already
-selects by node selector and needs to see all of them), (b) for
-`CiliumGatewayClassConfig` when wave 4 lands.
+**12.7 Resolved #171: list both configuration kinds across all namespaces.**
+`CiliumNodeConfig` selection needs every matching namespace (spec 00).
+`CiliumGatewayClassConfig` references use the explicit namespace/name in
+GatewayClass `parametersRef` (spec 21 §3.3), which may differ from the installation
+namespace. Therefore both informers MUST list/watch all namespaces with matching
+RBAC, retaining namespace as part of object identity; lookups MUST use the exact
+reference namespace/name. Restricting GatewayClassConfig to `--cilium-namespace`
+would silently lose valid references and is rejected.
 
-**12.8 Kubernetes version floor.** §10.2 sets 1.26 against the reference's
-1.21.
-(a) 1.26 (recommended). (b) Keep 1.21 and accept silent non-validation.
-(c) Raise to 1.29 (CEL GA) for a cleaner story.
-*Recommendation:* (a). (c) would exclude clusters that work fine today.
+**12.8 Resolved #172: Kubernetes 1.26.0 floor.** Refuse older servers using
+§3.10 parsing and numeric version comparison. Version acceptance does not prove
+CEL or any other required capability: those probes/conformance tests remain
+mandatory. Versions 1.26–1.32 warn as outside the reference test range; newer
+versions than 1.36 are untested too. The reference range is not a flowsdn e2e
+claim. Do not accept 1.21 or require 1.29 solely because of CEL's GA milestone.
+
+### 12.9 Implementation boundary
+
+`flowsdn-k8s` provides version/capability checks, registration projection and
+catalogue, namespace/endpoint plans, and guarded node patch construction with
+local regression tests. It does not yet provide an HTTP client, actual probes,
+CRD YAML corpus/hash CI, Rust resource types, admission or importer condition
+writes, informers, migration, or controllers. §9 remains the complete acceptance
+suite. The operator's CRD availability fence gates readiness (`/readyz`) separately
+from liveness (`/healthz`), including when CRD creation is skipped (spec 12).
+Issue #165 remains open pending list-byte measurement and protobuf capability
+evidence; JSON is the current baseline, not a measured permanent decision.

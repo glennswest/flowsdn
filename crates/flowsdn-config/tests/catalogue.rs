@@ -22,6 +22,7 @@ fn owning_defaults_resolve_typed_values_without_requiring_overrides() {
             "hubble-lost-event-send-interval",
             Value::Duration(1_000_000_000),
         ),
+        ("bpf-lb-sock-terminate-pod-connections", Value::Bool(true)),
         ("enable-bbr", Value::Bool(false)),
         ("enable-bbr-hostns-only", Value::Bool(false)),
         ("enable-bandwidth-manager", Value::Bool(false)),
@@ -546,4 +547,13 @@ fn runtime_snapshot_retains_runtime_and_dynamic_classification() {
         Class::Ignored
     );
     assert!(decoded.resolved.get("any-proto").is_none());
+}
+
+#[test]
+fn explicit_socket_termination_false_overrides_daemon_default() {
+    let schema = catalogue::partial_known_defaults_registry().unwrap();
+    let resolved = schema.resolve([Entry::new(Source::Flag, "bpf-lb-sock-terminate-pod-connections", "false")]).unwrap();
+    let value = resolved.get("bpf-lb-sock-terminate-pod-connections").unwrap();
+    assert_eq!(value.value, Value::Bool(false));
+    assert_eq!(value.source, Source::Flag);
 }

@@ -60,7 +60,7 @@ key mapping (spec "Helm values mapping").
 | `config-sources` / `config-sources-overrides` | JSON as emitted by `build-config` (section 6.2) | dynamic config reflector, drift checker |
 | `<state-dir>/agent-runtime-config.json` (+`-1`, `-2` rotation) | file names and rotation; content is flowsdn's own schema (section 6.6) | bugtool (`cp -r state`), humans |
 | Runtime options (`PATCH /config`, `PATCH /endpoint/{id}/config`) | option names `Debug`, `DebugLB`, `DebugPolicy`, `DebugTagged`, `DropNotification`, `TraceNotification`, `TraceSockNotification`, `PolicyVerdictNotification`, `PolicyAuditMode`, `MonitorAggregationLevel`, `SourceIPVerification`, `PolicyTracing`; values `enable`/`disable`/integer for aggregation | `cilium-dbg config`, `cilium-dbg endpoint config` |
-| Module health rows | fields `ID`, `Level` (`OK`/`Degraded`/`Stopped`), `Message`, `Error`, `LastOK`, `Updated`, `Stopped`, `Final`, `Count`; ID string `<module>.<component...>` | `cilium-dbg status` (reads table `health` via `/statedb/query`, see 8.4), `cilium_hive_status` metrics |
+| Module health rows | fields `ID`, `Level` (`OK`/`Degraded`/`Stopped`), `Message`, `Error`, `LastOK`, `Updated`, `Stopped`, `Final`, `Count`; internal ID string `<module>.<component...>`; JSON ID object `{Module: string[], Component: string[]}` | `cilium-dbg status` (reads table `health` via `/statedb/query`, see 8.4), `cilium_hive_status` metrics |
 | Metrics | `cilium_hive_status{level}`, `cilium_hive_degraded_status{module}`, controller/reconciler metrics named in section 8 | dashboards |
 
 Everything else in this spec is internal. In particular **there is no
@@ -1683,7 +1683,7 @@ prune interval), `agent.<owner>.<reconciler>` (3.2.1).
   calls after printing the status to render "Modules Health" (it queries
   `LowerBound("agent")`). Any other table returns 404. **DEVIATION** from the
   ADR's "no HTTP dump": one read-only table for one known client; no `dump`,
-  no `changes`. Open decision 12.5.
+  no `changes`. Decision #46 resolved: implement the read-only route.
 - `GET /health/modules` (flowsdn-native, JSON array of `HealthStatus`) for
   `flowsdn-dbg` and humans.
 - `GET /config` `status.daemon-configuration-map` carries every key (canonical
@@ -1809,8 +1809,10 @@ Crates (workspace members, all `#![forbid(unsafe_code)]`):
   `HealthReporter` (cheap clone, holds `Arc<Registry>` + `Identifier`),
   `Identifier` (`SmallVec<[Arc<str>; 4]>`), history writer (append-only file
   with size rotation, `serde_json` lines), Prometheus gauges. The
-  `/statedb/query` compat route and `/health/modules` live in the REST crate
-  and read this registry.
+  `/statedb/query` compat route and `/health/modules` live in the agent REST
+  adapter and read this registry. The initial standalone adapter reports API
+  and restore success plus Degraded for unavailable Kubernetes, identity and
+  policy controllers. It does not claim those controllers are implemented.
 
 Key traits and types shared with area crates: `Keyed`, `Indexer<T>`,
 `Target<T>`, `HealthReporter`, `Fence`, `Config` (the typed struct),
@@ -1839,13 +1841,16 @@ registry + generator + build-config ~3k, fence + health ~1k.
    configuration or immutable comparisons (§3.3.9). Endpoint state migration
    remains supported in scope; its datapath compatibility tests are not replaced
    by this diagnostic-file decision.
-5. **`/statedb/query` compat for the `health` table.** (a) provide it (this
-   spec) so upstream `cilium-dbg status` prints module health; (b) drop it and
-   accept that `cilium-dbg status` prints the status but exits with a
-   "Failed while streaming remote health data table" error when health
-   checking is enabled — which makes the upstream tool unusable, so (b) is not
-   really an option; (c) also serve `/statedb/dump` for `cilium-dbg statedb`.
-   Recommendation: (a); (c) only if `flowsdn-dbg` is delayed.
+5. **Resolved (#46): provide the read-only health table query.** The agent
+   accepts GET (reference client) and POST bodies on `/statedb/query`; other
+   tables return 404. No dump or changes API is added. The pinned reference
+   `pkg/hive/health/types/types.go:44–80` encodes ID as `Module` and `Component`
+   arrays, despite the internal string index. Timestamp fields use RFC3339Nano
+   strings and zero time `0001-01-01T00:00:00Z`; row revisions are integers.
+   The bounded initial adapter validates/serializes the whole response before
+   sending it, so errors use an HTTP error response instead of a partial stream.
+   Unit and live socket fixtures cover this shape; upstream CLI end-to-end
+   acceptance remains part of the milestone integration gate.
 6. **Resolved (#47/#90, ADR-0011): `lb-retry-backoff-max` is `1m`.**
    The §6.4 registry follows spec 05 §6; `lb-retry-backoff-min` remains `1s`.
 7. **Resolved (#48):** `strict-config` defaults false and rejects unknown

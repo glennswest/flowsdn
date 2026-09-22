@@ -1259,6 +1259,11 @@ the agent is a scripttest scenario, not a bpftest case.
 
 ### 11.2 `BPF_PROG_TEST_RUN` and aya
 
+**Resolved (#255):** the pinned API audit below confirms the safe test-run
+wrapper and the success-log gap. Existing smoke/endpoint packet fixtures use
+that wrapper; this resolution does not close context/CPU/kernel-matrix coverage
+(#256/#257) or verifier-measurement work (#41/#50).
+
 **Updated 2026-09-09 for pinned Aya 0.14.0.** The previous Aya 0.13
 recollection is superseded for test execution: `SchedClassifier` implements
 `aya::programs::TestRun`, with packet/context buffers, repeat and execution
@@ -1274,7 +1279,7 @@ Other gaps below remain provisional until separately checked.
 |---|---|---|
 | `BPF_PROG_TEST_RUN` with packet/context buffers, repeat and result metadata | present in Aya 0.14.0 | Use `TestRun`; extend validation to the context and execution-attribute matrix before claiming those capabilities. |
 | Program fd access (`AsFd` on a loaded program) | present via `ProgramFd` | — |
-| `log_level = 4` on load and access to the verifier log on **success** | aya exposes the log on *failure* (`ProgramError::LoadError { verifier_log }`); the success-path log is what §5.2 needs | If unavailable, load with `EbpfLoader::verifier_log_level(VerifierLogLevel::STATS)` and, failing that, do the stats load through the same raw-syscall path with our own log buffer, discarding that fd and letting aya do the real load. Wasteful but honest; upstream a `verifier_log()` accessor. |
+| `log_level = 4` on load and access to the verifier log on **success** | verified absent in Aya 0.14.0: `src/programs/mod.rs:782–797` retains the log only in `ProgramError::LoadError`; successful loads discard it | `EbpfLoader::verifier_log_level(VerifierLogLevel::STATS)` selects logging but cannot return successful logs. Use a dedicated stats-load adapter with its own buffer, discard its fd, then let Aya perform the runtime load; an upstream accessor can replace this adapter. Implementation and full verifier measurements remain pending (#41/#50). |
 | `BPF_OBJ_GET_INFO_BY_FD` → `bpf_prog_info.verified_insns` | `aya::programs::ProgramInfo` exists; `verified_insns` coverage unknown | raw syscall fallback in the same module |
 | Batch map ops (`BPF_MAP_LOOKUP_AND_DELETE_BATCH`) for §5.1 clearing | unknown | iterate-and-delete fallback, selected by a probe at harness start |
 | Anonymous (unpinned) maps and full teardown on drop | present | — |

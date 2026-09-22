@@ -22,6 +22,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "health_api.rs"]
+mod health_api;
+
 const BODY_LIMIT: usize = 4_194_304;
 const HEADER_LIMIT: usize = 16_384;
 const REQUEST_BUDGET: Duration = Duration::from_secs(2);
@@ -701,8 +704,7 @@ fn read_request(stream: &mut UnixStream) -> Result<Request> {
     }
 }
 
-fn write_response(stream: &mut UnixStream, status: u16, body: Value) -> Result<()> {
-    let body = serde_json::to_vec(&body)?;
+fn write_response(stream: &mut UnixStream, status: u16, body: Vec<u8>) -> Result<()> {
     let mut response=format!("HTTP/1.1 {status} Agent\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",body.len()).into_bytes();
     response.extend_from_slice(&body);
     let start = Instant::now();
@@ -848,6 +850,7 @@ pub fn run(config_path: &Path) -> Result<()> {
     // Writers that waited for replay recheck a now-listening API under their
     // shared lock, so they cannot enqueue a deletion missed by this replay.
     drop(replay);
+    let health = health_api::ModuleHealth::new()?;
     eprintln!("initial endpoint API listening; Kubernetes and policy controllers are not enabled");
     loop {
         api.expire();
@@ -860,7 +863,13 @@ pub fn run(config_path: &Path) -> Result<()> {
             Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
             Err(error) => return Err(error.into()),
         };
-        let result = read_request(&mut stream).and_then(|request| api.handle(request));
+        let result = read_request(&mut stream).and_then(|request| {
+            match (request.method.as_str(), request.target.as_str()) {
+                ("GET" | "POST", "/statedb/query" | "/v1/statedb/query") => health.query(&request.body).map(|body|(200,body)),
+                ("GET", "/health/modules" | "/v1/health/modules") => Ok((200,serde_json::to_vec(&health.modules()?)?)),
+                _ => api.handle(request).and_then(|(status,body)|Ok((status,serde_json::to_vec(&body)?))),
+            }
+        });
         let (status, body) = match result {
             Ok(reply) => reply,
             Err(error) => {
@@ -868,7 +877,7 @@ pub fn run(config_path: &Path) -> Result<()> {
                     .downcast_ref::<Failure>()
                     .map(|e| e.status)
                     .unwrap_or(500);
-                (status, json!({"code":status,"message":error.to_string()}))
+                (status, serde_json::to_vec(&json!({"code":status,"message":error.to_string()}))?)
             }
         };
         if let Err(error) = write_response(&mut stream, status, body) {

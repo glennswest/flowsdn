@@ -91,12 +91,13 @@ routes into any table, per-neighbor import policies.
 | Config keys | §6, byte-identical to the reference flag names | Helm ConfigMap, `cilium-config` |
 | Route policy naming | policy `peer-<peerName>-export`; statement `<Type>[-<resourceID>]-ipv{4,6}[-agg-<len>]` | `cilium-dbg bgp route-policies`, txtar expectations |
 
-**DEVIATION (ADR-0001, ADR-0004).** flowsdn serves only `cilium.io/v2` for the
-BGP CRDs. The reference still serves the deprecated `v2alpha1` copies and runs
-a one-shot storage-version migrator. flowsdn ships `v2`-only CRD YAML, does not
-serve `v2alpha1`, and does not implement the migrator. Users migrating from the
-reference must have completed the `v2alpha1` → `v2` migration first; this is
-documented in the Helm values mapping. See open decision O-2.
+**Version compatibility (resolved #184, spec 13 §12.2).** All five BGP CRDs
+MUST serve `cilium.io/v2` and deprecated `cilium.io/v2alpha1`, with `v2` as the
+sole storage version and strategy `None`. Preserve the vendored versions array.
+This supersedes the earlier v2-only proposal; manifests using the older served
+version must remain accepted. Serving both versions does not itself rewrite
+existing storage: storage-version migration and its verification remain runtime
+implementation work, and no served version may be removed before that completes.
 
 **DEVIATION (ADR-0001).** The deprecated agent REST endpoints `GET /bgp/peers`,
 `GET /bgp/routes`, `GET /bgp/route-policies` are kept (they are what `cilium-dbg
@@ -1784,11 +1785,11 @@ ship the `routeros` backend as the first working end-to-end path, and land the
 speaker second. The trait split in §3.17 exists precisely so this ordering
 costs nothing.
 
-**O-2. Serve `v2alpha1`?** The reference still serves it, deprecated, with a
-storage-version migrator. *Recommendation:* no — serve `v2` only, and document
-that migration from the reference must be completed before switching. Revisit
-only if a real migration path from a running Cilium install is required, in
-which case the migrator is ~200 lines.
+**O-2. Resolved #184: serve both versions.** Keep deprecated `v2alpha1` served
+alongside storage `v2` for all five BGP CRDs, consistent with spec 13 §12.2.
+Registration projection rejects removal of the older served version. Live
+registration and storage-version migration remain unimplemented; the decision
+is not a claim that a running reference installation can already be migrated.
 
 **O-3. TCP-AO (RFC 5925).** Linux 6.7+ supports it and the fleet kernel line
 (6.12) has it. It is strictly better than MD5 and would exceed the reference.

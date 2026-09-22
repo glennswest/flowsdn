@@ -914,7 +914,7 @@ All keys are agent keys unless marked (op) = operator. Kinds per spec 00
 | `kube-proxy-replacement` | Bool | `false` | master switch; forces `bpf-lb-sock=true`; NodePort/LB/HostPort programmed only when true |
 | `bpf-lb-sock` | Bool (immutable) | `false` | socket LB program attach |
 | `bpf-lb-sock-hostns-only` | Bool | `false` | host-netns-only variant; disables pod-netns termination |
-| `bpf-lb-sock-terminate-pod-connections` | Bool | **`true`** (inventory 04 recorded `false`; the daemon registers `true`) | pod-netns socket termination (deferred feature) |
+| `bpf-lb-sock-terminate-pod-connections` | Bool | **`true`** | pod-netns socket termination (deferred feature) |
 | `lb-sock-terminate-all-protos` | Bool (hidden) | `false` | also terminate TCP |
 | `bpf-sock-rev-map-max` | Int | `0` = dynamic (§3.8) | `[1024, 16777216]`, LRU-aligned |
 | `bpf-lb-map-max` | Int (immutable) | `65536` | > 0; default for every `bpf-lb-*-map-max` that is 0 |
@@ -1191,9 +1191,13 @@ Sizing: `flowsdn-lb` ~7k lines + ~5k tests/golden data; `flowsdn-lb-maps`
 7. **Resolved (#86, ADR-0011): `enable-service-topology` defaults false.**
    Explicit enablement applies the specified hints; chart mappings preserve
    the default unless the user selects a value.
-8. **`bpf-lb-sock-terminate-pod-connections` default.** Inventory 04 says
-   `false`, the daemon registers `true`; this spec follows the daemon.
-   Confirm with the Helm values (`socketLB.terminatePodConnections`).
+8. **Resolved (#87): socket termination defaults true.** The pinned daemon
+   registers `true` (`daemon/cmd/daemon_main.go:272`). Helm
+   `values.yaml:1388` is a commented example; the ConfigMap template at
+   `templates/cilium-configmap.yaml:878` emits a value only when
+   `socketLB.terminatePodConnections` is explicitly present. An absent chart
+   key preserves the daemon default; explicit `false` overrides it. This
+   resolves default selection, not implementation of socket destruction.
 9. **Resolved (#88, ADR-0011): backend-slot bit 14 is never written.**
    Quarantine is conveyed by slot range and backend state, as §4 requires.
    Spec 02 §3.12 no longer makes this bit a condition for correct selection.

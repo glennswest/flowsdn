@@ -89,7 +89,7 @@ management, gops, hive shell (`shell.sock`), `--cmdref`, the five-binary split
 | CNP/CCNP `.status.conditions[]` entry `Type: Valid`, `Status: True|False`, `Message` | condition type string | users, `kubectl describe cnp` |
 | Synced Secret naming `cilium-sync-secret-<sha256hex>` / `cilium-sync-cfgmap-<sha256hex>` with digest over `<kind>\0<ns>\0<name>` and the legacy `<ns>-<name>` cleanup | name derivation exactly | agent Envoy SDS (spec L7), agent RBAC scoped to the secrets namespace |
 | Synced object annotations `secretsync.cilium.io/source-{kind,namespace,name}` and ownership labels `secretsync.cilium.io/owning-secret-{namespace,name}` | keys and values | operator's own reconcile, humans |
-| Operator REST API: `GET /healthz` (plain text, 200/500/501) and its alias at `/v1/healthz`; `GET /v1/metrics/`; `GET /v1/cluster` | paths, status codes, payload shapes | kubelet liveness/readiness probes on port 9234, `flowsdn-operator status`, `cilium-dbg` |
+| Operator REST API: `GET /healthz` (plain text, 200/500/501) and its alias at `/v1/healthz`; `GET /v1/metrics/`; `GET /v1/cluster`; additive readiness route `GET /readyz` | paths, status codes, payload shapes | kubelet liveness/readiness probes on port 9234, `flowsdn-operator status`, `cilium-dbg` |
 | Prometheus metric names under the `cilium_operator_` namespace (§8.1) | names and label names | dashboards |
 | Config key names (§6) | byte-identical, dash-separated lower case | Helm `cilium-config` ConfigMap |
 | Deployment shape: `hostNetwork: true`, container port 9234 (`health`, also `hostPort`), 9963 metrics, `SO_REUSEADDR|SO_REUSEPORT` on the API listener | kept | Helm chart, two replicas landing on one node in a small cluster |
@@ -204,7 +204,7 @@ either landed or been aborted inside that 5 s window, for every duty, forever �
 an obligation that grows with each new controller. Exiting hands that proof to
 the kernel. The deployment already has `replicas: 2` and a `RollingUpdate`
 strategy, so the cost is one pod restart. Kept as a **non-deviation**; the
-graceful-demote alternative is Open Decision 1.
+graceful-demote alternative is rejected by decision #155 (§12).
 
 Two refinements over the reference, neither observable:
 
@@ -238,7 +238,7 @@ has its own, much smaller, fence graph:
 | `k8s-client` | client built, apiserver version fetched and accepted | leader election, API server |
 | `api-listening` | operator API bound on `operator-api-serve-addr` | readiness probe answers |
 | `leader` | Lease acquired | the entire leader scope |
-| `crds-established` | every CRD in the conditional set (§3.4) created/updated and `Established` | every leader duty that lists a Cilium CRD |
+| `crds-established` | every CRD in the registration set (§3.4) created/updated and `Established` | every leader duty that lists a Cilium CRD |
 | `informers-synced` | initial list complete for every shared informer the leader scope needs | CES controller startup replay, GC controllers |
 
 Ordering constraints that MUST hold:
@@ -269,12 +269,19 @@ the path of §3.2 applies instead.
 
 ### 3.4 CRD registration
 
-Skipped entirely when `skip-crd-creation` is set or k8s is disabled; the
-operator logs one line and releases `crds-established` immediately.
-`skip-crd-creation` exists for clusters where a separate process (GitOps,
-cluster addon manager) owns the CRDs; the operator then MUST still verify each
-required CRD exists and is `Established` before releasing the fence, and MUST
-fail readiness (not exit) if one is missing.
+CRD writes are skipped when `skip-crd-creation` is set. This does **not**
+release `crds-established`: the operator MUST observe every required CRD as
+present and `Established` first. Missing, unestablished or unreadable CRDs keep
+the fence closed and fail `/readyz` with 503 and named blockers, without exiting.
+Continue observing so external creation can restore readiness; later deletion
+revokes readiness and prevents new dependent duties until the fence recovers.
+With k8s disabled, skip registration and release this fence; probes remain 501.
+
+`skip-crd-creation` supports a separate CRD owner (GitOps or an addon manager).
+`flowsdn-operator::readiness` implements the observation/fence/probe plan; CRD
+watches, duty cancellation and HTTP serving remain to be implemented. The
+operator required set is all 22 cilium.io CRDs from spec13, plus separately
+enabled externally managed dependencies; agent wait sets remain conditional.
 
 **Payload.** The CRD objects are the vendored OpenAPI YAML (§4.2), embedded in
 the binary. The object written is assembled as:
@@ -291,8 +298,15 @@ the binary. The object written is assembled as:
 
 **Schema version.** The label value is a semver string. flowsdn continues the
 reference's `1.33.x` line so that an existing Cilium v1.20.1 cluster can be
-upgraded in place (Open Decision 3). The value MUST be a compile-time constant
-of the binary, bumped whenever any vendored CRD YAML changes.
+upgraded in place (#157). The canonical target constant is
+`flowsdn_k8s::SCHEMA_VERSION = "1.33.11"`, with label key
+`io.cilium.k8s.crd.schema.version`. Registration must consume that constant,
+not maintain an independent operator version. Before registration is shipped,
+CI MUST bind a manifest of the vendored YAML hashes to this version; changes to
+that manifest require a reviewed schema-version update. The corpus/hash CI
+check is not implemented by the operator planning library. Equal/newer schema
+protection below remains mandatory; keeping the label alone proves no live
+upgrade safety. Reassess the version line at 1.0 without silently forking it.
 
 **Create/update algorithm** (per CRD, run once at leader start):
 
@@ -328,43 +342,18 @@ of the binary, bumped whenever any vendored CRD YAML changes.
 | Installed label is older / missing / unparsable | full `UPDATE` of labels + spec, retried on conflict for up to 60 s |
 | `NamesAccepted=False` | fatal for that CRD: another CRD already owns the plural/short name. The operator fails startup rather than proceeding without the resource |
 
-**Conditional CRD set.** The operator creates the union of the agent's required
-set and its own:
+**Registration set (#169, spec13).** With creation enabled, register all 22
+`cilium.io` CRDs from spec13, independent of controller enablement. This includes
+`CiliumGatewayClassConfig`, CES and datapath-plugin schemas. With creation
+skipped, verify that same set before releasing the operator CRD fence. This
+supersedes the reference conditional registration behavior; a disabled
+controller must not make a compatibility schema disappear.
 
-*Always:*
-
-| Kind | Plural | Version |
-|---|---|---|
-| CiliumIdentity | `ciliumidentities` | v2 |
-| CiliumPodIPPool | `ciliumpodippools` | v2alpha1 |
-| CiliumLoadBalancerIPPool | `ciliumloadbalancerippools` | v2 (+ v2alpha1 deprecated) |
-| CiliumL2AnnouncementPolicy | `ciliuml2announcementpolicies` | v2alpha1 |
-| CiliumNodeConfig | `ciliumnodeconfigs` | v2 |
-
-*Conditional:*
-
-| Kind | Gate (key) | Default state |
-|---|---|---|
-| CiliumEndpoint | `!disable-endpoint-crd` | created |
-| CiliumEndpointSlice | `enable-cilium-endpoint-slice` | not created |
-| CiliumNode | `enable-ciliumnode-crd` (hidden) | created |
-| CiliumNetworkPolicy | `enable-cilium-network-policy` | created |
-| CiliumClusterwideNetworkPolicy | `enable-cilium-clusterwide-network-policy` | created |
-| CiliumCIDRGroup | either policy CRD enabled | created |
-| CiliumEgressGatewayPolicy | `enable-egress-gateway` | not created |
-| CiliumLocalRedirectPolicy | `enable-local-redirect-policy` | not created |
-| CiliumEnvoyConfig + CiliumClusterwideEnvoyConfig | `enable-envoy-config` | not created |
-| CiliumBGPClusterConfig, CiliumBGPPeerConfig, CiliumBGPAdvertisement, CiliumBGPNodeConfig, CiliumBGPNodeConfigOverride | `enable-bgp-control-plane` | not created |
-| CiliumDatapathPlugin | `enable-datapath-plugins` | not created |
-| CiliumGatewayClassConfig | `enable-gateway-api` | not created |
-| `ServiceExport`, `ServiceImport` (`multicluster.x-k8s.io/v1beta1`) | `clustermesh-enable-mcs-api` **and** `clustermesh-mcs-api-install-crds` | not created |
-
-Note that the always-set is *smaller* than inventory 08 states: `CiliumNode`
-and `CiliumEndpoint` are conditional (on hidden keys that default to
-create-it), and `CiliumNodeConfig` is operator-only. Several of these gates are
-**agent** keys read from the shared `cilium-config` ConfigMap — the operator
-therefore MUST accept the agent's key names verbatim (§6, Open Decision 6 of
-inventory 08 risk list).
+`ServiceExport`/`ServiceImport` are outside this cilium.io set: registration
+remains gated by `clustermesh-enable-mcs-api` and
+`clustermesh-mcs-api-install-crds`. Upstream Gateway API CRDs remain externally
+owned (§3.15). Controller watches and the agent's own wait set remain gated by
+feature configuration; schema presence does not enable a controller.
 
 The operator MUST NOT *delete* a CRD it no longer needs. Disabling a feature
 leaves its CRD installed; the corresponding data is cleaned up by the
@@ -383,9 +372,10 @@ blocks until every name in its own required set exists. Metadata-only matters:
 the full CRD objects carry ~20 000 lines of OpenAPI schema and pulling them on
 every agent at startup is a measurable load on the apiserver.
 
-The required set is the conditional table above minus the operator-only entries
-(`CiliumNodeConfig`, `CiliumGatewayClassConfig`) and gated by the *agent's* copy
-of the same keys.
+The agent required set remains the conditional set from spec13 §3.2, excluding
+operator-only `CiliumNodeConfig` and `CiliumGatewayClassConfig`. Its own feature
+keys determine its watches and wait set. The operator registering all schemas
+does not force disabled agent controllers to wait for or watch them.
 
 Readiness is polled every **50 ms**; every 20th poll (≈1 s) the agent logs one
 line naming the CRDs still missing, so a stuck bootstrap is diagnosable from
@@ -488,9 +478,13 @@ roughly the pod count. The cost is that the operator must reproduce the
 agent's label→identity derivation *exactly* (§5.6); a divergence silently
 mislabels traffic.
 
-flowsdn implements **default mode first** and slim mode second (Open
-Decision 2), because default mode is the one a mixed Cilium/flowsdn cluster can
-run.
+The delivery order is **default mode first**, with agents writing CEPs;
+slim remains a required second mode behind the same hidden key (#156). Neither
+controller exists in the planning library yet. Default mode retains the mixed
+Cilium/flowsdn rollout contract. Slim activation requires CES enabled,
+`disable-endpoint-crd=true`, operator-managed identities and no remaining
+reference agents requiring CEPs, plus shared agent/operator identity fixtures
+(§5.6). Do not silently enable slim or remove CEP publication based on scale.
 
 #### 3.7.3 Queues, batching and rate limiting
 
@@ -509,7 +503,8 @@ Two work queues over CES names, sharing one exponential failure limiter:
 `ces-rate-limits` is a JSON array of `{"nodes": <int>, "limit": <float>,
 "burst": <int>}`, default `[{"nodes":0,"limit":10,"burst":20}]`. Unknown JSON
 fields are rejected. The array is sorted ascending by `nodes`; the entry with
-the greatest `nodes ≤ current CiliumNode count` is in force. The selection is
+the greatest `nodes ≤ current CiliumNode count` is in force, falling back to the
+first entry when the count is below every threshold. The selection is
 re-evaluated on every `CiliumNode` add/delete, and a change reconfigures the
 existing limiter's rate and burst in place (no queue reset). `limit` is
 writes per second; `burst` is the bucket depth. The delay a write waits is
@@ -662,7 +657,7 @@ ConfigMap). Removal matches on **key only** — any value and any effect.
 flowsdn keeps this key rather than a `node.flowsdn.io/...` key: the taint is
 placed by kubeadm/cloud-init/Karpenter templates and cluster-API bootstrap
 configs that exist before flowsdn is installed, and renaming it strands them
-(Open Decision 4).
+(decision #158, §12).
 
 **Taint addition** (`set-cilium-node-taints`) uses the identical two-op patch
 with the appended taint `{key: node.cilium.io/agent-not-ready, value: "",
@@ -916,11 +911,11 @@ operator state.
 **Controller name** is `io.cilium/gateway-controller`. A `GatewayClass` is
 accepted only when its `spec.controllerName` matches this string exactly. It is
 part of the compatibility surface — users' `GatewayClass` manifests name it
-(Open Decision 5).
+(decision #159, §12).
 
 **CRDs the operator creates for Gateway API**: only
-`CiliumGatewayClassConfig` (v2alpha1), and only when `enable-gateway-api` is
-set (§3.4). The operator never creates upstream Gateway API CRDs.
+`CiliumGatewayClassConfig` (v2alpha1), included unconditionally in the
+cilium.io registration set (§3.4). The operator never creates upstream Gateway API CRDs.
 
 **Ingress** is enabled by `enable-ingress-controller`, handles the `cilium`
 `IngressClass`, and additionally handles class-less Ingresses when that
@@ -945,6 +940,7 @@ can land on one node in a small cluster and would otherwise collide on 9234.
 | `/v1/healthz` | GET | `text/plain` |
 | `/v1/metrics/` | GET | JSON array of `{name, labels{}, value}` |
 | `/v1/cluster` | GET | JSON array of remote-cluster status objects |
+| `/readyz` | GET | dependency health plus required-CRD readiness; `text/plain` |
 
 **Health semantics** (`/healthz`):
 
@@ -959,6 +955,14 @@ Deliberately, **leadership is not part of the verdict**. A follower that can
 reach the apiserver is healthy; failing its probe would restart the standby in
 a loop. The `is_leader` flag is exposed in `/v1/metrics/` and the health
 module tree instead.
+
+`/readyz` preserves a failing dependency-health status above; otherwise it
+returns 503 with the names and observation states of required CRD blockers,
+or 200 `ok` when all are established. It does not require leadership. Keep
+`/healthz` as the liveness/dependency-health contract: missing CRDs alone must
+not restart an otherwise live operator (#164). `/readyz`, like `/healthz`,
+is a probe route outside the administrative operation allowlist. This extra
+route is a deliberate extension; the HTTP adapter and chart probes are pending.
 
 Consecutive failures are counted and logged with the count; a success after
 failures logs one recovery line.
@@ -984,7 +988,7 @@ whatever the setting.
 | Probe | Path | Port | Timing |
 |---|---|---|---|
 | liveness | `/healthz` | 9234 | `initialDelaySeconds: 60`, `periodSeconds: 10`, `timeoutSeconds: 3` |
-| readiness | `/healthz` | 9234 | `initialDelaySeconds: 0`, `periodSeconds: 5`, `timeoutSeconds: 3`, `failureThreshold: 5` |
+| readiness | `/readyz` | 9234 | `initialDelaySeconds: 0`, `periodSeconds: 5`, `timeoutSeconds: 3`, `failureThreshold: 5` |
 
 With `hostNetwork: true` the probes target `127.0.0.1` (or `::1` when IPv4 is
 disabled).
@@ -1239,7 +1243,22 @@ select(node_count):
 
 Applied at startup with `node_count = 0`, and re-evaluated on every
 `CiliumNode` add/delete. A change adjusts the live limiter's rate and burst;
-tokens already in the bucket are kept.
+tokens already in the bucket are kept (subject to the new bucket capacity);
+queue items and outstanding reservations must not be reset.
+
+The first entry also applies below its threshold: a table need not start at
+zero. This resolves the §3.7.3 wording against pinned reference
+`operator/pkg/ciliumendpointslice/rate_limit.go` at `7d68cfb394` (single-step
+threshold 5 still applies at zero). Accept case-insensitive field names as the
+reference JSON decoder does; preserve the standard lowercase output spelling.
+
+**Validation clarification (#162):** require a nonempty array, every field,
+nonnegative integer `nodes` (u64), finite positive `limit`, and positive integer
+`burst` (u32). Reject unknown fields, duplicate thresholds, repeated
+JSON fields (including case variants) and trailing JSON. These deliberate validation
+restrictions reject ambiguous or unusable reference inputs instead of panicking
+on an empty table or starting a limiter that cannot make progress. `flowsdn-operator::ces` parses, sorts, selects and detects changed steps;
+it does not implement the live token bucket, reservations or node watch.
 
 ### 5.3 CES name generation
 
@@ -1387,7 +1406,7 @@ and validation are spec `00` §3.3.
 | `identity-gc-rate-limit` | int | 2500 | spec `03` §3.6 |
 | `identity-heartbeat-timeout` | duration | 30m | spec `03` §3.6 |
 | `identity-allocation-mode` | string | `crd` | spec `03` §6; reference flag default is `kvstore`, Helm sets `crd` |
-| `identity-management-mode` | `agent\|operator\|both` | `agent` | operator-managed CID creation (deferred, Open Decision 7) |
+| `identity-management-mode` | `agent\|operator\|both` | `agent` | operator-managed CID creation remains required; default fixed by #161 |
 | `unmanaged-pod-watcher-interval` | duration | 15s | §3.11; 0 disables |
 | `pod-restart-selector` | string | `k8s-app=kube-dns` | §3.11; empty = all pods |
 
@@ -1555,7 +1574,7 @@ Unknown keys are an error, as in spec `00` §3.3.
 | **Secret sync target namespace missing** | Copy creation fails with `NotFound`; retried on the resync interval. The operator does not create the namespace (Helm owns it) |
 | **Secret copy name collision with a hand-made object** | Refused with an error log (§3.14), never overwritten |
 | **Upgrade from a Cilium operator** | The Lease is contended by both; whichever wins runs. CRD schema version comparison prevents a downgrade. Synced secrets are migrated by the legacy-name cleanup. CES objects are compatible because §4.3 is frozen. Rolling both at once is safe; running both indefinitely is not (they will fight over `identity-management-mode` if it differs) |
-| **Downgrade to a Cilium operator** | Works if flowsdn has not written a newer CRD schema version. This is the reason for Open Decision 3 |
+| **Downgrade to a Cilium operator** | Works if flowsdn has not written a newer CRD schema version. This is required by decision #157 |
 
 ## 8. Observability
 
@@ -1584,7 +1603,7 @@ depend on them.
 | `cilium_operator_feature_adv_connect_and_lb_l7_aware_traffic_management_enabled` | gauge | – | |
 | `cilium_operator_feature_adv_connect_and_lb_node_ipam_enabled` | gauge | – | |
 | `cilium_operator_feature_controlplane_kubernetes_version` | gauge | `version` | emitted unless suppressed by `CILIUM_FEATURE_METRICS_WITHOUT_ENV_VERSION` |
-| `cilium_operator_process_*`, `cilium_operator_go_*` | — | — | **DEVIATION**: Go runtime collectors have no Rust equivalent. flowsdn exports `process_*` (RSS, CPU, FDs, start time) and omits `go_*`. Dashboards keying on `go_goroutines` will show no data |
+| `cilium_operator_process_*`, `cilium_operator_go_*` | — | — | **DEVIATION**: Go runtime collectors have no Rust equivalent. flowsdn exports `process_*` (RSS, CPU, FDs, start time) and omits `go_*`. Dashboards keying on `go_goroutines` will show no data; see [dashboard delta](../compatibility/metrics.md) (#163). Collectors are not yet implemented |
 | `cilium_operator_workqueue_depth` | gauge | `name` | per queue |
 | `cilium_operator_workqueue_adds_total` | counter | `name` | |
 | `cilium_operator_workqueue_queue_duration_seconds` | histogram | `name` | |
@@ -1686,7 +1705,7 @@ Go code, not data.
 - [ ] `NamesAccepted=False` aborts with the condition's reason.
 - [ ] `Established` poll times out at 60 s and fails startup.
 - [ ] Agent CRD wait: polls at 50 ms, logs missing names about once a second, and is fatal at `crd-wait-timeout`.
-- [ ] `skip-crd-creation` writes nothing but still verifies presence and fails readiness when a CRD is absent.
+- [ ] `skip-crd-creation` writes nothing but verifies presence/Established, keeps the fence closed and fails `/readyz` while a CRD is absent; `/healthz` remains healthy for this condition alone. Creation recovers readiness; later deletion revokes it.
 - [ ] Feature gates: each of the 12 conditional gates flips exactly the expected CRD set.
 - [ ] Generated CRD YAML diffs clean against the vendored reference YAML for all 22 CRDs (schema fidelity gate, §11).
 
@@ -1944,88 +1963,56 @@ Matching inventory 08's "M (≈ 6–8k Rust lines)" for the core.
    registry must accept the agent's key names in the operator binary (§6).
 3. `hostNetwork` + `SO_REUSEPORT` must survive packaging (§10).
 
-## 12. Open decisions
+## 12. Decisions and remaining implementation
 
-1. **Graceful demotion on lost leadership.** §3.2 keeps the reference's
-   fatal exit. The alternative is to cancel the leader scope, await all tasks
-   with a deadline strictly less than `lease-duration − renew-deadline` (5 s),
-   and continue as a follower — saving a pod restart per flap and keeping the
-   API server's connection warm. **Recommendation: keep the exit.** Revisit
-   only if leader flaps become a measured operational problem, and only with a
-   per-duty audit proving every write path is cancel-safe within the budget.
+The `flowsdn-operator` crate is a library of planning primitives, not an
+operator binary. The decisions below preserve all controllers and live
+compatibility tests required by this specification.
 
-2. **Slim mode first, or default mode first?** Inventory 08 open question 1
-   asks whether flowsdn agents write CEPs at all. Going slim-first
-   (`ces-controller-mode=slim` + `disable-endpoint-crd` +
-   `identity-management-mode=operator`) removes CEP GC entirely, halves
-   identity-GC complexity, and removes one apiserver object per pod — a large
-   simplification and the direction upstream is heading. It also makes a mixed
-   Cilium/flowsdn cluster impossible, because Cilium agents watch CEPs.
-   **Recommendation: default mode first, slim mode as a supported second
-   mode behind the same hidden key.** Ship slim-first only if the migration
-   story is abandoned. Note that slim mode's correctness depends on §5.6
-   matching the agent exactly, which is a shared-fixture obligation on spec
-   `03`.
-
-3. **CRD schema-version line.** Continue `io.cilium.k8s.crd.schema.version` on
-   `1.33.x` (upgrade-in-place from Cilium works; but flowsdn is then obliged to
-   keep its CRDs a superset of whatever Cilium ships at that version, forever),
-   or fork the label (clean semantics, no in-place upgrade path).
-   **Recommendation: continue the line**, and pin the exact value in a
-   compile-time constant with a CI check that the vendored YAML hash and the
-   constant move together. Revisit at 1.0.
-
-4. **Taint key.** Keep `node.cilium.io/agent-not-ready` (recommended:
-   bootstrap tooling already writes it) or move to `node.flowsdn.io/...` with
-   the old key accepted as an alias for removal. A dual-key removal (remove
-   both keys, add only the new one) is a cheap middle path and costs one extra
-   entry in the removal filter. **Recommendation: keep the reference key; add
-   dual-key *removal* when the flowsdn key is introduced.**
-
-5. **Gateway API controller name.** `io.cilium/gateway-controller` is what
-   users' `GatewayClass` manifests name. Changing it to `io.flowsdn/...`
-   breaks every existing manifest. **Recommendation: keep it**, and make it
-   configurable so a cluster running both implementations can disambiguate.
-   Defer the key until that need is real.
-
-6. **Operator REST API surface.** `/healthz` is load-bearing (kubelet probes).
-   `/v1/metrics/` and `/v1/cluster` exist only for `cilium-operator status`.
-   Options: (a) keep all three; (b) keep `/healthz` and serve the other two
-   only when a key enables them; (c) keep `/healthz` only and give
-   `flowsdn-operator status` a Prometheus scrape instead.
-   **Recommendation: (a)** — the cost is ~150 lines and `/v1/cluster` is the
-   only way to see remote-cluster state without a shell in the pod.
-
-7. **`identity-management-mode` default.** The reference defaults to `agent`
-   (agents allocate their own `CiliumIdentity`); Helm does not change it.
-   `operator` moves allocation into the operator, which is a precondition for
-   slim CES mode and removes the agents' `create` on `ciliumidentities`
-   (a meaningful RBAC reduction: an agent can then no longer mint identities).
-   It also makes identity allocation a single-leader bottleneck and adds a
-   failure mode where a new pod waits on the operator.
-   **Recommendation: default `agent`**, matching the reference, with
-   `operator` implemented alongside slim CES mode and promoted to the default
-   only after it has run at scale. Spec `03` §6 currently accepts only
-   `agent`; that restriction lifts when this lands.
-
-8. **CES dynamic rate limit for small clusters.** Inventory 08 open question 7
-   notes that the target clusters here are small and a single
-   `{nodes:0,limit:10,burst:20}` step may suffice, making the whole stepped
-   table dead configuration. Dropping it saves ~150 lines but breaks a
-   `cilium-config` that sets a multi-step table.
-   **Recommendation: keep the table** (it is cheap and it is config
-   compatibility), but do not build a UI or Helm surface for it.
-
-9. **Prometheus `go_*` metrics.** Dashboards ported from Cilium will have
-   empty panels for `go_goroutines`, `go_memstats_*`. Options: omit (current
-   §8.1), or emit deliberately-fake equivalents mapping to Rust concepts
-   (`go_goroutines` ← live tokio tasks). **Recommendation: omit**, and ship a
-   dashboard delta document with the Helm spec. Faking a runtime's metrics
-   under another runtime's names is a trap for whoever debugs it next.
-
-10. **`--skip-crd-creation` verification strictness.** §3.4 says the operator
-    must verify presence and fail *readiness* when a CRD is missing. The
-    alternative is to fail *startup*. Failing readiness keeps the pod alive so
-    `/healthz` can explain the problem; failing startup makes it a
-    `CrashLoopBackOff` whose reason is only in logs.
-    **Recommendation: fail readiness**, as specified.
+1. **Resolved #155: leadership loss remains fatal.** The lifecycle state
+   machine transitions to a terminal state from either starting or active
+   leadership, returns cancel-and-exit, and cannot reacquire. Partial duty
+   startup failure additionally requires Lease release. Actual request
+   cancellation, structured loss logging and process exit1 remain binary duties.
+   Reconsider demotion only after measured flaps and a complete cancel-safety audit.
+2. **Resolved #156: default CES/CEP mode first, slim second.** Defaults remain
+   `ces-controller-mode=default`; agents publish CEPs. Slim and operator identity
+   ownership remain in scope, gated as §3.7.2 describes, with shared derivation
+   fixtures before enablement. The mode constants do not implement controllers.
+3. **Resolved #157: keep the schema-version label and 1.33.x line.** Start at
+   canonical `flowsdn_k8s::SCHEMA_VERSION` 1.33.11. Version/hash coupling is a
+   release gate for the eventual vendored CRD registration payload (§3.4), not
+   a claim that its corpus or CI gate has already been delivered.
+4. **Resolved #158: keep `node.cilium.io/agent-not-ready`.** Honor the existing
+   custom-key option for add and remove; remove by key regardless of effect or
+   value, preserve every unrelated taint. The library implements that desired
+   state; guarded Kubernetes patching remains. No flowsdn alias is introduced.
+   If a new default key is introduced later, remove both legacy and new keys
+   during that migration, while adding only the new one.
+5. **Resolved #159: keep `io.cilium/gateway-controller` and existing object
+   names** (`cilium-gateway-*`, `cilium-ingress-*`, `cilium-secrets`). Constants
+   pin these interfaces. A controller-name override remains a future explicit
+   coexistence feature requiring ownership/collision tests; do not invent a key
+   or imply that two implementations can safely share owned objects today.
+6. **Resolved #160: keep all three existing API families.** `/healthz` with
+   `/v1/healthz`, `/v1/metrics/` and `/v1/cluster` remain required, with their
+   existing payloads and access-control rules. `/readyz` is the additive probe
+   extension from #164. The route catalogue is implemented, HTTP handlers are not.
+7. **Resolved #161: identity management defaults to `agent`.** Retain
+   `operator` and `both` compatibility modes and RBAC contracts; operator
+   allocation is delivered with slim mode. Do not flip the default without
+   scale validation and a separately reviewed rollout. Constants establish
+   the default only, not allocation support.
+8. **Resolved #162: retain the complete stepped CES table.** The library
+   implements parsing, ordering, fallback below the first threshold and changes
+   in both directions, including reference uppercase JSON spelling. Validation
+   restrictions and pending live-limiter integration are explicit in §5.2.
+   No new dedicated UI or Helm value is added; existing configuration remains.
+9. **Resolved #163: omit Go runtime metrics.** Do not alias Tokio tasks or Rust
+   allocations to Go names. The [dashboard delta](../compatibility/metrics.md)
+   supplies panel/query/alert changes and distinguishes the future collector
+   contract from current availability. Link it from Helm compatibility guidance.
+10. **Resolved #164: missing CRDs fail readiness, not startup.** The library
+    returns blockers and keeps the CRD fence closed without any fatal action.
+    `/readyz` reports the blocked state, while liveness continues on `/healthz`.
+    CRD watches, serving and Helm probe wiring remain required (§3.4, §3.16).

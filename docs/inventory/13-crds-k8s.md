@@ -91,7 +91,7 @@ All CRDs: group `cilium.io`, `apiextensions.k8s.io/v1`, generated with controlle
 | CiliumGatewayClassConfig | ciliumgatewayclassconfigs | cgcc | cilium | Namespaced | **v2alpha1** | status | user; operator status |
 | CiliumDatapathPlugin | ciliumdatapathplugins | cddp | cilium | Cluster | **v2alpha1** (flagged deprecated in YAML) | – | user |
 
-Version/deprecation policy (from `introducing_new_crds.rst`, `register.go`, and the YAML): new CRDs start in `v2alpha1`; graduation adds a `v2` served+storage version with a byte-identical schema and marks `v2alpha1` `deprecated: true, storage: false` (no `deprecationWarning` text, no conversion webhook); the Go `v2alpha1` package keeps type aliases so old clients still compile. Removal of a served version has not yet happened for any of the five graduated CRDs. The agent's `ciliumResourceToGroupMapping` still keys BGP CRDs by their `v2alpha1` names (the names are version-independent). The schema-version label is bumped on every CRD change (`1.33.11` for v1.20.1; `latest/main` is `1.34.3`).
+Version/deprecation policy (from `introducing_new_crds.rst`, `register.go`, and the YAML): new CRDs start in `v2alpha1`; graduation adds a `v2` served+storage version with a byte-identical schema and marks `v2alpha1` `deprecated: true, storage: false` (no `deprecationWarning` text, no conversion webhook); the Go `v2alpha1` package keeps type aliases so old clients still compile. Removal of a served version has not yet happened for any of the seven graduated CRDs. The agent's `ciliumResourceToGroupMapping` still keys BGP CRDs by their `v2alpha1` names (the names are version-independent). The schema-version label is bumped on every CRD change (`1.33.11` for v1.20.1; `latest/main` is `1.34.3`).
 
 CRD annotations/labels used by Cilium on the CRD objects themselves: label `io.cilium.k8s.crd.schema.version` (only key the updater compares); annotation `controller-gen.kubebuilder.io/version=v0.20.1` (informational).
 
@@ -1352,3 +1352,15 @@ None (pure control-plane). `hostfirewallbypass` sets `SO_MARK` on outgoing socke
 - Whether to keep `CiliumEndpoint` as a per-pod object (N objects, JSON-patched on every regeneration) or go straight to `CiliumEndpointSlice`-only (`--disable-endpoint-crd` + CES); the latter halves API write load but changes what `kubectl get cep` shows.
 - Protobuf vs JSON for built-in types on rustkube (does rustkube speak protobuf at all?).
 - Namespaced `CiliumNodeConfig`/`CiliumGatewayClassConfig` are the only namespaced non-policy CRDs; confirm the namespace(s) flowsdn's operator should list (`--cilium-namespace`).
+
+### flowsdn decision outcomes (2026-09-22)
+
+Spec 13 §12.2–12.8 resolves #166–172: preserve both served versions for seven
+graduated CRDs, strategic merge with explicitly probed guarded JSON fallback,
+no client CEL substitute, all 22 registrations regardless of feature enablement,
+CEP default with validated opt-in slim CES, all-namespace NodeConfig and
+GatewayClassConfig watches, and Kubernetes 1.26.0 floor with separate capability
+requirements. The original questions above are historical, superseded by those
+contracts. #165 remains open for measurement. `flowsdn-k8s` implements bounded
+planning/patch primitives; live API, schema corpus and controller conformance
+remain pending.

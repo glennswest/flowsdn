@@ -455,7 +455,10 @@ removed from init containers.
   optional. Command `["/flowsdn-operator","run","--config-dir=/tmp/cilium/config-map"]`.
   Image suffix (`""`/`-aws`/`-azure`/`-alibabacloud`) is preserved as a values
   contract; the four images are four Cargo feature builds of one package
-  (§3.8.2). Probes: `httpGet 127.0.0.1:9234/healthz`.
+  (§3.8.2). Liveness: `httpGet 127.0.0.1:9234/healthz`; readiness:
+  `httpGet 127.0.0.1:9234/readyz` also requires the CRD fence (spec 12 #164).
+  Missing CRDs keep readiness false without inducing liveness restarts.
+  Dashboard migration: [metrics compatibility](../compatibility/metrics.md).
 - **`cilium-envoy` DaemonSet** — template unchanged (upstream image).
 - **`hubble-relay` Deployment** — command `["/flowsdn-relay","serve"]`, config
   at `/etc/hubble-relay/config.yaml`, TLS at `/var/lib/hubble-relay/tls`, port

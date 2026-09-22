@@ -872,7 +872,11 @@ true) and only for **policy verdict** events.
      VRRP/IGMP → that protocol with `dport = 0`; no L4 → protocol `ANY`,
      port 0.
 3. If `dport == 0 || proto == 0`, stop. VRRP, IGMP and L3-only flows are
-   therefore never correlated.
+   therefore never correlated. This also omits valid ICMP type 0, including
+   IPv4 echo reply: it is a preserved reference correlation limitation, not
+   an invalid-packet determination. Pinned `pkg/policy/correlation/correlation.go`
+   at `7d68cfb394` checks zero at line 46 after mapping ICMP type to dport at
+   lines 122–127 (inspected 2026-09-22). No deviation is adopted here.
 4. `endpoint_by_id(endpoint_id)` then
    `policy_correlation_info(Key{identity, dport, proto, direction})` against the
    endpoint's realized policy map (spec 06). A miss stops.
@@ -892,6 +896,21 @@ direction and verdict, with duplicates elided.
 
 Note that `AUDIT` populates the *denied-by* fields — the rule that *would have*
 denied. That is intentional and is what the CLI's audit-mode output expects.
+
+**Realized-policy adapter contract (#23).** `flowsdn-hubble::correlation`
+provides `PolicySnapshot::correlation_info(endpoint_id, Key) -> Option<PolicyMatch>`.
+`Key` carries remote identity, host-order destination port (or ICMP type),
+protocol and direction. The endpoint selects one immutable **realized** policy
+snapshot before decoding; the result carries that snapshot's revision and all
+matched `RuleOrigin` label sets/log strings (spec 06 §§4.3–4.4), not the current
+repository head or pending desired revision. The policy owner performs the same
+identity/protocol/port-prefix specificity and effective-entry lookup as its
+realized map; Hubble must not substitute an exact-key-only lookup. An absent
+endpoint, unavailable snapshot or lookup miss returns `None`, leaving correlation
+fields absent. Logs are deduplicated; audit verdicts populate denied-by fields.
+The pure trait and verdict projection are implemented and mock-tested. The
+realized-policy adapter, rule-label-to-protobuf conversion and live correlation
+remain required; no implemented endpoint currently claims populated policy fields.
 
 ### 3.12.2 Socket flows (`sock`)
 
@@ -1266,7 +1285,7 @@ last deliberately.
 | `encrypted` | 40 | `[]bool` against `IP.encrypted`; empty list ⇒ match |
 | `source_identity`, `destination_identity` | 19, 20 | numeric `u32` exact |
 | `protocol` | 12 | lowercased name. L4: `icmp` (matches v4 **or** v6), `icmpv4`, `icmpv6`, `tcp`, `udp`, `sctp`, `vrrp`, `igmp`. L7: `dns`, `http`. Anything else is a build error. |
-| `source_ip`, `destination_ip`, `source_ip_xlated` | 1, 3, 34 | each entry is either a plain address or a CIDR. Plain addresses are compared as **strings** against the flow's rendered address; CIDRs are parsed and tested with prefix containment. (The string comparison means a non-canonical spelling of an IPv6 address does not match; kept for compatibility, noted in §12.8.) |
+| `source_ip`, `destination_ip`, `source_ip_xlated` | 1, 3, 34 | each entry is either a plain address or a CIDR. Both filter entries and flow addresses are parsed; exact addresses use numeric equality and CIDRs use same-family prefix containment. Non-canonical IPv6 spellings match. IPv4-mapped IPv6 remains IPv6, distinct from IPv4. This is the deliberate deviation in §12.8. |
 | `ip_version` | 25 | enum membership; a flow with no IP layer has version `IP_NOT_USED (0)` and therefore matches a filter listing `IP_NOT_USED` |
 | `source_pod`, `destination_pod`, `source_service`, `destination_service` | 2, 4, 16, 17 | `ns/name` split (below), namespace **exact**, name **prefix** |
 | `source_workload`, `destination_workload` | 26, 27 | per entry: `(name empty ∨ name == w.name) ∧ (kind empty ∨ kind == w.kind)` over the endpoint's workloads |
@@ -2517,11 +2536,11 @@ flow (§3.19.5), with the timestamp excluded.
 | `hubble-export-aggregation-interval` | duration | `0s` (off) | aggregation flush interval |
 | `hubble-flowlogs-config-path` | string | `""` | dynamic flow-log YAML, polled every 5 s |
 
-### 6.5 Accepted but ignored
+### 6.5 Deprecated and unsupported inputs
 
 | Key | Reason |
 |---|---|
-| `hubble-prefer-ipv6` | deprecated upstream in favour of the global `prefer-ipv6`; flowsdn accepts it, logs a deprecation warning and honours it, and adopts only `prefer-ipv6` going forward (§12.10) |
+| `hubble-prefer-ipv6` | deprecated upstream in favour of the global `prefer-ipv6`; flowsdn accepts it and warns whenever explicitly supplied; explicit global `prefer-ipv6` wins even when false, otherwise this legacy value is used, otherwise false (§12.10) |
 | `hubble-drop-events`, `hubble-drop-events-interval`, `hubble-drop-events-reasons`, `hubble-drop-events-extended`, `hubble-drop-events-rate-limit` | the Kubernetes `PacketDrop` event emitter is **deferred** (§1). Accepted and ignored so an existing ConfigMap loads; setting `hubble-drop-events=true` MUST log a warning that the feature is not implemented. Defaults are `false`, `2m`, `[auth_required, policy_denied]`, `false`, `1`. |
 | `FlowFilter.experimental.cel_expression` | CEL is deferred; a request carrying it MUST be rejected with `InvalidArgument` naming the unsupported field rather than silently ignored (a silently-ignored filter returns *more* data than asked for, which is a disclosure risk) |
 
@@ -2921,7 +2940,9 @@ One test per field, plus:
       `4++` rejected. TCP-flag subset semantics including an all-false entry.
 - [ ] `event_type` with `type == 0`, with and without `match_sub_type`; a lost
       event always matches. `reply` unknown-on-dropped treated as false.
-- [ ] IP filters: exact string and CIDR containment, both families.
+- [ ] IP filters: parsed address equivalence and CIDR containment, both families;
+      alternate IPv6 spelling, host bits in prefixes, /0 and full-width masks,
+      family isolation and invalid input rejection.
 - [ ] HTTP filters rejected when the event-type filter excludes L7.
 - [ ] A benchmark asserting the filter path stays within budget at aggregation
       level `none`.
@@ -3044,14 +3065,16 @@ architecture-specific beyond the two points above.
 
 | Crate | Contents | Approx. size |
 |---|---|---|
-| `flowsdn-monitor` | perf reader, the event bus, the gob subset encoder, the `monitor1_2.sock` server, all notification decoders, the numeric tables, the text formatter | 3.5k |
+| `flowsdn-monitor` | perf reader, the event bus, the gob subset encoder, the `monitor1_2.sock` server, all notification decoders, the text formatter | 3.5k |
 | `flowsdn-hubble` | the parsers, `FlowEnricher`, the ring buffer, the observer service, filters, field masks, metrics handlers, the exporter, the peer service, the gRPC server assembly and TLS | 11k |
 | `flowsdn-hubble-relay` | the relay binary: peer pool, fan-out, sort-merge, error aggregation, health | 2.5k |
 | `flowsdn-proto` (shared) | generated `flow`, `observer`, `peer`, `relay` types plus the protojson layer | generated |
 
 `flowsdn-monitor` MUST NOT depend on `flowsdn-hubble`: `cilium-dbg monitor`
 support has to work in a build with Hubble disabled. The numeric tables live in
-the datapath ABI crate (§11.6) and both depend on it.
+`flowsdn-bpf-abi` (§11.6) and both depend on it. The initial drop-decoder
+helper resides in `flowsdn-hubble`; move the reusable codec into the ABI/monitor
+layer when the monitor crate is introduced, without reversing this dependency.
 
 ### 11.2 Protobuf and gRPC
 
@@ -3111,15 +3134,19 @@ and none should be written — the surface is exactly one struct type.
 
 ### 11.6 Shared numeric tables
 
-One table crate (the datapath ABI crate from spec 01/02) declares message
+**Resolved ownership (#22): `flowsdn-bpf-abi`** owns the Rust source tables
+shared by both BPF and userspace; no C header generator is introduced under
+ADR-0002. The ABI crate declares message
 types, trace observation points, trace reasons, drop reasons with their
 `flow.proto` names and their human strings, debug subtypes, capture points and
 source-file ids. It generates:
 
 1. the constants the BPF programs use,
 2. the Rust enums the decoder uses,
-3. a test that walks the generated `flow.proto` enums and asserts
-   name-and-number equality with the table.
+3. parity tests against the pinned `flow.proto` enum names and numbers.
+   These must compare independent reference data, not two views of the Rust
+   table. Complete enum generation and protobuf parity coverage remain
+   implementation obligations; assigning ownership does not claim completion.
 
 This is what makes §2.3 enforceable rather than aspirational, and it is where
 the `DBG_SKIP_POLICY` fix (§2.4) lives.
@@ -3155,7 +3182,8 @@ composition is three small combinators (§3.16). Glob patterns compile to a
 single anchored `regex` alternation; label selectors need a small selector
 parser (`k8s-openapi`'s is not usable standalone, so this is ~200 lines).
 
-CEL (`cel-interpreter`) is an optional feature, off by default (§12.5).
+CEL expressions are rejected before stream creation with `InvalidArgument`
+(§12.5). No interpreter or optional executable feature is currently included.
 
 ### 11.9 Enrichment
 
@@ -3210,37 +3238,52 @@ into the ring, which is §12.3, not a lock.
 
 ---
 
+### 11.14 Implemented primitive boundary
+
+`flowsdn-hubble` currently provides parsed IP predicates and filter-list algebra,
+CEL rejection, address preference resolution, checked drop-header decoding,
+emitter constants, a realized-policy correlation trait/projection, and a bounded
+**single-owner synchronous ring model**. Its `&mut self` writer makes ownership
+explicit; it is not the concurrent Observer service or lock-free fan-out. The
+model reserves the newest slot, uses wrapping sequence distances with cursors
+less than half the u64 space apart, and reports one loss per overwritten cursor
+position. It retains at most capacity+1 event references; readers may retain
+their own `Arc`s. Payload sizes must be bounded by the ingestion adapter.
+Production cycle equivalence, async wakeup races, cancellation, protobufs,
+perf ingestion, enrichment, metrics, exporters and the gRPC/monitor servers
+remain unimplemented. No runtime throughput or loss benchmark is claimed.
+
 ## 12. Decision register (resolved and open)
 
-**12.1 Does flowsdn ship a `monitor1_2` *client*?** This spec commits to the
-server side, which is what `cilium-dbg monitor` needs; a client would also need
-a gob *decoder*. Options: (a) server only; (b) server plus a `flowsdn-dbg
-monitor` with a decoder; (c) server plus a monitor CLI that is a thin Observer
-client. **Recommend (c)** — the gob decoder is then never written.
+**12.1 Resolved #141: Observer-based flowsdn monitor client.** Keep the
+`monitor1_2.sock` server and its bounded gob subset encoder for existing
+`cilium-dbg monitor`. The future `flowsdn-dbg monitor` command uses Observer
+RPCs; do not implement a gob decoder. Server encoder, gRPC adapter and command
+remain runtime work; this fixes the compatibility surface and client design.
 
-**12.2 Perf reader wakeup policy.** The reference wakes on every sample (1-byte
-watermark), i.e. a syscall per sample at high rates. Options: (a) keep it;
-(b) add `--monitor-wakeup-events`, default 1; (c) default to a one-page
-watermark with a 1 ms timer. **Recommend (a) first**, then benchmark — any
-change alters `hubble observe --follow` latency, which is the feature's point.
+**12.2 Perf reader wakeup policy (#142 remains open).** Preserve the 1-byte
+watermark and no `wakeup_events` override initially. The primitive constant
+records this default; it is not a perf reader. No throughput/follow-latency
+benchmark has been run, so the issue's measurement gate is unmet. A batching
+change requires measured latency and loss results before adoption.
 
-**12.3 Decode-task scaling.** One decode task must keep up with all CPUs at
-aggregation level `none`. Options: (a) single task, stateless decoder, snapshot
-enrichment (this spec); (b) shard by CPU with per-shard ring writes;
-(c) shard with a sequencer restoring order before the ring write.
-**Recommend (a)** with a CI benchmark gate; (c) is the fallback, because the
-ring's single-writer invariant is load-bearing.
+**12.3 Decode-task scaling (#143 remains open).** Initial implementation must
+use one decode task with snapshot enrichment and one ring writer. Sharding, if
+needed, must sequence results before that writer. The production task and CI
+throughput/latency benchmark gate are not implemented; synchronous ring unit
+tests do not satisfy this acceptance.
 
 **12.4. Flow Summary compatibility — resolved #144.** Populate deprecated `Summary` for
 both L3/L4 and L7 flows using the existing layer-derived strings. Lazy generation or a
 bounded cache may optimize cost but must not change field presence or text.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-**12.5 CEL filters.** Options: (a) reject with `InvalidArgument` (§6.5);
-(b) implement behind an off-by-default feature; (c) implement and enable.
-**Recommend (a) now, (b) later** — explicitly experimental upstream, no shipped
-tool emits it, and silently ignoring a filter returns *more* data than
-requested.
+**12.5 Resolved #145: reject CEL expressions.** Any nonempty expression
+list, including an empty expression string, fails filter construction with
+`InvalidArgument` naming `experimental.cel_expression`. An absent or empty
+list adds no predicate. Never silently ignore an expression. The validation
+primitive and rejection tests exist; request parsing and gRPC status mapping
+remain adapter obligations. An interpreter requires a separate later change.
 
 **12.6. Drop reason names — resolved #146.** Keep numeric values, protobuf enum names,
 and monitor display strings separately as specified. In particular 136 retains
@@ -3248,34 +3291,55 @@ and monitor display strings separately as specified. In particular 136 retains
 `FAILED_TO_INSERT_INTO_PROXYMAP` with `NAT 46/64 not enabled`.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-**12.7 `drop_notify.ifindex` is decoded but never surfaced.** The reference
-sets `Flow.interface` only from traces and debug captures. Options: (a) match
-the reference; (b) populate it for drops as an improvement. **Recommend (b) as
-a marked DEVIATION**, after checking the Hubble UI's drop rendering does not
-treat a present `interface` on a drop as impossible. Not adopted in this
-revision.
+**12.7 Resolved #147: preserve reference drop-interface omission.** Decode
+`drop_notify.ifindex` for raw monitor consumers, but keep `Flow.interface`
+absent for drops, including nonzero ifindex. The v0–v3 checked decoder and
+projection helper enforce this behavior. This chooses option (a); no claim is
+made about Hubble UI accepting a newly populated drop interface. A future
+deviation needs the issue's UI compatibility check before adoption.
 
-**12.8 IP filters compare strings, not addresses**, so a non-canonical IPv6
-spelling silently fails to match. Options: (a) match the reference; (b) parse
-both sides. **Recommend (b) as a DEVIATION** — (a) is a correctness bug with no
-dependent consumer — pending a check that the CLI never relies on string
-identity. Deferred to the implementation PR.
+**12.8 Resolved #148: numeric IP equality, deliberate deviation.** Parse
+plain addresses on both sides just as CIDRs are parsed; match alternate IPv6
+spellings numerically. Invalid filter addresses fail construction; invalid or
+absent flow addresses do not match. Preserve IPv4/IPv6 family separation, even
+for IPv4-mapped IPv6, and mask host bits when testing prefix membership. Scoped
+IPv6 literals are rejected: packet flow addresses have no zone identifier.
+
+Pinned-CLI review (Cilium v1.20.1 `7d68cfb394`, inspected 2026-09-22):
+`hubble/cmd/observe/flows_filter.go:416–435` passes `from-ip`, `to-ip`, `ip`
+and `snat-ip` values into protobuf fields without textual matching in the
+online path. No online CLI protocol requires textual identity. The old CLI's
+**offline** input reader (`io_reader_observer.go:90–99,222`) invokes the
+reference filter library itself, whose `pkg/hubble/filters/ip.go:32–79` uses
+string equality for plain IPs. Consequently an old CLI filtering an exported
+file retains its old non-canonical-address mismatch; changing the server does
+not change offline CLI code. This limitation is explicit rather than a claim
+of identical offline filtering. The new Rust predicate tests numeric equality,
+prefix boundaries and allow/deny semantics; live Observer integration is pending.
 
 **12.9 Exporter `node_name` inconsistency.** §3.19.2 proposes always using the
 cluster-qualified name where the reference mixes qualified and bare. Options:
 (a) match exactly; (b) always qualified. **Recommend (b)** as a DEVIATION,
 confirmed against a real log-shipper pipeline in e2e.
 
-**12.10 `hubble-prefer-ipv6` vs global `prefer-ipv6`.** Options: (a) accept
-both, specific wins; (b) accept both, global wins, warn on the specific one;
-(c) accept only the global one. **Recommend (b)** — the deprecation is already
-announced, and the warning tells operators to migrate.
+**12.10 Resolved #150: explicit global preference wins.** Accept both
+`prefer-ipv6` and deprecated `hubble-prefer-ipv6`; warn whenever the latter is
+explicitly supplied. If global preference was explicitly set, it wins, including
+`false`; otherwise use an explicitly supplied legacy value, then default false.
+Resolve ordinary source precedence for each key first, then this cross-key
+precedence. Preserve configuration provenance until resolution. The pure
+resolver covers all nine absent/false/true combinations. Registry/runtime wiring
+and warning emission remain configuration-adapter obligations.
 
-**12.11 Ring persistence across a restart.** Today a restart loses all buffered
-flows, so a crash destroys the evidence of what preceded it. Options: (a) none
-(this spec); (b) an mmap-backed ring in tmpfs; (c) rely on the exporter.
-**Recommend (a) + (c)** — document `--hubble-export-file-path` as the durable
-path; (b) turns a lock-free structure into a crash-consistency problem.
+**12.11 Resolved #151: memory-only ring, exporter for retained history.**
+Restart creates an empty ring, resets its sequence space and invalidates every
+old stream/cursor. Do not add mmap persistence or reuse cursors across instances.
+Use `hubble-export-file-path` for history outside the agent lifetime; production
+retention requires an implemented exporter and persistent storage, neither
+provided by the ring primitive. Export is not a lossless crash journal: events
+not yet exported, failed writes and volatile filesystem buffers can still be
+lost. Ring unit tests cover bounded retention, per-position in-band loss, newest
+slot reservation, sequence wrap and construction of a fresh empty instance.
 
 **12.12 Who generates Hubble certificates?** Decide in the packaging spec; this
 spec only fixes the **name derivation** (§3.17.4), which every option must
@@ -3287,9 +3351,8 @@ upstream, ~500 lines, needs a k8s event recorder plus dedupe and rate limiting.
 Options: (a) never; (b) after the k8s client crate lands; (c) replace with a
 Prometheus alert on `hubble_drop_total`. **Recommend (b)**, low priority.
 
-**12.14 Emitter name.** §3.8 sets `emitter.name = "flowsdn"`. Options:
-(a) `"flowsdn"`; (b) `"cilium"` for maximum compatibility; (c) `"flowsdn"` with
-a `--hubble-emitter-name` override. **Recommend (a)** — the field exists to
-identify the emitter, no known consumer branches on it, and claiming to be
-Cilium is both incorrect and a trademark problem (`docs/licensing.md`). (c) is
-the escape hatch if a real consumer turns up.
+**12.14 Resolved #154: identify the producer as flowsdn.** Set
+`emitter.name = "flowsdn"` and version to the flowsdn package version. Do not
+add an override or impersonate the compatibility target. Shared constants and
+a version test establish the source of truth; protobuf dispatcher integration
+remains required. Reconsider an override only for a demonstrated consumer need.

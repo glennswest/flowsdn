@@ -65,7 +65,7 @@ Totals: ~19.7k non-test Go lines (core LB ~15.1k, Maglev 0.4k, L2 ~1.7k, LB IPAM
 | `--kube-proxy-replacement` | false | Master switch; NodePort/LB/HostPort frontends only programmed when true; forces `--bpf-lb-sock` |
 | `--bpf-lb-sock` | false | Socket-level (cgroup) E/W load balancing |
 | `--bpf-lb-sock-hostns-only` | false | Socket LB only for host-netns sockets |
-| `--bpf-lb-sock-terminate-pod-connections` | false | Also destroy sockets inside pod netns on backend removal |
+| `--bpf-lb-sock-terminate-pod-connections` | true | Also destroy sockets inside pod netns on backend removal |
 | `--lb-sock-terminate-all-protos` (hidden) | false | Terminate TCP as well as UDP sockets |
 | `--bpf-sock-rev-map-max` | dynamic (`SockRevNATMapEntriesDefault`, LRU-aligned) | `cilium_lb{4,6}_reverse_sk` size |
 | `--bpf-lb-map-max` | 65536 | Default size for all LB maps |
