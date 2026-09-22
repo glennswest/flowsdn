@@ -453,6 +453,40 @@ IPsec blocks and **before** the strict-mode check and `handle_nat_fwd`:
    Stamp the source identity into the mark as `MARK_MAGIC_IDENTITY` and
    redirect to the `cilium_wg0` ifindex.
 
+**Decision-core boundary and missing upstream cases (#266).**
+`flowsdn-bpf-abi::encryption` provides a shared `no_std` decision function with
+explicit parsed-packet, host-mark/source-identity and ipcache lookup inputs.
+Its result distinguishes clear/encrypted pass, malformed/unsupported input
+drop, and WireGuard egress redirect with either a preserved overlay mark or
+an identity-mark update. Source identity recovery from a mark and the actual
+mark encoding remain adapter responsibilities; the core never truncates a
+scoped identity into a wire mark. Source CIDR classification uses the full
+scope byte as required by spec 03 §4.4, including indices above 65535. A proxy
+bypass that would stamp a scoped identity is rejected rather than losing scope.
+
+The independently authored unit vectors map all ten names in the uncompiled
+v1.20.1 `bpf/tests/encrypt_host_wireguard_tunnel` translation unit (included
+`encrypt_host.h`, reference commit `7d68cfb394`):
+
+| IPv4 case | IPv6 case | Explicit lookup/mark condition | Expected decision |
+|---|---|---|---|
+| `encrypt_v4_1_missing_dst` | `encrypt_v6_1_missing_dst` | source mark; destination endpoint absent but covering PodCIDR hit has key 255 | redirect, identity mark |
+| `encrypt_v4_2_src_mark` | `encrypt_v6_2_src_mark` | source endpoint absent; source mark; destination hit key 255 | redirect, identity mark |
+| `encrypt_v4_3_no_src_mark` | `encrypt_v6_3_no_src_mark` | no source mark or source entry | clear pass without strict mode |
+| `encrypt_v4_4_no_src_mark_with_src_entry` | `encrypt_v6_4_no_src_mark_with_src_entry` | source entry; explicit destination hit key 255 | redirect, identity mark |
+| `encrypt_v4_vxlan` | `encrypt_v6_vxlan` | overlay mark; no ipcache entries needed | redirect, preserve mark |
+
+The reference setups share map state: case 4 adds only a source entry and
+relies on destination entries left by cases 1/2. The Rust decision vectors
+make those inputs explicit so each case is independently reproducible. Extra
+vectors vary the destination key, source scope, proxy bypass, node encryption,
+neighbor-advertisement exemption, invalid packet and already-encrypted mark.
+These tests are **not completed packet-case ports**: the Rust `to_netdev`
+encryption hook, packet parser/mark recovery, ipcache LPM adapter, redirect
+execution and packet/map assertions are still missing. #266 remains open
+until those adapters exercise the ten cases; neither a decision result nor a
+redirect verdict proves encrypted WireGuard traffic on the wire.
+
 Ingress, `from_wireguard` (tc ingress on `cilium_wg0`, attached
 **unconditionally**): set `MARK_MAGIC_DECRYPT` with node id 0, emit
 `TRACE_FROM_CRYPTO`, resolve the source identity from the ipcache, and then —

@@ -10,7 +10,7 @@ It is an opt-in scaffold; no universal production profile is shipped or enabled.
 Run on the target Linux architecture using a baseline approved for that runtime:
 
 ```console
-cargo run -p flowsdn-trace-seccomp -- \
+cargo run -p flowsdn-trace-seccomp --bin flowsdn-trace-seccomp -- \
   --baseline runtime-default.json --arch amd64 \
   --caps CAP_BPF,CAP_PERFMON,CAP_NET_ADMIN,CAP_SYS_ADMIN \
   --exe /usr/local/bin/flowsdn-agent --exe /opt/cni/bin/flowsdn-cni \
@@ -61,3 +61,20 @@ verify the effective filter, rather than relying on the manifest alone.
 
 The eventual Helm opt-in remains integration work. Retain the deployment's
 existing security context until its reviewed generated profile is installed.
+
+## Linux enforcement test runner
+
+`cargo run -p flowsdn-trace-seccomp --bin enforce -- PROFILE.json -- COMMAND ARGS`
+loads a resolved profile through the installed `libseccomp.so.2`, enables its
+default no-new-privileges behavior, and replaces itself with the command. The
+filter survives exec and is inherited by children, including test helpers.
+Failures therefore include helper dependencies as well as agent/CNI syscalls.
+Use the compiled test harness executable directly for meaningful validation;
+running Cargo under the profile additionally exercises the compiler/toolchain.
+
+The runner accepts only explicit native-family architectures, ALLOW/ERRNO/KILL
+actions and standard comparison operators. It rejects unknown fields, unresolved
+conditions, unsupported flags and syscall names. It does not silently discard
+rules that cannot be represented. It is a single-process validation utility,
+not a container-runtime integration. The system libseccomp shared library is
+LGPL-2.1; it is dynamically loaded, not bundled into this tool.
