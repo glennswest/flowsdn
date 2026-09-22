@@ -137,9 +137,13 @@ fn run() -> Result<(), Box<dyn Error>> {
             return Err("shared fixture mapping has conflicting bytes".into());
         }
     }
+    // Refuse every existing unsafe destination before publishing any fixture.
+    // Otherwise a later symlink could be discovered after earlier files changed.
+    for fixture in unique.keys() {
+        no_symlink(&output.join(fixture))?;
+    }
     for (fixture, data) in &unique {
         let target = output.join(fixture);
-        no_symlink(&target)?;
         if mode == "--check" {
             if fs::read(&target)? != *data {
                 return Err(format!("fixture differs: {fixture}").into());
