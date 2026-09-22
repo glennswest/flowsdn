@@ -84,13 +84,22 @@ fn stale_failure_does_not_remove_a_new_reservation() {
 #[test]
 fn old_gate_completion_cannot_erase_replacement_gate_reservation() {
     let mut old = Gate::new(Duration::from_secs(120), 1, 0).expect("old gate");
-    let stale = old.admit(Duration::ZERO, key("uid")).expect("old admission");
+    let stale = old
+        .admit(Duration::ZERO, key("uid"))
+        .expect("old admission");
     drop(old);
     let mut replacement = Gate::new(Duration::from_secs(120), 1, 0).expect("replacement");
-    let current = replacement.admit(Duration::ZERO, key("uid")).expect("new admission");
+    let current = replacement
+        .admit(Duration::ZERO, key("uid"))
+        .expect("new admission");
     replacement.finish(stale, false);
     assert_eq!(replacement.retained_keys(), 1);
-    assert_eq!(replacement.admit(Duration::ZERO, key("uid")).expect_err("reserved"), Rejected::Duplicate);
+    assert_eq!(
+        replacement
+            .admit(Duration::ZERO, key("uid"))
+            .expect_err("reserved"),
+        Rejected::Duplicate
+    );
     replacement.finish(current, false);
     assert_eq!(replacement.retained_keys(), 0);
 }

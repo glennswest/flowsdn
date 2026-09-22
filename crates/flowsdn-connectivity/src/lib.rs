@@ -13,7 +13,10 @@ pub enum Error {
     IncompleteEvidence,
 }
 #[derive(Clone, Debug)]
-pub struct Group { issuer: Arc<()>, generation: u64 }
+pub struct Group {
+    issuer: Arc<()>,
+    generation: u64,
+}
 impl PartialEq for Group {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.issuer, &other.issuer) && self.generation == other.generation
@@ -56,14 +59,21 @@ impl<T> FlowWindow<T> {
         self.nodes = nodes;
         self.generation = generation;
         self.incomplete = false;
-        let group = Group { issuer: Arc::clone(&self.issuer), generation };
+        let group = Group {
+            issuer: Arc::clone(&self.issuer),
+            generation,
+        };
         self.active = Some(generation);
         Ok(group)
     }
     fn check(&self, group: &Group) -> Result<(), Error> {
         match self.active {
             None => Err(Error::NotActive),
-            Some(active) if active != group.generation || !Arc::ptr_eq(&self.issuer, &group.issuer) => Err(Error::StaleGroup),
+            Some(active)
+                if active != group.generation || !Arc::ptr_eq(&self.issuer, &group.issuer) =>
+            {
+                Err(Error::StaleGroup)
+            }
             _ => Ok(()),
         }
     }

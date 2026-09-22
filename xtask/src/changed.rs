@@ -134,7 +134,8 @@ fn output(command: &mut Command) -> Result<Vec<u8>, Box<dyn Error>> {
     Ok(output.stdout)
 }
 
-fn inputs(base: &str) -> Result<(BTreeMap<String, Package>, Vec<String>), Box<dyn Error>> {
+type Inputs = (BTreeMap<String, Package>, Vec<String>);
+fn inputs(base: &str) -> Result<Inputs, Box<dyn Error>> {
     // Resolve to object IDs before passing revision arguments to other git commands.
     let revision = format!("{base}^{{commit}}");
     let resolved = String::from_utf8(output(Command::new("git").args([

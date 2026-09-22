@@ -2,8 +2,8 @@
 //! Call only for eligible pod drops after reason/direction and pod-UID lookup.
 use std::{
     collections::{BTreeMap, VecDeque},
-    time::Duration,
     sync::Arc,
+    time::Duration,
 };
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Key {
@@ -104,7 +104,11 @@ impl Gate {
         if self.per_second != 0 {
             self.attempts.push_back(now);
         }
-        Ok(Ticket { issuer: Arc::clone(&self.issuer), key, sequence })
+        Ok(Ticket {
+            issuer: Arc::clone(&self.issuer),
+            key,
+            sequence,
+        })
     }
     /// Failed writes may retry without waiting for dedupe expiry, but do not
     /// refund the global attempt budget. Stale completion cannot erase a later

@@ -99,5 +99,8 @@ fn replaced_window_rejects_old_group_even_when_generation_matches() {
     assert_eq!(replacement.abort(&stale), Err(Error::StaleGroup));
     assert_eq!(replacement.finish(&stale), Err(Error::StaleGroup));
     replacement.push(&current, "node", 2).expect("current data");
-    assert_eq!(replacement.finish(&current).expect("complete").get("node"), Some(&vec![2]));
+    assert_eq!(
+        replacement.finish(&current).expect("complete").get("node"),
+        Some(&vec![2])
+    );
 }
