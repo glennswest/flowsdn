@@ -27,9 +27,7 @@ fn main() -> flowsdn_agent::state::Result<()> {
             println!("flowsdn-agent {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
-        [flag, path] if flag == "--config" => {
-            flowsdn_agent::api::run(std::path::Path::new(path))
-        }
+        [flag, path] if flag == "--config" => flowsdn_agent::api::run(std::path::Path::new(path)),
         _ => Err("usage: flowsdn-agent --config PATH (use --help for options)".into()),
     }
 }
