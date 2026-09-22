@@ -573,8 +573,13 @@ fn bgp_extension_defaults_and_explicit_policy_are_distinct() {
     let defaults = schema.resolve([]).unwrap();
     for key in ["bgp-strict-update-errors", "bgp-status-report-prefixes"] {
         assert_eq!(defaults.get(key).unwrap().value, Value::Bool(false));
-        let explicit = schema.resolve([Entry::new(Source::Flag, key, "true")]).unwrap();
+        let explicit = schema
+            .resolve([Entry::new(Source::Flag, key, "true")])
+            .unwrap();
         assert_eq!(explicit.get(key).unwrap().value, Value::Bool(true));
     }
-    assert_eq!(catalogue::get("bgp-strict-update-errors").unwrap().class, Class::Immutable);
+    assert_eq!(
+        catalogue::get("bgp-strict-update-errors").unwrap().class,
+        Class::Immutable
+    );
 }

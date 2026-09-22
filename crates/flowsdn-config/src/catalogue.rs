@@ -14,8 +14,22 @@ pub const SPECIFICATION: &str =
 
 /// flowsdn-only keys, deliberately excluded from reference catalogue coverage.
 pub const EXTENSIONS: &[Definition] = &[
-    Definition { name: "bgp-strict-update-errors", pflag: Pflag::Bool, default_expression: "false", default: Some("false"), class: Class::Immutable, inventory_name: None },
-    Definition { name: "bgp-status-report-prefixes", pflag: Pflag::Bool, default_expression: "false", default: Some("false"), class: Class::Active, inventory_name: None },
+    Definition {
+        name: "bgp-strict-update-errors",
+        pflag: Pflag::Bool,
+        default_expression: "false",
+        default: Some("false"),
+        class: Class::Immutable,
+        inventory_name: None,
+    },
+    Definition {
+        name: "bgp-status-report-prefixes",
+        pflag: Pflag::Bool,
+        default_expression: "false",
+        default: Some("false"),
+        class: Class::Active,
+        inventory_name: None,
+    },
     Definition {
         name: "force-config-change",
         pflag: Pflag::Bool,
@@ -129,7 +143,12 @@ impl Definition {
     pub fn default_provenance(self) -> Option<&'static str> {
         self.default?;
         Some(match self.name {
-            "strict-config" | "endpoint-id-max" | "force-config-change" | "bpf-ipcache-map-max" | "bgp-strict-update-errors" | "bgp-status-report-prefixes" => {
+            "strict-config"
+            | "endpoint-id-max"
+            | "force-config-change"
+            | "bpf-ipcache-map-max"
+            | "bgp-strict-update-errors"
+            | "bgp-status-report-prefixes" => {
                 "docs/spec/00-foundation-table-config.md#flowsdn-extension-keys"
             }
             "identity-allocation-mode" => "docs/spec/20-clustermesh-kvstore.md:1558",
@@ -173,7 +192,9 @@ impl Definition {
     pub fn help(self) -> Option<&'static str> {
         match self.name {
             "bgp-strict-update-errors" => Some("Reset the BGP session on malformed UPDATE content"),
-            "bgp-status-report-prefixes" => Some("Report acknowledged advertised BGP prefixes in status"),
+            "bgp-status-report-prefixes" => {
+                Some("Report acknowledged advertised BGP prefixes in status")
+            }
             "force-config-change" => {
                 Some("Allow immutable configuration changes during endpoint restoration")
             }
@@ -188,7 +209,12 @@ impl Definition {
     pub fn hidden(self) -> Option<bool> {
         matches!(
             self.name,
-            "strict-config" | "endpoint-id-max" | "force-config-change" | "bpf-ipcache-map-max" | "bgp-strict-update-errors" | "bgp-status-report-prefixes"
+            "strict-config"
+                | "endpoint-id-max"
+                | "force-config-change"
+                | "bpf-ipcache-map-max"
+                | "bgp-strict-update-errors"
+                | "bgp-status-report-prefixes"
         )
         .then_some(false)
     }

@@ -236,6 +236,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-bgp-proto"
+version = "0.14.0"
+
+[[package]]
 name = "flowsdn-bpf-abi"
 version = "0.14.0"
 
@@ -261,6 +265,14 @@ dependencies = [
  "flowsdn-ipam",
  "httparse",
  "nix",
+ "serde_json",
+]
+
+[[package]]
+name = "flowsdn-clustermesh"
+version = "0.14.0"
+dependencies = [
+ "flowsdn-identity",
  "serde_json",
 ]
 
@@ -302,6 +314,13 @@ version = "0.14.0"
 dependencies = [
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "flowsdn-gateway"
+version = "0.14.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]

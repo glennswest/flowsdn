@@ -81,8 +81,15 @@ pub fn report() -> Result<Value, Box<dyn Error>> {
         .filter(|key| flowsdn_config::catalogue::get(key).is_none())
         .cloned()
         .collect();
-    let classified: BTreeMap<_,_> = unknown.iter().map(|key| (key.clone(), outside_catalogue_owner(key))).collect();
-    let unclassified: Vec<_> = classified.iter().filter(|(_,owner)| owner.is_none()).map(|(key,_)| key.clone()).collect();
+    let classified: BTreeMap<_, _> = unknown
+        .iter()
+        .map(|key| (key.clone(), outside_catalogue_owner(key)))
+        .collect();
+    let unclassified: Vec<_> = classified
+        .iter()
+        .filter(|(_, owner)| owner.is_none())
+        .map(|(key, _)| key.clone())
+        .collect();
     Ok(
         json!({"reference":"7d68cfb394", "files":paths.len(), "startup_flags":flags,
         "flags_outside_agent_catalogue":unknown,"outside_catalogue_classification":classified,"unclassified_flags":unclassified,"commands":commands,"preserved_cilium_symbols":names,
@@ -92,7 +99,16 @@ pub fn report() -> Result<Value, Box<dyn Error>> {
 pub fn run(check: bool) -> Result<(), Box<dyn Error>> {
     let report = report()?;
     if check {
-        if report.get("unclassified_flags").and_then(Value::as_array).is_none_or(|v| !v.is_empty()) { return Err("unclassified startup flags require source review before accepting naming snapshot".into()); }
+        if report
+            .get("unclassified_flags")
+            .and_then(Value::as_array)
+            .is_none_or(|v| !v.is_empty())
+        {
+            return Err(
+                "unclassified startup flags require source review before accepting naming snapshot"
+                    .into(),
+            );
+        }
         let expected: Value =
             serde_json::from_str(&fs::read_to_string("tests/scripttest/naming-audit.json")?)?;
         if expected != report {

@@ -130,6 +130,14 @@
   ],
   "naming_rewrites": [],
   "note": "Unknown startup flags require area-fixture classification, not automatic renaming. Commands are syntax-inventoried, not claimed implemented. Embedded data is preserved.",
+  "outside_catalogue_classification": {
+    "enable-cluster-pool-to-multi-pool-migration": "operator/multipool migration input",
+    "enable-example": "tutorial fixture input",
+    "probe-tcp-md5": "BGP fixture input",
+    "synchronize-k8s-nodes": "operator/kvstore nodes GC input",
+    "test-peering-ips": "BGP fixture input",
+    "use-kernel-managed-arp-ping": "neighbor fixture input"
+  },
   "preserved_cilium_symbols": [
     "cilium_bpf_map_pressure",
     "cilium_ipcache_v2",
@@ -358,5 +366,6 @@
     "use-kernel-managed-arp-ping": [
       "tests/scripttest/corpus/neighbor/neighbor-reconciler-kernel-arp.txtar"
     ]
-  }
+  },
+  "unclassified_flags": []
 }
