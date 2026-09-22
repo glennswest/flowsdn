@@ -46,3 +46,9 @@ name = "loader-kfunc"
 path = "src/bin/loader-kfunc.rs"
 test = false
 bench = false
+
+[[bin]]
+name = "socket-context"
+path = "src/bin/socket-context.rs"
+test = false
+bench = false

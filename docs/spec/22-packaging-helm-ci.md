@@ -1614,14 +1614,26 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    change to trusted main precedes privileged testing. The Rust policy helper
    fails closed; actual workflow wiring remains a milestone 4 gate.
 
-8. **seccomp profile.** The reference ships `seccompProfile: Unconfined` for the
-   agent. flowsdn's syscall surface is much smaller (no exec of anything, ever)
-   and therefore profileable. **Recommendation:** ship a `RuntimeDefault`-plus-
-   `bpf/perf_event_open/setns/mount` profile as an opt-in
-   (`flowsdn.seccomp.enabled`) at 1.0, generated from a syscall trace of the
-   privileged test suite, and make it the default at 1.1 once it has run in
-   anger. A scratch image with no shell and no exec is the ideal case for this,
-   and it is a genuine security improvement over the reference.
+8. **Seccomp profile (#243).** The reference ships agent seccomp Unconfined.
+   `tools/trace-seccomp` generates an opt-in OCI profile from a reviewed runtime
+   baseline with default ERRNO, preserving architecture/capability conditions
+   and argument filters, then permitting bpf/perf_event_open/setns/mount. It
+   removes conflicting baseline rules for those four names before adding ALLOW.
+   Includes require every capability; excludes match any, consistent with
+   [containers/common's profile resolver](https://github.com/containers/common/blob/main/pkg/seccomp/seccomp_linux.go).
+   Unknown filter types fail closed. Trace observations do not expand access.
+   The per-PID parser requires exact successful execve identity and stops on
+   helper exec; fork/thread inheritance and split exec transitions remain
+   unattributed. Sanitized syscall counts distinguish allowed, conditional,
+   denied and missing names; argument matching and complete runtime coverage
+   cannot be proved by name-only traces. Never commit raw traces.
+   `deploy/seccomp` supplies generation instructions and a Localhost manifest
+   fragment. There is no universal shipped allowlist, automatic Helm activation
+   or validated enforcement claim. Installation on every node, integration of
+   flowsdn.seccomp.enabled, privileged-suite enforcement on amd64/arm64, and
+   eventual default promotion remain release gates. Host CNI needs launcher
+   integration; agent Pod seccomp does not cover it. Verify effective filters
+   for privileged containers before claiming the opt-in enforces restrictions.
 
 9. **Resolved #244: publish charts through OCI and public Pages.** OCI is
    the primary chart transport; enable Pages for helm repo add when the

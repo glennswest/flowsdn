@@ -1,0 +1,6 @@
+# Optional fragment, not a complete workload. Generate and install the profile
+# on every target node and validate enforcement before applying.
+securityContext:
+  seccompProfile:
+    type: Localhost
+    localhostProfile: flowsdn/agent.json

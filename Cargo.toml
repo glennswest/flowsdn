@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "xtask", "tools/harvest-bpf-cases", "tools/harvest-controlplane"]
+members = ["crates/*", "xtask", "tools/harvest-bpf-cases", "tools/harvest-controlplane", "tools/trace-seccomp"]
 exclude = ["crates/flowsdn-bpf"]
 
 [workspace.package]

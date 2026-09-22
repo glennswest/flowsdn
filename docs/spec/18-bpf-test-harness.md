@@ -612,9 +612,9 @@ fails if a case skips on a kernel row where the matrix says it must run.
 ### 3.9 Program types `BPF_PROG_TEST_RUN` cannot run
 
 `BPF_PROG_TEST_RUN` supports `SCHED_CLS`, `SCHED_ACT`, `XDP`, and a few others
-(`FLOW_DISSECTOR`, `RAW_TRACEPOINT`, `SK_LOOKUP`, `SYSCALL`, `CGROUP_SOCKOPT`,
-`CGROUP_SOCK_ADDR` since 5.12 with `bpf_attr.test.ctx_in` as
-`struct bpf_sock_addr`). The reference driver simply deletes every program that
+(`FLOW_DISSECTOR`, `RAW_TRACEPOINT`, `SK_LOOKUP`, `SYSCALL`). The prior
+claim that `CGROUP_SOCK_ADDR` test-run is available since 5.12 was not
+substantiated; the official supported-type list does not include it. The reference driver simply deletes every program that
 is not XDP/`SchedACT`/`SchedCLS`. Consequently, and this is worth stating
 plainly because it changes what the M2 socket-LB cases mean:
 
@@ -636,12 +636,12 @@ plainly because it changes what the M2 socket-LB cases mean:
   `fib_tests.c`, `ipfrag.c`, `ipv6_test.c`, `ratelimit.c`, `builtins.c`,
   `jhash_test.c`, `mcast_tests.c`, `ip_options_trace_id.c`,
   `drop_notify_test.c`).
-- Where flowsdn can do better than a costume, it does: `CGROUP_SOCK_ADDR`
-  programs *are* runnable under `BPF_PROG_TEST_RUN` on the flowsdn kernel
-  floor (5.12+), so at M2 the socket-LB cases SHOULD be re-expressed as real
-  `connect4`/`connect6`/`sendmsg` runs with a `bpf_sock_addr` `ctx_in`, and
-  the direct-call form kept only as a fast unit check. Recorded as open
-  decision §12.5.
+- Real socket hooks require a separately demonstrated kernel execution path.
+  The `socket-context` probe loads actual connect4/connect6 programs and issues
+  `BPF_PROG_TEST_RUN` with a 72-byte `bpf_sock_addr` context. It reports the exact
+  kernel error and exits unsuccessfully when unsupported; no fallback is counted
+  as a real-hook pass. If unsupported, M2 integration uses disposable cgroup/netns
+  attachment and local sockets; direct pure helper tests remain the fast baseline.
 - `iter/tcp` / `iter/udp` with the `bpf_sock_destroy` kfunc (M3) has no
   `BPF_PROG_TEST_RUN` path at all. It gets a netns-tier test with real sockets.
 
@@ -1160,7 +1160,7 @@ harness; they live in spec 02 §9.3 as a checklist and here as data. The gate is
 the netns tier.
 
 Program types run under `BPF_PROG_TEST_RUN`: `BPF_PROG_TYPE_SCHED_CLS` and
-`BPF_PROG_TYPE_XDP` for M1; `BPF_PROG_TYPE_CGROUP_SOCK_ADDR` (5.12) at M2 if
+`BPF_PROG_TYPE_XDP` for M1; capability-probed `BPF_PROG_TYPE_CGROUP_SOCK_ADDR` at M2 if
 §12.5 is decided that way. `BPF_PROG_TYPE_TRACING` iterators are never run this
 way (§3.9).
 
@@ -1365,13 +1365,16 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    including TTL, TCP window and payload bytes, with provenance. Keep rendered packet
    bytes and checksums as independently reviewed golden data.
 
-5. **Socket-LB cases at M2 (§3.9).** Options: (a) keep the reference's
-   direct-call-in-an-XDP-wrapper form; (b) run the real `CGROUP_SOCK_ADDR`
-   programs under `BPF_PROG_TEST_RUN` with a `bpf_sock_addr` `ctx_in` (5.12+,
-   inside the floor); (c) both. **Recommendation: (c)** — (b) as the real test,
-   (a) retained as a fast unit check — but the work is M2 and the decision can
-   wait until the socket-LB spec lands. Note that (b) tests something upstream
-   does not test at all.
+5. **Socket-LB strategy — #219 capability experiment.** Keep direct pure helper
+   tests plus genuine hook execution. The latter must use a demonstrated execution
+   path, not the former unverified 5.12 test-run assumption. `socket-context`
+   contains actual `cgroup/connect4` and `cgroup/connect6` programs and a userspace
+   syscall probe because pinned Aya0.14 does not implement `TestRun` for
+   `CgroupSockAddr`. No cgroup attach or connect syscall occurs in this probe.
+   A nonzero result remains a failed/unsupported capability observation until the
+   kernel validation record records its errno. On unsupported kernels, integration
+   coverage requires real local socket operations in a disposable cgroup/netns.
+   The strategy decision does not claim the socket-LB feature is implemented.
 
 6. **Resolved — #220.** Report case-inventory coverage, not BPF line or branch coverage.
    Do not port CFG-rewriting coverbee instrumentation. A future verifier-safe tool needs
@@ -1405,3 +1408,27 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
 10. **Resolved — #224.** Keep the BPF case corpus on reference v1.20.1 through milestone
    1. At that boundary, review a re-harvest as one dedicated change under the review and
    diff-accounting policy in spec 17 §12.10. Never follow upstream tags automatically.
+
+
+### Socket context capability probe (#219)
+
+The shared original Rust helper rewrites documentation addresses
+192.0.2.80:80 and [2001:db8::80]:80 to loopback port18080, permits unmatched
+addresses unchanged, and denies the wrong address family unchanged. These are
+fixture addresses, not an implementation of service selection. Direct tests
+assert both families, address/port changes and untouched context fields.
+The actual BPF wrappers access only family-appropriate writable fields.
+
+The userspace binary loads each real CGROUP_SOCK_ADDR program with its connect
+attach type and invokes command10 (`BPF_PROG_TEST_RUN`) through a narrow, zeroed
+80-byte `bpf_attr.test` adapter. Input/output contexts use the documented UAPI
+72-byte layout, including pointer padding; no userspace socket pointer is supplied.
+On supported kernels, compare return value and all context bytes against the
+helper, require truncated-context rejection, and test invalid-family handling.
+Any syscall failure prints its actual errno and prevents success. A missing
+Aya trait implementation is not itself evidence of kernel unavailability.
+
+[Linux's supported program-type list](https://docs.kernel.org/bpf/bpf_prog_run.html)
+does not list CGROUP_SOCK_ADDR (accessed 2026-09-22). Its actual status on the
+validation kernel is determined by this probe. The ABI layout was checked against
+pinned `bpf/include/linux/bpf.h`; no upstream executable implementation was copied.
