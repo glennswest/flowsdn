@@ -183,3 +183,21 @@ are excluded. Known overlapping agent windows total 1769 seconds (0.491 hours),
 not added to project elapsed. Active work time remains unknown. Counters include
 repeated context, do not measure account cost, and are not allocated to multiple
 crates.
+
+## Issue batch 6: 36 encryption, proxy and observability resolutions
+
+2026-09-22T12:28:52.786Z–2026-09-22T12:52:40.267017Z: **1427.5 seconds**
+(23.8 minutes). Thirty-six closures verified on GitHub;
+**40 open / 255 closed**. [Batch results](../workcycles/2026-09-22-batch6.md)
+separate executable primitives, decisions and remaining runtime gates.
+576 workspace tests (35 new), Clippy, formatting, both Linux musl checks,
+dependency policy, corpus audit and BPF builds passed. No fresh privileged
+fixture or production release claim. Cleanup removed 21,983 files / 6.8 GiB and
+ten task logs. CI activation remains open because no runner is registered.
+
+Processed usage **20,118,326**, including **19,203,840 cached input**.
+Response IDs are globally deduplicated; prior cycles and this snapshot's final
+publication/reporting are excluded. Known overlapping agent windows total
+1218 seconds (0.338 hours), not added to project elapsed. Active work time is
+unknown. Counters include repeated context, do not measure account cost, and
+are counted once under project/shared.
