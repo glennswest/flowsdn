@@ -506,7 +506,9 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         exchange(&mut first, &mut second, v6, true)?;
         exchange(&mut second, &mut first, v6, true)?;
     }
-    println!("PASS: durable endpoint intent recovers absent BPF publication without reallocating addresses");
+    println!(
+        "PASS: durable endpoint intent recovers absent BPF publication without reallocating addresses"
+    );
     drop(agent);
     cni(&cni_binary, &temp, "DEL", &first, &conf)?;
     let agent = start_agent(&agent_binary, &temp)?;

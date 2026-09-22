@@ -88,13 +88,21 @@ impl CidrSet {
         if address.is_ipv4() != self.cluster.address.is_ipv4()
             || number(address) < number(self.cluster.address)
             || number(address) > self.cluster.last()
-        { return Err("address outside cluster"); }
+        {
+            return Err("address outside cluster");
+        }
         let width = if address.is_ipv4() { 32u8 } else { 128 };
-        usize::try_from(number(address).saturating_sub(number(self.cluster.address))
-            .checked_shr(u32::from(width.saturating_sub(self.node_mask))).unwrap_or(0))
-            .map_err(|_| "index overflow")
+        usize::try_from(
+            number(address)
+                .saturating_sub(number(self.cluster.address))
+                .checked_shr(u32::from(width.saturating_sub(self.node_mask)))
+                .unwrap_or(0),
+        )
+        .map_err(|_| "index overflow")
     }
-    pub fn allocated(&self) -> usize { self.used.iter().filter(|v| **v).count() }
+    pub fn allocated(&self) -> usize {
+        self.used.iter().filter(|v| **v).count()
+    }
     pub fn capacity(&self) -> usize {
         self.used.len()
     }
