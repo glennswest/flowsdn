@@ -68,10 +68,10 @@ pub fn report() -> Result<Value, Box<dyn Error>> {
                 .insert(path.to_string_lossy().into_owned());
         }
         for line in parse_script(archive.script())? {
-            if let Line::Command(command) = line {
-                if let Some(name) = command.words.first() {
-                    commands.insert(name.literal());
-                }
+            if let Line::Command(command) = line
+                && let Some(name) = command.words.first()
+            {
+                commands.insert(name.literal());
             }
         }
         names.extend(symbols.find_iter(&source).map(|m| m.as_str().to_owned()));

@@ -81,12 +81,12 @@ pub fn plan_claim(
     validate_record(config)?;
     let owner_key = format!("flowsdn/cluster-owners/{cluster}");
     let config_key = format!("cilium/cluster-config/{cluster}");
-    if let Some(owner) = owner {
-        if owner.lease_id.is_some() || owner.value != instance.as_str().as_bytes() {
-            return Err(Error(
-                "cluster name owned by a different instance or unsafe leased guard".into(),
-            ));
-        }
+    if let Some(owner) = owner
+        && (owner.lease_id.is_some() || owner.value != instance.as_str().as_bytes())
+    {
+        return Err(Error(
+            "cluster name owned by a different instance or unsafe leased guard".into(),
+        ));
     }
     if let Some(config) = config {
         let existing: Value = serde_json::from_slice(&config.value)

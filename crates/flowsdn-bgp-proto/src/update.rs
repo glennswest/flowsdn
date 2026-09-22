@@ -249,35 +249,23 @@ pub fn validate(body: &[u8], four_octet_asn: bool) -> Result<Summary, ProtocolEr
                     return Err(error(8, false));
                 }
             }
-            4 | 5 => {
-                if value.len() != 4 {
-                    return Err(error(5, false));
-                }
+            4 | 5 if value.len() != 4 => {
+                return Err(error(5, false));
             }
-            6 => {
-                if !value.is_empty() {
-                    return Err(error(5, false));
-                }
+            6 if !value.is_empty() => {
+                return Err(error(5, false));
             }
-            7 => {
-                if value.len() != if four_octet_asn { 8 } else { 6 } {
-                    return Err(error(5, false));
-                }
+            7 if value.len() != if four_octet_asn { 8 } else { 6 } => {
+                return Err(error(5, false));
             }
-            18 => {
-                if value.len() != 8 {
-                    return Err(error(5, false));
-                }
+            18 if value.len() != 8 => {
+                return Err(error(5, false));
             }
-            8 => {
-                if !value.len().is_multiple_of(4) {
-                    return Err(error(5, false));
-                }
+            8 if !value.len().is_multiple_of(4) => {
+                return Err(error(5, false));
             }
-            32 => {
-                if !value.len().is_multiple_of(12) {
-                    return Err(error(5, false));
-                }
+            32 if !value.len().is_multiple_of(12) => {
+                return Err(error(5, false));
             }
             14 => result.mp_announced = mp(value, true)?,
             15 => result.mp_withdrawn = mp(value, false)?,

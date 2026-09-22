@@ -86,10 +86,10 @@ fn validate_service(service: &Value, errors: &mut Vec<Violation>) {
         }
     }
     if present(service, "loadBalancerClass")
-        && !service
+        && service
             .get("loadBalancerClass")
             .and_then(Value::as_str)
-            .is_some_and(|s| !s.is_empty())
+            .is_none_or(|s| s.is_empty())
     {
         reject(
             errors,
