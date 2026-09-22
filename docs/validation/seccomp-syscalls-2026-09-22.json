@@ -1,0 +1,257 @@
+{
+  "architecture": "amd64",
+  "capabilities": [
+    "CAP_BPF",
+    "CAP_IPC_LOCK",
+    "CAP_NET_ADMIN",
+    "CAP_NET_RAW",
+    "CAP_PERFMON",
+    "CAP_SYS_ADMIN"
+  ],
+  "scope": "successful exact-path execve per PID; no fork/thread inheritance",
+  "selected_execs": 25,
+  "syscalls": {
+    "accept4": {
+      "count": 151,
+      "coverage": "allowed"
+    },
+    "access": {
+      "count": 25,
+      "coverage": "allowed"
+    },
+    "arch_prctl": {
+      "count": 25,
+      "coverage": "allowed"
+    },
+    "bind": {
+      "count": 4,
+      "coverage": "allowed"
+    },
+    "bpf": {
+      "count": 211,
+      "coverage": "allowed"
+    },
+    "brk": {
+      "count": 207,
+      "coverage": "allowed"
+    },
+    "chmod": {
+      "count": 9,
+      "coverage": "allowed"
+    },
+    "clock_nanosleep": {
+      "count": 82,
+      "coverage": "allowed"
+    },
+    "clone3": {
+      "count": 35,
+      "coverage": "allowed"
+    },
+    "close": {
+      "count": 556,
+      "coverage": "allowed"
+    },
+    "connect": {
+      "count": 55,
+      "coverage": "allowed"
+    },
+    "epoll_create1": {
+      "count": 34,
+      "coverage": "allowed"
+    },
+    "epoll_ctl": {
+      "count": 102,
+      "coverage": "allowed"
+    },
+    "epoll_wait": {
+      "count": 143,
+      "coverage": "allowed"
+    },
+    "eventfd2": {
+      "count": 34,
+      "coverage": "allowed"
+    },
+    "execve": {
+      "count": 25,
+      "coverage": "allowed"
+    },
+    "exit_group": {
+      "count": 21,
+      "coverage": "allowed"
+    },
+    "fchmod": {
+      "count": 1,
+      "coverage": "allowed"
+    },
+    "fcntl": {
+      "count": 440,
+      "coverage": "allowed"
+    },
+    "flock": {
+      "count": 18,
+      "coverage": "allowed"
+    },
+    "fstat": {
+      "count": 122,
+      "coverage": "allowed"
+    },
+    "fsync": {
+      "count": 34,
+      "coverage": "allowed"
+    },
+    "futex": {
+      "count": 69,
+      "coverage": "allowed"
+    },
+    "getdents64": {
+      "count": 27,
+      "coverage": "allowed"
+    },
+    "getpid": {
+      "count": 1,
+      "coverage": "allowed"
+    },
+    "getrandom": {
+      "count": 37,
+      "coverage": "allowed"
+    },
+    "gettid": {
+      "count": 25,
+      "coverage": "allowed"
+    },
+    "ioctl": {
+      "count": 98,
+      "coverage": "allowed"
+    },
+    "linkat": {
+      "count": 1,
+      "coverage": "allowed"
+    },
+    "listen": {
+      "count": 4,
+      "coverage": "allowed"
+    },
+    "lseek": {
+      "count": 59,
+      "coverage": "allowed"
+    },
+    "madvise": {
+      "count": 20,
+      "coverage": "allowed"
+    },
+    "mkdir": {
+      "count": 22,
+      "coverage": "allowed"
+    },
+    "mmap": {
+      "count": 359,
+      "coverage": "allowed"
+    },
+    "mprotect": {
+      "count": 125,
+      "coverage": "allowed"
+    },
+    "mremap": {
+      "count": 35,
+      "coverage": "allowed"
+    },
+    "munmap": {
+      "count": 61,
+      "coverage": "allowed"
+    },
+    "openat": {
+      "count": 215,
+      "coverage": "allowed"
+    },
+    "poll": {
+      "count": 25,
+      "coverage": "allowed"
+    },
+    "pread64": {
+      "count": 50,
+      "coverage": "allowed"
+    },
+    "prlimit64": {
+      "count": 50,
+      "coverage": "allowed"
+    },
+    "read": {
+      "count": 8424,
+      "coverage": "allowed"
+    },
+    "readlink": {
+      "count": 30,
+      "coverage": "allowed"
+    },
+    "recvfrom": {
+      "count": 229,
+      "coverage": "allowed"
+    },
+    "rename": {
+      "count": 3,
+      "coverage": "allowed"
+    },
+    "rmdir": {
+      "count": 3,
+      "coverage": "allowed"
+    },
+    "rseq": {
+      "count": 25,
+      "coverage": "allowed"
+    },
+    "rt_sigaction": {
+      "count": 145,
+      "coverage": "allowed"
+    },
+    "rt_sigprocmask": {
+      "count": 122,
+      "coverage": "allowed"
+    },
+    "sched_getaffinity": {
+      "count": 25,
+      "coverage": "allowed"
+    },
+    "sendto": {
+      "count": 178,
+      "coverage": "allowed"
+    },
+    "set_robust_list": {
+      "count": 25,
+      "coverage": "allowed"
+    },
+    "set_tid_address": {
+      "count": 25,
+      "coverage": "allowed"
+    },
+    "setsockopt": {
+      "count": 242,
+      "coverage": "allowed"
+    },
+    "sigaltstack": {
+      "count": 71,
+      "coverage": "allowed"
+    },
+    "socket": {
+      "count": 103,
+      "coverage": "conditional"
+    },
+    "statx": {
+      "count": 108,
+      "coverage": "allowed"
+    },
+    "uname": {
+      "count": 5,
+      "coverage": "allowed"
+    },
+    "unlink": {
+      "count": 11,
+      "coverage": "allowed"
+    },
+    "write": {
+      "count": 138,
+      "coverage": "allowed"
+    }
+  },
+  "unattributed_calls": 5702,
+  "unattributed_files": 85
+}
