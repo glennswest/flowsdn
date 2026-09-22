@@ -3,9 +3,9 @@
 pub mod capabilities;
 pub mod encode_update;
 pub mod messages;
-pub mod session;
 pub mod open;
 pub mod planning;
+pub mod session;
 pub mod update;
 use std::fmt;
 pub const HEADER_LENGTH: usize = 19;
@@ -124,5 +124,5 @@ pub const fn error_action(error: ProtocolError, strict_update_errors: bool) -> E
     }
 }
 
-pub mod rib;
 pub mod collision;
+pub mod rib;

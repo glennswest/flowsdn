@@ -360,6 +360,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-harvest-controlplane"
+version = "0.14.0"
+
+[[package]]
 name = "flowsdn-health"
 version = "0.14.0"
 dependencies = [

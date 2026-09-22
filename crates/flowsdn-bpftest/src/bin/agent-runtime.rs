@@ -429,15 +429,31 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     }
     // A pin's program ID is not ownership: both interfaces share a program.
     // Swap their pin names and demand safe refusal while old traffic survives.
-    let mut pins = fs::read_dir(&pin_root)?.map(|e| e.map(|e| e.path())).collect::<std::io::Result<Vec<_>>>()?;
-    pins.retain(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("ingress-")));
+    let mut pins = fs::read_dir(&pin_root)?
+        .map(|e| e.map(|e| e.path()))
+        .collect::<std::io::Result<Vec<_>>>()?;
+    pins.retain(|p| {
+        p.file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with("ingress-"))
+    });
     pins.sort();
-    let [left, right] = pins.as_slice() else { return Err("expected two TCX pins".into()); };
+    let [left, right] = pins.as_slice() else {
+        return Err("expected two TCX pins".into());
+    };
     let swap = pin_root.join("swap");
-    fs::rename(left, &swap)?; fs::rename(right, left)?; fs::rename(&swap, right)?;
-    ensure(start_agent(&agent_binary, &temp).is_err(), "wrong-interface pins accepted")?;
-    for v6 in [false,true] { exchange(&mut first, &mut second, v6, true)?; }
-    fs::rename(left, &swap)?; fs::rename(right, left)?; fs::rename(&swap, right)?;
+    fs::rename(left, &swap)?;
+    fs::rename(right, left)?;
+    fs::rename(&swap, right)?;
+    ensure(
+        start_agent(&agent_binary, &temp).is_err(),
+        "wrong-interface pins accepted",
+    )?;
+    for v6 in [false, true] {
+        exchange(&mut first, &mut second, v6, true)?;
+    }
+    fs::rename(left, &swap)?;
+    fs::rename(right, left)?;
+    fs::rename(&swap, right)?;
     let mut restored_config: Value =
         serde_json::from_slice(&fs::read(temp.0.join("config.json"))?)?;
     *restored_config.get_mut("route-mtu").ok_or("route MTU")? = json!(1400);

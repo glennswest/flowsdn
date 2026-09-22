@@ -184,25 +184,26 @@ impl LocalDelivery {
             return Err("invalid network interface name".into());
         }
         if !self.interfaces.contains_key(interface)
-            && let Some(root) = &self.pin_root {
-                let path = root.join(format!("ingress-{interface}"));
-                match std::fs::symlink_metadata(&path) {
-                    Ok(meta) => {
-                        if meta.file_type().is_symlink() {
-                            return Err("link pin cannot be a symlink".into());
-                        }
-                        let pinned = FdLink::from(PinnedLink::from_pin(&path)?);
-                        let info = tcx_identity::read(&path)?;
-                        if info.id != pinned.info()?.id() || !info.matches(interface, true)? {
-                            return Err("refusing to detach a foreign pinned link".into());
-                        }
-                        let link: SchedClassifierLink = pinned.try_into()?;
-                        std::fs::remove_file(path)?;
-                        link.detach()?;
+            && let Some(root) = &self.pin_root
+        {
+            let path = root.join(format!("ingress-{interface}"));
+            match std::fs::symlink_metadata(&path) {
+                Ok(meta) => {
+                    if meta.file_type().is_symlink() {
+                        return Err("link pin cannot be a symlink".into());
                     }
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => return Err(e.into()),
+                    let pinned = FdLink::from(PinnedLink::from_pin(&path)?);
+                    let info = tcx_identity::read(&path)?;
+                    if info.id != pinned.info()?.id() || !info.matches(interface, true)? {
+                        return Err("refusing to detach a foreign pinned link".into());
+                    }
+                    let link: SchedClassifierLink = pinned.try_into()?;
+                    std::fs::remove_file(path)?;
+                    link.detach()?;
                 }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e.into()),
+            }
         }
         // Keep the handle on unlink failure so teardown can be retried.
         if let Some(OwnedLink::Persistent { path, .. }) = self.interfaces.get(interface) {
