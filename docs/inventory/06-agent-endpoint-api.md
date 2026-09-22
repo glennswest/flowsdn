@@ -559,7 +559,8 @@ lines of Rust; XL if `flowsdn-dbg` and bugtool are rewritten in the same phase).
 - API rate limiter auto-adjust: keep the adaptive algorithm or fixed limits?
 - Health prober: reuse cluster-size-dependent interval formula exactly (metrics
   dashboards assume ~60 s at small size)?
-- Do we expose `/statedb/*` at all, or provide `flowsdn-dbg` native table dumps?
+- Resolved #46: expose the read-only health-table `/statedb/query` adapter
+  (spec 00 §8.4 and spec 08 §12.5); generic dump/changes remain unsupported.
 
 ## Appendix A — full agent flag table (the `cilium-config` key surface)
 

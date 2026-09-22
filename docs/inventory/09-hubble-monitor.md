@@ -909,9 +909,9 @@ VLAN, IPv4/6 + extensions, TCP/UDP/ICMPv4/v6) plus hand parsers for SCTP
 overlay parsing repeats the same stack. About 800 lines.
 
 **Filters** — 25 filter builders over `FlowFilter`; straightforward closures
-`Box<dyn Fn(&Event) -> bool>`. CEL (`cel_expression`) needs the `cel`
-(cel-rust) crate; treat as optional feature. Pod/FQDN/node patterns are glob
-with `ns/` prefix semantics — copy `patterns.go` behaviour and its tests.
+`Box<dyn Fn(&Event) -> bool>`. Nonempty experimental CEL expressions are
+rejected with `InvalidArgument` (#145; spec 11 §12.5). Supported Pod/FQDN/node
+patterns retain glob and `ns/` semantics, with independent implementation/tests.
 
 **Metrics** — `prometheus` crate `IntCounterVec`/`HistogramVec` with dynamic
 label names computed from context options at handler init (the Go code

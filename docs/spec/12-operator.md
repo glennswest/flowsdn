@@ -126,12 +126,12 @@ MUST query the apiserver version and refuse to run (exit non-zero, one log
 line naming both versions) when it is below the enforced minimum. Two
 different numbers are in play and both are kept:
 
-- **Enforced constraint: `>= 1.21.0`.** This is the reference's
-  `MinimalVersionConstraint` and it is what the fatal check compares against.
-  It is deliberately far below the tested line — it exists to reject something
-  ancient, not to police support.
-- **Documented supported line: 1.33–1.36** (inventory 13). Outside it, flowsdn
-  relies on Kubernetes API compatibility and offers no guarantee.
+- **Enforced constraint: `>= 1.26.0`** (spec 13 §3.10, resolved #172).
+  The reference enforced `1.21.0`; that is historical evidence only.
+  The flowsdn floor requires the selected CEL-capable API baseline; version
+  checking does not replace discovery and capability verification.
+- **Reference tested line: 1.33–1.36** (inventory 13), not a flowsdn runtime
+  support claim. flowsdn cluster acceptance remains pending.
 
 The check is fatal, not a warning.
 

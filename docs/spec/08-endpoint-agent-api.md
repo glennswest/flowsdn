@@ -1685,10 +1685,10 @@ API server + models + limiter ~5k, healthcheck ~2k, status ~0.8k, tests ~5k.
    reuse, and otherwise report/leave the unrelated process alone.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-5. **`/statedb/query` for the `health` table.** Conditional on spec 00
-   decision 12.5; if (a) there, the route in 3.12 is normative here. If it is
-   dropped, `cilium-dbg status` from upstream exits non-zero after printing
-   the status; `flowsdn-dbg` becomes P0.
+5. **Resolved (#46): read-only health query compatibility.** Serve the
+   route required by spec 00 §8.4; other tables return 404. Native
+   `/health/modules` remains available. Upstream debug CLI end-to-end
+   acceptance remains pending; no generic dump API is enabled.
 6. **Unimplemented API routes — resolved #118.** Register recognized but
    not-yet-implemented method/path pairs and return 501 with the standard Error body.
    Unknown paths remain 404; invalid methods are handled separately. A 501 explicitly

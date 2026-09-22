@@ -490,8 +490,8 @@ Not a datapath area. Requirements are socket-level:
    same YAML and let the API server validate).
 2. Operator: cluster-config -> node-config compiler, override merge, owner
    references, conflict detection, conditions, router-ID pool allocator,
-   storage-version migration (only needed if we serve `v2alpha1`; recommend
-   serving `v2` only).
+   storage-version migration and verification before future served-version
+   removal (retain deprecated `v2alpha1` and storage `v2`; resolved #184).
 3. Agent: level-triggered reconciler with the same seven reconcilers and the
    same ordering (default-gateway 10, interface 20, pod-cidr 30, service 40,
    pod-ip-pool 50, route-policy 100, neighbor 110), the reference-counted path
@@ -638,9 +638,9 @@ MikroTik-fronted fleet, and the Cilium implementation is export-only with a
 small attribute set, so the RFC surface we must implement is genuinely small
 (4271, 4760, 6793, 2918, 4724/8538, 8950, 1997/8092, 2385). Do not embed
 holo-bgp (daemon architecture, libyang) or a sidecar (breaks the scratch
-single-binary model). Defer BFD, ADD-PATH, non-unicast SAFIs, import policies,
-`v2alpha1` serving and the deprecated REST endpoints (keep only the shell/CLI
-read commands).
+single-binary model). Defer BFD, ADD-PATH, non-unicast SAFIs and import policies.
+Retain both BGP CRD versions and the REST compatibility surface required by
+spec 15. Live registration and migration remain implementation work.
 
 Effort: **L** (8-20k lines): ~6-10k speaker + codec + interop tests, ~8-12k
 control plane (CRDs, operator compiler, seven reconcilers, status, CLI),
@@ -652,8 +652,9 @@ peering against GoBGP and against a RouterOS CHR in CI.
 - Which peers will real deployments have — RouterOS only, or also
   FRR/bird/Arista? This decides whether the `bgp` backend is v1 or v2 work
   (RouterOS backend alone could ship first).
-- Do we serve `v2alpha1` at all? Cilium still serves it (deprecated). A
-  clean-room project can start at `v2` only and skip the migrator.
+- Resolved #184: retain served deprecated `v2alpha1` alongside sole storage
+  `v2` for all five BGP CRDs (spec 15 O-2; spec 13 §12.2). Live migration
+  remains unimplemented.
 - TCP-AO (RFC 5925, Linux 6.7+): worth adding beyond Cilium's MD5-only
   support, given the fleet kernel version?
 - Passive sessions: Cilium requires `localPort` for inbound; do we want a
