@@ -1491,3 +1491,8 @@ suite. The operator's CRD availability fence gates readiness (`/readyz`) separat
 from liveness (`/healthz`), including when CRD creation is skipped (spec 12).
 Issue #165 remains open pending list-byte measurement and protobuf capability
 evidence; JSON is the current baseline, not a measured permanent decision.
+
+Gateway API type ownership (#21) follows spec21§12.11: flowsdn-k8s owns
+hand-declared schema-backed types pinned to Gateway API1.6.1. The current
+Gateway validation library consumes JSON resources; this decision does not
+claim that the complete generated/schema corpus or typed client exists.

@@ -59,6 +59,13 @@ policy correlation. These libraries do not yet provide live controllers or an
 Observer server. See the [metrics migration guide](docs/compatibility/metrics.md)
 for the documented dashboard changes.
 
+BGP protocol helpers now validate frames, OPEN capabilities and UPDATE structure,
+with explicit lenient/strict content-error policy. Gateway helpers validate
+configuration and project conditions; ClusterMesh helpers check address overlap,
+read authorization and guarded ownership/lease plans. Deployment policy and
+bounded script diagnostics are also available. Live speakers, controllers,
+transactions and deployment adapters remain unfinished.
+
 | | |
 |---|---|
 | Specifications | 24 files, ~40k lines — every area, normative, with compatibility contracts and test plans |

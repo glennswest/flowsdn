@@ -59,11 +59,13 @@ entry. No Go or C test *code* is copied.
   upstream Go `cilium-cli`; upstream may still be run manually for
   cross-checking during bring-up.
 
-**4. Renaming.** Harvested fixtures keep their scenario semantics but are
-rewritten mechanically where they name `cilium`-specific paths, map names
-that flowsdn keeps (most), or flags flowsdn renames (few). The rewrite is a
-script under `tools/`, not hand editing, so a re-harvest at a newer reference
-tag is cheap.
+**4. Naming preservation (resolved #213).** The audited rewrite set is empty
+for the pinned harvested script corpus. Keep reference flags, command names,
+map/metric symbols and embedded paths. `cargo xtask audit-corpus --check`
+compares a reviewed inventory and rejects unclassified startup names. See
+`tests/scripttest/NAMING.md` for all six non-agent-catalogue inputs. If a future
+reference bump requires a rename, use an explicit reviewed mapping in a Rust
+tool with provenance and differential checks; never hand-edit harvested data.
 
 ## Consequences
 

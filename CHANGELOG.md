@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Add BGP framing, OPEN/UPDATE validation, strict-error handling and passive/status
+  planning, with structural-error precedence regression tests.
+- Add Gateway configuration validation, condition projection and conformance
+  planning; preserve separate header/query matcher types.
+- Add ClusterMesh overlap, prefix authorization and durable UUID ownership plans,
+  including lease rebinding; align the identity allocation default to CRD.
+- Add deployment/CI policy plans, bounded script diagnostics and a reproducible
+  naming audit for all 168 harvested scripts. Runtime adapters remain outstanding.
+
 - Add read-only module health queries compatible with the StateDB wire format,
   including explicit degraded status for unavailable agent controllers.
 - Add Kubernetes version/CRD registration plans and guarded Node patch creation.
