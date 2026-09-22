@@ -146,3 +146,21 @@ including **25,155,200 cached input**. Deduplicated
 response deltas exclude previous cycles and this final publication/reporting.
 Known overlapping agent windows total 1663 seconds (0.462 hours); active time
 unknown. Counts include repeated context and do not measure account cost.
+
+## Issue batch 4: 30 health and controller foundation resolutions
+
+2026-09-22T00:54:05.185Z–2026-09-22T01:16:33.160743Z: **1348.0 seconds**
+(22.5 minutes). Thirty closures verified on GitHub;
+**106 open / 189 closed**. [Batch results](../workcycles/2026-09-22-batch4.md)
+separate executable libraries, agent health routes and compatibility decisions.
+509 workspace tests, final affected suite, Clippy, both Linux musl compile checks,
+dependency policy, BPF build and three privileged fixtures passed. No release.
+Cleanup removed 18,935 files / 6.8 GiB and fifteen task logs.
+
+Processed usage **19,650,180**, including
+**19,164,416 cached input**. Response IDs are
+globally deduplicated; prior cycles and this snapshot's final publication/reporting
+are excluded. Known overlapping agent windows total 1880 seconds (0.522 hours),
+not added to project elapsed. Active work time remains unknown. Counters include
+repeated context, do not measure account cost, and are not allocated to multiple
+crates.
