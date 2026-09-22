@@ -368,11 +368,16 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     let agent_binary = fs::canonicalize(agent_binary)?;
     let object = fs::canonicalize(object)?;
     isolate()?;
+    unshare(CloneFlags::CLONE_NEWNS)?;
+    nix::mount::mount(None::<&str>, "/", None::<&str>, nix::mount::MsFlags::MS_REC | nix::mount::MsFlags::MS_PRIVATE, None::<&str>)?;
     let temp = Temp::new()?;
+    let pin_root = temp.0.join("bpf");
+    fs::create_dir(&pin_root)?;
+    nix::mount::mount(Some("bpffs"), &pin_root, Some("bpf"), nix::mount::MsFlags::empty(), None::<&str>)?;
     fs::write(
         temp.0.join("config.json"),
         serde_json::to_vec(
-            &json!({"socket-path":temp.0.join("agent.sock"),"state-dir":temp.0.join("state"),"bpf-object":object,
+            &json!({"socket-path":temp.0.join("agent.sock"),"state-dir":temp.0.join("state"),"bpf-object":object,"bpf-pin-root":pin_root,
         "ipv4-pool":"198.18.0.0/24","ipv6-pool":"2001:db8:1::/64","ipv4-gateway":"198.18.0.254","ipv6-gateway":"2001:db8:1::ffff","device-mtu":1500,"route-mtu":1450,"endpoint-id-max":2}),
         )?,
     )?;
@@ -404,9 +409,11 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         exchange(&mut first, &mut second, v6, true)?;
         exchange(&mut second, &mut first, v6, true)?;
     }
+    let map_id = aya::maps::MapInfo::from_pin(pin_root.join("cilium_lxc"))?.id();
     drop(agent);
     for v6 in [false, true] {
-        exchange(&mut first, &mut second, v6, false)?;
+        exchange(&mut first, &mut second, v6, true)?;
+        exchange(&mut second, &mut first, v6, true)?;
     }
     let mut restored_config: Value =
         serde_json::from_slice(&fs::read(temp.0.join("config.json"))?)?;
@@ -416,6 +423,7 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         serde_json::to_vec(&restored_config)?,
     )?;
     let agent = start_agent(&agent_binary, &temp)?;
+    ensure(aya::maps::MapInfo::from_pin(pin_root.join("cilium_lxc"))?.id()==map_id, "restart replaced endpoint map")?;
     for (endpoint, check) in [&first, &second].into_iter().zip(&previous) {
         cni(&cni_binary, &temp, "CHECK", endpoint, check)?;
         let duplicate = cni(&cni_binary, &temp, "ADD", endpoint, &conf)?;
@@ -429,7 +437,7 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         exchange(&mut second, &mut first, v6, true)?;
     }
     println!(
-        "PASS: dual-stack endpoints and same-sandbox duplicate ADD preserve results; foreign sandbox rejected; restart restores ADD/CHECK and traffic"
+        "PASS: dual-stack endpoints and same-sandbox duplicate ADD preserve results; foreign sandbox rejected; pinned forwarding survives downtime; restart preserves map ID, ADD/CHECK and traffic"
     );
     drop(agent);
     cni(&cni_binary, &temp, "DEL", &first, &conf)?;
@@ -501,6 +509,9 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     println!(
         "PASS: offline CNI deletion survives process restart, does not resurrect stale links, drains durable queue and tears down remaining endpoint"
     );
+    ensure(fs::read_dir(&pin_root)?.count()==1, "endpoint deletion left pinned links")?;
+    fs::remove_file(pin_root.join("cilium_lxc"))?;
+    nix::mount::umount(&pin_root)?;
     Ok(())
 }
 fn main() -> Result<()> {

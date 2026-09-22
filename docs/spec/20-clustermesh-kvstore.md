@@ -1958,13 +1958,44 @@ the prefix-scoping front ≈ 0.5k. MCS-API and the EndpointSlice v2 consumer add
    remains a fastetcd roadmap item, not an implementation dependency or a filed
    upstream issue claim. The binding/range primitives have local tests; TLS,
    protocol enforcement and isolation remain release requirements.
-6. **Mesh bootstrap tooling.** `cilium clustermesh connect` is out of tree, so
-   flowsdn needs its own command to exchange endpoints and certificates and
-   write the config files. Options: a `flowsdn-cli clustermesh connect`
-   mirroring the upstream UX; or a `CiliumClusterMeshPeer`-style CRD reconciled
-   by the operator. **Recommendation: the CLI first** (it is what the
-   documentation and every existing runbook assume), with the CRD as a later
-   addition.
+6. **Resolved #29: offline peer-bundle CLI first.** `flowsdn-cli clustermesh
+   connect --bundle FILE --config-dir DIRECTORY [--replace] [--dry-run]`
+   installs an explicitly provisioned peer's endpoints and credentials. This
+   is an offline exchange interface, not the upstream Kubernetes-context UX:
+   operators provision/export client credentials through their existing CA
+   workflow, transfer bundles securely, and invoke the command at each receiving
+   cluster. Each direction requires its own authorized client bundle. No
+   Kubernetes credentials, Secret writes, certificate issuance or connectivity
+   handshake are implied. A peer CRD/controller remains a later interface.
+
+   The JSON bundle contains exactly `cluster`, `endpoints` (nonempty unique HTTPS
+   authorities with explicit nonzero ports), `ca_pem`, `cert_pem`, and `key_pem`.
+   Cluster names are validated DNS labels. The bundle must be an owner-only
+   regular file of at most 4 MiB. PEM envelope/base64 character checks are
+   structural only: transport must still verify trust chain, validity, client
+   purpose, server identity and key correspondence. Never print credential data
+   or parser excerpts. Input/output path symlinks and parent traversal reject.
+
+   The preexisting config directory must not be group/other writable. CLI
+   writers serialize using an exclusive owner-only lock file. The tool prepares
+   immutable credentials under `.flowsdn-peer-material/<generation>/` (0700),
+   using `<cluster>.etcd-client-ca.crt`, `.crt`, `.key` basenames (0400). It fsyncs
+   these files and directories before publishing the `<cluster>` YAML config by
+   one atomic rename. This nested staging prevents the directory watcher from
+   seeing a partial peer config. Existing regular configs require `--replace`;
+   symlink targets are never followed. Failed preparation retains the old config;
+   after successful rename, even a durability error must retain new credentials.
+   Old credential generations remain for readers holding old configs; operators
+   may prune them only after proving no active config/reader uses them. A stale
+   lock requires explicit verification/removal, never automatic stealing.
+
+   `--dry-run` validates without writes. Bundle/config directories are trusted
+   against same-user adversarial mutation; the tool does not claim a sandbox
+   against a hostile process with the same filesystem authority. Paths encoded
+   in YAML must be visible unchanged to the receiving agent. CLI integration
+   tests cover real writes, permissions, replacement, retained generations,
+   malformed inputs, locks, symlinks and secret-free output. Live mesh importers
+   and TLS/provider interoperability retain their own acceptance gates.
 7. **Resolved #28: require non-overlapping PodCIDRs between clusters.**
    Validate every known local and remote allocation prefix before accepting a
    topology replacement. CIDR containment in either direction is overlap;

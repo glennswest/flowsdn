@@ -1902,11 +1902,40 @@ Closed design choices do not claim Kubernetes, REST or datapath integration.
 
 11. **Resolved #102.** Retain lockdown default false for compatibility and alarm at pressure >= 0.9 with exact integer rounding. pressure() provides the tested planning primitive, not a live metric or map write. Overflow must remain a reported enforcement failure; runtime lockdown and pre-1.0 security review remain required.
 
-12. **Simulator — #103 remains open.** The new independent `oracle::evaluate`
-    scans resolved L3/L4 rules directly for tier, priority, Pass, deny and redirect
-    precedence, without using the optimized mapstate algorithm. Exhaustive-port
-    and ordering tests cover this subset. Authentication inheritance, L7 matching,
-    full selector/distillation inputs and fuzz agreement against the eventual
-    optimized mapstate builder are still required. Unsupported authentication is
-    an error, not an oracle success. Do not close #103 or gate an optimization
-    solely on this partial oracle.
+12. **Simulator — #103 remains open for the complete oracle gate.**
+    `oracle::evaluate` remains independent of optimized lookup construction.
+    A new `mapstate::MapState` compiles the current resolved exact/wildcard
+    identity L3/L4 rule domain into identity/protocol buckets and disjoint port
+    intervals, then coalesces equivalent adjacent answers. Lookup uses a binary
+    search, without scanning policy rules. It independently implements sorted
+    tier/priority/verdict/redirect ranking and Pass handling; it never invokes
+    the oracle evaluator or its matching/ranking helpers. Invalid replacement
+    preserves the previous index.
+
+    The test gate compares all 65,536 ports for representative Pass, deny,
+    redirect, identity/direction and protocol combinations. Another deterministic
+    generated-policy test checks 192 seeds, reversed insertion order, every
+    generated port-boundary equivalence class, both directions, and known/unknown
+    identity/protocol classes. Signed-zero priorities and equal redirect candidates
+    are regression cases. These gates must pass for interval coalescing changes.
+
+    This index is not the kernel LPM mapstate of §§5.4–5.8. Authentication
+    inheritance, aggregate identities, cookies/origins, selectors/default-deny
+    synthesis, named-port integration, 27 reference seeds, and sustained fuzz
+    comparison against the complete kernel-map builder remain outstanding.
+    Both current paths explicitly reject authentication, rather than treating
+    matching unsupported errors as evidence of semantic equality. Closing #103
+    requires those remaining gates; local resolved-policy comparisons do not
+    establish Kubernetes policy enforcement.
+
+### Simulator source clarification
+
+Pinned-reference review for #103 (`7d68cfb394`,
+`pkg/policy/testutils/simulate.go`): the brute-force simulator first selects
+subject/direction rules and derives default-deny, then resolves peers and ports
+before tier/priority/verdict ordering. It treats nil peers as matching nothing,
+empty peers as matching everything, and Pass as skipping the rest of its tier.
+The current Rust `Rule` domain starts after subject/peer/named-port resolution
+and expects synthesized defaults explicitly. That missing frontend must not be
+hidden by calling the interval index a complete simulator port. Source was read
+to resolve scope ambiguity; no reference implementation code was copied.

@@ -121,8 +121,9 @@ impl Store {
         }
         Ok(records.into_values().collect())
     }
-    /// Stage a new endpoint; existing state is never overwritten. Caller loads
-    /// the datapath before publish(), and drops this guard on failure.
+    /// Stage a new endpoint; existing state is never overwritten. Publish this
+    /// recoverable intent before installing persistent forwarding. A publish
+    /// error after rename is ambiguous; retain ownership until explicit cleanup.
     pub fn stage(&self, record: &Record) -> Result<Staged<'_>> {
         let parsed = Record::parse(record.document.clone())?;
         if parsed.id != record.id || parsed.attachment != record.attachment {

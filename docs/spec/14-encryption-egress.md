@@ -1760,6 +1760,23 @@ use exponential backoff from 100 ms to 1 min; the CiliumEndpoint stream uses
 | `encryption.type=ztunnel` | Out of scope here (`16-l7-envoy-dns.md`) |
 | `--enable-vtep`, `--enable-srv6` and their companions | **Rejected** while deferred (§1.2), with a message saying so |
 
+**Resolved #19 — ENI route ownership.** Removal of the old egress-gateway
+route-installation switch does not eliminate per-interface IPAM routing. ENI
+uses priority 111 with table `10 + interface-number`; Azure alone retains
+priority 110 and table `ifindex`. A lookup rule is insufficient without its
+shared gateway host route and default route. IPAM supplies the gateway, CIDRs,
+master MAC and interface number in its allocation response. The CNI ADD path
+installs the pod rules **and** those routes through `RoutingInfo::Configure`;
+the agent installs infrastructure endpoint routing and reconciles shared
+gateway routes. This is the spec 07 §3.20 / spec 10 routing responsibility,
+not an additional egress-gateway manager route writer. Endpoint deletion removes
+its rules and preserves shared per-interface routes. Pinned-reference evidence:
+`plugins/cilium-cni/cmd/interface.go:71`,
+`pkg/datapath/linux/routing/routing.go` (`Configure`, `installRoutes`,
+`ReconcileGatewayRoutes`, `computeTableIDFromIfaceNumber`), and
+`daemon/infraendpoints/infra_ip_allocation.go:305–322`, commit `7d68cfb394`.
+This confirms the ownership contract; ENI cloud runtime validation remains pending.
+
 ### 6.7 Mutually exclusive and fatal combinations
 
 WireGuard + IPsec. IPsec + strict **ingress**. IPsec + host firewall. IPsec + a
@@ -1997,15 +2014,35 @@ options:
   over the per-peer flags — in particular the ability to **not** set
   replace-allowed-ips, which is the whole point of the workaround.
 
-**Honest gap assessment.** `netlink-packet-wireguard` covers the attribute set,
-but two things must be verified against the pinned version at Phase 2 and
-hand-encoded if absent: (a) the per-peer flags as a *bitfield the caller
-controls*, rather than an API that always replaces; and (b) **message
-fragmentation** — a peer with thousands of AllowedIPs exceeds one netlink
-message and the kernel expects the peer to be continued across messages with
-the same public key. A cluster with large pod CIDRs in native routing will hit
-this; a naive encoder silently truncates. flowsdn MUST test a peer with more
-AllowedIPs than fit one message.
+**Resolved #258 — audited codec and bounded peer fragments.** The exact
+`netlink-packet-wireguard = 0.4.0` published crate (MIT; `peer.rs`,
+`attribute.rs`, `message.rs`) exposes caller-controlled `Flags` bitfields,
+including empty flags, remove-peer, replace-AllowedIPs and update-only. Its
+`Emitable` implementation serializes the supplied attributes; it has **no
+fragmentation layer**. flowsdn therefore owns fragmentation in
+`flowsdn-encryption::wireguard`, using that codec and `netlink-packet-core
+= 0.8.0`. Tests decode with `netlink-packet-generic = 0.4.0`.
+
+The planner accepts a device ifindex, caller-controlled replace-peers choice,
+and peer operations with public key, flags, optional endpoint/keepalive and
+validated address/prefix pairs. It emits one peer per message, splitting its
+AllowedIPs without loss or duplication. The budget includes the 16-byte netlink
+and 4-byte generic headers and is capped at 60,000 bytes, below the nested
+attribute u16 limit. Device replace-peers occurs only in the first message;
+peer replace-AllowedIPs and endpoint/keepalive occur only in that peer's first
+fragment. Update-only remains on continuations. Remove-peer cannot carry
+AllowedIPs, replace-AllowedIPs or endpoint settings. Empty replacement lists
+still emit an operation. Reject invalid bounds/prefixes and duplicate peer keys
+before returning a plan; no partial plan escapes on failure. Plans cap input at
+65,535 peers and 1,000,000 total prefixes.
+
+This follows the kernel [WireGuard generic-netlink contract](https://docs.kernel.org/netlink/specs/wireguard.html).
+Published codec source: [version 0.4.0](https://docs.rs/crate/netlink-packet-wireguard/0.4.0/source/).
+The future writer must serialize plans per device and await each kernel ACK,
+stop on first error, retain the desired state and reconcile after partial
+application; fragments are not an atomic transaction. Family discovery, sockets,
+ACK processing, dummy-peer workflow integration and live kernel scale checks
+remain pending. Unit tests establish wire fragmentation, not a running tunnel.
 
 Key generation with `x25519-dalek`; the private key is 32 raw bytes and the
 public key is base64 for publication.

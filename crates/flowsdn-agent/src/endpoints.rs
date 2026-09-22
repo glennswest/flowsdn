@@ -81,26 +81,36 @@ impl Manager {
         ipam: Ipam,
         id_max: u32,
     ) -> Result<Self> {
+        Self::restore_with_pins(path, object, ipam, id_max, None)
+    }
+    pub fn restore_with_pins(path: &Path, object: &Path, ipam: Ipam, id_max: u32, pin_root: Option<&Path>) -> Result<Self> {
         let ids = IdPool::new(id_max)?;
         let store = Store::open(path)?;
         let records = store.restore()?;
+        let mut unique_addresses = BTreeSet::new();
+        for record in &records {
+            for ip in addresses(&record.document)? {
+                if !unique_addresses.insert(ip) { return Err("duplicate persisted endpoint address".into()); }
+            }
+        }
         let mut manager = Self {
             store,
             ids,
             records: BTreeMap::new(),
             addresses: BTreeMap::new(),
             deleting: BTreeSet::new(),
-            driver: kernel(LocalDelivery::load(object))?,
+            driver: kernel(match pin_root { Some(root) => LocalDelivery::load_pinned(object, root), None => LocalDelivery::load(object) })?,
             ipam,
         };
         let connector = Connector::open()?;
         // Validate every persisted identity/address before installing any link.
         let mut viable = Vec::new();
+        let mut stale = Vec::new();
         for record in records {
             let Some(link) = connector.link(text(&record.document, "IfName"))? else {
-                // DEL may remove the peer while the agent is down. Its host
-                // link disappears too; no live endpoint remains to restore.
-                manager.store.remove(record.id)?;
+                // Defer every mutation until all other live identities validate.
+                info(&record)?;
+                stale.push(record);
                 continue;
             };
             manager.ids.reserve(record.id)?;
@@ -124,6 +134,25 @@ impl Manager {
                 manager.ipam.allocate(ip, &owner)?;
             }
             viable.push(record);
+        }
+        for record in &stale {
+            for ip in addresses(&record.document)? {
+                // A stale durable record cannot authorize removal of another
+                // endpoint's map value after interrupted publication/reuse.
+                if let Some(old) = kernel(manager.driver.snapshot(ip))? {
+                    use flowsdn_bpf_abi::MapBytes;
+                    if old != info(&record)?.to_bytes() {
+                        return Err("stale endpoint map ownership differs; preserve forwarding".into());
+                    }
+                }
+            }
+        }
+        for record in stale {
+            kernel(manager.driver.detach(text(&record.document, "IfName")))?;
+            for ip in addresses(&record.document)? {
+                kernel(manager.driver.remove_if_present(ip))?;
+            }
+            manager.store.remove(record.id)?;
         }
         for record in viable {
             manager.install(&record)?;
@@ -199,22 +228,37 @@ impl Manager {
             if link.index != endpoint.ifindex || mac_value(&link.mac)? != endpoint.node_mac {
                 return Err("endpoint host link identity mismatch".into());
             }
-            // Stage only after all caller-provided identity fields are checked.
-            // Split field borrows allow the stage to keep Store's lock alive.
+            for ip in &ips {
+                if kernel(self.driver.snapshot(*ip))?.is_some() {
+                    return Err("endpoint map address already owned; reconcile before create".into());
+                }
+            }
+            // Publish recoverable intent before any persistent forwarding.
+            // Register ownership before publish: a directory rename may succeed
+            // even when the following durability barrier reports failure.
             let staged = self.store.stage(&record)?;
-            install(&mut self.driver, &record)?;
-            if let Err(error) = staged.publish() {
-                let _ = uninstall(&mut self.driver, &record);
-                let _ = self.store.remove(record.id);
+            for ip in &ips {
+                self.addresses.insert(*ip, record.attachment.clone());
+            }
+            self.records.insert(record.attachment.clone(), record.clone());
+            self.deleting.insert(record.attachment.clone());
+            staged.publish()?;
+            if let Err(error) = install(&mut self.driver, &record) {
+                // Retain ID, addresses and durable intent on any uncertain
+                // rollback. DEL/restart can then complete recovery safely.
+                if uninstall(&mut self.driver, &record).is_ok()
+                    && self.store.remove(record.id).is_ok()
+                {
+                    for ip in ips { self.addresses.remove(&ip); }
+                    self.records.remove(&record.attachment);
+                    self.deleting.remove(&record.attachment);
+                }
                 return Err(error);
             }
-            for ip in ips {
-                self.addresses.insert(ip, record.attachment.clone());
-            }
-            self.records.insert(record.attachment.clone(), record);
+            self.deleting.remove(&record.attachment);
             Ok(id)
         })();
-        if result.is_err() {
+        if result.is_err() && !self.records.values().any(|record| record.id == id) {
             self.ids.release(id);
         }
         result
@@ -250,14 +294,15 @@ fn install(driver: &mut LocalDelivery, record: &Record) -> Result<()> {
     let mut installed = Vec::new();
     let outcome = (|| {
         for ip in addresses(&record.document)? {
+            let old = kernel(driver.snapshot(ip))?;
             kernel(driver.upsert(ip, endpoint))?;
-            installed.push(ip);
+            installed.push((ip, old));
         }
         kernel(driver.attach(text(&record.document, "IfName")))
     })();
     if outcome.is_err() {
-        for ip in installed {
-            let _ = driver.remove(ip);
+        for (ip, old) in installed {
+            kernel(driver.restore_snapshot(ip, old))?;
         }
     }
     outcome

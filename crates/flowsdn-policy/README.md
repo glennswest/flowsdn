@@ -10,7 +10,9 @@ Policy-library building blocks from spec 06:
 - API port validation, masked-port expansion and BPF key conversion;
 - exact policy-map pressure alarms and explicit overflow action planning;
 - independent brute-force resolved L3/L4 oracle for tiers, priorities, Pass,
-  deny precedence and redirect preference.
+  deny precedence and redirect preference;
+- independently compiled interval lookup with adjacent-answer coalescing,
+  binary-search lookup and atomic validated replacement.
 
 The oracle does not implement authentication inheritance or L7 content matching.
 It refuses authentication inputs rather than reporting an unverified verdict.
@@ -22,3 +24,9 @@ mapstate builder, BPF map writer, policy REST handler, or controller here. Kerne
 publication and its atomicity remain the caller's responsibility. Full policy
 scope and the required fuzz comparison against the eventual optimized builder
 remain in spec 06; this crate is not a claim of network-policy enforcement.
+
+The interval compiler is checked against the independent oracle with exhaustive
+port enumeration and deterministic generated policies covering all generated
+boundary classes and reversed insertion order. It is not the kernel LPM mapstate
+compiler. Issue #103 remains open for authentication, aggregates, frontend
+resolution, imported regression seeds and the complete fuzz gate.

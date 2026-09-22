@@ -32,6 +32,7 @@ impl PortRange {
             })
         }
     }
+    pub const fn bounds(self) -> (u16, u16) { (self.start, self.end) }
     pub const fn contains(self, port: u16) -> bool {
         self.start <= port && port <= self.end
     }

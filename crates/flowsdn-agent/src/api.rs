@@ -69,6 +69,7 @@ struct Config {
     socket: PathBuf,
     state: PathBuf,
     object: PathBuf,
+    pin_root: Option<PathBuf>,
     queue: PathBuf,
     v4: Option<(IpAddr, u8)>,
     v6: Option<(IpAddr, u8)>,
@@ -89,6 +90,7 @@ impl Config {
         let socket = PathBuf::from(string(&value, "socket-path")?);
         let state = PathBuf::from(string(&value, "state-dir")?);
         let object = PathBuf::from(string(&value, "bpf-object")?);
+        let pin_root = match optional(&value, "bpf-pin-root")? { "" => None, path => Some(PathBuf::from(path)) };
         let queue = if optional(&value, "delete-queue")?.is_empty() {
             socket
                 .parent()
@@ -162,6 +164,7 @@ impl Config {
             socket,
             state,
             object,
+            pin_root,
             queue,
             v4,
             v6,
@@ -420,6 +423,7 @@ impl Api {
     }
     fn create(&mut self, id: &str, body: &Value) -> Result<(u16, Value)> {
         if self.manager.get(id).is_some() {
+            if !self.manager.healthy(id)? { return fail(500, "endpoint recovery or teardown remains incomplete"); }
             return fail(409, "endpoint already exists");
         }
         let cid = string(body, "container-id")?;
@@ -806,11 +810,12 @@ pub fn run(config_path: &Path) -> Result<()> {
     let config = Config::read(config_path)?;
     // The manager's exclusive state lock is acquired before inspecting or
     // removing a stale socket, preventing a second owner of this state tree.
-    let manager = Manager::restore_with_id_max(
+    let manager = Manager::restore_with_pins(
         &config.state,
         &config.object,
         config.ipam()?,
         config.endpoint_id_max,
+        config.pin_root.as_deref(),
     )?;
     let mut api = Api {
         config,

@@ -1,5 +1,7 @@
 //! ClusterMesh validation and transaction planning, not live clients/controllers.
 #![forbid(unsafe_code)]
+#[cfg(unix)]
+pub mod bootstrap;
 pub mod config;
 pub mod ownership;
 pub mod prefixes;

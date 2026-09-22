@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 pub mod gateway;
 pub mod validation;
+pub mod wireguard;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Error(pub &'static str);
