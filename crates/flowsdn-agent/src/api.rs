@@ -310,8 +310,12 @@ impl Api {
                 if request.method != "GET" {
                     return fail(405, "method not supported");
                 }
-                let decoded=decode(id)?;
-                let record=read_endpoint(self.manager.records(), &decoded).ok_or_else(|| Failure {status:404,message:"endpoint not found".into()})?;
+                let decoded = decode(id)?;
+                let record =
+                    read_endpoint(self.manager.records(), &decoded).ok_or_else(|| Failure {
+                        status: 404,
+                        message: "endpoint not found".into(),
+                    })?;
                 let healthy = self.manager.healthy(&record.attachment)?;
                 let status = if healthy { "OK" } else { "Failure" };
                 return Ok((
@@ -330,10 +334,11 @@ impl Api {
                     }
                 }
                 "GET" => {
-                    let record = read_endpoint(self.manager.records(), &id).ok_or_else(|| Failure {
-                        status: 404,
-                        message: "endpoint not found".into(),
-                    })?;
+                    let record =
+                        read_endpoint(self.manager.records(), &id).ok_or_else(|| Failure {
+                            status: 404,
+                            message: "endpoint not found".into(),
+                        })?;
                     Ok((200, endpoint_response(record.id, &record.document)))
                 }
                 _ => fail(405, "method not supported"),
@@ -529,24 +534,35 @@ impl Api {
     }
 }
 
-fn read_endpoint<'a>(mut records: impl Iterator<Item=&'a crate::state::Record>, id: &str) -> Option<&'a crate::state::Record> {
+fn read_endpoint<'a>(
+    mut records: impl Iterator<Item = &'a crate::state::Record>,
+    id: &str,
+) -> Option<&'a crate::state::Record> {
     if !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()) {
-        let numeric=id.parse::<u16>().ok().filter(|v| *v!=0)?;
-        records.find(|record| record.id==numeric)
-    } else { records.find(|record| record.attachment==id) }
+        let numeric = id.parse::<u16>().ok().filter(|v| *v != 0)?;
+        records.find(|record| record.id == numeric)
+    } else {
+        records.find(|record| record.attachment == id)
+    }
 }
-fn endpoint_list<'a>(records: impl Iterator<Item=&'a crate::state::Record>) -> Result<Value> {
-    let mut records=records.collect::<Vec<_>>(); records.sort_by_key(|r|r.id);
-    let mut bytes=2usize;let mut result=Vec::new();
+fn endpoint_list<'a>(records: impl Iterator<Item = &'a crate::state::Record>) -> Result<Value> {
+    let mut records = records.collect::<Vec<_>>();
+    records.sort_by_key(|r| r.id);
+    let mut bytes = 2usize;
+    let mut result = Vec::new();
     for record in records {
-        let value=endpoint_response(record.id,&record.document);
-        bytes=bytes.saturating_add(serde_json::to_vec(&value)?.len()).saturating_add(usize::from(!result.is_empty()));
-        if bytes>BODY_LIMIT {return fail(413,"endpoint list exceeds 4 MiB");}
+        let value = endpoint_response(record.id, &record.document);
+        bytes = bytes
+            .saturating_add(serde_json::to_vec(&value)?.len())
+            .saturating_add(usize::from(!result.is_empty()));
+        if bytes > BODY_LIMIT {
+            return fail(413, "endpoint list exceeds 4 MiB");
+        }
         result.push(value);
     }
     Ok(Value::Array(result))
 }
-fn ipam_summary(ipam:&Ipam)->Value {
+fn ipam_summary(ipam: &Ipam) -> Value {
     let pools=[("ipv4",ipam.ipv4()),("ipv6",ipam.ipv6())].into_iter().filter_map(|(family,pool)| pool.map(|pool| {
         let summary=pool.summary();
         json!({"pool":"default","family":family,"cidr":format!("{}/{}",pool.network(),pool.prefix_len()),

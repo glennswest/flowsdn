@@ -211,29 +211,77 @@ fn stale_cni_route_configuration_is_rejected_before_creation() {
 
 #[test]
 fn endpoint_inventory_is_sorted_bounded_and_preserves_pod_identifiers() {
-    let records=[crate::state::Record {id:42,attachment:"cni-attachment-id:c:eth0".into(),document:json!({"K8sNamespace":"ns","K8sPodName":"pod","K8sUID":"uid","dockerID":"c","IPv4":"10.0.0.2"})},crate::state::Record {id:2,attachment:"cni-attachment-id:b:eth0".into(),document:json!({})}];
-    let list=endpoint_list(records.iter()).expect("list");
-    assert_eq!(list.get(0).and_then(|v|v.get("id")),Some(&json!(2)));
-    assert_eq!(list.get(1).and_then(|v|v.pointer("/status/external-identifiers/k8s-namespace")),Some(&json!("ns")));
-    assert_eq!(list.get(1).and_then(|v|v.pointer("/status/external-identifiers/k8s-pod-name")),Some(&json!("pod")));
-    assert_eq!(read_endpoint(records.iter(),"42").map(|r|r.attachment.as_str()),Some("cni-attachment-id:c:eth0"));
-    assert_eq!(read_endpoint(records.iter(),"cni-attachment-id:b:eth0").map(|r|r.id),Some(2));
-    for invalid in ["0","65536","999999999999999999999","not-found"] {assert!(read_endpoint(records.iter(),invalid).is_none());}
-    assert_eq!(endpoint_list(std::iter::empty()).expect("empty"),json!([]));
-    let large=crate::state::Record {id:1,attachment:"x".into(),document:json!({"K8sPodName":"x".repeat(BODY_LIMIT)})};
-    let error=endpoint_list(std::iter::once(&large)).expect_err("bounded response");
-    assert_eq!(error.downcast_ref::<Failure>().expect("HTTP error").status,413);
+    let records = [
+        crate::state::Record {
+            id: 42,
+            attachment: "cni-attachment-id:c:eth0".into(),
+            document: json!({"K8sNamespace":"ns","K8sPodName":"pod","K8sUID":"uid","dockerID":"c","IPv4":"10.0.0.2"}),
+        },
+        crate::state::Record {
+            id: 2,
+            attachment: "cni-attachment-id:b:eth0".into(),
+            document: json!({}),
+        },
+    ];
+    let list = endpoint_list(records.iter()).expect("list");
+    assert_eq!(list.get(0).and_then(|v| v.get("id")), Some(&json!(2)));
+    assert_eq!(
+        list.get(1)
+            .and_then(|v| v.pointer("/status/external-identifiers/k8s-namespace")),
+        Some(&json!("ns"))
+    );
+    assert_eq!(
+        list.get(1)
+            .and_then(|v| v.pointer("/status/external-identifiers/k8s-pod-name")),
+        Some(&json!("pod"))
+    );
+    assert_eq!(
+        read_endpoint(records.iter(), "42").map(|r| r.attachment.as_str()),
+        Some("cni-attachment-id:c:eth0")
+    );
+    assert_eq!(
+        read_endpoint(records.iter(), "cni-attachment-id:b:eth0").map(|r| r.id),
+        Some(2)
+    );
+    for invalid in ["0", "65536", "999999999999999999999", "not-found"] {
+        assert!(read_endpoint(records.iter(), invalid).is_none());
+    }
+    assert_eq!(endpoint_list(std::iter::empty()).expect("empty"), json!([]));
+    let large = crate::state::Record {
+        id: 1,
+        attachment: "x".into(),
+        document: json!({"K8sPodName":"x".repeat(BODY_LIMIT)}),
+    };
+    let error = endpoint_list(std::iter::once(&large)).expect_err("bounded response");
+    assert_eq!(
+        error.downcast_ref::<Failure>().expect("HTTP error").status,
+        413
+    );
 }
 #[test]
 fn ipam_inventory_counts_are_lossless_decimal_strings_and_disabled_families_absent() {
-    let mut v6=HostScope::new("::".parse().expect("IP"),0,Default::default()).expect("pool");
-    v6.exclude_ip("::1".parse().expect("IP"),"gateway");
-    let ipam=Ipam::new(None,Some(v6)).expect("IPAM");
-    let response=ipam_summary(&ipam);
-    let pools=response.get("pools").and_then(Value::as_array).expect("pools");assert_eq!(pools.len(),1);
-    let pool=pools.first().expect("IPv6");assert_eq!(pool.get("family"),Some(&json!("ipv6")));
-    assert_eq!(pool.get("capacity"),Some(&json!(u128::MAX.saturating_sub(1).to_string())));
-    assert_eq!(pool.get("available"),Some(&json!(u128::MAX.saturating_sub(2).to_string())));
-    assert_eq!(pool.get("excluded"),Some(&json!("1")));
-    assert_eq!(ipam_summary(&Ipam::new(None,None).expect("empty")),json!({"pools":[]}));
+    let mut v6 = HostScope::new("::".parse().expect("IP"), 0, Default::default()).expect("pool");
+    v6.exclude_ip("::1".parse().expect("IP"), "gateway");
+    let ipam = Ipam::new(None, Some(v6)).expect("IPAM");
+    let response = ipam_summary(&ipam);
+    let pools = response
+        .get("pools")
+        .and_then(Value::as_array)
+        .expect("pools");
+    assert_eq!(pools.len(), 1);
+    let pool = pools.first().expect("IPv6");
+    assert_eq!(pool.get("family"), Some(&json!("ipv6")));
+    assert_eq!(
+        pool.get("capacity"),
+        Some(&json!(u128::MAX.saturating_sub(1).to_string()))
+    );
+    assert_eq!(
+        pool.get("available"),
+        Some(&json!(u128::MAX.saturating_sub(2).to_string()))
+    );
+    assert_eq!(pool.get("excluded"), Some(&json!("1")));
+    assert_eq!(
+        ipam_summary(&Ipam::new(None, None).expect("empty")),
+        json!({"pools":[]})
+    );
 }

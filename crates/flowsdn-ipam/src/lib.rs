@@ -128,11 +128,32 @@ impl HostScope {
     }
 
     pub fn summary(&self) -> PoolSummary {
-        let allocated = self.owners.len().saturating_sub(self.materialized_exclusions.len()) as u128;
-        let excluded = self.excluded.keys().filter(|ip| self.offset(**ip).is_some()).count() as u128;
-        let allocated_excluded = self.owners.keys().filter(|ip| self.excluded.contains_key(*ip) && !self.materialized_exclusions.contains(*ip)).count() as u128;
-        let unavailable = allocated.saturating_add(excluded).saturating_sub(allocated_excluded);
-        PoolSummary { capacity:self.capacity, allocated, excluded, allocated_excluded, available:self.capacity.saturating_sub(unavailable) }
+        let allocated = self
+            .owners
+            .len()
+            .saturating_sub(self.materialized_exclusions.len()) as u128;
+        let excluded = self
+            .excluded
+            .keys()
+            .filter(|ip| self.offset(**ip).is_some())
+            .count() as u128;
+        let allocated_excluded = self
+            .owners
+            .keys()
+            .filter(|ip| {
+                self.excluded.contains_key(*ip) && !self.materialized_exclusions.contains(*ip)
+            })
+            .count() as u128;
+        let unavailable = allocated
+            .saturating_add(excluded)
+            .saturating_sub(allocated_excluded);
+        PoolSummary {
+            capacity: self.capacity,
+            allocated,
+            excluded,
+            allocated_excluded,
+            available: self.capacity.saturating_sub(unavailable),
+        }
     }
 
     pub fn dump(&self) -> &BTreeMap<IpAddr, String> {
