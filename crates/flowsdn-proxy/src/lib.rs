@@ -1,6 +1,6 @@
 //! Proxy integration plans, not a DNS server, xDS transport or L7 proxy.
-pub mod ack;
 pub mod accesslog;
+pub mod ack;
 pub mod fqdn;
 /// Explicit effective configuration wins; only an unset key inherits the SDP
 /// topology default. Caller resolves file/environment/flag precedence first.

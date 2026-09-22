@@ -431,6 +431,7 @@ name = "flowsdn-proxy"
 version = "0.14.0"
 dependencies = [
  "flowsdn-identity",
+ "nix",
 ]
 
 [[package]]
