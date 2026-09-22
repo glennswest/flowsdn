@@ -33,7 +33,11 @@ fn run() -> Result<(), Box<dyn Error>> {
         .nth(1)
         .ok_or("usage: ipcache-probe <pinned-cilium-envoy>")?;
     let version = Command::new(&binary).arg("--version").output()?;
-    let version = format!("{}{}", String::from_utf8_lossy(&version.stdout), String::from_utf8_lossy(&version.stderr));
+    let version = format!(
+        "{}{}",
+        String::from_utf8_lossy(&version.stdout),
+        String::from_utf8_lossy(&version.stderr)
+    );
     if !version.contains(REVISION) {
         return Err(format!("wrong Envoy revision: {version}").into());
     }
@@ -49,7 +53,11 @@ fn run() -> Result<(), Box<dyn Error>> {
                 json,
             ])
             .output()?;
-        let log = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        let log = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
         match map {
             Some(map) => {
                 if !output.status.success() {
