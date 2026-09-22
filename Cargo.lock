@@ -472,6 +472,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-trace-seccomp"
+version = "0.14.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "flowsdn-version"
 version = "0.14.0"
 dependencies = [

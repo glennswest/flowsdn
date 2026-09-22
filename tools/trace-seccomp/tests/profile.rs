@@ -1,4 +1,4 @@
-use flowsdn_trace_seccomp::{coverage, profile, trace, REQUIRED};
+use flowsdn_trace_seccomp::{REQUIRED, coverage, profile, trace};
 use serde_json::json;
 use std::collections::BTreeSet;
 
@@ -13,7 +13,11 @@ fn selected_execs_only_and_unfinished_calls_count_once() {
     assert_eq!(result.counts.get("write"), Some(&1));
     assert!(!result.counts.contains_key("read"));
     assert!(!result.counts.contains_key("mount"));
-    assert!(trace("read(0, 0, 0) = 0", &BTreeSet::new()).counts.is_empty());
+    assert!(
+        trace("read(0, 0, 0) = 0", &BTreeSet::new())
+            .counts
+            .is_empty()
+    );
 }
 
 #[test]
@@ -26,22 +30,37 @@ fn capability_arch_filters_and_argument_rules_are_preserved() {
         {"names":["bpf","setns","perf_event_open","mount","other"],"action":"SCMP_ACT_ERRNO","errno":"EPERM","excludes":{"caps":["CAP_BPF","CAP_SYS_ADMIN"]}},
         {"names":["personality"],"action":"SCMP_ACT_ALLOW","args":[{"index":0,"value":0,"op":"SCMP_CMP_EQ"}]}
     ]});
-    let result = profile(&baseline, "amd64", &BTreeSet::from(["CAP_SYS_PTRACE".into()])).expect("profile");
-    for name in REQUIRED { assert_eq!(coverage(&result, name), "allowed"); }
+    let result = profile(
+        &baseline,
+        "amd64",
+        &BTreeSet::from(["CAP_SYS_PTRACE".into()]),
+    )
+    .expect("profile");
+    for name in REQUIRED {
+        assert_eq!(coverage(&result, name), "allowed");
+    }
     assert_eq!(coverage(&result, "ptrace"), "missing");
     assert_eq!(coverage(&result, "other"), "denied");
     assert_eq!(coverage(&result, "personality"), "conditional");
     assert_eq!(coverage(&result, "arch_prctl"), "allowed");
     assert_eq!(coverage(&result, "cacheflush"), "missing");
     assert_eq!(result.get("defaultErrnoRet"), Some(&json!(38)));
-    let result = profile(&baseline, "amd64", &BTreeSet::from(["CAP_SYS_PTRACE".into(), "CAP_SYS_ADMIN".into()])).expect("profile");
+    let result = profile(
+        &baseline,
+        "amd64",
+        &BTreeSet::from(["CAP_SYS_PTRACE".into(), "CAP_SYS_ADMIN".into()]),
+    )
+    .expect("profile");
     assert_eq!(coverage(&result, "ptrace"), "allowed");
     assert_eq!(coverage(&result, "other"), "missing");
 }
 
 #[test]
 fn unsupported_conditions_and_allow_default_fail_closed() {
-    for baseline in [json!({"defaultAction":"SCMP_ACT_ALLOW","syscalls":[]}), json!({"defaultAction":"SCMP_ACT_ERRNO","syscalls":[{"names":["read"],"action":"SCMP_ACT_ALLOW","includes":{"minKernel":"4.0"}}]})] {
+    for baseline in [
+        json!({"defaultAction":"SCMP_ACT_ALLOW","syscalls":[]}),
+        json!({"defaultAction":"SCMP_ACT_ERRNO","syscalls":[{"names":["read"],"action":"SCMP_ACT_ALLOW","includes":{"minKernel":"4.0"}}]}),
+    ] {
         assert!(profile(&baseline, "amd64", &BTreeSet::new()).is_err());
     }
 }
@@ -58,7 +77,10 @@ fn successful_execveat_stops_attribution_and_basename_is_not_identity() {
 
 #[test]
 fn split_exec_transition_cannot_attribute_a_helper_to_agent() {
-    let parsed = trace("execve(\"/bin/flowsdn-agent\", [], []) = 0\nexecve(\"/bin/helper\", [] <unfinished ...>\n<... execve resumed>) = 0\nmount(0) = 0", &BTreeSet::from(["/bin/flowsdn-agent".into()]));
+    let parsed = trace(
+        "execve(\"/bin/flowsdn-agent\", [], []) = 0\nexecve(\"/bin/helper\", [] <unfinished ...>\n<... execve resumed>) = 0\nmount(0) = 0",
+        &BTreeSet::from(["/bin/flowsdn-agent".into()]),
+    );
     assert!(!parsed.counts.contains_key("mount"));
     assert_eq!(parsed.counts.get("execve"), Some(&1));
 }
@@ -74,5 +96,8 @@ fn arm64_filters_and_mixed_allow_deny_are_not_reported_as_proven() {
     assert_eq!(coverage(&generated, "cacheflush"), "allowed");
     assert_eq!(coverage(&generated, "socket"), "conditional");
     assert!(profile(&baseline, "amd64", &BTreeSet::new()).is_err());
-    assert_eq!(generated, profile(&baseline, "arm64", &BTreeSet::new()).expect("deterministic"));
+    assert_eq!(
+        generated,
+        profile(&baseline, "arm64", &BTreeSet::new()).expect("deterministic")
+    );
 }
