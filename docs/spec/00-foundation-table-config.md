@@ -1872,3 +1872,9 @@ key tuple; no zero-separator encoding leaks into exact-key query semantics.
 Change streams, tombstone retention, initialization, metrics and reconciliation
 remain pending. The core's range-query APIs currently return collected rows;
 streaming range iterators may replace those allocations before scale tuning.
+
+Batch 6 extension keys (immutable): `egress-gateway-selection` String defaults
+`modulo`; `egress-gateway-legacy-map` Bool defaults `false`. The encryption area
+validator rejects unknown algorithms and requires explicit homogeneous-flowsdn
+cohort confirmation before rendezvous. These parser entries do not activate a
+running egress controller.

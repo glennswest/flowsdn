@@ -997,8 +997,7 @@ iptables comment" (`GetProxyPorts`) is replaced by the L7 spec's own port
 persistence (`<state-dir>/proxy-ports.json`) — **DEVIATION**, the rule set is
 regenerated, never parsed.
 
-**Host mark** (presence: `enable-host-firewall=true`, or legacy host routing,
-or `kube-proxy-replacement=false`; see 12.3):
+**Host mark** (always present; resolved #133):
 
 ```
 filter_output:  meta mark & 0xf00 != 0xd00  meta mark & 0xf00 != 0xe00  meta mark & 0xf00 != 0x400
@@ -2031,3 +2030,32 @@ without root by encoding then decoding.
 10. **`rustables` vs own nft encoder** (§11). Decide at Phase 2 start after a
     one-day evaluation against the golden files in §9. **Recommend: own
     encoder unless `rustables` passes licensing and covers every expression.**
+
+### Batch 6: residual and migration decisions (#133, #134, #247)
+
+**#133: always install the host mark rule.** Retain reference behavior until
+complete host-pipeline evidence supports removing it. This supersedes the
+proposed feature gate and the claim that an otherwise disabled residual installs
+nothing: N1 now expects the host mark baseline, and N11 expects the rule with
+host firewall both enabled and disabled. The gate would depend on unimplemented
+pipeline behavior. `flowsdn-packaging::host_identity_mark` tests preserved
+special magic values and unrelated bits; this is a rule contract, not a live
+nftables installation.
+
+**#134: operator-managed cleanup before migration; no automatic agent deletion.**
+Before handing a node over, drain its workloads, stop the reference agent,
+snapshot the host ruleset and review removal of reference-owned feeder rules and
+`CILIUM_*`/`OLD_CILIUM_*` chains using the installed backend's management tool.
+Check both address families and confirm reference NAT rules are gone before
+starting flowsdn. Preserve all unrelated tables/chains. Legacy and nft backends
+need distinct cleanup procedures; never translate arbitrary iptables-owned nft
+objects through the agent. A leftover reference chain blocks automated handoff.
+A chart may later orchestrate a separately reviewed migration job; no shipped
+hook or automatic upgrade support is claimed. This avoids an unreviewed destructive
+pre-upgrade job and retains the no-iptables agent contract.
+
+**#247: the requested pre-implementation assertion inventory already exists.**
+§9.1 N1–N45 maps the 25 reference tests/2,592 lines to presence, goldens,
+idempotence, atomicity, coexistence, teardown, ignored keys and convergence.
+The BPF-only replacements are explicitly enumerated in §9.1.9. This closes the
+missing-enumeration issue; unchecked cases remain requirements, not passed tests.

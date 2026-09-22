@@ -1606,10 +1606,14 @@ debug_event` plus `node_name` (1000) and `time` (1001).
 **Note on `node_name`:** the reference sets `node_name` from the *flow* for
 flow events but from the bare node name for lost/agent/debug events, whereas
 the Observer API uses the cluster-qualified name everywhere.
-**DEVIATION**: flowsdn uses the cluster-qualified name (`<cluster>/<node>`)
-consistently in the exporter. Reason: an inconsistent `node_name` within one
-log file cannot be correlated by a log shipper, and the qualified form is a
-superset. Recorded as a behavior change in §12.9.
+**Resolved #149: preserve this event-specific reference shape.** Copy the flow's
+node_name verbatim for flow exports, and the bare node name for lost/agent/debug
+exports. Do not normalize an empty flow name or substitute the Observer envelope
+name. The projection helper and independent cases enforce this choice. Pinned
+Cilium `7d68cfb394`, `pkg/hubble/exporter/exporter.go:193,201,209,217` confirms
+these four sources (inspected 2026-09-22). No log-shipper pipeline or full JSON
+export has been validated; choosing reference compatibility avoids an untested
+deviation. The complete protojson/exporter runtime remains outstanding.
 
 #### 3.19.3 Rotation
 
@@ -3242,7 +3246,7 @@ into the ring, which is §12.3, not a lock.
 
 `flowsdn-hubble` currently provides parsed IP predicates and filter-list algebra,
 CEL rejection, address preference resolution, checked drop-header decoding,
-emitter constants, a realized-policy correlation trait/projection, and a bounded
+exporter node-name projection, PacketDrop admission gating, emitter constants, a realized-policy correlation trait/projection, and a bounded
 **single-owner synchronous ring model**. Its `&mut self` writer makes ownership
 explicit; it is not the concurrent Observer service or lock-free fan-out. The
 model reserves the newest slot, uses wrapping sequence distances with cursors
@@ -3317,10 +3321,10 @@ not change offline CLI code. This limitation is explicit rather than a claim
 of identical offline filtering. The new Rust predicate tests numeric equality,
 prefix boundaries and allow/deny semantics; live Observer integration is pending.
 
-**12.9 Exporter `node_name` inconsistency.** §3.19.2 proposes always using the
-cluster-qualified name where the reference mixes qualified and bare. Options:
-(a) match exactly; (b) always qualified. **Recommend (b)** as a DEVIATION,
-confirmed against a real log-shipper pipeline in e2e.
+**12.9 Resolved #149: reference-compatible exporter names.** Retain the
+per-event source in §3.19.2. The always-qualified alternative is not adopted;
+no external shipper compatibility result is claimed. A later normalization
+proposal requires the issue's independent log-shipper acceptance test.
 
 **12.10 Resolved #150: explicit global preference wins.** Accept both
 `prefer-ipv6` and deprecated `hubble-prefer-ipv6`; warn whenever the latter is
@@ -3346,10 +3350,26 @@ keeps Helm default, cert-manager/user Secrets and digest-pinned upstream certgen
 for CronJob mode. Every issuer preserves §3.17.4 names and authentication.
 The planning helper does not generate certificates or render the chart.
 
-**12.13 Kubernetes `PacketDrop` event emitter.** Deferred (§1) — alpha
-upstream, ~500 lines, needs a k8s event recorder plus dedupe and rate limiting.
-Options: (a) never; (b) after the k8s client crate lands; (c) replace with a
-Prometheus alert on `hubble_drop_total`. **Recommend (b)**, low priority.
+**12.13 Resolved #153: stage PacketDrop after the Kubernetes writer.** Keep
+the event feature in scope after a real client/recorder exists; Prometheus drop
+metrics are complementary, not a replacement. The current feature flag still
+warns and performs no Kubernetes write. Initial `drop_events::Gate` work provides
+bounded deduplication/admission with a two-minute configurable interval, an
+optional one-second attempt limit (zero disables only that limit), and explicit
+failed-write completion. Key on stable pod UID, event reason and full message
+(including peer/protocol details), so recreated pods and distinct drop messages
+are not collapsed. Refuse admission at capacity instead of evicting live keys;
+prune expired keys and use monotonic time. Failed writes release their matching
+dedupe reservation but do not refund rate budget; stale completions cannot erase
+new reservations. The recorder must bound message/key sizes and report rejected
+admissions. This is a candidate admission primitive, not a port of Kubernetes
+EventCorrelator aggregation or a claim of reference-exact event timing.
+
+Pinned reference `pkg/hubble/dropeventemitter/dropeventemitter.go:51–80` and
+`cell.go:47–49` distinguish per-event interval from global events-per-second,
+including zero as unlimited (inspected 2026-09-22). Eligibility, reason filtering,
+pod lookup, exact message rendering, correlator aggregation, API retries and
+live Kubernetes event tests remain required before enabling the flag.
 
 **12.14 Resolved #154: identify the producer as flowsdn.** Set
 `emitter.name = "flowsdn"` and version to the flowsdn package version. Do not

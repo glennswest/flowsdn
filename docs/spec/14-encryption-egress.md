@@ -1353,13 +1353,13 @@ pass consumes an accumulated event bitmap:
    `(egress_ip, gateway_ip, egress_ifindex)` for the other two.
 5. Delete everything still marked stale.
 
-Write errors are logged and reconciliation continues. All three maps are written
-on **every** pass, in the order legacy-v4 → v4_v2 → v6, so the two v4 maps
-always carry the same key set and the same address pair; only v4_v2 carries the
-ifindex. The datapath reads **v4_v2 first and falls back to the legacy map**;
-the legacy map exists only so an older loaded program keeps working across an
-upgrade. flowsdn never loads such a program, so whether to write it at all is
-open decision 2 — spec 01 §2.2 already marks it deferred.
+Write errors are logged and reconciliation remains degraded. Modern IPv4 v2
+and enabled IPv6 maps are synchronized on every pass. With the explicit legacy
+option, also synchronize legacy IPv4 first, followed by v4_v2 and v6, retaining
+identical IPv4 keys/address pairs. A partial failure is not successful migration.
+The reference reader falls back to legacy; flowsdn's new programs do not require
+that fallback. Loaded reference readers are protected by the inspection and
+migration gate in resolved decision #174 (§12.2).
 
 Two reference behaviors flowsdn MUST **not** reproduce (**DEVIATION**, both are
 latent correctness faults with no compatibility consequence):
@@ -2080,21 +2080,23 @@ concurrently with itself.
    diagnostic selectors.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-2. **The legacy `cilium_egress_gw_policy_v4` map.** It exists only so an older
-   loaded program keeps working across an upgrade. Options: (a) write it in
-   lock-step as the reference does; (b) write only `_v4_v2` and `_v6`.
-   **Recommendation: (b), with (a) available behind a flag.** flowsdn never
-   loads a program that reads the legacy map, so writing it is pure cost; the
-   flag exists for a cluster migrating from the reference in place. Spec 01
-   already marks it deferred.
+2. **Resolved #174: modern maps by default, guarded migration option.**
+   `egress-gateway-legacy-map=false` writes IPv4 v2 and enabled IPv6 maps only.
+   Enabling the flowsdn option also synchronizes/prunes legacy IPv4 entries in
+   lock-step. Inspect actual loaded readers: a legacy reader with the option
+   off, disabled IPv4 or unknown reader ownership is fatal until the operator
+   drains/detaches it or enables synchronized migration. Never infer safe takeover
+   from the current binary's program set alone. A partial map write must keep
+   reconciliation degraded; do not detach old readers until both maps match.
+   The library plans enabled maps, not actual map writes or upgrade safety.
 
-3. **Strict ingress with IPsec.** The reference refuses the combination, but the
-   IPsec decrypt mark is available and the check is mark-based. Options:
-   (a) keep the refusal; (b) allow it, testing the decrypt mark from either
-   source. **Recommendation: (b), deferred past the first IPsec milestone.** It
-   is a genuine security improvement and the mechanism already exists, but it
-   needs its own leak testing and should not ride along with the initial IPsec
-   work.
+3. **Resolved #175: retain IPsec strict-ingress refusal until leak tests.**
+   Startup validation rejects IPsec plus strict ingress. A later extension may
+   accept IPsec decrypt marks only after plain/encrypted traffic, host/pod paths,
+   key rotation, reconnect and mark-spoofing negative tests prove no plaintext
+   bypass. This gate follows the first complete IPsec acceptance milestone;
+   WireGuard strict ingress remains its existing independent contract. The
+   validation helper is delivered, not the datapath extension.
 
 4. **IPsec endpoint-route mark — resolved #176.** Apply zero output mark for enabled
    endpoint routes on both subnet-encryption and single-CIDR IN-state paths. Preserve
@@ -2106,17 +2108,25 @@ concurrently with itself.
    substitute. Exhaustion reports failure and must not install unsafe encryption state.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-6. **Egress-gateway assignment stability.** The multi-gateway modulo reshuffles
-   every endpoint whenever the gateway set changes (GH-39245), and health-based
-   failover (§3.4.10) makes that worse by making the set change more often.
-   Options: (a) keep the modulo; (b) replace it with a **rendezvous hash**
-   (highest `H(endpoint_uid ‖ gateway_ip)` wins), which moves only the
-   endpoints assigned to a departing gateway. **Recommendation: (b), behind a
-   flag defaulting to (a).** It is strictly better and it is what makes health
-   failover safe to enable — but it is not wire-compatible with a cluster
-   running a mix of flowsdn and the reference, because two agents disagreeing
-   on an endpoint's gateway is a black hole. Enable it only when every agent
-   in the cluster is flowsdn.
+6. **Resolved #178: reference modulo default, opt-in rendezvous.**
+   `egress-gateway-selection=modulo` uses FNV-1a-32 of endpoint UID bytes modulo
+   the count of resolved gateways sorted by numeric IPv4 address. Preserve
+   duplicate slots. The optional `rendezvous` uses unsigned FNV-1a-64 over UID
+   bytes followed by four IPv4 octets; highest score wins, ties choose the lowest
+   numeric IPv4. It requires a coordinated all-flowsdn cohort using the same
+   algorithm and gateway snapshot; reject unknown/mixed membership. Switching
+   algorithm requires a drained/coordinated rollout and rebuilding all relevant
+   maps, not a per-agent toggle during traffic. Health failover remains separately
+   gated; this pure algorithm does not observe health or ensure distributed
+   agreement. Removing a nonwinning gateway preserves the winner; adding a new
+   gateway may move an endpoint to that new gateway. Runtime wiring, mixed-peer
+   default comparisons and coordinated rollout tests remain required.
+
+   Pinned-reference ambiguity audit (v1.20.1 `7d68cfb394`):
+   `pkg/egressgateway/policy.go:363–366` selects standard `fnv.New32a()` over
+   endpoint UID bytes; lines 377–385 sort by `gatewayIP.Compare` before modulo.
+   The Rust implementation follows that specified algorithm, with independent
+   standard FNV vectors and numeric-IP ordering tests. No reference code copied.
 
 7. **Egress selectors — resolved #179.** Keep the reference globally flattened
    node-selector cross-product with pod/namespace matches from §3.4.2. Do not silently
@@ -2130,14 +2140,48 @@ concurrently with itself.
    route/map writer.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-9. **VTEP and SRv6.** Both deferred (§1.2). Options: (a) leave them out;
-   (b) implement VTEP; (c) implement SRv6 maps with no control plane.
-   **Recommendation: (a).** VTEP is beta, IPv4-only and niche; SRv6 has no
-   open-source control plane to mirror, so implementing the maps would produce
-   an untestable feature. Revisit SRv6 if a BGP/VRF integration lands.
+9. **Resolved #181: refuse VTEP and SRv6 while controllers are absent.**
+   Keep both feature requests rejected with explicit not-implemented errors;
+   map-only stubs must not advertise a working network. VTEP remains planned
+   scope with an IPv4 interoperability gate against a concrete VTEP peer.
+   Revisit SRv6 when BGP/VRF integration has an owning controller and executable
+   routing, policy and isolation tests. These are staged capabilities, not silent
+   removal from the complete project scope or a claim that their maps suffice.
 
 10. **IPsec key forms — resolved #182.** Accept both AEAD and auth+crypt key-file forms
    with the §3.2.2 validation and key derivation. Preserve accepted legacy syntax
    including the ignored `+` suffix; do not narrow migration input to AEAD only. Warn
    about nonpreferred algorithms without exposing key material.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+### Additional resolved foundation decisions
+
+- **#6:** all four cloud IPAM providers remain required for the first complete
+  networking release (ADR-0001/spec 07). Foundation releases and intermediate
+  checkpoints are not that acceptance gate. Per-interface routes, CiliumNode
+  fields and provider test matrices remain in scope; no cloud client is delivered
+  by this crate.
+- **#7:** support IPv4 and IPv6 underlay. `auto` prefers enabled IPv4, otherwise
+  enabled IPv6; an explicit family must be enabled, and tunnel peers lacking that
+  address fail without cross-family fallback. WireGuard retains its distinct
+  four-branch endpoint order in §3.1.4. Enabled node-address inputs only are passed
+  to the helper. Live dual-underlay routing/encryption tests remain required.
+- **#9:** WireGuard first, then egress gateway/ip-masq-agent, then full IPsec as
+  §1.3 specifies. IPsec table 200, node-ID/SPI and XFRM/key-rotation work remain
+  mandatory for complete encryption acceptance; intermediate WireGuard delivery
+  never closes the IPsec implementation milestone.
+- **#31:** support only native IPsec and overlay-inside-IPsec (the 1.18+ layering
+  already specified at the pinned reference). Refuse pre-1.18 encrypted-overlay
+  mode; drain/migrate before switching, with no uninterrupted takeover claim.
+- **#32:** keep `encryption.ipsec.interface` accepted and ignored with a named
+  warning when nonempty; selection remains node/device discovery (§3.2.6).
+  Do not invent an `encrypt-interface` agent flag or silently select that device.
+
+### Implemented validation boundary
+
+`flowsdn-encryption` supplies family/endpoint selection, modern IPsec layering,
+explicit configuration validation, legacy-map planning and deterministic gateway
+selection. It does not provide WireGuard/XFRM operations, keys, map writers,
+cloud IPAM, node watchers, liveness, leak prevention or safe live migration.
+Unit tests establish the local decisions only. Spec 02 additionally owns tested
+BPF host-routing/build-plan decisions; actual object instrumentation remains open.

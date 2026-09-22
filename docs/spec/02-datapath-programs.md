@@ -1702,17 +1702,13 @@ claim that the full packet path has been validated.
    mixed-cluster forwarding: that requires packet-path integration and
    bidirectional identity/DSR tests against reference nodes. Any future
    private cluster mode requires a separate explicit decision.
-4. **Legacy host routing.** Options: (a) keep the reference's
-   `enable_bpf_host_routing=false` path (pass pod-bound traffic to the
-   stack, deliver via `cilium_host` routes); (b) BPF host routing only,
-   with the endpoint-routes `redirect(ifindex)` path retained for
-   IPAM modes that need per-endpoint routes. Recommendation: **(b)**,
-   **DEVIATION** from the reference default set. The floor kernel has
-   `redirect_neigh`/`redirect_peer`; the legacy path exists in the
-   reference for < 5.10 and for iptables interplay that ADR-0003 removed.
-   Consequence: `enable_bpf_host_routing` becomes a constant `true` in
-   `.rodata` for one release (so config dumps stay comparable) and is then
-   removed.
+4. **Resolved #56: BPF host routing only.** Reject legacy host routing;
+   retain BPF endpoint-route delivery for IPAM modes requiring it. Preserve
+   `enable_bpf_host_routing=true` in comparable rodata dumps until a separately
+   reviewed ABI cleanup; do not remove it automatically after an unspecified
+   release. FIB errors drop visibly instead of silently falling back to the
+   stack. The validation/delivery plan is implemented in `flowsdn-encryption`;
+   full host pipeline and provider endpoint-route tests remain required.
 5. **Resolved (#57, ADR-0011): retain `PERF_EVENT_ARRAY`.**
    The monitor map and per-CPU framing follow spec 01 §3.10. No ring-buffer
    migration is implied by the current service milestone.
@@ -1740,7 +1736,54 @@ claim that the full packet path has been validated.
     shares that delivery helper. The endpoint kernel fixture tests both 0 and
     1 for IPv4 and IPv6 (`bpftest/src/bin/endpoint/packets.rs`); it does not
     establish ICMP generation or full production-path coverage.
-11. **Debug events as a build dimension.** Recommendation: yes
-    (`debug-events` feature); release images ship without them. The
-    `cilium-dbg monitor --type debug` surface is documented as "requires
-    the debug build".
+11. **Resolved #63: debug events are an explicit build dimension.**
+    Select `debug-events` only for diagnostic BPF objects; ordinary release
+    objects exclude it and `test-hooks`. `cilium-dbg monitor --type debug`
+    requires a debug build. `ObjectBuild` validates the release selection and
+    names requested Cargo features. The present BPF crate has not implemented
+    debug event instrumentation; this plan does not create an empty feature
+    or claim those objects exist. Before delivery, wire the feature to actual
+    emit sites and verify event presence/absence, object size and verifier
+    acceptance on both architectures. Trace/drop compatibility is separate.
+
+### Pinned helper audit (#254, 2026-09-22)
+
+The BPF lockfile pins `aya-ebpf 0.2.1` and `aya-ebpf-bindings 0.2.0`.
+All §11.8 helpers exist as raw `aya_ebpf::helpers::bpf_*` bindings in both
+x86_64 and aarch64 generated modules. `crates/flowsdn-bpf/src/helper_coverage.rs`
+is compiled with both project BPF binaries to guard symbol availability.
+No hand-written helper-ID wrapper or assembly is needed for these rows.
+
+| Helper | Generated helpers.rs line (both architectures) |
+|---|---:|
+| `bpf_fib_lookup` | 675 |
+| `bpf_redirect_neigh` | 1547 |
+| `bpf_redirect_peer` | 1579 |
+| `bpf_sk_assign` | 1277 |
+| `bpf_skc_lookup_tcp` | 985 |
+| `bpf_sk_lookup_udp` | 862 |
+| `bpf_sk_release` | 878 |
+| `bpf_skb_set_tunnel_key` | 185 |
+| `bpf_skb_get_tunnel_key` | 171 |
+| `bpf_skb_set_tunnel_opt` | 283 |
+| `bpf_skb_get_tunnel_opt` | 271 |
+| `bpf_csum_diff` | 255 |
+| `bpf_get_hash_recalc` | 324 |
+| `bpf_skb_change_head` | 384 |
+| `bpf_skb_change_type` | 307 |
+| `bpf_skb_change_proto` | 295 |
+| `bpf_skb_change_tail` | 354 |
+| `bpf_clone_redirect` | 120 |
+| `bpf_jiffies64` | 1219 |
+| `bpf_map_lookup_percpu_elem` | 1974 |
+| `bpf_set_retval` | 1887 |
+| `bpf_for_each_map_elem` | 1654 |
+| `bpf_loop` | 1830 |
+
+This verifies the required post-6.1 interface symbols directly instead of
+inferring coverage from an undocumented header-version label. Raw bindings are
+unsafe and program-type restricted: use context-aware wrappers where available,
+validate pointer lifetimes and verifier constraints at each call site. Symbol
+availability does not establish kernel helper support or verifier acceptance;
+#3, #256 and #257 retain those runtime obligations. The historical recalled
+0.13/0.1.x table is superseded by this locked-source audit.

@@ -845,7 +845,7 @@ outlives the process that started it:
    | agent restart counts increased by exactly the expected number | the upgrade actually happened; a "no disruption" result on an upgrade that did not occur is the classic false pass |
    | zero `DROPPED` Hubble flows for those 5-tuples, or only drops on the allowlist | the datapath did not drop and recover |
    | for IPsec: XFRM error counters within the allowlist | no window where the SA was missing |
-   | the CT entry for each surviving flow still exists after the swap, with its original creation timestamp | the conntrack map was **reused, not recreated** — the direct assertion on spec 01 §3.2 step 2 |
+   | hold the original CT map FD, compare kernel map IDs, and check each surviving tuple plus its quiesced raw value after the swap | evidence that the same kernel map object and sampled state survived; identical entry delete/reinsert is not detectable (§12.8) |
    | the `cilium_calls_*` pin's map id **changed exactly once**, at commit | the tail-call map was replaced wholesale rather than rewritten in place — the direct assertion on the pin-replace protocol |
    | zero `DROP_MISSED_TAIL_CALL` (140) and zero `DROP_EP_NOT_READY` (203) flows during the roll | no packet ever saw a half-populated tail-call graph or an empty `cilium_call_policy` slot |
 
@@ -871,7 +871,7 @@ The suite therefore tests three cases, with three *different* expectations:
 
 | ID | What | Expect |
 |---|---|---|
-| `upgrade-same-abi` | roll to a build with an identical map ABI | all `must-survive` flows survive; CT creation timestamps preserved; the `cilium_calls_*` map id changes exactly once per object |
+| `upgrade-same-abi` | roll to a build with an identical map ABI | all `must-survive` flows survive; CT map IDs and quiesced tuple values preserved; the `cilium_calls_*` map id changes exactly once per object |
 | `upgrade-calls-replace` | any roll | during the whole roll, no flow observes `DROP_MISSED_TAIL_CALL`; the policy program is present in `cilium_call_policy[epid]` **before** the ingress link exists (checked by sampling the map during the roll) |
 | `upgrade-ct-abi-bump` | roll to a CI-only build with a deliberately bumped CT map layout (`--force-map-abi-bump=ct`) | the flows **break and re-establish** within one keepalive interval, the agent logged the old and new map attributes, and the CT map's id changed. This asserts the *documented* consequence. A run where the flows survive a CT layout change means something silently kept the old map, which is a bug in the other direction. |
 | `upgrade-agent-restart` | restart the agent without changing the image | flows survive; this is the cheap variant that runs per-PR |
@@ -1672,7 +1672,10 @@ proxy subresource is blocked by an admission policy.
 
 **Concurrency model.** One `tokio` runtime. A scenario is an `async fn`; a
 scenario group is a `JoinSet` bounded by `--test-concurrency`; the Hubble
-streams are long-lived tasks writing into a per-node ring the assertions read.
+streams last for one scenario group and write into bounded per-node windows.
+Wait for every participating stream to become ready before sending traffic;
+settle, cancel and join all streams before finishing that group. No stream or
+flow collection carries into the next group.
 Cancellation is by `tokio_util::sync::CancellationToken` so that
 `--scenario-timeout` actually stops the work rather than leaving a task running
 into the next scenario's window and polluting its flows.
@@ -1741,13 +1744,17 @@ initially.** Naming these so nobody discovers them by being surprised:
 
 Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integration-issue-resolutions.md); their implementation and acceptance tests remain required.
 
-1. **Hubble stream lifetime.** Per-scenario-group streams (simple, bounded
-   memory, but repeated stream setup) versus one long-lived stream per node with
-   a windowing index (cheaper, but the suite must buffer and index flows for the
-   whole run). *Recommendation*: start per-group; move to long-lived once a full
-   run exceeds ~20 minutes, and measure the memory before doing so. A third
-   option — asking the agent for a *replay* of a past window rather than
-   following live — is not available in the frozen Observer API.
+1. **Resolved #225: per-scenario-group Hubble streams.** Bound each node's
+   flow window; wait for stream readiness before traffic, settle afterwards,
+   cancel/join at group completion and discard the group index before starting
+   another. Generation tokens reject late data from an earlier group. Overflow,
+   lost-event markers and unexpected stream termination mark evidence incomplete;
+   negative assertions must not pass from a partial sample. `FlowWindow` implements
+   bounded group storage, token checks and explicit complete/abort results.
+   Transport readiness, cancellation and actual Hubble RPCs remain work. Consider
+   long-lived streams only after measured full runs exceed about twenty minutes
+   and memory/latency measurements justify the change; no such result is claimed.
+   Bounded historical ring queries are not a durable replacement for live capture.
 
 2. **`--flow-settle` value.** 2 s is a guess carried from how long perf-ring
    drainage typically takes. *Recommendation*: measure the distribution of
@@ -1765,44 +1772,63 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    to the production agent. Bound capture duration and size and clean up the pod after
    failures.
 
-5. **arm64 e2e on Rose nodes versus a cloud arm64 VM.** Rose gives the real
-   kernel, the real NIC and no recurring cost, but couples CI to lab hardware
-   availability and risks a test taking down a node that does other work.
-   *Recommendation*: Rose, nightly, with the cluster built from a dedicated set
-   of nodes whose only job is CI, and a cloud VM added only if Rose availability
-   proves to be the binding constraint.
+5. **Resolved #229/#241: dedicated physical arm64 nightly placement.**
+   Use a reserved CI-only arm64 node set with real kernel/NIC coverage. Do not
+   schedule destructive tests on shared workload nodes. A cloud arm64 lane is a
+   later availability-driven option; QEMU remains suitable for separate verifier
+   testing, not evidence about physical drivers. This fixes target placement, not
+   a claim that nodes are allocated or a nightly job exists. Missing hardware
+   leaves that acceptance outstanding, never a passing skip.
 
 6. **Resolved — #230.** Keep e2e-encryption as a required PR gate once the encryption
    lane is implemented: both WireGuard and IPsec must verify confidentiality, not just
    successful traffic. Missing required encryption capability is a failed gate, not a
    passing skip.
 
-7. **Upstream cross-check.** Should CI ever run the real `cilium connectivity
-   test` against a flowsdn cluster? It is the strongest available evidence that
-   the compatibility claims hold, and it costs a Go binary download.
-   *Recommendation*: yes, but as a **weekly non-blocking** job with its failures
-   triaged as findings, and never as a dependency of the build.
+7. **Resolved #231: weekly advisory upstream connectivity cross-check.**
+   Run the real upstream `cilium connectivity test` against a disposable flowsdn
+   cluster as an independent oracle. Pin and verify the CLI artifact; record its
+   version with findings. It is never a Rust build dependency and failures do not
+   block PRs automatically: triage them as compatibility findings. Scheduling,
+   artifact provenance and successful executions remain unimplemented here.
 
-8. **Conn-disrupt CT-timestamp assertion.** Asserting that CT entries were
-   *reused* (original creation timestamps preserved) is the sharpest test of the
-   pin-replace protocol, but it reads a map field whose exposure through
-   `flowsdn-dbg` is not yet settled in spec 04. *Recommendation*: expose the
-   creation timestamp in the CT dump JSON; it is useful for support regardless.
+8. **Resolved #232: no fabricated CT creation timestamp.** The frozen 56-byte
+   `ct_entry` contains `lifetime` at 32 (absolute expiry), `last_tx_report` at 48
+   and `last_rx_report` at 52 (mutable monitor times), **no creation timestamp**.
+   Evidence: spec 04 §2.3 and `flowsdn-bpf-abi/src/ct.rs` layout assertions;
+   inspected 2026-09-22. Do not expose any of these fields as created_at or alter
+   the shared map ABI for this test. Hold the original map FD throughout the
+   observation, compare kernel map IDs (not pin-path names/inodes), tuple keys
+   and raw values during a quiesced sampling window, plus continued traffic
+   survival. `quiesced_ct_reuse` classifies those observations. Map/tuple sampling,
+   diagnostic JSON and live pin-replacement tests remain work. Same value/map
+   evidence cannot prove entry-generation identity: delete/reinsert of identical
+   data is unobservable without an independently designed generation marker.
 
 9. **Resolved — #233.** Accept pinned upstream connectivity-test names as aliases in
    --test through an explicit mapping to canonical flowsdn scenario IDs. Expand aliases
    before applying inclusion/exclusion filters, deduplicate IDs, and retain the no-match
    error. Report canonical IDs and the alias mapping revision.
 
-10. **Scale-row cluster size.** Five nodes is enough to see churn effects but not
-    enough to see anything about a 100-node control plane. *Recommendation*:
-    keep five for the nightly gate; add a separate, weekly, kwok-based
-    (simulated-node) control-plane scale job when the operator spec's CES work
-    lands, since that is where node count actually matters and it needs no real
-    datapath.
+10. **Resolved #234: separate datapath churn from control-plane scale.**
+    Retain five real nodes for the nightly datapath scale row. Add a separate
+    weekly simulated-node job targeting at least 100 nodes after CES controllers
+    can be exercised; measure control-plane object churn and reconciliation there.
+    Synthetic nodes do not validate routing, drivers or packet throughput. The
+    placement primitive distinguishes these lanes; no cluster, simulator job or
+    100-node measurement has been provisioned or run by this change.
 
 11. **Resolved #235: bounded evidence retention.** Keep a 10 MB decimal quick
     set for every run (seven days on success, fourteen on failure), plus full
     failure-only sysdumps capped at 2 GiB (fourteen days). Nightly flow capacity
     is 100,000; PR capacity 1,000,000. Existing truncation manifests remain
     required. Planning helpers are implemented; collection/upload wiring is not.
+
+### Implementation boundary for the evidence primitives
+
+`flowsdn-connectivity` is currently a library, not the e2e executable. It supplies
+bounded per-group flow storage, CT observation comparisons and declarative lane
+placements. It has no Hubble client, cluster provisioner, simulator, packet
+traffic generator or workflow runner. The matrix above describes target gates;
+its presence does not mean any row has been installed or passed. Payload sizes
+and discovered node count must also be bounded by the eventual ingestion owner.

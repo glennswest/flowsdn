@@ -229,9 +229,26 @@ bumped again so Envoy converges on the old, known-good document.
 **Endpoint policy revision.** A `cilium.NetworkPolicy` push is part of endpoint
 regeneration. The endpoint's policy revision MUST NOT be advanced, and the BPF
 policy map MUST NOT be switched to a new proxy port, until the NPDS ACK for that
-push has been observed or has timed out (spec 08 owns the pipeline; this spec
+push has been observed (spec 08 owns the pipeline; this spec
 owns the signal). A timeout MUST be treated as a regeneration failure and retried
 with backoff; it MUST NOT silently proceed.
+
+Decision #24 preserves this barrier without a weaker fallback. For a new
+listener/port, its LDS acknowledgement is an additional prerequisite. Retain the
+old acknowledged port and policy revision until every required acknowledgement
+succeeds. Bind replies to the Envoy node, type URL, actually sent response
+version/nonce and stream epoch; stale replies and pre-first-ACK resume values
+cannot complete new work. A newer acknowledged version may satisfy an earlier
+mutation only when that response includes the mutation. NACK, timeout and
+cancellation return no publication permit and require rollback/retry.
+
+`flowsdn-proxy::ack` implements this per-attempt state machine using monotonic
+caller ticks. A newer sent response revokes that type's readiness until its ACK;
+reconnect clears the attempt's acknowledgements. Commit is one-shot and checks
+the deadline again. The endpoint owner must cancel superseded attempts and
+atomically verify the permit's attempt/revision against its current desired
+state before BPF publication. The xDS transport, cache reversion and endpoint
+pipeline integration remain required; the library does not perform them.
 
 #### 3.1.6 Bootstrap flowsdn generates
 
@@ -885,7 +902,8 @@ the same port.
 - The **upstream** socket sets `SO_MARK = MARK_MAGIC_PROXY_EGRESS (0x0B00) |
   identity << 16`, so the datapath applies egress policy and encryption to the
   proxy's own query, and `SO_LINGER` = `dnsproxy-socket-linger-timeout` (10s).
-- **Transparent mode** (`dnsproxy-enable-transparent-mode`, default false): the
+- **Transparent mode** (`dnsproxy-enable-transparent-mode`, default false
+  without SDP, derived true with SDP unless explicitly overridden): the
   upstream socket additionally binds the *pod's* address with `IP_TRANSPARENT`,
   so the DNS server sees the pod as the client. It MUST be skipped when the
   source is the host endpoint, the source is loopback, the destination identity
@@ -1156,7 +1174,8 @@ rather than from reading Istio:
   The initial exchange is an `Add` for every enrolled endpoint followed by
   `SnapshotSent`.
 - **Enrolment**: namespaces labelled `io.cilium/mtls-enabled=true`; every endpoint
-  in them gets Istio's in-pod iptables rules installed inside the pod netns
+  in them requires the nftables implementation of the reference traffic
+  redirection semantics inside the pod netns
   (marks `0x111`/`0x539` mask `0xfff`, route table 100, rule priority 32764,
   ports 15008/15001/15006) and an `AddWorkload`.
 - **Workload xDS**: delta-only ADS on `127.0.0.1:15012` over TLS, serving
@@ -1166,9 +1185,10 @@ rather than from reading Istio:
   carry exactly one URI SAN `spiffe://<trust-domain>/ns/<ns>/sa/<sa>` and a local
   endpoint with that namespace/service-account must exist. 30-day certificates.
 
-Note that in-pod iptables conflicts with ADR-0003 (no iptables). A flowsdn
-implementation would have to program the pod netns with nftables or accept the
-dependency; that is an ADR, not a detail.
+ADR-0015 selects Rust nftables transactions inside the pod namespace. There
+is no iptables exception. The marks/routes/ports and ZDS behavior above remain
+the compatibility contract, with privileged enrollment/rollback tests required
+before activation; until then explicit ztunnel enablement is rejected.
 
 ---
 
@@ -1504,7 +1524,7 @@ Accepted and **ignored**: `envoy-log`, `envoy-base-id`,
 | `dnsproxy-lock-count` | int | 131 | striped per-name mutexes (hidden) |
 | `dnsproxy-lock-timeout` | duration | 500ms | warn threshold (hidden) |
 | `dnsproxy-socket-linger-timeout` | int (s) | 10 | upstream `SO_LINGER` |
-| `dnsproxy-enable-transparent-mode` | bool | false | bind the pod's address upstream |
+| `dnsproxy-enable-transparent-mode` | bool | false; derived true with SDP when unset | bind the pod's address upstream; explicit false/true wins (#197) |
 | `enable-standalone-dns-proxy` | bool | false | SDP gRPC server |
 | `standalone-dns-proxy-server-port` | int | 10095 | SDP gRPC port |
 
@@ -1518,7 +1538,9 @@ Accepted and **ignored**, with a warning when set to a non-default value:
 `mesh-auth-signal-backoff-duration`, `mesh-auth-mutual-listener-port`,
 `mesh-auth-mutual-connect-timeout`, `mesh-auth-spire-admin-socket`,
 `mesh-auth-spiffe-trust-domain`, `mesh-auth-rotated-identities-queue-size`,
-`bpf-auth-map-max`, `enable-ztunnel`. Note that `authentication.mode: required`
+`bpf-auth-map-max`. An explicit `enable-ztunnel=true` must instead be rejected
+until the ADR-0015 nftables enrollment path is implemented; never accept it
+as an ignored request for mesh encryption. Note that `authentication.mode: required`
 in a policy is a **validation error**, not an ignored setting (§3.8).
 
 ---
@@ -1863,12 +1885,13 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    egress residual rules. A later default change requires explicit validation and a
    documented config migration.
 
-5. **DNS proxy transparent mode default.** Off upstream, but the SDP and
-   source-attribution in Hubble both assume it. Options: (a) keep the default
-   off; (b) default on when the SDP is enabled; (c) default on always.
-   *Recommendation: (b).* Turning it on unconditionally changes what upstream DNS
-   servers see for every cluster; tying it to the SDP keeps the change scoped to
-   deployments that already opted into a different DNS topology.
+5. **Resolved #197: default transparent DNS on with SDP, off otherwise.**
+   When the effective key is unset/default-sourced, derive its value from
+   `enable-standalone-dns-proxy`. An explicit flag/env/file true or false wins
+   after normal source precedence. The `flowsdn-proxy::transparent_dns` helper
+   accepts that resolved optional override; it does not open sockets or change
+   upstream source addresses. Configuration provenance must identify derived
+   defaults, and actual socket/source-attribution tests remain required.
 
 6. **Resolved — #198.** Support all three secret-source modes in §3.5.4. New chart
    installations should explicitly select SDS with secret sync, while retaining the raw
@@ -1895,13 +1918,21 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    authentication requirement into allow. This rejection does not remove mutual
    authentication from the full feature scope.
 
-11. **ztunnel.** Deferred (§3.9). It is the sanctioned mTLS successor, but its
-    in-pod iptables conflicts with ADR-0003. *Recommendation: defer, and when it
-    is picked up, open an ADR on the in-pod firewall (nftables inside the pod
-    netns vs. accepting an iptables dependency scoped to enrolled pods).*
-
-12. **`fqdn:` identity allocation.** The reference uses local CIDR-style
-    identities with preallocation per selector, which interacts with the local
-    identity range and its restore (spec 03). *Recommendation: keep the same
-    range split and preallocation,* and record the range reservation in spec 03
-    rather than here, so there is one owner of the identity number space.
+11. **Resolved #203:** [ADR-0015](../decisions/0015-proxy-and-ztunnel-contracts.md)
+    selects Rust nftables transactions in the enrolled pod namespace, without
+    an iptables exception. Enrollment and its privileged tests remain required;
+    reject enablement while unimplemented, never silently omit mTLS.
+12. **Resolved #204: FQDN shares spec03's complete local scope.** No separate
+    FQDN numeric partition or allocator is introduced. Range and ownership are
+    defined in spec03; preallocate selector identities before policy publication,
+    maintain shared reference counts, and restore/withhold requested IDs before
+    new allocations. The proxy helper validates that requested/restore IDs have
+    local scope, including indices beyond 65535. It proves no allocation
+    ownership or restore implementation; those remain the identity owner's work.
+13. **Resolved #262:** ADR-0015 retains external Envoy and records concrete
+    prerequisites for any separately proposed Rust replacement. This repository's
+    `flowsdn-proxy` library is not an L7 replacement or performance claim.
+14. **Resolved #24:** the NPDS/new-listener ACK barrier in §3.1.5 remains
+    mandatory. State-machine tests cover stale replies, NACK, reconnect,
+    cancellation and timeout including timeout after readiness; actual endpoint
+    and xDS integration remain required.

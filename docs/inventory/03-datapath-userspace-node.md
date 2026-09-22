@@ -651,10 +651,8 @@ IPsec XFRM collector, node manager event/emit metrics.
 - Does flowsdn support `--enable-endpoint-routes`? It changes the decrypt rule,
   hairpin SNAT and requires netkit scrub attrs; dropping it removes several
   branches here and in the BPF side.
-- Is legacy host routing (upper-stack forwarding, iptables masquerade, no KPR)
-  a supported configuration at all? If not, the whole `CILIUM_POST_nat`
-  masquerade family, node ipsets, `xt_socket` fallback and the KPR downgrade
-  path disappear.
+- **Resolved #56:** BPF host routing only; retain BPF endpoint-route delivery.
+  Reject legacy mode; full routing integration remains pending (spec 02 §12.4).
 - Resolved #135: pinned `cilium_node_map_v2` remains authoritative. Refuse
   incompatible replacement until an explicit ID-preserving migration exists;
   never silently reallocate node IDs used in encryption marks. Spec 10 owns
@@ -663,15 +661,15 @@ IPsec XFRM collector, node manager event/emit metrics.
 - Which kernel floor is flowsdn targeting? If ≥ 6.6/6.7 is assumed, tcx and
   managed neighbors are unconditional, and the `NTF_USE` refresher, PROG_ATTACH
   fallback and many probes can be dropped.
-- Cloud IPAM (ENI/Azure/Alibaba per-interface tables and `CiliumNode.spec.eni`)
-  — in scope for a first release, or cluster-pool/kubernetes IPAM only?
-- IPv6 underlay: the ipcache listener and node manager select tunnel endpoints
-  by `UnderlayProtocol`; confirm flowsdn wants dual underlay support or IPv4-only
-  underlay initially.
+- **Resolved #6:** all four cloud IPAM providers remain required for the first
+  complete networking release, per ADR-0001/spec 07; intermediate foundation
+  checkpoints do not satisfy this gate.
+- **Resolved #7:** both underlay families supported, auto IPv4-first, explicit
+  family validated; missing selected peer address fails without family fallback.
+  Live dual-family routing/encryption remains pending (spec 14 foundation decisions).
 - `--devices` grammar (`+` wildcard, `!` exclusion, ordered first-match) and
   runtime device detection (hot-plug) — keep compatible for Helm parity?
 - Should the residual netfilter rules be nftables-native (breaks environments
   running iptables-legacy alongside) or continue to shell out to `iptables`?
-- WireGuard vs IPsec: the node handler's IPsec path is ~1.8k lines of this
-  area; if flowsdn ships WireGuard-only first, the IPsec table 200 rules, node
-  ID SPI encoding and XFRM coupling can be deferred wholesale.
+- **Resolved #9:** WireGuard first, full IPsec remains required afterward;
+  table 200, node-ID/SPI and XFRM work are not dropped (spec 14 §1.3).

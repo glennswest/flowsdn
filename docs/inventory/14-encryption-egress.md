@@ -636,24 +636,26 @@ planners and tests), with IPsec carrying most of the risk.
 
 ## Open questions
 
-1. Do we reproduce the pre-1.18 "IPsec-in-overlay" layering or only the 1.18+
-   "overlay-in-IPsec" (encrypted overlay)? Only the latter exists at v1.20.1;
-   upgrade-from-1.17 migration code is not needed for a new implementation.
+1. **Resolved #31:** native IPsec and overlay-inside-IPsec only. Pre-1.18
+   layering requires an offline drain/migration (spec 14 foundation decisions).
 2. Fixed WireGuard port 51871 and fixed IPsec reqid 1: keep hard-coded for
    interoperability with Cilium tooling, or make configurable?
 3. Should flowsdn honor the `+` suffix and per-tunnel keys only (as v1.20.1
    effectively does), and reject the legacy global-key format outright?
-4. Egress gateway HA: mirror OSS hashing only, or design active gateway health
-   (node liveness → reassignment) from the start? Also whether to add a
-   `status` subresource to the CEGP-equivalent CRD.
-5. Strict mode ingress with IPsec is unsupported in Cilium; is that a
-   limitation we accept or design away (IPsec decrypt mark is available)?
+4. **Resolved #178:** reference FNV-1a-32 modulo remains default; optional
+   rendezvous requires coordinated all-flowsdn rollout. Health/status controllers
+   and rollout tests remain future work (spec 14 §12.6).
+5. **Resolved #175:** IPsec strict ingress remains rejected until dedicated
+   mark-spoofing/plaintext leak tests pass after the first IPsec milestone.
 6. Node ID as u16 caps clusters at 65535 nodes; keep the encoding (mark bit
    layout is shared with the whole datapath) or widen with a different mark
    scheme in area 01?
 7. Confirm with area 03 who owns the IPsec ip rules/routes (table 200) and
    `cilium_node_map_v2` population — in Cilium both live in the node handler,
    not in the IPsec agent.
-8. The `encryption.ipsec.interface` Helm value has no agent flag behind it at
-   this tag; decide whether flowsdn drops it or wires it into encryption
-   interface selection.
+8. **Resolved #32:** preserve the no-op Helm value with a named warning;
+   interface selection follows discovery, with no resurrected agent flag.
+
+Spec 14 also resolves #174 (guarded legacy-map migration) and #181 (explicit
+VTEP/SRv6 staging and startup refusal). `flowsdn-encryption` provides local
+validation/selection plans, not kernel or network integration.

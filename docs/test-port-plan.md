@@ -906,12 +906,17 @@ fastetcd at step 1, not step 12.** They are 2,280 Go test lines that answer
 
 ## 6. Open questions
 
-1. **Privileged CI lane.** 230 tests need root and a kernel, across 53 packages.
-   ADR-0005 does not say where they run. Recommendation: a `vmtest`-style lane on
-   `<build-host>` gating merge, matching the kernel floor in
-   `docs/kernel-requirements.md`, with the unprivileged lane on every push.
+1. **Resolved #246: trusted privileged kernel lane.** Run unprivileged checks
+   on every push. Privileged suites belong in disposable VMs on designated
+   trusted CI capacity, testing the supported kernel floor/line from
+   `docs/kernel-requirements.md`. Once operational, the reviewed-commit lane
+   gates merge; missing required kernel capabilities fail the gate. Fork PR code
+   must not execute automatically with host privilege or secrets; use an explicit
+   trusted review boundary and isolated VM lifecycle. This is lane placement and
+   policy, not evidence of runner provisioning, branch-protection installation
+   or execution of the 230-test inventory. CI wiring and those runs remain work.
 2. **The dropped iptables coverage.** ~~2,592 Go test lines vanish under ADR-0003
-   with no automatic replacement.~~ **Resolved 2026-09-07.**
+   with no automatic replacement.~~ **Resolved #247, confirmed 2026-09-22.**
    `docs/spec/10-node-routing-nftables.md` §9.1 now enumerates the replacement
    before any nftables code exists: 45 cases (N1–N45) across feature-gate
    presence/absence, golden rulesets, determinism and idempotent re-apply,

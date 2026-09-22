@@ -482,7 +482,7 @@ post_bind/sock_release` hooks). Userspace obligations (**socket LB retained for 
 - `cilium_lb{4,6}_reverse_sk` is sized by `bpf-sock-rev-map-max` (0 = dynamic:
   the CT-any default through the dynamic-size calculator, at least 64Ki,
   LRU-aligned, within `[1Ki, 16Mi]`).
-- **Socket termination** — **deferred** (inventory 04 recommendation;
+- **Socket termination** — **scheduled for the LB implementation milestone** (#82;
   §12.3). When implemented it MUST: watch backend changes; for deleted or
   non-alive UDP backends (TCP too only with hidden
   `lb-sock-terminate-all-protos`) destroy matching sockets via
@@ -768,11 +768,19 @@ status:
 
 ### 4.9 Files
 
-`lb-state-file` (hidden, default `""`): optional YAML/JSON of services,
-frontends and backends with source `LocalAPI`, re-read after
-`lb-state-file-interval` (1 s) on change. **Deferred** (§12.4); the schema is
-whatever `GET /service` produces plus backends, and MUST round-trip through
-the same serde types.
+`lb-state-file` (hidden, default `""`): optional YAML/JSON object with
+`services: [Kubernetes Service]` and `endpoints: [Kubernetes EndpointSlice]`.
+**Resolved (#83): implement after the shared LB conversion core.** Audit of
+`pkg/loadbalancer/reflectors/file.go:32–35,192–248` at the pinned reference
+corrects the prior `/service` schema claim: these are Kubernetes objects.
+The file replaces only source `LocalAPI` in one transaction, preserving other
+sources. Empty files clear that source; malformed reads retain the last good
+snapshot. Writers should atomically rename complete files. Unknown top-level
+fields are ignored, matching the reference's fixture that renames `endpoints`.
+`flowsdn-lb::LocalSnapshot` implements JSON/YAML parsing, identity checks,
+lossless object round-trip and atomic input replacement. File watching,
+Kubernetes-to-LB conversion and transactional BPF reconciliation remain required
+under #292; this library does not expose a working agent reflector yet.
 
 ## 5. Algorithms
 
@@ -879,7 +887,7 @@ transaction per flush.
 5. Generic requests: for each requested family still without an IP, first try
    an existing compatible sharing cluster with the same key; else allocate the
    lowest free IP from the first enabled, family-matching range whose pool
-   selector matches (pools in map iteration order — **DEVIATION candidate**:
+   selector matches (pools in map iteration order — **DEVIATION (#89)**:
    flowsdn MUST iterate pools in a deterministic order, by `creationTimestamp`
    then name, so two operator instances agree; there is no priority field).
 6. Patch service status (ingress + condition) only if changed; recompute pool
@@ -1210,3 +1218,21 @@ Sizing: `flowsdn-lb` ~7k lines + ~5k tests/golden data; `flowsdn-lb-maps`
    Preserve `:<port>` from §3.7; restricting the listener to classified
    NodePort addresses could exclude cloud health-check destinations.
    This does not change the separately configured KPR healthz bind address.
+
+### Batch 6 decisions (#82, #89)
+
+Socket termination is retained: UDP first, TCP only with the hidden all-protocols
+flag; preserve cookie ownership and namespace gates. The reference supports
+inet_diag `SOCK_DESTROY` and a newer BPF iterator destroyer
+(`pkg/datapath/sockets/sockets.go`, `pkg/loadbalancer/reconciler/termination.go`).
+Issue #82's claim that only `bpf_sock_destroy` works is corrected: the initial
+adapter uses inet_diag and requires `CONFIG_INET_DIAG_DESTROY`.
+`flowsdn-lb::Termination` tests eligibility; the 50ms coalescer, namespace walker
+and real socket destruction remain #292 implementation work.
+
+Pool traversal is creation timestamp then name, with timestamps normalized to
+UTC seconds/nanoseconds, unique names and existing allocations preserved.
+Reference consumers `operator/pkg/lbipam/pool.go` and `lbipam.go` select free
+ranges via map iteration; no ordering guarantee exists to retain. This audit
+cannot promise undocumented third-party behavior. The stable order is an
+explicit deviation for new allocations, covered by `ordered_pools` tests.

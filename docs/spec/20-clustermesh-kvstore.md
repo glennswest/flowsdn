@@ -1017,7 +1017,8 @@ use etcd Auth at all. Instead:
    the cluster's CA. This is unchanged from the reference.
 2. Authorization is **prefix scoping enforced by the flowsdn apiserver front**,
    not by the store. A peer connects to the apiserver's gRPC listener, which
-   maps the presented certificate CN to one of the role sets above and rejects
+   maps the verified leaf certificate's single CN through an explicit binding
+   to Local or Remote read-only roles (never a caller-supplied role) and rejects
    any `Range`/`Watch` outside its allowed ranges and every mutating RPC.
 3. The table above is therefore still normative: it is the front's policy
    table, expressed in exactly the reference's ranges, so a Cilium peer using a
@@ -1025,6 +1026,22 @@ use etcd Auth at all. Instead:
 4. `cluster-users-enabled`, `cluster-users-config-path`, the `users.yaml` file
    and the `clustermesh-remote-users` ConfigMap are accepted and ignored, with
    one startup warning naming this section.
+
+`flowsdn-clustermesh::principal` binds an already TLS-verified certificate CN
+to an opaque, authority-bound principal. Missing/multiple CNs and unknown names
+reject; comparison is exact and case-sensitive. A principal cannot be reused
+with another front authority. Binding updates validate atomically, and request
+authorization consults the current bindings, so removing a CN revokes existing
+session principals. The transport must also cancel existing watches when their
+binding is revoked or narrowed; checking only watch creation is insufficient.
+The table's root/admin entries describe the reference private administration
+path, not public frontend roles. Administrative writes use a separate private
+trusted client and are never granted by the public reader front.
+
+The trusted TLS adapter must verify certificate chain, validity and client-auth
+purpose before invoking this helper. The helper performs no cryptographic
+verification, gRPC parsing, active-watch cancellation or network isolation.
+Its name/role API is not permission to trust an RPC field or unverified CN.
 
 §12 decision 5 records the alternative (implement CN→user mapping and RBAC in
 fastetcd and keep the reference model) and why it is not the first cut.
@@ -1934,13 +1951,13 @@ the prefix-scoping front ≈ 0.5k. MCS-API and the EndpointSlice v2 consumer add
    only slices cannot supply usable remote service backends to this importer;
    detect/reject that unsupported peer mode instead of claiming interoperability.
    The library supplies the plan, not producers or consumers.
-5. **etcd Auth vs an apiserver-side prefix front (§3.8.5).** Options: (a) the
-   front, as specified — no store-side RBAC, one place to audit, works with
-   fastetcd today; (b) extend fastetcd with CN→user mapping and per-key RBAC and
-   use the reference's users/roles. **Recommendation: (a) now, (b) as a
-   fastetcd roadmap item**, since (b) also fixes the Txn-bypasses-RBAC and
-   unprotected-Auth-service gaps that are latent security problems in fastetcd
-   regardless of flowsdn.
+5. **Resolved #26: mTLS plus an in-process prefix front.** Use the explicit
+   verified-CN binding and complete-range authorization contract in §3.8.5.
+   Reject every mutation, including apparently read-only Txn, on the public
+   frontend. No etcd Auth bootstrap is required. Store-side CN/RBAC hardening
+   remains a fastetcd roadmap item, not an implementation dependency or a filed
+   upstream issue claim. The binding/range primitives have local tests; TLS,
+   protocol enforcement and isolation remain release requirements.
 6. **Mesh bootstrap tooling.** `cilium clustermesh connect` is out of tree, so
    flowsdn needs its own command to exchange endpoints and certificates and
    write the config files. Options: a `flowsdn-cli clustermesh connect`
@@ -2013,3 +2030,13 @@ atomic failed topology replacement, competing claims, stale revisions, restarts
 and config lease loss. No network clients, leases, TLS, scheduler, API controllers,
 actual store transactions, identity allocator or bootstrap persistence are
 implemented here. Existing full acceptance gates in §9 remain open.
+
+
+### Packaging decision (#238)
+
+[ADR-0015](../decisions/0015-proxy-and-ztunnel-contracts.md) confirms the existing
+§6.6 Rust apiserver plus separately owned fastetcd backend. There is no interim
+upstream Go apiserver image. This resolves the image-owner choice, not server
+implementation, image publication or backend acceptance. #275 stays open for
+the peer-TLS hardening item and shipped peer-port NetworkPolicy; no external
+issue has been filed and no unbuilt manifest is claimed.

@@ -139,7 +139,7 @@ fn strict_config_cannot_be_registered_with_an_ineffective_kind_or_class() {
 fn catalogue_registers_extension_without_changing_reference_coverage() {
     assert_eq!(catalogue::ENTRIES.len(), 539);
     assert_eq!(catalogue::coverage().declared, 539);
-    assert_eq!(catalogue::EXTENSIONS.len(), 6);
+    assert_eq!(catalogue::EXTENSIONS.len(), 8);
     let definition = catalogue::get("STRICT_CONFIG").unwrap();
     assert_eq!(definition.default, Some("false"));
     assert_eq!(definition.hidden(), Some(false));

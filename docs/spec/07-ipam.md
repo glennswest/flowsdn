@@ -792,7 +792,7 @@ There is no GCP API client in the reference and none in flowsdn. Helm
 `install-no-conntrack-iptables-rules: "false"` (moot under ADR-0003), and the
 user-supplied `ipv4-native-routing-cidr` (the cluster's pod range). The agent
 waits for `Node.spec.podCIDR(s)` as in 3.4. GKE alias-IP programming is done
-by GKE itself. A real GCP integration is open decision 12.6.
+by GKE itself. Decision #109 retains this integration; no separate GCP Compute client is planned.
 
 ### 3.13 Excess-IP release handshake (CRD allocator modes: Azure, Alibaba, crd)
 
@@ -1728,3 +1728,11 @@ selector helpers for some versions; a small `netlink-packet-route` encoder for
    type for wire decoding and schema compatibility. No flowsdn controller writes or uses
    it as allocation authority.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+### Batch 6: GKE allocation contract (#109)
+
+GKE uses Kubernetes-provided PodCIDRs and native endpoint routes. Alias-IP
+programming remains GKE-owned; no GCP allocator is added without a concrete new
+requirement. Packaging validation rejects another IPAM/routing mode, missing
+endpoint routes and a missing/noncanonical IPv4 native-routing CIDR. Actual GKE
+cluster validation is still required before claiming provider support (#293).

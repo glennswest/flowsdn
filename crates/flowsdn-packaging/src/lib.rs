@@ -306,3 +306,53 @@ mod tests {
         ));
     }
 }
+
+/// Native Kubernetes PodCIDR allocation is the supported GKE integration.
+/// This validates chart inputs; discovery and provider networking remain external.
+pub fn validate_gke(ipam: &str, routing: &str, endpoint_routes: bool, native_cidr: Option<&str>) -> Result<(), &'static str> {
+    if ipam != "kubernetes" || routing != "native" || !endpoint_routes {
+        return Err("GKE requires Kubernetes IPAM, native routing and endpoint routes");
+    }
+    let cidr = native_cidr.ok_or("GKE requires the cluster IPv4 native routing CIDR")?;
+    let (ip, prefix) = cidr.split_once('/').ok_or("invalid IPv4 CIDR")?;
+    let ip: std::net::Ipv4Addr = ip.parse().map_err(|_| "invalid IPv4 CIDR")?;
+    let prefix: u32 = prefix.parse().map_err(|_| "invalid IPv4 prefix")?;
+    if prefix > 32 { return Err("invalid IPv4 prefix"); }
+    let mask = u32::MAX.checked_shl(32_u32.saturating_sub(prefix)).unwrap_or(0);
+    if u32::from(ip) & !mask != 0 { return Err("native routing CIDR must be canonical"); }
+    Ok(())
+}
+
+/// Migration preflight never deletes foreign-owned objects. Both iptables-nft
+/// and legacy backends require the operator's reviewed cleanup before handoff.
+pub fn reference_chain_blocks_handoff(chain: &str) -> bool {
+    chain.starts_with("CILIUM_") || chain.starts_with("OLD_CILIUM_")
+}
+
+/// Preserve encryption, overlay and proxy magic; otherwise set host identity
+/// while retaining all unrelated mark bits. The host rule is always present.
+pub fn host_identity_mark(mark: u32) -> u32 {
+    let magic = mark & 0xf00;
+    if matches!(magic, 0xd00 | 0xe00 | 0x400) || matches!(mark & 0xe00, 0xa00 | 0x800) { mark }
+    else { (mark & 0xffff_f0ff) | 0xc00 }
+}
+#[cfg(test)]
+mod routing_contract_tests {
+    use super::*;
+    #[test]
+    fn gke_rejects_implicit_provider_and_noncanonical_ranges() {
+        assert!(validate_gke("kubernetes","native",true,Some("10.0.0.0/16")).is_ok());
+        for cidr in ["10.0.0.1/16","::/0","10.0.0.0/33"] { assert!(validate_gke("kubernetes","native",true,Some(cidr)).is_err()); }
+        assert!(validate_gke("gke","native",true,Some("10.0.0.0/16")).is_err());
+        assert!(validate_gke("kubernetes","tunnel",true,Some("10.0.0.0/16")).is_err());
+        assert!(validate_gke("kubernetes","native",true,None).is_err());
+    }
+    #[test]
+    fn foreign_cleanup_is_explicit_and_mark_preserves_special_sources() {
+        assert!(reference_chain_blocks_handoff("CILIUM_POST_nat"));
+        assert!(reference_chain_blocks_handoff("OLD_CILIUM_POST_nat"));
+        assert!(!reference_chain_blocks_handoff("MY_CILIUM_TABLE"));
+        for magic in [0xd00,0xe00,0x400,0xa00,0xb00,0x800,0x900] { assert_eq!(host_identity_mark(0x1234_0000 | magic),0x1234_0000 | magic); }
+        assert_eq!(host_identity_mark(0x1234_007f),0x1234_0c7f);
+    }
+}

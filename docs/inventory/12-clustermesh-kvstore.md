@@ -657,9 +657,9 @@ apiserver synchronizers **M** (~3k), MCS-API/EndpointSlice v2 **L** if taken.
   limited ranges, `ErrCompacted` on stale watch revisions, per-key `lease`
   and `mod_revision`, and `ResponseHeader.cluster_id`? Each is load-bearing
   above.
-- Do we keep etcd Auth (users/roles) for per-cluster read scoping, or rely on
-  mTLS with a proxy that restricts prefixes? The `remote` role read set is
-  small and could be enforced in a flowsdn front-end instead.
+- **Resolved #26:** mTLS with explicit verified-CN binding to the in-process
+  prefix front. Binding and byte-range checks are implemented primitives;
+  TLS/gRPC enforcement, watch revocation and backend isolation remain required.
 - **Resolved #20:** CRD identities default; explicit kvstore remains required
   with `kvstore=etcd`. Runtime backends/GC still need implementation (spec 20 §12.1).
 - **Resolved #27:** require legacy service import and dual export; only
@@ -675,3 +675,7 @@ change), #274 (reject double-write, offline migration), #276 (stable UUID plus
 durable CAS ownership guard), #277 (in-process prefix front) and #279 (explicit
 MCS/mirroring staging). `flowsdn-clustermesh` provides local planning/checking
 primitives only; no live store/client/controller behavior is established.
+
+ADR-0015 confirms #238: Rust ClusterMesh apiserver plus fastetcd, as spec20
+§6.6 already defines. The server image, manifests and full backend acceptance
+remain required. Peer-TLS hardening and NetworkPolicy issue #275 remains open.

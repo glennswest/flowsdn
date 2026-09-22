@@ -802,13 +802,12 @@ Surface the replacement must cover to drop `cilium-envoy`:
 - Whether `enable-bpf-tproxy` (sk_assign) becomes the only mode in flowsdn;
   it removes the fwmark ip rules but requires kernel ≥ 5.7 and tc ingress
   only (host egress still needs the mark path).
-- Policy revision ACK semantics: the endpoint's regeneration waits for Envoy
-  to ACK NPDS before the BPF policy map is switched to the new proxy port.
-  flowsdn's regeneration pipeline (area: endpoint) needs the same
-  "wait for proxy" barrier or a documented weaker guarantee.
-- DNS proxy in transparent mode (`dnsproxy-enable-transparent-mode`) vs
-  host-sourced upstream queries: which default? Transparent mode is off by
-  default upstream but is what SDP and Hubble source attribution assume.
+- **Resolved #24:** preserve the NPDS/new-listener ACK barrier. The proxy
+  library has a bounded attempt state machine; actual xDS and endpoint-map
+  publication remain required (spec16 §3.1.5).
+- **Resolved #197:** derive transparent mode from SDP enablement only when
+  unset; an explicit effective true/false overrides the derived default.
+  Socket behavior and Hubble source-attribution tests remain required.
 - How the Hubble flow record for L7 is produced when Envoy is external:
   reuse `LogEntry` protobuf over the unix datagram socket (keeps cilium/proxy
   unchanged) — confirm that datagram sizes stay under the 4096 default for
@@ -816,7 +815,10 @@ Surface the replacement must cover to drop `cilium-envoy`:
 - Whether to support the SDS-less "inline secrets" TLS modes at all, or only
   SDS (`enable-policy-secrets-sync`), which is the documented default for new
   clusters.
-- Identity allocation for `fqdn:` names: the reference uses local CIDR-style
-  identities with preallocation per selector; this interacts with the
-  identity allocator area (local identity range, restore) and needs the same
-  range split.
+- **Resolved #204:** FQDN shares the full local identity range owned by spec03,
+  with selector preallocation, shared reference counts and restore withholding.
+  No separate numeric partition; only scope validation is implemented here.
+
+ADR-0015 resolves #262 (retain Envoy; separate replacement proposal/gates) and
+#203 (future nftables enrollment inside pod namespaces, no iptables exception).
+Neither decision delivers a Rust L7 replacement or ztunnel enrollment.

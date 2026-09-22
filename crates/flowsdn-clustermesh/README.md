@@ -16,3 +16,8 @@ No live clients, TLS, CN authentication, transport enforcement, controllers,
 allocator, lease manager, scheduler or persistent bootstrap are implemented.
 The range checker consumes already authenticated roles; it is not an auth server.
 Tests exercise local plans and synthetic store state, not deployment conformance.
+
+Verified-certificate principal binding now feeds the range checker, with exact
+CN mapping, authority-bound tokens and current-binding revocation checks. This
+is not TLS verification: a trusted TLS adapter must validate the certificate
+before binding, and a future server must revoke already-open watches too.

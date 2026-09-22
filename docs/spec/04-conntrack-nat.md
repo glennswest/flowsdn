@@ -1092,3 +1092,20 @@ e2e:
    and return traffic are acceptance requirements, not completed features.
    The independent stateless RFC 6052 gateway remains advanced networking
    in milestone 3; extending §3.15 is required before its implementation.
+
+### Batch 6: deletion progress and restore evidence (#77, #232)
+
+Expired-key deletion uses batch deletion with a cached unsupported fallback.
+The processed count describes the successful prefix. A missing-key batch error
+is not a count of all missing keys: retry the unprocessed suffix individually,
+counting only observed single-key ENOENT as skipped. Other errors retain observed
+progress and fail the pass. `flowsdn-bpf-loader::delete` implements this protocol
+against a syscall adapter; production GC wiring and privileged batch-syscall
+validation remain #292. Unsupported classification must distinguish malformed
+arguments from a validated unsupported map/kernel capability.
+
+The frozen CT value has expiry and mutable last-report fields, **no creation
+timestamp**. Do not fabricate a creation time or silently extend its ABI.
+Map-ID equality plus unchanged quiesced key/value observations can detect some
+replacements, but cannot prove the same entry generation after delete/reinsert.
+Use those limited assertions for restore tests; see spec 19's reuse contract.

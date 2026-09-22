@@ -1,0 +1,104 @@
+name: Affected crates
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Base commit to compare
+        required: true
+        type: string
+permissions:
+  contents: read
+# The provisioned runner is trusted, Linux, and used only for this repository.
+# PR code never executes on this shared privileged host automatically.
+concurrency:
+  group: flowsdn-shared-build-host
+  cancel-in-progress: false
+env:
+  CARGO_BUILD_JOBS: 2
+  TMPDIR: /build/tmp
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, flowsdn-build]
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_packages: ${{ steps.plan.outputs.has_packages }}
+      bpf: ${{ steps.plan.outputs.bpf }}
+    env:
+      CARGO_TARGET_DIR: /build/cargo/flowsdn/ci-plan
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: /build/cargo/flowsdn/ci-plan
+          key: planner-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'xtask/**', 'rust-toolchain.toml') }}
+      - id: plan
+        env:
+          BASE: ${{ inputs.base || github.event.before }}
+        run: |
+          test -c /dev/null
+          df -h / /build
+          cargo xtask ci-plan "$BASE"
+  crates:
+    needs: plan
+    if: needs.plan.outputs.has_packages == 'true'
+    runs-on: [self-hosted, linux, flowsdn-build]
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      CARGO_TARGET_DIR: /build/cargo/flowsdn/ci-${{ matrix.package }}
+      PACKAGE: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: /build/cargo/flowsdn/ci-${{ matrix.package }}
+          key: crate-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: |
+            crate-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-
+      - run: |
+          test -c /dev/null
+          df -h / /build
+          cargo fmt --all -- --check
+          cargo clippy -p "$PACKAGE" --all-targets --all-features --locked -- -D warnings
+          cargo test -p "$PACKAGE" --all-features --locked -- --test-threads=1
+          cargo check -p "$PACKAGE" --all-targets --all-features --locked --target x86_64-unknown-linux-musl
+          cargo check -p "$PACKAGE" --all-targets --all-features --locked --target aarch64-unknown-linux-musl
+      - if: always()
+        run: df -h / /build
+  bpf:
+    needs: [plan, crates]
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.bpf == 'true' && (needs.crates.result == 'success' || needs.crates.result == 'skipped')
+    runs-on: [self-hosted, linux, flowsdn-build]
+    env:
+      CARGO_TARGET_DIR: /build/cargo/flowsdn/ci-bpf
+      CARGO_TARGET_BPFEL_UNKNOWN_NONE_RUSTFLAGS: -C debuginfo=2 -C link-arg=--btf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: /build/cargo/flowsdn/ci-bpf
+          key: bpf-${{ hashFiles('crates/flowsdn-bpf/Cargo.lock', 'crates/flowsdn-bpf/**', 'crates/flowsdn-bpf-abi/**', 'rust-toolchain.toml') }}
+      - run: |
+          test -c /dev/null
+          df -h / /build
+          cargo +nightly-2026-04-03 build --manifest-path crates/flowsdn-bpf/Cargo.toml --target bpfel-unknown-none -Z build-std=core --release --locked
+      - if: always()
+        run: df -h / /build
+  cleanup:
+    needs: [plan, crates, bpf]
+    if: always() && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, flowsdn-build]
+    steps:
+      - uses: actions/checkout@v4
+      # Previous jobs have saved their GitHub caches before this job starts.
+      - run: |
+          test -c /dev/null
+          cargo clean --target-dir /build/cargo/flowsdn
+          df -h / /build

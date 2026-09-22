@@ -2,6 +2,9 @@
 #![no_std]
 #![no_main]
 
+#[path = "../helper_coverage.rs"]
+mod helper_coverage;
+
 use aya_ebpf::{
     bindings::{TC_ACT_OK, TC_ACT_SHOT},
     macros::{classifier, map},

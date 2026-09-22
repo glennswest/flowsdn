@@ -172,3 +172,5 @@ pub mod kernel;
 pub mod layout;
 pub mod nested;
 pub mod tails;
+
+pub mod delete;

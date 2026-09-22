@@ -132,7 +132,7 @@ fn output(command: &mut Command) -> Result<Vec<u8>, Box<dyn Error>> {
     Ok(output.stdout)
 }
 
-pub fn plan(base: &str) -> Result<Vec<String>, Box<dyn Error>> {
+fn inputs(base: &str) -> Result<(BTreeMap<String, Package>, Vec<String>), Box<dyn Error>> {
     // Resolve to object IDs before passing revision arguments to other git commands.
     let revision = format!("{base}^{{commit}}");
     let resolved = String::from_utf8(output(Command::new("git").args([
@@ -167,7 +167,34 @@ pub fn plan(base: &str) -> Result<Vec<String>, Box<dyn Error>> {
         "1",
         "--no-deps",
     ]))?)?;
-    Ok(select(&graph(&metadata)?, &files).into_iter().collect())
+    Ok((graph(&metadata)?, files))
+}
+
+/// Emit a matrix containing transitive consumers and a separate excluded BPF crate.
+pub fn plan(base: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    let (packages, files) = inputs(base)?;
+    Ok(select(&packages, &files).into_iter().collect())
+}
+fn bpf_changed(files: &[String]) -> bool {
+    files.iter().any(|file| file.starts_with("crates/flowsdn-bpf/")
+        || file.starts_with("crates/flowsdn-bpf-abi/")
+        || file.starts_with(".cargo/") || file.starts_with(".github/")
+        || matches!(file.as_str(), "Cargo.toml" | "Cargo.lock" | "rust-toolchain.toml" | "bpf-objects.lock")
+        || !(file.starts_with("crates/") || file.starts_with("xtask/") || file.starts_with("tools/")
+            || file.starts_with("docs/") || matches!(file.as_str(), "README.md" | "CHANGELOG.md" | "CLAUDE.md" | "AGENTS.md" | "LICENSE" | "NOTICE")))
+}
+pub fn ci_plan(base: &str) -> Result<(), Box<dyn Error>> {
+    let (packages, files) = inputs(base)?;
+    let chosen: Vec<_> = select(&packages, &files).into_iter().collect();
+    let matrix = serde_json::to_string(&serde_json::json!({"package": chosen}))?;
+    let bpf = bpf_changed(&files);
+    let outputs = format!("matrix={matrix}\nhas_packages={}\nbpf={bpf}\n", !chosen.is_empty());
+    print!("{outputs}");
+    if let Some(path) = std::env::var_os("GITHUB_OUTPUT") {
+        use std::io::Write;
+        std::fs::OpenOptions::new().append(true).open(path)?.write_all(outputs.as_bytes())?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -197,6 +224,15 @@ mod tests {
             &workspace(),
             &files.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
         )
+    }
+    #[test]
+    fn bpf_selection_skips_docs_and_userspace_but_tracks_shared_abi() {
+        for path in ["README.md", "docs/spec/02.md", "crates/flowsdn-agent/src/main.rs"] {
+            assert!(!bpf_changed(&[path.into()]));
+        }
+        for path in ["Cargo.lock", "crates/flowsdn-bpf-abi/src/lib.rs", "crates/flowsdn-bpf/src/main.rs", "tests/bpf/cases.json"] {
+            assert!(bpf_changed(&[path.into()]));
+        }
     }
     #[test]
     fn documents_and_empty_diff_skip_checks() {

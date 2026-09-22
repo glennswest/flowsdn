@@ -15,6 +15,22 @@ pub const SPECIFICATION: &str =
 /// flowsdn-only keys, deliberately excluded from reference catalogue coverage.
 pub const EXTENSIONS: &[Definition] = &[
     Definition {
+        name: "egress-gateway-selection",
+        pflag: Pflag::String,
+        default_expression: "modulo",
+        default: Some("modulo"),
+        class: Class::Immutable,
+        inventory_name: None,
+    },
+    Definition {
+        name: "egress-gateway-legacy-map",
+        pflag: Pflag::Bool,
+        default_expression: "false",
+        default: Some("false"),
+        class: Class::Immutable,
+        inventory_name: None,
+    },
+    Definition {
         name: "bgp-strict-update-errors",
         pflag: Pflag::Bool,
         default_expression: "false",
@@ -147,6 +163,8 @@ impl Definition {
             | "endpoint-id-max"
             | "force-config-change"
             | "bpf-ipcache-map-max"
+            | "egress-gateway-selection"
+            | "egress-gateway-legacy-map"
             | "bgp-strict-update-errors"
             | "bgp-status-report-prefixes" => {
                 "docs/spec/00-foundation-table-config.md#flowsdn-extension-keys"
@@ -191,6 +209,8 @@ impl Definition {
     /// The table does not supply help text or hidden-flag metadata.
     pub fn help(self) -> Option<&'static str> {
         match self.name {
+            "egress-gateway-selection" => Some("Gateway selection: modulo or homogeneous-cluster rendezvous"),
+            "egress-gateway-legacy-map" => Some("Plan legacy IPv4 egress map mirroring during migration"),
             "bgp-strict-update-errors" => Some("Reset the BGP session on malformed UPDATE content"),
             "bgp-status-report-prefixes" => {
                 Some("Report acknowledged advertised BGP prefixes in status")
@@ -213,7 +233,9 @@ impl Definition {
                 | "endpoint-id-max"
                 | "force-config-change"
                 | "bpf-ipcache-map-max"
-                | "bgp-strict-update-errors"
+                | "egress-gateway-selection"
+            | "egress-gateway-legacy-map"
+            | "bgp-strict-update-errors"
                 | "bgp-status-report-prefixes"
         )
         .then_some(false)

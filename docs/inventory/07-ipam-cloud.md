@@ -741,3 +741,5 @@ client), routing S (~1k). Overall XL (~23k lines of Rust).
   stay with `ipam=kubernetes`? The reference offers no precedent.
 - IPv6 on ENI is partial in the reference (`/80` prefixes, no IPv6 secondary
   IP path); decide on parity or better.
+
+Decision #109: GKE remains Kubernetes PodCIDR/native routing integration; no separate Compute API allocator. See spec 07 §3.12 and its validated packaging contract.

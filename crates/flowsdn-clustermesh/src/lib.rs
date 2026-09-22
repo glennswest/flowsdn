@@ -3,6 +3,7 @@
 pub mod config;
 pub mod ownership;
 pub mod prefixes;
+pub mod principal;
 pub mod topology;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Error(pub String);

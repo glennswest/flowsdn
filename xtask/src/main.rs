@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let command = args.first().map(String::as_str).unwrap_or("help");
     if command == "help" || command == "--help" {
         println!(
-            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|check-changed> BASE\ncargo xtask audit-corpus [--check]\nRun build tasks on Linux; see README.md."
+            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|ci-plan|check-changed> BASE\ncargo xtask audit-corpus [--check]\nRun build tasks on Linux; see README.md."
         );
         return Ok(());
     }
@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return corpus::run(args.len() == 2);
     }
     if !((args.len() == 1 && matches!(command, "build" | "test" | "check" | "deny"))
-        || (args.len() == 2 && matches!(command, "plan" | "check-changed")))
+        || (args.len() == 2 && matches!(command, "plan" | "ci-plan" | "check-changed")))
     {
         return Err("expected build/test/check/deny, or plan/check-changed BASE".into());
     }
@@ -45,7 +45,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             .parent()
             .ok_or("no workspace root")?,
     )?;
-    if matches!(command, "plan" | "check-changed") {
+    if matches!(command, "plan" | "ci-plan" | "check-changed") {
+        if command == "ci-plan" { return changed::ci_plan(args.get(1).ok_or("missing base revision")?); }
         let packages = changed::plan(args.get(1).ok_or("missing base revision")?)?;
         if command == "plan" {
             println!("{}", serde_json::to_string(&packages)?);
