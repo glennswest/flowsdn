@@ -143,19 +143,18 @@ pub fn registration_payload(document: &Value) -> Result<Value, Error> {
     if storage.is_none() {
         return Err(Error("missing storage version".into()));
     }
-    if DUAL_VERSION_PLURALS.contains(&plural) {
-        if storage != Some("v2")
+    if DUAL_VERSION_PLURALS.contains(&plural)
+        && (storage != Some("v2")
             || versions.len() != 2
             || !versions.iter().any(|v| {
                 v.get("name").and_then(Value::as_str) == Some("v2alpha1")
                     && v.get("served") == Some(&json!(true))
                     && v.get("deprecated") == Some(&json!(true))
-            })
-        {
-            return Err(Error(
-                "graduated CRDs must retain deprecated served v2alpha1 and storage v2".into(),
-            ));
-        }
+            }))
+    {
+        return Err(Error(
+            "graduated CRDs must retain deprecated served v2alpha1 and storage v2".into(),
+        ));
     }
     let mut projected_names = serde_json::Map::new();
     for field in ["kind", "plural", "singular", "shortNames", "categories"] {
@@ -164,10 +163,10 @@ pub fn registration_payload(document: &Value) -> Result<Value, Error> {
         }
     }
     for required in ["kind", "plural", "singular"] {
-        if !projected_names
+        if projected_names
             .get(required)
             .and_then(Value::as_str)
-            .is_some_and(|v| !v.is_empty())
+            .is_none_or(|v| v.is_empty())
         {
             return Err(Error(format!("missing name {required}")));
         }
