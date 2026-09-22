@@ -890,7 +890,9 @@ CI workflow port (kind+LVH matrix, cloud jobs) **M**.
    bit-for-bit so cilium-cli, hubble and bugtool keep working, or is a `flowsdn-cli` fork acceptable?
 6. Which cilium-cli version to pin as the acceptance suite (v0.19.7 today) and whether flowsdn CI can afford
    the LVH kernel matrix (5.15/6.1/6.6/6.12/6.18 × 41 configs) or a reduced set (6.1, 6.6, 6.12).
-7. Golden control-plane cases beyond `node/ciliumnodes` were removed upstream in 1.20 — recover them from
-   1.16/1.17 tags as flowsdn fixtures?
+7. **Resolved #36:** recovered the removed HostPort, dual-stack services, graceful-termination
+   and NodePort static inputs/goldens from pinned v1.16.0/v1.17.0 into
+   `tests/golden/controlplane-legacy`: 100 source records, 68 unique files,
+   exact per-file provenance and Rust verification. Runtime adapters remain pending.
 8. Binary sizes in F7 are estimates; measure from a pulled `quay.io/cilium/cilium:v1.20.1` on dev before
    quoting them in design docs.

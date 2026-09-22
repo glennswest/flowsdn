@@ -1,5 +1,9 @@
 //! Bounded BGP wire and configuration primitives from specification 15.
-//! No session FSM, sockets, routing table, timer tasks or working speaker.
+//! Includes a deterministic session core, but no sockets, RIB or working speaker.
+pub mod capabilities;
+pub mod encode_update;
+pub mod messages;
+pub mod session;
 pub mod open;
 pub mod planning;
 pub mod update;
@@ -119,3 +123,6 @@ pub const fn error_action(error: ProtocolError, strict_update_errors: bool) -> E
         ErrorAction::NotifyAndClose
     }
 }
+
+pub mod rib;
+pub mod collision;

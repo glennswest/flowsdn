@@ -68,8 +68,20 @@ reference; each `PROVENANCE` states which.
 
 ## Re-harvesting
 
-The harvest tracks one reference tag (ADR-0005 "Consequences"). To move to a
-newer tag, re-run the copy, diff, and update every `PROVENANCE` commit line in
+The primary harvest tracks one reference tag (ADR-0005 "Consequences").
+The explicit #36 exception under `controlplane-legacy/` preserves removed
+control-plane fixtures from pinned v1.16.0 and v1.17.0 with per-file provenance;
+it does not change the primary tag or reinterpret old outputs as current behavior.
+To move the primary corpus to a newer tag, re-run the copy, diff, and update every `PROVENANCE` commit line in
 the same change. Do not hand-edit fixtures: divergences flowsdn chooses
 deliberately are recorded as expected-divergence annotations in the harness,
 not by mutating the data.
+
+## Recovered historical control-plane cases
+
+[`controlplane-legacy/`](controlplane-legacy/README.md) adds HostPort, dual-stack
+Service, graceful-termination and NodePort inputs and golden outputs removed by
+v1.20.1. The 100 tagged source records occupy 68 unique static files; shared
+inputs are deduplicated, differing expected outputs stay versioned. A Rust
+verification/restoration tool checks exact pinned Git objects. Runtime adapters
+remain pending; no Go/shell harness was copied.

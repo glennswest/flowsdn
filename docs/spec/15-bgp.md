@@ -823,7 +823,7 @@ length (1), value. Encoded by flowsdn:
 | 1 | Multiprotocol | AFI (2), reserved (1), SAFI (1) — one per configured family |
 | 2 | Route refresh | empty |
 | 5 | Extended next hop encoding | triples of NLRI AFI (2), NLRI SAFI (2), next-hop AFI (2) — sent only when an IPv6 session carries IPv4 families |
-| 64 | Graceful restart | restart flags + restart time packed as a 16-bit field (`R` bit 0x8000 set only while restarting, `N` bit 0x0800 per RFC 8538 always set when GR is enabled, time in the low 12 bits, capped at 4095), then per family: AFI (2), SAFI (1), flags (1) with the forwarding-state bit **clear** |
+| 64 | Graceful restart | restart flags + restart time packed as a 16-bit field (`R` bit 0x8000 set only while restarting, `N` bit 0x4000 per RFC 8538 always set when GR is enabled, time in the low 12 bits, capped at 4095), then per family: AFI (2), SAFI (1), flags (1) with the forwarding-state bit **clear** |
 | 65 | Four-octet AS | the local ASN as a 4-byte value |
 
 #### 3.16.3 Finite state machine
@@ -876,7 +876,8 @@ Timers:
 
 - **ConnectRetry** — configured value, applied with jitter in `[t, 2t)` so a
   fleet reconnecting after an upstream reboot does not synchronize.
-- **Hold** — negotiated (§3.16.4). Reset on every message received.
+- **Hold** — negotiated (§3.16.4). Reset on accepted KEEPALIVE or UPDATE;
+  malformed discarded UPDATEs do not extend peer liveness.
 - **Keepalive** — `min(configured keepalive, negotiated hold / 3)`. Disabled
   when the negotiated hold is 0.
 - **IdleHold** — fixed **5 s** after any reset before leaving Idle.
@@ -966,15 +967,36 @@ The reconcilers see the speaker through this surface (Rust signatures in
 `advertise` and `withdraw` MUST NOT block on network I/O; they mutate the
 Loc-RIB and wake per-session export tasks.
 
-**Primitive implementation boundary.** `flowsdn-bgp-proto` currently implements
-framing and encoding within the 4096-byte limit, OPEN TLVs and peer checks,
-UPDATE structural validation for supported unicast attributes/prefixes, and
-strict/lenient error-action selection. Unknown optional transitive attributes
-are returned with the partial bit set; they are not installed anywhere. OPEN
-family/capability negotiation, notification data payload construction, complete
-attribute semantics, UPDATE splitting, AS4 conversion, FSM/timers, sockets,
-GR and adj-RIB storage remain required. A successful parse is not authorization
-to install a route. Codec tests do not satisfy the full protocol-suite issue #249.
+**Primitive implementation boundary.** `flowsdn-bgp-proto` implements bounded
+framing, OPEN capability negotiation, IPv4/IPv6 UPDATE encoders and splitting,
+AS_TRANS/AS4_PATH conversion, strict/lenient validation, and a deterministic
+six-state session core with injected clock/entropy and generation checks.
+Its collision owner uses opaque instance-bound tokens; adapters must validate
+OPEN before collision selection and reject displaced-token callbacks before
+forwarding them to the session. Numeric session generations alone are not
+cross-instance socket identities. Collision rejection sends Cease/7 in the
+transport adapter; the owner returns the displaced connection explicitly.
+
+GR negotiation uses the last advertised GR capability and RFC 8538's N mask
+`0x4000`, separate from the low twelve restart-time bits. Hard administrative
+resets wrap their cause in Cease/9 only after bilateral N negotiation. The
+close disposition reports when peers may retain **our exported** routes; it
+does not retain or install learned forwarding state. Unsupported-version
+notifications include the supported version. Complete per-error notification
+payload extraction remains required.
+
+The independent local-origin and bounded per-family observation stores have
+no operation that promotes received routes. Observation overflow counts
+announcement/withdrawal events and omitted storage, not an exact unique live
+prefix count (which would require unbounded memory after overflow). One
+instance reports overflow once; withdrawals free stored capacity. A transcript
+feeds 100001 announcements through an established session and asserts the
+local-origin snapshot is unchanged, storage is bounded and the session stays
+established. No kernel/BPF adapter exists in this crate; runtime assertions
+that those stores remain unchanged still belong to the speaker acceptance
+suite. Likewise actual sockets, TCP authentication, timer tasks, adj-RIB-out,
+export-policy/next-hop resolution, reconciler integration and interoperability
+remain required. These unit primitives do not alone close issue #249.
 
 ### 3.17 The pluggable advertiser
 

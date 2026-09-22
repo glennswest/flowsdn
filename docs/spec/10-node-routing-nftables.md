@@ -457,7 +457,7 @@ startup). `FRA_PROTOCOL = RTPROT_KERNEL` on every rule.
 | 20 | `to <podIP>` | `lookup main` | per pod | ENI/Azure IPAM (deferred) |
 | **100** | `from all` | `lookup local` | both | **always** |
 | 109 | `fwmark 0x80/0x80` | `lookup main` | both | ENI/Azure with multi-node NodePort (deferred) |
-| 110 / 111 | `from <podIP> [to <vpcCIDR>]` | `lookup 10+iface` | per pod | ENI/Azure (110 = compat priority with table `10+ifindex`; 111 = v2 with table `10+eni number`) (deferred) |
+| 110 / 111 | `from <podIP> [to <vpcCIDR>]` | provider-selected table | per pod | ENI v2 uses `10+eni number`; Azure uses `ifindex`. Priority does not eliminate gateway routes; spec 07 §3.20. |
 | 112 | `to <vtepCIDR>` | `lookup 202` | IPv4 | VTEP (deferred) |
 
 **Relocating the kernel's local rule** (`NodeEnsureLocalRoutingRule`): at
@@ -2059,3 +2059,9 @@ pre-upgrade job and retains the no-iptables agent contract.
 idempotence, atomicity, coexistence, teardown, ignored keys and convergence.
 The BPF-only replacements are explicitly enumerated in §9.1.9. This closes the
 missing-enumeration issue; unchecked cases remain requirements, not passed tests.
+
+Decision #19: priority 111 is not sufficient by itself. IPAM supplies interface
+routing metadata; CNI RoutingInfo.Configure installs per-pod rules and gateway
+routes, and the agent reconciles shared gateway routes. Retain spec 07 §3.20's
+routes. The Azure per-interface table is the interface index (ENI uses its
+separate table mapping); see the pinned reference audit in spec 14.

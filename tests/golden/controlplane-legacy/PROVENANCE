@@ -1,0 +1,29 @@
+Historical control-plane test data — recovered 2026-09-22 for issue #36
+
+Project: https://github.com/cilium/cilium
+Copyright: Authors of Cilium
+License: Apache-2.0 (full text in LICENSE-CILIUM)
+Primary historical tag: v1.17.0
+Commit: c2bbf787eab9b7f728fcc861904d9bcf17e4ba9b
+Comparison historical tag: v1.16.0
+Commit: 82999990bc954699cf24853ef9747d9166ee24c8
+Current main corpus tag: v1.20.1
+Commit: 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc
+
+Source roots:
+  test/controlplane/pod/hostport/
+  test/controlplane/services/dualstack/
+  test/controlplane/services/graceful-termination/
+  test/controlplane/services/nodeport/
+
+MANIFEST.tsv records every logical source path at both historical tags, its
+full source commit, Git blob identity, byte length and stored fixture path.
+Each historical tag has 50 YAML/golden files. All 32 YAML input/manifests are
+identical between tags and share their v1.17.0 storage paths. Each tag's 18
+changed expected-output files is retained separately. Totals: 100 source
+records, 68 unique stored fixtures, 257194 fixture bytes. No fixture bytes
+were rewritten. LICENSE-CILIUM is copied from v1.17.0:LICENSE.
+
+No Go harness, shell generator, Makefile or compiled object is copied.
+The original source harnesses were read solely to document scenario ordering.
+No runtime control-plane adapter or network conformance execution is claimed.

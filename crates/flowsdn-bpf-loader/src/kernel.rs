@@ -183,8 +183,8 @@ impl LocalDelivery {
         if interface.is_empty() || interface.len() >= 16 || interface.contains(['\0', '/']) {
             return Err("invalid network interface name".into());
         }
-        if !self.interfaces.contains_key(interface) {
-            if let Some(root) = &self.pin_root {
+        if !self.interfaces.contains_key(interface)
+            && let Some(root) = &self.pin_root {
                 let path = root.join(format!("ingress-{interface}"));
                 match std::fs::symlink_metadata(&path) {
                     Ok(meta) => {
@@ -203,7 +203,6 @@ impl LocalDelivery {
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                     Err(e) => return Err(e.into()),
                 }
-            }
         }
         // Keep the handle on unlink failure so teardown can be retried.
         if let Some(OwnedLink::Persistent { path, .. }) = self.interfaces.get(interface) {

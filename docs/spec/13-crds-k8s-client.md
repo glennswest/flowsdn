@@ -1204,6 +1204,18 @@ distinct value at debug with `resource`, `field`, `value`.
 
 ### 9.5 rustkube conformance suite
 
+**Source matrix resolved #30, runtime conformance still pending.** The exact
+rustkube `e45acc7` [capability audit](../validation/dependency-capabilities-2026-09-22.md)
+records each requested feature and existing executable test. CEL, schema
+defaulting and schema-driven map-list semantics are absent from the audited
+CRD write path; client defaults/validation remain necessary. Status isolation
+and stale-watch 410 behavior have concrete gaps. Positive implementations of
+metadata projection, bookmarks, typed protobuf, selectors, Lease routing and
+CRD establishment do not imply all corresponding HTTP conformance checks pass.
+These findings supersede any assumption elsewhere that an unverified rustkube
+feature can be treated as available. Required-feature failures remain deployment
+blockers; the full runner described below remains pending.
+
 A standalone binary, `flowsdn-k8s-conformance`, that takes a kubeconfig and
 exercises C1–C36 as independent named checks, each reporting
 pass/fail/not-applicable with the request and response that decided it. It MUST

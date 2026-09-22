@@ -162,3 +162,9 @@ crates/flowsdn-bpf-abi/src/lib.rs notify constants retain numeric interface
 values from Cilium v1.20.1, commit 7d68cfb394, pkg/monitor/api/types.go and
 api/v1/flow/flow.proto, Apache License 2.0. Decoder and correlation logic are
 independent Rust implementations from the specifications.
+
+Legacy control-plane fixture data under tests/golden/controlplane-legacy derives
+from cilium/cilium v1.16.0 (82999990bc954699cf24853ef9747d9166ee24c8) and v1.17.0
+(c2bbf787eab9b7f728fcc861904d9bcf17e4ba9b). Copyright Authors of Cilium,
+Apache-2.0. Exact paths/blob IDs and deduplication mapping are in MANIFEST.tsv;
+the original license is retained alongside the static fixtures.

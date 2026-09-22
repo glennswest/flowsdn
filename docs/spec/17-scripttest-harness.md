@@ -1617,3 +1617,17 @@ single-character `/` and `:` separator names. Braces allow other environment
 names. Empty or unterminated braces are parse errors; a dollar without a name
 is literal. Expansion is single-pass and does not split arguments. Quoted
 fragments remain literal; regex mode quotes only substituted values.
+
+### Historical control-plane recovery (#36)
+
+`tests/golden/controlplane-legacy` preserves removed HostPort, dual-stack Service,
+graceful-termination and NodePort cases from Cilium v1.16.0
+(`82999990bc954699cf24853ef9747d9166ee24c8`) and v1.17.0
+(`c2bbf787eab9b7f728fcc861904d9bcf17e4ba9b`). The primary corpus remains v1.20.1.
+Each source record has exact commit/blob/byte/path provenance; 32 identical YAML
+inputs are stored once and 18 differing golden outputs per tag stay separate.
+The no-dependency Rust `flowsdn-harvest-controlplane` tool verifies/restores these
+100 source records (68 files), without executing or copying upstream Go/shell.
+The existing Node/CiliumNode corpus is unaffected. This resolves fixture recovery
+only: historical-version-aware Kubernetes/LB adapters and expected-divergence
+annotations remain required before runtime pass/fail assertions are claimed.

@@ -108,3 +108,13 @@ This records permission to consume these two specification-owned artifacts,
 not evidence that CI integration, trusted artifact pins or conformance runs
 have been delivered. Spec21's profiles and individually owned exemptions
 remain the acceptance contract.
+
+## Amendment: older control-plane fixtures (#36)
+
+The four removed control-plane families may use static data from pinned
+v1.16.0 and v1.17.0 alongside the primary v1.20.1 reference. Each recovered
+input/expected file carries exact tag, commit, source path and Git blob identity
+in a manifest, with license attribution. Differing old expectations stay
+separate; no old expectation silently overrides current behavior. The Rust
+harvester verifies bytes without executing old Go tests. Adapter implementation
+and compatibility decisions remain separate acceptance work.
