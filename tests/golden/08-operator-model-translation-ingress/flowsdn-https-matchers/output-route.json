@@ -1,0 +1,8 @@
+{
+  "match": {
+    "pathSeparatedPrefix": "/secure",
+    "headers": [{"name": "token", "stringMatch": {"exact": "header-value"}}],
+    "queryParameters": [{"name": "token", "stringMatch": {"prefix": "query-value"}}]
+  },
+  "redirect": {"httpsRedirect": true}
+}

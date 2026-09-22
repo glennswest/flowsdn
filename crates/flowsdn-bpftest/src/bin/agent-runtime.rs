@@ -368,6 +368,12 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     let agent_binary = fs::canonicalize(agent_binary)?;
     let object = fs::canonicalize(object)?;
     isolate()?;
+    // Refuse ordinary stack forwarding so continuity proves BPF delivery.
+    ensure(
+        Command::new("nft").arg("add table inet flowsdn_fixture; add chain inet flowsdn_fixture forward { type filter hook forward priority 0; policy drop; }")
+            .status()?.success(),
+        "could not isolate BPF forwarding from the kernel stack",
+    )?;
     unshare(CloneFlags::CLONE_NEWNS)?;
     nix::mount::mount(
         None::<&str>,

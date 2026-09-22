@@ -375,7 +375,7 @@ image and uses the admin socket only.
   Each Envoy listener opens one connection; the listener's worker threads share
   it, so the server MUST handle many concurrent connections.
 - Each received packet is one `cilium.LogEntry` protobuf. Reads use a buffer of
-  `envoy-access-log-buffer-size` bytes (default 4096). A read whose flags contain
+  `envoy-access-log-buffer-size` bytes (default 16384). A read whose flags contain
   `MSG_TRUNC` MUST discard the record and log a warning naming the flag — a
   truncated protobuf must never be partially decoded. Header-heavy requests are
   the common cause; the message MUST tell the operator to raise the size.
@@ -512,10 +512,32 @@ filter reads `SO_MARK` for the identity.
 | `policy_update_warning_limit` | 9 | unset |
 | `l7lb_policy_name` | 10 | unset for policy listeners |
 | `original_source_so_linger_time` | 11 | `envoy-http-upstream-linger-timeout` when ≥ 0, only for HTTP listeners |
-| **`ipcache_name`** | 12 | **`cilium_ipcache_v2`** — the pinned name of flowsdn's ipcache (spec 03 §4.8, spec 01 §4.1). The proto's implicit default is `cilium_ipcache`, which flowsdn does **not** pin; the field MUST therefore be set explicitly on every listener, and a listener emitted without it is a bug that manifests as Envoy seeing every peer as WORLD |
+| **`ipcache_name`** | 12 | **`cilium_ipcache_v2`** — the pinned name of flowsdn's ipcache (spec 03 §4.8, spec 01 §4.1). The filter's empty-field fallback is `cilium_ipcache`, which flowsdn does **not** pin; the field MUST therefore be set explicitly on every listener, and a listener emitted without it is a bug that manifests as Envoy seeing every peer as WORLD |
 | `use_nphds` | 13 | false |
 | `cache_entry_ttl` / `cache_gc_interval` | 14, 15 | unset (Envoy defaults) |
 | `cilium_config_source` | 16 | unset in split mode; the ADS config source in ADS mode |
+
+**Pinned image audit and probe (#70).** The v1.20.1 reference Dockerfile pins
+`quay.io/cilium/cilium-envoy:v1.37.5-1786810558-766ccfb37260a43e9d228837aa84ce3faf9f64e7`
+with manifest digest
+`sha256:75b8094c7127736a2ffd2dce3945e0931cb6df21b0372ff661940eca26730b91`.
+At that image revision, [BpfMetadata field 12](https://github.com/cilium/proxy/blob/766ccfb37260a43e9d228837aa84ce3faf9f64e7/cilium/api/bpf_metadata.proto)
+and [the filter constructor](https://github.com/cilium/proxy/blob/766ccfb37260a43e9d228837aa84ce3faf9f64e7/cilium/bpf_metadata.cc)
+select the nonempty configured name; [IpCache](https://github.com/cilium/proxy/blob/766ccfb37260a43e9d228837aa84ce3faf9f64e7/cilium/ipcache.cc)
+opens the resulting path. The vendored Go API revision `9c14fdc485a1` is a
+separate schema provenance and must not be mistaken for the image revision.
+
+`cargo run -p flowsdn-proxy --bin ipcache-probe -- <cilium-envoy>` checks the
+binary revision and validates four embedded static bootstraps: omitted name,
+explicit v2 name, a sentinel name, and an unknown-field rejection control.
+Each positive case must actually construct the filter and log the exact map
+path it attempted to open beneath an intentionally absent root. The listener
+does not bind a port. This distinguishes configurable map selection from mere
+schema acceptance and from strings embedded in the executable. The probe
+creates no BPF map and does not demonstrate map-layout or packet-path
+interoperability. Until its image run is recorded, #70 remains open. Once it
+passes, no legacy symlink pin or production NPHDS fallback is needed for name
+selection; normal map ABI validation remains mandatory.
 
 Envoy reads the pinned map at `<bpf_root>/tc/globals/cilium_ipcache_v2` and needs
 read access to bpffs and membership in `proxy-gid` for the sockets. On the

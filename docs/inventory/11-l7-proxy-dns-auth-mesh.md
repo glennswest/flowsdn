@@ -795,10 +795,11 @@ Surface the replacement must cover to drop `cilium-envoy`:
 - Does flowsdn want `external-envoy-proxy` DaemonSet mode only (simplest:
   no process management, only sockets on a hostPath), or also embedded? The
   DaemonSet mode also decides who copies the Envoy artifacts.
-- Envoy's `cilium.bpf_metadata` reads `cilium_ipcache` by pinned name and
-  layout; flowsdn's ipcache map (area: ipcache) must keep the exact key/value
-  layout and pin path, or NPHDS must be enabled (`use_nphds=true`) and served
-  — which the reference tests but does not run in production.
+- **#70 source audit:** the image revision `766ccfb37260a43e9d228837aa84ce3faf9f64e7`
+  uses nonempty `BpfMetadata.ipcache_name` to select the map; only an empty
+  field falls back to `cilium_ipcache`. Spec 16 §3.2.5 records pinned source
+  links and a four-case executable image probe. The image-run gate remains
+  pending; exact key/value ABI compatibility remains a separate requirement.
 - Whether `enable-bpf-tproxy` (sk_assign) becomes the only mode in flowsdn;
   it removes the fwmark ip rules but requires kernel ≥ 5.7 and tc ingress
   only (host egress still needs the mark path).

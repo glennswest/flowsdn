@@ -1,0 +1,72 @@
+{
+  "node": {
+    "id": "flowsdn-ipcache-probe",
+    "cluster": "flowsdn-ipcache-probe"
+  },
+  "static_resources": {
+    "listeners": [
+      {
+        "name": "probe",
+        "address": {
+          "socket_address": {
+            "address": "127.0.0.1",
+            "port_value": 19000
+          }
+        },
+        "bind_to_port": false,
+        "listener_filters": [
+          {
+            "name": "cilium.bpf_metadata",
+            "typed_config": {
+              "@type": "type.googleapis.com/cilium.BpfMetadata",
+              "bpf_root": "/flowsdn-ipcache-probe-not-a-bpf-root",
+              "use_nphds": false,
+              "ipcache_name": "cilium_ipcache_v2",
+              "flowsdn_unknown_field": true
+            }
+          }
+        ],
+        "filter_chains": [
+          {
+            "filters": [
+              {
+                "name": "envoy.filters.network.tcp_proxy",
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy",
+                  "stat_prefix": "probe",
+                  "cluster": "discard"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "clusters": [
+      {
+        "name": "discard",
+        "connect_timeout": "1s",
+        "type": "STATIC",
+        "load_assignment": {
+          "cluster_name": "discard",
+          "endpoints": [
+            {
+              "lb_endpoints": [
+                {
+                  "endpoint": {
+                    "address": {
+                      "socket_address": {
+                        "address": "127.0.0.1",
+                        "port_value": 9
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

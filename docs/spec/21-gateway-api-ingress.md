@@ -1964,7 +1964,7 @@ namespace, …) plus `output-listeners.yaml`.
 Anticipated divergences from flowsdn's own decisions: the `PortUnavailable`
 host-network collision condition (§3.10), the reachable
 `CiliumGatewayClassConfig` validation branch (§3.11.8), the corrected
-HTTPS-redirect matcher (#281; fixture annotations remain outstanding), and the `nodeipam.cilium.io`
+HTTPS-redirect matcher (#281; fixture audit and synthetic JSON regression recorded), and the `nodeipam.cilium.io`
 default prefix (§6.2). Each MUST be annotated before the suite is declared
 green.
 
@@ -2160,14 +2160,21 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    to exercise the shared translator. This follows ADR-0001 boundary compatibility; a
    green Gateway API report does not itself authorize dropping Ingress.
 
-2. **#281 remains open; own behavior is fixed.** Do not reproduce the
-   header/query argument-order bug. `flowsdn-gateway::matcher` gives headers and
-   queries distinct element types and named fields, preserving both through a
-   301 HTTPS redirect plan. This is not the full Envoy translator. Affected
-   harvested goldens still require per-scenario EXPECTED-DIVERGENCE annotations
-   when that translator lands; no upstream report has been filed because that
-   external communication is not authorized. Neither obligation is fabricated
-   or waived to close this issue.
+2. **#281 implementation and golden audit complete; external coordination pending.**
+   Do not reproduce the header/query argument-order bug. Distinct header/query
+   types flow through `force_https` into the executable `envoy_route` JSON
+   projection. Header-only, query-only and same-name/different-value regressions
+   assert the final Envoy field locations, including 301 by omitted response
+   code. Caller supplies authority/method and matcher ordering; this bounded
+   projection is not a complete CEC/xDS translator.
+   The harvested `host_rules/output-cec.yaml` reaches the affected code but has
+   empty user matcher lists, hence no actual byte divergence. Its local
+   `EXPECTED-DIVERGENCE.md` documents that fact; the adjacent flowsdn-authored
+   synthetic fixture exercises the defect-triggering nonempty lists. Ingestion
+   force-HTTPS flag fixtures do not execute the affected translator. Preserve
+   original harvested YAML. No public upstream issue has been filed because
+   external communication is not authorized; the local defect record below
+   preserves evidence and reproduction steps for later coordination.
 3. **Resolved — #282.** Keep one combined CEC for shared Ingress mode and the common
    listener set. Do not split per Ingress without an agent-side listener-merge contract.
    Preserve validation and last accepted configuration when a replacement is rejected.
@@ -2246,3 +2253,17 @@ The library maintains the exemption/skip constants and checks target/golden
 agreement and supplied implementation evidence. It does not contain a complete
 upstream feature corpus, publish supportedFeatures, execute conformance, or
 claim removal of these exceptions. Those are still acceptance requirements.
+
+### Local defect record: HTTPS redirect matcher argument order (#281)
+
+Pinned source: Cilium `7d68cfb394`,
+`operator/pkg/model/translation/envoy_virtual_host.go:299–304`. The redirect
+branch passes `QueryParamsMatch` before `HeadersMatch`, while `getRouteMatch`
+expects headers before query. Build one secure route with header token exact
+header-value and query token prefix query-value; enable force HTTPS. The
+reference redirects only when those inputs are exchanged at request time.
+The corrected flowsdn projection instead places each list in its corresponding
+Envoy matcher field, as asserted by `tests/https_redirect.rs`. Existing
+host_rules YAML has neither input, so it cannot detect this defect. Public
+reporting and upstream acceptance are unperformed; this record makes no claim
+about later Cilium revisions or a running Envoy interoperability test.

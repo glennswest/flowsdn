@@ -1,0 +1,6 @@
+flowsdn-authored synthetic regression for issue #281; not copied upstream data.
+Inputs: force HTTPS, prefix /secure/, header token exact header-value,
+query parameter token prefix query-value. Output is one Envoy protobuf-JSON
+Route projection, not a complete CEC or a validated running Envoy response.
+Reference defect location: cilium/cilium 7d68cfb394,
+operator/pkg/model/translation/envoy_virtual_host.go:299–304.

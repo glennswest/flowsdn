@@ -862,7 +862,11 @@ Layout owned by `01-bpf-map-abi-loader` (LPM trie, 24-byte packed key
 Envoy's `cilium.bpf_metadata` opens the map by pinned name; the Envoy
 bootstrap written by flowsdn MUST pass the pinned name of this map
 (`cilium_ipcache_v2`) in `ipcache_name` (inventory 11 lists the proto
-default `cilium_ipcache`).
+empty-field fallback `cilium_ipcache`). The pinned proxy image source at
+`766ccfb37260a43e9d228837aa84ce3faf9f64e7` honors field 12 and constructs
+`<bpf_root>/tc/globals/<ipcache_name>`; it does not hard-code the legacy name
+when a nonempty field is supplied. See spec 16 §3.2.5 for the executable
+image probe and its validation gate.
 
 ### 4.9 REST models
 
@@ -1236,9 +1240,10 @@ writing. Startup fences: `initial_cid_list`, `k8s_caches_synced`,
 6. **Resolved (#69, ADR-0011): well-known identities default on.**
    `enable-well-known-identities=true` follows §4.4 and the config catalogue.
    Explicit false disables the shortcut; no inventory suggestion overrides it.
-7. **Envoy `ipcache_name`.** Confirm against the cilium/proxy image that
-   the bootstrap field must name `cilium_ipcache_v2` (section 4.8); if the
-   proxy hard-codes the legacy name, a symlink pin or NPHDS mode is needed.
+7. **Envoy `ipcache_name` (#70).** Pinned source confirms configurable field
+   12, with a legacy fallback only when empty. The image probe in spec 16
+   §3.2.5 must demonstrate the selected map path before this item is closed;
+   strings or protobuf field acceptance alone are insufficient.
 8. **Resolved (#71): retain CEP-GC interval prerequisite with CES.**
    Section 3.6 follows spec 12 startup validation; CES identities still count
    as alive. Operator scheduling/GC tests remain required.
