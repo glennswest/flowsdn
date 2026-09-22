@@ -1245,3 +1245,8 @@ writing. Startup fences: `initial_cid_list`, `k8s_caches_synced`,
 9. **Resolved (#72): reject reserved fixed-identity names.** The shared
    validator enforces the numeric range, built-in-name exclusion and unique
    ID/name ownership described in §3.2 before a mapping is usable.
+
+Decision #204 retains one shared local identity range for CIDR/FQDN/CIDR-group
+allocation (`0x01000001..0x01ffffff`). FQDN has no carved-out subrange. Shared
+allocation, reference counts and restored reservations prevent collisions;
+`flowsdn-proxy::fqdn` only checks range membership and is not an allocator.

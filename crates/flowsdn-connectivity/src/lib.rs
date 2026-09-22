@@ -1,7 +1,7 @@
 //! Connectivity evidence and scenario-group collection primitives, spec 19.
 //! No cluster provisioner, Hubble client or end-to-end test executor.
 use flowsdn_bpf_abi::ct::CtEntry;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
     InvalidCapacity,
@@ -12,14 +12,21 @@ pub enum Error {
     Overflow,
     IncompleteEvidence,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Group(u64);
+#[derive(Clone, Debug)]
+pub struct Group { issuer: Arc<()>, generation: u64 }
+impl PartialEq for Group {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.issuer, &other.issuer) && self.generation == other.generation
+    }
+}
+impl Eq for Group {}
 /// Data is scoped to one active scenario group and explicitly bounded per node.
 /// The transport owner must cancel and join streams before finish/begin.
 pub struct FlowWindow<T> {
+    issuer: Arc<()>,
     capacity: usize,
     generation: u64,
-    active: Option<Group>,
+    active: Option<u64>,
     nodes: BTreeMap<String, Vec<T>>,
     incomplete: bool,
 }
@@ -29,6 +36,7 @@ impl<T> FlowWindow<T> {
             return Err(Error::InvalidCapacity);
         }
         Ok(Self {
+            issuer: Arc::new(()),
             capacity: capacity_per_node,
             generation: 0,
             active: None,
@@ -48,18 +56,18 @@ impl<T> FlowWindow<T> {
         self.nodes = nodes;
         self.generation = generation;
         self.incomplete = false;
-        let group = Group(generation);
-        self.active = Some(group);
+        let group = Group { issuer: Arc::clone(&self.issuer), generation };
+        self.active = Some(generation);
         Ok(group)
     }
-    fn check(&self, group: Group) -> Result<(), Error> {
+    fn check(&self, group: &Group) -> Result<(), Error> {
         match self.active {
             None => Err(Error::NotActive),
-            Some(active) if active != group => Err(Error::StaleGroup),
+            Some(active) if active != group.generation || !Arc::ptr_eq(&self.issuer, &group.issuer) => Err(Error::StaleGroup),
             _ => Ok(()),
         }
     }
-    pub fn push(&mut self, group: Group, node: &str, event: T) -> Result<(), Error> {
+    pub fn push(&mut self, group: &Group, node: &str, event: T) -> Result<(), Error> {
         self.check(group)?;
         let entries = self.nodes.get_mut(node).ok_or(Error::UnknownNode)?;
         if entries.len() >= self.capacity {
@@ -71,12 +79,12 @@ impl<T> FlowWindow<T> {
     }
     /// Loss markers, stream termination or decode loss invalidate negative
     /// assertions. The caller may retain the partial sample for diagnostics.
-    pub fn mark_incomplete(&mut self, group: Group) -> Result<(), Error> {
+    pub fn mark_incomplete(&mut self, group: &Group) -> Result<(), Error> {
         self.check(group)?;
         self.incomplete = true;
         Ok(())
     }
-    pub fn finish(&mut self, group: Group) -> Result<BTreeMap<String, Vec<T>>, Error> {
+    pub fn finish(&mut self, group: &Group) -> Result<BTreeMap<String, Vec<T>>, Error> {
         self.check(group)?;
         if self.incomplete {
             return Err(Error::IncompleteEvidence);
@@ -85,7 +93,7 @@ impl<T> FlowWindow<T> {
         Ok(std::mem::take(&mut self.nodes))
     }
     /// Close a failed group while retaining its partial diagnostic sample.
-    pub fn abort(&mut self, group: Group) -> Result<BTreeMap<String, Vec<T>>, Error> {
+    pub fn abort(&mut self, group: &Group) -> Result<BTreeMap<String, Vec<T>>, Error> {
         self.check(group)?;
         self.active = None;
         Ok(std::mem::take(&mut self.nodes))

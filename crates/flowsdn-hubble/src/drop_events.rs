@@ -3,6 +3,7 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     time::Duration,
+    sync::Arc,
 };
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Key {
@@ -21,6 +22,7 @@ pub enum Rejected {
 }
 #[derive(Debug)]
 pub struct Ticket {
+    issuer: Arc<()>,
     key: Key,
     sequence: u64,
 }
@@ -30,6 +32,7 @@ struct Entry {
     sequence: u64,
 }
 pub struct Gate {
+    issuer: Arc<()>,
     interval: Duration,
     maximum: usize,
     per_second: usize,
@@ -49,6 +52,7 @@ impl Gate {
             return Err("drop interval and dedupe capacity must be positive");
         }
         Ok(Self {
+            issuer: Arc::new(()),
             interval,
             maximum,
             per_second,
@@ -100,13 +104,15 @@ impl Gate {
         if self.per_second != 0 {
             self.attempts.push_back(now);
         }
-        Ok(Ticket { key, sequence })
+        Ok(Ticket { issuer: Arc::clone(&self.issuer), key, sequence })
     }
     /// Failed writes may retry without waiting for dedupe expiry, but do not
     /// refund the global attempt budget. Stale completion cannot erase a later
-    /// reservation for the same key. Success retains the dedupe record.
+    /// reservation for the same key or a replacement Gate. Success retains the
+    /// dedupe record; tickets hold their issuer identity alive to avoid reuse.
     pub fn finish(&mut self, ticket: Ticket, success: bool) {
-        if !success
+        if Arc::ptr_eq(&self.issuer, &ticket.issuer)
+            && !success
             && self
                 .entries
                 .get(&ticket.key)

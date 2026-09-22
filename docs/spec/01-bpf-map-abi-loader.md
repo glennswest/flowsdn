@@ -1383,3 +1383,9 @@ Licenses per `docs/licensing.md`.
    feature-based startup refusal; remove the older-kernel clsact attach path,
    retaining only legacy attachment cleanup/takeover where explicitly noted.
    Privileged verification of the target kernel matrix remains outstanding.
+
+Decision #174: modern egress maps are the default. Explicit legacy mirroring is
+available only as a migration plan while an old program may still read the
+legacy IPv4 map; map retirement requires proof those readers are detached.
+The encryption library plans this requirement; atomic runtime mirroring and
+migration validation remain implementation work.

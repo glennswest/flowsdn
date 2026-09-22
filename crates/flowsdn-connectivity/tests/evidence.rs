@@ -7,25 +7,25 @@ fn group_windows_isolate_old_streams_and_refuse_incomplete_assertions() {
         .begin(["node-a".into(), "node-b".into()])
         .expect("start");
     assert_eq!(window.begin(["node-c".into()]), Err(Error::AlreadyActive));
-    window.push(first, "node-a", 1).expect("flow");
-    window.push(first, "node-a", 2).expect("flow");
-    assert_eq!(window.push(first, "node-a", 3), Err(Error::Overflow));
-    assert_eq!(window.finish(first), Err(Error::IncompleteEvidence));
+    window.push(&first, "node-a", 1).expect("flow");
+    window.push(&first, "node-a", 2).expect("flow");
+    assert_eq!(window.push(&first, "node-a", 3), Err(Error::Overflow));
+    assert_eq!(window.finish(&first), Err(Error::IncompleteEvidence));
     assert_eq!(
-        window.abort(first).expect("diagnostics").get("node-a"),
+        window.abort(&first).expect("diagnostics").get("node-a"),
         Some(&vec![1, 2])
     );
     let second = window.begin(["node-b".into()]).expect("next");
-    assert_eq!(window.push(first, "node-b", 4), Err(Error::StaleGroup));
-    assert_eq!(window.push(second, "node-a", 4), Err(Error::UnknownNode));
-    window.push(second, "node-b", 5).expect("new");
+    assert_eq!(window.push(&first, "node-b", 4), Err(Error::StaleGroup));
+    assert_eq!(window.push(&second, "node-a", 4), Err(Error::UnknownNode));
+    window.push(&second, "node-b", 5).expect("new");
     assert_eq!(
-        window.finish(second).expect("complete").get("node-b"),
+        window.finish(&second).expect("complete").get("node-b"),
         Some(&vec![5])
     );
     let third = window.begin(["node-b".into()]).expect("loss group");
-    window.mark_incomplete(third).expect("loss");
-    assert_eq!(window.finish(third), Err(Error::IncompleteEvidence));
+    window.mark_incomplete(&third).expect("loss");
+    assert_eq!(window.finish(&third), Err(Error::IncompleteEvidence));
 }
 #[test]
 fn ct_reuse_never_mislabels_expiry_or_report_time_as_creation() {
@@ -84,4 +84,20 @@ fn placements_distinguish_simulation_real_datapath_and_advisory_crosschecks() {
     let upstream = placement(Lane::UpstreamCrosscheck);
     assert_eq!(upstream.cadence, Cadence::Weekly);
     assert!(!upstream.merge_gate_when_operational);
+}
+
+#[test]
+fn replaced_window_rejects_old_group_even_when_generation_matches() {
+    let mut old = FlowWindow::<u8>::new(1).expect("old window");
+    let stale = old.begin(["node".into()]).expect("old group");
+    drop(old);
+    let mut replacement = FlowWindow::new(1).expect("replacement");
+    let current = replacement.begin(["node".into()]).expect("current group");
+    assert_ne!(stale, current);
+    assert_eq!(replacement.push(&stale, "node", 1), Err(Error::StaleGroup));
+    assert_eq!(replacement.mark_incomplete(&stale), Err(Error::StaleGroup));
+    assert_eq!(replacement.abort(&stale), Err(Error::StaleGroup));
+    assert_eq!(replacement.finish(&stale), Err(Error::StaleGroup));
+    replacement.push(&current, "node", 2).expect("current data");
+    assert_eq!(replacement.finish(&current).expect("complete").get("node"), Some(&vec![2]));
 }

@@ -80,7 +80,9 @@ fn select(packages: &BTreeMap<String, Package>, files: &[String]) -> BTreeSet<St
     let mut selected = BTreeSet::new();
     for file in files {
         // Manifests/lock/config can change dependency resolution or flags globally.
-        if file == "Cargo.lock"
+        if file.starts_with("docs/spec/")
+            || file.starts_with("docs/inventory/")
+            || file == "Cargo.lock"
             || file.ends_with("Cargo.toml")
             || file.starts_with(".cargo/")
             || file.starts_with(".github/")
@@ -263,7 +265,7 @@ mod tests {
     }
     #[test]
     fn documents_and_empty_diff_skip_checks() {
-        assert!(chosen(&["docs/spec/00.md", "README.md"]).is_empty());
+        assert!(chosen(&["docs/guide.md", "README.md"]).is_empty());
         assert!(chosen(&[]).is_empty());
     }
     #[test]
@@ -287,6 +289,7 @@ mod tests {
     fn global_unknown_and_removed_paths_are_conservative() {
         for path in [
             "Cargo.lock",
+            "docs/spec/00.md",
             "crates/table/Cargo.toml",
             "tests/corpus/a.txtar",
             "crates/gone/src/lib.rs",

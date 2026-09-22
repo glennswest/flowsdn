@@ -51,11 +51,6 @@ fn stale_nonce_wrong_node_and_pre_first_ack_resume_cannot_open_barrier() {
         ..event("NPDS", 4)
     };
     assert_eq!(gate.observe(&wrong, 2), Ok(false));
-    let future = Observation {
-        version: 5,
-        ..event("NPDS", 4)
-    };
-    assert_eq!(gate.observe(&future, 2), Err(Error::InvalidResponse));
     gate.observe(&event("NPDS", 4), 2).expect("ack");
     let epoch = gate.reconnect(3).expect("reconnect");
     assert_eq!(epoch, 1);
@@ -117,6 +112,28 @@ fn a_superseding_response_revokes_readiness_until_its_ack() {
     assert_eq!(gate.commit(4), Err(Error::NotReady));
     gate.observe(&event("NPDS", 5), 5).expect("new ack");
     assert!(gate.commit(6).is_ok());
+}
+#[test]
+fn invalid_current_stream_response_rejects_pending_and_ready_attempts() {
+    for ready in [false, true] {
+        let mut gate = barrier();
+        gate.sent("NPDS", 4, 1).expect("send policy");
+        gate.sent("LDS", 6, 1).expect("send listener");
+        if ready {
+            gate.observe(&event("NPDS", 4), 2).expect("policy ACK");
+            gate.observe(&event("LDS", 6), 2).expect("listener ACK");
+            assert_eq!(gate.state(), State::Ready);
+        }
+        let invalid = Observation {
+            version: 5,
+            ..event("NPDS", 4)
+        };
+        assert_eq!(gate.observe(&invalid, 3), Err(Error::InvalidResponse));
+        assert_eq!(gate.state(), State::Rejected);
+        assert_eq!(gate.commit(4), Err(Error::Terminal));
+        assert_eq!(gate.observe(&event("NPDS", 4), 4), Err(Error::Terminal));
+        assert_eq!(gate.reconnect(4), Err(Error::Terminal));
+    }
 }
 #[test]
 fn expired_ready_gate_still_cannot_commit() {

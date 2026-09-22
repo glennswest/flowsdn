@@ -1661,3 +1661,30 @@ binaries/images with source/license provenance and checksum verification, driven
 by Rust orchestration. Do not author/copy Go or build these suites from source
 inside this repository. Selecting concrete artifact digests and running the
 suites remain milestone 4 acceptance work (ADR0005, spec21).
+
+### Batch 6 deployment and CI contracts
+
+- #6 retains cloud IPAM in the complete networking release scope; initial
+  cluster-pool/Kubernetes work is staging, not a permanent provider omission.
+- #9 sequences WireGuard before IPsec; #31 supports only overlay-in-IPsec.
+  #32 drops the orphan `encryption.ipsec.interface` chart value with a clear
+  migration diagnostic; it must not silently pretend to select an interface.
+- #134 requires operator-reviewed reference ruleset cleanup before node handoff,
+  as specified in spec 10; no automatic destructive chart hook is shipped.
+- #238 selects the Rust ClusterMesh apiserver plus fastetcd image architecture;
+  no image is production-ready before the store/security conformance gates.
+- #229/#241 place nightly arm64 e2e on dedicated physical arm64 CI capacity;
+  #246 places privileged tests in isolated ephemeral VMs on trusted Linux
+  runners. Missing capacity is an unavailable gate, never a pass. #231 retains
+  a pinned, checksummed weekly advisory upstream CLI comparison; #234 separates
+  five-node real datapath and 100-node simulated controller scaling.
+
+The affected-crate workflow supplies conservative dependency selection, separate
+package caches, serialized shared-host builds, both musl checks and separate
+BPF selection/cache. Specification edits run workspace tests because tests embed
+spec data; ordinary prose edits skip them. Documentation edits do not rebuild
+BPF objects. Pushes and manual dispatch execute only trusted main; PR execution
+is not enabled on the shared host. Runner registration, isolated privileged VM
+provisioning, first successful workflow run and required status checks remain
+#264/#294 work. No runner was registered at the batch's GitHub API audit, so
+committing this workflow is not CI activation.

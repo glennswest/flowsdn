@@ -121,6 +121,7 @@ impl Barrier {
             return Ok(false);
         }
         if version > nonce {
+            self.state = State::Rejected;
             return Err(Error::InvalidResponse);
         }
         if nack || version < nonce {

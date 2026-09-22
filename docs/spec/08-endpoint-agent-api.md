@@ -1769,3 +1769,10 @@ This closes a restart race between GET config and IPAM allocation.
   verifies its rollback preserves two existing endpoints, allocations and traffic.
   This validates current endpoint/map/IPAM isolation. Shared policy and identity
   controller lifecycle verification remains required when those controllers ship.
+
+Decision #24 requires NPDS and any new listener ACK before publishing the new
+proxy port/policy map revision. Timeout, NACK, invalid stream response and
+cancellation retain the old realized policy and roll back unpublished resources.
+Reconnect requires fresh ACKs. The `flowsdn-proxy::ack` barrier grants a one-shot
+permit for the matching attempt/revision; real xDS transport and regeneration
+integration remain #292, and a helper permit alone does not publish BPF state.
