@@ -12,7 +12,7 @@ use aya_ebpf::{
 #[unsafe(no_mangle)]
 static __config_probe: u32 = 17;
 #[map]
-static FEATURE_STATE: Array<u32> = Array::with_max_entries(2, 0);
+static FEATURE_STATE: Array<u32> = Array::with_max_entries(3, 0);
 #[classifier]
 pub fn global_probe(_ctx: TcContext) -> i32 {
     // SAFETY: valid immutable global; volatile prevents constant folding so
@@ -31,6 +31,8 @@ pub fn fragmented_xdp(ctx: XdpContext) -> u32 {
     // the total length, including non-linear fragments.
     let size = unsafe { aya_ebpf::helpers::bpf_xdp_get_buff_len(ctx.ctx) } as u32;
     let _ = FEATURE_STATE.set(1, size, 0);
+    let linear = ctx.data_end().saturating_sub(ctx.data()) as u32;
+    let _ = FEATURE_STATE.set(2, linear, 0);
     xdp_action::XDP_PASS
 }
 // SAFETY: unique immutable kernel-required license symbol.
