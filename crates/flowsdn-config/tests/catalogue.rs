@@ -552,8 +552,16 @@ fn runtime_snapshot_retains_runtime_and_dynamic_classification() {
 #[test]
 fn explicit_socket_termination_false_overrides_daemon_default() {
     let schema = catalogue::partial_known_defaults_registry().unwrap();
-    let resolved = schema.resolve([Entry::new(Source::Flag, "bpf-lb-sock-terminate-pod-connections", "false")]).unwrap();
-    let value = resolved.get("bpf-lb-sock-terminate-pod-connections").unwrap();
+    let resolved = schema
+        .resolve([Entry::new(
+            Source::Flag,
+            "bpf-lb-sock-terminate-pod-connections",
+            "false",
+        )])
+        .unwrap();
+    let value = resolved
+        .get("bpf-lb-sock-terminate-pod-connections")
+        .unwrap();
     assert_eq!(value.value, Value::Bool(false));
     assert_eq!(value.source, Source::Flag);
 }

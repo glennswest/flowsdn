@@ -865,9 +865,15 @@ pub fn run(config_path: &Path) -> Result<()> {
         };
         let result = read_request(&mut stream).and_then(|request| {
             match (request.method.as_str(), request.target.as_str()) {
-                ("GET" | "POST", "/statedb/query" | "/v1/statedb/query") => health.query(&request.body).map(|body|(200,body)),
-                ("GET", "/health/modules" | "/v1/health/modules") => Ok((200,serde_json::to_vec(&health.modules()?)?)),
-                _ => api.handle(request).and_then(|(status,body)|Ok((status,serde_json::to_vec(&body)?))),
+                ("GET" | "POST", "/statedb/query" | "/v1/statedb/query") => {
+                    health.query(&request.body).map(|body| (200, body))
+                }
+                ("GET", "/health/modules" | "/v1/health/modules") => {
+                    Ok((200, serde_json::to_vec(&health.modules()?)?))
+                }
+                _ => api
+                    .handle(request)
+                    .and_then(|(status, body)| Ok((status, serde_json::to_vec(&body)?))),
             }
         });
         let (status, body) = match result {
@@ -877,7 +883,10 @@ pub fn run(config_path: &Path) -> Result<()> {
                     .downcast_ref::<Failure>()
                     .map(|e| e.status)
                     .unwrap_or(500);
-                (status, serde_json::to_vec(&json!({"code":status,"message":error.to_string()}))?)
+                (
+                    status,
+                    serde_json::to_vec(&json!({"code":status,"message":error.to_string()}))?,
+                )
             }
         };
         if let Err(error) = write_response(&mut stream, status, body) {

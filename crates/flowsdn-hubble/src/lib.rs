@@ -1,8 +1,8 @@
 //! Observer building blocks from specification 11. No server or perf reader.
+pub mod correlation;
 pub mod filters;
 pub mod monitor;
 pub mod ring;
-pub mod correlation;
 
 /// Producer identity, never the name of the compatibility target.
 pub const EMITTER_NAME: &str = "flowsdn";
@@ -20,7 +20,13 @@ pub struct AddressPreference {
 /// collapsing configuration provenance into defaulted booleans.
 pub const fn address_preference(global: Option<bool>, legacy: Option<bool>) -> AddressPreference {
     AddressPreference {
-        prefer_ipv6: match global { Some(value) => value, None => match legacy { Some(value) => value, None => false } },
+        prefer_ipv6: match global {
+            Some(value) => value,
+            None => match legacy {
+                Some(value) => value,
+                None => false,
+            },
+        },
         warn_deprecated: legacy.is_some(),
     }
 }

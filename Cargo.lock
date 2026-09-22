@@ -217,10 +217,12 @@ dependencies = [
  "flowsdn-bpf-loader",
  "flowsdn-cni",
  "flowsdn-connector",
+ "flowsdn-health",
  "flowsdn-ipam",
  "httparse",
  "nix",
  "serde_json",
+ "tokio",
  "uuid",
 ]
 
@@ -319,6 +321,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-hubble"
+version = "0.14.0"
+dependencies = [
+ "flowsdn-bpf-abi",
+]
+
+[[package]]
 name = "flowsdn-identity"
 version = "0.14.0"
 dependencies = [
@@ -330,6 +339,21 @@ dependencies = [
 [[package]]
 name = "flowsdn-ipam"
 version = "0.14.0"
+
+[[package]]
+name = "flowsdn-k8s"
+version = "0.14.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "flowsdn-operator"
+version = "0.14.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "flowsdn-policy"

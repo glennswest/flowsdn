@@ -11,5 +11,9 @@ pub const GATEWAY_OBJECT_PREFIX: &str = "cilium-gateway-";
 pub const INGRESS_OBJECT_PREFIX: &str = "cilium-ingress-";
 pub const SECRETS_NAMESPACE: &str = "cilium-secrets";
 pub const OPERATOR_ROUTES: &[&str] = &[
-    "/healthz", "/v1/healthz", "/v1/metrics/", "/v1/cluster", "/readyz",
+    "/healthz",
+    "/v1/healthz",
+    "/v1/metrics/",
+    "/v1/cluster",
+    "/readyz",
 ];

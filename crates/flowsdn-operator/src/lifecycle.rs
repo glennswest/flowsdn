@@ -9,7 +9,12 @@ pub enum State {
     Terminated,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Event { LeaseAcquired, DutiesStarted, LeadershipLost, DutyStartFailed }
+pub enum Event {
+    LeaseAcquired,
+    DutiesStarted,
+    LeadershipLost,
+    DutyStartFailed,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Action {
     StartLeaderScope,
@@ -22,16 +27,30 @@ pub enum Action {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InvalidTransition;
 #[derive(Debug, Default)]
-pub struct Lifecycle { state: State }
+pub struct Lifecycle {
+    state: State,
+}
 impl Lifecycle {
-    pub fn state(&self) -> State { self.state }
-    pub fn is_leader(&self) -> bool { self.state == State::Leading }
+    pub fn state(&self) -> State {
+        self.state
+    }
+    pub fn is_leader(&self) -> bool {
+        self.state == State::Leading
+    }
     pub fn transition(&mut self, event: Event) -> Result<Action, InvalidTransition> {
         let (state, action) = match (self.state, event) {
-            (State::Follower, Event::LeaseAcquired) => (State::StartingLeader, Action::StartLeaderScope),
-            (State::StartingLeader, Event::DutiesStarted) => (State::Leading, Action::PublishLeadership),
-            (State::StartingLeader | State::Leading, Event::LeadershipLost) => (State::Terminated, Action::CancelAndExit),
-            (State::StartingLeader, Event::DutyStartFailed) => (State::Terminated, Action::CancelReleaseAndExit),
+            (State::Follower, Event::LeaseAcquired) => {
+                (State::StartingLeader, Action::StartLeaderScope)
+            }
+            (State::StartingLeader, Event::DutiesStarted) => {
+                (State::Leading, Action::PublishLeadership)
+            }
+            (State::StartingLeader | State::Leading, Event::LeadershipLost) => {
+                (State::Terminated, Action::CancelAndExit)
+            }
+            (State::StartingLeader, Event::DutyStartFailed) => {
+                (State::Terminated, Action::CancelReleaseAndExit)
+            }
             _ => return Err(InvalidTransition),
         };
         self.state = state;

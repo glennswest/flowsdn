@@ -283,7 +283,10 @@ fn start_agent(binary: &Path, temp: &Temp) -> Result<Process> {
             .config()
             .is_ok_and(|r| r.status == 200)
         {
-            verify_health(&Client::new(temp.0.join("agent.sock"), Duration::from_secs(2)))?;
+            verify_health(&Client::new(
+                temp.0.join("agent.sock"),
+                Duration::from_secs(2),
+            ))?;
             return Ok(process);
         }
         ensure(
@@ -294,25 +297,59 @@ fn start_agent(binary: &Path, temp: &Temp) -> Result<Process> {
     }
 }
 fn verify_health(client: &Client) -> Result<()> {
-    let response = client.request(Method::Get, "/statedb/query", Some(&json!({
-        "table":"health", "index":"id", "key":"YWdlbnQ=", "lowerbound":true
-    })))?;
+    let response = client.request(
+        Method::Get,
+        "/statedb/query",
+        Some(&json!({
+            "table":"health", "index":"id", "key":"YWdlbnQ=", "lowerbound":true
+        })),
+    )?;
     ensure(response.status == 200, "health query status")?;
-    let rows: Vec<Value> = std::str::from_utf8(&response.body)?.lines()
-        .map(serde_json::from_str).collect::<std::result::Result<_,_>>()?;
+    let rows: Vec<Value> = std::str::from_utf8(&response.body)?
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<std::result::Result<_, _>>()?;
     ensure(rows.len() == 3, "health query row count")?;
     for row in &rows {
-        ensure(row.get("rev").and_then(Value::as_u64).is_some_and(|n| n > 0), "health revision")?;
-        ensure(row.pointer("/obj/ID/Module") == Some(&json!(["agent"])), "health identifier")?;
+        ensure(
+            row.get("rev")
+                .and_then(Value::as_u64)
+                .is_some_and(|n| n > 0),
+            "health revision",
+        )?;
+        ensure(
+            row.pointer("/obj/ID/Module") == Some(&json!(["agent"])),
+            "health identifier",
+        )?;
     }
-    ensure(rows.iter().any(|r| r.pointer("/obj/ID/Component") == Some(&json!(["controllers"]))
-        && r.pointer("/obj/Level") == Some(&json!("Degraded"))), "unimplemented controllers must report degraded")?;
+    ensure(
+        rows.iter().any(|r| {
+            r.pointer("/obj/ID/Component") == Some(&json!(["controllers"]))
+                && r.pointer("/obj/Level") == Some(&json!("Degraded"))
+        }),
+        "unimplemented controllers must report degraded",
+    )?;
     let modules = client.request(Method::Get, "/health/modules", None)?;
-    ensure(modules.status == 200 && modules.json.as_ref().and_then(Value::as_array).is_some_and(|v| v.len() == 3), "native health modules")?;
-    let unknown = client.request(Method::Get, "/statedb/query", Some(&json!({
-        "table":"secrets", "index":"id", "key":"", "lowerbound":true
-    })))?;
-    ensure(unknown.status == 404, "health route must not expose other tables")
+    ensure(
+        modules.status == 200
+            && modules
+                .json
+                .as_ref()
+                .and_then(Value::as_array)
+                .is_some_and(|v| v.len() == 3),
+        "native health modules",
+    )?;
+    let unknown = client.request(
+        Method::Get,
+        "/statedb/query",
+        Some(&json!({
+            "table":"secrets", "index":"id", "key":"", "lowerbound":true
+        })),
+    )?;
+    ensure(
+        unknown.status == 404,
+        "health route must not expose other tables",
+    )
 }
 fn exchange(from: &mut Endpoint, to: &mut Endpoint, v6: bool, allowed: bool) -> Result<()> {
     let payload = format!("agent-{}-{}-{v6}", from.id, to.id);

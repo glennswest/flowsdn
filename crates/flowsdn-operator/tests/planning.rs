@@ -1,4 +1,9 @@
-use flowsdn_operator::{ces::{Error, RateTable, Selection}, lifecycle::{Action, Event, Lifecycle, State}, readiness::{Observation, crd_plan, probes}, taints::{self, Taint}};
+use flowsdn_operator::{
+    ces::{Error, RateTable, Selection},
+    lifecycle::{Action, Event, Lifecycle, State},
+    readiness::{Observation, crd_plan, probes},
+    taints::{self, Taint},
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
@@ -6,13 +11,28 @@ fn leadership_loss_is_terminal_even_during_startup() {
     for started in [false, true] {
         let mut lifecycle = Lifecycle::default();
         assert!(!lifecycle.is_leader());
-        assert_eq!(lifecycle.transition(Event::LeaseAcquired), Ok(Action::StartLeaderScope));
-        if started { assert_eq!(lifecycle.transition(Event::DutiesStarted), Ok(Action::PublishLeadership)); }
+        assert_eq!(
+            lifecycle.transition(Event::LeaseAcquired),
+            Ok(Action::StartLeaderScope)
+        );
+        if started {
+            assert_eq!(
+                lifecycle.transition(Event::DutiesStarted),
+                Ok(Action::PublishLeadership)
+            );
+        }
         assert_eq!(lifecycle.is_leader(), started);
-        assert_eq!(lifecycle.transition(Event::LeadershipLost), Ok(Action::CancelAndExit));
+        assert_eq!(
+            lifecycle.transition(Event::LeadershipLost),
+            Ok(Action::CancelAndExit)
+        );
         assert_eq!(lifecycle.state(), State::Terminated);
         assert!(!lifecycle.is_leader());
-        for event in [Event::LeaseAcquired, Event::DutiesStarted, Event::LeadershipLost] {
+        for event in [
+            Event::LeaseAcquired,
+            Event::DutiesStarted,
+            Event::LeadershipLost,
+        ] {
             assert!(lifecycle.transition(event).is_err());
             assert_eq!(lifecycle.state(), State::Terminated);
         }
@@ -24,7 +44,10 @@ fn partial_duty_start_failure_requires_release_and_exit() {
     assert!(lifecycle.transition(Event::DutiesStarted).is_err());
     assert_eq!(lifecycle.state(), State::Follower);
     lifecycle.transition(Event::LeaseAcquired).expect("acquire");
-    assert_eq!(lifecycle.transition(Event::DutyStartFailed), Ok(Action::CancelReleaseAndExit));
+    assert_eq!(
+        lifecycle.transition(Event::DutyStartFailed),
+        Ok(Action::CancelReleaseAndExit)
+    );
     assert!(!lifecycle.is_leader());
     assert!(lifecycle.transition(Event::LeaseAcquired).is_err());
 }
@@ -66,7 +89,16 @@ fn crd_registration_and_disabled_kubernetes_are_distinct() {
 #[test]
 fn ces_unsorted_thresholds_select_boundaries_in_both_directions() {
     let table = RateTable::parse(r#"[{"nodes":25,"limit":16,"burst":32},{"nodes":5,"limit":5,"burst":10},{"nodes":15,"limit":11.5,"burst":22}]"#).expect("table");
-    for (count, expected) in [(0,5), (4,5), (5,5), (14,5), (15,15), (24,15), (25,25), (u64::MAX,25)] {
+    for (count, expected) in [
+        (0, 5),
+        (4, 5),
+        (5, 5),
+        (14, 5),
+        (15, 15),
+        (24, 15),
+        (25, 25),
+        (u64::MAX, 25),
+    ] {
         assert_eq!(table.select(count).nodes, expected);
     }
     let mut current = Selection::new(table);
@@ -79,7 +111,8 @@ fn ces_unsorted_thresholds_select_boundaries_in_both_directions() {
 }
 #[test]
 fn ces_single_step_and_reference_field_spelling() {
-    let table = RateTable::parse(r#"[{"Nodes":5,"Limit":15.5,"Burst":30}]"#).expect("reference spelling");
+    let table =
+        RateTable::parse(r#"[{"Nodes":5,"Limit":15.5,"Burst":30}]"#).expect("reference spelling");
     assert_eq!(table.select(0), table.select(u64::MAX));
     assert_eq!(table.select(0).limit, 15.5);
     assert_eq!(RateTable::default().select(0).burst, 20);
@@ -87,29 +120,67 @@ fn ces_single_step_and_reference_field_spelling() {
 }
 #[test]
 fn ces_rejects_invalid_tables_before_selection() {
-    for bad in ["", "null", "{}", "[]", "[null]", r#"[{"nodes":0,"limit":10,"burst":20,"unknown":1}]"#,
-        r#"[{"nodes":-1,"limit":10,"burst":20}]"#, r#"[{"nodes":0.5,"limit":10,"burst":20}]"#,
-        r#"[{"nodes":0,"limit":0,"burst":20}]"#, r#"[{"nodes":0,"limit":-2,"burst":20}]"#,
-        r#"[{"nodes":0,"limit":1e999,"burst":20}]"#, r#"[{"nodes":0,"limit":10,"burst":0}]"#,
-        r#"[{"nodes":0,"limit":10,"burst":4294967296}]"#, r#"[{"nodes":0,"limit":10}]"#,
+    for bad in [
+        "",
+        "null",
+        "{}",
+        "[]",
+        "[null]",
+        r#"[{"nodes":0,"limit":10,"burst":20,"unknown":1}]"#,
+        r#"[{"nodes":-1,"limit":10,"burst":20}]"#,
+        r#"[{"nodes":0.5,"limit":10,"burst":20}]"#,
+        r#"[{"nodes":0,"limit":0,"burst":20}]"#,
+        r#"[{"nodes":0,"limit":-2,"burst":20}]"#,
+        r#"[{"nodes":0,"limit":1e999,"burst":20}]"#,
+        r#"[{"nodes":0,"limit":10,"burst":0}]"#,
+        r#"[{"nodes":0,"limit":10,"burst":4294967296}]"#,
+        r#"[{"nodes":0,"limit":10}]"#,
         r#"[{"nodes":0,"limit":10,"burst":20}] {}"#,
         r#"[{"nodes":0,"Nodes":1,"limit":10,"burst":20}]"#,
         r#"[{"nodes":0,"nodes":1,"limit":10,"burst":20}]"#,
         r#"[{"nodes":0,"limit":10,"limit":20,"burst":20}]"#,
-        r#"[{"nodes":0,"limit":10,"burst":20,"burst":30}]"#] {
+        r#"[{"nodes":0,"limit":10,"burst":20,"burst":30}]"#,
+    ] {
         assert!(RateTable::parse(bad).is_err(), "{bad}");
     }
-    assert_eq!(RateTable::parse(r#"[{"nodes":0,"limit":10,"burst":20},{"nodes":0,"limit":20,"burst":40}]"#).expect_err("duplicate threshold"), Error::DuplicateThreshold);
+    assert_eq!(
+        RateTable::parse(
+            r#"[{"nodes":0,"limit":10,"burst":20},{"nodes":0,"limit":20,"burst":40}]"#
+        )
+        .expect_err("duplicate threshold"),
+        Error::DuplicateThreshold
+    );
 }
 #[test]
 fn taint_removal_matches_key_and_preserves_every_other_field() {
-    let make = |key: &str, effect: &str| Taint { key: key.into(), value: "true".into(), effect: effect.into() };
+    let make = |key: &str, effect: &str| Taint {
+        key: key.into(),
+        value: "true".into(),
+        effect: effect.into(),
+    };
     let other = make("other", "PreferNoSchedule");
-    let observed = vec![make(taints::AGENT_NOT_READY_KEY, "NoExecute"), other.clone(), make(taints::AGENT_NOT_READY_KEY, "NoSchedule")];
-    assert_eq!(taints::remove_not_ready(&observed, taints::AGENT_NOT_READY_KEY), vec![other]);
+    let observed = vec![
+        make(taints::AGENT_NOT_READY_KEY, "NoExecute"),
+        other.clone(),
+        make(taints::AGENT_NOT_READY_KEY, "NoSchedule"),
+    ];
+    assert_eq!(
+        taints::remove_not_ready(&observed, taints::AGENT_NOT_READY_KEY),
+        vec![other]
+    );
     assert_eq!(taints::remove_not_ready(&observed, "custom"), observed);
-    assert_eq!(taints::add_not_ready(&observed, taints::AGENT_NOT_READY_KEY), observed);
+    assert_eq!(
+        taints::add_not_ready(&observed, taints::AGENT_NOT_READY_KEY),
+        observed
+    );
     let custom = taints::add_not_ready(&observed, "custom");
-    assert_eq!(custom.last(), Some(&Taint { key: "custom".into(), value: String::new(), effect: "NoSchedule".into() }));
+    assert_eq!(
+        custom.last(),
+        Some(&Taint {
+            key: "custom".into(),
+            value: String::new(),
+            effect: "NoSchedule".into()
+        })
+    );
     assert_eq!(taints::remove_not_ready(&custom, "custom"), observed);
 }
