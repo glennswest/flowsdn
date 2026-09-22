@@ -28,7 +28,8 @@
 - Add LB input snapshots, pool ordering, socket eligibility, batch-delete
   progress handling and GKE/host-mark/migration contracts.
 - Audit pinned BPF helper symbols and add per-crate CI caching/change selection;
-  runner activation and live feature validation remain outstanding.
+  activate the trusted Linux runner and verify leaf-crate cache hits and BPF skip.
+  Live feature validation remains incomplete.
 
 - Add BGP framing, OPEN/UPDATE validation, strict-error handling and passive/status
   planning, with structural-error precedence regression tests.
