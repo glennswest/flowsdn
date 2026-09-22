@@ -169,7 +169,7 @@ impl Definition {
             | "bgp-status-report-prefixes" => {
                 "docs/spec/00-foundation-table-config.md#flowsdn-extension-keys"
             }
-            "envoy-access-log-buffer-size" => "docs/spec/16-l7-envoy-dns.md:1476",
+            "envoy-access-log-buffer-size" => "docs/spec/16-l7-envoy-dns.md:1500",
             "identity-allocation-mode" => "docs/spec/20-clustermesh-kvstore.md:1575",
             "agent-not-ready-taint-key" => "docs/spec/12-operator.md:1434",
             "bpf-lb-algorithm" => "docs/spec/05-service-loadbalancing.md:943",
@@ -178,7 +178,7 @@ impl Definition {
             "bpf-lb-maglev-table-size" => "docs/spec/05-service-loadbalancing.md:945",
             "bpf-lb-map-max" => "docs/spec/05-service-loadbalancing.md:934",
             "bpf-lb-mode" => "docs/spec/05-service-loadbalancing.md:940",
-            "bpf-map-event-buffers" => "docs/spec/03-identity-ipcache.md:961",
+            "bpf-map-event-buffers" => "docs/spec/03-identity-ipcache.md:965",
             "bpf-nat-global-max" => "docs/spec/04-conntrack-nat.md:807",
             "bpf-neigh-global-max" => "docs/spec/01-bpf-map-abi-loader.md:1064",
             "bpf-node-map-max" => "docs/spec/14-encryption-egress.md:1715",
@@ -188,7 +188,7 @@ impl Definition {
             "enable-bbr-hostns-only" => "docs/spec/10-node-routing-nftables.md:1383",
             "enable-dynamic-source-lookup-nodeport" => "docs/spec/05-service-loadbalancing.md:957",
             "enable-node-ipam" => "docs/spec/12-operator.md:1471",
-            "fixed-identity-mapping" => "docs/spec/03-identity-ipcache.md:946",
+            "fixed-identity-mapping" => "docs/spec/03-identity-ipcache.md:950",
             "gateway-api-secrets-namespace" => "docs/spec/21-gateway-api-ingress.md:1736",
             "hubble-drop-events-reasons" => "docs/spec/11-hubble-monitor.md:2548",
             "hubble-event-buffer-capacity" => "docs/spec/11-hubble-monitor.md:2499",
@@ -198,11 +198,11 @@ impl Definition {
             "hubble-tls-client-ca-files" => "docs/spec/11-hubble-monitor.md:2507",
             "hubble-tls-key-file" => "docs/spec/11-hubble-monitor.md:2506",
             "ingress-secrets-namespace" => "docs/spec/21-gateway-api-ingress.md:1753",
-            "ipam-multi-pool-pre-allocation" => "docs/spec/07-ipam.md:1254",
+            "ipam-multi-pool-pre-allocation" => "docs/spec/07-ipam.md:1265",
             "kvstore" => "docs/spec/20-clustermesh-kvstore.md:1533",
             "node-port-range" => "docs/spec/05-service-loadbalancing.md:936",
             "policy-secrets-namespace" => "docs/spec/12-operator.md:1468",
-            "policy-secrets-only-from-secrets-namespace" => "docs/spec/16-l7-envoy-dns.md:1499",
+            "policy-secrets-only-from-secrets-namespace" => "docs/spec/16-l7-envoy-dns.md:1523",
             "socket-path" => "docs/spec/08-endpoint-agent-api.md:1338",
             _ => SPECIFICATION,
         })
