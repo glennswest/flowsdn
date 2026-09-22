@@ -181,7 +181,7 @@ impl Definition {
             "bpf-map-event-buffers" => "docs/spec/03-identity-ipcache.md:965",
             "bpf-nat-global-max" => "docs/spec/04-conntrack-nat.md:807",
             "bpf-neigh-global-max" => "docs/spec/01-bpf-map-abi-loader.md:1064",
-            "bpf-node-map-max" => "docs/spec/14-encryption-egress.md:1715",
+            "bpf-node-map-max" => "docs/spec/14-encryption-egress.md:1749",
             "clustermesh-service-v2" => "docs/spec/20-clustermesh-kvstore.md:1574",
             "enable-bandwidth-manager" => "docs/spec/10-node-routing-nftables.md:1382",
             "enable-bbr" => "docs/spec/10-node-routing-nftables.md:1383",

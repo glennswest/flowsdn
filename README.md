@@ -67,6 +67,15 @@ read authorization and guarded ownership/lease plans. Deployment policy and
 bounded script diagnostics are also available. Live speakers, controllers,
 transactions and deployment adapters remain unfinished.
 
+Additional unreleased work includes Maglev tables, CIDR block allocation,
+WireGuard netlink fragmentation, Azure request/polling plans, offline ClusterMesh
+peer-bundle installation and a bounded access-log reader. BGP tests now exercise
+session transitions and exact error payloads. Policy tests replay reference seeds
+and compare independent kernel-entry lookups; the complete policy compiler is
+still unfinished. An [opt-in seccomp profile](deploy/seccomp/README.md) has passed
+the isolated agent lifecycle fixture on x86-64.
+
+
 | | |
 |---|---|
 | Specifications | 24 files, ~40k lines — every area, normative, with compatibility contracts and test plans |

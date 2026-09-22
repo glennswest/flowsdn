@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+- Preserve endpoint forwarding across agent downtime with pinned maps/TCX links,
+  ownership-checked restoration, durable intent recovery and duplicate-interface
+  rejection. Privileged tests block ordinary stack forwarding as a false positive.
+- Implement Maglev and CIDR block allocation with complete mapped upstream unit
+  categories; add policy seed replay and independent kernel-entry/authentication
+  checks while retaining the full policy compiler as unfinished work.
+- Add BGP encoding, bounded session/RIB state and exact notification diagnostics;
+  implement Azure ARM request/LRO plans and caller-controlled WireGuard fragments.
+- Add offline ClusterMesh peer-bundle installation, a peer-port NetworkPolicy,
+  a 16-KiB access-log reader and corrected HTTPS header/query projection.
+- Recover 68 legacy control-plane fixture files with 100 verified provenance
+  records; measure reference image binaries and validate the Rocky kernel config.
+- Verify Envoy map-name selection, AF_PACKET ingress direction, XDP fragments and
+  real IPv4/IPv6 cgroup socket hooks. Record unsupported kfunc relocation and
+  socket test-run paths instead of claiming capability from API presence.
+- Ship a trace-derived opt-in amd64 seccomp profile and enforce it against the
+  isolated agent lifecycle fixture. Full production/arm64 coverage remains open.
+
 - Add encryption/underlay validation and deterministic egress assignment plans.
 - Add proxy ACK publication barriers, DNS default resolution and authenticated
   ClusterMesh principal bindings with explicit runtime integration gaps.

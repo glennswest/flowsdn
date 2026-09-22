@@ -75,9 +75,9 @@ The completed Maglev and CIDRset unit-test ports provide two actual observations
 
 | Port | Rust test code lines | Static fixture lines | Pinned Go test lines | Code ratio | Code plus data ratio |
 |---|---:|---:|---:|---:|---:|
-| Maglev | 122 | 1 | 249 | 0.490 | 0.494 |
+| Maglev | 123 | 3 | 249 | 0.494 | 0.506 |
 | CIDRset | 193 | 55 | 764 | 0.253 | 0.325 |
-| Combined | **315** | **56** | **1013** | **315/1013 = 0.311** | **371/1013 = 0.366** |
+| Combined | **316** | **58** | **1013** | **316/1013 = 0.312** | **374/1013 = 0.369** |
 
 These are physical-line ratios for two algorithmic test ports, not engineering
 hours, a representative project sample, or a confidence interval. The Go Maglev
@@ -89,7 +89,7 @@ For sensitivity analysis only, retain the following explicit planning inputs:
 
 | Disposition | Conditional factor | Evidence or assumption |
 |---|---:|---|
-| port | 315/1013 code-only; 371/1013 including static data | Measured on the two ports above; applying either to other packages is an **unvalidated extrapolation**. |
+| port | 316/1013 code-only; 374/1013 including static data | Measured on the two ports above; applying either to other packages is an **unvalidated extrapolation**. |
 | harvest | ×0.10 | Unvalidated historical runner-size assumption. |
 | replace | ×0.35 | Unvalidated historical replacement-suite assumption. |
 | drop | ×0 | No test port in this disposition; no statement about implementation work. |
@@ -97,12 +97,12 @@ For sensitivity analysis only, retain the following explicit planning inputs:
 
 Using the disposition counts above, the arithmetic is reproducible:
 
-- Conditional port component: `188730 × 315 / 1013 = 58687.019` code lines,
-  or `188730 × 371 / 1013 = 69120.267` lines including static data.
+- Conditional port component: `188730 × 316 / 1013 = 58873.327` code lines,
+  or `188730 × 374 / 1013 = 69679.191` lines including static data.
 - Other modeled components: `31557 × 0.10 + 22161 × 0.35 + 18968 × 0.35
   = 17550.850` lines; these factors have not been calibrated.
-- Conditional totals, rounded only after summation: **76,238 code-only** or
-  **86,671 with the port component's static data included**. The latter is not
+- Conditional totals, rounded only after summation: **76,424 code-only** or
+  **87,230 with the port component's static data included**. The latter is not
   a complete fixture inventory: other disposition factors remain unchanged.
 
 These totals replace the old aggregate calculation as labeled planning
@@ -996,10 +996,10 @@ fastetcd at step 1, not step 12.** They are 2,280 Go test lines that answer
    (`pkg/maglev/maglev_test.go`, including its benchmark/harness) and 764
    (`pkg/ipam/cidrset/cidr_set_test.go`). The benchmark is not a unit-test
    requirement and has not been ported; no performance calibration is claimed.
-   Linux execution and Clippy passed. Formatted Rust test LOC: Maglev 122
-   plus 1 fixture line versus 249 Go lines (0.490 code-only; 0.494 including
+   Linux execution and Clippy passed. Formatted Rust test LOC: Maglev 123
+   plus 3 fixture lines versus 249 Go lines (0.494 code-only; 0.506 including
    data); CIDRset 193 plus 55 fixture lines versus 764 (0.253; 0.325).
-   Combined: 315 code lines / 1013 = 0.311; 371 including data / 1013 = 0.366.
+   Combined: 316 code lines / 1013 = 0.312; 374 including data / 1013 = 0.369.
    This observed two-module range replaces the unvalidated ×0.45 test-LOC
    assumption for these ports only. It is not a whole-project engineering
    time estimate; the original Maglev denominator includes an unported benchmark.
