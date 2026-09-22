@@ -77,7 +77,9 @@ fn decide(ordered: &[&Rule], port: u16, default_allow: bool) -> Decision {
     if winner.is_some() {
         Decision::Allow { proxy_ports }
     } else if passed.is_none() && default_allow {
-        Decision::Allow { proxy_ports: BTreeSet::from([0]) }
+        Decision::Allow {
+            proxy_ports: BTreeSet::from([0]),
+        }
     } else {
         Decision::Deny
     }

@@ -3,12 +3,12 @@
 use std::fmt;
 
 pub mod cidr;
-pub mod simulator;
 pub mod mapstate;
 pub mod named_ports;
 pub mod oracle;
 pub mod ports;
 pub mod repository;
+pub mod simulator;
 
 /// Frozen reference target; availability is a watcher responsibility.
 pub const KCNP_API_VERSION: &str = "policy.networking.k8s.io/v1alpha2";

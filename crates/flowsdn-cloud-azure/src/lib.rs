@@ -273,7 +273,7 @@ impl Poller {
         response: &Response,
     ) -> Result<Self, &'static str> {
         cloud.validate_url(&resource)?;
-        if !matches!(response.status, 200 | 201 | 202) {
+        if !matches!(response.status, 200..=202) {
             return Err("mutation not accepted");
         }
         let state = if let Some(url) = response.header("Azure-AsyncOperation")? {
