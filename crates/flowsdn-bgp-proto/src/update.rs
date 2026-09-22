@@ -173,16 +173,25 @@ pub fn validate(body: &[u8], four_octet_asn: bool) -> Result<Summary, ProtocolEr
     validate_detailed(body, four_octet_asn).map_err(|failure| failure.error)
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Failure { pub error: ProtocolError, pub data: Vec<u8> }
+pub struct Failure {
+    pub error: ProtocolError,
+    pub data: Vec<u8>,
+}
 pub fn validate_detailed(body: &[u8], four_octet_asn: bool) -> Result<Summary, Failure> {
     let mut data = Vec::new();
     validate_inner(body, four_octet_asn, &mut data).map_err(|error| {
-        if error.code != 3 || !matches!(error.subcode, 2|3|4|5|6|8|9) { data.clear(); }
+        if error.code != 3 || !matches!(error.subcode, 2 | 3 | 4 | 5 | 6 | 8 | 9) {
+            data.clear();
+        }
         data.truncate(crate::MAX_MESSAGE_LENGTH.saturating_sub(21));
         Failure { error, data }
     })
 }
-fn validate_inner(body: &[u8], four_octet_asn: bool, data: &mut Vec<u8>) -> Result<Summary, ProtocolError> {
+fn validate_inner(
+    body: &[u8],
+    four_octet_asn: bool,
+    data: &mut Vec<u8>,
+) -> Result<Summary, ProtocolError> {
     if body.len() > crate::MAX_MESSAGE_LENGTH.saturating_sub(crate::HEADER_LENGTH) {
         return Err(crate::framing(2));
     }
@@ -207,7 +216,12 @@ fn validate_inner(body: &[u8], four_octet_asn: bool, data: &mut Vec<u8>) -> Resu
         };
         let value = take(&mut attributes, length, 5, true)?;
         let consumed = raw.len().saturating_sub(attributes.len());
-        fields.push((flags, code, value, raw.get(..consumed).expect("consumed attribute")));
+        fields.push((
+            flags,
+            code,
+            value,
+            raw.get(..consumed).expect("consumed attribute"),
+        ));
     }
     data.clear();
     let withdrawn = prefixes(withdrawn_bytes, false)?;

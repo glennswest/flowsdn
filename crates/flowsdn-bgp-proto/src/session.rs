@@ -170,16 +170,30 @@ impl Session {
         notification: Option<(u8, u8)>,
         out: &mut Vec<Action>,
     ) -> Result<(), Error> {
-        let cause = notification.map(|(code, subcode)| if (code, subcode)==(2,1) {
-            crate::messages::Notification::unsupported_version()
-        } else { crate::messages::Notification {code,subcode,data:vec![]} });
-        self.reset_notification(now,cause,out)
+        let cause = notification.map(|(code, subcode)| {
+            if (code, subcode) == (2, 1) {
+                crate::messages::Notification::unsupported_version()
+            } else {
+                crate::messages::Notification {
+                    code,
+                    subcode,
+                    data: vec![],
+                }
+            }
+        });
+        self.reset_notification(now, cause, out)
     }
-    fn reset_notification(&mut self, now:u64, notification:Option<crate::messages::Notification>, out:&mut Vec<Action>)->Result<(),Error> {
+    fn reset_notification(
+        &mut self,
+        now: u64,
+        notification: Option<crate::messages::Notification>,
+        out: &mut Vec<Action>,
+    ) -> Result<(), Error> {
         let gr = self.negotiated.as_ref().and_then(|n| n.graceful.as_ref());
         let notifications = gr.is_some_and(|g| g.notifications);
         let hard = notification
-            .as_ref().is_some_and(|n| n.code == 6 && matches!(n.subcode, 2 | 3 | 4 | 9));
+            .as_ref()
+            .is_some_and(|n| n.code == 6 && matches!(n.subcode, 2 | 3 | 4 | 9));
         self.last_close = if gr.is_some() && !hard && (notification.is_none() || notifications) {
             CloseDisposition::PeerMayRetainExports
         } else {
@@ -412,18 +426,45 @@ impl Session {
     /// Consume one buffered wire message. None means more bytes are needed and
     /// leaves timers/state untouched; callers must continue polling timers.
     /// Fatal framing errors consume the supplied buffer and close this session.
-    pub fn receive(&mut self, generation:u64, bytes:&[u8], now:u64, entropy:u64) -> Result<Option<(Vec<Action>,usize)>,Error> {
+    pub fn receive(
+        &mut self,
+        generation: u64,
+        bytes: &[u8],
+        now: u64,
+        entropy: u64,
+    ) -> Result<Option<(Vec<Action>, usize)>, Error> {
         match crate::decode(bytes) {
-            Ok((frame,consumed)) => self.handle(Event::Message {generation,frame},now,entropy).map(|actions|Some((actions,consumed))),
+            Ok((frame, consumed)) => self
+                .handle(Event::Message { generation, frame }, now, entropy)
+                .map(|actions| Some((actions, consumed))),
             Err(crate::DecodeError::NeedMore) => Ok(None),
             Err(crate::DecodeError::Protocol(error)) => {
-                let mut next=self.clone(); let mut actions=Vec::new();
-                next.advance(now,entropy,&mut actions)?;
-                if generation==next.generation && matches!(next.state,State::OpenSent|State::OpenConfirm|State::Established) {
-                    let data=match error.subcode {2=>bytes.get(16..18).unwrap_or_default().to_vec(),3=>bytes.get(18..19).unwrap_or_default().to_vec(),_=>vec![]};
-                    next.reset_notification(now,Some(crate::messages::Notification{code:error.code,subcode:error.subcode,data}),&mut actions)?;
+                let mut next = self.clone();
+                let mut actions = Vec::new();
+                next.advance(now, entropy, &mut actions)?;
+                if generation == next.generation
+                    && matches!(
+                        next.state,
+                        State::OpenSent | State::OpenConfirm | State::Established
+                    )
+                {
+                    let data = match error.subcode {
+                        2 => bytes.get(16..18).unwrap_or_default().to_vec(),
+                        3 => bytes.get(18..19).unwrap_or_default().to_vec(),
+                        _ => vec![],
+                    };
+                    next.reset_notification(
+                        now,
+                        Some(crate::messages::Notification {
+                            code: error.code,
+                            subcode: error.subcode,
+                            data,
+                        }),
+                        &mut actions,
+                    )?;
                 }
-                *self=next; Ok(Some((actions,bytes.len())))
+                *self = next;
+                Ok(Some((actions, bytes.len())))
             }
         }
     }
@@ -437,8 +478,17 @@ impl Session {
         // Frame may be directly constructed by an adapter: enforce envelope
         // size and message minimums again before interpreting its body.
         if let Err(error) = crate::encode(frame.kind, frame.body) {
-            let length = u16::try_from(crate::HEADER_LENGTH.saturating_add(frame.body.len())).unwrap_or(u16::MAX);
-            self.reset_notification(now,Some(crate::messages::Notification {code:error.code,subcode:error.subcode,data:length.to_be_bytes().to_vec()}),out)?;
+            let length = u16::try_from(crate::HEADER_LENGTH.saturating_add(frame.body.len()))
+                .unwrap_or(u16::MAX);
+            self.reset_notification(
+                now,
+                Some(crate::messages::Notification {
+                    code: error.code,
+                    subcode: error.subcode,
+                    data: length.to_be_bytes().to_vec(),
+                }),
+                out,
+            )?;
             return Ok(());
         }
         if frame.kind == Kind::Notification {
@@ -471,18 +521,41 @@ impl Session {
                     });
                 }
                 Err(error) => {
-                    let mut error=error;
-                    if error.subcode==4 { error.subcode=open_parameter_subcode(frame.body); }
-                    let mut data=if error.subcode==1 {vec![0,4]} else {vec![]};
-                    if error.subcode==7 {
-                        for capability in self.config.local.capabilities.iter().filter(|c|c.code==1) {
+                    let mut error = error;
+                    if error.subcode == 4 {
+                        error.subcode = open_parameter_subcode(frame.body);
+                    }
+                    let mut data = if error.subcode == 1 {
+                        vec![0, 4]
+                    } else {
+                        vec![]
+                    };
+                    if error.subcode == 7 {
+                        for capability in self
+                            .config
+                            .local
+                            .capabilities
+                            .iter()
+                            .filter(|c| c.code == 1)
+                        {
                             data.push(capability.code);
-                            data.push(u8::try_from(capability.value.len()).map_err(|_|Error::InvalidConfig)?);
+                            data.push(
+                                u8::try_from(capability.value.len())
+                                    .map_err(|_| Error::InvalidConfig)?,
+                            );
                             data.extend_from_slice(&capability.value);
                         }
                     }
-                    self.reset_notification(now,Some(crate::messages::Notification{code:error.code,subcode:error.subcode,data}),out)?;
-                },
+                    self.reset_notification(
+                        now,
+                        Some(crate::messages::Notification {
+                            code: error.code,
+                            subcode: error.subcode,
+                            data,
+                        }),
+                        out,
+                    )?;
+                }
             }
             return Ok(());
         }
@@ -513,14 +586,22 @@ impl Session {
                             self.reset_hold(now)?;
                             out.push(Action::ObserveUpdate(summary));
                         }
-                        Err(failure) => match error_action(failure.error, self.config.strict_update_errors) {
-                            ErrorAction::NotifyAndClose => {
-                                self.reset_notification(now, Some(crate::messages::Notification {code:failure.error.code, subcode:failure.error.subcode, data:failure.data}), out)?
+                        Err(failure) => {
+                            match error_action(failure.error, self.config.strict_update_errors) {
+                                ErrorAction::NotifyAndClose => self.reset_notification(
+                                    now,
+                                    Some(crate::messages::Notification {
+                                        code: failure.error.code,
+                                        subcode: failure.error.subcode,
+                                        data: failure.data,
+                                    }),
+                                    out,
+                                )?,
+                                ErrorAction::CountLogAndDiscard => {
+                                    out.push(Action::DiscardUpdate(failure.error))
+                                }
                             }
-                            ErrorAction::CountLogAndDiscard => {
-                                out.push(Action::DiscardUpdate(failure.error))
-                            }
-                        },
+                        }
                     }
                     return Ok(());
                 }
@@ -548,7 +629,15 @@ impl Session {
             State::OpenConfirm => 2,
             _ => 3,
         };
-        self.reset_notification(now,Some(crate::messages::Notification{code:5,subcode,data:vec![frame.kind as u8]}),out)
+        self.reset_notification(
+            now,
+            Some(crate::messages::Notification {
+                code: 5,
+                subcode,
+                data: vec![frame.kind as u8],
+            }),
+            out,
+        )
     }
 }
 /// For two unestablished connections, retain the one initiated by the speaker
@@ -565,21 +654,40 @@ pub fn retain_outbound(local: Ipv4Addr, peer: Ipv4Addr) -> Option<bool> {
 /// an unrecognized complete parameter is Unsupported Optional Parameter (4).
 /// Decode each bounded prefix so earlier malformed capability content takes
 /// precedence over a later unknown parameter. OPEN options are at most255bytes.
-fn open_parameter_subcode(body:&[u8])->u8 {
-    let Some(length)=body.get(9).copied() else{return 0;};
-    if body.len()!=10+usize::from(length){return 0;}
-    let mut offset=10;
-    while offset<body.len() {
-        let Some(kind)=body.get(offset).copied() else{return 0;};
-        let Some(length)=body.get(offset+1).copied() else{return 0;};
-        let end=offset+2+usize::from(length);
-        let Some(prefix)=body.get(..end) else{return 0;};
-        if kind!=2{return 4;}
-        let mut prefix=prefix.to_vec();
-        let Some(total)=prefix.get_mut(9) else{return 0;};
-        let Ok(length)=u8::try_from(end-10) else{return 0;};*total=length;
-        if Open::decode(&prefix).is_err(){return 0;}
-        offset=end;
+fn open_parameter_subcode(body: &[u8]) -> u8 {
+    let Some(length) = body.get(9).copied() else {
+        return 0;
+    };
+    if body.len() != 10 + usize::from(length) {
+        return 0;
+    }
+    let mut offset = 10;
+    while offset < body.len() {
+        let Some(kind) = body.get(offset).copied() else {
+            return 0;
+        };
+        let Some(length) = body.get(offset.saturating_add(1)).copied() else {
+            return 0;
+        };
+        let end = offset.saturating_add(2).saturating_add(usize::from(length));
+        let Some(prefix) = body.get(..end) else {
+            return 0;
+        };
+        if kind != 2 {
+            return 4;
+        }
+        let mut prefix = prefix.to_vec();
+        let Some(total) = prefix.get_mut(9) else {
+            return 0;
+        };
+        let Ok(length) = u8::try_from(end.saturating_sub(10)) else {
+            return 0;
+        };
+        *total = length;
+        if Open::decode(&prefix).is_err() {
+            return 0;
+        }
+        offset = end;
     }
     0
 }

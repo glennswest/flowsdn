@@ -137,7 +137,8 @@ fn packet(size: usize, port: u16, tag: u8) -> Result<Vec<u8>> {
         .get_mut(..14)
         .ok_or("Ethernet header")?
         .copy_from_slice(&[2, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 2, 8, 0]);
-    let [hi, lo] = u16::try_from(size - 14)?.to_be_bytes();
+    let [hi, lo] =
+        u16::try_from(size.checked_sub(14).ok_or("short Ethernet frame")?)?.to_be_bytes();
     let header = frame.get_mut(14..34).ok_or("IPv4 header")?;
     header.copy_from_slice(&[
         0x45, 0, hi, lo, 0, 0, 0, 0, 64, 17, 0, 0, 192, 0, 2, 2, 192, 0, 2, 1,
@@ -145,10 +146,14 @@ fn packet(size: usize, port: u16, tag: u8) -> Result<Vec<u8>> {
     let mut checksum = 0_u32;
     for pair in header.chunks_exact(2) {
         let pair = <[u8; 2]>::try_from(pair)?;
-        checksum += u32::from(u16::from_be_bytes(pair));
+        checksum = checksum
+            .checked_add(u32::from(u16::from_be_bytes(pair)))
+            .ok_or("checksum overflow")?;
     }
     while checksum > 0xffff {
-        checksum = (checksum & 0xffff) + (checksum >> 16);
+        checksum = (checksum & 0xffff)
+            .checked_add(checksum >> 16)
+            .ok_or("checksum overflow")?;
     }
     header
         .get_mut(10..12)
@@ -162,10 +167,9 @@ fn packet(size: usize, port: u16, tag: u8) -> Result<Vec<u8>> {
         .get_mut(36..38)
         .ok_or("destination port")?
         .copy_from_slice(&port.to_be_bytes());
-    frame
-        .get_mut(38..40)
-        .ok_or("UDP length")?
-        .copy_from_slice(&u16::try_from(size - 34)?.to_be_bytes());
+    frame.get_mut(38..40).ok_or("UDP length")?.copy_from_slice(
+        &u16::try_from(size.checked_sub(34).ok_or("short UDP frame")?)?.to_be_bytes(),
+    );
     frame.get_mut(42..).ok_or("payload")?.fill(tag);
     Ok(frame)
 }

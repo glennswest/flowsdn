@@ -476,57 +476,174 @@ fn terminal_connect_callback_revokes_attempt_before_late_success_or_failure() {
     }
 }
 
-fn notification_body(actions:&[Action])->Vec<u8> {
-    actions.iter().find_map(|a| if let Action::Send{kind:Kind::Notification,body}=a {Some(body.clone())}else{None}).expect("NOTIFICATION")
+fn notification_body(actions: &[Action]) -> Vec<u8> {
+    actions
+        .iter()
+        .find_map(|a| {
+            if let Action::Send {
+                kind: Kind::Notification,
+                body,
+            } = a
+            {
+                Some(body.clone())
+            } else {
+                None
+            }
+        })
+        .expect("NOTIFICATION")
 }
 #[test]
 fn raw_header_error_data_and_fragment_buffering() {
-    for (length,kind,expected) in [(18u16,4u8,vec![1,2,0,18]),(4097,4,vec![1,2,16,1]),(19,99,vec![1,3,99])] {
-        let mut session=established(config(),30);
-        let mut wire=vec![255;16];wire.extend_from_slice(&length.to_be_bytes());wire.push(kind);
-        let (actions,consumed)=session.receive(session.generation(),&wire,10,0).expect("receive").expect("complete header");
-        assert_eq!(notification_body(&actions),expected);assert_eq!(consumed,19);assert_eq!(session.state(),State::Idle);
+    for (length, kind, expected) in [
+        (18u16, 4u8, vec![1, 2, 0, 18]),
+        (4097, 4, vec![1, 2, 16, 1]),
+        (19, 99, vec![1, 3, 99]),
+    ] {
+        let mut session = established(config(), 30);
+        let mut wire = vec![255; 16];
+        wire.extend_from_slice(&length.to_be_bytes());
+        wire.push(kind);
+        let (actions, consumed) = session
+            .receive(session.generation(), &wire, 10, 0)
+            .expect("receive")
+            .expect("complete header");
+        assert_eq!(notification_body(&actions), expected);
+        assert_eq!(consumed, 19);
+        assert_eq!(session.state(), State::Idle);
     }
-    let mut session=established(config(),30);
-    let bytes=encode(Kind::Keepalive,&[]).expect("keepalive");let before=session.deadlines();
-    assert!(session.receive(session.generation(),bytes.get(..18).expect("partial"),10,0).expect("need more").is_none());
-    assert_eq!(session.deadlines(),before);
-    assert_eq!(session.receive(session.generation(),&bytes,10,0).expect("complete").expect("frame").1,19);
+    let mut session = established(config(), 30);
+    let bytes = encode(Kind::Keepalive, &[]).expect("keepalive");
+    let before = session.deadlines();
+    assert!(
+        session
+            .receive(
+                session.generation(),
+                bytes.get(..18).expect("partial"),
+                10,
+                0
+            )
+            .expect("need more")
+            .is_none()
+    );
+    assert_eq!(session.deadlines(), before);
+    assert_eq!(
+        session
+            .receive(session.generation(), &bytes, 10, 0)
+            .expect("complete")
+            .expect("frame")
+            .1,
+        19
+    );
 }
 #[test]
 fn strict_update_diagnostics_reach_the_session_wire() {
-    let mut cfg=config();cfg.strict_update_errors=true;
-    let mut session=established(cfg,30);
-    let body=[0,0,0,4,0x40,1,1,9];
-    assert_eq!(notification_body(&message(&mut session,Kind::Update,&body,10)),[3,6,0x40,1,1,9]);
-    assert_eq!(session.state(),State::Idle);
+    let mut cfg = config();
+    cfg.strict_update_errors = true;
+    let mut session = established(cfg, 30);
+    let body = [0, 0, 0, 4, 0x40, 1, 1, 9];
+    assert_eq!(
+        notification_body(&message(&mut session, Kind::Update, &body, 10)),
+        [3, 6, 0x40, 1, 1, 9]
+    );
+    assert_eq!(session.state(), State::Idle);
 }
 #[test]
 fn fsm_unexpected_message_data_in_each_open_state() {
-    for phase in [0,1,2] {
-        let mut session=Session::new(config()).expect("session");session.handle(Event::Start,0,0).expect("start");
-        session.handle(Event::TcpEstablished{generation:session.generation(),inbound:false},1,0).expect("connect");
-        if phase>0 {message(&mut session,Kind::Open,&peer(30),2);}
-        if phase>1 {message(&mut session,Kind::Keepalive,&[],3);}
-        let (kind,body,expected)=match phase {0=>(Kind::Keepalive,vec![],vec![5,1,4]),1=>(Kind::Update,vec![0,0,0,0],vec![5,2,2]),_=>(Kind::Open,peer(30),vec![5,3,1])};
-        assert_eq!(notification_body(&message(&mut session,kind,&body,4)),expected);
+    for phase in [0, 1, 2] {
+        let mut session = Session::new(config()).expect("session");
+        session.handle(Event::Start, 0, 0).expect("start");
+        session
+            .handle(
+                Event::TcpEstablished {
+                    generation: session.generation(),
+                    inbound: false,
+                },
+                1,
+                0,
+            )
+            .expect("connect");
+        if phase > 0 {
+            message(&mut session, Kind::Open, &peer(30), 2);
+        }
+        if phase > 1 {
+            message(&mut session, Kind::Keepalive, &[], 3);
+        }
+        let (kind, body, expected) = match phase {
+            0 => (Kind::Keepalive, vec![], vec![5, 1, 4]),
+            1 => (Kind::Update, vec![0, 0, 0, 0], vec![5, 2, 2]),
+            _ => (Kind::Open, peer(30), vec![5, 3, 1]),
+        };
+        assert_eq!(
+            notification_body(&message(&mut session, kind, &body, 4)),
+            expected
+        );
     }
 }
 #[test]
 fn unsupported_capability_reports_required_tlv() {
-    let mut session=Session::new(config()).expect("session");session.handle(Event::Start,0,0).expect("start");
-    session.handle(Event::TcpEstablished{generation:session.generation(),inbound:false},1,0).expect("connect");
-    let other=local_open(65001,30,Ipv4Addr::new(192,0,2,2),&BTreeSet::from([Family::IPV6])).expect("peer").encode().expect("OPEN");
-    assert_eq!(notification_body(&message(&mut session,Kind::Open,&other,2)),[2,7,1,4,0,1,0,1]);
+    let mut session = Session::new(config()).expect("session");
+    session.handle(Event::Start, 0, 0).expect("start");
+    session
+        .handle(
+            Event::TcpEstablished {
+                generation: session.generation(),
+                inbound: false,
+            },
+            1,
+            0,
+        )
+        .expect("connect");
+    let other = local_open(
+        65001,
+        30,
+        Ipv4Addr::new(192, 0, 2, 2),
+        &BTreeSet::from([Family::IPV6]),
+    )
+    .expect("peer")
+    .encode()
+    .expect("OPEN");
+    assert_eq!(
+        notification_body(&message(&mut session, Kind::Open, &other, 2)),
+        [2, 7, 1, 4, 0, 1, 0, 1]
+    );
 }
 
 #[test]
 fn malformed_recognized_open_parameter_differs_from_unknown_parameter() {
-    for (options,subcode) in [(vec![2,1,1],0),(vec![99,1,0],4),(vec![2,1,1,99,1,0],0)] {
-        let mut session=Session::new(config()).expect("session");session.handle(Event::Start,0,0).expect("start");
-        session.handle(Event::TcpEstablished{generation:session.generation(),inbound:false},1,0).expect("connect");
-        let mut body=vec![4,0xfd,0xe9,0,30,192,0,2,2,u8::try_from(options.len()).expect("bounded")];body.extend(options);
-        assert_eq!(notification_body(&message(&mut session,Kind::Open,&body,2)),[2,subcode]);
-        assert_eq!(session.state(),State::Idle);
+    for (options, subcode) in [
+        (vec![2, 1, 1], 0),
+        (vec![99, 1, 0], 4),
+        (vec![2, 1, 1, 99, 1, 0], 0),
+    ] {
+        let mut session = Session::new(config()).expect("session");
+        session.handle(Event::Start, 0, 0).expect("start");
+        session
+            .handle(
+                Event::TcpEstablished {
+                    generation: session.generation(),
+                    inbound: false,
+                },
+                1,
+                0,
+            )
+            .expect("connect");
+        let mut body = vec![
+            4,
+            0xfd,
+            0xe9,
+            0,
+            30,
+            192,
+            0,
+            2,
+            2,
+            u8::try_from(options.len()).expect("bounded"),
+        ];
+        body.extend(options);
+        assert_eq!(
+            notification_body(&message(&mut session, Kind::Open, &body, 2)),
+            [2, subcode]
+        );
+        assert_eq!(session.state(), State::Idle);
     }
 }
