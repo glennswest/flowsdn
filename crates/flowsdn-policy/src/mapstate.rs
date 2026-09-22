@@ -49,7 +49,7 @@ fn compare(left: &Rule, right: &Rule) -> std::cmp::Ordering {
         })
         .then_with(|| rank(right).cmp(&rank(left)))
 }
-fn decide(ordered: &[&Rule], port: u16) -> Decision {
+fn decide(ordered: &[&Rule], port: u16, default_allow: bool) -> Decision {
     let mut passed: Option<Tier> = None;
     let mut winner: Option<&Rule> = None;
     let mut proxy_ports = BTreeSet::new();
@@ -76,12 +76,17 @@ fn decide(ordered: &[&Rule], port: u16) -> Decision {
     }
     if winner.is_some() {
         Decision::Allow { proxy_ports }
+    } else if passed.is_none() && default_allow {
+        Decision::Allow { proxy_ports: BTreeSet::from([0]) }
     } else {
         Decision::Deny
     }
 }
 impl MapState {
     pub fn compile(rules: &[Rule]) -> Result<Self, Error> {
+        Self::compile_with_default(rules, false)
+    }
+    pub fn compile_with_default(rules: &[Rule], default_allow: bool) -> Result<Self, Error> {
         validate_subject(rules)?;
         if rules.iter().any(|rule| rule.authentication.is_some()) {
             return Err(Error::OracleAuthenticationUnsupported);
@@ -129,7 +134,7 @@ impl MapState {
                         let first = u16::try_from(first).map_err(|_| Error::InvalidPortRange)?;
                         let last = u16::try_from(end.saturating_sub(1))
                             .map_err(|_| Error::InvalidPortRange)?;
-                        let decision = decide(&candidates, first);
+                        let decision = decide(&candidates, first, default_allow);
                         if let Some(previous) = intervals
                             .last_mut()
                             .filter(|previous| previous.decision == decision)

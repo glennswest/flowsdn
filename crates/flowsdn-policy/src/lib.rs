@@ -3,6 +3,7 @@
 use std::fmt;
 
 pub mod cidr;
+pub mod simulator;
 pub mod mapstate;
 pub mod named_ports;
 pub mod oracle;

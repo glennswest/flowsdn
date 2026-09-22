@@ -1919,14 +1919,33 @@ Closed design choices do not claim Kubernetes, REST or datapath integration.
     identity/protocol classes. Signed-zero priorities and equal redirect candidates
     are regression cases. These gates must pass for interval coalescing changes.
 
+    A selected-subject frontend now handles equality-conjunction label selectors,
+    nil/no-match versus wildcard peers, direction selection and default-deny.
+    Numeric ranges and TCP/UDP named ports resolve against the destination
+    endpoint; absent named ports match nothing. Endpoint label/named-port changes
+    require recompilation. Unknown selected identities are bounded by the supplied
+    endpoint snapshot; this API is not a Kubernetes selector parser or watcher.
+    Its direct flow evaluator scans selected entries without calling frontend
+    compilation. The compiled frontend expands identity sets into the independent
+    interval compiler. A subject map refuses lookups for the opposite direction.
+    No matched entries with default-deny disabled means allow, while matching Pass
+    entries that exhaust all tiers mean deny; an unconditional default-allow rule
+    would incorrectly conflate these cases.
+
+    All 27 already-harvested FuzzDistillPolicy seeds are now decoded by the Rust
+    integration test and replayed through both frontend paths, including reversed
+    rule order and eight deterministic bit mutations per seed. Another 128 generated
+    byte streams include empty policies and ignored odd tail bytes. These are
+    mandatory normal `cargo test -p flowsdn-policy` tests, not a claim of sustained
+    coverage-guided fuzzing. Frontend/index optimizations must pass both these and
+    the exhaustive resolved-policy gates above.
+
     This index is not the kernel LPM mapstate of §§5.4–5.8. Authentication
-    inheritance, aggregate identities, cookies/origins, selectors/default-deny
-    synthesis, named-port integration, 27 reference seeds, and sustained fuzz
-    comparison against the complete kernel-map builder remain outstanding.
-    Both current paths explicitly reject authentication, rather than treating
-    matching unsupported errors as evidence of semantic equality. Closing #103
-    requires those remaining gates; local resolved-policy comparisons do not
-    establish Kubernetes policy enforcement.
+    inheritance, aggregate identities, cookies/origins, full selector import,
+    and sustained fuzz comparison against the complete kernel-map builder remain
+    outstanding. Both resolved paths explicitly reject authentication. #103 remains
+    open for that complete gate; replay of the harvested seeds establishes only
+    the stated simulator/frontend domain, not Kubernetes policy enforcement.
 
 ### Simulator source clarification
 
@@ -1935,7 +1954,17 @@ Pinned-reference review for #103 (`7d68cfb394`,
 subject/direction rules and derives default-deny, then resolves peers and ports
 before tier/priority/verdict ordering. It treats nil peers as matching nothing,
 empty peers as matching everything, and Pass as skipping the rest of its tier.
-The current Rust `Rule` domain starts after subject/peer/named-port resolution
-and expects synthesized defaults explicitly. That missing frontend must not be
-hidden by calling the interval index a complete simulator port. Source was read
-to resolve scope ambiguity; no reference implementation code was copied.
+The low-level Rust `Rule` domain starts after subject/peer/named-port resolution.
+The `simulator` frontend supplies the bounded label/port resolution above and a
+separate default policy input to the interval index. Source was read to resolve
+scope ambiguity; no reference implementation code was copied.
+
+The pinned seed byte format consumes two bytes per entry and ignores an odd tail.
+The second byte's low two bits select Admin(0), Baseline(2), or Normal(1/3);
+the remaining six bits encode priority. The first byte's low two bits select
+wildcard, name=b, name=c, or namespace=default. Bits2–4 select wildcard,
+4–7, 4–5, 6–7, or one port4/5/6/7 (TCP for nonwildcard). Bits5–6 select
+Allow(0), Deny(1), or Pass(2/3). All entries select subject name=a, egress,
+and default-deny. This describes the data format of
+`pkg/policy/simulate_fuzz_test.go::makeFuzzEntries`, not its executable code.
+Original corpus provenance remains in `tests/fuzz/SEEDS.md` and `NOTICE`.
