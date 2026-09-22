@@ -1,0 +1,362 @@
+{
+  "commands": [
+    "add-device",
+    "add-initializer",
+    "add-owner",
+    "add-route",
+    "addr/add",
+    "allocator/allocated-pools",
+    "bgp/peers",
+    "bgp/route-policies",
+    "bgp/routes",
+    "cat",
+    "cmp",
+    "config/add",
+    "config/delete",
+    "cp",
+    "db",
+    "db/cmp",
+    "db/delete",
+    "db/empty",
+    "db/get",
+    "db/initialized",
+    "db/insert",
+    "db/list",
+    "db/prefix",
+    "db/show",
+    "echo",
+    "egress/policy-maps-dump",
+    "empty",
+    "endpoint/create",
+    "endpoint/delete",
+    "endpoint/regen-all",
+    "endpoint/wait-for-policy-revision",
+    "env",
+    "envoy/cmp",
+    "event/send",
+    "example/counts",
+    "example/hello",
+    "exec",
+    "exporters/count",
+    "file/exists",
+    "file/read",
+    "finish-initializer",
+    "forwardable-ip/finish-initializer",
+    "forwardable-ip/register-initializer",
+    "gobgp/add-peer",
+    "gobgp/add-server",
+    "gobgp/advertise-route",
+    "gobgp/delete-server",
+    "gobgp/peers",
+    "gobgp/routes",
+    "gobgp/wait-state",
+    "grep",
+    "health",
+    "health/history",
+    "health/ok",
+    "hive",
+    "hive/recreate",
+    "hive/start",
+    "hive/stop",
+    "http/get",
+    "identity/allocate",
+    "ipam/allocate",
+    "ipam/dump",
+    "ipam/restore-endpoint",
+    "ipam/restore-finished",
+    "ipam/start",
+    "k8s/add",
+    "k8s/delete",
+    "k8s/get",
+    "k8s/list",
+    "k8s/resync",
+    "k8s/summary",
+    "k8s/svc/update-status",
+    "k8s/update",
+    "kvstore/delete",
+    "kvstore/list",
+    "kvstore/update",
+    "lb/maps-dump",
+    "lb/maps-empty",
+    "lb/maps-restore",
+    "lb/maps-snapshot",
+    "lb/prune",
+    "link/add",
+    "link/del",
+    "link/set",
+    "metrics",
+    "metrics/html",
+    "metrics/plot",
+    "mv",
+    "netns/create",
+    "policy/import",
+    "policy/lookup-flow",
+    "policy/remove",
+    "policyrepo/selectorcache",
+    "reconciler/cleanup",
+    "reconciler/init",
+    "reconciler/reconcile",
+    "remove-owner",
+    "replace",
+    "route/add",
+    "route/del",
+    "route/list",
+    "route/replace",
+    "sed",
+    "set-node-labels",
+    "skiplbmap",
+    "sleep",
+    "stdout",
+    "stop",
+    "subnet/map-dump",
+    "svc/set-proxy-redirect",
+    "sysctl/set",
+    "test/bpfops-reset",
+    "test/bpfops-summary",
+    "test/init-wait",
+    "test/set-is-service-healthchecked",
+    "test/set-node-ip",
+    "test/set-node-labels",
+    "test/update-backend-health"
+  ],
+  "files": 168,
+  "flags_outside_agent_catalogue": [
+    "enable-cluster-pool-to-multi-pool-migration",
+    "enable-example",
+    "probe-tcp-md5",
+    "synchronize-k8s-nodes",
+    "test-peering-ips",
+    "use-kernel-managed-arp-ping"
+  ],
+  "naming_rewrites": [],
+  "note": "Unknown startup flags require area-fixture classification, not automatic renaming. Commands are syntax-inventoried, not claimed implemented. Embedded data is preserved.",
+  "preserved_cilium_symbols": [
+    "cilium_bpf_map_pressure",
+    "cilium_ipcache_v2",
+    "cilium_neighbor_entry_refresh_count"
+  ],
+  "reference": "7d68cfb394",
+  "startup_flags": {
+    "bpf-lb-algorithm": [
+      "tests/scripttest/corpus/loadbalancer/clusterip-allowed.txtar",
+      "tests/scripttest/corpus/loadbalancer/dualstack-maglev.txtar",
+      "tests/scripttest/corpus/loadbalancer/endpointslice-weight.txtar",
+      "tests/scripttest/corpus/loadbalancer/external-clusterip.txtar",
+      "tests/scripttest/corpus/loadbalancer/graceful-termination.txtar",
+      "tests/scripttest/corpus/loadbalancer/nodeport-explicit-random.txtar",
+      "tests/scripttest/corpus/loadbalancer/nodeport-maglev.txtar"
+    ],
+    "bpf-lb-algorithm-annotation": [
+      "tests/scripttest/corpus/loadbalancer/nodeport-explicit-maglev.txtar",
+      "tests/scripttest/corpus/loadbalancer/nodeport-explicit-random.txtar"
+    ],
+    "bpf-lb-enable-wildcard-entries": [
+      "tests/scripttest/corpus/loadbalancer/loadbalancer-disabled-wildcards.txtar"
+    ],
+    "bpf-lb-external-clusterip": [
+      "tests/scripttest/corpus/loadbalancer/clusterip-allowed.txtar",
+      "tests/scripttest/corpus/loadbalancer/clusterip.txtar",
+      "tests/scripttest/corpus/loadbalancer/endpointslice-weight.txtar",
+      "tests/scripttest/corpus/loadbalancer/external-clusterip.txtar",
+      "tests/scripttest/corpus/loadbalancer/graceful-termination.txtar"
+    ],
+    "bpf-lb-map-max": [
+      "tests/scripttest/corpus/loadbalancer/dualstack-maglev.txtar"
+    ],
+    "bpf-lb-mode": [
+      "tests/scripttest/corpus/loadbalancer/hybrid-dsr.txtar"
+    ],
+    "bpf-lb-mode-annotation": [
+      "tests/scripttest/corpus/loadbalancer/svc-forwarding-mode-annotation.txtar"
+    ],
+    "bpf-lb-source-range-all-types": [
+      "tests/scripttest/corpus/loadbalancer/source-ranges-all.txtar"
+    ],
+    "cluster-id": [
+      "tests/scripttest/corpus/clustermesh-agent/clusterservice-multiport.txtar",
+      "tests/scripttest/corpus/clustermesh-agent/clusterservice-without-local-eps.txtar",
+      "tests/scripttest/corpus/clustermesh-agent/clusterservice.txtar",
+      "tests/scripttest/corpus/clustermesh-agent/service-affinity.txtar",
+      "tests/scripttest/corpus/clustermesh/ciliumendpoints.txtar",
+      "tests/scripttest/corpus/clustermesh/ciliumendpointslices.txtar",
+      "tests/scripttest/corpus/clustermesh/ciliumidentitites.txtar",
+      "tests/scripttest/corpus/clustermesh/ciliumnodes.txtar",
+      "tests/scripttest/corpus/clustermesh/clusterconfig-endpointslices-only.txtar",
+      "tests/scripttest/corpus/clustermesh/clusterconfig-serviceexport.txtar",
+      "tests/scripttest/corpus/clustermesh/clusterconfig.txtar",
+      "tests/scripttest/corpus/clustermesh/globalnamespace.txtar",
+      "tests/scripttest/corpus/clustermesh/serviceexports-crd-upgrade.txtar",
+      "tests/scripttest/corpus/operator-watchers/endpointslice-export-sync.txtar",
+      "tests/scripttest/corpus/operator-watchers/globalnamespace-services.txtar",
+      "tests/scripttest/corpus/operator-watchers/servicesync.txtar"
+    ],
+    "cluster-name": [
+      "tests/scripttest/corpus/clustermesh-agent/clusterservice-multiport.txtar",
+      "tests/scripttest/corpus/clustermesh-agent/clusterservice-without-local-eps.txtar",
+      "tests/scripttest/corpus/clustermesh-agent/clusterservice.txtar",
+      "tests/scripttest/corpus/clustermesh-agent/service-affinity.txtar",
+      "tests/scripttest/corpus/clustermesh/ciliumendpoints.txtar",
+      "tests/scripttest/corpus/clustermesh/ciliumendpointslices.txtar",
+      "tests/scripttest/corpus/clustermesh/ciliumidentitites.txtar",
+      "tests/scripttest/corpus/clustermesh/ciliumnodes.txtar",
+      "tests/scripttest/corpus/clustermesh/clusterconfig-endpointslices-only.txtar",
+      "tests/scripttest/corpus/clustermesh/clusterconfig-serviceexport.txtar",
+      "tests/scripttest/corpus/clustermesh/clusterconfig.txtar",
+      "tests/scripttest/corpus/clustermesh/globalnamespace.txtar",
+      "tests/scripttest/corpus/clustermesh/serviceexports-crd-upgrade.txtar",
+      "tests/scripttest/corpus/nodes-gc/disabled.txtar",
+      "tests/scripttest/corpus/nodes-gc/enabled.txtar",
+      "tests/scripttest/corpus/operator-watchers/endpointslice-export-sync.txtar",
+      "tests/scripttest/corpus/operator-watchers/globalnamespace-services.txtar",
+      "tests/scripttest/corpus/operator-watchers/servicesync.txtar"
+    ],
+    "clustermesh-default-global-namespace": [
+      "tests/scripttest/corpus/clustermesh/globalnamespace.txtar",
+      "tests/scripttest/corpus/operator-watchers/globalnamespace-services.txtar"
+    ],
+    "clustermesh-enable-mcs-api": [
+      "tests/scripttest/corpus/clustermesh/clusterconfig-serviceexport.txtar",
+      "tests/scripttest/corpus/clustermesh/serviceexports-crd-upgrade.txtar"
+    ],
+    "clustermesh-service-v2": [
+      "tests/scripttest/corpus/clustermesh/clusterconfig-endpointslices-only.txtar"
+    ],
+    "config-sources": [
+      "tests/scripttest/corpus/dynamicconfig/node-config.txtar",
+      "tests/scripttest/corpus/dynamicconfig/node.txtar"
+    ],
+    "devices": [
+      "tests/scripttest/corpus/datapath-linux/device-detection-force.txtar",
+      "tests/scripttest/corpus/datapath-linux/device-detection-reverse.txtar",
+      "tests/scripttest/corpus/datapath-linux/device-detection-wildcard.txtar"
+    ],
+    "enable-cilium-endpoint-slice": [
+      "tests/scripttest/corpus/clustermesh/ciliumendpointslices.txtar"
+    ],
+    "enable-cluster-pool-to-multi-pool-migration": [
+      "tests/scripttest/corpus/ipam-multipool/from-cluster-pool-migration.txtar"
+    ],
+    "enable-example": [
+      "tests/scripttest/corpus/example/example.txtar"
+    ],
+    "enable-health-check-nodeport": [
+      "tests/scripttest/corpus/lb-healthserver/healthserver-ipv6.txtar",
+      "tests/scripttest/corpus/lb-healthserver/healthserver-proxy-redirect.txtar",
+      "tests/scripttest/corpus/lb-healthserver/healthserver.txtar"
+    ],
+    "enable-no-service-endpoints-routable": [
+      "tests/scripttest/corpus/bgp/svc-no-endpoints.txtar"
+    ],
+    "enable-service-topology": [
+      "tests/scripttest/corpus/loadbalancer/prefer-same-node.txtar",
+      "tests/scripttest/corpus/loadbalancer/prefer-same-zone-fallback.txtar",
+      "tests/scripttest/corpus/loadbalancer/topology-aware-terminating.txtar",
+      "tests/scripttest/corpus/loadbalancer/topology-aware.txtar"
+    ],
+    "force-device-detection": [
+      "tests/scripttest/corpus/datapath-linux/device-detection-force.txtar"
+    ],
+    "ipam": [
+      "tests/scripttest/corpus/bgp/pod-ip-pool.txtar"
+    ],
+    "ipam-default-ip-pool": [
+      "tests/scripttest/corpus/ipam-multipool/from-cluster-pool-migration.txtar"
+    ],
+    "kube-proxy-replacement": [
+      "tests/scripttest/corpus/bgp/svc-kpr-disabled.txtar",
+      "tests/scripttest/corpus/loadbalancer/kpr-transition-to-disabled.txtar",
+      "tests/scripttest/corpus/loadbalancer/kpr-transition-to-enabled.txtar"
+    ],
+    "lb-pressure-metrics-interval": [
+      "tests/scripttest/corpus/loadbalancer/dualstack-maglev.txtar"
+    ],
+    "lb-state-file": [
+      "tests/scripttest/corpus/loadbalancer/file.txtar"
+    ],
+    "lb-state-file-interval": [
+      "tests/scripttest/corpus/loadbalancer/file.txtar"
+    ],
+    "lb-test-fault-probability": [
+      "tests/scripttest/corpus/envoyconfig/ingress-headless.txtar",
+      "tests/scripttest/corpus/envoyconfig/ingress.txtar",
+      "tests/scripttest/corpus/loadbalancer/dualstack-maglev.txtar",
+      "tests/scripttest/corpus/loadbalancer/dualstack.txtar",
+      "tests/scripttest/corpus/loadbalancer/endpointslice-weight.txtar",
+      "tests/scripttest/corpus/loadbalancer/hostport-lb-collision.txtar",
+      "tests/scripttest/corpus/loadbalancer/hostport.txtar",
+      "tests/scripttest/corpus/loadbalancer/hybrid-dsr.txtar",
+      "tests/scripttest/corpus/loadbalancer/ingress.txtar",
+      "tests/scripttest/corpus/loadbalancer/kpr-transition-to-disabled.txtar",
+      "tests/scripttest/corpus/loadbalancer/kpr-transition-to-enabled.txtar",
+      "tests/scripttest/corpus/loadbalancer/loadbalancer-class-wildcards.txtar",
+      "tests/scripttest/corpus/loadbalancer/loadbalancer-disabled-wildcards.txtar",
+      "tests/scripttest/corpus/loadbalancer/loadbalancer-localaddr-wildcards.txtar",
+      "tests/scripttest/corpus/loadbalancer/loadbalancer-multiport.txtar",
+      "tests/scripttest/corpus/loadbalancer/loadbalancer-multiprotocol.txtar",
+      "tests/scripttest/corpus/loadbalancer/loadbalancer.txtar",
+      "tests/scripttest/corpus/loadbalancer/marshalling.txtar",
+      "tests/scripttest/corpus/loadbalancer/migrate-any-proto.txtar",
+      "tests/scripttest/corpus/loadbalancer/migrate-backend.txtar",
+      "tests/scripttest/corpus/loadbalancer/multiple-endpointslices.txtar",
+      "tests/scripttest/corpus/loadbalancer/nodeport-addr.txtar",
+      "tests/scripttest/corpus/loadbalancer/nodeport-explicit-maglev.txtar",
+      "tests/scripttest/corpus/loadbalancer/nodeport-explicit-random.txtar",
+      "tests/scripttest/corpus/loadbalancer/nodeport-lb-nodeport-range.txtar",
+      "tests/scripttest/corpus/loadbalancer/nodeport-maglev.txtar",
+      "tests/scripttest/corpus/loadbalancer/nodeport.txtar",
+      "tests/scripttest/corpus/loadbalancer/prefer-same-node.txtar",
+      "tests/scripttest/corpus/loadbalancer/prefer-same-zone-fallback.txtar",
+      "tests/scripttest/corpus/loadbalancer/proxy-delegation.txtar",
+      "tests/scripttest/corpus/loadbalancer/prune-deleted-on-restart.txtar",
+      "tests/scripttest/corpus/loadbalancer/pruning.txtar",
+      "tests/scripttest/corpus/loadbalancer/quarantined.txtar",
+      "tests/scripttest/corpus/loadbalancer/reuse.txtar",
+      "tests/scripttest/corpus/loadbalancer/svc-forwarding-mode-annotation.txtar",
+      "tests/scripttest/corpus/loadbalancer/svc-node-exposure.txtar",
+      "tests/scripttest/corpus/loadbalancer/svc-type-annotation.txtar",
+      "tests/scripttest/corpus/loadbalancer/topology-aware-terminating.txtar",
+      "tests/scripttest/corpus/loadbalancer/topology-aware.txtar"
+    ],
+    "lrp-address-matcher-cidrs": [
+      "tests/scripttest/corpus/redirectpolicy/address.txtar"
+    ],
+    "metrics": [
+      "tests/scripttest/corpus/neighbor/neighbor-reconciler-kernel-arp.txtar",
+      "tests/scripttest/corpus/neighbor/neighbor-reconciler.txtar"
+    ],
+    "metrics-sampling-interval": [
+      "tests/scripttest/corpus/loadbalancer/quarantined.txtar"
+    ],
+    "probe-tcp-md5": [
+      "tests/scripttest/corpus/bgp/peering-auth.txtar"
+    ],
+    "synchronize-k8s-nodes": [
+      "tests/scripttest/corpus/nodes-gc/disabled.txtar"
+    ],
+    "test-peering-ips": [
+      "tests/scripttest/corpus/bgp/commands.txtar",
+      "tests/scripttest/corpus/bgp/interface.txtar",
+      "tests/scripttest/corpus/bgp/multi-peer-advertisements.txtar",
+      "tests/scripttest/corpus/bgp/peering-auth.txtar",
+      "tests/scripttest/corpus/bgp/peering-changes.txtar",
+      "tests/scripttest/corpus/bgp/peering-default-gateway.txtar",
+      "tests/scripttest/corpus/bgp/peering-ipv6.txtar",
+      "tests/scripttest/corpus/bgp/peering-multi-instance.txtar",
+      "tests/scripttest/corpus/bgp/pod-cidr.txtar",
+      "tests/scripttest/corpus/bgp/pod-ip-pool.txtar",
+      "tests/scripttest/corpus/bgp/svc-adverts.txtar",
+      "tests/scripttest/corpus/bgp/svc-aggregation-priority.txtar",
+      "tests/scripttest/corpus/bgp/svc-aggregation.txtar",
+      "tests/scripttest/corpus/bgp/svc-gateway-proxy-redirect.txtar",
+      "tests/scripttest/corpus/bgp/svc-kpr-disabled.txtar",
+      "tests/scripttest/corpus/bgp/svc-modifications.txtar",
+      "tests/scripttest/corpus/bgp/svc-no-endpoints.txtar",
+      "tests/scripttest/corpus/bgp/svc-path-attributes.txtar",
+      "tests/scripttest/corpus/bgp/svc-sharing.txtar",
+      "tests/scripttest/corpus/bgp/svc-traffic-policy.txtar"
+    ],
+    "use-kernel-managed-arp-ping": [
+      "tests/scripttest/corpus/neighbor/neighbor-reconciler-kernel-arp.txtar"
+    ]
+  }
+}

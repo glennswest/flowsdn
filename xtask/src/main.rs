@@ -22,8 +22,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
     if command == "audit-corpus" {
-        if args.len() > 2 || args.get(1).is_some_and(|s| s != "--check") { return Err("expected audit-corpus [--check]".into()); }
-        env::set_current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).parent().ok_or("workspace")?)?;
+        if args.len() > 2 || args.get(1).is_some_and(|s| s != "--check") {
+            return Err("expected audit-corpus [--check]".into());
+        }
+        env::set_current_dir(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .ok_or("workspace")?,
+        )?;
         return corpus::run(args.len() == 2);
     }
     if !((args.len() == 1 && matches!(command, "build" | "test" | "check" | "deny"))
