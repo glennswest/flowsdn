@@ -66,8 +66,12 @@ fn validate_interface_owners<'a>(records: impl IntoIterator<Item = &'a Record>) 
     let mut indices = BTreeSet::new();
     for record in records {
         let name = text(&record.document, "IfName");
-        let index = record.document.get("IfIndex").and_then(Value::as_u64)
-            .and_then(|n| u32::try_from(n).ok()).filter(|n| *n != 0)
+        let index = record
+            .document
+            .get("IfIndex")
+            .and_then(Value::as_u64)
+            .and_then(|n| u32::try_from(n).ok())
+            .filter(|n| *n != 0)
             .ok_or("invalid host ifindex")?;
         if name.is_empty() || !names.insert(name) || !indices.insert(index) {
             return Err("endpoint host interface already owned or invalid".into());
@@ -360,14 +364,18 @@ mod interface_ownership_tests {
     fn record(id: u16, name: &str, index: u32) -> Record {
         Record::parse(json!({"ID":id,"dockerID":format!("container-{id}"),
             "ContainerIfName":"eth0","IfName":name,"IfIndex":index,
-            "IPv4":format!("198.18.0.{id}")})).expect("record")
+            "IPv4":format!("198.18.0.{id}")}))
+        .expect("record")
     }
     #[test]
     fn distinct_attachment_and_address_cannot_reuse_host_interface() {
         let live = record(1, "host-one", 10);
         let alias = record(2, "host-one", 10);
         assert_ne!(live.attachment, alias.attachment);
-        assert_ne!(addresses(&live.document).expect("IP"), addresses(&alias.document).expect("IP"));
+        assert_ne!(
+            addresses(&live.document).expect("IP"),
+            addresses(&alias.document).expect("IP")
+        );
         // This exact preflight runs on create before stage/install, and on
         // restore before loading the BPF object or cleaning stale state.
         assert!(validate_interface_owners([&live, &alias]).is_err());

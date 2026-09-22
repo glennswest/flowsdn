@@ -45,10 +45,11 @@ impl HttpsRedirect {
         if self.status_code != 301 {
             return Err("force HTTPS requires status301");
         }
-        if let StringMatch::Exact(value) | StringMatch::Prefix(value) = path {
-            if !value.is_empty() && !value.starts_with('/') {
-                return Err("route path must start with slash");
-            }
+        if let StringMatch::Exact(value) | StringMatch::Prefix(value) = path
+            && !value.is_empty()
+            && !value.starts_with('/')
+        {
+            return Err("route path must start with slash");
         }
         let mut matched = serde_json::Map::new();
         match path {

@@ -280,6 +280,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-cloud-azure"
+version = "0.14.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "flowsdn-clustermesh"
 version = "0.14.0"
 dependencies = [
