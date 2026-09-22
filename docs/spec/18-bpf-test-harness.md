@@ -592,7 +592,9 @@ Shape: a `NetnsFixture` builds, inside a fresh netns, a veth or netkit pair, a
 `cilium_host`/`cilium_net` pair, addresses, routes and neighbour entries from a
 declarative description; attaches the production object with the production
 attach code (spec 01 §3.9); injects the built packet with an `AF_PACKET`
-`SOCK_RAW` send on the ingress side; and captures on the peer with a second
+`SOCK_RAW` send on the **veth peer of the device whose ingress hook is under
+test**; transmitting on the target itself exercises its egress path. Captures
+use the appropriate receiving interface with a second
 `AF_PACKET` socket with a BPF filter. Assertions reuse §3.4's packet
 vocabulary. The netns tier is a minority of cases (target: under 40 of 625)
 and is marked in `PORTED.toml` with `tier = "netns"`.
@@ -1375,11 +1377,21 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    Do not port CFG-rewriting coverbee instrumentation. A future verifier-safe tool needs
    a separate fidelity assessment before its output can support a coverage claim.
 
-7. **Netns-tier packet injection.** Options: (a) `AF_PACKET` `SOCK_RAW` send on
-   the ingress device; (b) a `tc` action that injects; (c) a userspace TAP.
-   **Recommendation: (a)** — simplest, no extra kernel objects, and the capture
-   side is symmetric. Revisit if `AF_PACKET` send turns out to bypass the tcx
-   ingress hook on some kernel (to-verify in §9.1's netns lifecycle test).
+7. **Netns-tier packet injection (#221).** Use `AF_PACKET` `SOCK_RAW` on
+   the **veth peer**, so the frame arrives at the target device's TCX ingress.
+   [packet(7)](https://man7.org/linux/man-pages/man7/packet.7.html) specifies
+   that raw transmission queues the frame to the selected device's driver;
+   sending on the ingress target itself therefore tests the wrong direction.
+   `packet-ingress` in `flowsdn-bpftest` is the privileged regression: an
+   anonymous namespace, one veth pair, the Rust smoke classifier on target
+   ingress, and 64/128/1500-byte frames. Direct target send must be captured
+   byte-for-byte on the peer without changing the target BPF observation map;
+   peer send must update the map and deliver/drop/resume UDP according to the
+   smoke verdict. Raw capture alone is not proof of a pass verdict because
+   packet sockets may observe frames before ingress classification. The test
+   also verifies TCX attachment and detachment. The image/kernel validation
+   record must pass before closing #221; no netkit or kernel-matrix coverage
+   is implied by one veth smoke run.
 
 8. **Resolved — #222.** Share tests/fixtures/packets/*.toml between bpftest and the
    connectivity traffic generator. Each fixture contains the builder description and

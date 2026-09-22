@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flowsdn-clustermesh-fastetcd-ingress
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/part-of: flowsdn
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fastetcd
+      app.kubernetes.io/instance: flowsdn-clustermesh
+  policyTypes:
+    - Ingress
+  ingress:
+    # A podSelector alone is restricted to this policy's namespace.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: fastetcd
+              app.kubernetes.io/instance: flowsdn-clustermesh
+      ports:
+        - protocol: TCP
+          port: 2380
+    # Client authorization is independent and never grants Raft access.
+    - from:
+        - podSelector:
+            matchLabels:
+              flowsdn.io/clustermesh-client: "true"
+      ports:
+        - protocol: TCP
+          port: 2379

@@ -497,6 +497,17 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         fs::remove_file(pin)?;
     }
     fs::remove_file(pin_root.join("cilium_lxc"))?;
+    let detached = Instant::now();
+    loop {
+        let mut remaining = 0;
+        for pin in &pins {
+            let name = pin.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_prefix("ingress-")).ok_or("pin interface")?;
+            remaining += aya::programs::SchedClassifier::query_tcx(name, aya::programs::TcAttachType::Ingress)?.1.len();
+        }
+        if remaining == 0 { break; }
+        ensure(detached.elapsed() < Duration::from_secs(5), "removed pins retained TCX attachments")?;
+        thread::sleep(Duration::from_millis(10));
+    }
     for v6 in [false, true] {
         exchange(&mut first, &mut second, v6, false)?;
     }

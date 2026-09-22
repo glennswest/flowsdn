@@ -219,7 +219,7 @@ either fastetcd must be extended or flowsdn must avoid the dependency (the
 | F18 | Server-side automatic compaction, so history does not grow without bound | a mesh writes continuously | OK, but **revision mode only**; etcd's `--auto-compaction-mode=periodic` (`"1h"`) is unsupported and a duration string fails to parse | §6.6 configures `--auto-compaction-retention` as a **revision count**, not a duration. This is a documented operational difference from the reference's `--auto-compaction-retention=1` (which means one hour). |
 | F19 | Users, roles, key-range read permissions, `AuthEnable`, and mapping a client certificate CN to a user (`--client-cert-auth`) | the reference's per-remote-cluster etcd users and their ACL ranges (§3.8.5) | **GAP** — RBAC primitives exist, but CN→user mapping does not exist at all, and the Auth service is reachable without the auth interceptor | **DEVIATION (§3.8.5).** flowsdn does not use etcd Auth. Read scoping is enforced by the flowsdn apiserver front (mTLS identity → allowed prefix set) instead. The `users.yaml` file and the `clustermesh-remote-users` ConfigMap are accepted and ignored, with a startup warning. |
 | F20 | Server TLS with mandatory client-certificate verification against a CA | the only authentication in the flowsdn model | OK (`--cert-file`, `--key-file`, `--trusted-ca-file`, `--client-cert-auth`) | use as is; §3.8.6 |
-| F21 | Separate server and peer TLS identities | defence in depth for the raft port | **GAP** — one identity is shared; `--peer-*-file` flags are parsed and discarded | accepted for now; the peer port is not exposed outside the pod/StatefulSet. Recorded in §12 decision 8. |
+| F21 | Separate server and peer TLS identities | defence in depth for the raft port | **GAP** — one identity is shared; `--peer-*-file` flags are parsed and discarded | accepted with the shipped peer-port NetworkPolicy; tracked in fastetcd#23. Port 2380 remains cluster-internally reachable in HA; see §12 decision 8. |
 | F22 | A `Range` of a prefix that returns nothing must be distinguishable from an error | "cluster config missing" is a normal, expected state on a peer that has not started yet | OK | use as is |
 | F23 | Revisions are globally monotonic across the whole keyspace | watch-from-revision and the list→watch handoff | OK (`Revision { main, sub }`) | use as is |
 | F24 | Bounded request/response size, or at least a documented limit | `ClusterEndpointSlice` values can approach the 16 MiB decode cap | fastetcd does not enforce `--max-request-bytes`; gRPC transport limits apply | flowsdn caps a single value at 4 MiB on write and rejects larger ones with a named error rather than relying on the store. |
@@ -1615,7 +1615,7 @@ What changes operationally:
 | Store cluster id | derived by etcd | **MUST** be set explicitly: `--cluster-id=<FNV-1a-64(cluster-name) masked to 63 bits, never 0>` (§2.7 F17) |
 | Backup | `etcdctl snapshot` | `fastetcd backup` / `restore`; the gRPC `Snapshot` RPC is never used |
 | Metrics | etcd's `/metrics` on 9963 | fastetcd's `--listen-metrics-url`, same port |
-| Peer TLS | separate peer identity | shared identity (§2.7 F21); the peer port is never exposed outside the pod |
+| Peer TLS | separate peer identity | shared identity (§2.7 F21); TCP 2380 restricted to same-namespace store members by shipped NetworkPolicy |
 
 Required fastetcd flags in the manifest: `--cert-file`, `--key-file`,
 `--trusted-ca-file`, `--client-cert-auth`, `--listen-client-urls`,
@@ -2006,9 +2006,19 @@ the prefix-scoping front ≈ 0.5k. MCS-API and the EndpointSlice v2 consumer add
    plan. Live watcher/IPAM admission integration remains required. Cluster-aware
    overlapping addressing needs a separate concrete deployment requirement and
    tests for per-cluster CT/NAT and inter-cluster SNAT before support is claimed.
-8. **fastetcd peer TLS (§2.7 F21).** Accepted as-is because the peer port is
-   not exposed. **Recommendation: file it as a fastetcd hardening item**, and
-   require a NetworkPolicy restricting the peer port in the shipped manifest.
+8. **Resolved #275 — peer restriction shipped; TLS hardening tracked.**
+   `deploy/clustermesh/network-policy.yaml` restricts TCP 2380 ingress to store
+   member pods selected by name+instance labels in the policy namespace.
+   TCP 2379 client ingress is a separate rule with a client authorization label.
+   Workload labels, policy namespace and effective additive policy set MUST be
+   verified by the deployment adapter; ports must never be combined into a
+   broad client allow rule. The README records direct-pod/service and
+   same/cross-namespace positive/negative probes; enforcement is not yet tested.
+   fastetcd `cf53856` still discards peer certificate flags and clones client
+   TLS into the Raft listener. The existing
+   [fastetcd#23](https://github.com/glennswest/fastetcd/issues/23) tracks this
+   hardening; no duplicate is needed. HA headless service reachability means
+   “not exposed externally” must not be confused with pod-level isolation.
 9. **Resolved #276: stable instance UUID with guarded ownership.** Add
    `capabilities.flowsdnInstanceUUID` (canonical lowercase, nonzero UUID string;
    omitted by reference peers). Provision it once in durable cluster bootstrap
@@ -2068,6 +2078,6 @@ implemented here. Existing full acceptance gates in §9 remain open.
 [ADR-0015](../decisions/0015-proxy-and-ztunnel-contracts.md) confirms the existing
 §6.6 Rust apiserver plus separately owned fastetcd backend. There is no interim
 upstream Go apiserver image. This resolves the image-owner choice, not server
-implementation, image publication or backend acceptance. #275 stays open for
-the peer-TLS hardening item and shipped peer-port NetworkPolicy; no external
-issue has been filed and no unbuilt manifest is claimed.
+implementation, image publication or backend acceptance. #275 now has the
+shipped policy artifact and existing fastetcd#23 hardening tracker; workload
+packaging and deployed policy enforcement remain validation obligations.
