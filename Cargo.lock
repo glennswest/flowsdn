@@ -299,6 +299,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-connectivity"
+version = "0.14.0"
+dependencies = [
+ "flowsdn-bpf-abi",
+]
+
+[[package]]
 name = "flowsdn-connector"
 version = "0.14.0"
 dependencies = [
@@ -307,6 +314,10 @@ dependencies = [
  "rtnetlink",
  "tokio",
 ]
+
+[[package]]
+name = "flowsdn-encryption"
+version = "0.14.0"
 
 [[package]]
 name = "flowsdn-fence"
@@ -367,6 +378,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-lb"
+version = "0.14.0"
+dependencies = [
+ "serde_json",
+ "yaml-rust2",
+]
+
+[[package]]
 name = "flowsdn-operator"
 version = "0.14.0"
 dependencies = [
@@ -383,6 +402,13 @@ name = "flowsdn-policy"
 version = "0.14.0"
 dependencies = [
  "flowsdn-bpf-abi",
+ "flowsdn-identity",
+]
+
+[[package]]
+name = "flowsdn-proxy"
+version = "0.14.0"
+dependencies = [
  "flowsdn-identity",
 ]
 

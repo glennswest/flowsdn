@@ -3,6 +3,8 @@
 use flowsdn_identity::{IdentityError, NumericIdentity, Scope};
 pub fn local_identity(value: u32) -> Result<NumericIdentity, IdentityError> {
     let identity = NumericIdentity::new(value)?;
-    if identity.scope() != Scope::Local { return Err(IdentityError::OutsideAllocationRange); }
+    if identity.scope() != Scope::Local {
+        return Err(IdentityError::OutsideAllocationRange);
+    }
     Ok(identity)
 }

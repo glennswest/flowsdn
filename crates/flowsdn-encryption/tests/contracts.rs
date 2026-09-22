@@ -1,87 +1,261 @@
-use flowsdn_encryption::{*,gateway::*,validation::*};
-use std::net::{IpAddr,Ipv4Addr,Ipv6Addr};
+use flowsdn_encryption::{gateway::*, validation::*, *};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 #[test]
 fn dual_underlay_selection_never_cross_family_falls_back() {
-    assert_eq!(underlay("auto",true,true),Ok(Family::Ipv4));
-    assert_eq!(underlay("auto",false,true),Ok(Family::Ipv6));
-    assert_eq!(underlay("ipv6",true,true),Ok(Family::Ipv6));
-    for (request,v4,v6) in [("auto",false,false),("ipv6",true,false),("ipv4",false,true),("invalid",true,true)] {assert!(underlay(request,v4,v6).is_err());}
-    let v4=Ipv4Addr::new(192,0,2,1); let v6="2001:db8::1".parse::<Ipv6Addr>().expect("IPv6");
-    assert_eq!(tunnel_endpoint(Family::Ipv6,Some(v4),Some(v6)),Ok(IpAddr::V6(v6)));
-    assert!(tunnel_endpoint(Family::Ipv6,Some(v4),None).is_err());
-    assert!(tunnel_endpoint(Family::Ipv4,None,Some(v6)).is_err());
+    assert_eq!(underlay("auto", true, true), Ok(Family::Ipv4));
+    assert_eq!(underlay("auto", false, true), Ok(Family::Ipv6));
+    assert_eq!(underlay("ipv6", true, true), Ok(Family::Ipv6));
+    for (request, v4, v6) in [
+        ("auto", false, false),
+        ("ipv6", true, false),
+        ("ipv4", false, true),
+        ("invalid", true, true),
+    ] {
+        assert!(underlay(request, v4, v6).is_err());
+    }
+    let v4 = Ipv4Addr::new(192, 0, 2, 1);
+    let v6 = "2001:db8::1".parse::<Ipv6Addr>().expect("IPv6");
+    assert_eq!(
+        tunnel_endpoint(Family::Ipv6, Some(v4), Some(v6)),
+        Ok(IpAddr::V6(v6))
+    );
+    assert!(tunnel_endpoint(Family::Ipv6, Some(v4), None).is_err());
+    assert!(tunnel_endpoint(Family::Ipv4, None, Some(v6)).is_err());
 }
 #[test]
 fn wireguard_ordering_matches_all_four_reference_branches() {
-    let v4=Ipv4Addr::new(192,0,2,1);let v6="2001:db8::1".parse().expect("IPv6");
-    assert_eq!(wireguard_endpoint(true,Family::Ipv6,Some(v4),Some(v6)).expect("wg").ip(),IpAddr::V6(v6));
-    for (tunnel,family) in [(false,Family::Ipv6),(true,Family::Ipv4),(false,Family::Ipv4)] {
-        let endpoint=wireguard_endpoint(tunnel,family,Some(v4),Some(v6)).expect("wg");
-        assert_eq!(endpoint.ip(),IpAddr::V4(v4));assert_eq!(endpoint.port(),51871);
+    let v4 = Ipv4Addr::new(192, 0, 2, 1);
+    let v6 = "2001:db8::1".parse().expect("IPv6");
+    assert_eq!(
+        wireguard_endpoint(true, Family::Ipv6, Some(v4), Some(v6))
+            .expect("wg")
+            .ip(),
+        IpAddr::V6(v6)
+    );
+    for (tunnel, family) in [
+        (false, Family::Ipv6),
+        (true, Family::Ipv4),
+        (false, Family::Ipv4),
+    ] {
+        let endpoint = wireguard_endpoint(tunnel, family, Some(v4), Some(v6)).expect("wg");
+        assert_eq!(endpoint.ip(), IpAddr::V4(v4));
+        assert_eq!(endpoint.port(), 51871);
     }
-    assert_eq!(wireguard_endpoint(false,Family::Ipv4,None,Some(v6)).expect("v6fallback").ip(),IpAddr::V6(v6));
-    assert_eq!(wireguard_endpoint(true,Family::Ipv6,Some(v4),None).expect("v4fallback").ip(),IpAddr::V4(v4));
-    assert!(wireguard_endpoint(true,Family::Ipv6,None,None).is_err());
+    assert_eq!(
+        wireguard_endpoint(false, Family::Ipv4, None, Some(v6))
+            .expect("v6fallback")
+            .ip(),
+        IpAddr::V6(v6)
+    );
+    assert_eq!(
+        wireguard_endpoint(true, Family::Ipv6, Some(v4), None)
+            .expect("v4fallback")
+            .ip(),
+        IpAddr::V4(v4)
+    );
+    assert!(wireguard_endpoint(true, Family::Ipv6, None, None).is_err());
 }
 #[test]
 fn encryption_refuses_unsafe_combinations_and_exposes_insecure_override() {
-    let ipsec=Encryption {ipsec:true,..Default::default()};
+    let ipsec = Encryption {
+        ipsec: true,
+        ..Default::default()
+    };
     assert!(ipsec.validate().expect("ipsec").is_empty());
-    for invalid in [Encryption {wireguard:true,..ipsec},Encryption {strict_ingress:true,..ipsec},Encryption {host_firewall:true,..ipsec},Encryption {pinned_router_ip:true,..ipsec},Encryption {ciliumnode_crd:false,..ipsec},Encryption {tunnel:true,..ipsec},Encryption {l7_proxy:true,..ipsec}] {assert!(invalid.validate().is_err());}
-    assert!(Encryption {tunnel:true,xfrm_output_mark_mask:true,..ipsec}.validate().is_ok());
-    assert!(Encryption {l7_proxy:true,dns_transparent:true,..ipsec}.validate().expect("transparent").is_empty());
-    assert_eq!(Encryption {l7_proxy:true,insecure_ipsec_proxy_override:true,..ipsec}.validate().expect("override").len(),1);
-    assert!(Encryption {wireguard:true,ciliumnode_crd:false,..Default::default()}.validate().is_err());
-    assert!(Encryption {vtep:true,..Default::default()}.validate().is_err());
-    assert!(Encryption {srv6:true,..Default::default()}.validate().is_err());
+    for invalid in [
+        Encryption {
+            wireguard: true,
+            ..ipsec
+        },
+        Encryption {
+            strict_ingress: true,
+            ..ipsec
+        },
+        Encryption {
+            host_firewall: true,
+            ..ipsec
+        },
+        Encryption {
+            pinned_router_ip: true,
+            ..ipsec
+        },
+        Encryption {
+            ciliumnode_crd: false,
+            ..ipsec
+        },
+        Encryption {
+            tunnel: true,
+            ..ipsec
+        },
+        Encryption {
+            l7_proxy: true,
+            ..ipsec
+        },
+    ] {
+        assert!(invalid.validate().is_err());
+    }
+    assert!(
+        Encryption {
+            tunnel: true,
+            xfrm_output_mark_mask: true,
+            ..ipsec
+        }
+        .validate()
+        .is_ok()
+    );
+    assert!(
+        Encryption {
+            l7_proxy: true,
+            dns_transparent: true,
+            ..ipsec
+        }
+        .validate()
+        .expect("transparent")
+        .is_empty()
+    );
+    assert_eq!(
+        Encryption {
+            l7_proxy: true,
+            insecure_ipsec_proxy_override: true,
+            ..ipsec
+        }
+        .validate()
+        .expect("override")
+        .len(),
+        1
+    );
+    assert!(
+        Encryption {
+            wireguard: true,
+            ciliumnode_crd: false,
+            ..Default::default()
+        }
+        .validate()
+        .is_err()
+    );
+    assert!(
+        Encryption {
+            vtep: true,
+            ..Default::default()
+        }
+        .validate()
+        .is_err()
+    );
+    assert!(
+        Encryption {
+            srv6: true,
+            ..Default::default()
+        }
+        .validate()
+        .is_err()
+    );
 }
 #[test]
 fn modern_layering_host_routing_and_debug_build_decisions() {
-    assert_eq!(ipsec_layering(true,false),Ok(IpsecLayering::OverlayInsideIpsec));
-    assert_eq!(ipsec_layering(false,false),Ok(IpsecLayering::NativeIpsec));
-    assert!(ipsec_layering(true,true).is_err());
-    assert!(ipsec_interface_warning("eth0").is_some());assert!(ipsec_interface_warning("").is_none());
-    assert_eq!(host_delivery(false,true),Ok(HostDelivery::BpfEndpointRoute));
-    assert_eq!(host_delivery(false,false),Ok(HostDelivery::BpfHostRouting));
-    assert!(host_delivery(true,true).is_err());assert!(host_delivery(true,false).is_err());
+    assert_eq!(
+        ipsec_layering(true, false),
+        Ok(IpsecLayering::OverlayInsideIpsec)
+    );
+    assert_eq!(ipsec_layering(false, false), Ok(IpsecLayering::NativeIpsec));
+    assert!(ipsec_layering(true, true).is_err());
+    assert!(ipsec_interface_warning("eth0").is_some());
+    assert!(ipsec_interface_warning("").is_none());
+    assert_eq!(
+        host_delivery(false, true),
+        Ok(HostDelivery::BpfEndpointRoute)
+    );
+    assert_eq!(
+        host_delivery(false, false),
+        Ok(HostDelivery::BpfHostRouting)
+    );
+    assert!(host_delivery(true, true).is_err());
+    assert!(host_delivery(true, false).is_err());
     assert!(ObjectBuild::default().validate_release().is_ok());
-    let debug=ObjectBuild {debug_events:true,test_hooks:false};
-    assert_eq!(debug.cargo_features(),vec!["debug-events"]);assert!(debug.validate_release().is_err());
-    assert!(ObjectBuild {test_hooks:true,..Default::default()}.validate_release().is_err());
+    let debug = ObjectBuild {
+        debug_events: true,
+        test_hooks: false,
+    };
+    assert_eq!(debug.cargo_features(), vec!["debug-events"]);
+    assert!(debug.validate_release().is_err());
+    assert!(
+        ObjectBuild {
+            test_hooks: true,
+            ..Default::default()
+        }
+        .validate_release()
+        .is_err()
+    );
 }
 #[test]
 fn legacy_map_reader_gate_requires_migration_synchronization() {
-    assert_eq!(egress_maps(true,true,false,LegacyReaders::None).expect("modern"),EgressMaps {ipv4_v2:true,ipv6:true,legacy_ipv4:false});
-    assert!(egress_maps(true,true,false,LegacyReaders::Present).is_err());
-    assert!(egress_maps(true,true,true,LegacyReaders::Unknown).is_err());
-    assert!(egress_maps(false,true,true,LegacyReaders::Present).is_err());
-    assert!(egress_maps(true,true,true,LegacyReaders::Present).expect("migration").legacy_ipv4);
-    assert!(!egress_maps(false,true,true,LegacyReaders::None).expect("v6").legacy_ipv4);
+    assert_eq!(
+        egress_maps(true, true, false, LegacyReaders::None).expect("modern"),
+        EgressMaps {
+            ipv4_v2: true,
+            ipv6: true,
+            legacy_ipv4: false
+        }
+    );
+    assert!(egress_maps(true, true, false, LegacyReaders::Present).is_err());
+    assert!(egress_maps(true, true, true, LegacyReaders::Unknown).is_err());
+    assert!(egress_maps(false, true, true, LegacyReaders::Present).is_err());
+    assert!(
+        egress_maps(true, true, true, LegacyReaders::Present)
+            .expect("migration")
+            .legacy_ipv4
+    );
+    assert!(
+        !egress_maps(false, true, true, LegacyReaders::None)
+            .expect("v6")
+            .legacy_ipv4
+    );
 }
 #[test]
 fn reference_fnv_vectors_and_numeric_gateway_ordering() {
     // Standard FNV-1a-32 vectors, not output generated by this implementation.
-    assert_eq!(fnv1a32(b""),0x811c9dc5);assert_eq!(fnv1a32(b"a"),0xe40c292c);assert_eq!(fnv1a32(b"foobar"),0xbf9cf968);
-    let low=Ipv4Addr::new(10,0,0,2);let high=Ipv4Addr::new(10,0,0,10);
-    assert_eq!(choose(b"a",&[high,low],Selection::Modulo),Ok(Some(low))); // evenhash
-    assert_eq!(choose(b"",&[high,low],Selection::Modulo),Ok(Some(high))); // oddhash
-    assert_eq!(choose(b"",&[],Selection::Modulo),Ok(None));
-    assert_eq!(choose(b"foobar",&[high],Selection::Modulo),Ok(Some(high)));
-    assert_eq!(Selection::default(),Selection::Modulo);
-    assert!(Selection::parse("rendezvous",false).is_err());assert!(Selection::parse("unknown",true).is_err());
+    assert_eq!(fnv1a32(b""), 0x811c9dc5);
+    assert_eq!(fnv1a32(b"a"), 0xe40c292c);
+    assert_eq!(fnv1a32(b"foobar"), 0xbf9cf968);
+    let low = Ipv4Addr::new(10, 0, 0, 2);
+    let high = Ipv4Addr::new(10, 0, 0, 10);
+    assert_eq!(choose(b"a", &[high, low], Selection::Modulo), Ok(Some(low))); // evenhash
+    assert_eq!(choose(b"", &[high, low], Selection::Modulo), Ok(Some(high))); // oddhash
+    assert_eq!(choose(b"", &[], Selection::Modulo), Ok(None));
+    assert_eq!(
+        choose(b"foobar", &[high], Selection::Modulo),
+        Ok(Some(high))
+    );
+    assert_eq!(Selection::default(), Selection::Modulo);
+    assert!(Selection::parse("rendezvous", false).is_err());
+    assert!(Selection::parse("unknown", true).is_err());
 }
 #[test]
 fn rendezvous_moves_only_departed_winner_and_is_order_independent() {
-    let gateways=[Ipv4Addr::new(192,0,2,1),Ipv4Addr::new(192,0,2,2),Ipv4Addr::new(192,0,2,3)];
-    let selection=Selection::parse("rendezvous",true).expect("cohort");
+    let gateways = [
+        Ipv4Addr::new(192, 0, 2, 1),
+        Ipv4Addr::new(192, 0, 2, 2),
+        Ipv4Addr::new(192, 0, 2, 3),
+    ];
+    let selection = Selection::parse("rendezvous", true).expect("cohort");
     for uid in 0_u32..500 {
-        let uid=uid.to_be_bytes();
-        let chosen=choose(&uid,&gateways,selection).expect("choose").expect("winner");
-        let mut reversed=gateways.to_vec();reversed.reverse();
-        assert_eq!(choose(&uid,&reversed,selection),Ok(Some(chosen)));
-        let retained:Vec<_>=gateways.iter().copied().filter(|gateway|*gateway==chosen || gateway.octets().last()!=Some(&3)).collect();
-        assert_eq!(choose(&uid,&retained,selection),Ok(Some(chosen)));
-        let without_winner:Vec<_>=gateways.iter().copied().filter(|gateway|*gateway!=chosen).collect();
-        assert_ne!(choose(&uid,&without_winner,selection),Ok(Some(chosen)));
+        let uid = uid.to_be_bytes();
+        let chosen = choose(&uid, &gateways, selection)
+            .expect("choose")
+            .expect("winner");
+        let mut reversed = gateways.to_vec();
+        reversed.reverse();
+        assert_eq!(choose(&uid, &reversed, selection), Ok(Some(chosen)));
+        let retained: Vec<_> = gateways
+            .iter()
+            .copied()
+            .filter(|gateway| *gateway == chosen || gateway.octets().last() != Some(&3))
+            .collect();
+        assert_eq!(choose(&uid, &retained, selection), Ok(Some(chosen)));
+        let without_winner: Vec<_> = gateways
+            .iter()
+            .copied()
+            .filter(|gateway| *gateway != chosen)
+            .collect();
+        assert_ne!(choose(&uid, &without_winner, selection), Ok(Some(chosen)));
     }
 }

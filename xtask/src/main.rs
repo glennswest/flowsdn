@@ -46,7 +46,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             .ok_or("no workspace root")?,
     )?;
     if matches!(command, "plan" | "ci-plan" | "check-changed") {
-        if command == "ci-plan" { return changed::ci_plan(args.get(1).ok_or("missing base revision")?); }
+        if command == "ci-plan" {
+            return changed::ci_plan(args.get(1).ok_or("missing base revision")?);
+        }
         let packages = changed::plan(args.get(1).ok_or("missing base revision")?)?;
         if command == "plan" {
             println!("{}", serde_json::to_string(&packages)?);
