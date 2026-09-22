@@ -879,13 +879,13 @@ CI workflow port (kind+LVH matrix, cloud jobs) **M**.
 
 1. Minimum kernel for flowsdn: if 5.10/5.15 is kept, `CAP_BPF`/`CAP_PERFMON` exist (≥5.8) but the RHEL 4.18
    path (rhel8.10 in the matrix) still needs `SYS_ADMIN` — support both via a values switch, or drop 4.18?
-2. Do we implement the iptables-era features at all (non-KPR mode with kube-proxy, iptables masquerade, L7
-   TPROXY via iptables, `installNoConntrackIptablesRules`, `iptablesRandomFully`), or require KPR + BPF masquerade +
-   BPF TPROXY and reject those keys in `validate.yaml`? The e2e matrix has 12 kube-proxy-mode configs.
+2. Resolved #33: follow ADR0003/spec22: BPF-only masquerade, nftables residual
+   including NOTRACK, compatibility warnings for ignored iptables controls.
+   Kube-proxy coexistence remains governed by routing validation.
 3. Embedded Envoy mode (`envoy.enabled=false`) requires the Envoy binary in the agent image — drop it and force
    the DaemonSet (upgradeCompatibility <1.16 users)?
-4. Where do bpffs and cgroup2 mounts live long-term: keep the privileged init container (Cilium's answer), or
-   require the host to mount them (`sys-fs-bpf.mount`) and fail fast?
+4. Resolved #38: verified host-managed mounts or configured init helpers;
+   wrong filesystem types fail closed (spec22 packaging policy).
 5. Should `cilium status` JSON and the agent unix API (`/var/run/cilium/cilium.sock`, OpenAPI) be reproduced
    bit-for-bit so cilium-cli, hubble and bugtool keep working, or is a `flowsdn-cli` fork acceptable?
 6. Which cilium-cli version to pin as the acceptance suite (v0.19.7 today) and whether flowsdn CI can afford

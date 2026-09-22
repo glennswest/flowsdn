@@ -649,19 +649,22 @@ peering against GoBGP and against a RouterOS CHR in CI.
 
 ## Open questions
 
-- Which peers will real deployments have — RouterOS only, or also
-  FRR/bird/Arista? This decides whether the `bgp` backend is v1 or v2 work
-  (RouterOS backend alone could ship first).
+- **Resolved #183:** shared protocol/control plane first, RouterOS as the
+  first end-to-end backend, then the in-tree speaker; both remain in scope.
+  Only protocol/planning primitives currently exist (spec 15 O-1).
 - Resolved #184: retain served deprecated `v2alpha1` alongside sole storage
   `v2` for all five BGP CRDs (spec 15 O-2; spec 13 §12.2). Live migration
   remains unimplemented.
-- TCP-AO (RFC 5925, Linux 6.7+): worth adding beyond Cilium's MD5-only
-  support, given the fleet kernel version?
-- Passive sessions: Cilium requires `localPort` for inbound; do we want a
-  passive-only mode for routers that insist on initiating?
-- Should advertised prefixes and installed policies be added to
-  `CiliumBGPNodeConfig.status` (Cilium exposes them only via the agent API)?
-  Useful for a RouterOS backend where the node has no local RIB to query.
+- **Resolved #185:** initial authentication is MD5; defer AO until a real
+  implementation, kernel probes and independent peer/key-rollover tests exist.
+  Explicit AO requests fail, never silently downgrade (spec 15 O-3).
+- **Resolved #186:** opt-in passiveMode requires nonzero instance localPort
+  and suppresses outbound connection attempts; default remains active/listening.
+  The planner exists; schema/FSM/socket integration remains required.
+- **Resolved #187:** optional advertised peer/prefix/policy rows are enabled
+  only by bgp-status-report-prefixes; default field omission preserves the
+  reference surface. Project acknowledged state with bounded all-or-error
+  publication (spec 15 §4.4); the writer and schema remain unimplemented.
 - Policy naming (`peer-<name>-export`, `<Type>-<resource>-ipv4`): preserve
   for CLI parity or simplify?
 - `CiliumBGPNodeConfigOverride.peers[].localPort` is a dead field in Cilium —

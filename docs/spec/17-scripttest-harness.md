@@ -1559,9 +1559,11 @@ let their registered handler interpret arguments. This does not constrain CLI pa
 outside the script language.
 
 
-**12.4 BGP test peer.** Rust peer reusing spec 15's speaker vs driving an
-external `gobgpd` (§3.6.6). **Recommendation: build the Rust peer**, and keep
-an `[exec:gobgpd]`-gated cross-check job so a shared bug is caught.
+**12.4 Resolved #208: Rust peer with an independent cross-check.** Build the
+Rust peer on spec 15 protocol primitives; require a separately gated external
+GoBGP interoperability run to catch shared bugs. Published peer binaries are
+consumed, not Go source authored here. Peer/socket/FSM adapters and full
+protocol acceptance (#249) remain pending.
 
 **12.5 Resolved — #209.** Run all 51 load-balancer scripts with the in-memory map
 backend on every applicable PR and with both in-memory and real BPF map backends

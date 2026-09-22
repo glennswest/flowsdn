@@ -84,7 +84,7 @@ plus 604 golden fixture files. It is deferred because it produces nothing but
 | P5 | The operator's leader-elected controller runtime and CRD-discovery loop exist | spec 12 §3.15 |
 | P6 | `kube-proxy-replacement` is true in the cluster. Gateway API without KPR is refused with a warning, not a fatal error | spec 12 §3.15 |
 
-**Two stages.** The staging is deliberate: Ingress is a strict subset of the
+**Three implementation stages within milestone 4.** The staging is deliberate: Ingress is a strict subset of the
 work, exercises the whole model→CEC→Envoy path end to end, and has a small,
 stable API with a ready-made external conformance suite. Getting it green
 proves the translator before the far larger status-and-attachment machinery
@@ -110,12 +110,17 @@ of Gateway API is written.
 **Stage 2 — Gateway API.**
 
 - `GatewayClass` + `CiliumGatewayClassConfig`, `Gateway`, `HTTPRoute`,
-  `GRPCRoute`, `TLSRoute` first; `TCPRoute`/`UDPRoute`, `XListenerSet`,
-  `ServiceImport` and GAMMA second.
+  `GRPCRoute`, `TLSRoute` first; `TCPRoute`/`UDPRoute`,
+  `ServiceImport` and GAMMA second. `XListenerSet` belongs to stage 3.
 - The full status surface (§3.11) — this is the bulk of the work, and it is
   where the 604 harvested fixtures are spent.
 - Exit criterion: the upstream Gateway API conformance suite passes for the
   profiles in §2.4.
+
+**Stage 3 — ListenerSet.** Extend the same conflict detection, status ownership
+and secret-grant machinery to `XListenerSet`, then activate its harvested
+fixtures and advertise `ListenerSet`. This remains required before milestone 4
+acceptance (#294); stage 2 does not advertise it merely because its CRD exists.
 
 **Stage 2 MUST NOT begin before stage 1's translator is golden-clean.** Both
 front ends share one translator; a translator bug found during Gateway API
@@ -155,7 +160,7 @@ an error or a warning:
 |---|---|---|
 | `TCPRoute` | `gateway.networking.k8s.io/v1` | `TCP` protocol listeners |
 | `UDPRoute` | `gateway.networking.k8s.io/v1` | `UDP` protocol listeners |
-| `XListenerSet` | `gateway.networking.k8s.io/v1` | listeners contributed by a separate object (§3.6) |
+| `XListenerSet` | `gateway.networking.k8s.io/v1` | listeners contributed by a separate object (§3.6), after stage-3 implementation |
 | `ServiceImport` | `multicluster.x-k8s.io/v1beta1` | `backendRefs` to a ClusterSet service (§3.4.4) |
 
 Discovery matches the **plural resource name**, because that is what the
@@ -228,7 +233,7 @@ MESH-HTTP     MESH-GRPC
 ```
 
 run with `--gateway-class cilium --all-features --allow-crds-mismatch
---cleanup-base-resources=false`, no exempt features on the command line, and
+--cleanup-base-resources=false`, no additional exempt features on the command line, and
 the same two test skips the reference carries: `MeshConsumerRoute` and
 `HTTPRouteListenerPortMatching`. Each skip MUST be listed in §12 with an owner
 and a target release; a skip that is not tracked is a silent regression.
@@ -241,6 +246,7 @@ The reference's exempt list, which flowsdn adopts as its starting point, is:
 | Exempt feature | Why |
 |---|---|
 | `HTTPRouteParentRefPort` | `parentRef.port` disambiguation not implemented |
+| `ListenerSet` | staged after the single-Gateway conflict/status implementation; stage 3 (#286) |
 | `MeshConsumerRoute` | GAMMA consumer routes (§3.8) |
 | `BackendTLSPolicySANValidation` | SAN validation not passed to Envoy |
 | `TLSRouteModeTerminate` | `TLSRoute` only supports passthrough |
@@ -250,17 +256,24 @@ The reference's exempt list, which flowsdn adopts as its starting point, is:
 
 Everything else in the upstream feature set is reported: `Gateway`,
 `HTTPRoute`, `GRPCRoute`, `TLSRoute`, `TCPRoute`, `UDPRoute`,
-`ReferenceGrant`, `BackendTLSPolicy`, `ListenerSet`, `Mesh`, the
+`ReferenceGrant`, `BackendTLSPolicy`, `Mesh`, the
 `HTTPRoute*` matching/filter/redirect/rewrite/mirror/retry/timeout/CORS
 features, `GatewayHTTPListenerIsolation`,
 `GatewayInfrastructurePropagation`, `GatewayStaticAddresses`,
 `GatewayAddressEmpty`, `GatewayPort8080`, `TLSRouteModeMixed`, and the
-`Mesh*` variants — 51 names at the reference tag.
+`Mesh*` variants. The exact target list is checked against the pinned upstream
+catalogue; do not infer availability from this descriptive list.
 
 flowsdn keeps the exempt list as **one sorted constant in one file**, with a
 CI test asserting that `AllFeatures − exempt` equals the golden list, so that
 bumping the Gateway API dependency surfaces new features as a test failure
-rather than as a silently-unreported capability.
+rather than as a silently-unreported capability. `flowsdn-gateway::conformance`
+implements the sorted exemptions, skips, profiles and comparison/evidence
+checks. Its unit tests use a synthetic catalogue: the complete upstream
+AllFeatures corpus and independent golden file are still required. Current
+primitives advertise no runtime capabilities; a future status writer MUST
+provide implementation evidence for every feature it publishes. The stage-2
+exemptions do not authorize permanently dropping any feature (§12.13).
 
 ### 2.5 Ingress conformance
 
@@ -459,6 +472,9 @@ a combined Envoy listener would erase the Gateway listener's port boundary and
 route one listener's traffic to another's backends.
 
 ### 3.6 XListenerSet
+
+The following contract activates in stage 3 (#286). Before then, CRD presence
+alone must not enable ListenerSet ingestion or feature advertisement.
 
 When the `XListenerSet` CRD is installed, a `Gateway` MAY delegate listeners
 to one or more `XListenerSet` objects.
@@ -846,7 +862,7 @@ within a group the first failing check stops that group.
 `Invalid<Kind>` (`InvalidHTTPRoute`, `InvalidGRPCRoute`, `InvalidTLSRoute`,
 `InvalidTCPRoute`, `InvalidUDPRoute`) is **not** an upstream Gateway API reason
 constant. flowsdn keeps it for compatibility with the harvested fixtures and
-records it here as a known non-standard reason (Open decision 6).
+records it here as a known non-standard reason (decision #285, §12).
 
 Check 6 is silent when no candidate listener had a namespace restriction at
 all — an unrestricted Gateway that simply has no matching listener produces
@@ -896,7 +912,7 @@ GAMMA writes two **Cilium-specific** conditions onto the parent
 
 Note that the reason string does not vary with the status. That is the
 reference's behavior; flowsdn keeps it because tooling greps the type, and
-records it here as a wart rather than silently improving it (Open decision 6).
+records it here as a wart rather than silently improving it (decision #285, §12).
 
 A Service with no GAMMA routes referencing it MUST have **no** conditions
 written — flowsdn must not stamp status on every Service in the cluster.
@@ -931,7 +947,7 @@ downgrade attack surface, and this distinction is why the model carries it.
 | Type | Status | Reason | Message |
 |---|---|---|---|
 | `Accepted` | `True` | `Accepted` | `Valid GatewayClassConfig` |
-| `Accepted` | `False` | `Accepted` | `Invalid GatewayClassConfig` |
+| `Accepted` | `False` | `InvalidParameters` | `Invalid GatewayClassConfig` |
 
 The reference performs no validation here and the `False` branch is
 unreachable. flowsdn MUST implement the validation the reference left as a
@@ -942,6 +958,29 @@ TODO — at minimum: `loadBalancerClass`, `loadBalancerSourceRanges` and
 **DEVIATION**, additive: the `False` branch becomes reachable, and its reason
 becomes `InvalidParameters` rather than `Accepted`, because a reason string
 that does not change with the status carries no information.
+
+Implemented in `flowsdn-gateway::config` (#253), including the Accepted condition
+projection with `observedGeneration`. Validation reads the complete resource
+without mutation after CRD defaulting. Absence/null of an optional field means
+unset; an explicitly supplied false `allocateLoadBalancerNodePorts` or empty
+source-range list still invokes the LoadBalancer-only restriction. Omitted
+`service.type` means LoadBalancer. Omitted `ipFamilyPolicy` means SingleStack:
+one explicit family is valid; two are not. PreferDualStack accepts one or two
+distinct families; RequireDualStack also accepts a single primary family,
+letting the Service API complete the secondary family. Omitted/empty families
+delegate allocation to Kubernetes. Whether a cluster can satisfy RequireDualStack
+is checked when the Service is created, not inferred from this config. See the
+[Kubernetes dual-stack contract](https://kubernetes.io/docs/concepts/services-networking/dual-stack/). Unknown/duplicate families, malformed types and conflicting
+counts reject. Source ranges must be valid IPv4/IPv6 CIDRs.
+
+Text format requires nonempty text (at most 4096 Unicode characters); JSON
+requires 1–64 string-valued entries. Both payload fields may coexist because
+the schema supplies both defaults. Unknown format or a missing selected
+payload rejects. The validator also bounds accessLogs to 1–8 entries. It does
+not replace full OpenAPI admission/defaulting or implement a status writer:
+the future controller must preserve unrelated conditions, stamp transition
+times and publish with concurrency guards. Invalid parameters MUST block
+GatewayClass acceptance and generated-resource publication.
 
 #### 3.11.9 Ingress
 
@@ -1925,7 +1964,7 @@ namespace, …) plus `output-listeners.yaml`.
 Anticipated divergences from flowsdn's own decisions: the `PortUnavailable`
 host-network collision condition (§3.10), the reachable
 `CiliumGatewayClassConfig` validation branch (§3.11.8), the corrected
-HTTPS-redirect matcher (Open decision 2), and the `nodeipam.cilium.io`
+HTTPS-redirect matcher (#281; fixture annotations remain outstanding), and the `nodeipam.cilium.io`
 default prefix (§6.2). Each MUST be annotated before the suite is declared
 green.
 
@@ -1971,18 +2010,20 @@ shared-model merge order; passthrough rule rejection cases.
 ### 9.4 Ingress conformance (stage 1 gate)
 
 Run `ingress-controller-conformance` with `-ingress-class cilium` against a
-live cluster in CI. This is an external Go binary. **DEVIATION** from
-ADR-0005's "all harnesses in Rust": the suite is a *conformance* definition
+live cluster in CI. This is an external Go binary, covered by the narrow
+[ADR-0005 exception](../decisions/0005-test-strategy.md#external-conformance-artifact-exception-290): the suite is a *conformance* definition
 owned by upstream, not a test flowsdn writes, and reimplementing it would
 prove compatibility with our reading of the spec rather than with the spec.
-The same reasoning applies to §9.5. flowsdn writes no Go; it runs a published
-binary.
+The same exception applies to §9.5. flowsdn writes no Go; it runs a published
+binary or an immutable upstream-published image. Pin the suite version and
+artifact digest, verify provenance, and retain the invocation/report. No Go
+source build or Go test wrapper is authorized; orchestration remains Rust.
 
-### 9.5 Gateway API conformance (stage 2 gate, recommended)
+### 9.5 Gateway API conformance (stage 2 gate)
 
-**flowsdn SHOULD run the upstream Gateway API conformance suite in CI**, at the
-pinned version, for the profiles in §2.4, and SHOULD publish the conformance
-report. The recommendation is strong for three reasons:
+**flowsdn MUST run the upstream Gateway API conformance suite in CI**, at the
+pinned version, for the profiles in §2.4, and publish the conformance
+report. This release gate is required for three reasons:
 
 1. The 604 harvested fixtures pin *the reference's* behavior at one commit.
    Conformance pins *the specification's* behavior, and where the two disagree
@@ -2119,15 +2160,14 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    to exercise the shared translator. This follows ADR-0001 boundary compatibility; a
    green Gateway API report does not itself authorize dropping Ingress.
 
-2. **The HTTPS-redirect matcher bug.** In the reference, the code path that
-   builds routes for a force-HTTPS virtual host passes the header and query
-   matcher lists in the wrong argument order, so query parameters are emitted
-   as header matchers and vice versa. Options: reproduce it for fixture
-   compatibility, or fix it and annotate the affected goldens.
-   **Recommendation: fix it**, annotate the goldens as expected divergences,
-   and file the bug upstream (cross-project rule 11). Reproducing a matcher
-   bug means a user's query-parameter match silently does not work on exactly
-   the routes that redirect.
+2. **#281 remains open; own behavior is fixed.** Do not reproduce the
+   header/query argument-order bug. `flowsdn-gateway::matcher` gives headers and
+   queries distinct element types and named fields, preserving both through a
+   301 HTTPS redirect plan. This is not the full Envoy translator. Affected
+   harvested goldens still require per-scenario EXPECTED-DIVERGENCE annotations
+   when that translator lands; no upstream report has been filed because that
+   external communication is not authorized. Neither obligation is fabricated
+   or waived to close this issue.
 3. **Resolved — #282.** Keep one combined CEC for shared Ingress mode and the common
    listener set. Do not split per Ingress without an agent-side listener-merge contract.
    Preserve validation and last accepted configuration when a replacement is rejected.
@@ -2140,20 +2180,16 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    document this value; help text and chart descriptions must say 301 as well. Do not
    silently change to 308 or introduce a new setting in this decision.
 
-6. **Non-standard reason strings.** `Invalid<Kind>` on route `Accepted`, and
-   the GAMMA conditions whose reason does not vary with status (§3.11.5,
-   §3.11.6). Options: keep for fixture compatibility; or emit the upstream
-   constants (`NoMatchingParent`, `Accepted`/`NotAccepted`) and annotate the
-   goldens. **Recommendation: keep them**, because they are what users' tooling
-   and the harvested fixtures both expect, and revisit if the Gateway API adds
-   a conformance assertion on the reason.
-7. **`XListenerSet` at all.** It is an experimental Gateway API resource,
-   ~13 fixture scenarios, and it complicates conflict detection, status
-   ownership and secret grants materially. Options: implement in stage 2 as
-   specified; or defer to a stage 3. **Recommendation: defer to stage 3.**
-   Nothing else depends on it, the `ListenerSet` feature is simply not
-   advertised while it is absent, and the conflict machinery is easier to get
-   right for one source before it is generalized to many.
+6. **Resolved #285: keep the reference reason strings.** Typed route kinds
+   return InvalidHTTPRoute/GRPCRoute/TLSRoute/TCPRoute/UDPRoute for missing
+   parents. GAMMA reason remains Accepted/Programmed for both boolean statuses.
+   This is separate from #253's deliberate InvalidParameters config-validation
+   deviation. Revisit only with an explicit conformance/compatibility migration;
+   actual status writers remain required.
+7. **Resolved #286: ListenerSet is stage 3.** Stage 2 excludes ListenerSet from
+   its target supportedFeatures. Stage 3 remains inside milestone 4, with all
+   conflict detection, grant/status rules and harvested fixtures retained. Do
+   not pass the fixture gate by silently ignoring the currently unported cases.
 8. **Resolved (#159): retain controller and object names.** Keep
    `io.cilium/gateway-controller`, `cilium-gateway-*`, `cilium-ingress-*`, and
    `cilium-secrets`. Defer a controller-name config key until a coexistence
@@ -2166,3 +2202,47 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    translator, status behavior and MESH-HTTP/MESH-GRPC profile requirements. Spec 16
    owns proxy execution and mesh transport; a new transport does not silently transfer
    the route contract.
+
+
+11. **Resolved #21: own the pinned type boundary in `flowsdn-k8s`.** Use
+    hand-declared Rust/serde resource types backed by the vendored Gateway API
+    v1.6.1 OpenAPI schemas, including XListenerSet, BackendTLSPolicy, TCPRoute
+    and UDPRoute; do not introduce an unverified `gateway-api` crate version.
+    Preserve unknown enum values and opaque fields on round trip as spec13
+    requires. The type/schema fixture gate must cover every served version.
+    `flowsdn-gateway` owns ingestion/translation and depends on that shared type
+    layer; its current JSON validator is a bounded primitive, not completion
+    of the type layer. First Gateway release acceptance requires all seven
+    profiles in §2.4, with only the explicitly tracked stage-2 exceptions below.
+12. **Resolved #253/#290.** Config validation and Accepted-condition projection
+    are implemented as §3.11.8 specifies; Kubernetes publication remains future.
+    ADR-0005 now permits the two upstream-owned conformance artifacts only;
+    actual artifact pins, CI runner integration and live reports remain required.
+
+### 12.13 Conformance exception ownership and removal targets (#289)
+
+Every row has a concrete owner and target: the first milestone-4 release
+(acceptance issue #294), before that release is approved. `flowsdn-gateway` is
+responsible for the controller/translator and its integration tests; references
+to a second crate identify a required collaborator, not a transferred task.
+No release number is invented before the milestone has one. A missed removal
+must fail this acceptance gate and require an explicit, separately reviewed
+exception with updated owner/target; it cannot silently carry forward.
+
+| Entry | Kind | Reason / removal evidence | Owner | Target release gate |
+|---|---|---|---|---|
+| MeshConsumerRoute | test skip | Consumer-route ingestion and parent-Service routing must pass the upstream case | flowsdn-gateway | First milestone-4 release, #294 |
+| HTTPRouteListenerPortMatching | test skip | Resolve listener by parentRef.port and pass the port-matching case | flowsdn-gateway | First milestone-4 release, #294 |
+| HTTPRouteParentRefPort | feature exemption | Implement port-disambiguated attachment/status and pass feature cases | flowsdn-gateway | First milestone-4 release, #294 |
+| MeshConsumerRoute | feature exemption | Same consumer-route capability as the tracked test skip; remove both together | flowsdn-gateway | First milestone-4 release, #294 |
+| BackendTLSPolicySANValidation | feature exemption | Carry SAN checks through translation and prove rejected peer certificates | flowsdn-gateway with flowsdn-envoy-proto | First milestone-4 release, #294 |
+| TLSRouteModeTerminate | feature exemption | Implement TLS termination and route behavior beyond passthrough | flowsdn-gateway | First milestone-4 release, #294 |
+| GatewayBackendClientCertificate | feature exemption | Configure upstream client certificate delivery and pass mutual-TLS tests | flowsdn-gateway with flowsdn-envoy-proto | First milestone-4 release, #294 |
+| GatewayFrontendClientCertificateValidation | feature exemption | Configure downstream client validation and prove invalid-client rejection | flowsdn-gateway with flowsdn-envoy-proto | First milestone-4 release, #294 |
+| GatewayHTTPSListenerDetectMisdirectedRequests | feature exemption | Emit 421 for the specified SNI/authority mismatch and pass the case | flowsdn-gateway | First milestone-4 release, #294 |
+| ListenerSet | stage-2 feature exemption | Stage 3 conflict/status/grant implementation and activation of all harvested ListenerSet fixtures | flowsdn-gateway | First milestone-4 release, #294, stage 3 |
+
+The library maintains the exemption/skip constants and checks target/golden
+agreement and supplied implementation evidence. It does not contain a complete
+upstream feature corpus, publish supportedFeatures, execute conformance, or
+claim removal of these exceptions. Those are still acceptance requirements.

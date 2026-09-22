@@ -1135,7 +1135,7 @@ assertions (#230). A missing required capability must fail, not pass by skipping
 | `bpf-build` | PR (dev-g8) | pinned nightly + `bpf-linker`, build every object variant, no-`memcpy`/no-panic relocation check, tail-slot name check, `bpf-objects.lock` match | 9 min |
 | `verifier` | PR (dev-g8) | load every variant with the all-features `.rodata` and with the default config in LVH 6.6 and 6.12 VMs, x86-64. **Fail** if any program > 800 000 processed instructions or > 480 B stack (spec `02` §9.4); **warn** at +10 % vs `docs/verifier-baseline.json`. Emits `verifier-budget.json` and a PR comment table | 14 min |
 | `bpf-tests` | PR (dev-g8) | `flowsdn-bpf-tests` under `BPF_PROG_RUN` in an LVH 6.12 VM (ADR-0005 corpus, `tests/bpf/CASES.toml`) | 18 min |
-| `privileged` | PR (dev-g8) | `cargo test --features privileged -- --ignored` in a 6.12 VM: map open/create, tcx/netkit/XDP/cgroup attach, netlink, nftables residual, netns | 15 min |
+| `privileged` | approved trusted-main dispatch (#242) | `cargo test --features privileged -- --ignored` in a 6.12 VM: map open/create, tcx/netkit/XDP/cgroup attach, netlink, nftables residual, netns | 15 min |
 | `scripttest` | PR | `cargo test -p flowsdn-scripttest` over the 168 harvested txtar scenarios (unprivileged, fakes) | 7 min |
 | `cloud-fixture-scan` | **PR** | pattern scan over `tests/cloud/**` for credentials, real account identifiers, ARNs, subscription/tenant IDs, tokens and signatures (ADR-0007 §2). Runs **before** any job reads a fixture and blocks them on failure, so a leak is caught at the gate rather than replayed | 1 min |
 | `cloud-fakes` | **PR** | `cargo test -p flowsdn-ipam-aws -p flowsdn-ipam-azure -p flowsdn-ipam-alibaba -p flowsdn-operator-ipam --features cloud-replay`, one matrix leg per provider, against the recorded fixtures in `tests/cloud/<provider>/<scenario>/` replayed at the **HTTP layer** so each SDK's signing, retry, pagination and error mapping stay in the tested path (ADR-0007 §3; spec `07` §9.1). Strict mode: an unmatched request *or* an unused recorded interaction fails. Hosted runner — no kernel, no cluster, **no credentials** | 8 min |
@@ -1655,3 +1655,9 @@ failure evidence up to 2 GiB for fourteen days. Failure quick sets share the
 fourteen-day retention. Use 100,000 retained flows nightly and 1,000,000 for PR
 runs. Existing manifest/truncation ordering remains mandatory; these are caps,
 not a claim that the collector or upload workflow exists.
+
+External conformance tools (#290) are consumed as pinned published upstream
+binaries/images with source/license provenance and checksum verification, driven
+by Rust orchestration. Do not author/copy Go or build these suites from source
+inside this repository. Selecting concrete artifact digests and running the
+suites remain milestone 4 acceptance work (ADR0005, spec21).

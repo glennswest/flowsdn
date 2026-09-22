@@ -83,3 +83,26 @@ The fourth harness is specified in [spec 23](../spec/23-control-plane-golden-tes
 Its deterministic event/fence protocol, manifest, state comparison, normalization,
 failure and cleanup behavior are normative. The spec resolves the missing
 contract; implementing adapters and demonstrating corpus coverage remain #294.
+
+
+## External conformance artifact exception (#290)
+
+Amended 2026-09-22. The Ingress controller conformance suite and Gateway API
+conformance suite named in spec21 §§9.4–9.5 may run as **upstream-owned,
+published binaries or immutable upstream-published container images**. Their
+implementation language does not turn them into flowsdn-authored harnesses.
+Pin release/version and cryptographic artifact digest, verify source/provenance,
+and retain the exact invocation and conformance report with release evidence.
+If a suitable published artifact does not exist, the gate remains blocked;
+this exception does not authorize compiling a Go suite from source.
+
+All flowsdn-authored orchestration, wrappers, fixtures generators and test code
+remain Rust. Do not copy, modify or author Go; do not add a Go toolchain or Go
+source build to this repository's CI. The exception does not extend to arbitrary
+upstream unit tests, helper programs or cilium-cli connectivity tests; the four
+Rust harnesses and their corpus obligations above remain unchanged.
+
+This records permission to consume these two specification-owned artifacts,
+not evidence that CI integration, trusted artifact pins or conformance runs
+have been delivered. Spec21's profiles and individually owned exemptions
+remain the acceptance contract.

@@ -1348,7 +1348,8 @@ None (pure control-plane). `hostfirewallbypass` sets `SO_MARK` on outgoing socke
 
 - rustkube feature matrix: does it implement CEL validation, defaulting, `x-kubernetes-list-type=map`, strategic-merge patch, status subresources, field selectors on `spec.nodeName`/`status.phase`, `PartialObjectMetadata` negotiation, watch bookmarks/410 relist, protobuf content type, Leases and CRD `Established` conditions? Each "no" moves logic into flowsdn (client-side defaulting/validation, client-side pod filtering, JSON-only, etc.).
 - Should flowsdn serve `v2alpha1` for the five graduated BGP/LB/CIDRGroup CRDs at all, or only `v2`? Serving both with strategy `None` costs nothing on a store that does not convert, but rustkube must accept two served versions with one storage version.
-- Identity mode: CRD-backed identities (`CiliumIdentity`) vs the kvstore backend — on rustkube the CRD path avoids etcd but the allocator's `Create`-race semantics rely on API-server uniqueness of `metadata.name`.
+- Resolved #20: CRD identities are primary; kvstore remains optional scope.
+  API-server uniqueness of metadata.name is still a required CRD allocation gate.
 - Whether to keep `CiliumEndpoint` as a per-pod object (N objects, JSON-patched on every regeneration) or go straight to `CiliumEndpointSlice`-only (`--disable-endpoint-crd` + CES); the latter halves API write load but changes what `kubectl get cep` shows.
 - Protobuf vs JSON for built-in types on rustkube (does rustkube speak protobuf at all?).
 - Namespaced `CiliumNodeConfig`/`CiliumGatewayClassConfig` are the only namespaced non-policy CRDs; confirm the namespace(s) flowsdn's operator should list (`--cilium-namespace`).

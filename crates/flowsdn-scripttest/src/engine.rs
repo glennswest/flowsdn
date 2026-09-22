@@ -256,9 +256,6 @@ impl Engine {
         self.max_commands = max_commands;
     }
 
-    /// Pattern commands regex-escape substitutions in their first non-option
-    /// argument (or the argument following `--`). Argument indices exclude the
-    /// command name. Flags themselves are parsed by the registered handler.
     /// Non-interactive failure snapshot for fixture callers. Only registered
     /// tables and current output are included; environment values and external
     /// maps are not implicitly read. Rendering errors remain visible. The
@@ -306,6 +303,9 @@ impl Engine {
         output
     }
 
+    /// Pattern commands regex-escape substitutions in their first non-option
+    /// argument (or the argument following `--`). Argument indices exclude the
+    /// command name. Flags themselves are parsed by the registered handler.
     pub fn register_command(
         &mut self,
         name: &str,

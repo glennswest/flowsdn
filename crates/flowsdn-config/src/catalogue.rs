@@ -14,6 +14,8 @@ pub const SPECIFICATION: &str =
 
 /// flowsdn-only keys, deliberately excluded from reference catalogue coverage.
 pub const EXTENSIONS: &[Definition] = &[
+    Definition { name: "bgp-strict-update-errors", pflag: Pflag::Bool, default_expression: "false", default: Some("false"), class: Class::Immutable, inventory_name: None },
+    Definition { name: "bgp-status-report-prefixes", pflag: Pflag::Bool, default_expression: "false", default: Some("false"), class: Class::Active, inventory_name: None },
     Definition {
         name: "force-config-change",
         pflag: Pflag::Bool,
@@ -127,9 +129,10 @@ impl Definition {
     pub fn default_provenance(self) -> Option<&'static str> {
         self.default?;
         Some(match self.name {
-            "strict-config" | "endpoint-id-max" | "force-config-change" | "bpf-ipcache-map-max" => {
+            "strict-config" | "endpoint-id-max" | "force-config-change" | "bpf-ipcache-map-max" | "bgp-strict-update-errors" | "bgp-status-report-prefixes" => {
                 "docs/spec/00-foundation-table-config.md#flowsdn-extension-keys"
             }
+            "identity-allocation-mode" => "docs/spec/20-clustermesh-kvstore.md:1558",
             "agent-not-ready-taint-key" => "docs/spec/12-operator.md:1434",
             "bpf-lb-algorithm" => "docs/spec/05-service-loadbalancing.md:929",
             "bpf-lb-dsr-dispatch" => "docs/spec/05-service-loadbalancing.md:928",
@@ -141,14 +144,14 @@ impl Definition {
             "bpf-nat-global-max" => "docs/spec/04-conntrack-nat.md:807",
             "bpf-neigh-global-max" => "docs/spec/01-bpf-map-abi-loader.md:1064",
             "bpf-node-map-max" => "docs/spec/14-encryption-egress.md:1715",
-            "clustermesh-service-v2" => "docs/spec/20-clustermesh-kvstore.md:1548",
+            "clustermesh-service-v2" => "docs/spec/20-clustermesh-kvstore.md:1557",
             "enable-bandwidth-manager" => "docs/spec/10-node-routing-nftables.md:1383",
             "enable-bbr" => "docs/spec/10-node-routing-nftables.md:1384",
             "enable-bbr-hostns-only" => "docs/spec/10-node-routing-nftables.md:1384",
             "enable-dynamic-source-lookup-nodeport" => "docs/spec/05-service-loadbalancing.md:943",
             "enable-node-ipam" => "docs/spec/12-operator.md:1471",
             "fixed-identity-mapping" => "docs/spec/03-identity-ipcache.md:946",
-            "gateway-api-secrets-namespace" => "docs/spec/21-gateway-api-ingress.md:1697",
+            "gateway-api-secrets-namespace" => "docs/spec/21-gateway-api-ingress.md:1736",
             "hubble-drop-events-reasons" => "docs/spec/11-hubble-monitor.md:2544",
             "hubble-event-buffer-capacity" => "docs/spec/11-hubble-monitor.md:2495",
             "hubble-lost-event-send-interval" => "docs/spec/11-hubble-monitor.md:2498",
@@ -156,9 +159,9 @@ impl Definition {
             "hubble-tls-cert-file" => "docs/spec/11-hubble-monitor.md:2501",
             "hubble-tls-client-ca-files" => "docs/spec/11-hubble-monitor.md:2503",
             "hubble-tls-key-file" => "docs/spec/11-hubble-monitor.md:2502",
-            "ingress-secrets-namespace" => "docs/spec/21-gateway-api-ingress.md:1714",
+            "ingress-secrets-namespace" => "docs/spec/21-gateway-api-ingress.md:1753",
             "ipam-multi-pool-pre-allocation" => "docs/spec/07-ipam.md:1254",
-            "kvstore" => "docs/spec/20-clustermesh-kvstore.md:1507",
+            "kvstore" => "docs/spec/20-clustermesh-kvstore.md:1516",
             "node-port-range" => "docs/spec/05-service-loadbalancing.md:922",
             "policy-secrets-namespace" => "docs/spec/12-operator.md:1468",
             "policy-secrets-only-from-secrets-namespace" => "docs/spec/16-l7-envoy-dns.md:1479",
@@ -169,6 +172,8 @@ impl Definition {
     /// The table does not supply help text or hidden-flag metadata.
     pub fn help(self) -> Option<&'static str> {
         match self.name {
+            "bgp-strict-update-errors" => Some("Reset the BGP session on malformed UPDATE content"),
+            "bgp-status-report-prefixes" => Some("Report acknowledged advertised BGP prefixes in status"),
             "force-config-change" => {
                 Some("Allow immutable configuration changes during endpoint restoration")
             }
@@ -183,7 +188,7 @@ impl Definition {
     pub fn hidden(self) -> Option<bool> {
         matches!(
             self.name,
-            "strict-config" | "endpoint-id-max" | "force-config-change" | "bpf-ipcache-map-max"
+            "strict-config" | "endpoint-id-max" | "force-config-change" | "bpf-ipcache-map-max" | "bgp-strict-update-errors" | "bgp-status-report-prefixes"
         )
         .then_some(false)
     }

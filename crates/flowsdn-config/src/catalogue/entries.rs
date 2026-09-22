@@ -2594,7 +2594,7 @@ pub static ENTRIES: &[Definition] = &[
         name: "identity-allocation-mode",
         pflag: Pflag::String,
         default_expression: "kvstore",
-        default: Some("kvstore"),
+        default: Some("crd"),
         class: Class::Immutable,
         inventory_name: None,
     },

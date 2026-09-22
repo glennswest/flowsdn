@@ -777,7 +777,7 @@ never imports, the required RFC surface is small and fully enumerated here.
 Deliberately **not** implemented: ADD-PATH (7911), enhanced route refresh
 (7313 — the plain 2918 form is used), extended messages (8654 — 4096 byte cap
 retained), BGP-LS, flowspec, VPN SAFIs, route reflection (4456),
-confederations (5065), BFD (5880), TCP-AO (5925 — see open decision O-3).
+confederations (5065), BFD (5880), TCP-AO (5925 — deferred by decision O-3).
 
 #### 3.16.2 Message encoding and decoding
 
@@ -858,6 +858,15 @@ States and the events that move between them. `ConnectRetry`, `Hold`,
 | any | shutdown with GR enabled | Idle | close TCP **without** NOTIFICATION |
 | any | shutdown without GR / instance destroy | Idle | NOTIFICATION 6/2 (administrative shutdown), close |
 
+**Passive mode (#186).** When `spec.transport.passiveMode=true`, startup and
+ConnectRetry expiry MUST NOT initiate TCP: remain in Active while listening.
+A missing or zero instance localPort is a configuration error, not an implicit
+port 179. Inbound OPEN handling, Hold/Keepalive timers and administrative
+reset behavior are unchanged. After transport loss and IdleHold, return to
+passive Active. Default false retains both listening and initiating when a
+localPort exists. Socket listeners and this FSM integration remain unimplemented;
+the transport planner enforces configuration and initiation decisions.
+
 Connection collision (both sides connect simultaneously, only possible when
 listening): resolved per RFC 4271 §6.8 — the connection whose BGP identifier is
 numerically larger on the local side is kept; the other is closed with
@@ -913,12 +922,20 @@ with nothing to do at all.
 | 6 | Cease | 1 max prefixes reached, 2 administrative shutdown, 3 peer de-configured, 4 administrative reset, 6 other configuration change, 7 connection collision resolution, 8 out of resources (RFC 4486) |
 | 7 | ROUTE-REFRESH message error | 1 invalid message length |
 
+**Resolved error policy (#191).** `bgp-strict-update-errors` defaults to
+`false`. When true, every detected malformed UPDATE causes its notification
+and session close. When false, only bounded UPDATE-content errors take the
+count/log/discard path below; malformed framing or attribute TLV boundaries
+still close the session. A malformed optional attribute with a valid outer
+length is a content error: its enclosing UPDATE boundary is known. Never apply
+this lenient mode to a receive path that imports routes into forwarding.
+
 **Treat-as-withdraw is not applicable.** Because the adj-RIB-in is
 observability-only, a malformed UPDATE cannot corrupt forwarding. flowsdn
 therefore prefers **session survival** over strict error handling for the
 receive path: an UPDATE that fails to parse increments a counter, is logged at
 `debug` with the first 64 bytes hex-dumped, and the session continues. A
-NOTIFICATION is sent only when the error is in the message *framing* (code 1)
+In default lenient mode, a NOTIFICATION is sent only when the error is in the message *framing* (code 1)
 or in the attribute *length* structure such that the remainder of the message
 cannot be located. This is a deliberate divergence from RFC 4271's
 session-reset default and MUST be documented; the risk that motivates
@@ -948,6 +965,16 @@ The reconcilers see the speaker through this surface (Rust signatures in
 
 `advertise` and `withdraw` MUST NOT block on network I/O; they mutate the
 Loc-RIB and wake per-session export tasks.
+
+**Primitive implementation boundary.** `flowsdn-bgp-proto` currently implements
+framing and encoding within the 4096-byte limit, OPEN TLVs and peer checks,
+UPDATE structural validation for supported unicast attributes/prefixes, and
+strict/lenient error-action selection. Unknown optional transitive attributes
+are returned with the partial bit set; they are not installed anywhere. OPEN
+family/capability negotiation, notification data payload construction, complete
+attribute semantics, UPDATE splitting, AS4 conversion, FSM/timers, sockets,
+GR and adj-RIB storage remain required. A successful parse is not authorization
+to install a route. Codec tests do not satisfy the full protocol-suite issue #249.
 
 ### 3.17 The pluggable advertiser
 
@@ -1062,6 +1089,7 @@ documented:
 | Field | Type | Default / validation | Effect |
 |---|---|---|---|
 | `spec.transport.peerPort` | int32 | default `179`, 1..65535 | remote TCP port |
+| `spec.transport.passiveMode` | bool | flowsdn extension, default false; true requires nonzero instance `localPort` | suppress every outbound connect/retry; wait in Active for inbound sessions (#186) |
 | `spec.transport.sourceInterface` | string | optional | source IP from this device; must yield exactly one usable address per family |
 | `spec.timers.connectRetryTimeSeconds` | int32 | default `120`, 1..2147483647 | ConnectRetry |
 | `spec.timers.holdTimeSeconds` | int32 | default `90`, 3..65535 | Hold; change ⇒ hard reset |
@@ -1153,6 +1181,20 @@ and `open_confirm` with underscores, matching the reference's string form; the
 CRD documentation in the reference lists `opensent`/`openconfirm`. flowsdn
 emits the underscore form because that is what the reference code produces and
 what cilium-cli parses.
+
+**Opt-in advertised status (#187).** Add optional instance-level
+`advertised[]` entries `{peer: string, prefix: CIDR, policy: string}` only when
+`bgp-status-report-prefixes=true`. Prefixes are canonical; entries sort by
+peer, address family/address/prefix length, then policy and are deduplicated.
+Use acknowledged backend state; pending desired advertisements must never be
+reported as installed. Default false omits the field entirely; enabled with no
+advertisements emits an empty list. The writer supplies a bounded row limit
+and checks serialized object size before publication; exceeding either fails
+that publication with a reconcile error, retaining the previous status. Never
+truncate silently or publish only one backend's subset as a complete snapshot.
+The planner implements omission/sorting/deduplication/row limits; CRD schema,
+backend acknowledgements, JSON size limits and status writer remain required.
+The existing reference fields and defaults remain unchanged.
 
 ### 4.5 `CiliumBGPNodeConfigOverride` (cluster-scoped, `cbgpnodeoverride`, no status)
 
@@ -1345,6 +1387,12 @@ runs only once per session establishment.
 ---
 
 ## 6. Configuration
+
+Additional resolved keys: `bgp-strict-update-errors` is boolean, default false
+(§3.16.5), and `bgp-status-report-prefixes` is boolean, default false (§4.4).
+The former is fixed for a session; changing it requires session reconfiguration.
+The latter can requeue status projection without resetting sessions.
+
 
 Agent and operator share the key names of the reference so an existing
 `cilium-config` ConfigMap works unchanged.
@@ -1777,13 +1825,12 @@ reconcilers, status, read APIs), ~1–2k RouterOS backend.
 
 ## 12. Decision register (resolved and open)
 
-**O-1. Which backend ships first.** The RouterOS backend alone would make BGP
-useful on the MikroTik fleet without any of the speaker work; the `bgp` backend
-is required for every other deployment. *Recommendation:* build
-`flowsdn-bgp-proto` and the control plane first (they are needed either way),
-ship the `routeros` backend as the first working end-to-end path, and land the
-speaker second. The trait split in §3.17 exists precisely so this ordering
-costs nothing.
+**O-1. Resolved #183: protocol/control plane, RouterOS path, then speaker.**
+Build protocol primitives and the shared control plane first. The first
+working end-to-end backend is RouterOS under the §3.17 advertiser contract;
+then complete the in-tree `bgp` speaker for other deployments. Both remain in
+scope. The protocol crate now exists; no working RouterOS backend, control
+plane or session speaker is implied by this sequencing decision.
 
 **O-2. Resolved #184: serve both versions.** Keep deprecated `v2alpha1` served
 alongside storage `v2` for all five BGP CRDs, consistent with spec 13 §12.2.
@@ -1791,27 +1838,25 @@ Registration projection rejects removal of the older served version. Live
 registration and storage-version migration remain unimplemented; the decision
 is not a claim that a running reference installation can already be migrated.
 
-**O-3. TCP-AO (RFC 5925).** Linux 6.7+ supports it and the fleet kernel line
-(6.12) has it. It is strictly better than MD5 and would exceed the reference.
-*Recommendation:* defer to a follow-up, gated on a peer that supports it;
-RouterOS 7 does not, and neither does GoBGP, so it would be untestable in CI
-today. Add a `spec.authMode: md5|ao` field to `CiliumBGPPeerConfig` when it
-lands — as a flowsdn extension marked **DEVIATION**.
+**O-3. Resolved #185: MD5 first, TCP-AO deferred.** Keep TCP MD5 as the
+initial authenticated transport contract. Do not expose an operative TCP-AO
+mode or silently downgrade an AO request to MD5/plaintext. The transport
+planner explicitly rejects AO. Introduce an `authMode` CRD extension only with
+implementation, feature probing and an independently tested peer/key-rollover
+interop case. This decision does not rely on claims about current RouterOS or
+GoBGP capabilities; no live MD5 socket implementation is claimed either.
 
-**O-4. Passive-only sessions.** The reference requires `localPort` to accept
-inbound connections, and a node with `localPort` set both listens and
-initiates. Some routers insist on initiating. *Recommendation:* add
-`spec.transport.passiveMode: bool` to `CiliumBGPPeerConfig` (flowsdn
-extension): when true and `localPort` is set, the session never initiates and
-waits in Active. Low cost given the FSM is ours.
+**O-4. Resolved #186: explicit passive-only extension.** Add
+`spec.transport.passiveMode`, default false; true requires a configured nonzero
+instance localPort and forbids outbound connections/retries. The initial state
+is passive Active. Transport planning tests cover missing listener, active
+mode and passive suppression; CRD schema and live FSM integration remain work.
 
-**O-5. Expose advertised prefixes and policies in `CiliumBGPNodeConfig.status`.**
-The reference exposes them only through the agent API. For the RouterOS backend
-the node has no local RIB to query, so the status is the only cluster-wide
-view. *Recommendation:* add an optional `status.bgpInstances[].advertised[]`
-list, populated only when `bgp-status-report-prefixes` is enabled (default
-off, because it can be large), and keep the default status schema identical to
-the reference.
+**O-5. Resolved #187: opt-in advertised prefix/policy status.** Use the
+optional `advertised[]` projection in §4.4, default omitted. Include the
+acknowledged peer/prefix/policy association, with deterministic ordering and
+bounded all-or-error publication. The pure planner is implemented; CRD schema,
+serialized-size validation, backend state and status writes are not.
 
 **O-6. BGP policy names — resolved #188.** Preserve the exact policy names generated by
 §3.7, including `peer-<name>-export` and address-family/resource naming. Names are CLI
@@ -1830,13 +1875,21 @@ reconciliation naming that setting; do not reject the advertisement solely for t
 reason. Operators may supply external reachability separately.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-**O-9. Error handling divergence on malformed UPDATE.** §3.16.5 chooses session
-survival over RFC 4271's session reset, justified by the import invariant.
-*Recommendation:* adopt it, behind `bgp-strict-update-errors` (default `false`)
-so a user peering with something that depends on the strict behavior can turn it
-on. Revisit if an interop failure is traced to it.
+**O-9. Resolved #191: explicit strict-update-errors escape hatch.** Adopt
+§3.16.5 default-false session-survival policy for bounded content errors, with
+strict=true closing on all detected UPDATE errors. Framing/TLV truncation is
+always fatal. The classifier and independent malformed-message vectors cover
+both modes; runtime counters, bounded diagnostics and session actions remain
+unimplemented. This does not claim interop coverage or full RFC conformance.
 
 **O-10. BGP backend scope — resolved #192.** Keep `bgp-backend` a node-level setting.
 Both in-tree BGP and RouterOS backends remain in scope under the shared advertiser
 contract; do not mix next-hop/status models per peer in one instance.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
+
+**Test peer (#208).** The script peer will reuse the Rust protocol library,
+while an independent `[exec:gobgpd]`-gated job cross-checks sessions and wire
+behavior. A shared codec oracle alone cannot detect shared bugs. Spec 17 owns
+command wiring and capability detection; both runtime peers and the twenty
+scenario executions remain implementation acceptance. The initial vector tests
+use independently specified bytes, not only encoder/decoder round trips.

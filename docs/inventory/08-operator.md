@@ -930,12 +930,12 @@ without it.
 1. **Resolved #156:** agents publish CEPs; default CES mode ships first. Slim
    remains a required second mode with operator identities and shared derivation
    fixtures. No slim controller is delivered by the current planning library.
-2. Identity allocation mode default: Cilium's operator default is `kvstore`
-   while Helm defaults to `crd`. The normative choice belongs to spec03/12;
-   this is distinct from the identity-management ownership default (#161).
-3. Gateway API: target `gateway-api` crate vs hand-derived types for
-   `ListenerSet`/`BackendTLSPolicy`/`TCPRoute`/`UDPRoute`; which conformance
-   profiles are must-pass for first release?
+2. Resolved #20: CRD allocation is primary (spec20); kvstore remains supported
+   scope with separate conformance gates. Allocation backend is distinct from
+   identity-management ownership (#161).
+3. Resolved #21: hand-declared schema-backed types owned by flowsdn-k8s,
+   pinned to Gateway API 1.6.1; spec21§12.11 owns seven required profiles and
+   staged capabilities. Type generation and controller integration remain pending.
 4. **Resolved #158:** keep `node.cilium.io/agent-not-ready`, including the
    existing custom-key option. Key-only removal preserves unrelated taints.
    Any future default-key migration must remove both keys.

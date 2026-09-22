@@ -641,9 +641,10 @@ agent-side ClusterMesh import path (nodes, identities, ipcache, shared
 services, cluster config, canaries) — they are the interoperability contract
 and the only way a flowsdn cluster can mesh with (or replace) a Cilium one.
 **Keep** kvstoremesh (small, pure kvstore->kvstore). **Defer** MCS-API,
-EndpointSlice v2 export/mirroring, the operator-side EndpointSlice sync, the
-CoreDNS auto-config job, and etcd user management (use mTLS-only in the first
-cut). **Replace** the etcd sidecar + `etcdinit` with fastetcd embedded/adjacent
+the EndpointSlice v2 consumer, operator-side EndpointSlice mirroring and the
+CoreDNS auto-config job until the legacy interoperability gate passes (#279).
+Required export retains both legacy and slice shapes (#27). Replace etcd user
+management with mTLS plus in-process prefix authorization, not mTLS alone (#277). **Replace** the etcd sidecar + `etcdinit` with fastetcd embedded/adjacent
 to the flowsdn apiserver, keeping the client-facing key/ACL layout.
 
 Effort: kvstore client + store layer **M** (~5k), identity kvstore backend +
@@ -659,15 +660,18 @@ apiserver synchronizers **M** (~3k), MCS-API/EndpointSlice v2 **L** if taken.
 - Do we keep etcd Auth (users/roles) for per-cluster read scoping, or rely on
   mTLS with a proxy that restricts prefixes? The `remote` role read set is
   small and could be enforced in a flowsdn front-end instead.
-- Which identity allocation mode is primary for flowsdn (kvstore vs CRD)? With
-  fastetcd present, `kvstore` mode removes the CRD backend and the
-  double-write migration modes entirely.
-- Keep legacy `services/v1` ClusterService export, or start on
-  `endpointslices/v1` (`only-endpointslice`) and accept no interop with
-  `prefer-legacy` Cilium peers?
-- Cluster-aware addressing has no user-facing switch in v1.20.1; decide
-  whether flowsdn implements overlapping-PodCIDR meshes at all or documents
-  the same "non-overlapping PodCIDR" requirement.
+- **Resolved #20:** CRD identities default; explicit kvstore remains required
+  with `kvstore=etcd`. Runtime backends/GC still need implementation (spec 20 §12.1).
+- **Resolved #27:** require legacy service import and dual export; only
+  `prefer-legacy` until slice-consumer interoperability tests pass (spec 20 §12.4).
+- **Resolved #28:** cross-cluster PodCIDRs must not overlap; topology replacement
+  checks preserve prior state on conflict. Live admission remains pending (spec 20 §12.7).
 - The cilium-cli (`cilium clustermesh connect`) is out of tree; flowsdn needs
   its own tool to exchange endpoints/certs and write the
   `/var/lib/cilium/clustermesh/<name>` files or an equivalent config source.
+
+Spec 20 §12 also resolves #273 (5m resync pending an evidence-gated default
+change), #274 (reject double-write, offline migration), #276 (stable UUID plus
+durable CAS ownership guard), #277 (in-process prefix front) and #279 (explicit
+MCS/mirroring staging). `flowsdn-clustermesh` provides local planning/checking
+primitives only; no live store/client/controller behavior is established.

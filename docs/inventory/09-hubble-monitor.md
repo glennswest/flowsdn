@@ -994,7 +994,6 @@ it), and fix the `DBG_SKIP_POLICY` off-by-one rather than copying it.
 - **Resolved #150:** accept both preferences and warn on explicit legacy
   input. Explicit global wins, including false; otherwise legacy, then false.
   Preserve provenance until resolution (spec 11 §12.10).
-- Relay TLS: the reference derives the per-node server name
-  `<node>.<cluster>.hubble-grpc.cilium.io` and expects certificates issued
-  accordingly (Helm `hubble.tls.auto`). Does flowsdn ship a certificate
-  generator (cert-manager / helm / cronjob modes) or require external issuance?
+- Resolved #152/#239: packaging owns issuance (Helm default, cert-manager,
+  supplied Secrets or digest-pinned upstream certgen CronJob). All methods
+  retain spec11 server-name and authentication requirements.

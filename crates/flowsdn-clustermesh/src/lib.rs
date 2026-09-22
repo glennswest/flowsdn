@@ -1,0 +1,12 @@
+//! ClusterMesh validation and transaction planning, not live clients/controllers.
+#![forbid(unsafe_code)]
+pub mod config;
+pub mod ownership;
+pub mod prefixes;
+pub mod topology;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Error(pub String);
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }
+}
+impl std::error::Error for Error {}

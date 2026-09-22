@@ -1595,6 +1595,8 @@ coverage count. These are startup settings, not runtime-mutable options.
 | `endpoint-id-max` | Uint | `4095` | active |
 | `force-config-change` | Bool | `false` | active |
 | `bpf-ipcache-map-max` | Uint | `512000` | immutable |
+| `bgp-strict-update-errors` | Bool | `false` | immutable |
+| `bgp-status-report-prefixes` | Bool | `false` | active |
 
 `strict-config` follows §3.3.4. `endpoint-id-max` is validated in the inclusive
 range 1..65535 and bounds newly allocated endpoint IDs (spec 08, #115).

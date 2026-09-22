@@ -11,6 +11,7 @@ fn owning_defaults_resolve_typed_values_without_requiring_overrides() {
     let schema = catalogue::partial_known_defaults_registry().unwrap();
     let resolved = schema.resolve([]).unwrap();
     for (key, expected) in [
+        ("identity-allocation-mode", Value::String("crd".into())),
         ("bpf-lb-map-max", Value::Int(65536)),
         ("lb-retry-backoff-max", Value::Duration(60_000_000_000)),
         ("bpf-nat-global-max", Value::Int(524288)),
@@ -136,7 +137,7 @@ fn resolved_provenance_points_to_the_actual_owning_declaration() {
             definition.name
         );
     }
-    assert_eq!(cross_spec_count, 33);
+    assert_eq!(cross_spec_count, 34);
     assert_eq!(catalogue::coverage().literal_defaults, 521);
 }
 
@@ -564,4 +565,16 @@ fn explicit_socket_termination_false_overrides_daemon_default() {
         .unwrap();
     assert_eq!(value.value, Value::Bool(false));
     assert_eq!(value.source, Source::Flag);
+}
+
+#[test]
+fn bgp_extension_defaults_and_explicit_policy_are_distinct() {
+    let schema = catalogue::partial_known_defaults_registry().unwrap();
+    let defaults = schema.resolve([]).unwrap();
+    for key in ["bgp-strict-update-errors", "bgp-status-report-prefixes"] {
+        assert_eq!(defaults.get(key).unwrap().value, Value::Bool(false));
+        let explicit = schema.resolve([Entry::new(Source::Flag, key, "true")]).unwrap();
+        assert_eq!(explicit.get(key).unwrap().value, Value::Bool(true));
+    }
+    assert_eq!(catalogue::get("bgp-strict-update-errors").unwrap().class, Class::Immutable);
 }

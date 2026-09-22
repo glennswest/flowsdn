@@ -559,8 +559,11 @@ its `CiliumClusterConfig` (§4.2), leased. The writer:
 
 1. establishes its own watch on the key first, and waits **5 s** for it to be
    established before the first write, so it cannot race itself;
-2. writes with `put_if_different`, so a steady state is silent;
-3. re-writes whenever the watch reports a foreign modification or a deletion;
+2. computes the ownership-guarded transaction in §12 decision 9; unchanged
+   same-owner values on the desired lease require no write; unchanged bytes
+   on a different lease MUST be rebound by a guarded PUT;
+3. on modification/deletion rereads owner and config together, then repairs
+   only when the same UUID still owns the name; foreign/legacy values fail closed;
 4. refreshes every **5 minutes** regardless.
 
 The key is the only thing peers exchange about each other's configuration.
@@ -648,7 +651,8 @@ Everything above the trait is identical in both modes, including the numbering,
 the cluster-ID range, the label-string key, the local (`0x01`) and remote-node
 (`0x02`) scopes, and the identity change stream the policy engine consumes.
 A cluster MUST NOT change modes while running; the migration path the
-double-write modes exist to serve is out of scope (§12 decision 3).
+double-write modes exist to serve is rejected in favor of the documented offline
+procedure (§12 decision 3).
 
 In CRD mode, a mesh still needs identities visible to peers: the
 clustermesh-apiserver mirrors `CiliumIdentity` objects into
@@ -877,8 +881,9 @@ replacing them*, and every global service loses its remote backends.
 **DEVIATION.** flowsdn accepts only `prefer-legacy` and rejects the other two
 values at startup, rather than shipping a mode that silently breaks global
 services. The key schema, the export path and the `endpointSlicesExportMode`
-capability are still implemented and advertised, so a peer in a v2 mode
-interoperates; only the local *selection* is restricted. §12 decision 4 revisits
+capability remain part of the required producer contract. A peer exporting only
+slices is incompatible with this importer and must be rejected; dual exporters
+remain compatible through their legacy records. §12 decision 4 revisits
 this when the consumer exists.
 
 #### 3.7.10 Status
@@ -1231,6 +1236,10 @@ JSON, every field omitted when empty:
     "endpointSlicesExportMode": "services-and-endpointslices" } }
 ```
 
+`capabilities.flowsdnInstanceUUID` is a flowsdn additive optional string,
+required on local writes, governed by §12 decision 9. Old peers may omit it on
+read; that does not authorize local ownership adoption.
+
 `id` is `u32`. `serviceExportsEnabled` is **nullable**: absent means the peer
 does not know the concept, `false` means it knows it and has it off.
 `endpointSlicesExportMode` is one of `""` (services only),
@@ -1427,8 +1436,8 @@ Because fastetcd can currently drop watch events silently under load without
 cancelling the watch (§2.7 F10), flowsdn adds a periodic relist every
 `kvstore-resync-interval` (default 5 m, `0` disables). It runs the same relist
 path, so it converges the same way, and its cost is one paginated list per
-prefix per interval. When F10 is fixed the default becomes `0` and this becomes
-a diagnostic tool. The reference has no equivalent.
+prefix per interval. A future change to `0` requires the explicit evidence gate in §12 decision 2;
+it is never selected automatically. The reference has no equivalent.
 
 ### 5.5 Lease bookkeeping
 
@@ -1895,27 +1904,36 @@ the prefix-scoping front ≈ 0.5k. MCS-API and the EndpointSlice v2 consumer add
 
 ## 12. Open decisions
 
-1. **Identity allocation mode for a meshed flowsdn cluster.** Options: (a) CRD
-   everywhere, with the apiserver mirroring identities into the store for peers
-   — the reference's Helm default, and the only mode that works without a
-   kvstore on non-meshed clusters; (b) kvstore mode, which removes the CRD
-   allocator and the operator's CRD identity GC from the mesh path.
-   **Recommendation: (a) as the default, (b) supported and tested**, because
-   (a) keeps a single allocation implementation on the common path and (b)'s GC
-   is the subtlest algorithm in this spec (§5.6).
-2. **`kvstore-resync-interval` default.** 5 m is a real cost at 100k ipcache
-   entries. Options: keep 5 m until fastetcd F10 is fixed, then 0; or make it
-   adaptive (relist only after a watch has been silent for N intervals).
-   **Recommendation: 5 m now, 0 after F10, revisit if the list cost bites.**
-3. **Double-write identity modes.** Not implemented. They exist purely to
-   migrate an existing Cilium cluster from kvstore to CRD identities in place.
-   **Recommendation: leave unimplemented**; document the offline migration
-   (drain, switch, re-allocate) instead. Revisit only if a user has a live
-   cluster to convert.
-4. **EndpointSlice v2 service export.** flowsdn exports both shapes but imports
-   only the legacy one (§3.7.9). **Recommendation: implement the consumer
-   before allowing the non-legacy modes**, and track the reference: if upstream
-   ships the consumer in 1.21, harvest its scenarios and lift the restriction.
+1. **Resolved #20: CRD allocation is the default.** Use `crd` with the
+   apiserver mirroring identities into kvstore for remote readers. Explicit
+   `kvstore` remains a required supported backend, selected only with
+   `kvstore=etcd`; it is not delivered by the configuration planner. Agent vs
+   operator identity management is independent (spec 12). Both allocators and
+   their GC/concurrency acceptance remain required before runtime claims.
+2. **Resolved #273: keep the five-minute resync default.** Keep `5m` until
+   pinned-server tests prove watch lag always cancels rather than silently
+   dropping events, with compaction/relist recovery tests. Do not automatically
+   switch to zero based on a version string or a reported upstream fix. A later
+   explicit default change needs those tests and list-cost evidence. Explicit
+   `0` remains available with a warning that periodic convergence is disabled;
+   it cannot make an F10-failing server production conformant. No adaptive
+   resync is selected; scheduling/watch integration remains to implement.
+3. **Resolved #274: reject double-write modes.** Both double-write values
+   remain fatal. Offline migration requires draining affected workloads,
+   stopping old allocators/writers, switching the configured backend, allocating
+   identities afresh, reconciling maps/policy, and validating connectivity before
+   uncordon. Do not promise stable numeric IDs or a live transition. Revisit
+   live migration only with a concrete deployment and an acceptance suite proving
+   ownership, GC and rollback across both backends. Ordinary kvstore support is
+   still required, not removed by this migration restriction.
+4. **Resolved #27: preserve legacy imports and dual exports.** Only
+   `prefer-legacy` is accepted. The required producer publishes both
+   `services/v1` and `endpointslices/v1`, while backend selection consumes the
+   legacy service store. Non-legacy selection remains fatal until an actual
+   EndpointSlice consumer and mixed-peer migration tests exist. A peer exporting
+   only slices cannot supply usable remote service backends to this importer;
+   detect/reject that unsupported peer mode instead of claiming interoperability.
+   The library supplies the plan, not producers or consumers.
 5. **etcd Auth vs an apiserver-side prefix front (§3.8.5).** Options: (a) the
    front, as specified — no store-side RBAC, one place to audit, works with
    fastetcd today; (b) extend fastetcd with CN→user mapping and per-key RBAC and
@@ -1930,25 +1948,68 @@ the prefix-scoping front ≈ 0.5k. MCS-API and the EndpointSlice v2 consumer add
    by the operator. **Recommendation: the CLI first** (it is what the
    documentation and every existing runbook assume), with the CRD as a later
    addition.
-7. **Overlapping PodCIDRs.** The reference carries a dormant cluster-aware
-   addressing datapath with no user-facing switch. Options: implement it
-   (per-cluster CT/NAT maps, inter-cluster SNAT) and support overlapping
-   PodCIDRs; or keep the documented non-overlapping requirement.
-   **Recommendation: keep the requirement**; revisit only with a concrete user
-   need, since it costs map memory on every node in every deployment.
+7. **Resolved #28: require non-overlapping PodCIDRs between clusters.**
+   Validate every known local and remote allocation prefix before accepting a
+   topology replacement. CIDR containment in either direction is overlap;
+   IPv4 and IPv6 remain distinct. A failed update must preserve the prior
+   accepted topology and report both cluster names. Nested prefixes within the
+   same cluster are permitted. Missing allocation information is not proof of
+   non-overlap: cloud modes still require an operator-verified disjoint address
+   plan. Live watcher/IPAM admission integration remains required. Cluster-aware
+   overlapping addressing needs a separate concrete deployment requirement and
+   tests for per-cluster CT/NAT and inter-cluster SNAT before support is claimed.
 8. **fastetcd peer TLS (§2.7 F21).** Accepted as-is because the peer port is
    not exposed. **Recommendation: file it as a fastetcd hardening item**, and
    require a NetworkPolicy restricting the peer port in the shipped manifest.
-9. **Cluster-name collision detection.** Nothing detects two clusters sharing a
-   name; they silently overwrite each other. Options: leave it (reference
-   parity); or have each writer stamp a per-cluster instance UUID in its
-   cluster config and refuse to overwrite a config carrying a different one.
-   **Recommendation: the UUID stamp**, as an additive `omitempty` capability
-   field — it is cheap, additive, and turns a silent corruption into a clear
-   error. Requires a decision because it is a wire-format addition.
-10. **Where the prefix-scoping front lives.** Options: inside the apiserver
-    process, in front of an in-process fastetcd; or as a separate sidecar in
-    front of a standalone fastetcd. **Recommendation: in the apiserver
-    process**, so there is one TLS termination point and one place that knows
-    the CN→role table, and so the two-container pod of §6.6 stays two
-    containers.
+9. **Resolved #276: stable instance UUID with guarded ownership.** Add
+   `capabilities.flowsdnInstanceUUID` (canonical lowercase, nonzero UUID string;
+   omitted by reference peers). Provision it once in durable cluster bootstrap
+   state shared by HA writers; restart/leader change must reuse it. Never derive
+   it from a process ID or generate one on each start. Claim an unleased
+   `flowsdn/cluster-owners/<name>` key containing that UUID atomically with the
+   leased config write. The guard survives config lease expiry. Compare absence
+   with `Version==0`, and existing records with exact value, `mod_revision` and lease ID. Desired
+   config lease IDs must be nonzero; equal bytes never suppress a required
+   lease rebind after a new session.
+   Never blindly rewrite a foreign modification. A different UUID, leased owner
+   key, unstamped existing config or stamped config with missing owner guard is
+   an error requiring explicit offline operator recovery, not automatic adoption.
+   Preserve unknown config fields when adding the stamp. On CAS failure reread
+   both keys and replan. No remote frontend role may access the private owner
+   prefix. Administrative deletion/backup restore must preserve guard+bootstrap
+   consistency; reference writers do not honor this guard, so it cannot promise
+   collision protection against mixed unmodified writers. Such a collision must
+   fail the flowsdn writer closed. Live atomic-store, bootstrap persistence and
+   migration tests remain required; the library produces the guarded plan only.
+10. **Resolved #277: prefix authorization lives in the apiserver process.**
+    One public mTLS termination and explicit CN-to-role mapping feed the
+    read-range checker before forwarding to the private backend. No additional
+    sidecar is selected. The backend must be unreachable directly by peers.
+    Check the entire requested byte range against one granted interval, not
+    just the first key; reject unbounded reads, unknown principals and every
+    non-Range/Watch RPC (including Txn). Decode an empty etcd `range_end` as a
+    single-key request, and reject the zero-byte unbounded sentinel. Local
+    administrative writes use a separate private trusted client. The pure range
+    checker is implemented; TLS, CN mapping, gRPC enforcement, network isolation
+    and adversarial transport conformance are outstanding.
+11. **Resolved #279: explicit MCS and EndpointSlice-mirroring staging.** MCS
+    `ServiceExport`/`ServiceImport`, `clusterset.local` DNS, `serviceexports/v1`
+    writes and operator EndpointSlice mirroring remain required feature scope,
+    owned by this spec's apiserver/mesh controllers and the spec 12 operator.
+    Stage them after legacy mesh import/export, reconnect/resync and mixed-peer
+    conformance pass. Enabling their currently accepted-but-ignored keys emits
+    named warnings; it must not publish capabilities suggesting active support.
+    Keep schemas, read-side tolerance and the harvested divergence marker. Revisit
+    the stage when the legacy interoperability gate passes, then require MCS
+    CRD/DNS lifecycle and EndpointSlice ownership/update/delete tests before
+    enabling the keys. A warning planner is delivered, no feature runtime.
+
+### Current implementation boundary
+
+`flowsdn-clustermesh` provides configuration/compatibility plans, five-minute
+resync selection, cross-cluster CIDR checks, byte-range authorization and UUID
+ownership transaction planning. Local tests cover prefix escapes, forbidden RPCs,
+atomic failed topology replacement, competing claims, stale revisions, restarts
+and config lease loss. No network clients, leases, TLS, scheduler, API controllers,
+actual store transactions, identity allocator or bootstrap persistence are
+implemented here. Existing full acceptance gates in §9 remain open.

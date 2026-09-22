@@ -59,6 +59,8 @@ async fn bindings_are_independent_and_duplicate_registration_never_replaces() {
     let mut first = Engine::new();
     let mut second = Engine::new();
     first.register_table("items", populated).unwrap();
+    let dump = first.diagnostic_dump(&State::default());
+    assert!(dump.contains("== table items ==") && dump.contains("value"));
     second.register_table("items", empty.clone()).unwrap();
     assert!(first.register_table("items", empty).is_err());
     assert!(
