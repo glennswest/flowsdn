@@ -248,6 +248,8 @@ impl Api {
                     json!({"cilium":{"state":"Ok","msg":"initial endpoint API ready"}}),
                 ));
             }
+            ("GET", "/v1/endpoint") => return Ok((200, endpoint_list(self.manager.records())?)),
+            ("GET", "/v1/ipam") => return Ok((200, ipam_summary(self.manager.ipam()))),
             ("POST", "/v1/ipam") => return self.allocate(&query, request.expiration),
             ("DELETE", "/v1/endpoint") => {
                 let cid = string(&request.body, "container-id")?;
@@ -308,10 +310,9 @@ impl Api {
                 if request.method != "GET" {
                     return fail(405, "method not supported");
                 }
-                if self.manager.get(&decode(id)?).is_none() {
-                    return fail(404, "endpoint not found");
-                }
-                let healthy = self.manager.healthy(&decode(id)?)?;
+                let decoded=decode(id)?;
+                let record=read_endpoint(self.manager.records(), &decoded).ok_or_else(|| Failure {status:404,message:"endpoint not found".into()})?;
+                let healthy = self.manager.healthy(&record.attachment)?;
                 let status = if healthy { "OK" } else { "Failure" };
                 return Ok((
                     200,
@@ -329,7 +330,7 @@ impl Api {
                     }
                 }
                 "GET" => {
-                    let record = self.manager.get(&id).ok_or_else(|| Failure {
+                    let record = read_endpoint(self.manager.records(), &id).ok_or_else(|| Failure {
                         status: 404,
                         message: "endpoint not found".into(),
                     })?;
@@ -528,8 +529,35 @@ impl Api {
     }
 }
 
+fn read_endpoint<'a>(mut records: impl Iterator<Item=&'a crate::state::Record>, id: &str) -> Option<&'a crate::state::Record> {
+    if !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()) {
+        let numeric=id.parse::<u16>().ok().filter(|v| *v!=0)?;
+        records.find(|record| record.id==numeric)
+    } else { records.find(|record| record.attachment==id) }
+}
+fn endpoint_list<'a>(records: impl Iterator<Item=&'a crate::state::Record>) -> Result<Value> {
+    let mut records=records.collect::<Vec<_>>(); records.sort_by_key(|r|r.id);
+    let mut bytes=2usize;let mut result=Vec::new();
+    for record in records {
+        let value=endpoint_response(record.id,&record.document);
+        bytes=bytes.saturating_add(serde_json::to_vec(&value)?.len()).saturating_add(usize::from(!result.is_empty()));
+        if bytes>BODY_LIMIT {return fail(413,"endpoint list exceeds 4 MiB");}
+        result.push(value);
+    }
+    Ok(Value::Array(result))
+}
+fn ipam_summary(ipam:&Ipam)->Value {
+    let pools=[("ipv4",ipam.ipv4()),("ipv6",ipam.ipv6())].into_iter().filter_map(|(family,pool)| pool.map(|pool| {
+        let summary=pool.summary();
+        json!({"pool":"default","family":family,"cidr":format!("{}/{}",pool.network(),pool.prefix_len()),
+            "capacity":summary.capacity.to_string(),"allocated":summary.allocated.to_string(),"excluded":summary.excluded.to_string(),
+            "allocated-excluded":summary.allocated_excluded.to_string(),"available":summary.available.to_string()})
+    })).collect::<Vec<_>>();
+    json!({"pools":pools})
+}
+
 fn endpoint_response(id: u16, document: &Value) -> Value {
-    json!({"id":id,"status":{"state":"ready","networking":{"mac":document.get("LXCMAC"),"host-mac":document.get("NodeMAC"),
+    json!({"id":id,"status":{"state":"ready","external-identifiers":{"k8s-pod-name":document.get("K8sPodName"),"k8s-namespace":document.get("K8sNamespace"),"k8s-uid":document.get("K8sUID"),"container-id":document.get("dockerID")},"networking":{"mac":document.get("LXCMAC"),"host-mac":document.get("NodeMAC"),
         "interface-name":document.get("IfName"),"interface-index":document.get("IfIndex"),"container-interface-name":document.get("ContainerIfName"),"netns-cookie":document.get("NetnsCookie").and_then(Value::as_u64).unwrap_or(0).to_string(),"host-addressing":document.get("CNIHostAddressing"),"route-mtu":document.get("CNIRouteMTU"),
         "addressing":[{"ipv4":document.get("IPv4"),"ipv6":document.get("IPv6"),"ipv4-pool-name":document.get("IPv4IPAMPool"),"ipv6-pool-name":document.get("IPv6IPAMPool")} ]}}})
 }

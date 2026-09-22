@@ -253,3 +253,29 @@ fn explicit_family_allocation_ignores_an_exhausted_other_pool() {
     );
     assert!(ipam.allocate_next_family(true, "full").is_err());
 }
+
+#[test]
+fn summaries_distinguish_lazy_exclusions_real_allocations_and_overlap() {
+    let mut pool=flowsdn_ipam::HostScope::new("10.10.0.0".parse().expect("IP"),30,Default::default()).expect("pool");
+    let first="10.10.0.1".parse().expect("IP");let second="10.10.0.2".parse().expect("IP");
+    pool.exclude_ip("10.10.0.0".parse().expect("IP"),"reserved endpoint");
+    pool.exclude_ip("192.0.2.1".parse().expect("IP"),"external");
+    pool.allocate(first,"real owner (excluded)").expect("allocate");
+    pool.exclude_ip(first,"new exclusion");pool.exclude_ip(second,"gateway");
+    assert_eq!(pool.summary(),flowsdn_ipam::PoolSummary {capacity:2,allocated:1,excluded:2,allocated_excluded:1,available:0});
+    assert_eq!(pool.allocate_next("pending"),Err(flowsdn_ipam::Error::Full));
+    assert_eq!(pool.allocated(),2); // existing raw owner count includes lazy marker
+    assert_eq!(pool.summary().allocated,1);assert_eq!(pool.summary().available,0);
+    pool.release(first);assert_eq!(pool.summary().allocated,0);assert_eq!(pool.summary().excluded,2);assert_eq!(pool.summary().available,0);
+    pool.release(second);assert_eq!(pool.summary().allocated,0);assert_eq!(pool.summary().available,0);
+}
+#[test]
+fn summaries_account_for_ipv6_capacity_and_reserved_endpoints_without_iteration() {
+    let mut pool=flowsdn_ipam::HostScope::new("::".parse().expect("IP"),0,Default::default()).expect("pool");
+    assert_eq!(pool.summary().capacity,u128::MAX.saturating_sub(1));
+    pool.allocate("::42".parse().expect("IP"),"pending").expect("allocate");
+    pool.exclude_ip("::1".parse().expect("IP"),"gateway");
+    assert_eq!(pool.summary().available,u128::MAX.saturating_sub(3));
+    assert_eq!(pool.summary().allocated,1);
+    let one=flowsdn_ipam::HostScope::new("192.0.2.1".parse().expect("IP"),32,Default::default()).expect("single");assert_eq!(one.summary().capacity,1);
+}

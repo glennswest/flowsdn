@@ -198,6 +198,9 @@ impl Manager {
     }
     /// IPAM allocations precede endpoint publication; adapters own expiration
     /// timers for unclaimed allocations. A failed create never releases IPs.
+    pub fn ipam(&self) -> &Ipam {
+        &self.ipam
+    }
     pub fn ipam_mut(&mut self) -> &mut Ipam {
         &mut self.ipam
     }

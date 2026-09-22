@@ -3,7 +3,7 @@
 
 pub mod cidrset;
 
-use std::collections::{BTreeMap, hash_map::RandomState};
+use std::collections::{BTreeMap, BTreeSet, hash_map::RandomState};
 use std::fmt;
 use std::hash::BuildHasher;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -60,8 +60,20 @@ pub struct HostScope {
     words: BTreeMap<u128, u64>,
     owners: BTreeMap<IpAddr, String>,
     excluded: BTreeMap<IpAddr, String>,
+    materialized_exclusions: BTreeSet<IpAddr>,
     random: RandomState,
     sequence: u128,
+}
+
+/// Counts within the allocatable range, excluding reserved prefix endpoints.
+/// Allocations include pending/user reservations, not only endpoint ownership.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PoolSummary {
+    pub capacity: u128,
+    pub allocated: u128,
+    pub excluded: u128,
+    pub allocated_excluded: u128,
+    pub available: u128,
 }
 
 impl HostScope {
@@ -93,6 +105,7 @@ impl HostScope {
             words: BTreeMap::new(),
             owners: BTreeMap::new(),
             excluded: BTreeMap::new(),
+            materialized_exclusions: BTreeSet::new(),
             random: RandomState::new(),
             sequence: 0,
         })
@@ -112,6 +125,14 @@ impl HostScope {
 
     pub fn allocated(&self) -> usize {
         self.owners.len()
+    }
+
+    pub fn summary(&self) -> PoolSummary {
+        let allocated = self.owners.len().saturating_sub(self.materialized_exclusions.len()) as u128;
+        let excluded = self.excluded.keys().filter(|ip| self.offset(**ip).is_some()).count() as u128;
+        let allocated_excluded = self.owners.keys().filter(|ip| self.excluded.contains_key(*ip) && !self.materialized_exclusions.contains(*ip)).count() as u128;
+        let unavailable = allocated.saturating_add(excluded).saturating_sub(allocated_excluded);
+        PoolSummary { capacity:self.capacity, allocated, excluded, allocated_excluded, available:self.capacity.saturating_sub(unavailable) }
     }
 
     pub fn dump(&self) -> &BTreeMap<IpAddr, String> {
@@ -164,6 +185,7 @@ impl HostScope {
                 if let Some(excluded_owner) = self.excluded.get(&address) {
                     let excluded_owner = format!("{excluded_owner} (excluded)");
                     self.reserve(offset, address, excluded_owner);
+                    self.materialized_exclusions.insert(address);
                 } else {
                     self.reserve(offset, address, owner.to_owned());
                     return Ok(address);
@@ -202,6 +224,7 @@ impl HostScope {
             }
         }
         self.owners.remove(&address);
+        self.materialized_exclusions.remove(&address);
     }
 
     fn offset(&self, address: IpAddr) -> Option<u128> {

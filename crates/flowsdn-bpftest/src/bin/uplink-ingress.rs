@@ -4,7 +4,7 @@ use aya::{
     maps::{HashMap, MapData},
     programs::{SchedClassifier, TestRun, TestRunOptions},
 };
-use flowsdn_bpf_abi::endpoint::{EndpointInfo, EndpointKey};
+use flowsdn_bpf_abi::{MapBytes, endpoint::{EndpointInfo, EndpointKey}};
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 fn ensure(ok: bool, message: &str) -> Result<()> {
     if ok { Ok(()) } else { Err(message.into()) }
