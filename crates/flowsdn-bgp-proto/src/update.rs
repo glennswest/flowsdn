@@ -170,6 +170,19 @@ fn mp(value: &[u8], reach: bool) -> Result<Vec<Prefix>, ProtocolError> {
 /// Outer lengths and attribute TLVs are always fatal when malformed; bounded
 /// semantic errors follow the strict/lenient policy in error_action.
 pub fn validate(body: &[u8], four_octet_asn: bool) -> Result<Summary, ProtocolError> {
+    validate_detailed(body, four_octet_asn).map_err(|failure| failure.error)
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Failure { pub error: ProtocolError, pub data: Vec<u8> }
+pub fn validate_detailed(body: &[u8], four_octet_asn: bool) -> Result<Summary, Failure> {
+    let mut data = Vec::new();
+    validate_inner(body, four_octet_asn, &mut data).map_err(|error| {
+        if error.code != 3 || !matches!(error.subcode, 2|3|4|5|6|8|9) { data.clear(); }
+        data.truncate(crate::MAX_MESSAGE_LENGTH.saturating_sub(21));
+        Failure { error, data }
+    })
+}
+fn validate_inner(body: &[u8], four_octet_asn: bool, data: &mut Vec<u8>) -> Result<Summary, ProtocolError> {
     if body.len() > crate::MAX_MESSAGE_LENGTH.saturating_sub(crate::HEADER_LENGTH) {
         return Err(crate::framing(2));
     }
@@ -183,6 +196,8 @@ pub fn validate(body: &[u8], four_octet_asn: bool) -> Result<Summary, ProtocolEr
     // failure in lenient mode. Allocation is bounded by the message-size cap.
     let mut fields = Vec::new();
     while !attributes.is_empty() {
+        let raw = attributes;
+        *data = raw.to_vec();
         let flags = byte(&mut attributes, 1, true)?;
         let code = byte(&mut attributes, 1, true)?;
         let length = if flags & 0x10 != 0 {
@@ -190,8 +205,11 @@ pub fn validate(body: &[u8], four_octet_asn: bool) -> Result<Summary, ProtocolEr
         } else {
             usize::from(byte(&mut attributes, 5, true)?)
         };
-        fields.push((flags, code, take(&mut attributes, length, 5, true)?));
+        let value = take(&mut attributes, length, 5, true)?;
+        let consumed = raw.len().saturating_sub(attributes.len());
+        fields.push((flags, code, value, raw.get(..consumed).expect("consumed attribute")));
     }
+    data.clear();
     let withdrawn = prefixes(withdrawn_bytes, false)?;
     let announced = prefixes(bytes, false)?;
     let mut result = Summary {
@@ -202,7 +220,8 @@ pub fn validate(body: &[u8], four_octet_asn: bool) -> Result<Summary, ProtocolEr
         unknown_transitive: Vec::new(),
     };
     let mut seen = BTreeSet::new();
-    for (flags, code, value) in fields {
+    for (flags, code, value, raw) in fields {
+        *data = raw.to_vec();
         if !seen.insert(code) {
             return Err(error(1, false));
         }
@@ -275,9 +294,11 @@ pub fn validate(body: &[u8], four_octet_asn: bool) -> Result<Summary, ProtocolEr
     if (!result.announced.is_empty() || !result.mp_announced.is_empty())
         && (!seen.contains(&1) || !seen.contains(&2))
     {
+        *data = vec![if !seen.contains(&1) { 1 } else { 2 }];
         return Err(error(3, false));
     }
     if !result.announced.is_empty() && !seen.contains(&3) {
+        *data = vec![3];
         return Err(error(3, false));
     }
     Ok(result)

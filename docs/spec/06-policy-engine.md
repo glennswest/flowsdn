@@ -1968,3 +1968,55 @@ Allow(0), Deny(1), or Pass(2/3). All entries select subject name=a, egress,
 and default-deny. This describes the data format of
 `pkg/policy/simulate_fuzz_test.go::makeFuzzEntries`, not its executable code.
 Original corpus provenance remains in `tests/fuzz/SEEDS.md` and `NOTICE`.
+
+
+### ABI-entry oracle and aggregate/authentication gate (#103)
+
+`kernel_map` adds a lower-level oracle over canonical `PolicyKey`/`PolicyEntry`
+records. The independent optimized `Index` probes at most 17 masked-port keys
+plus a protocol wildcard within each identity bucket; the oracle scans all
+entries and chooses the longest prefix per identity. Both validate canonical
+keys, matching entry prefix flags, deny normalization, duplicate keys, and the
+absence of unresolved Pass entries. Numeric identity aggregation uses spec03's
+existing 255/511-cluster encoding. The resulting value retains redirect port,
+authentication requirement and cookie; nonzero authentication is a requirement,
+not evidence that an auth-map entry or TLS handshake exists.
+
+Pinned `bpf/lib/policy.h` review clarified that identity0 is a fallback only if
+both the specific and category-aggregate lookups miss. It must not participate
+as a third precedence candidate. Explicit disabled authentication on the winning
+entry blocks inheritance; derived authentication may take the larger type from
+an equal-precedence alternate. This description is from the source contract;
+no upstream executable implementation was copied.
+
+`inherit_auth` handles the same-identity explicit/derived propagation stage on
+already precedence-normalized keys. The nearest covering explicit auth boundary
+at the same allow priority supplies a derived type; explicit boundaries survive,
+including explicit disabled. Stronger covering entries are rejected with a
+normalization-required error: this helper does not pretend to implement the
+precedence/redirect override and covering-key deletion stages in §5.5. Inputs
+and original records remain unchanged on error.
+
+The first aggregate pruning optimization is deliberately conservative: identical
+specific/category-aggregate entries at exactly the same prefix may be deduplicated
+only when each identity/direction bucket contains that single entry. Values,
+cookies and origin strings must match. Otherwise another covering or narrower
+entry could become visible after deletion, so it remains present pending the
+full compiler's normalization proof. Exhaustive-port tests compare pre/post
+pruning and include a stronger covering-entry counterexample.
+
+Five normal integration tests cover explicit/derived auth, explicit disable,
+protocol boundaries, aggregate/specific prefix and precedence ties, fallback,
+canonical validation, pruning, and an independent scan/index differential soak.
+The deterministic soak defaults to 256 generated maps and reversed insertion
+orders across local, remote-node, world and remote-cluster identity categories.
+`FLOWSDN_POLICY_SOAK_CASES` selects a larger reproducible case budget for
+`cargo test -p flowsdn-policy --test kernel_map deterministic_soak`.
+This is bounded deterministic fuzzing, not coverage-guided fuzzing or BPF execution.
+
+#103 remains open: the Rule-to-kernel compiler still lacks full same-identity
+precedence normalization, cross-identity covering insertion, Pass reranking and
+incremental origin/cookie handling. The raw-ABI differential gate and partial
+auth propagation now exist; the complete policy compiler must eventually be
+connected to both the frontend simulator and the kernel-entry oracle before
+its optimizations can claim the complete end-to-end agreement gate.

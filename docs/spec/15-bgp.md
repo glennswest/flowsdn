@@ -982,8 +982,19 @@ GR negotiation uses the last advertised GR capability and RFC 8538's N mask
 resets wrap their cause in Cease/9 only after bilateral N negotiation. The
 close disposition reports when peers may retain **our exported** routes; it
 does not retain or install learned forwarding state. Unsupported-version
-notifications include the supported version. Complete per-error notification
-payload extraction remains required.
+notifications include the supported version. Diagnostic UPDATE validation
+preserves the offending full attribute for subcodes 2/4/5/6/8/9 and the missing
+attribute code for subcode 3; malformed-list, invalid-NLRI and malformed-AS_PATH
+data remain empty. Header errors carry the erroneous two-byte length or
+one-byte type. Unsupported capability carries the required capability TLVs.
+These payload rules follow [RFC 4271§6](https://www.rfc-editor.org/rfc/rfc4271.html#section-6)
+and RFC 5492; FSM error data contains the unexpected message type per
+[RFC 6608§4](https://www.rfc-editor.org/rfc/rfc6608.html#section-4).
+Bounded diagnostics never exceed the NOTIFICATION frame budget. The session's
+buffered `receive` API returns NeedMore without consuming state; callers must
+continue polling timers while collecting partial frames. Fatal framing errors
+carry bytes from the original header and consume the supplied buffer before
+closing. Direct typed-frame callbacks reconstruct their invalid length data.
 
 The independent local-origin and bounded per-family observation stores have
 no operation that promotes received routes. Observation overflow counts
@@ -996,7 +1007,11 @@ established. No kernel/BPF adapter exists in this crate; runtime assertions
 that those stores remain unchanged still belong to the speaker acceptance
 suite. Likewise actual sockets, TCP authentication, timer tasks, adj-RIB-out,
 export-policy/next-hop resolution, reconciler integration and interoperability
-remain required. These unit primitives do not alone close issue #249.
+remain required. Issue #249's missing protocol-unit-suite work is now represented
+by executable independent codecs, a deterministic FSM and negative transcripts;
+closing that test-gap item after validation does not close networking-speaker
+or interoperability acceptance. The standalone protocol suite has no socket
+adapter, and cannot claim kernel/BPF forwarding isolation has run.
 
 ### 3.17 The pluggable advertiser
 
@@ -1591,6 +1606,20 @@ one entry for the status writer, degraded while status patches are failing.
       handling, 32 KiB truncation, 5-error cap.
 
 ### 9.2 Speaker unit (wire codec and FSM)
+
+The #249 suite is `cargo test -p flowsdn-bgp-proto`. Coverage is mapped to
+`tests/wire.rs` (framing, UPDATE attributes, structural precedence, notification
+data), `tests/encoders.rs` (OPEN/capabilities, UPDATE export, AS4, GR/refresh/EOR),
+`tests/session.rs` (active/passive handshake, retry/idle/hold/keepalive timers,
+stale callbacks, resets, GR, strict/lenient receive and bounded observation),
+and `tests/ownership.rs` (collision authority and local/observed RIB ownership).
+Additional session regressions exercise raw header errors with original length
+and type bytes, partial buffering, exact UPDATE notification payloads, missing
+capability TLVs and unexpected-message codes/data in all three connected FSM
+states. These are unit/transcript assertions; the interop and transport gates
+in §9.3 remain separate. The checklist below remains the broader speaker
+acceptance list, not a claim every runtime obligation is complete.
+
 
 - [ ] Round-trip encode/decode of every message type, including boundary
       lengths 19 and 4096.

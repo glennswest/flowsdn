@@ -4,6 +4,7 @@ use std::fmt;
 
 pub mod cidr;
 pub mod mapstate;
+pub mod kernel_map;
 pub mod named_ports;
 pub mod oracle;
 pub mod ports;

@@ -318,3 +318,35 @@ fn structural_failures_take_precedence_over_earlier_content_errors() {
         assert_eq!(error_action(error, false), ErrorAction::NotifyAndClose);
     }
 }
+
+#[test]
+fn update_notification_payload_matrix() {
+    for (attribute,code) in [
+        (vec![0x40,99,1,9],2),
+        (vec![0x80,1,1,0],4),
+        (vec![0x50,1,0,2,0,0],5),
+        (vec![0x40,1,1,9],6),
+        (vec![0x40,3,4,0,0,0,0],8),
+        (vec![0x80,14,3,0,2,1],9),
+    ] {
+        let failure=update::validate_detailed(&update_body(&attribute,&[]),false).expect_err("malformed");
+        assert_eq!(failure.error.subcode,code);assert_eq!(failure.data,attribute);
+    }
+    let failure=update::validate_detailed(&[0,0,0,0,0],false).expect_err("missing ORIGIN");
+    assert_eq!(failure.error.subcode,3);assert_eq!(failure.data,[1]);
+    let failure=update::validate_detailed(&update_body(&[0x40,2,2,3,1],&[]),false).expect_err("AS_PATH");
+    assert_eq!(failure.error.subcode,11);assert!(failure.data.is_empty());
+    let failure=update::validate_detailed(&[0,0,0,0,33],false).expect_err("NLRI");
+    assert_eq!(failure.error.subcode,10);assert!(failure.data.is_empty());
+}
+#[test]
+fn missing_attribute_data_identifies_each_mandatory_code_and_structure_wins() {
+    for (attributes,missing) in [(vec![],1),(vec![0x40,1,1,0],2),(vec![0x40,1,1,0,0x40,2,0],3)] {
+        let failure=update::validate_detailed(&update_body(&attributes,&[0]),false).expect_err("mandatory");
+        assert_eq!((failure.error.code,failure.error.subcode),(3,3));assert_eq!(failure.data,[missing]);
+    }
+    let failure=update::validate_detailed(&[0,0,0,4,0x40,1,2,0],false).expect_err("truncated value");
+    assert_eq!(failure.error.scope,ErrorScope::AttributeStructure);assert_eq!(failure.data,[0x40,1,2,0]);
+    let failure=update::validate_detailed(&[0,9,33],false).expect_err("bad outer length");
+    assert_eq!(failure.error.subcode,1);assert!(failure.data.is_empty());
+}
