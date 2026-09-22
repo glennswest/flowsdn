@@ -485,6 +485,29 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         "PASS: dual-stack endpoints and same-sandbox duplicate ADD preserve results; foreign sandbox rejected; pinned forwarding survives downtime; restart preserves map ID, ADD/CHECK and traffic"
     );
     drop(agent);
+    // Model a crash after durable endpoint intent, before BPF publication.
+    // Keep endpoint records and live veths, but remove this fixture's pins.
+    for pin in &pins {
+        fs::remove_file(pin)?;
+    }
+    fs::remove_file(pin_root.join("cilium_lxc"))?;
+    for v6 in [false, true] {
+        exchange(&mut first, &mut second, v6, false)?;
+    }
+    let agent = start_agent(&agent_binary, &temp)?;
+    for (endpoint, check) in [&first, &second].into_iter().zip(&previous) {
+        cni(&cni_binary, &temp, "CHECK", endpoint, check)?;
+        ensure(
+            check.get("prevResult") == Some(&cni(&cni_binary, &temp, "ADD", endpoint, &conf)?),
+            "durable intent recovery changed allocation",
+        )?;
+    }
+    for v6 in [false, true] {
+        exchange(&mut first, &mut second, v6, true)?;
+        exchange(&mut second, &mut first, v6, true)?;
+    }
+    println!("PASS: durable endpoint intent recovers absent BPF publication without reallocating addresses");
+    drop(agent);
     cni(&cni_binary, &temp, "DEL", &first, &conf)?;
     let agent = start_agent(&agent_binary, &temp)?;
     let client = Client::new(temp.0.join("agent.sock"), Duration::from_secs(2));

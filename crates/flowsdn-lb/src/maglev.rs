@@ -84,6 +84,18 @@ pub fn hash(bytes: &[u8], seed: u32) -> (u64, u64) {
     h2 = h2.wrapping_add(h1);
     (h1, h2)
 }
+#[allow(clippy::arithmetic_side_effects)] // callers bound m and n by supported table sizes
+fn permutation_slot(offset:u64, skip:u64, n:u64, m:u64)->usize { ((offset+n*skip)%m) as usize }
+/// One backend permutation in input order, suitable for independently chunked
+/// preparation. There is no internal worker pool or scheduling dependency.
+pub fn permutation(backend:&Backend,size:usize,seed:u32)->Result<Vec<usize>,&'static str>{
+    if ![251,509,1021,2039,4093,8191,16381,32749,65521,131071].contains(&size){return Err("invalid Maglev size");}
+    let m=size as u64;
+    let(a,b)=hash(backend.hash_string().as_bytes(),seed);
+    let offset=a.checked_rem(m).ok_or("size")?;
+    let skip=b.checked_rem(m.saturating_sub(1)).ok_or("size")?.saturating_add(1);
+    Ok((0..m).map(|n|permutation_slot(offset,skip,n,m)).collect())
+}
 struct Work {
     id: u32,
     weight: u64,
@@ -153,7 +165,7 @@ pub fn table(backends: &[Backend], size: usize, seed: u32) -> Result<Vec<u32>, &
                 w.counter += sum as f64;
             }
             loop {
-                let slot = ((w.offset + w.next * w.skip) % m) as usize;
+                let slot = permutation_slot(w.offset, w.skip, w.next, m);
                 w.next += 1;
                 let entry = entries.get_mut(slot).ok_or("slot")?;
                 if entry.is_none() {

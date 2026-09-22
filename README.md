@@ -47,8 +47,9 @@ agent verifies ownership before reusing duplicate CNI attachments and preserves
 their original route settings across restart. Endpoint allocation has a configurable
 ceiling (4095 by default); the configuration library supports opt-in strict
 unknown-key validation. The agent uses explicit local configuration; Kubernetes discovery, identity/policy
-controllers, uninterrupted forwarding across agent downtime and two-node
-Kubernetes pod connectivity remain outstanding.
+controllers and two-node Kubernetes pod connectivity remain outstanding.
+Pinned endpoint maps and TCX links preserve forwarding across agent downtime;
+restart checks interface ownership before reusing attachments.
 
 The agent also exposes read-only module health through the reference query wire
 format and a native JSON route, reporting missing controllers as degraded.

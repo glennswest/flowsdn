@@ -73,7 +73,7 @@ impl CidrSet {
         let diff = node_mask
             .checked_sub(cluster.bits)
             .ok_or("node mask smaller than cluster")?;
-        if node_mask > width || diff > 16 {
+        if node_mask > width || diff > if cluster.address.is_ipv4() { 24 } else { 16 } {
             return Err("subnet mask size too big");
         }
         Ok(Self {
@@ -83,6 +83,18 @@ impl CidrSet {
             next: 0,
         })
     }
+    /// Index of an address in this cluster, at node-block granularity.
+    pub fn index(&self, address: IpAddr) -> Result<usize, &'static str> {
+        if address.is_ipv4() != self.cluster.address.is_ipv4()
+            || number(address) < number(self.cluster.address)
+            || number(address) > self.cluster.last()
+        { return Err("address outside cluster"); }
+        let width = if address.is_ipv4() { 32u8 } else { 128 };
+        usize::try_from(number(address).saturating_sub(number(self.cluster.address))
+            .checked_shr(u32::from(width.saturating_sub(self.node_mask))).unwrap_or(0))
+            .map_err(|_| "index overflow")
+    }
+    pub fn allocated(&self) -> usize { self.used.iter().filter(|v| **v).count() }
     pub fn capacity(&self) -> usize {
         self.used.len()
     }
@@ -158,7 +170,7 @@ impl CidrSet {
     pub fn is_allocated(&self, p: Prefix) -> Result<bool, &'static str> {
         Ok(self.interval(p)?.all(|i| self.used.get(i) == Some(&true)))
     }
-    #[allow(clippy::arithmetic_side_effects)] // vector capacity is a nonzero power of two, at most65536
+    #[allow(clippy::arithmetic_side_effects)] // vector capacity is a nonzero power of two, at most 2^24
     pub fn allocate_next(&mut self) -> Result<Prefix, &'static str> {
         for step in 0..self.used.len() {
             let i = self.next.saturating_add(step) % self.used.len();

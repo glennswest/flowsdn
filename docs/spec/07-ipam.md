@@ -1167,7 +1167,8 @@ sync.
 ### 5.4 Node-CIDR sets (cluster-pool and multi-pool operator)
 
 A CIDR set carves fixed-size node prefixes of `nodeMask` bits from one cluster
-prefix: `maxCIDRs = 2^(nodeMask − clusterMask)` (≤ 2^16), a bitmap of that
+prefix: `maxCIDRs = 2^(nodeMask − clusterMask)` (IPv6 ≤2^16; flowsdn
+IPv4 bounded at 2^24), a bitmap of that
 size, a `nextCandidate` cursor. `AllocateNext` scans from the cursor for the
 first free bit (wrapping) → prefix at that index; `Occupy(prefix)` idempotently sets every intersecting node-block bit,
 including all blocks for a covering supernet (error if disjoint or wrong family);
@@ -1176,6 +1177,16 @@ including all blocks for a covering supernet (error if disjoint or wrong family)
 upper 64 bits when the node mask ≤ 64 (k8s-derived layout). Errors:
 "there are no remaining CIDRs left to allocate", "subnet mask size too big",
 "CIDR allocation failed; not in range".
+
+Calibration #250 ports all 52 static rows of pinned `cidr_set_test.go` plus
+both full-256 allocation/release/reallocation workflows and half-occupied
+workflows. The reference limits only IPv6 to a 16-bit prefix difference;
+IPv4 /8→/32 is covered, requiring 16,777,216 bitmap slots. flowsdn caps IPv4
+at a 24-bit difference (16 MiB boolean bitmap), rejecting larger requests
+before allocation. This explicit resource bound differs from the reference's
+unbounded IPv4 constructor and does not affect any harvested test case.
+`index(address)` rejects wrong-family/outside addresses and returns the
+node-block index; occupied counts remain exact under repeated operations.
 
 ### 5.5 Single-IP bitmap (`kubernetes`, `cluster-pool`, per-CIDR in multi-pool)
 

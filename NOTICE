@@ -175,3 +175,9 @@ crates/flowsdn-lb/tests/maglev-weighted.rle retains static expected data from
 cilium/cilium v1.20.1, commit 7d68cfb394, pkg/maglev/maglev_test.go.
 Copyright Authors of Cilium. Licensed under Apache-2.0. The Rust algorithm
 is independently implemented from the specification.
+
+CIDR allocator test vectors
+--------------------------
+crates/flowsdn-ipam/tests/cidrset-upstream.txt retains static test data from
+cilium/cilium v1.20.1, commit 7d68cfb394, pkg/ipam/cidrset/cidr_set_test.go.
+Copyright Authors of Cilium and The Kubernetes Authors. Apache-2.0.

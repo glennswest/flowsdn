@@ -938,17 +938,26 @@ fastetcd at step 1, not step 12.** They are 2,280 Go test lines that answer
    does not test it; `pkg/bgp/gobgp` is **replace** and leaves a hole. flowsdn's
    own speaker needs session state-machine, OPEN/UPDATE encoding and error-path
    tests that have no reference counterpart. Not costed in §1.
-5. **Effort model calibration — #250 partial implementation, measurement pending.**
-   `flowsdn-lb::maglev` and `flowsdn-ipam::cidrset` now implement the pure
-   algorithms with bounded inputs. Pinned Go test files contain 249 and 764
-   physical lines respectively. The Rust tests port the weighted RLE vector,
-   removal behavior and CIDR allocation/occupancy categories, but do not yet
-   exhaust every upstream table case or permutation backend-count combination.
-   Therefore no full-port factor is measured yet: ×0.45 remains unvalidated,
-   and §1 totals must not be re-labelled calibrated. Count Rust test physical
-   lines only after standard formatting and successful Linux validation;
-   record numerator, denominator and coverage scope together. The ratio for
-   a selected subset is not a project effort conversion. Remaining gates are
-   exhaustive case mapping, independent vector passes and formatted LOC.
+5. **Effort model calibration — #250 source port complete; validation/LOC pending.**
+   The pure algorithms and Rust ports now cover every named upstream unit-test
+   category. Calibration mapping:
 
+   | Pinned Go test | Rust evidence |
+   |---|---|
+   | Maglev TestPermutations | `every_upstream_permutation_count_size_and_chunking_case`: all 8 backend counts × 3 sizes × 6 chunk counts; no internal worker pool, so partition invariance replaces scheduling coverage |
+   | TestReproducible | `weighted_vector_and_permutation`, exact copied 251-entry RLE data and reversed input |
+   | TestBackendRemoval | `removal_disruption`, valid replacement IDs and fewer than 11 retained-owner changes in 1021 slots |
+   | TestWeightedBackendWithRemoval | `weighted_removal`, same disruption threshold and exact counts 16/98/832/75 |
+   | CIDR FullyAllocated / IndexToCIDRBlock / GetBitforCIDR / Occupy / CIDRSetv6 / InvalidSubNetMaskSize | `all_upstream_table_rows`: all 52 static rows (2/15/14/14/3/4), exact results and errors; occupancy verifies all selected bits plus total count, then idempotent release |
+   | CIDR RandomishAllocation / AllocationOccupied | `upstream_full_roundtrip_and_half_occupied_workflows`: both IPv4/IPv6 inputs; all 256 blocks; release/reallocate equality; last 128 occupied scenario |
 
+   Additional Rust tests cover invalid inputs, cross-family ownership, cursor
+   wrapping and hash vectors. The original physical-line denominators are 249
+   (`pkg/maglev/maglev_test.go`, including its benchmark/harness) and 764
+   (`pkg/ipam/cidrset/cidr_set_test.go`). The benchmark is not a unit-test
+   requirement and has not been ported; no performance calibration is claimed.
+   Count formatted Rust test files and static fixture lines separately after
+   successful Linux execution, reporting each ratio and the combined ratio.
+   Do not substitute unformatted compact source LOC. Until those measurements
+   are recorded, ×0.45 remains unvalidated. Even measured LOC ratios cover only
+   these two modules and cannot calibrate whole-project engineering effort.

@@ -60,8 +60,10 @@ Run `agent-runtime` with the CNI executable, agent executable and BPF object
 paths to exercise the real standalone process. It checks dual-stack ADD/CHECK,
 restart recovery, offline deletion replay, partial teardown health, retries and
 persisted-state cleanup. It also checks module-health query wire rows, native
-health JSON and rejection of other table queries across process restarts. Traffic loss during agent downtime is an explicit
-current limitation, not a continuity claim.
+health JSON and rejection of other table queries across process restarts. Pinned
+TCX links retain forwarding during downtime; restart reuses the endpoint map
+and rejects pins belonging to other interfaces. The fixture also exercises
+recovery from durable intent with missing BPF publication.
 
 The BPF crate is a separate workspace with its own lockfile and toolchain.
 Format it separately with `cargo +nightly-2026-04-03 fmt --manifest-path

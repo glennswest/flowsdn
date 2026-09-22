@@ -84,3 +84,72 @@ fn invalid_masks() {
     assert!(CidrSet::new(p("10.0.0.0/24"), 23).is_err());
     assert!(Prefix::new("::1".parse().expect("ip"), 129).is_err());
 }
+
+// Static table data is attributed in cidrset-upstream.txt and NOTICE.
+#[test]
+fn all_upstream_table_rows() {
+    let mut counts = std::collections::BTreeMap::<&str, usize>::new();
+    for line in include_str!("cidrset-upstream.txt").lines().filter(|l| !l.starts_with('#')) {
+        let fields: Vec<_> = line.split('|').collect();
+        let [kind, cluster, mask, input, first, second, error]: [&str; 7] = fields.try_into().expect("seven fields");
+        let count = counts.entry(kind).or_default();
+        *count = count.saturating_add(1);
+        let result = CidrSet::new(p(cluster), mask.parse().expect("mask"));
+        if kind == "mask" || kind == "v6" && error == "true" {
+            assert_eq!(result.is_err(), error == "true", "{line}");
+            continue;
+        }
+        let mut set = result.expect(line);
+        match kind {
+            "full" => {
+                let expected = p(first);
+                assert_eq!(set.allocate_next().expect(line), expected);
+                assert!(set.is_full());
+                assert!(set.allocate_next().is_err());
+                set.release(expected).expect(line);
+                assert_eq!(set.allocate_next().expect(line), expected);
+                assert!(set.allocate_next().is_err());
+            }
+            "index" => assert_eq!(set.block(input.parse().expect("index")).expect(line), p(first)),
+            "bit" => {
+                let index = set.index(p(input).address());
+                if error == "true" { assert!(index.is_err(), "{line}"); }
+                else { assert_eq!(index.expect(line), first.parse::<usize>().expect("index")); }
+            }
+            "occupy" => {
+                let begin = first.parse::<usize>().expect("begin");
+                let end = second.parse::<usize>().expect("end");
+                set.occupy(p(input)).expect(line);
+                set.occupy(p(input)).expect("idempotent");
+                assert_eq!(set.allocated(), end.saturating_sub(begin).saturating_add(1), "{line}");
+                for index in begin..=end { assert!(set.is_allocated(set.block(index).expect(line)).expect(line)); }
+                set.release(p(input)).expect(line);
+                set.release(p(input)).expect("idempotent");
+                assert_eq!(set.allocated(), 0);
+            }
+            "v6" => {
+                assert_eq!(set.allocate_next().expect(line), p(first));
+                assert_eq!(set.allocate_next().expect(line), p(second));
+            }
+            _ => panic!("unknown category {kind}"),
+        }
+    }
+    assert_eq!(counts, std::collections::BTreeMap::from([("full",2),("index",15),("bit",14),("occupy",14),("v6",3),("mask",4)]));
+}
+#[test]
+fn upstream_full_roundtrip_and_half_occupied_workflows() {
+    for cluster in ["127.123.234.0/16", "beef:1234::/16"] {
+        for half_occupied in [false, true] {
+            let mut set = CidrSet::new(p(cluster),24).expect("set");
+            let original: Vec<_> = (0..256).map(|_|set.allocate_next().expect("allocate")).collect();
+            assert!(set.allocate_next().is_err());
+            for prefix in &original { set.release(*prefix).expect("release"); }
+            if half_occupied { for prefix in original.get(128..).expect("second half") { set.occupy(*prefix).expect("occupy"); } }
+            let count = if half_occupied {128} else {256};
+            let mut again: Vec<_> = (0..count).map(|_|set.allocate_next().expect("reallocate")).collect();
+            assert!(set.allocate_next().is_err());
+            if half_occupied { again.extend_from_slice(original.get(128..).expect("second half")); }
+            assert_eq!(original, again);
+        }
+    }
+}
