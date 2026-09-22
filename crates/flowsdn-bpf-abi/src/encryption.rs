@@ -97,7 +97,7 @@ pub fn decide(config: Config, input: Input) -> Result<Decision, InvalidInterface
     if !proxy_bypass && (world || remote || (!config.node_encryption && identity == 1)) {
         return Ok(clear);
     }
-    if !input.destination_key.is_some_and(|key| key != 0) {
+    if input.destination_key.is_none_or(|key| key == 0) {
         return Ok(clear);
     }
     // Source identity must fit the wire mark even if a proxy bypassed source

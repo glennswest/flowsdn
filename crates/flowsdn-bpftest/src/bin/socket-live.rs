@@ -84,10 +84,10 @@ impl Drop for Cgroup {
             }
             self.moved = false;
         }
-        if let Err(error) = fs::remove_dir(&self.temporary) {
-            if error.kind() != std::io::ErrorKind::NotFound {
-                eprintln!("failed to remove owned temporary cgroup: {error}");
-            }
+        if let Err(error) = fs::remove_dir(&self.temporary)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            eprintln!("failed to remove owned temporary cgroup: {error}");
         }
     }
 }

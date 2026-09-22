@@ -77,10 +77,10 @@ fn parse(value: &Value) -> Result<Profile, String> {
             "flags",
         ],
     )?;
-    if let Some(flags) = value.get("flags") {
-        if !flags.as_array().is_some_and(Vec::is_empty) {
-            return Err("nonempty flags unsupported".into());
-        }
+    if let Some(flags) = value.get("flags")
+        && !flags.as_array().is_some_and(Vec::is_empty)
+    {
+        return Err("nonempty flags unsupported".into());
     }
     let default = action(text(value, "defaultAction")?, value.get("defaultErrnoRet"))?;
     if default == 0x7fff0000 {
