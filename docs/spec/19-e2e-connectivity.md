@@ -1510,8 +1510,11 @@ control-plane + 2 workers + **1 worker with no agent** (labelled
 `flowsdn.io/no-agent`, tainted so nothing else schedules there), a secondary
 docker network attached (`--secondary-network`) so multi-device rows are real,
 and one external-target container on the kind network. Provisioning is
-`tools/ci/cluster.sh` in flowsdn (a thin wrapper over `kind` and the LVH runner
-action), not `contrib/scripts/kind.sh` copied from the reference.
+a future Rust provisioning command over `kind` and the LVH runner; no shell
+provisioner is shipped. `ci/acceptance-matrix.json` pins the external CLI and
+bounds scheduling to one privileged VM and two build jobs. Rotate nightly
+rows when the shared runner cannot finish the complete matrix in one night;
+all supported rows remain mandatory before release.
 
 Additionally, the **stormcos row**: a Rocky 10 VM running the exact
 `kernel-6.12.0-2xx.el10` stormcos pins, with `kind` inside it. This is the only

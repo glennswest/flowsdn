@@ -895,11 +895,18 @@ CI workflow port (kind+LVH matrix, cloud jobs) **M**.
    wrong filesystem types fail closed (spec22 packaging policy).
 5. Should `cilium status` JSON and the agent unix API (`/var/run/cilium/cilium.sock`, OpenAPI) be reproduced
    bit-for-bit so cilium-cli, hubble and bugtool keep working, or is a `flowsdn-cli` fork acceptable?
-6. Which cilium-cli version to pin as the acceptance suite (v0.19.7 today) and whether flowsdn CI can afford
-   the LVH kernel matrix (5.15/6.1/6.6/6.12/6.18 × 41 configs) or a reduced set (6.1, 6.6, 6.12).
+6. **Resolved #35:** pin cilium-cli v0.19.7 at commit
+   `7ca7fc53c20275f5c10ef5f3557076691fd1d720`, matching the reference pin.
+   `ci/acceptance-matrix.json` selects the supported 6.6/6.12/6.18 lines and
+   spec19’s 12 configurations, with one privileged VM at a time and two build
+   jobs. Gate changes on three 6.12 configurations; rotate remaining rows
+   nightly and require all supported rows before release. Do not schedule
+   unsupported 5.15/6.1 or adopt the upstream 41-config fleet. This is the
+   resource-budget decision; workflow provisioning and measured runtimes remain
+   release obligations, not claimed results.
 7. **Resolved #36:** recovered the removed HostPort, dual-stack services, graceful-termination
    and NodePort static inputs/goldens from pinned v1.16.0/v1.17.0 into
    `tests/golden/controlplane-legacy`: 100 source records, 68 unique files,
    exact per-file provenance and Rust verification. Runtime adapters remain pending.
-8. Binary sizes in F7 are estimates; measure from a pulled `quay.io/cilium/cilium:v1.20.1` on dev before
-   quoting them in design docs.
+8. **Resolved #37:** F7 now records measured bytes from the pulled v1.20.1
+   image with immutable digest and machine-readable validation evidence.

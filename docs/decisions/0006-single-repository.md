@@ -60,3 +60,17 @@ everything else.
   does not rebuild the BPF programs.
 - `cargo deny`, the license policy and the MSRV are configured once at the
   workspace root.
+
+## Extraction review (#263, 2026-09-22)
+
+Keep `flowsdn-bgp-proto` and `flowsdn-scripttest` in this workspace and keep
+`publish = false`. Their APIs are still changing in the active milestone work;
+no external consumer requirement is recorded in this repository. Do not create
+placeholder repositories or publish prereleases to reserve names.
+
+Reopen extraction when a concrete external consumer requests it, the public
+API has survived a flowsdn release without incompatible changes, each crate
+builds/tests independently with no private workspace types, and ownership,
+licensing, release automation and compatibility policy have been reviewed.
+Extraction is gated by those events, with no speculative calendar date. This
+resolves the timing decision; it is not a claim that either crate is published.

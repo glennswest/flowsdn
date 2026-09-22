@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "acceptance_cli": {
+    "repository": "cilium/cilium-cli",
+    "tag": "v0.19.7",
+    "commit": "7ca7fc53c20275f5c10ef5f3557076691fd1d720"
+  },
+  "kernel_versions": [
+    "6.6",
+    "6.12",
+    "6.18"
+  ],
+  "architectures": [
+    "x86_64",
+    "aarch64"
+  ],
+  "configurations": [
+    "vxlan-kpr",
+    "native-kpr-dsr",
+    "geneve-dsr",
+    "wireguard",
+    "ipsec",
+    "egressgw",
+    "hostfw",
+    "ipv6only",
+    "dualstack",
+    "netkit",
+    "l7",
+    "kubeproxy"
+  ],
+  "netkit_minimum_kernel": "6.12",
+  "shared_build_jobs": 2,
+  "maximum_simultaneous_privileged_vms": 1,
+  "pr_gate": {
+    "kernel": "6.12",
+    "configurations": [
+      "vxlan-kpr",
+      "native-kpr-dsr",
+      "dualstack"
+    ]
+  },
+  "nightly": "Rotate other supported kernel/configuration rows serially; complete every supported row before release.",
+  "status": "Capacity policy and pinned inputs; kernel workflow provisioning and timing measurements remain required."
+}
