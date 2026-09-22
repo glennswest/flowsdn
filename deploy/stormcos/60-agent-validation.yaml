@@ -1,0 +1,80 @@
+# This is a reviewed host-resource contract, not a production CNI installer.
+# Replace the image placeholder with a trusted pinned runtime image digest.
+# Stage the two File hostPaths and select exactly one validation node first.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: flowsdn-agent-validation
+  namespace: flowsdn-system
+spec:
+  selector:
+    matchLabels:
+      app: flowsdn-agent-validation
+  updateStrategy:
+    type: OnDelete
+  template:
+    metadata:
+      labels:
+        app: flowsdn-agent-validation
+    spec:
+      serviceAccountName: flowsdn-agent
+      automountServiceAccountToken: false
+      hostNetwork: true
+      dnsPolicy: Default
+      nodeSelector:
+        flowsdn.io/validation-node: "a"
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: agent
+          image: registry.example.invalid/stormcos/flowsdn-runtime:replace-with-pinned-digest
+          imagePullPolicy: IfNotPresent
+          command: ["/opt/flowsdn/bin/flowsdn-agent"]
+          args: ["--config", "/etc/flowsdn/agent.json"]
+          securityContext:
+            runAsUser: 0
+            privileged: true
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: agent-binary
+              mountPath: /opt/flowsdn/bin/flowsdn-agent
+              readOnly: true
+            - name: bpf-object
+              mountPath: /opt/flowsdn/bpf/local-delivery
+              readOnly: true
+            - name: config
+              mountPath: /etc/flowsdn
+              readOnly: true
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+              mountPropagation: HostToContainer
+            - name: runtime
+              mountPath: /var/run/cilium
+            - name: state
+              mountPath: /var/lib/flowsdn
+      volumes:
+        - name: agent-binary
+          hostPath:
+            # Required staging path for this example, not a claim about the
+            # golden's current internal layout. Adjust to the real mounted file.
+            path: /pallets/flowsdn/bin/flowsdn-agent
+            type: File
+        - name: bpf-object
+          hostPath:
+            path: /pallets/flowsdn/bpf/local-delivery
+            type: File
+        - name: config
+          configMap:
+            name: flowsdn-agent-example-a
+        - name: bpffs
+          hostPath:
+            path: /sys/fs/bpf
+            type: Directory
+        - name: runtime
+          hostPath:
+            path: /var/run/cilium
+            type: DirectoryOrCreate
+        - name: state
+          hostPath:
+            path: /var/lib/flowsdn
+            type: DirectoryOrCreate

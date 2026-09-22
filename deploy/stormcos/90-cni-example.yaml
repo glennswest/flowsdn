@@ -1,0 +1,15 @@
+# Review-only staging document. Applying this ConfigMap does NOT activate CNI.
+# The host's owner must install the data as /etc/cni/net.d/05-flowsdn.conflist
+# after satisfying README.md's acceptance gates and removing conflicting CNI.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flowsdn-cni-staging-example
+  namespace: flowsdn-system
+data:
+  05-flowsdn.conflist: |
+    {
+      "cniVersion": "1.1.0",
+      "name": "flowsdn",
+      "plugins": [{"type": "flowsdn"}]
+    }

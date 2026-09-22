@@ -1,0 +1,23 @@
+# One validation node only. Allocate distinct non-overlapping pools for any
+# additional node; this agent does not watch Kubernetes Node PodCIDRs.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flowsdn-agent-example-a
+  namespace: flowsdn-system
+data:
+  agent.json: |
+    {
+      "socket-path": "/var/run/cilium/cilium.sock",
+      "state-dir": "/var/lib/flowsdn",
+      "bpf-object": "/opt/flowsdn/bpf/local-delivery",
+      "bpf-pin-root": "/sys/fs/bpf/flowsdn/endpoint-runtime",
+      "delete-queue": "/var/run/cilium/deleteQueue",
+      "ipv4-pool": "10.244.1.0/24",
+      "ipv4-gateway": "10.244.1.254",
+      "ipv6-pool": "fd00:10:244:1::/64",
+      "ipv6-gateway": "fd00:10:244:1::ffff",
+      "device-mtu": 1500,
+      "route-mtu": 1500,
+      "endpoint-id-max": 4095
+    }

@@ -3,6 +3,18 @@
 use aya_ebpf::{bindings::TC_ACT_SHOT, helpers::bpf_redirect, programs::TcContext};
 use flowsdn_bpf_abi::endpoint::{EndpointInfo, EndpointKey};
 
+/// Extract only the destination identity before validating the IP header.
+/// Uplink dispatch uses this to avoid passing a malformed packet merely because
+/// full validation failed, when its fixed destination identifies a local pod.
+#[inline(always)]
+pub fn destination_candidate(ctx: &TcContext) -> Option<EndpointKey> {
+    match ctx.load::<[u8; 2]>(12).ok()? {
+        [0x08, 0x00] => Some(EndpointKey::v4(ctx.load::<[u8; 4]>(30).ok()?, 0, 0)),
+        [0x86, 0xdd] => Some(EndpointKey::v6(ctx.load::<[u8; 16]>(38).ok()?, 0, 0)),
+        _ => None,
+    }
+}
+
 /// Validate the fixed IP header and return its local-cluster destination key.
 /// VLAN, non-IP frames and IPv6 jumbograms are not supported by this primitive.
 #[inline(always)]
