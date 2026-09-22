@@ -42,8 +42,10 @@ fn main() -> Result<()> {
     let path = std::env::args_os()
         .nth(1)
         .ok_or("usage: loader-features PATH_TO_FEATURE_OBJECT [PATH_TO_KFUNC_OBJECT]")?;
-    if path=="--kfunc-only" {
-        let object=std::env::args_os().nth(2).ok_or("--kfunc-only requires an object")?;
+    if path == "--kfunc-only" {
+        let object = std::env::args_os()
+            .nth(2)
+            .ok_or("--kfunc-only requires an object")?;
         return probe_kfunc(Path::new(&object));
     }
     let path = Path::new(&path);
@@ -79,9 +81,15 @@ fn main() -> Result<()> {
         .ok_or("ordinary XDP")?
         .try_into()?;
     ordinary.load()?;
-    match ordinary.test_run(TestRunOptions {data_in:Some(&jumbo),..Default::default()}) {
-        Ok(result)=>println!("OBSERVED ordinary XDP accepts 9000-byte test-run, verdict={}",result.return_value),
-        Err(error)=>println!("OBSERVED ordinary XDP rejects 9000-byte test-run: {error}"),
+    match ordinary.test_run(TestRunOptions {
+        data_in: Some(&jumbo),
+        ..Default::default()
+    }) {
+        Ok(result) => println!(
+            "OBSERVED ordinary XDP accepts 9000-byte test-run, verdict={}",
+            result.return_value
+        ),
+        Err(error) => println!("OBSERVED ordinary XDP rejects 9000-byte test-run: {error}"),
     }
     let fragmented: &mut Xdp = bpf
         .program_mut("fragmented_xdp")
@@ -97,10 +105,16 @@ fn main() -> Result<()> {
         state.get(&1, 0)? == 9000,
         "XDP total buffer helper did not observe non-linear input",
     )?;
-    let total=state.get(&1,0)?;let linear=state.get(&2,0)?;
+    let total = state.get(&1, 0)?;
+    let linear = state.get(&2, 0)?;
     println!("OBSERVED fragmented XDP total={total} linear={linear}");
-    ensure(total>linear,"test-run did not demonstrate non-linear XDP data")?;
-    println!("PASS fragmented XDP non-linear packet execution; inspect BPF_PROG_LOAD trace to independently confirm prog_flags");
+    ensure(
+        total > linear,
+        "test-run did not demonstrate non-linear XDP data",
+    )?;
+    println!(
+        "PASS fragmented XDP non-linear packet execution; inspect BPF_PROG_LOAD trace to independently confirm prog_flags"
+    );
     if let Some(kfunc) = std::env::args_os().nth(2) {
         probe_kfunc(Path::new(&kfunc))?;
     } else {
@@ -109,17 +123,15 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn probe_kfunc(kfunc:&Path)->Result<()> {
-        // Load only: never attach or create/read an iterator FD. Preserve all
-        // relocation/verifier failures as errors, not feature-success skips.
-        let mut object = EbpfLoader::new().load_file(kfunc)?;
-        let iter: &mut aya::programs::Iter = object
-            .program_mut("sock_destroy_probe")
-            .ok_or("kfunc program")?
-            .try_into()?;
-        iter.load("tcp", &aya::Btf::from_sys_fs()?)?;
-        println!(
-            "PASS bpf_sock_destroy external relocation and iterator verifier load (not executed)"
-        );
+fn probe_kfunc(kfunc: &Path) -> Result<()> {
+    // Load only: never attach or create/read an iterator FD. Preserve all
+    // relocation/verifier failures as errors, not feature-success skips.
+    let mut object = EbpfLoader::new().load_file(kfunc)?;
+    let iter: &mut aya::programs::Iter = object
+        .program_mut("sock_destroy_probe")
+        .ok_or("kfunc program")?
+        .try_into()?;
+    iter.load("tcp", &aya::Btf::from_sys_fs()?)?;
+    println!("PASS bpf_sock_destroy external relocation and iterator verifier load (not executed)");
     Ok(())
 }
