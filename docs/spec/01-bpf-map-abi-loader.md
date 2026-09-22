@@ -1317,13 +1317,27 @@ aya gaps and how each is filled:
 | `BPF_LINK_UPDATE` on a pinned link | `flowsdn-bpf-sys::link_update(link_fd, prog_fd, old_prog_fd?)`; aya has `PinnedLink::from_pin` to obtain the fd |
 | netkit attach | `link_create` with `BPF_NETKIT_PRIMARY/PEER`; netkit device creation in area 03 |
 | tcx ordering / `expected_revision` | aya 0.13 `TcAttachOptions::TcxOrder` with `LinkOrder::last()` suffices for anchor-tail; revision-checked ordering via the shim if ever needed |
-| `BPF_F_XDP_HAS_FRAGS` on a program | set `prog_flags` on the `aya_obj` program before load (field exists; verify it is honoured; else shim `prog_load`) |
+| `BPF_F_XDP_HAS_FRAGS` on a program | Aya 0.14 maps the `xdp.frags` section (`#[xdp(frags)]`) to the kernel flag; validate with a 9000-byte XDP test-run and unflagged negative control |
 | BTF decl tags | not used (§3.7, §3.8 DEVIATIONS); tables in the ABI crate |
-| `.rodata.config` `set_global` | confirmed by section-prefix match; loader additionally validates the datasec name |
+| `.rodata.config` `set_global` | Aya 0.14 aliases this deprecated API to `override_global`; kernel map-observation probe must confirm default and overridden values, with wrong-size/missing-symbol negative controls; loader additionally validates the datasec name |
 | reachability analysis | new code over `aya_obj::Object` instruction slices (`Vec<Instruction>` with relocation info); ~1.5k lines |
-| kfunc/ksym relocation for `bpf_sock_destroy` | aya supports `.ksyms` relocation since 0.13; validated on the target kernel in §9.4; feature deferred otherwise |
+| kfunc/ksym relocation for `bpf_sock_destroy` | **Unconfirmed gap:** pinned aya-obj 0.3 ordinary call relocation resolves object-local functions, not kernel BTF kfunc IDs. A dedicated relocation path or validated alternative is required; do not claim support from generated kfunc constants or generic CO-RE support |
 | `PROG_ATTACH` without flags | shim (aya's `CgroupAttachMode` always sets a flag) |
 | possible-CPU count | `aya::util::nr_cpus()` reads `possible`; used for perf arrays, per-CPU maps and `.data.aux` |
+
+**Executable feature probes (#3).** The standalone Rust BPF binaries
+`loader-features` and `loader-kfunc` feed the userspace `loader-features`
+binary in `flowsdn-bpftest`. The first checks actual `.rodata.config` values
+observed in a BPF array and non-linear XDP packet execution. The second is
+strictly **load-only**: it must never be attached or iterated, because its
+external `bpf_sock_destroy` call is destructive. Its Rust external declaration
+is a toolchain/loader integration probe, not evidence that a correct `.ksyms`
+BTF relocation has already been emitted. A compiler, linker, relocation or
+verifier rejection keeps that capability unconfirmed and must be recorded at
+the stage that rejected it. Omitting this object prints `NOT RUN`, never
+`PASS`. The feature-set issue remains open until all requested loader
+capabilities have kernel evidence; TCX pin/update evidence is recorded
+separately. No network interface is attached by these two feature probes.
 
 Key types: `PinPolicy::{ByName, Replace, None}`, `PendingPins`, `Commit`
 (FnOnce, must be called or explicitly dropped with rollback), `AttachTarget::{Tcx(dir), Clsact(dir,prio), Netkit(side), Xdp(mode), CgroupRoot(attach_type), Iter}`,

@@ -499,21 +499,21 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     fs::remove_file(pin_root.join("cilium_lxc"))?;
     let detached = Instant::now();
     loop {
-        let mut remaining = 0;
+        let mut all_detached = true;
         for pin in &pins {
             let name = pin
                 .file_name()
                 .and_then(|n| n.to_str())
                 .and_then(|n| n.strip_prefix("ingress-"))
                 .ok_or("pin interface")?;
-            remaining += aya::programs::SchedClassifier::query_tcx(
+            all_detached &= aya::programs::SchedClassifier::query_tcx(
                 name,
                 aya::programs::TcAttachType::Ingress,
             )?
             .1
-            .len();
+            .is_empty();
         }
-        if remaining == 0 {
+        if all_detached {
             break;
         }
         ensure(

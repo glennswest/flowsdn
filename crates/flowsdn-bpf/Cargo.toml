@@ -34,3 +34,15 @@ indexing_slicing = "deny"
 arithmetic_side_effects = "deny"
 unwrap_used = "deny"
 todo = "deny"
+
+[[bin]]
+name = "loader-features"
+path = "src/bin/loader-features.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "loader-kfunc"
+path = "src/bin/loader-kfunc.rs"
+test = false
+bench = false
