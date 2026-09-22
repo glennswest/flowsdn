@@ -664,15 +664,13 @@ Structure that falls out of the reference:
     both are in the default chain) and `aws-sdk-ec2` paginators for
     `describe_network_interfaces`/`describe_instances`/`describe_instance_types`.
     `BaseEndpoint` override maps to `.endpoint_url()`. Availability: mature, official.
-  - Azure: `azure_identity` (`ManagedIdentityCredential` with user-assigned
-    client ID, `DefaultAzureCredential` incl. workload identity and
-    `AZURE_CLIENT_{ID,SECRET}`/`AZURE_TENANT_ID`), `azure_mgmt_network` and
-    `azure_mgmt_compute` (autorust-generated, `azure-sdk-for-rust`
-    `services/mgmt/*`). These management crates are generated and less
-    polished than `azure_core`; expect to pin versions and handle the
-    long-running `BeginUpdate` poller manually. IMDS is a plain `reqwest` GET
-    with `Metadata: true`. Cloud selection by `azEnvironment` maps to
-    `azure_core::cloud` endpoints.
+  - Azure: application-owned ARM REST and recoverable LRO protocol; the
+    `flowsdn-cloud-azure` prototype covers thirteen operation routes and synthetic
+    polling fixtures. Generated management crates 0.21.0 were source-audited;
+    NIC await ignores initial Retry-After and does not expose restart progress.
+    Future `azure_core`/`azure_identity` transport needs exact dependency validation;
+    credentials, HTTP, cloud recordings and live allocator integration remain open.
+    See spec07 §12.2 and the prototype README for pins and licensing evidence.
   - Alibaba: no official Rust SDK. Options: `alibaba-cloud-sdk-rust`
     (community, incomplete) or write a small RPC-style client (~600 lines) for
     the dozen ECS/VPC actions above using the OpenAPI v2 signature (HMAC-SHA1
@@ -727,9 +725,9 @@ client), routing S (~1k). Overall XL (~23k lines of Rust).
 - Should flowsdn ship the legacy per-IP ENI path at all, given the operator
   auto-detects multi-pool agents? Recommendation above says no, but a
   mixed-version cluster (Cilium 1.19 agents + flowsdn operator) would need it.
-- Azure: is `azure_mgmt_network`/`azure_mgmt_compute` maintained enough, or
-  should flowsdn call the ARM REST endpoints directly with `azure_core`
-  pipelines (fewer dependencies, ~1k lines)?
+- Azure client choice resolved #105: own REST polling contracts; generated SDK
+  source audit and synthetic tests are available. Runtime transport remains pending.
+
 - Alibaba: community crate vs. hand-written signer; also whether to support
   RRSA (OIDC) from day one.
 - Egress gateway on ENI: the reference has removed the compat flags; confirm

@@ -1605,7 +1605,7 @@ above is likewise never a pull-request gate.
 | `flowsdn-routing-cloud` (agent + CNI) | `RoutingInfo`, `configure`, `delete`, `reconcile_gateway_routes` over `rtnetlink`; sysctl via `/proc/sys`. Shared with the CNI binary (spec 09). |
 | `flowsdn-operator-ipam` | `NodeManager`, `Node` (watermarks as free functions, handshake, CIDR release tracking), `trait NodeOperations` and `trait CloudInstances` (11.2), `ClusterPoolAllocator` + `NodesPodCidrManager` (3.5) + `CidrSet` (5.4), `PoolAllocator` + `NodeHandler` + migration (3.6), CiliumNode GC (3.19), metrics (8.2), `ApiLimiter` (`governor` token bucket recording waits). |
 | `flowsdn-ipam-aws` | `aws-config` (default chain incl. IRSA and IMDS, `retry_config` with rate limiter disabled), `aws-sdk-ec2` with paginators, `aws-sdk-ec2::config::Builder::endpoint_url` for `--ec2-api-endpoint`, IMDS via `aws_config::imds::Client`; `Ec2Api` trait + in-memory fake; `InstancesManager`, `LimitsGetter`, `EniNode: NodeOperations`, ENI GC. Error classification by `ProvideErrorMetadata::code()`/`message()` for `InsufficientCidrBlocks`, `InvalidParameterValue`, `OperationNotPermitted`. |
-| `flowsdn-ipam-azure` | `azure_identity` (`ManagedIdentityCredential` with client id, `DefaultAzureCredential`), `azure_mgmt_network` + `azure_mgmt_compute` (pin versions; drive long-running operations by polling the `Azure-AsyncOperation`/`Location` header until terminal), IMDS via `reqwest` with `Metadata: true`; cloud selection maps `azEnvironment` to `azure_core::cloud` endpoints; resource-id parser (own, ~50 lines); `AzureNode: NodeOperations`. If the mgmt crates prove unmaintained, fall back to `azure_core` pipelines against the ARM REST endpoints directly (12.2). |
+| `flowsdn-ipam-azure` | Application-owned ARM REST over future pinned `azure_core`/`azure_identity` transport; `flowsdn-cloud-azure` provides request/polling contracts (12.2), not a live cloud allocator. IMDS still requires Metadata:true; AzureNode implements NodeOperations in the runtime integration. |
 | `flowsdn-ipam-alibaba` | own RPC-style client over `reqwest`: query-parameter signing (RPC signature version 1.0, HMAC-SHA1, `SignatureNonce`, `Timestamp`) for the `ecs` 2014-05-26 and `vpc` 2016-04-28 APIs, credential chain (env AK/SK/STS token, ECS RAM role via metadata, OIDC RRSA), endpoints `<product>-vpc.<region>.aliyuncs.com`, paging by `NextToken`/`PageNumber`; `AlibabaNode: NodeOperations`; metadata client. Budget ~1k lines including the signer and a fake. |
 
 `flowsdn-table` (spec 00) provides `LocalPodIPPool`, pods and namespaces tables
@@ -1691,10 +1691,27 @@ selector helpers for some versions; a small `netlink-packet-route` encoder for
    no compatibility field merely because the flowsdn agent does not consume it.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-2. **Azure client library.** (a) `azure_mgmt_network`/`azure_mgmt_compute`
-   generated crates; (b) direct ARM REST over `azure_core` pipelines (~1k
-   lines, the eight operations of 3.10). Recommendation: prototype (a); switch
-   to (b) if the LRO poller or pinning proves fragile.
+2. **Azure client library — resolved #105.** Use application-owned ARM REST
+   requests and recoverable LRO state, with a future exactly pinned `azure_core`
+   pipeline plus `azure_identity` transport. Source-audited generated management
+   crates 0.21.0 expose the routes and raw send APIs, but the generated NIC await
+   poller ignores initial Retry-After and cannot checkpoint progress for restart.
+   The Compute VMSS update await loop also repeats PUT instead of monitoring GET.
+   These are concrete integration concerns, not a claim that the SDK is unmaintained.
+   `flowsdn-cloud-azure` tests the REST contract without adding Azure dependencies.
+   Network API is pinned to `2024-03-01`, Compute to `2024-07-01`; NIC/public-IP
+   operations nested beneath Microsoft.Compute retain the Network API version.
+   The inventory contains thirteen methods, superseding the earlier “eight” shorthand.
+   Initial retry delay, async-header precedence, Location fallback, provisioning
+   states, confirmed failure/cancellation, final resource GET, restart checkpoints,
+   pagination authority and three cloud origins are explicit tested contracts.
+   Never release VMSS ownership on timeout, caller cancellation, malformed replies
+   or transport failure; persist uncertain outcomes and recover before new writes.
+   The local checkpoint object does not implement durable ownership itself.
+   Synthetic fixtures are not ADR-0007 recorded-response acceptance. HTTP transport,
+   credential compatibility/pins, API payload allocation, durable reconciliation,
+   real response replay and live validation remain implementation gates. See the
+   [prototype and pinned-source audit](../../crates/flowsdn-cloud-azure/README.md).
 3. **Azure mirror fields — resolved #106.** Read and write `interfaces[].cidr` and
    `addresses[].subnet` as mirrors of the current fields, without a feature flag. A
    future incompatible removal requires a separate migration decision.

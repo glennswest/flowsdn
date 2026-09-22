@@ -58,6 +58,24 @@ fn info(record: &Record) -> Result<EndpointInfo> {
     })
 }
 
+// One host interface has exactly one endpoint attachment owner. Validate before
+// any map/link mutation: rollback of a failed second attach must never detach
+// the first owner's live program.
+fn validate_interface_owners<'a>(records: impl IntoIterator<Item = &'a Record>) -> Result<()> {
+    let mut names = BTreeSet::new();
+    let mut indices = BTreeSet::new();
+    for record in records {
+        let name = text(&record.document, "IfName");
+        let index = record.document.get("IfIndex").and_then(Value::as_u64)
+            .and_then(|n| u32::try_from(n).ok()).filter(|n| *n != 0)
+            .ok_or("invalid host ifindex")?;
+        if name.is_empty() || !names.insert(name) || !indices.insert(index) {
+            return Err("endpoint host interface already owned or invalid".into());
+        }
+    }
+    Ok(())
+}
+
 pub struct Manager {
     store: Store,
     ids: IdPool,
@@ -93,6 +111,7 @@ impl Manager {
         let ids = IdPool::new(id_max)?;
         let store = Store::open(path)?;
         let records = store.restore()?;
+        validate_interface_owners(&records)?;
         let mut unique_addresses = BTreeSet::new();
         for record in &records {
             for ip in addresses(&record.document)? {
@@ -217,6 +236,7 @@ impl Manager {
             if self.records.contains_key(&record.attachment) {
                 return Err("endpoint attachment already exists".into());
             }
+            validate_interface_owners(self.records.values().chain(std::iter::once(&record)))?;
             let ips = addresses(&record.document)?;
             let owner = format!(
                 "{}/{}",
@@ -332,4 +352,28 @@ fn uninstall(driver: &mut LocalDelivery, record: &Record) -> Result<()> {
         kernel(driver.remove_if_present(ip))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod interface_ownership_tests {
+    use super::*;
+    fn record(id: u16, name: &str, index: u32) -> Record {
+        Record::parse(json!({"ID":id,"dockerID":format!("container-{id}"),
+            "ContainerIfName":"eth0","IfName":name,"IfIndex":index,
+            "IPv4":format!("198.18.0.{id}")})).expect("record")
+    }
+    #[test]
+    fn distinct_attachment_and_address_cannot_reuse_host_interface() {
+        let live = record(1, "host-one", 10);
+        let alias = record(2, "host-one", 10);
+        assert_ne!(live.attachment, alias.attachment);
+        assert_ne!(addresses(&live.document).expect("IP"), addresses(&alias.document).expect("IP"));
+        // This exact preflight runs on create before stage/install, and on
+        // restore before loading the BPF object or cleaning stale state.
+        assert!(validate_interface_owners([&live, &alias]).is_err());
+        assert!(validate_interface_owners([&live, &record(2, "host-one", 11)]).is_err());
+        assert!(validate_interface_owners([&live, &record(2, "renamed", 10)]).is_err());
+        assert!(validate_interface_owners([&live, &record(2, "host-two", 11)]).is_ok());
+        assert!(validate_interface_owners([&live]).is_ok());
+    }
 }

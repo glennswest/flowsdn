@@ -1,13 +1,13 @@
 # Dependency capability source audit — 2026-09-22
 
 Scope: issues #25 and #30; coordinator-selected snapshots fastetcd `cf53856`
-and rustkube `e45acc7`. This is a source and existing-test inventory, **not a
-record of tests executed or deployed-server conformance**. Paths below are
+and rustkube `e45acc7`. This is a source inventory with bounded test execution recorded below;
+it does not establish deployed-server conformance. Paths below are
 relative to the named dependency repository. No dependency repository was edited.
 
 ## fastetcd: ClusterMesh prerequisites (#25)
 
-| Required behavior | Source evidence | Executable Rust evidence (not run in this audit) |
+| Required behavior | Source evidence | Executable Rust evidence (passed on Linux) |
 |---|---|---|
 | Txn compare on version | `crates/server/src/conv.rs` maps protobuf Version to MVCC Version; `crates/storage/src/mvcc/store.rs::eval_compare` | Storage `txn_success_branch_runs_when_compares_pass`, `txn_failure_branch_runs_when_compares_fail`, `txn_compare_on_absent_key_uses_zero_record`; these use `cmp_version_eq`. Server `txn_success_branch_runs_when_compare_holds` tests **value**, not version; an explicit gRPC version-zero CAS remains useful integration coverage. |
 | Limited range Count/More | MVCC `range_in_ctx` counts matching keys before limiting; server `kv.rs` forwards both fields | Storage `range_limit_marks_more` asserts More and total Count=3; `count_only_returns_count_without_values`. |
@@ -23,7 +23,9 @@ cargo test -p fastetcd-storage --lib
 cargo test -p fastetcd-server --test kv_grpc --test watch_grpc --test etcd_client_compat
 ```
 
-The server integration fixtures start temporary local servers themselves. These
+Executed on Linux at the stated revision: **53 storage tests and 20 server
+integration tests passed** (8 etcd-client, 6 KV, 6 watch). The server integration
+fixtures start temporary local servers themselves. These
 commands cover the named prerequisites; they do not establish flowsdn watch
 resumption, deployment interoperability, or multi-node failure recovery.
 

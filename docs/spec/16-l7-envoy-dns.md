@@ -535,9 +535,11 @@ path it attempted to open beneath an intentionally absent root. The listener
 does not bind a port. This distinguishes configurable map selection from mere
 schema acceptance and from strings embedded in the executable. The probe
 creates no BPF map and does not demonstrate map-layout or packet-path
-interoperability. Until its image run is recorded, #70 remains open. Once it
-passes, no legacy symlink pin or production NPHDS fallback is needed for name
-selection; normal map ABI validation remains mandatory.
+interoperability. All four cases passed against the exact image binary on
+2026-09-22; run the probe without effective/permitted capabilities because
+this Envoy binary rejects privileged execution. No legacy symlink pin or
+production NPHDS fallback is needed for name selection; normal map ABI
+validation remains mandatory. See the final-batch validation record.
 
 Envoy reads the pinned map at `<bpf_root>/tc/globals/cilium_ipcache_v2` and needs
 read access to bpffs and membership in `proxy-gid` for the sockets. On the

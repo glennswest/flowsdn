@@ -1240,10 +1240,10 @@ writing. Startup fences: `initial_cid_list`, `k8s_caches_synced`,
 6. **Resolved (#69, ADR-0011): well-known identities default on.**
    `enable-well-known-identities=true` follows §4.4 and the config catalogue.
    Explicit false disables the shortcut; no inventory suggestion overrides it.
-7. **Envoy `ipcache_name` (#70).** Pinned source confirms configurable field
-   12, with a legacy fallback only when empty. The image probe in spec 16
-   §3.2.5 must demonstrate the selected map path before this item is closed;
-   strings or protobuf field acceptance alone are insufficient.
+7. **Resolved #70: Envoy `ipcache_name`.** The exact image binary passed
+   spec 16 §3.2.5’s four-case probe on 2026-09-22: omitted name selects the
+   legacy path, explicit v2 and sentinel names select their actual map paths,
+   and an unknown field is rejected. Map ABI validation remains separate.
 8. **Resolved (#71): retain CEP-GC interval prerequisite with CES.**
    Section 3.6 follows spec 12 startup validation; CES identities still count
    as alive. Operator scheduling/GC tests remain required.

@@ -1389,9 +1389,9 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    peer send must update the map and deliver/drop/resume UDP according to the
    smoke verdict. Raw capture alone is not proof of a pass verdict because
    packet sockets may observe frames before ingress classification. The test
-   also verifies TCX attachment and detachment. The image/kernel validation
-   record must pass before closing #221; no netkit or kernel-matrix coverage
-   is implied by one veth smoke run.
+   also verifies TCX attachment and detachment. All cases passed on x86-64
+   Linux 6.17.1 on 2026-09-22, resolving #221. No netkit or kernel-matrix
+   coverage is implied by one veth smoke run.
 
 8. **Resolved — #222.** Share tests/fixtures/packets/*.toml between bpftest and the
    connectivity traffic generator. Each fixture contains the builder description and

@@ -1,0 +1,15 @@
+[
+ ["GET","Microsoft.Network/networkInterfaces?api-version=2024-03-01"],
+ ["GET","Microsoft.Network/networkInterfaces/n?api-version=2024-03-01"],
+ ["PUT","Microsoft.Network/networkInterfaces/n?api-version=2024-03-01"],
+ ["GET","Microsoft.Compute/virtualMachineScaleSets?api-version=2024-07-01"],
+ ["GET","Microsoft.Compute/virtualMachineScaleSets/s/networkInterfaces?api-version=2024-03-01"],
+ ["GET","Microsoft.Compute/virtualMachineScaleSets/s/virtualMachines/0/networkInterfaces?api-version=2024-03-01"],
+ ["GET","Microsoft.Compute/virtualMachineScaleSets/s/virtualMachines/0?api-version=2024-07-01&$expand=instanceView"],
+ ["PUT","Microsoft.Compute/virtualMachineScaleSets/s/virtualMachines/0?api-version=2024-07-01"],
+ ["GET","Microsoft.Compute/virtualMachines/v?api-version=2024-07-01"],
+ ["GET","Microsoft.Network/virtualNetworks/v/subnets/u?api-version=2024-03-01"],
+ ["GET","Microsoft.Network/publicIPPrefixes?api-version=2024-03-01"],
+ ["GET","Microsoft.Network/publicIPAddresses/p?api-version=2024-03-01"],
+ ["GET","Microsoft.Compute/virtualMachineScaleSets/s/virtualMachines/0/networkInterfaces/n/ipConfigurations/i/publicIPAddresses?api-version=2024-03-01"]
+]

@@ -938,7 +938,7 @@ fastetcd at step 1, not step 12.** They are 2,280 Go test lines that answer
    does not test it; `pkg/bgp/gobgp` is **replace** and leaves a hole. flowsdn's
    own speaker needs session state-machine, OPEN/UPDATE encoding and error-path
    tests that have no reference counterpart. Not costed in §1.
-5. **Effort model calibration — #250 source port complete; validation/LOC pending.**
+5. **Effort model calibration — #250 validated 2026-09-22.**
    The pure algorithms and Rust ports now cover every named upstream unit-test
    category. Calibration mapping:
 
@@ -956,8 +956,10 @@ fastetcd at step 1, not step 12.** They are 2,280 Go test lines that answer
    (`pkg/maglev/maglev_test.go`, including its benchmark/harness) and 764
    (`pkg/ipam/cidrset/cidr_set_test.go`). The benchmark is not a unit-test
    requirement and has not been ported; no performance calibration is claimed.
-   Count formatted Rust test files and static fixture lines separately after
-   successful Linux execution, reporting each ratio and the combined ratio.
-   Do not substitute unformatted compact source LOC. Until those measurements
-   are recorded, ×0.45 remains unvalidated. Even measured LOC ratios cover only
-   these two modules and cannot calibrate whole-project engineering effort.
+   Linux execution and Clippy passed. Formatted Rust test LOC: Maglev 122
+   plus 1 fixture line versus 249 Go lines (0.490 code-only; 0.494 including
+   data); CIDRset 193 plus 55 fixture lines versus 764 (0.253; 0.325).
+   Combined: 315 code lines / 1013 = 0.311; 371 including data / 1013 = 0.366.
+   This observed two-module range replaces the unvalidated ×0.45 test-LOC
+   assumption for these ports only. It is not a whole-project engineering
+   time estimate; the original Maglev denominator includes an unported benchmark.

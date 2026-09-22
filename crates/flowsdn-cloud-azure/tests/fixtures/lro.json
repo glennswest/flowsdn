@@ -1,0 +1,7 @@
+[
+ {"status":202,"headers":[["Azure-AsyncOperation","https://management.azure.com/operations/one?api-version=2024-03-01"],["Location","https://management.azure.com/ignored"],["Retry-After","17"]],"body":{}},
+ {"status":200,"headers":[["Retry-After","3"]],"body":{"status":"Running"}},
+ {"status":429,"headers":[["Retry-After","21"]],"body":{"error":{"code":"TooManyRequests"}}},
+ {"status":200,"headers":[],"body":{"status":"Succeeded"}},
+ {"status":200,"headers":[],"body":{"properties":{"provisioningState":"Succeeded"}}}
+]

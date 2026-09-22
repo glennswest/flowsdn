@@ -798,8 +798,8 @@ Surface the replacement must cover to drop `cilium-envoy`:
 - **#70 source audit:** the image revision `766ccfb37260a43e9d228837aa84ce3faf9f64e7`
   uses nonempty `BpfMetadata.ipcache_name` to select the map; only an empty
   field falls back to `cilium_ipcache`. Spec 16 §3.2.5 records pinned source
-  links and a four-case executable image probe. The image-run gate remains
-  pending; exact key/value ABI compatibility remains a separate requirement.
+  links and a four-case executable image probe, all passed on 2026-09-22;
+  exact key/value ABI compatibility remains a separate requirement.
 - Whether `enable-bpf-tproxy` (sk_assign) becomes the only mode in flowsdn;
   it removes the fwmark ip rules but requires kernel ≥ 5.7 and tc ingress
   only (host egress still needs the mark path).
