@@ -120,3 +120,9 @@ configuration, including `CARGO_TARGET_DIR` when set.
 The test harnesses and inventory tools are Rust. Static compatibility fixtures
 use txtar, YAML, TOML, and JSON. A txtar archive packages test commands and named
 fixture files in one readable text file.
+
+The next unreleased batch adds encryption and egress-selection plans, proxy ACK
+barriers, ClusterMesh principal binding, bounded flow/event admission, and LB
+input parsing and ordering. These libraries have explicit runtime integration
+gaps; see [batch 6 evidence](docs/workcycles/2026-09-22-batch6.md). CI workflow
+configuration is committed, with runner activation still outstanding.

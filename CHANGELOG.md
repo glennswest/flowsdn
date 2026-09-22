@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Add encryption/underlay validation and deterministic egress assignment plans.
+- Add proxy ACK publication barriers, DNS default resolution and authenticated
+  ClusterMesh principal bindings with explicit runtime integration gaps.
+- Add bounded PacketDrop admission and flow collection, including stale-handle
+  rejection; retain reference exporter naming and correct CT restore evidence.
+- Add LB input snapshots, pool ordering, socket eligibility, batch-delete
+  progress handling and GKE/host-mark/migration contracts.
+- Audit pinned BPF helper symbols and add per-crate CI caching/change selection;
+  runner activation and live feature validation remain outstanding.
+
 - Add BGP framing, OPEN/UPDATE validation, strict-error handling and passive/status
   planning, with structural-error precedence regression tests.
 - Add Gateway configuration validation, condition projection and conformance

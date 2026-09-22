@@ -20,7 +20,7 @@ env:
   TMPDIR: /build/tmp
 jobs:
   plan:
-    if: github.ref == 'refs/heads/main'
+    if: vars.FLOWSDN_CI_ENABLED == 'true' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, flowsdn-build]
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -93,7 +93,7 @@ jobs:
         run: df -h / /build
   cleanup:
     needs: [plan, crates, bpf]
-    if: always() && github.ref == 'refs/heads/main'
+    if: always() && needs.plan.result != 'skipped' && vars.FLOWSDN_CI_ENABLED == 'true' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, flowsdn-build]
     steps:
       - uses: actions/checkout@v4

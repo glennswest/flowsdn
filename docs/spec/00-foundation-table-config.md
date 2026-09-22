@@ -1595,6 +1595,8 @@ coverage count. These are startup settings, not runtime-mutable options.
 | `endpoint-id-max` | Uint | `4095` | active |
 | `force-config-change` | Bool | `false` | active |
 | `bpf-ipcache-map-max` | Uint | `512000` | immutable |
+| `egress-gateway-selection` | String | `modulo` | immutable |
+| `egress-gateway-legacy-map` | Bool | `false` | immutable |
 | `bgp-strict-update-errors` | Bool | `false` | immutable |
 | `bgp-status-report-prefixes` | Bool | `false` | active |
 

@@ -1688,3 +1688,5 @@ is not enabled on the shared host. Runner registration, isolated privileged VM
 provisioning, first successful workflow run and required status checks remain
 #264/#294 work. No runner was registered at the batch's GitHub API audit, so
 committing this workflow is not CI activation.
+
+The workflow remains dormant until `FLOWSDN_CI_ENABLED=true` is configured after runner provisioning. Its skipped state is not an acceptance gate.

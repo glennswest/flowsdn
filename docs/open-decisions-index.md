@@ -2,7 +2,7 @@
 
 This is the original harvested inventory, including issues subsequently closed.
 Current states live in GitHub; dated batch snapshots and evidence are in
-[workcycles](workcycles/) and [validation](validation/). ADRs 0011–0014 separate
+[workcycles](workcycles/) and [validation](validation/). ADRs 0011–0015 separate
 decision resolutions from remaining milestone implementation (#291–#294).
 
 Every open decision, TODO, to-verify item and deliberately-deferred gap recorded
