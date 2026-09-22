@@ -248,7 +248,9 @@ name = "flowsdn-bpf-loader"
 version = "0.14.0"
 dependencies = [
  "aya",
+ "aya-obj",
  "flowsdn-bpf-abi",
+ "libc",
 ]
 
 [[package]]
@@ -269,10 +271,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-cli"
+version = "0.14.0"
+dependencies = [
+ "flowsdn-clustermesh",
+ "serde_json",
+ "yaml-rust2",
+]
+
+[[package]]
 name = "flowsdn-clustermesh"
 version = "0.14.0"
 dependencies = [
  "flowsdn-identity",
+ "libc",
  "serde_json",
 ]
 
@@ -318,6 +330,11 @@ dependencies = [
 [[package]]
 name = "flowsdn-encryption"
 version = "0.14.0"
+dependencies = [
+ "netlink-packet-core 0.8.0",
+ "netlink-packet-generic",
+ "netlink-packet-wireguard",
+]
 
 [[package]]
 name = "flowsdn-fence"
@@ -702,9 +719,27 @@ dependencies = [
 
 [[package]]
 name = "netlink-packet-core"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "745d789fe0958caf7252f5e1e900ce5c09b6a5bf05c7bba02a9cc600866ce31e"
+dependencies = [
+ "pastey",
+]
+
+[[package]]
+name = "netlink-packet-core"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d6e2daf9a8c2e21302714706860a0e6be02e03d17294ecc66b354ea7d4059dd"
+
+[[package]]
+name = "netlink-packet-generic"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f891b2e0054cac5a684a06628f59568f841c93da4e551239da6e518f539e775"
+dependencies = [
+ "netlink-packet-core 0.8.0",
+]
 
 [[package]]
 name = "netlink-packet-route"
@@ -715,8 +750,21 @@ dependencies = [
  "bitflags",
  "libc",
  "log",
- "netlink-packet-core",
+ "netlink-packet-core 0.9.0",
  "zerocopy",
+]
+
+[[package]]
+name = "netlink-packet-wireguard"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb217ca08c02978c3ea5ef0f013d20c602f2a17a9f00d9e4b1518a3500c2f332"
+dependencies = [
+ "bitflags",
+ "libc",
+ "log",
+ "netlink-packet-core 0.8.0",
+ "netlink-packet-generic",
 ]
 
 [[package]]
@@ -729,7 +777,7 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "log",
- "netlink-packet-core",
+ "netlink-packet-core 0.9.0",
  "netlink-sys",
  "thiserror",
 ]
@@ -777,6 +825,12 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "pastey"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
 
 [[package]]
 name = "pin-project-lite"
@@ -861,7 +915,7 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "log",
- "netlink-packet-core",
+ "netlink-packet-core 0.9.0",
  "netlink-packet-route",
  "netlink-proto",
  "netlink-sys",

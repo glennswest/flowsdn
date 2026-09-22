@@ -369,11 +369,23 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     let object = fs::canonicalize(object)?;
     isolate()?;
     unshare(CloneFlags::CLONE_NEWNS)?;
-    nix::mount::mount(None::<&str>, "/", None::<&str>, nix::mount::MsFlags::MS_REC | nix::mount::MsFlags::MS_PRIVATE, None::<&str>)?;
+    nix::mount::mount(
+        None::<&str>,
+        "/",
+        None::<&str>,
+        nix::mount::MsFlags::MS_REC | nix::mount::MsFlags::MS_PRIVATE,
+        None::<&str>,
+    )?;
     let temp = Temp::new()?;
     let pin_root = temp.0.join("bpf");
     fs::create_dir(&pin_root)?;
-    nix::mount::mount(Some("bpffs"), &pin_root, Some("bpf"), nix::mount::MsFlags::empty(), None::<&str>)?;
+    nix::mount::mount(
+        Some("bpffs"),
+        &pin_root,
+        Some("bpf"),
+        nix::mount::MsFlags::empty(),
+        None::<&str>,
+    )?;
     fs::write(
         temp.0.join("config.json"),
         serde_json::to_vec(
@@ -423,7 +435,10 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         serde_json::to_vec(&restored_config)?,
     )?;
     let agent = start_agent(&agent_binary, &temp)?;
-    ensure(aya::maps::MapInfo::from_pin(pin_root.join("cilium_lxc"))?.id()==map_id, "restart replaced endpoint map")?;
+    ensure(
+        aya::maps::MapInfo::from_pin(pin_root.join("cilium_lxc"))?.id() == map_id,
+        "restart replaced endpoint map",
+    )?;
     for (endpoint, check) in [&first, &second].into_iter().zip(&previous) {
         cni(&cni_binary, &temp, "CHECK", endpoint, check)?;
         let duplicate = cni(&cni_binary, &temp, "ADD", endpoint, &conf)?;
@@ -509,7 +524,10 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     println!(
         "PASS: offline CNI deletion survives process restart, does not resurrect stale links, drains durable queue and tears down remaining endpoint"
     );
-    ensure(fs::read_dir(&pin_root)?.count()==1, "endpoint deletion left pinned links")?;
+    ensure(
+        fs::read_dir(&pin_root)?.count() == 1,
+        "endpoint deletion left pinned links",
+    )?;
     fs::remove_file(pin_root.join("cilium_lxc"))?;
     nix::mount::umount(&pin_root)?;
     Ok(())

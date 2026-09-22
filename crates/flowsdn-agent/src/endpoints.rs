@@ -83,14 +83,22 @@ impl Manager {
     ) -> Result<Self> {
         Self::restore_with_pins(path, object, ipam, id_max, None)
     }
-    pub fn restore_with_pins(path: &Path, object: &Path, ipam: Ipam, id_max: u32, pin_root: Option<&Path>) -> Result<Self> {
+    pub fn restore_with_pins(
+        path: &Path,
+        object: &Path,
+        ipam: Ipam,
+        id_max: u32,
+        pin_root: Option<&Path>,
+    ) -> Result<Self> {
         let ids = IdPool::new(id_max)?;
         let store = Store::open(path)?;
         let records = store.restore()?;
         let mut unique_addresses = BTreeSet::new();
         for record in &records {
             for ip in addresses(&record.document)? {
-                if !unique_addresses.insert(ip) { return Err("duplicate persisted endpoint address".into()); }
+                if !unique_addresses.insert(ip) {
+                    return Err("duplicate persisted endpoint address".into());
+                }
             }
         }
         let mut manager = Self {
@@ -99,7 +107,10 @@ impl Manager {
             records: BTreeMap::new(),
             addresses: BTreeMap::new(),
             deleting: BTreeSet::new(),
-            driver: kernel(match pin_root { Some(root) => LocalDelivery::load_pinned(object, root), None => LocalDelivery::load(object) })?,
+            driver: kernel(match pin_root {
+                Some(root) => LocalDelivery::load_pinned(object, root),
+                None => LocalDelivery::load(object),
+            })?,
             ipam,
         };
         let connector = Connector::open()?;
@@ -142,7 +153,9 @@ impl Manager {
                 if let Some(old) = kernel(manager.driver.snapshot(ip))? {
                     use flowsdn_bpf_abi::MapBytes;
                     if old != info(&record)?.to_bytes() {
-                        return Err("stale endpoint map ownership differs; preserve forwarding".into());
+                        return Err(
+                            "stale endpoint map ownership differs; preserve forwarding".into()
+                        );
                     }
                 }
             }
@@ -230,7 +243,9 @@ impl Manager {
             }
             for ip in &ips {
                 if kernel(self.driver.snapshot(*ip))?.is_some() {
-                    return Err("endpoint map address already owned; reconcile before create".into());
+                    return Err(
+                        "endpoint map address already owned; reconcile before create".into(),
+                    );
                 }
             }
             // Publish recoverable intent before any persistent forwarding.
@@ -240,7 +255,8 @@ impl Manager {
             for ip in &ips {
                 self.addresses.insert(*ip, record.attachment.clone());
             }
-            self.records.insert(record.attachment.clone(), record.clone());
+            self.records
+                .insert(record.attachment.clone(), record.clone());
             self.deleting.insert(record.attachment.clone());
             staged.publish()?;
             if let Err(error) = install(&mut self.driver, &record) {
@@ -249,7 +265,9 @@ impl Manager {
                 if uninstall(&mut self.driver, &record).is_ok()
                     && self.store.remove(record.id).is_ok()
                 {
-                    for ip in ips { self.addresses.remove(&ip); }
+                    for ip in ips {
+                        self.addresses.remove(&ip);
+                    }
                     self.records.remove(&record.attachment);
                     self.deleting.remove(&record.attachment);
                 }

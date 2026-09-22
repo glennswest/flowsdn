@@ -90,7 +90,10 @@ impl Config {
         let socket = PathBuf::from(string(&value, "socket-path")?);
         let state = PathBuf::from(string(&value, "state-dir")?);
         let object = PathBuf::from(string(&value, "bpf-object")?);
-        let pin_root = match optional(&value, "bpf-pin-root")? { "" => None, path => Some(PathBuf::from(path)) };
+        let pin_root = match optional(&value, "bpf-pin-root")? {
+            "" => None,
+            path => Some(PathBuf::from(path)),
+        };
         let queue = if optional(&value, "delete-queue")?.is_empty() {
             socket
                 .parent()
@@ -423,7 +426,9 @@ impl Api {
     }
     fn create(&mut self, id: &str, body: &Value) -> Result<(u16, Value)> {
         if self.manager.get(id).is_some() {
-            if !self.manager.healthy(id)? { return fail(500, "endpoint recovery or teardown remains incomplete"); }
+            if !self.manager.healthy(id)? {
+                return fail(500, "endpoint recovery or teardown remains incomplete");
+            }
             return fail(409, "endpoint already exists");
         }
         let cid = string(body, "container-id")?;
