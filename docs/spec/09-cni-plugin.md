@@ -633,6 +633,25 @@ Stop: the controller is removed; the file is **not** deleted by the agent.
 Removal is the `preStop` hook's job (section 3.12) and only when
 `cni-uninstall=true`.
 
+### 3.11.1 Rust loopback behavior clarification (2026-09-27)
+
+The loopback adapter dispatches by invocation basename or configuration type
+`loopback`/`flowsdn-loopback`. It negotiates the currently implemented CNI
+1.0.0 and 1.1.0 versions. It always operates on `lo`, regardless of CNI_IFNAME,
+using a netlink connection created inside the requested namespace.
+ADD brings the device up and rejects non-loopback addresses. Its result names
+`lo` and the sandbox and includes the first configured address/prefix of each
+family; an existing compatible prevResult is preserved. CHECK requires the
+administrative UP flag, not operational state (loopback may report UNKNOWN).
+DEL lowers the link; absent/empty namespaces and repeated DEL succeed, while
+permission and invalid-namespace failures remain errors. STATUS needs no agent.
+No operation changes loopback MAC, MTU, routes or address configuration.
+
+Behavioral ambiguity was resolved against the Apache-2.0 upstream
+[loopback implementation](https://github.com/containernetworking/plugins/blob/main/plugins/main/loopback/loopback.go).
+This is a behavior description, not copied executable source. Binary install
+and two-node acceptance remain separate gates.
+
 ### 3.12 Install and uninstall of the binary
 
 Installation is an init container (`install-cni-binaries`, drops all

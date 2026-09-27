@@ -12,7 +12,8 @@ fn main() {
                     "CNI configuration exceeds 1 MiB",
                 ));
             }
-            flowsdn_cni::runtime::run(
+            flowsdn_cni::loopback::dispatch(
+                std::env::args_os().next().as_deref().unwrap_or_default(),
                 env.get("CNI_COMMAND").map(String::as_str).unwrap_or(""),
                 &input,
                 &env,

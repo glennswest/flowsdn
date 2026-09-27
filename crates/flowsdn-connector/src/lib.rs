@@ -6,7 +6,7 @@ use rtnetlink::{
     Handle, LinkUnspec, LinkVeth, RouteMessageBuilder,
     packet_route::{
         address::AddressHeaderFlags,
-        link::{LinkAttribute, LinkMessage},
+        link::{LinkAttribute, LinkFlag, LinkMessage},
         neighbour::NeighbourState,
         route::{RouteAddress, RouteAttribute, RouteMessage, RouteMetric, RouteScope, RouteType},
     },
@@ -78,6 +78,59 @@ pub struct Connector {
     runtime: Runtime,
 }
 impl Connector {
+    /// Inspect or change only the administrative state of the namespace loopback.
+    /// None checks UP; Some(true/false) sets UP/DOWN. Preserve address prefixes.
+    pub fn loopback(&self, state: Option<bool>) -> Result<Vec<(IpAddr, u8)>> {
+        let message = self.run(async {
+            self.handle
+                .link()
+                .get()
+                .match_name("lo".into())
+                .execute()
+                .try_next()
+                .await?
+                .ok_or_else(|| "loopback interface not found".into())
+        })?;
+        if !message.header.flags.contains(&LinkFlag::Loopback) {
+            return Err("lo is not a loopback device".into());
+        }
+        let index = message.header.index;
+        if let Some(up) = state {
+            let link = LinkUnspec::new_with_index(index);
+            let link = if up { link.up() } else { link.down() };
+            self.run(async {
+                self.handle.link().set(link.build()).execute().await?;
+                Ok(())
+            })?;
+        } else if !message.header.flags.contains(&LinkFlag::Up) {
+            return Err("loopback interface is down".into());
+        }
+        let addresses = self.address_prefixes(index)?;
+        if state == Some(true) && addresses.iter().any(|(ip, _)| !ip.is_loopback()) {
+            return Err("non-loopback address on lo".into());
+        }
+        Ok(addresses)
+    }
+
+    pub fn address_prefixes(&self, index: u32) -> Result<Vec<(IpAddr, u8)>> {
+        use rtnetlink::packet_route::address::AddressAttribute;
+        self.run(async {
+            let mut stream = self.handle.address().get().set_link_index_filter(index).execute();
+            let mut addresses = Vec::new();
+            while let Some(message) = stream.try_next().await? {
+                for attribute in message.attributes {
+                    if let AddressAttribute::Address(ip) | AddressAttribute::Local(ip) = attribute {
+                        let address = (ip, message.header.prefix_len);
+                        if !addresses.contains(&address) {
+                            addresses.push(address);
+                        }
+                    }
+                }
+            }
+            Ok(addresses)
+        })
+    }
+
     pub fn addresses(&self, index: u32) -> Result<Vec<IpAddr>> {
         use rtnetlink::packet_route::address::AddressAttribute;
         self.run(async {

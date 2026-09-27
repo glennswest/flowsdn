@@ -1,0 +1,110 @@
+//! Rust loopback entry point shared by the primary CNI executable (spec 09).
+use crate::{CniError, Result};
+use flowsdn_connector::{Connector, in_namespace};
+use serde_json::{Value, json};
+use std::{collections::BTreeMap, ffi::OsStr, fs::File, path::Path};
+
+fn is_loopback(name: &str) -> bool {
+    matches!(name, "loopback" | "flowsdn-loopback")
+}
+
+/// Invocation aliases and configuration type both select the loopback adapter.
+pub fn dispatch(
+    executable: &OsStr,
+    command: &str,
+    input: &[u8],
+    env: &BTreeMap<String, String>,
+) -> Result<Option<Value>> {
+    let name = Path::new(executable)
+        .file_name()
+        .and_then(OsStr::to_str)
+        .unwrap_or("");
+    let conf: Value = serde_json::from_slice(input).unwrap_or_default();
+    if is_loopback(name)
+        || conf.get("type").and_then(Value::as_str).is_some_and(is_loopback)
+    {
+        run(command, input, env)
+    } else {
+        crate::runtime::run(command, input, env)
+    }
+}
+
+pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Result<Option<Value>> {
+    if command == "VERSION" {
+        return Ok(Some(json!({
+            "cniVersion": "1.1.0", "supportedVersions": ["1.0.0", "1.1.0"]
+        })));
+    }
+    let conf: Value = serde_json::from_slice(input).map_err(|e| CniError {
+        code: 6,
+        message: "invalid loopback configuration".into(),
+        details: e.to_string(),
+    })?;
+    let version = conf.get("cniVersion").and_then(Value::as_str).unwrap_or("");
+    if !matches!(version, "1.0.0" | "1.1.0") {
+        return Err(CniError {
+            code: 1,
+            message: "unsupported CNI version".into(),
+            details: String::new(),
+        });
+    }
+    match command {
+        "STATUS" => Ok(None),
+        "DEL" => {
+            let Some(path) = env.get("CNI_NETNS").filter(|s| !s.is_empty()) else {
+                return Ok(None);
+            };
+            let namespace = match File::open(path) {
+                Ok(file) => file,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                Err(e) => return Err(CniError::internal(e.to_string())),
+            };
+            in_namespace(namespace, move || Connector::open()?.loopback(Some(false)))
+                .map_err(|e| CniError::internal(e.to_string()))?;
+            Ok(None)
+        }
+        "ADD" | "CHECK" => {
+            for key in ["CNI_CONTAINERID", "CNI_NETNS", "CNI_IFNAME", "CNI_PATH"] {
+                if env.get(key).is_none_or(String::is_empty) {
+                    return Err(CniError::internal(format!("missing {key}")));
+                }
+            }
+            if conf.get("name").and_then(Value::as_str).is_none_or(str::is_empty) {
+                return Err(CniError::internal("missing network name"));
+            }
+            let previous = conf.get("prevResult").filter(|v| !v.is_null());
+            if previous.is_some_and(|v| !v.is_object() || v.get("cniVersion").and_then(Value::as_str) != Some(version)) {
+                return Err(CniError::internal("prevResult must be an object with matching cniVersion"));
+            }
+            let namespace = File::open(&env["CNI_NETNS"])
+                .map_err(|e| CniError::internal(e.to_string()))?;
+            let bring_up = command == "ADD";
+            let addresses = in_namespace(namespace, move || {
+                Connector::open()?.loopback(if bring_up { Some(true) } else { None })
+            }).map_err(|e| CniError::internal(e.to_string()))?;
+            if bring_up {
+                if let Some(previous) = previous {
+                    return Ok(Some(previous.clone()));
+                }
+                let mut ips = Vec::new();
+                for ipv4 in [true, false] {
+                    if let Some((ip, prefix)) = addresses.iter().find(|(ip, _)| ip.is_ipv4() == ipv4) {
+                        ips.push(json!({"address": format!("{ip}/{prefix}"), "interface": 0}));
+                    }
+                }
+                Ok(Some(json!({
+                    "cniVersion": version,
+                    "interfaces": [{"name": "lo", "sandbox": env["CNI_NETNS"]}],
+                    "ips": ips
+                })))
+            } else {
+                Ok(None)
+            }
+        }
+        _ => Err(CniError {
+            code: 4,
+            message: "unsupported loopback command".into(),
+            details: command.into(),
+        }),
+    }
+}

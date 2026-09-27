@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-27
+- **feat:** Add Rust loopback CNI dispatch, namespace-local ADD/CHECK/DEL, address validation and an isolated unprivileged namespace fixture for #291.
 - **docs:** Resume milestone #291 with Rust loopback/install implementation followed by Kubernetes integration and measured cluster acceptance.
 - **docs:** Record the repeat comment sweep (284 issues, 231 comments) and newly filed stormcentral SSH/session validation blocker; existing networking findings remain deduplicated.
 - **docs:** Record comment-mining results from 268 updated issues: file two uncovered rustkube defects, supplement existing schema/TLS/feature acceptance issues, and preserve evidence links without implementation changes.

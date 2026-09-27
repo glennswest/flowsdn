@@ -35,3 +35,17 @@ Both container JSON and attachment-string replay formats are supported.
 
 Tests combine real IPAM with failure injection, validate HTTP wire behavior,
 exercise queue concurrency and persistence, and check malformed response cleanup.
+
+## Loopback entry point
+
+The same executable handles `loopback` and `flowsdn-loopback` invocation names
+or configuration types. It supports CNI 1.0.0/1.1.0 ADD, CHECK, DEL, STATUS and
+VERSION without an agent. ADD raises `lo`, validates loopback addresses and
+returns configured address prefixes; CHECK requires administrative UP. DEL lowers
+`lo` and tolerates a missing namespace. It never changes MAC or MTU. A matching
+version prevResult is preserved. Binary installation remains a separate task.
+
+`cargo test -p flowsdn-cni --test loopback -- --ignored` runs the live fixture
+inside new user/network namespaces. Linux `unshare` and enabled unprivileged
+user namespaces are required; unavailable capabilities fail the fixture. Ordinary
+crate tests cover dispatch, version/errors and namespace-free teardown.
