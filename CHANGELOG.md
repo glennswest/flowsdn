@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-27
+- **feat:** Add bounded Node/Pod watch-state staging, atomic relists, bookmarks and UID-safe deletion using the existing table; authenticated transport and agent reconciliation remain outstanding.
 - **feat:** Add atomic Rust CNI installation with compatibility names, overwrite controls and installer regression tests; align loopback fixtures with workspace lint rules.
 - **fix:** Match locked netlink link flags and reject malformed loopback prevResult before namespace mutation; cover disabled IPv6.
 - **feat:** Add Rust loopback CNI dispatch, namespace-local ADD/CHECK/DEL, address validation and an isolated unprivileged namespace fixture for #291.

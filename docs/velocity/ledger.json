@@ -4955,6 +4955,10 @@
     "token_baseline": null,
     "token_endpoint": null,
     "active_work_seconds": null,
-    "outcomes": []
+    "outcomes": [
+      "Baseline CNI tests at a84bf3c: 31 passed; sc-build execution 275 seconds",
+      "Loopback/install implementation through 816c8c9 pushed; source validation queued",
+      "Watch-state implementation preserved on work/291-watch-state; transport not implemented"
+    ]
   }
 }

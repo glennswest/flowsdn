@@ -402,7 +402,9 @@ version = "0.14.0"
 name = "flowsdn-k8s"
 version = "0.14.0"
 dependencies = [
+ "flowsdn-table",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

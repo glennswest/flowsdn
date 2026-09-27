@@ -47,13 +47,21 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 ### Milestone 1 implementation — #291, 2026-09-27
 
 - [x] Read acceptance and acknowledge open backlog; synchronize the previous audit already published upstream.
-- [ ] Implement Rust loopback CNI dispatch and compatibility binary installation from spec 09 and ADRs 0012–0013; add failure and overwrite coverage.
+- [x] Implement Rust loopback CNI dispatch and compatibility binary installation from spec 09 and ADRs 0012–0013; add failure and overwrite coverage. Source through `816c8c9`; runtime validation pending.
+- [x] Implement the transport-independent Node/Pod watch-state layer with bounded pagination, atomic replacement and UID-safe deletion; tests pending.
+- [ ] Connect authenticated Kubernetes transport and watch state to the agent; native route reconciliation and identity/ipcache remain unfinished.
 - [ ] Push source, then validate with sc-build; preserve exact errors and measured results.
 - [ ] Continue Kubernetes Node/Pod watch, identity/ipcache and remote routing integration, then disposable two-node IPv4/IPv6 acceptance.
 - [ ] Close #291 only after every acceptance gate passes; stage the flowsdn golden after verified implementation.
 
-User reports stormcentral#102 and sandbox Git writes fixed. Recheck through the
-normal build path; never use a persistent checkout on the build host.
+Git writes/push and sc-build reachability are verified. Baseline CNI suite at
+`a84bf3c`: 31 passing tests; build execution 275 seconds. Loopback/install source
+validation is queued behind six shared builds. Watch state is preserved on
+`work/291-watch-state` while the earlier build may publish formatting to main.
+Existing persisted `K8sUID` supports future UID-safe local endpoint GC. Native
+routing still needs route replace/delete with explicit ownership; HTTPS transport
+must follow spec 13's kube/rustls and slim-type contracts. No CRDs are added.
+Use the normal build path; never use a persistent checkout on the build host.
 
 
 ### Active audit — 2026-09-27

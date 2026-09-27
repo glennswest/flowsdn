@@ -246,3 +246,8 @@ Final commit/publication is outside this cutoff.
 Started 2026-09-27T23:20:08Z; initial issue review preceded this baseline.
 Loopback/install implementation is the first checkpoint. Usage telemetry is
 unavailable; counters and active work time remain null.
+
+At the 23:46:06 UTC observation, baseline CNI tests passed (31 tests; reported
+remote execution 275 seconds), loopback/install validation remained queued,
+and the next watch-state code awaited validation. Elapsed since the recorded
+start: 1558 seconds. Usage and active work counters remain unavailable.
