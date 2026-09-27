@@ -220,3 +220,14 @@ clarifying comments. Remote documentation validation failed before starting
 because SSH rejected system configuration ownership/permissions. No runtime
 tests or release; usage and active/parallel time remain unknown. See the
 [audit record](../workcycles/2026-09-27-audit.md).
+
+## Comment mining — 2026-09-27
+
+184.4 seconds since the validation cutoff, through 18:00:36 UTC;
+755.9 seconds total since the first observed 17:48:01 UTC audit baseline.
+Read 268 issues/218 recent comments; created rustkube#127/#128 and supplemented
+four existing destination issues plus the origin thread. Both new issues are P1.
+Evidence gathering overlapped prior phases; these coordinator wall windows are
+not summed agent-hours. Usage, active time and parallel agent time stay null.
+No build wait, runtime test, golden or release claim. Final publication/reporting
+is outside this cutoff. See the [audit](../workcycles/2026-09-27-audit.md).

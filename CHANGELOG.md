@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-27
+- **docs:** Record comment-mining results from 268 updated issues: file two uncovered rustkube defects, supplement existing schema/TLS/feature acceptance issues, and preserve evidence links without implementation changes.
 - **docs:** Record evidence-based validation of 28 issues: close the two refreshed documentation issues, retain and prioritize 26 implementation/measurement gaps. File the golden artifact/install gap in stormcos.
 - **docs:** Record the code-based documentation, issue-validation and comment-mining audit plan.
 - **docs:** Refresh runtime configuration/defaults, Unix-only API and health, golden delivery, compatibility limits and current implementation status from source; distinguish specifications and historical validation from delivered features. Correct the configuration extension census and optional persistent pinning documentation.
