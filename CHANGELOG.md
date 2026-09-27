@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-27
+- **docs:** Record the repeat comment sweep (284 issues, 231 comments) and newly filed stormcentral SSH/session validation blocker; existing networking findings remain deduplicated.
 - **docs:** Record comment-mining results from 268 updated issues: file two uncovered rustkube defects, supplement existing schema/TLS/feature acceptance issues, and preserve evidence links without implementation changes.
 - **docs:** Record evidence-based validation of 28 issues: close the two refreshed documentation issues, retain and prioritize 26 implementation/measurement gaps. File the golden artifact/install gap in stormcos.
 - **docs:** Record the code-based documentation, issue-validation and comment-mining audit plan.

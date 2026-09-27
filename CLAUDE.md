@@ -53,6 +53,9 @@ Results: `docs/workcycles/2026-09-27-audit.md`; docs #300/#301 closed,
 26 requested issues retained/prioritized, stormcos#145 and rustkube#127/#128
 filed, existing cross-project trackers supplemented. Remote documentation
 validation could not start because SSH rejected system configuration permissions.
+A repeat 284-issue/231-comment sweep filed stormcentral#102 (P1) for that
+blocker; the sandbox reports the config target as UID/GID 65534. No host
+configuration was changed; UID mapping needs owner investigation.
 
 - Documentation-only audit: no runtime changes, no version bump or networking release claim. Coordinator owns Git and issue mutations; reviewers have disjoint documentation/read-only scopes.
 

@@ -231,3 +231,12 @@ Evidence gathering overlapped prior phases; these coordinator wall windows are
 not summed agent-hours. Usage, active time and parallel agent time stay null.
 No build wait, runtime test, golden or release claim. Final publication/reporting
 is outside this cutoff. See the [audit](../workcycles/2026-09-27-audit.md).
+
+## Repeat comment sweep — 2026-09-27
+
+Observed interval 19:10:58 UTC–19:13:58 UTC: 180.5 seconds,
+excluding the initial issue query. Read 284 updated issues and 231 recent
+comments. Filed stormcentral#102 at P1; other findings remain covered. One
+agent, no parallel-agent time; usage and active time are unknown. Only local
+SSH configuration parsing was exercised, with no remote connection or build.
+Final commit/publication is outside this cutoff.
