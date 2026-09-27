@@ -47,7 +47,7 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 ### Active audit — 2026-09-27
 
 - [x] Refresh README, current runtime/deployment documentation and this context from code and history since 2026-09-18; preserve owner terminology and file uncovered promises.
-- [ ] Validate the 28 requested open issues against code/tests and comments; close with evidence or prioritize remaining work without implementation changes.
+- [x] Validate the 28 requested open issues against code/tests and comments; close with evidence or prioritize remaining work without implementation changes.
 - [ ] Mine open and closed issue comments updated since 2026-09-18; deduplicate findings in their owning repositories and file gaps/owner decisions.
 - Documentation-only audit: no runtime changes, no version bump or networking release claim. Coordinator owns Git and issue mutations; reviewers have disjoint documentation/read-only scopes.
 

@@ -211,3 +211,12 @@ Plan commit: `f4b8061`; missing golden BPF/host CNI exposure: stormcos#145.
 Usage counters and active/parallel agent time are unavailable (null); review
 windows overlap. No runtime build or release is claimed. Remote documentation
 validation and publication follow this cutoff.
+
+## Issue validation — 2026-09-27
+
+171.7 seconds since the documentation cutoff, through 17:57:32 UTC.
+Validated 28 issues: two documentation closures, 26 retained/prioritized, eight
+clarifying comments. Remote documentation validation failed before starting
+because SSH rejected system configuration ownership/permissions. No runtime
+tests or release; usage and active/parallel time remain unknown. See the
+[audit record](../workcycles/2026-09-27-audit.md).
