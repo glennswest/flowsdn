@@ -33,6 +33,27 @@ fn invalid_input_fails_before_namespace_or_agent_access() {
     assert!(dispatch(OsStr::new("loopback"), "DEL", br#"{"cniVersion":"1.1.0"}"#, &env).is_ok());
 }
 
+#[test]
+fn malformed_previous_result_fails_before_namespace_access() {
+    let env = BTreeMap::from([
+        ("CNI_CONTAINERID".into(), "test".into()),
+        ("CNI_IFNAME".into(), "lo".into()),
+        ("CNI_PATH".into(), "/unused".into()),
+        ("CNI_NETNS".into(), "/nonexistent-flowsdn-netns".into()),
+    ]);
+    for previous in [
+        json!({"cniVersion":"1.1.0", "ips":"bad"}),
+        json!({"cniVersion":"1.1.0", "ips":[{"address":"127.0.0.1/99"}]}),
+        json!({"cniVersion":"1.1.0", "ips":[{"address":"127.0.0.1/8", "interface":9}]}),
+        json!({"cniVersion":"1.1.0", "interfaces":[{}]}),
+        json!({"cniVersion":"1.1.0", "dns":{"nameservers":false}}),
+    ] {
+        let conf = json!({"cniVersion":"1.1.0", "name":"lo", "prevResult":previous});
+        let error = dispatch(OsStr::new("loopback"), "ADD", &serde_json::to_vec(&conf).unwrap(), &env).unwrap_err();
+        assert!(error.message.contains("prevResult"), "{error}");
+    }
+}
+
 fn plugin(command: &str, conf: &Value) -> std::process::Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_flowsdn-cni"))
         .env("CNI_COMMAND", command)
@@ -62,6 +83,7 @@ fn loopback_namespace() {
         assert!(status.success(), "isolated loopback fixture failed: {status}");
         return;
     }
+    std::fs::write("/proc/sys/net/ipv6/conf/lo/disable_ipv6", "0").expect("fixture requires IPv6 support");
     let connector = flowsdn_connector::Connector::open().unwrap();
     let original = connector.require_link("lo").unwrap();
     let conf = json!({"cniVersion":"1.1.0", "name":"loopback-test", "type":"loopback"});
@@ -87,6 +109,11 @@ fn loopback_namespace() {
         assert!(plugin("DEL", &conf).status.success());
         assert!(!plugin("CHECK", &conf).status.success());
     }
+    std::fs::write("/proc/sys/net/ipv6/conf/lo/disable_ipv6", "1").unwrap();
+    let output = plugin("ADD", &conf);
+    assert!(output.status.success());
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["ips"].as_array().unwrap().len(), 1, "IPv6 disabled");
     connector.add_address(original.index, "192.0.2.1".parse().unwrap(), 32).unwrap();
     assert!(!plugin("ADD", &conf).status.success(), "foreign lo address must fail");
 }

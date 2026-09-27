@@ -29,6 +29,72 @@ pub fn dispatch(
     }
 }
 
+fn validate_previous(value: &Value, version: &str) -> Result<()> {
+    let invalid = || CniError::internal("invalid prevResult: expected a compatible CNI result");
+    if !value.is_object() || value.get("cniVersion").and_then(Value::as_str) != Some(version) {
+        return Err(invalid());
+    }
+    for field in ["interfaces", "ips", "routes"] {
+        if value.get(field).is_some_and(|v| !v.is_array()) {
+            return Err(invalid());
+        }
+    }
+    let interfaces = value.get("interfaces").and_then(Value::as_array);
+    for interface in interfaces.into_iter().flatten() {
+        if !interface.is_object()
+            || interface.get("name").and_then(Value::as_str).is_none_or(str::is_empty)
+            || ["mac", "sandbox"].iter().any(|key| interface.get(key).is_some_and(|v| !v.is_string()))
+        {
+            return Err(invalid());
+        }
+    }
+    let cidr = |v: &Value| -> Option<std::net::IpAddr> {
+        let (address, prefix) = v.as_str()?.split_once('/')?;
+        let ip: std::net::IpAddr = address.parse().ok()?;
+        let prefix: u8 = prefix.parse().ok()?;
+        (prefix <= if ip.is_ipv4() { 32 } else { 128 }).then_some(ip)
+    };
+    for (field, address_key, gateway_key) in [("ips", "address", "gateway"), ("routes", "dst", "gw")] {
+        for entry in value.get(field).and_then(Value::as_array).into_iter().flatten() {
+            let address = entry.get(address_key).and_then(cidr).ok_or_else(invalid)?;
+            if let Some(gateway) = entry.get(gateway_key) {
+                let gateway = gateway.as_str().and_then(|s| s.parse::<std::net::IpAddr>().ok()).ok_or_else(invalid)?;
+                if gateway.is_ipv4() != address.is_ipv4() {
+                    return Err(invalid());
+                }
+            }
+            if field == "ips" {
+                if let Some(index) = entry.get("interface").filter(|v| !v.is_null()) {
+                    let index = index.as_u64().and_then(|i| usize::try_from(i).ok()).ok_or_else(invalid)?;
+                    if index >= interfaces.map_or(0, Vec::len) {
+                        return Err(invalid());
+                    }
+                }
+            } else {
+                for key in ["mtu", "advmss", "priority", "table", "scope"] {
+                    if entry.get(key).is_some_and(|v| v.as_u64().is_none_or(|n| n > u64::from(u32::MAX))) {
+                        return Err(invalid());
+                    }
+                }
+            }
+        }
+    }
+    if let Some(dns) = value.get("dns") {
+        if !dns.is_object() || dns.get("domain").is_some_and(|v| !v.is_string()) {
+            return Err(invalid());
+        }
+        for key in ["nameservers", "search", "options"] {
+            if let Some(items) = dns.get(key) {
+                let items = items.as_array().ok_or_else(invalid)?;
+                if items.iter().any(|v| !v.is_string()) {
+                    return Err(invalid());
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Result<Option<Value>> {
     if command == "VERSION" {
         return Ok(Some(json!({
@@ -73,8 +139,8 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
                 return Err(CniError::internal("missing network name"));
             }
             let previous = conf.get("prevResult").filter(|v| !v.is_null());
-            if previous.is_some_and(|v| !v.is_object() || v.get("cniVersion").and_then(Value::as_str) != Some(version)) {
-                return Err(CniError::internal("prevResult must be an object with matching cniVersion"));
+            if let Some(previous) = previous {
+                validate_previous(previous, version)?;
             }
             let namespace = File::open(&env["CNI_NETNS"])
                 .map_err(|e| CniError::internal(e.to_string()))?;

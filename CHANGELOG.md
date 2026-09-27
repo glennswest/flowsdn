@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-27
+- **fix:** Match locked netlink link flags and reject malformed loopback prevResult before namespace mutation; cover disabled IPv6.
 - **feat:** Add Rust loopback CNI dispatch, namespace-local ADD/CHECK/DEL, address validation and an isolated unprivileged namespace fixture for #291.
 - **docs:** Resume milestone #291 with Rust loopback/install implementation followed by Kubernetes integration and measured cluster acceptance.
 - **docs:** Record the repeat comment sweep (284 issues, 231 comments) and newly filed stormcentral SSH/session validation blocker; existing networking findings remain deduplicated.

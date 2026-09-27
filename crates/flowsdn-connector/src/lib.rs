@@ -6,7 +6,7 @@ use rtnetlink::{
     Handle, LinkUnspec, LinkVeth, RouteMessageBuilder,
     packet_route::{
         address::AddressHeaderFlags,
-        link::{LinkAttribute, LinkFlag, LinkMessage},
+        link::{LinkAttribute, LinkFlags, LinkMessage},
         neighbour::NeighbourState,
         route::{RouteAddress, RouteAttribute, RouteMessage, RouteMetric, RouteScope, RouteType},
     },
@@ -91,7 +91,7 @@ impl Connector {
                 .await?
                 .ok_or_else(|| "loopback interface not found".into())
         })?;
-        if !message.header.flags.contains(&LinkFlag::Loopback) {
+        if !message.header.flags.contains(LinkFlags::Loopback) {
             return Err("lo is not a loopback device".into());
         }
         let index = message.header.index;
@@ -102,8 +102,11 @@ impl Connector {
                 self.handle.link().set(link.build()).execute().await?;
                 Ok(())
             })?;
-        } else if !message.header.flags.contains(&LinkFlag::Up) {
+        } else if !message.header.flags.contains(LinkFlags::Up) {
             return Err("loopback interface is down".into());
+        }
+        if state == Some(false) {
+            return Ok(Vec::new());
         }
         let addresses = self.address_prefixes(index)?;
         if state == Some(true) && addresses.iter().any(|(ip, _)| !ip.is_loopback()) {
