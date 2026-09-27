@@ -1,123 +1,76 @@
 # flowsdn — Project Instructions
 
-Rust reimplementation of Cilium. Private repo `github.com/glennswest/flowsdn`.
-Rule #1 in `AGENTS.md` applies: transfer via GitHub commits/pulls only; keep release history.
-Cross-project rules referenced in the original spec (commit+push everything, changelog,
-build on dev never on the Mac, cargo target dirs under `/build/cargo/flowsdn`).
+Rust networking implementation for stormcos, with Cilium-compatible boundary
+formats as a goal. Follow `AGENTS.md` and the session's cross-project rules.
+GitHub is the transfer/results path. Build only through `sc-build` after push;
+never build on this session VM or create persistent build-box checkouts.
 
-## Reference source
+## Current version and source state
 
-Cilium is cloned read-only at `../cilium` (sibling directory, Mac), checked out at
-**v1.20.1, commit 7d68cfb394**. All inventory and spec documents cite that commit.
-Reference sizes at that tag: pkg/ 359k non-test Go lines, operator/ 48k, api/ 97k
-(mostly generated), bpf/ 91k lines of C. It is a
-reference for reading. Never edit it, never build from it, never copy from it
-without following `docs/licensing.md`.
+Workspace package version and latest foundation prerelease: **0.14.0**.
+Version locations: `Cargo.toml` workspace.package.version and release headings
+in `CHANGELOG.md`; Cargo.lock records workspace packages when versions change.
+Main contains unreleased endpoint agent/CNI work beyond that foundation release.
+This documentation-only audit does not warrant a version bump or release.
 
-## Version
+As of 2026-09-27, source through `ce8f4d2` runs a standalone JSON-configured
+agent over a Unix socket and a primary veth CNI. Persisted ownership, pinned
+endpoint maps/TCX links, offline deletion, bounded endpoint reads and exact IPAM
+summaries are implemented. No TCP listener, Kubernetes watches, complete
+service/policy integration, operator executable or Hubble observer/relay exists.
+See `docs/runtime.md`, `docs/agent-api.md`, `docs/implementation-status.md` and
+`deploy/stormcos/README.md` before changing runtime behavior. Fixture traffic
+and cross-architecture compilation do not establish two-node pod networking.
 
-0.14.0 — identity filters, CIDR labels, overlay wire codecs and loader layout contracts; no networking agent yet. Version locations (when crates exist):
-`Cargo.toml` workspace.package.version, `CHANGELOG.md` heading.
+## Shipping and ownership
+
+The stormcos flowsdn edition carries the static musl agent and CNI in the
+`flowsdn` golden. A matching BPF object and the documented host resources are
+required; the current golden recipe omits that object and has unverified host
+CNI exposure (stormcos#145). Source pushes do not update nodes until a new golden is composed into
+a release. Authority:
+[stormcos/docs/goldens.md](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
+After validated implementation work, flowsdn uses the special-component
+`stormcentral component stage flowsdn` path specified by the session rules.
+Documentation-only work is not a networking release. Cargo.lock pins select
+which dependency revisions are built; sibling changes do not arrive implicitly.
+
+The owner requires flowsdn identity for CRDs it owns (#299). Current planning
+code still hardcodes `cilium.io`; do not describe that migration as implemented.
+Read compatibility formats separately from ownership/attribution. PVCs are
+provided by the built-in stormblock driver, not a flowsdn storage controller.
+Current build orchestration is stormcentral; removal of the obsolete GitHub
+workflow is #304. Do not reactivate it while refreshing documentation.
 
 ## Work plan
 
 ### Active audit — 2026-09-27
 
-- [ ] Refresh README, current runtime/deployment documentation and this context from code and history since 2026-09-18; preserve owner terminology and file uncovered promises.
+- [x] Refresh README, current runtime/deployment documentation and this context from code and history since 2026-09-18; preserve owner terminology and file uncovered promises.
 - [ ] Validate the 28 requested open issues against code/tests and comments; close with evidence or prioritize remaining work without implementation changes.
 - [ ] Mine open and closed issue comments updated since 2026-09-18; deduplicate findings in their owning repositories and file gaps/owner decisions.
 - Documentation-only audit: no runtime changes, no version bump or networking release claim. Coordinator owns Git and issue mutations; reviewers have disjoint documentation/read-only scopes.
 
 
-The current execution plan is `docs/milestones.md`: four remaining milestones.
-The historical phase checklist below is background, not the active work queue.
-Drive the next cycle from GitHub issues and milestone acceptance trackers #291–#294.
-A closed decision issue does not establish delivered functionality; ADRs 0011–0013
-record remaining implementation. Use bounded parallel implementation/review with
-narrow context. Commit completed steps frequently. Batch releases at milestone
-acceptance, with focused checks during implementation and the full required
-matrix before release. Repeat checks only after relevant changes or failures.
-Keep accounting to one compact update per completed issue batch. Prioritize
-implementation and testing; consolidate documentation and issue publication at
-the batch boundary. Do not create a release merely to report counters. Continue the disk cleanup requirements in AGENTS.md.
+The active implementation plan is `docs/milestones.md`, tracked by #291–#294.
+The inventory/specification phases are historical; source and validation records
+now cover 31 crates plus Rust tools, while live integration remains unfinished.
+Resolve implementation and measurement obligations independently of closed
+design issues. Preserve compact work-item records in `docs/velocity/ledger.json`
+and its README, with unknown telemetry recorded as null.
 
-### Phase 0 — Inventory (COMPLETE 2026-09-07, except kernel-requirements roll-up)
-- [x] Repo, license, NOTICE, clean-room protocol, ADR-0001 scope
-- [x] Name check: flowsdn clear on GitHub, crates.io, npm, PyPI, .com/.io/.net/.org
-- [x] Per-area inventory of the reference in `docs/inventory/` — 15 areas, files 01..15, running as parallel agents (started 2026-09-07):
-      01 bpf-programs, 02 bpf-maps-loader, 03 datapath-userspace-node, 04 loadbalancer,
-      05 policy-identity, 06 agent-endpoint-api, 07 ipam-cloud, 08 operator, 09 hubble-monitor,
-      10 bgp, 11 l7-proxy-dns-auth-mesh, 12 clustermesh-kvstore, 13 crds-k8s,
-      14 encryption-egress, 15 helm-images-ci-tests.
-      All 15 done and committed 2026-09-07 (~12.7k lines).
-- [x] ADR-0002 Rust only (BPF programs in aya-ebpf), ADR-0003 nftables residual
-- [x] ADR-0004 no Hive / no StateDB
-- [x] Roll-up scope table `docs/inventory/README.md` with sizes + keep/defer/replace + build order
-- [x] Kernel requirements roll-up `docs/kernel-requirements.md` — stormcos line 6.12 (Rocky 10 kernel, both arches), general minimum 6.6 LTS
+## Reference and conventions
 
-### Phase 1 — Specs (datapath first) — IN PROGRESS 2026-09-07
-Spec template: `docs/spec/TEMPLATE.md`. Wave 1 running as parallel agents:
-`00-foundation-table-config`, `01-bpf-map-abi-loader`, `02-datapath-programs`,
-`03-identity-ipcache`, `04-conntrack-nat`, plus `docs/kernel-requirements.md`.
-Wave 1 complete: 00 01 02 03 04 + kernel-requirements (~7.6k lines).
-Wave 2 complete (2026-09-07): `05-service-loadbalancing`, `06-policy-engine`,
-`07-ipam`, `08-endpoint-agent-api`, `09-cni-plugin`, `10-node-routing-nftables`.
-Wave 3 running (launched 2026-09-07): `11-hubble-monitor`, `12-operator`,
-`13-crds-k8s-client`, `14-encryption-egress`, `15-bgp`, `16-l7-envoy-dns`.
-Wave 4 to launch: ClusterMesh, Gateway API/Ingress, packaging/Helm/CI, workspace scaffold.
+The inventory/specification reference is Cilium **v1.20.1, `7d68cfb394`**.
+Follow `docs/licensing.md`; reference data is not executable flowsdn coverage.
+`docs/README.md` distinguishes current behavior, intended contracts and history.
 
-### Phase 1b — Test harvest (ADR-0005), IN PROGRESS 2026-09-07
-All harnesses in Rust; upstream test DATA harvested verbatim with provenance.
-Running as parallel agents:
-- `17-scripttest-harness` + harvest of 168 upstream `.txtar` scenarios -> `tests/scripttest/`
-- `18-bpf-test-harness` + case harvest of 141 files / 397 CHECKs -> `tests/bpf/`
-- `docs/test-port-plan.md` + `tests/golden/` + `tests/fuzz/` (3040 Go tests surveyed)
-- `19-e2e-connectivity` (own Rust suite; cilium-cli is out-of-tree at v1.20.1)
-Missing file = agent did not finish; rerun that spec.
-- [ ] BPF map catalogue: every map, key/value layout, pinning, sizing
-- [ ] Datapath programs: from-container, to-container, from-netdev, to-netdev,
-      overlay, host, xdp, cgroup socket LB, sock ops
-- [ ] Identity model and encoding (VNI, mark, ipcache)
-- [ ] Conntrack + NAT
-- [ ] Service LB: ClusterIP, NodePort, LB, DSR, Maglev, affinity, LRP
-- [ ] Policy: L3/L4, identities, CIDR groups, ANP/BANP, host firewall
-- [ ] IPAM: cluster-pool, kubernetes, multi-pool, crd, ENI, Azure, GCP, Alibaba
-- [ ] Encryption: WireGuard, IPsec
-- [ ] Egress gateway, egress IP
-- [ ] BGP control plane (CiliumBGP* CRDs)
-- [ ] Hubble: flow schema, observer API, relay, export
-- [ ] Agent REST API, health, status
-- [ ] Operator: identity GC, CEP/CES, node management, cloud IPAM
-- [ ] CRD catalogue with OpenAPI schemas
-- [ ] Helm values mapping
-- [ ] L7 / Envoy integration (xDS, CiliumEnvoyConfig) — external image
-- [ ] ClusterMesh
-- [ ] Gateway API / Ingress
-
-### Phase 1c — Backlog (COMPLETE 2026-09-07)
-- [x] 290 issues filed from every open decision / to-verify / deferred item;
-      index at `docs/open-decisions-index.md` with a "settle these first" ten
-- [x] 8 fastetcd compatibility gaps filed on glennswest/fastetcd (#16-#23);
-      #16 and #17 are blocking for ClusterMesh in production
-- [ ] DECISION NEEDED FROM USER: whether to file the ~15 upstream Cilium defects
-      found while reading (public repo, not ours) — listed across the specs
-
-### Phase 2 — Code (dependency order)
-- [ ] Workspace, CI (build on dev, x86-64 + arm64), cargo deny
-- [ ] BPF maps + datapath crate (Aya)
-- [ ] Agent: IPAM, endpoint mgmt, identity, ipcache
-- [ ] Agent: policy → maps
-- [ ] Agent: service LB → maps
-- [ ] CNI plugin binary
-- [ ] Encryption, egress, BGP
-- [ ] Hubble API
-- [ ] Operator incl. cloud IPAM
-- [ ] Helm chart / manifests
-
-## Conventions
-
-- **Rust only. No C anywhere** (ADR-0002). `aya` for BPF loading, `aya-ebpf` for
-  the BPF programs. **No iptables** (ADR-0003): a small nftables residual over netlink.
-- Docs and specs are Markdown under `docs/`. One area per file.
-- Every inventory/spec file names the reference paths it was derived from
-  and the reference commit.
+- Project executable code, test harnesses and reusable tools are Rust. BPF uses
+  aya-ebpf; no copied C datapath and no iptables dependency.
+- Read the relevant spec and architecture decisions before implementation,
+  including subsequent owner directions that supersede historical choices.
+- Use bounded parallel review with disjoint ownership. The coordinator alone
+  mutates Git and serializes shared-host validation.
+- Commit/push each work step with changelog and affected docs; inspect diffs for
+  secrets. Scratch stays in ignored `tmp/`. Preserve observed validation results
+  without upgrading a library/unit test into a runtime support claim.

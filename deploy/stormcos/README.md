@@ -16,6 +16,17 @@ not exceed device MTU. This example is native veth mode; no encapsulation or
 service load balancing is enabled by these keys. `endpoint-id-max` bounds the
 ID allocator, not the capacity of the current fixed-size endpoint BPF map.
 
+## Golden delivery boundary
+
+The current stormcos recipe seals the agent and CNI binaries into the flowsdn
+golden, mounted at `/pallets/flowsdn`. It does not yet include the required BPF
+object. Its internal `opt/cni/bin/flowsdn` path also does not by itself prove
+installation into the separate host `/opt/cni/bin` mount. These packaging and
+boot-verification gaps are tracked in
+[stormcos#145](https://github.com/glennswest/stormcos/issues/145). The authoritative
+[golden documentation](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md)
+moved from stormpump to stormcos on 2026-09-22.
+
 ## Required host resources
 
 | Resource | Contract |
@@ -27,7 +38,7 @@ ID allocator, not the capacity of the current fixed-size endpoint BPF map.
 | bpffs | `/sys/fs/bpf` must already be mounted as bpffs, writable and shared with the host. The dedicated `bpf-pin-root` holds endpoint map/TCX ownership. A normal directory is not a substitute. |
 | State | `/var/lib/flowsdn` must be durable, writable and owned by one agent. Startup takes an exclusive state lock. Preserve it together with its matching pins. |
 | Runtime directory | `/var/run/cilium` must be shared with the host CNI process. The compatibility socket is `cilium.sock`, mode 0600, and the offline queue is `deleteQueue`. This directory should remain available across agent process restarts. |
-| CNI executable | `/opt/cni/bin/flowsdn` must already exist on the host, as the golden provides. No copy-binaries init container is included. The container runtime also needs its ordinary CNI loopback setup. |
+| CNI executable | `/opt/cni/bin/flowsdn` must exist on the host. The golden contains this path internally, but host exposure through the separate CNI mount still needs verification (stormcos#145). No copy-binaries init container is included. The container runtime also needs its ordinary CNI loopback setup. |
 | Host PID/IPC namespaces | Not required by the present agent. The host-invoked CNI receives the sandbox namespace path from the container runtime and performs namespace/link configuration itself. |
 | Kubernetes credentials | Not used by this runtime. The sample disables ServiceAccount token mounting and grants no API permissions. |
 

@@ -17,14 +17,23 @@ that needs them; milestone 4 expands and hardens them. Conntrack/NAT primitives
 needed for milestone 1 are implemented there. Advanced modes of a component
 introduced in milestone 1 remain explicit milestone 3 deliverables.
 
+## Current checkpoint — 2026-09-27
+
+Main now has a standalone agent/CNI, persisted endpoint ownership, pinned
+forwarding, read APIs and deployment examples; the baseline above describes
+v0.14.0 only. Kubernetes watches, remote routing reconciliation and the two-node
+acceptance test remain unfinished. See [current implementation status](implementation-status.md).
+Stormcos ships this component in a golden; chart/image work in milestone 4 is
+additional packaging scope, not a description of that delivery path.
+
 ## Backlog ownership
 
 The existing issues mainly track decisions and verification, not all missing
 implementation. Issue counts therefore do not measure completion percentages.
-This table assigns every current area a primary milestone; prerequisites are
+This table assigns every baseline area a primary milestone; prerequisites are
 resolved earlier when required. Full feature scope is also tracked by the specs.
 
-| Primary milestone | Issue area labels | Current issues | Specifications |
+| Primary milestone | Issue area labels | Issues at baseline | Specifications |
 |---|---|---:|---|
 | 1 | foundation, maps, datapath, agent, cni, node, identity, ipam, k8s | 103 | 00–04, 07–10, 13; kernel requirements |
 | 2 | loadbalancer, policy | 25 | 04–06 |

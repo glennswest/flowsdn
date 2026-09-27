@@ -1,4 +1,58 @@
-# Implementation assessment — 2026-09-08
+# Implementation status — 2026-09-27
+
+## Current code
+
+The workspace version is still `0.14.0`, but current main includes substantial
+unreleased runtime work. The historical release assessments below describe
+those releases at their validation dates; their statements that an agent,
+pinning or subsystem libraries are absent are **not current status**.
+
+- `flowsdn-agent` serves a persisted local endpoint and host-pool IPAM API on
+  a Unix socket. `flowsdn-cni` implements the local CNI workflow; matching BPF
+  objects are required separately. Endpoint map/TCX pins can preserve ownership
+  during agent absence. Restore validates ownership and replays offline deletes.
+- Endpoint list/detail and exact pool counts support node tooling. The agent
+  exposes health modules and health-table queries, successful help/version
+  commands, and an explicit standalone deployment example.
+- Kubernetes/operator, Hubble, BGP, Gateway, ClusterMesh, encryption, proxy,
+  service and policy crates provide primitives and focused tests. Their
+  presence does not establish operational controllers or complete networking.
+  The agent does not watch Kubernetes, serve Hubble, or run an operator.
+- Configuration keys/defaults, actual listeners, delivery and current boundaries
+  are documented in [the runtime guide](runtime.md); the complete served route
+  list is in [the API contract](agent-api.md).
+- stormcos ships static musl agent/CNI binaries in a flowsdn golden. This is
+  separate from Kubernetes network acceptance and from this repository's
+  historical source releases. See [the deployment contract](../deploy/stormcos/README.md).
+
+## Changes since 2026-09-18
+
+`git log --since=2026-09-18` includes standalone daemon wiring (`2dbf86b`),
+configuration/CNI ownership and rollback work (`8a6ecb7`, `335ede3`, `9170edb`),
+operator/Kubernetes/Hubble foundations (`88ecf0a`), BGP/Gateway/ClusterMesh
+primitives (`3987539`), and foreign TCX pin rejection (`4342adf`). Later work
+adds allocator recovery, Maglev and CIDR sets, policy simulation and independent
+kernel probes, socket-hook execution and opt-in seccomp enforcement. The latest
+runtime changes add the deployment/CLI contract (`a8f7126`) and bounded endpoint
+inventory/exact IPAM reads (`c8f4133`, formatted by `ce8f4d2`).
+
+These are implementation and focused validation results, not completion of
+[the four networking milestones](milestones.md). Issues #291–#294 remain the
+acceptance trackers. Operator/relay and two-node deployment integration remain
+tracked by #296; native CRD ownership by #299. Current code still projects
+`cilium.io` CRDs, so it must not be described as already using a flowsdn-owned
+API group.
+
+Validation records under [validation/](validation/) retain their source,
+platform and scope. In particular, compile checks on arm64 are not arm64 runtime
+acceptance; router-namespace traffic is not a two-node Kubernetes test. This
+documentation refresh does not claim new build, privileged or cluster test runs.
+
+## Historical assessments and release validation
+
+The remainder is preserved as dated evidence, not a current capability list.
+
+### Initial assessment — 2026-09-08
 
 ## Current state
 

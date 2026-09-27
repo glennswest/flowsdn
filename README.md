@@ -1,120 +1,106 @@
 # flowsdn
 
-A Rust reimplementation of the Cilium networking stack: eBPF datapath, CNI,
-kube-proxy replacement, identity-based network policy, encryption, egress,
-BGP, cloud IPAM, and a Hubble-compatible observability API.
+flowsdn is a Rust networking stack for stormcos, implementing a CNI plugin and
+an eBPF endpoint datapath. Its broader goal is Cilium-compatible networking,
+services, policy and observability. **That full stack is not implemented yet.**
 
-Goals:
+## What works today
 
-- **Boundary-compatible with Cilium.** Same CRDs and semantics, same Hubble
-  gRPC observer API, same agent REST API, documented Helm value mapping.
-  Existing Cilium manifests, `cilium` and `hubble` CLIs keep working.
-- **Free inside.** Precompiled eBPF (no clang on the node), one static binary
-  per component, `scratch` container images, no iptables dependency.
-- **Two architectures.** x86-64 and arm64, one BPF object for both.
-- **Everything.** Full feature scope unless a documented decision records a
-  better solution.
+As of 2026-09-27 (source through `ce8f4d2`), the executable pair is
+`flowsdn-agent` and `flowsdn-cni`. The standalone agent provides persisted
+endpoint ownership, host-pool IPv4/IPv6 allocation and a bounded HTTP API over a
+Unix socket. The primary veth CNI supports ADD, CHECK, DEL, STATUS and VERSION,
+including queued offline deletion. With `bpf-pin-root` configured, pinned endpoint
+maps and TCX links preserve forwarding across agent downtime; restoration checks interface ownership.
 
-## Status
+Privileged fixtures have exercised same-node IPv4/IPv6 delivery, explicit native
+routing between isolated router namespaces, duplicate attachment, rollback and
+restart. Those fixtures are **not acceptance of a two-node Kubernetes network**.
+The agent still lacks Node/Pod watches, remote-route reconciliation, integrated
+service/policy controllers, an operator process and Hubble observer/relay.
 
-**Foundation implementation started (2026-09-08), version 0.14.0.**
+Libraries also implement configuration resolution, identity and map layouts,
+policy and service planning, Maglev tables, BGP codecs/session state, encryption
+and egress plans, proxy ACK handling, flow filtering and cloud request plans.
+A library or passing unit test does not imply the feature runs in the agent.
+See the [current implementation assessment](docs/implementation-status.md).
 
-The workspace includes indexed tables, initialization gates, a reconciler with
-pruning, optional batching and a caller-owned scheduling loop, configuration snapshots, module
-health and a script engine with generic file commands, foreground execution,
-background jobs and whole-section retries. Reconciliation observers expose
-attempted revisions and remaining retry progress, with optional module health
-reporting. Typed script table bindings support `db/show` and `db/empty`.
-The map ABI crate defines connection tuples, conntrack/NAT values, service
-and policy layouts, plus endpoint, node, subnet and ipcache byte layouts.
-The loader crate provides pinned-map compatibility planning, auxiliary scratch
-layout planning and typed tail-program inventory checks.
-The policy crate now supplies validated L3/L4 building blocks and an initial
-independent oracle; Kubernetes policy import and enforcement remain outstanding.
-The loader also plans capacity-preserving LRU reuse and feature-gated nested maps.
-The identity crate adds numeric scopes, cluster ranges and tunnel encoding,
-plus canonical CIDR labels and optional identity/node label filtering.
-Fixed VXLAN/Geneve headers and Geneve DSR options have explicit wire codecs.
-The released foundation has no working networking agent. Synthetic scripts and file assertions
-execute, while the harvested networking scenarios still lack their adapters.
+The package version and latest published foundation prerelease remain
+**0.14.0**. Current main contains unreleased runtime work beyond that prerelease.
+A stormcos golden's pinned source revision identifies what a node actually runs;
+the package version alone does not distinguish these unreleased commits.
 
-The unreleased milestone 1 work adds [privileged networking tests](crates/flowsdn-bpftest/README.md),
-dual-stack BPF endpoint delivery, native cross-node routing, host-scope IPAM,
-initial CNI and standalone endpoint agent executables, with persisted state.
-Isolated endpoint tests exercise live IPv4/IPv6 traffic, allocation, attachment,
-rollback, retry, process restart and offline deletion replay. The standalone
-agent verifies ownership before reusing duplicate CNI attachments and preserves
-their original route settings across restart. Endpoint allocation has a configurable
-ceiling (4095 by default); the configuration library supports opt-in strict
-unknown-key validation. The agent uses explicit local configuration; Kubernetes discovery, identity/policy
-controllers and two-node Kubernetes pod connectivity remain outstanding.
-Pinned endpoint maps and TCX links preserve forwarding across agent downtime;
-restart checks interface ownership before reusing attachments.
+## Interfaces and configuration
 
-The agent also exposes read-only module health through the reference query wire
-format and a native JSON route, reporting missing controllers as degraded.
-New Kubernetes and operator libraries provide guarded Node patch plans, CRD
-registration/version checks, leadership/readiness gates and CES rate selection.
-Hubble primitives cover IP/CIDR filters, drop decoding, ring behavior and realized
-policy correlation. These libraries do not yet provide live controllers or an
-Observer server. See the [metrics migration guide](docs/compatibility/metrics.md)
-for the documented dashboard changes.
+- `flowsdn-agent --config PATH` reads a standalone **JSON** configuration.
+  `--help`/`-h` and `--version`/`-V` exit successfully without starting the agent.
+- The agent opens **no TCP ports**. Its HTTP API uses the configured mode-0600
+  Unix socket. There is no Hubble service on 4244, metrics listener or relay.
+- `GET /v1/healthz` reports API availability after restore and deletion replay;
+  it does not mean the pod network or policy controllers are ready.
+  `/v1/health/modules` reports unavailable controllers as degraded.
+- Endpoint list/detail, IPAM summaries, allocation and CNI publication/deletion
+  routes are documented in the [agent API](docs/agent-api.md). This is a subset
+  of the reference REST shape, not complete Cilium CLI/API compatibility.
+- The [runtime configuration reference](docs/runtime.md) lists every standalone
+  key, required value, default and CNI override. The separate 539-key
+  [configuration library](crates/flowsdn-config/README.md) is a compatibility
+  catalogue, **not** the executable's accepted CLI or active feature set.
 
-BGP protocol helpers now validate frames, OPEN capabilities and UPDATE structure,
-with explicit lenient/strict content-error policy. Gateway helpers validate
-configuration and project conditions; ClusterMesh helpers check address overlap,
-read authorization and guarded ownership/lease plans. Deployment policy and
-bounded script diagnostics are also available. Live speakers, controllers,
-transactions and deployment adapters remain unfinished.
+Cilium wire formats, reference fixtures and compatibility names are not a claim
+that flowsdn is Cilium. The owner requires flowsdn-owned CRDs to use flowsdn's
+identity. The current Kubernetes planning library still hardcodes `cilium.io`;
+that unresolved implementation and runtime-name migration is tracked in
+[#299](https://github.com/glennswest/flowsdn/issues/299). The standalone daemon
+does not currently register or reconcile CRDs.
 
-Additional unreleased work includes Maglev tables, CIDR block allocation,
-WireGuard netlink fragmentation, Azure request/polling plans, offline ClusterMesh
-peer-bundle installation and a bounded access-log reader. BGP tests now exercise
-session transitions and exact error payloads. Policy tests replay reference seeds
-and compare independent kernel-entry lookups; the complete policy compiler is
-still unfinished. An [opt-in seccomp profile](deploy/seccomp/README.md) has passed
-the isolated agent lifecycle fixture on x86-64.
+## How it ships in stormcos
 
+flowsdn ships as the **`flowsdn` golden** in the stormcos flowsdn edition: static
+musl agent and CNI binaries are sealed into the release and mounted under
+`/pallets/flowsdn`. The golden contains `/flowsdn-agent` and
+`/opt/cni/bin/flowsdn` internally; host CNI exposure still needs verification
+against the separate host CNI mount. Nodes clone
+the golden copy-on-write. This delivery path does not pull a flowsdn container
+image. A source push alone does not update nodes: the selected revision must be
+built into a new golden and composed into a stormcos release.
 
-| | |
-|---|---|
-| Specifications | 24 files, ~40k lines — every area, normative, with compatibility contracts and test plans |
-| Inventories | 17 files, ~12.5k lines — the reference measured at v1.20.1 (`7d68cfb394`) |
-| Decision records | 13 (`docs/decisions/`) |
-| Harvested test corpora | 1,444 files — 168 txtar scenarios, 625 BPF cases, 1,196 golden fixtures, 30 fuzz seeds |
-| Open backlog | 173 issues as checked 2026-09-21; implementation acceptance tracked in #291–#294 |
+The authority for that lifecycle is
+[stormcos's golden documentation](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
+This authority moved from stormpump to stormcos on 2026-09-22.
+Dependency versions and Git revisions in `Cargo.lock` remain build inputs; a
+sibling dependency's new commit is not selected automatically.
 
-Read in this order: `docs/decisions/` for what was decided and why,
-`docs/inventory/README.md` for the scope table and build order,
-then the spec for the area you are working on.
+The agent also requires a matching `local-delivery` BPF object, mounted bpffs,
+persistent state, host networking and Linux BPF/network privileges. Shipping
+only the two binaries is insufficient to start this datapath. The current golden
+recipe omits the BPF object; that and host CNI exposure are tracked in
+[stormcos#145](https://github.com/glennswest/stormcos/issues/145). The
+[deployment contract and validation manifests](deploy/stormcos/README.md)
+describe these resources, CNI ownership and Unix-socket supervision. The example
+DaemonSet uses an image placeholder and is not an installable production chart.
+There is no operator or relay binary to deploy. Storage/PVC provisioning belongs
+to stormcos's built-in stormblock driver, not to flowsdn.
 
-The configuration catalogue records all 539 keys. Of their defaults, 521 resolve
-from the specifications and 18 require explicit values; see the
-[catalogue gaps](crates/flowsdn-config/REGISTRY-GAPS.md). Build identity metadata
-is available for future binaries.
+## What changed since 2026-09-18
 
-The remaining implementation follows [four milestones](docs/milestones.md),
-starting with working pod networking. See the
-[implementation assessment](docs/implementation-status.md) for delivered components. The kernel target and measured object-variant policy are reconciled in the
-specifications. The wire-format policy preserves the reference encodings; live
-mixed-cluster compatibility remains unvalidated.
+The history through `ce8f4d2` adds the standalone agent and persisted recovery,
+configuration/CNI ownership checks, persistent BPF attachment, endpoint inventory
+and exact IPAM read APIs, deployment examples and successful help/version flags.
+It also adds operator/Kubernetes/Hubble and advanced-networking library
+primitives, independent policy checks, kernel probes and an opt-in amd64 seccomp
+profile. [Implementation status](docs/implementation-status.md) links the source
+and validation records and separates those additions from the remaining gates.
 
-## Layout
+Remaining acceptance is tracked by [four milestones](docs/milestones.md):
+working Kubernetes pod networking (#291), services/policy (#292), advanced
+networking/observability (#293), and compatibility/release hardening (#294).
+The console plugin (#297), `sc net` integration (#298), presentation (#302) and
+short/medium/long component test containers (#303) remain separate work.
 
-```
-docs/inventory/   per-area inventory of the reference implementation
-docs/spec/        flowsdn specifications, one document per area
-docs/decisions/   architecture decision records
-docs/licensing.md clean-room protocol and license analysis
-```
+## Building, testing and reading the repository
 
-## License
-
-Apache License 2.0. See `LICENSE` and `NOTICE`.
-
-## Building and testing
-
-Development requires Linux and the Rust toolchain pinned in `rust-toolchain.toml`.
+Use Linux and the Rust toolchain pinned in `rust-toolchain.toml`:
 
 ```sh
 cargo xtask check
@@ -122,17 +108,25 @@ cargo test --workspace --all-features --release --locked
 cargo xtask deny
 ```
 
-`check` runs formatting, Clippy, tests, and compile checks for x86-64 and arm64
-Linux musl, including all feature-gated test fixtures. `deny` requires
-`cargo-deny`. Build output follows Cargo's standard
-configuration, including `CARGO_TARGET_DIR` when set.
+`check` runs formatting, Clippy, tests and compile checks for x86-64/arm64 Linux
+musl, including feature-gated fixtures. `deny` requires `cargo-deny`. Build output
+uses standard Cargo configuration. Privileged runtime fixtures have additional
+requirements documented in [flowsdn-bpftest](crates/flowsdn-bpftest/README.md);
+cross-compilation alone does not prove runtime support.
 
-The test harnesses and inventory tools are Rust. Static compatibility fixtures
-use txtar, YAML, TOML, and JSON. A txtar archive packages test commands and named
-fixture files in one readable text file.
+Current project builds are dispatched through stormcentral. The retained
+GitHub Actions workflow is historical configuration awaiting removal in
+[#304](https://github.com/glennswest/flowsdn/issues/304), not the current build
+service. This documentation audit adds no new runtime validation claim.
 
-The next unreleased batch adds encryption and egress-selection plans, proxy ACK
-barriers, ClusterMesh principal binding, bounded flow/event admission, and LB
-input parsing and ordering. These libraries have explicit runtime integration
-gaps; see [batch 6 evidence](docs/workcycles/2026-09-22-batch6.md). CI workflow
-configuration is committed, with runner activation still outstanding.
+Start with the [documentation guide](docs/README.md), current runtime/API and
+deployment references. `docs/spec/` defines intended contracts;
+`docs/inventory/` describes Cilium v1.20.1 (`7d68cfb394`); historical decisions,
+workcycles and release records are not lists of enabled features. Test corpora
+are data until a working adapter executes them. Project tools and harnesses are
+Rust; fixture data uses txtar, JSON, YAML and TOML.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE), [NOTICE](NOTICE) and the
+[licensing and clean-room rules](docs/licensing.md).

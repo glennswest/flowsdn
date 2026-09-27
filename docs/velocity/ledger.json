@@ -2398,6 +2398,30 @@
         "uncached_input_tokens": 844309
       },
       "usage_note": "token_usage_record globally deduplicated by response_id. Prior cumulative baselines exclude the preceding cycle and intervening reporting. Cached input is a subset of input; reasoning is a subset of output. Includes repeated context, not account cost. Excludes this snapshot commit and subsequent reporting."
+    },
+    {
+      "id": "2026-09-27-documentation-audit",
+      "scope": "project/shared",
+      "agent": "codex/root with three review agents",
+      "start_utc": "2026-09-27T17:48:01Z",
+      "end_utc": "2026-09-27T17:54:40.867656+00:00",
+      "elapsed_seconds": 399.9,
+      "active_work_seconds": null,
+      "token_baseline": null,
+      "token_endpoint": null,
+      "tokens": null,
+      "parallel_agent_seconds": null,
+      "source_revision": "ce8f4d2",
+      "commits": [
+        "f4b8061"
+      ],
+      "release": null,
+      "outcomes": [
+        "Current runtime, config, API and golden documentation refreshed",
+        "Cross-project missing golden BPF and host CNI exposure filed as stormcos#145 (P1)",
+        "Local links and source defaults reviewed; whitespace check passed"
+      ],
+      "note": "First observed UTC baseline; initial reading preceded this interval. No session usage counter available. Agent windows overlap and are not added. Publishing/remote validation follow this cutoff."
     }
   ],
   "crates": [

@@ -201,3 +201,13 @@ publication/reporting are excluded. Known overlapping agent windows total
 1218 seconds (0.338 hours), not added to project elapsed. Active work time is
 unknown. Counters include repeated context, do not measure account cost, and
 are counted once under project/shared.
+
+## Documentation audit — 2026-09-27
+
+Observed interval 17:48:01 UTC–17:54:40 UTC: 399.9 seconds.
+Initial reading preceded the baseline. Source through `ce8f4d2` was checked
+against runtime/configuration, API, deployment and dependency documentation.
+Plan commit: `f4b8061`; missing golden BPF/host CNI exposure: stormcos#145.
+Usage counters and active/parallel agent time are unavailable (null); review
+windows overlap. No runtime build or release is claimed. Remote documentation
+validation and publication follow this cutoff.

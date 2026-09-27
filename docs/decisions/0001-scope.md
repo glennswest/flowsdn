@@ -2,6 +2,16 @@
 
 Date: 2026-09-07. Status: accepted.
 
+## Subsequent owner direction (2026-09-27 documentation audit)
+
+[Issue #299](https://github.com/glennswest/flowsdn/issues/299) supersedes the
+owned-CRD naming choice below: flowsdn-owned objects must use flowsdn identity;
+reading Cilium formats is a separate compatibility concern. The current planning
+library still hardcodes `cilium.io`, so the migration remains open. The static
+binaries ship in a stormcos golden; the historical image strategy below is not
+the current delivery path. See the [current README](../../README.md). This ADR
+records intended scope, not a claim that every feature is implemented.
+
 ## Decision
 
 flowsdn reimplements the complete Cilium feature set in Rust. A feature is

@@ -4,6 +4,7 @@
 
 ### 2026-09-27
 - **docs:** Record the code-based documentation, issue-validation and comment-mining audit plan.
+- **docs:** Refresh runtime configuration/defaults, Unix-only API and health, golden delivery, compatibility limits and current implementation status from source; distinguish specifications and historical validation from delivered features. Correct the configuration extension census and optional persistent pinning documentation.
 
 - Preserve endpoint forwarding across agent downtime with pinned maps/TCX links,
   ownership-checked restoration, durable intent recovery and duplicate-interface

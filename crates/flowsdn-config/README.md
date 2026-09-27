@@ -13,11 +13,15 @@ expressions, owning-spec provenance, conflicts, missing help/hidden metadata
 and area-validator requirements. `Definition::default_provenance()` preserves
 the source of each resolved default without changing its original expression.
 
-Four flowsdn-only keys are declared separately in `catalogue::EXTENSIONS`:
+Eight flowsdn-only keys are declared separately in `catalogue::EXTENSIONS`:
 `strict-config=false`, `endpoint-id-max=4095`, `force-config-change=false`,
-and immutable `bpf-ipcache-map-max=512000`. Complete and partial
-catalogue registries include both without changing the 539-key reference
-coverage count. Foundation validation limits `endpoint-id-max` to 1–65535;
+`bpf-ipcache-map-max=512000`, `bgp-strict-update-errors=false`,
+`bgp-status-report-prefixes=false`, `egress-gateway-selection=modulo` and
+`egress-gateway-legacy-map=false`. Complete and partial catalogue registries
+include these without changing the 539-key reference coverage count. These are
+library declarations, not standalone agent JSON options; see the
+[runtime reference](../../docs/runtime.md).
+Foundation validation limits `endpoint-id-max` to 1–65535;
 the endpoint manager applies it only to newly allocated IDs.
 
 `complete_registry` refuses construction until every missing default has an
