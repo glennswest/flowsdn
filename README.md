@@ -30,6 +30,11 @@ The package version and latest published foundation prerelease remain
 A stormcos golden's pinned source revision identifies what a node actually runs;
 the package version alone does not distinguish these unreleased commits.
 
+The Rust CNI executable now includes a loopback adapter, and
+`flowsdn-agent cni install --source PATH` installs the primary compatibility
+names and loopback binary. See [installation](crates/flowsdn-cni/README.md#install-binaries).
+These additions are awaiting live validation and do not complete cluster acceptance.
+
 ## Interfaces and configuration
 
 - `flowsdn-agent --config PATH` reads a standalone **JSON** configuration.

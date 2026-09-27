@@ -43,9 +43,26 @@ or configuration types. It supports CNI 1.0.0/1.1.0 ADD, CHECK, DEL, STATUS and
 VERSION without an agent. ADD raises `lo`, validates loopback addresses and
 returns configured address prefixes; CHECK requires administrative UP. DEL lowers
 `lo` and tolerates a missing namespace. It never changes MAC or MTU. A matching
-version prevResult is preserved. Binary installation remains a separate task.
+version prevResult is preserved. The agent installation subcommand publishes these entry points.
 
 `cargo test -p flowsdn-cni --test loopback -- --ignored` runs the live fixture
 inside new user/network namespaces. Linux `unshare` and enabled unprivileged
 user namespaces are required; unavailable capabilities fail the fixture. Ordinary
 crate tests cover dispatch, version/errors and namespace-free teardown.
+
+## Install binaries
+
+Run `flowsdn-agent cni install --source PATH` with the built `flowsdn-cni` binary.
+`CNI_DIR` selects the CNI directory (default `$HOST_PREFIX/opt/cni`, with
+`HOST_PREFIX=/host`). Its `bin` directory must be trusted and writable. The
+installer atomically replaces `cilium-cni`, then publishes hardlinks named
+`flowsdn-cni` and `flowsdn` for compatibility with existing configurations.
+`OVERWRITE_CILIUM=false` retains an existing regular canonical binary and
+relinks the aliases to it. Existing destination symlinks are replaced, never
+written through; retaining a canonical symlink is rejected.
+
+`loopback` is copied from the same Rust source binary when absent or when
+`OVERWRITE_LOOPBACK=true`. Loopback installation failures produce warnings,
+consistent with spec 09. Publication is atomic per name, not across the whole
+set; a failed installation can be retried. The installer does not write a
+conflist, start an agent, or uninstall configuration.

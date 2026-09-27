@@ -142,7 +142,8 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
             if let Some(previous) = previous {
                 validate_previous(previous, version)?;
             }
-            let namespace = File::open(&env["CNI_NETNS"])
+            let netns = env.get("CNI_NETNS").ok_or_else(|| CniError::internal("missing CNI_NETNS"))?;
+            let namespace = File::open(netns)
                 .map_err(|e| CniError::internal(e.to_string()))?;
             let bring_up = command == "ADD";
             let addresses = in_namespace(namespace, move || {
@@ -160,7 +161,7 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
                 }
                 Ok(Some(json!({
                     "cniVersion": version,
-                    "interfaces": [{"name": "lo", "sandbox": env["CNI_NETNS"]}],
+                    "interfaces": [{"name": "lo", "sandbox": netns}],
                     "ips": ips
                 })))
             } else {

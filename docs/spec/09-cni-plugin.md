@@ -656,7 +656,7 @@ and two-node acceptance remain separate gates.
 
 Installation is an init container (`install-cni-binaries`, drops all
 capabilities, mounts `cni.binPath` at `/host/opt/cni/bin`). flowsdn provides
-it as the agent image with subcommand `flowsdn-agent cni install` (inventory
+it as the agent image with subcommand `flowsdn-agent cni install --source PATH` (inventory
 15 recommends a subcommand over a shell script; `scratch` images have no
 shell). Behaviour, identical to the reference script:
 
@@ -673,7 +673,13 @@ shell). Behaviour, identical to the reference script:
   executing right now) unless `OVERWRITE_CILIUM=false` and it exists.
   **DEVIATION**: additionally install `flowsdn-cni` as a hard link to the
   same file so operators can tell which implementation is present; the
-  conflist keeps `type: cilium-cni` (see 12.1).
+  conflist keeps `type: cilium-cni` (see 12.1). The installer also publishes
+  `flowsdn` for existing deployment configurations. Staging filenames include
+  process/counter suffixes to avoid collisions, and mode is 0755. The explicit
+  source path identifies the compiled Rust CNI binary; it is not embedded in
+  the agent. Publication is atomic per directory entry, not across aliases.
+  The destination directory is operator-controlled; destination symlinks are
+  replaced rather than written through. A retained canonical symlink is rejected.
 
 Uninstall is the agent pod's `preStop` (`flowsdn-agent cni uninstall`):
 if the config key `cni-uninstall` (read from `/tmp/cilium/config-map/

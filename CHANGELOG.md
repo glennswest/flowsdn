@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-27
+- **feat:** Add atomic Rust CNI installation with compatibility names, overwrite controls and installer regression tests; align loopback fixtures with workspace lint rules.
 - **fix:** Match locked netlink link flags and reject malformed loopback prevResult before namespace mutation; cover disabled IPv6.
 - **feat:** Add Rust loopback CNI dispatch, namespace-local ADD/CHECK/DEL, address validation and an isolated unprivileged namespace fixture for #291.
 - **docs:** Resume milestone #291 with Rust loopback/install implementation followed by Kubernetes integration and measured cluster acceptance.

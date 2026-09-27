@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, fmt, net::IpAddr};
 
 pub mod delete;
+pub mod install;
 pub mod loopback;
 pub mod queue;
 pub mod runtime;

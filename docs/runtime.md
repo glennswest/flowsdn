@@ -75,8 +75,8 @@ The CNI executable also dispatches by `loopback`/`flowsdn-loopback` basename or
 configuration type. This adapter operates on namespace `lo` independently of
 the agent: ADD raises it and returns its addresses, CHECK requires UP, and DEL
 lowers it (a missing namespace succeeds). VERSION and STATUS require no namespace.
-Only CNI 1.0.0/1.1.0 are currently supported. Installation of these aliases remains
-outstanding; see [the CNI crate](../crates/flowsdn-cni/README.md).
+Only CNI 1.0.0/1.1.0 are currently supported. Install the compatibility names with `flowsdn-agent cni install --source PATH`;
+`CNI_DIR` and overwrite controls are described in [the CNI crate](../crates/flowsdn-cni/README.md).
 
 ## Ports and APIs
 

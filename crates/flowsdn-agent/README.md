@@ -57,3 +57,9 @@ daemon opens no TCP listener or Hubble/relay service. `/v1/healthz` reports API
 availability after restore, not complete pod-network readiness. stormcos ships
 the static musl agent and CNI in a golden; required runtime resources and the
 validation manifest are documented in [the deployment contract](../../deploy/stormcos/README.md).
+
+`flowsdn-agent cni install --source PATH` installs the supplied Rust CNI binary
+under primary compatibility names and the loopback entry point. See the
+[CNI installation reference](../flowsdn-cni/README.md#install-binaries) for
+destination and overwrite controls. This command does not load BPF, start the
+API or publish a conflist.
