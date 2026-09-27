@@ -61,11 +61,11 @@ impl Scope {
                 for cidr in array(value.pointer("/spec/podCIDRs"))? {
                     cidrs.push(parse_cidr(text(cidr)?)?);
                 }
-                if cidrs.is_empty() {
-                    if let Some(cidr) = value.pointer("/spec/podCIDR") {
-                        let cidr = text(cidr)?;
-                        if !cidr.is_empty() { cidrs.push(parse_cidr(cidr)?); }
-                    }
+                if cidrs.is_empty()
+                    && let Some(cidr) = value.pointer("/spec/podCIDR").filter(|v| !v.is_null())
+                {
+                    let cidr = text(cidr)?;
+                    if !cidr.is_empty() { cidrs.push(parse_cidr(cidr)?); }
                 }
                 let mut ips = Vec::new();
                 for address in array(value.pointer("/status/addresses"))? {
@@ -79,19 +79,19 @@ impl Scope {
                 let actual = required(value.get("spec").ok_or_else(|| error("missing Pod spec"))?, "nodeName")?;
                 if actual != node_name { return Err(error("Pod does not match local node selector")); }
                 let host_network = match value.pointer("/spec/hostNetwork") {
-                    None => false,
+                    None | Some(Value::Null) => false,
                     Some(v) => v.as_bool().ok_or_else(|| error("invalid hostNetwork"))?,
                 };
                 let mut ips = Vec::new();
                 for address in array(value.pointer("/status/podIPs"))? { ips.push(parse_ip(required(address, "ip")?)?); }
-                if ips.is_empty() {
-                    if let Some(ip) = value.pointer("/status/podIP") {
-                        let ip = text(ip)?;
-                        if !ip.is_empty() { ips.push(parse_ip(ip)?); }
-                    }
+                if ips.is_empty()
+                    && let Some(ip) = value.pointer("/status/podIP").filter(|v| !v.is_null())
+                {
+                    let ip = text(ip)?;
+                    if !ip.is_empty() { ips.push(parse_ip(ip)?); }
                 }
                 let mut labels = BTreeMap::new();
-                if let Some(raw) = value.pointer("/metadata/labels") {
+                if let Some(raw) = value.pointer("/metadata/labels").filter(|v| !v.is_null()) {
                     for (key, val) in raw.as_object().ok_or_else(|| error("invalid labels"))? {
                         labels.insert(key.clone(), text(val)?.to_owned());
                     }
@@ -108,7 +108,7 @@ fn required<'a>(value: &'a Value, key: &str) -> Result<&'a str, Error> {
     value.get(key).and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or_else(|| Error(format!("missing or invalid {key}")))
 }
 fn array(value: Option<&Value>) -> Result<&[Value], Error> {
-    match value { None => Ok(&[]), Some(v) => v.as_array().map(Vec::as_slice).ok_or_else(|| error("expected array")) }
+    match value { None | Some(Value::Null) => Ok(&[]), Some(v) => v.as_array().map(Vec::as_slice).ok_or_else(|| error("expected array")) }
 }
 fn metadata(value: &Value, namespaced: bool) -> Result<Metadata, Error> {
     let meta = value.get("metadata").ok_or_else(|| error("missing metadata"))?;
@@ -235,23 +235,24 @@ impl WatchState {
         if !matches!(kind, "ADDED" | "MODIFIED" | "DELETED") { return Err(error("watch error or unsupported event; relist required")); }
         // Deleted objects need only metadata; deletion must not depend on spec
         // fields that may be absent from tombstones.
-        if kind == "DELETED" {
-            if let Scope::LocalPods { node_name } = &self.scope {
-                if let Some(actual) = object.pointer("/spec/nodeName") {
-                    if text(actual)? != node_name { return Err(error("Pod does not match local node selector")); }
-                }
-            }
+        if kind == "DELETED"
+            && let Scope::LocalPods { node_name } = &self.scope
+            && let Some(actual) = object.pointer("/spec/nodeName")
+            && text(actual)? != node_name
+        {
+            return Err(error("Pod does not match local node selector"));
         }
         let row = if kind == "DELETED" { None } else { Some(self.scope.parse(object)?) };
         let meta = metadata(object, matches!(self.scope, Scope::LocalPods { .. }))?;
         let key = format!("{}/{}", meta.namespace, meta.name).into_bytes();
         let snapshot = self.table.snapshot();
         let previous = snapshot.get("primary", &key).map_err(|e| Error(e.to_string()))?;
-        revision_budget(&snapshot, 1)?;
         if let Some(row) = row {
+            revision_budget(&snapshot, 1)?;
             if previous.is_none() && snapshot.len() >= self.limits.max_objects { return Err(error("watch exceeds object limit")); }
             self.table.insert(row).await.map_err(|e| Error(e.to_string()))?;
         } else if previous.is_some_and(|(row, _)| row.metadata().uid == meta.uid) {
+            revision_budget(&snapshot, 1)?;
             self.table.delete(&key).await.map_err(|e| Error(e.to_string()))?;
         }
         self.resource_version = Some(meta.resource_version);

@@ -132,3 +132,23 @@ fn ignored_selector_on_watch_invalidates_stream_without_overwriting_pod() {
         assert!(watch.needs_relist());
     });
 }
+
+#[test]
+fn sparse_and_nullable_optional_fields_remain_empty() {
+    let scope = Scope::LocalPods { node_name: "node-a".into() };
+    for nullable in [false, true] {
+        let mut value = json!({"metadata":{"name":"pod","namespace":"ns","uid":"u","resourceVersion":"1"},"spec":{"nodeName":"node-a"}});
+        let mut node = json!({"metadata":{"name":"node","uid":"u","resourceVersion":"1"}});
+        if nullable {
+            value["metadata"]["labels"] = Value::Null;
+            value["spec"]["hostNetwork"] = Value::Null;
+            value["status"] = json!({"podIPs":null,"podIP":null});
+            node["spec"] = json!({"podCIDRs":null,"podCIDR":null});
+            node["status"] = json!({"addresses":null});
+        }
+        let Resource::Pod(parsed) = scope.parse(&value).expect("sparse pod") else { panic!("pod") };
+        assert!(parsed.pod_ips.is_empty() && parsed.labels.is_empty() && !parsed.host_network);
+        let Resource::Node(parsed) = Scope::Nodes.parse(&node).expect("sparse node") else { panic!("node") };
+        assert!(parsed.pod_cidrs.is_empty() && parsed.internal_ips.is_empty());
+    }
+}
