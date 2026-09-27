@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-09-27
+- **docs:** Record the code-based documentation, issue-validation and comment-mining audit plan.
+
 - Preserve endpoint forwarding across agent downtime with pinned maps/TCX links,
   ownership-checked restoration, durable intent recovery and duplicate-interface
   rejection. Privileged tests block ordinary stack forwarding as a false positive.
