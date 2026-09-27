@@ -240,3 +240,9 @@ comments. Filed stormcentral#102 at P1; other findings remain covered. One
 agent, no parallel-agent time; usage and active time are unknown. Only local
 SSH configuration parsing was exercised, with no remote connection or build.
 Final commit/publication is outside this cutoff.
+
+## Milestone 1 resume — #291
+
+Started 2026-09-27T23:20:08Z; initial issue review preceded this baseline.
+Loopback/install implementation is the first checkpoint. Usage telemetry is
+unavailable; counters and active work time remain null.

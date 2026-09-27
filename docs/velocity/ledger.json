@@ -4945,5 +4945,16 @@
     "parallel_agent_window_seconds": 1105.0,
     "parallel_agent_window_hours": 0.30694444444444446,
     "known_agent_project_interval_union_seconds": 554.0
+  },
+  "m1_291_resume": {
+    "start_utc": "2026-09-27T23:20:08Z",
+    "end_utc": null,
+    "scope": "project/shared",
+    "agent": "codex/root",
+    "source_revision": "bd83c33",
+    "token_baseline": null,
+    "token_endpoint": null,
+    "active_work_seconds": null,
+    "outcomes": []
   }
 }

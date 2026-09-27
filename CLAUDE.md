@@ -44,6 +44,18 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 
 ## Work plan
 
+### Milestone 1 implementation — #291, 2026-09-27
+
+- [x] Read acceptance and acknowledge open backlog; synchronize the previous audit already published upstream.
+- [ ] Implement Rust loopback CNI dispatch and compatibility binary installation from spec 09 and ADRs 0012–0013; add failure and overwrite coverage.
+- [ ] Push source, then validate with sc-build; preserve exact errors and measured results.
+- [ ] Continue Kubernetes Node/Pod watch, identity/ipcache and remote routing integration, then disposable two-node IPv4/IPv6 acceptance.
+- [ ] Close #291 only after every acceptance gate passes; stage the flowsdn golden after verified implementation.
+
+User reports stormcentral#102 and sandbox Git writes fixed. Recheck through the
+normal build path; never use a persistent checkout on the build host.
+
+
 ### Active audit — 2026-09-27
 
 - [x] Refresh README, current runtime/deployment documentation and this context from code and history since 2026-09-18; preserve owner terminology and file uncovered promises.
