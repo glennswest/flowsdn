@@ -170,13 +170,16 @@ fn local_selector_and_slim_parsing_validate_dual_stack() {
         Some("spec.nodeName=node-a")
     );
     let mut value = pod("pod", "uid", "rv");
-    value["unknown"] = json!({"ignored":true});
+    value
+        .as_object_mut()
+        .expect("pod object")
+        .insert("unknown".into(), json!({"ignored":true}));
     let Resource::Pod(parsed) = scope.parse(&value).expect("slim pod") else {
         panic!("pod")
     };
     assert_eq!(parsed.pod_ips.len(), 2);
     assert_eq!(parsed.labels.get("app").map(String::as_str), Some("demo"));
-    value["spec"]["nodeName"] = json!("other");
+    *value.pointer_mut("/spec/nodeName").expect("node name") = json!("other");
     assert!(scope.parse(&value).is_err());
     let node = json!({"metadata":{"name":"node-b","uid":"uid","resourceVersion":"rv"},"spec":{"podCIDRs":["10.2.0.0/24","fd02::/64"]},"status":{"addresses":[{"type":"InternalIP","address":"192.0.2.2"},{"type":"InternalIP","address":"2001:db8::2"},{"type":"Hostname","address":"node-b"}]}});
     let Resource::Node(parsed) = Scope::Nodes.parse(&node).expect("slim node") else {
@@ -249,7 +252,7 @@ fn ignored_selector_on_watch_invalidates_stream_without_overwriting_pod() {
             .expect("list");
         let revision = watch.snapshot().revision();
         let mut invalid = pod("a", "u", "3");
-        invalid["spec"]["nodeName"] = json!("other-node");
+        *invalid.pointer_mut("/spec/nodeName").expect("node name") = json!("other-node");
         assert!(watch.event(&event("MODIFIED", invalid)).await.is_err());
         assert_eq!(watch.snapshot().revision(), revision);
         assert!(watch.needs_relist());
@@ -265,11 +268,26 @@ fn sparse_and_nullable_optional_fields_remain_empty() {
         let mut value = json!({"metadata":{"name":"pod","namespace":"ns","uid":"u","resourceVersion":"1"},"spec":{"nodeName":"node-a"}});
         let mut node = json!({"metadata":{"name":"node","uid":"u","resourceVersion":"1"}});
         if nullable {
-            value["metadata"]["labels"] = Value::Null;
-            value["spec"]["hostNetwork"] = Value::Null;
-            value["status"] = json!({"podIPs":null,"podIP":null});
-            node["spec"] = json!({"podCIDRs":null,"podCIDR":null});
-            node["status"] = json!({"addresses":null});
+            value
+                .get_mut("metadata")
+                .and_then(Value::as_object_mut)
+                .expect("pod metadata")
+                .insert("labels".into(), Value::Null);
+            value
+                .get_mut("spec")
+                .and_then(Value::as_object_mut)
+                .expect("pod spec")
+                .insert("hostNetwork".into(), Value::Null);
+            value
+                .as_object_mut()
+                .expect("pod object")
+                .insert("status".into(), json!({"podIPs":null,"podIP":null}));
+            node.as_object_mut()
+                .expect("node object")
+                .insert("spec".into(), json!({"podCIDRs":null,"podCIDR":null}));
+            node.as_object_mut()
+                .expect("node object")
+                .insert("status".into(), json!({"addresses":null}));
         }
         let Resource::Pod(parsed) = scope.parse(&value).expect("sparse pod") else {
             panic!("pod")

@@ -42,7 +42,7 @@ fn aliases_and_type_dispatch_do_not_contact_agent() {
     let version = invoke("loopback", "VERSION", Value::Null)
         .expect("fixture operation")
         .expect("fixture operation");
-    assert_eq!(version["supportedVersions"], json!(["1.0.0", "1.1.0"]));
+    assert_eq!(version.get("supportedVersions").expect("supported versions"), &json!(["1.0.0", "1.1.0"]));
 }
 
 #[test]
@@ -171,10 +171,10 @@ fn loopback_namespace() {
             String::from_utf8_lossy(&output.stdout)
         );
         let result: Value = serde_json::from_slice(&output.stdout).expect("fixture operation");
-        assert_eq!(result["interfaces"][0]["name"], "lo");
-        let ips = result["ips"].as_array().expect("fixture operation");
-        assert!(ips.iter().any(|ip| ip["address"] == "127.0.0.1/8"));
-        assert!(ips.iter().any(|ip| ip["address"] == "::1/128"));
+        assert_eq!(result.pointer("/interfaces/0/name").expect("loopback name"), "lo");
+        let ips = result.get("ips").expect("result IPs").as_array().expect("fixture operation");
+        assert!(ips.iter().any(|ip| ip.get("address").and_then(Value::as_str) == Some("127.0.0.1/8")));
+        assert!(ips.iter().any(|ip| ip.get("address").and_then(Value::as_str) == Some("::1/128")));
         assert!(plugin("CHECK", &conf).status.success());
     }
     assert_eq!(
@@ -184,7 +184,7 @@ fn loopback_namespace() {
     );
     let previous = json!({"cniVersion":"1.1.0", "interfaces":[{"name":"eth0"}], "ips":[]});
     let mut chained = conf.clone();
-    chained["prevResult"] = previous.clone();
+    chained.as_object_mut().expect("config object").insert("prevResult".into(), previous.clone());
     let output = plugin("ADD", &chained);
     assert!(output.status.success());
     assert_eq!(
@@ -200,7 +200,7 @@ fn loopback_namespace() {
     assert!(output.status.success());
     let result: Value = serde_json::from_slice(&output.stdout).expect("fixture operation");
     assert_eq!(
-        result["ips"].as_array().expect("fixture operation").len(),
+        result.get("ips").expect("result IPs").as_array().expect("fixture operation").len(),
         1,
         "IPv6 disabled"
     );

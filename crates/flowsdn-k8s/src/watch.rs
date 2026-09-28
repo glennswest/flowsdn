@@ -246,14 +246,13 @@ impl WatchState {
         if limits.max_objects == 0 || limits.max_pages == 0 || limits.max_bytes == 0 {
             return Err(error("watch limits must be positive"));
         }
-        if let Scope::LocalPods { node_name } = &scope {
-            if node_name.is_empty()
+        if let Scope::LocalPods { node_name } = &scope
+            && (node_name.is_empty()
                 || node_name
                     .chars()
-                    .any(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '.')
-            {
-                return Err(error("invalid local node name"));
-            }
+                    .any(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '.'))
+        {
+            return Err(error("invalid local node name"));
         }
         Ok(Self {
             scope,

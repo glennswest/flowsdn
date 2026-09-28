@@ -51,14 +51,13 @@ pub struct Query<'a> {
 /// Percent-encode opaque values, including opaque resource versions and tokens.
 /// Pod selection is always constrained to the requested node.
 pub fn request_uri(scope: &Scope, query: &Query<'_>) -> Result<String, Error> {
-    if let Scope::LocalPods { node_name } = scope {
-        if node_name.is_empty()
+    if let Scope::LocalPods { node_name } = scope
+        && (node_name.is_empty()
             || node_name
                 .chars()
-                .any(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '.')
-        {
-            return Err(Error("invalid local node name".into()));
-        }
+                .any(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '.'))
+    {
+        return Err(Error("invalid local node name".into()));
     }
     if query.watch && (query.limit.is_some() || query.continue_token.is_some()) {
         return Err(Error("watch cannot use list pagination".into()));
