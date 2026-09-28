@@ -323,3 +323,7 @@ wait-owner succeeded; issue remains open. Counters remain unavailable.
 ## Issue-comment mining — 2026-09-28
 
 20:38:45 UTC–20:43:42 UTC: **297 seconds** observed; initial reading preceded baseline. Reviewed 32 issues and 25 recent comments. Filed stormcos#183 (P1), supplemented owner decision stormcentral#83 and linked the handoff on #296. No implementation, runtime tests or release. One read-only reviewer overlapped this interval; agent-hours, active time and token counters remain unknown. Final publication follows cutoff. See [audit table](../workcycles/2026-09-28-comment-mining.md).
+
+## #296 owner decision recheck
+
+2026-09-28 20:47:04 UTC–20:47:34 UTC: 30 seconds observed after initial reading. Decision remains unanswered; no disposable flowsdn pair is registered. Stopped implementation as requested and requested the owner handoff. No build/runtime tests or release; usage and active time unavailable.

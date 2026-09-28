@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Recheck #296 owner-target decision and managed inventory; preserve implementation pending disposable pair allocation and supported provisioning.
 - **docs:** Record 32-issue/25-comment mining results: new provisioning tracker stormcos#183 (P1), supplemented owner decision stormcentral#83, and existing coverage for remaining findings.
 - **docs:** Plan the September 28 issue-comment mining pass; no implementation changes.
 - **docs:** Record successful managed documentation checks and #296 owner-question handoff; runtime acceptance remains unverified.
