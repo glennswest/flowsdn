@@ -280,3 +280,6 @@ golden or release. Build execution intervals were 2, 7, 38, 101, 28, 73 and
 109 seconds, nested in elapsed time; reaper/slot wait bounds are unknown.
 Usage, active time and parallel agent-hours remain null. Final record commit
 and reporting are outside this cutoff.
+
+Fedora TLS migration started 2026-09-28T16:52:14Z from `170183a`; initial review
+preceded the baseline. Owner approved a Fedora C provider. Usage unavailable.

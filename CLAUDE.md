@@ -67,7 +67,9 @@ is preserved. Do not overwrite these branches or claim them complete.
 - [x] Rust loopback/install source is on main; combined build/tests passed at bfc19b2 (86 tests across agent/CNI/Kubernetes). Namespace runtime fixture remains unrun.
 - [x] Recover saved watch state/HTTPS transport in 67cb727; remote lock/format in 556877f; fix ambiguous loopback lookup in bfc19b2.
 - [x] At 03685f2, Clippy passed and affected Kubernetes/loopback tests passed again; 86 broader tests passed earlier at bfc19b2.
-- [ ] OWNER DECISION: recovered HTTPS selects ring → cc, banned by deny.toml/ADR-0002; cargo-deny 0.20.2 failed bans and licenses (#306). Do not weaken policy or ship. The reviewed pure-Rust rustls-rustcrypto candidate warns against production use. Resolve TLS provider choice before continuing integration. See docs/validation/2026-09-28-m1-recovery.md.
+- [x] Owner approved a Fedora-provided C TLS provider on 2026-09-28; choose system OpenSSL via kube openssl-tls.
+- [ ] Record the narrow ADR/policy exception, replace ring/rustls transport features, resolve lock through sc-build, validate tests/Clippy/policy and Fedora linkage.
+- [ ] File stormcos packaging dependency for the future GNU/Fedora-linked agent; keep #291 integration and cluster acceptance open.
 - [ ] Connect watch reconciliation, identity/ipcache and owned remote routes to the endpoint agent; review ADR acceptance in parallel.
 - [ ] Push each source checkpoint before sc-build; preserve exact errors and measured results.
 - [ ] Continue Kubernetes Node/Pod watch, identity/ipcache and remote routing integration, then disposable two-node IPv4/IPv6 acceptance.
