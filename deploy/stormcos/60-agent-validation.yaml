@@ -31,6 +31,19 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["/opt/flowsdn/bin/flowsdn-agent"]
           args: ["--config", "/etc/flowsdn/agent.json"]
+          startupProbe:
+            exec:
+              command: ["/opt/flowsdn/bin/flowsdn-agent", "health", "--socket", "/var/run/cilium/cilium.sock"]
+            timeoutSeconds: 3
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            exec:
+              command: ["/opt/flowsdn/bin/flowsdn-agent", "health", "--socket", "/var/run/cilium/cilium.sock"]
+            timeoutSeconds: 3
+            periodSeconds: 10
+            failureThreshold: 3
+          # API liveness only: no pod-network readiness assertion.
           securityContext:
             runAsUser: 0
             privileged: true
@@ -44,6 +57,9 @@ spec:
               readOnly: true
             - name: config
               mountPath: /etc/flowsdn
+              readOnly: true
+            - name: kernel-btf
+              mountPath: /sys/kernel/btf/vmlinux
               readOnly: true
             - name: bpffs
               mountPath: /sys/fs/bpf
@@ -66,6 +82,10 @@ spec:
         - name: config
           configMap:
             name: flowsdn-agent-example-a
+        - name: kernel-btf
+          hostPath:
+            path: /sys/kernel/btf/vmlinux
+            type: File
         - name: bpffs
           hostPath:
             path: /sys/fs/bpf

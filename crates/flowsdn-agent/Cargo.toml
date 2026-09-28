@@ -11,6 +11,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+flowsdn-api-client = { path = "../flowsdn-api-client", version = "=0.14.0" }
 tokio = { workspace = true, features = ["rt"] }
 flowsdn-health = { path = "../flowsdn-health", version = "=0.14.0" }
 serde_json.workspace = true

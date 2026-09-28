@@ -46,7 +46,7 @@ moved from stormpump to stormcos on 2026-09-22.
 namespaces. It deliberately contains an image placeholder: Kubernetes still
 requires a trusted container image even when the executable is bind-mounted
 from a golden. No flowsdn runtime image is claimed to exist at that placeholder.
-Replace it with a pinned image digest and verify the two `File` hostPaths.
+Replace it with a pinned image digest and verify the executable, BPF object and host kernel BTF `File` hostPaths.
 The golden must also carry the matching BPF object; there is no init-container
 download. PID 1 already owns bpffs mounting, so no mount-bpffs init container is
 included. `HostToContainer` shares existing mounts without granting the pod a
@@ -84,9 +84,12 @@ restore and offline-deletion replay complete. It is **not** an assertion of
 Kubernetes/network readiness. `/v1/health/modules` reports the missing
 controllers as degraded. A supervisor that only accepts a TCP HTTP path must
 add Unix-socket probing or an explicit local adapter; pointing it at `/healthz`
-on an invented TCP port would repeatedly restart a functioning process. The
-sample therefore supplies no unsupported Kubernetes HTTP probe. Keep readiness
-for pod-network use gated on the actual cluster tests.
+on an invented TCP port would repeatedly restart a functioning process. The sample uses startup/liveness exec probes:
+`flowsdn-agent health --socket /var/run/cilium/cilium.sock`. This command checks
+`GET /v1/healthz` within a two-second deadline and fails on transport errors,
+invalid responses or a non-Ok API state. The Kubernetes probe timeout is three
+seconds, leaving time for process startup. No TCP listener or shell/curl binary
+is required. Keep readiness for pod-network use gated on actual cluster tests.
 
 ## Current behavior and remaining integration
 
@@ -109,9 +112,18 @@ controller; allocations currently come from the configured host pools.
 `flowsdn-operator` is a library, not a deployed controller. The agent does not
 absorb operator duties: pool allocation, identity/node lifecycle, CRD garbage
 collection and coordinated multi-node allocation remain to be implemented.
+The accepted architecture requires a separate leader-elected operator; the
+agent is not an alternative operator implementation. Schema registration,
+cluster pool allocation and lifecycle controllers must land and pass takeover
+and multi-node acceptance before that executable can be called complete.
+
 `flowsdn-hubble` is also a library; the current executable exposes neither the
 Hubble observer gRPC service nor a relay. A console must show these capabilities
-as unavailable, rather than infer that a relay is unnecessary.
+as unavailable, rather than infer that a relay is unnecessary. The accepted
+[relay contract](../../docs/spec/22-packaging-helm-ci.md) requires peer fan-out,
+sorting/merging and health; [ADR-0013](../../docs/decisions/0013-integration-issue-resolutions.md)
+selects relay for interactive clients and explicit per-node operation for CI.
+Neither process is provided by this validation DaemonSet.
 
 Before comparing two StormOS nodes as a working pod network, complete the
 Node/Pod and routing integrations, select and implement multi-node IPAM

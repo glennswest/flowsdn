@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **feat:** Add bounded Unix-socket agent health CLI, startup/liveness exec probes and explicit host BTF mount to the validation deployment; document separate operator/relay requirements (#296).
 - **docs:** Record the accepted separate operator/relay architecture and schema-bundle prerequisite for executable operator integration.
 - **docs:** Plan stormcos Unix-socket supervision integration for #296; retain explicit operator, relay and pod-network acceptance gaps.
 - **BREAKING:** Attribute owned Kubernetes registration, controller names, taints, status conditions and configuration defaults to flowsdn; retain explicit reference-schema migration and document runtime compatibility names (#299).

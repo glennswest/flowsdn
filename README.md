@@ -67,6 +67,10 @@ resources as ours. New configuration/controller defaults use flowsdn names.
 See the [resource identity decision](docs/decisions/0016-flowsdn-resource-identity.md)
 for migration boundaries and the runtime-name rationale.
 
+The built-in `flowsdn-agent health --socket PATH` command checks Unix API
+liveness within two seconds without initializing the datapath. The validation
+DaemonSet uses it for startup/liveness; pod-network readiness remains unverified.
+
 ## How it ships in stormcos
 
 flowsdn ships as the **`flowsdn` golden** in the stormcos flowsdn edition: static

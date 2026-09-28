@@ -15,7 +15,18 @@ and does not discover Kubernetes PodCIDRs.
 
 ## Transport and supervision
 
-Send a bounded request to the configured Unix socket, for example:
+The built-in liveness command needs neither a config file nor BPF privileges:
+
+```sh
+flowsdn-agent health --socket /run/flowsdn/agent.sock
+```
+
+It bounds connection, request and response handling to two seconds, and exits
+successfully only for HTTP 200 with the API state `Ok`. Transport errors,
+malformed/oversized responses and a non-Ok state fail. This checks API liveness,
+not Kubernetes or policy readiness. It can be used directly by an exec probe.
+
+Alternatively, send a bounded request to the configured Unix socket:
 
 ```sh
 curl --unix-socket /run/flowsdn/agent.sock http://localhost/v1/healthz
