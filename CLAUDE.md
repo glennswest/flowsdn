@@ -36,7 +36,7 @@ Documentation-only work is not a networking release. Cargo.lock pins select
 which dependency revisions are built; sibling changes do not arrive implicitly.
 
 The owner requires flowsdn identity for CRDs it owns (#299). Owned registration now projects `flowsdn.io/v1alpha1`; upstream schema input
-is explicit migration only. See ADR-0017; remote verification is pending.
+is explicit migration only. See ADR-0017; full workspace verification passed at 9c1ea61.
 Read compatibility formats separately from ownership/attribution. PVCs are
 provided by the built-in stormblock driver, not a flowsdn storage controller.
 Current builds/tests use sc-build after push and flowsdn goldens use
@@ -54,8 +54,8 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 - [x] Recover staging result: job ea5a8e9a2762 selected flowsdn 4092ba1 but produced no golden; stormcos#155 tracks `named in ONLY and not staged: flowsdn`.
 - [x] Revalidate pushed d54ee44 through sc-build: workflow absent, locked build and all 16 tooling tests passed (26 seconds); drive deleted. Verification recorded; #304 ready for closure. Golden repair belongs to stormcos#155; no runtime or version change.
 
-Implementation checkpoints remain saved separately: #299 at f35b620 on
-work/299-crd-identity (validation deferred before execution for current #304); #296 at 4a7eb49 on
+The saved #299 checkpoint f35b620 is recovered and validated on main at 9c1ea61.
+Other implementation checkpoints remain saved separately: #296 at 4a7eb49 on
 work/296-stormcos-integration (schema/election/client source, unresolved new
 transport lock dependencies and remote validation pending); #291 watch branch
 is preserved. Do not overwrite these branches or claim them complete.
@@ -65,8 +65,9 @@ is preserved. Do not overwrite these branches or claim them complete.
 
 - [x] Read issue/comments and open backlog; inspect preserved implementation f35b620.
 - [x] Recover owned flowsdn.io/v1alpha1 CRDs, explicit upstream migration projection and documented runtime compatibility-name decisions; reconcile with current OpenSSL transport.
-- [ ] Review ownership boundaries and tests; push source before serialized sc-build validation.
-- [ ] Validate affected crates, format/lint and regression coverage; record results, stage the golden and close #299 only with verified evidence.
+- [x] Reviewed all four ownership requirements; source e02d811 and formatting 9c1ea61 pushed. No further owner decision needed.
+- [x] Full workspace build, formatting/Clippy, 710 tests and both musl checks passed at 9c1ea61 (283 seconds); one existing namespace fixture ignored.
+- [ ] Request the flowsdn golden once and record its outcome; close #299 with the verified ownership behavior and validation limits.
 
 ### Milestone 1 implementation — #291, resumed 2026-09-28
 

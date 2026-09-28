@@ -292,3 +292,12 @@ Observed elapsed: 1857 seconds including storage/slot waits; managed
 execution: 6 and 168 seconds. Usage counters and parallel-agent time are unknown.
 This interval overlaps #299 recovery and must not be added to it. See
 [validation](../validation/2026-09-28-fedora-tls.md); #291 remains incomplete.
+
+## CRD ownership verification — #299
+
+At 9c1ea61, full workspace validation passed: 710 tests, formatting/Clippy,
+locked build and both musl targets; one namespace fixture remains ignored.
+Elapsed through validation record: 730 seconds; managed execution:
+283 seconds. Token counters and active/parallel-agent time are unknown.
+This interval overlaps Fedora TLS work; do not sum them. Golden staging and
+closure follow this cutoff. See [validation](../validation/2026-09-28-resource-identity.md).

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Verify #299 at 9c1ea61: full workspace build, formatting/Clippy, 710 passing tests and both supported musl compile targets; record the unchanged live-integration limits.
 - **chore:** Format recovered CRD ownership implementation through the managed build (#299).
 - **docs:** Record passing Fedora OpenSSL transport tests, native lint, static CNI checks, system-library linkage and dependency policy at e1a1e7b (#291/#306).
 - **BREAKING:** Recover flowsdn-owned CRD identity, explicit upstream schema projection, controller/configuration attribution and compatibility-name decisions from #299; reconcile ADR-0017 with the current TLS backend.

@@ -5084,7 +5084,23 @@
     "token_baseline": null,
     "token_endpoint": null,
     "active_work_seconds": null,
-    "outcomes": [],
-    "note": "Overlaps queued Fedora TLS validation; do not sum overlapping project elapsed windows."
+    "outcomes": [
+      "All four #299 requirements implemented and independently reviewed",
+      "Full build, formatting/Clippy, all 710 tests and both musl checks passed; one namespace fixture ignored",
+      "Golden request and issue closure pending"
+    ],
+    "note": "Overlaps queued Fedora TLS validation; do not sum overlapping project elapsed windows.",
+    "validation_cutoff_utc": "2026-09-28T17:30:48Z",
+    "validation_elapsed_seconds": 730,
+    "validated_revision": "9c1ea61",
+    "tests_passed": 710,
+    "tests_ignored": 1,
+    "build_execution_seconds": 283,
+    "commits": [
+      "8ca8ede",
+      "e02d811",
+      "9c1ea61"
+    ],
+    "parallel_agent_hours": null
   }
 }
