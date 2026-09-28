@@ -4967,7 +4967,21 @@
     "token_endpoint": null,
     "active_work_seconds": null,
     "outcomes": [
-      "Plan owned CRD identity; earlier milestone build remains queued"
+      "Owned identity implementation f35b620 pushed; consolidated sc-build queued",
+      "Replaced old queued 816c8c9 run before execution; helper exit error recorded on stormcentral#118"
+    ]
+  },
+  "issue_296": {
+    "start_utc": "2026-09-28T00:26:51Z",
+    "end_utc": null,
+    "scope": "project/shared",
+    "agent": "codex/root",
+    "source_revision": "f35b620",
+    "token_baseline": null,
+    "token_endpoint": null,
+    "active_work_seconds": null,
+    "outcomes": [
+      "Plan bounded Unix-socket supervision; operator/relay integration remains open"
     ]
   }
 }

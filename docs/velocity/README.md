@@ -252,3 +252,10 @@ unavailable; counters and active work time remain null.
 Started 2026-09-28T00:16:43Z. Registration, ownership documentation and regression tests;
 validation pending. Token counters and active time unavailable. Earlier #291
 watch transport is checkpointed separately; shared build is still queued.
+
+## Stormcos integration #296
+
+Started 2026-09-28T00:26:51Z. Bounded Unix-socket liveness and deployment probe work;
+#299 implementation f35b620 is pushed with consolidated validation queued.
+The older unstarted build was canceled; helper exit failure is stormcentral#118.
+Token counters and active time remain unknown.

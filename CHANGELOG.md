@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Plan stormcos Unix-socket supervision integration for #296; retain explicit operator, relay and pod-network acceptance gaps.
 - **BREAKING:** Attribute owned Kubernetes registration, controller names, taints, status conditions and configuration defaults to flowsdn; retain explicit reference-schema migration and document runtime compatibility names (#299).
 - **docs:** Plan owned Kubernetes identity migration and explicit runtime compatibility naming for #299.
 

@@ -45,6 +45,19 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 
 ## Work plan
 
+### Stormcos integration — #296
+
+- [x] Read issue/comments and existing deployment/API contract; preserve #299 at f35b620 on work/299-crd-identity with its sc-build pending.
+- [ ] Add a bounded Unix-socket liveness command and validation DaemonSet exec probe, with failure/timeout coverage.
+- [ ] Keep operator and relay availability explicit; implement missing integration without pretending static manifests provide working multi-node networking.
+- [ ] Push and validate via sc-build; close only when operator/network and deployment acceptance obligations are satisfied.
+
+Current #296 work is isolated on work/296-stormcos-integration. Earlier #291
+watch/transport source remains on work/291-watch-state. The old queued 816c8c9
+build was canceled before execution in favor of consolidated f35b620 validation;
+cancellation exposed stormcentral#118's helper exit error, recorded there.
+
+
 ### Owned Kubernetes identity — #299
 
 - [x] Project registration into flowsdn.io/v1alpha1 with Flowsdn kinds, owned names/category and schema label; retain explicit reference-schema input only.
