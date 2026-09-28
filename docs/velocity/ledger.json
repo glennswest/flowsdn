@@ -4975,6 +4975,12 @@
     "validation_cutoff_utc": "2026-09-28T00:59:26Z",
     "elapsed_to_validation_seconds": 1110,
     "validated_revision": "9e7144fec889",
-    "build_execution_seconds": 412
+    "build_execution_seconds": 412,
+    "golden_request": {
+      "id": "ea5a8e9a2762",
+      "source_revision": "f8d5cc8",
+      "state": "queued behind stormvm fetch",
+      "observed_utc": "2026-09-28T01:02:55Z"
+    }
   }
 }

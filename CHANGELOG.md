@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Preserve the requested golden staging job and its queued status after successful workflow-removal validation.
 - **docs:** Record passing sc-build validation for workflow removal: locked build and 16 xtask/packaging tests, with GitHub Actions still disabled.
 - **docs:** Record focused workflow-removal validation and defer the unstarted earlier implementation build.
 - **chore:** Remove the disabled GitHub Actions workflow and replace active runner, build and artifact-publication guidance with sc-build and stormcentral staging (#304).

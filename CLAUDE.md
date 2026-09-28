@@ -50,7 +50,8 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 - [x] Read issue/comments and confirm GitHub Actions remains disabled through the read-only permissions API.
 - [x] Remove crates.yml and replace active build/publication/runner promises with sc-build and stormcentral golden orchestration; source/docs review complete.
 - [x] Validate #304 at 9e7144f through sc-build: workflow absence, locked xtask/packaging build and 16 passing tests; execution 412 seconds, scratch removed.
-- [ ] Request the flowsdn golden once and close #304 with verification evidence. No runtime or version change.
+- [x] Request the flowsdn golden once: ea5a8e9a2762 for f8d5cc8, currently queued behind stormvm fetch.
+- [ ] Record the staging result and close #304 with verification evidence. No runtime or version change.
 
 Implementation checkpoints remain saved separately: #299 at f35b620 on
 work/299-crd-identity (validation deferred before execution for current #304); #296 at 4a7eb49 on
