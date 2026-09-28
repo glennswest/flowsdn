@@ -270,3 +270,13 @@ and issue closure follow this cutoff.
 #291 recovery started 2026-09-28T15:46:33Z from `13cfc45`. Initial reading preceded this
 baseline. Recover saved watch transport and validate CNI, then integrate
 controllers and perform cluster acceptance. Usage counters remain unavailable.
+
+#291 checkpoint cutoff 2026-09-28T16:02:57Z: **984 seconds** observed
+since the recovery baseline. Source through `03685f2` is pushed. Earlier
+86 tests passed; final affected 22 tests and Clippy passed, with one namespace
+fixture still ignored. Dependency policy failed on banned cc through ring and
+licenses (#306). Owner TLS-provider decision is required; no milestone closure,
+golden or release. Build execution intervals were 2, 7, 38, 101, 28, 73 and
+109 seconds, nested in elapsed time; reaper/slot wait bounds are unknown.
+Usage, active time and parallel agent-hours remain null. Final record commit
+and reporting are outside this cutoff.

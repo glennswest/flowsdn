@@ -27,7 +27,7 @@ The caller still must connect the transport to this state, issue pagination
 requests, apply retry/backoff and implement agent reconciliation. The state
 layer alone does not establish Kubernetes connectivity or pod networking.
 
-## HTTPS transport checkpoint (not yet validated)
+## HTTPS transport checkpoint (dependency policy blocked)
 
 `client::JsonClient` loads an explicit kubeconfig or in-cluster configuration,
 requires verified HTTPS, and reads a token-file credential for each request.
@@ -40,7 +40,9 @@ frames have byte/time limits. HTTP failures do not collect unbounded response
 bodies. Partial frame bytes and deadlines survive cancellation; EOF, malformed
 frames, timeouts and watch ERROR events require relisting.
 
-This checkpoint still needs dependency lock resolution and remote compilation.
-Protocol/unit tests are provided; real HTTPS integration and agent controller
-orchestration are not verified. The implementation follows the pinned
+The locked checkpoint compiles and its unit tests and Clippy pass through the
+managed build service. It fails dependency policy: the selected ring provider
+brings in the banned cc build dependency; the license gate also fails (#306).
+A TLS-provider decision is required before acceptance. Real HTTPS integration
+and agent controller orchestration are not verified. The implementation follows the pinned
 [kube 4.2.0 client API](https://docs.rs/kube/4.2.0/kube/struct.Client.html).

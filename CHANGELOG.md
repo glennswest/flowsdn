@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Record passing recovered-checkpoint lint/tests and failing TLS dependency policy (#306); pause #291 for the provider decision without weakening the Rust-only rule.
 - **chore:** Format checked milestone-one fixture access after remote lint feedback (#291).
 - **test:** Use checked JSON fixture access and simplify watch scope validation to comply with workspace lint rules (#291).
 - **docs:** Record the partial #291 recovery, 86 passing tests, outstanding integration contracts and the required disposable two-node test target.

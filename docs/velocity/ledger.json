@@ -5003,13 +5003,48 @@
   },
   "issue_291_recovery": {
     "start_utc": "2026-09-28T15:46:33Z",
-    "end_utc": null,
+    "end_utc": "2026-09-28T16:02:57Z",
     "scope": "project/shared",
     "agent": "codex/root",
     "source_revision": "13cfc45",
     "token_baseline": null,
     "token_endpoint": null,
     "active_work_seconds": null,
-    "outcomes": []
+    "outcomes": [
+      "Recovered Node/Pod state and HTTPS transport; source, lock and lint fixes pushed",
+      "86 agent/CNI/Kubernetes tests passed at bfc19b2; one namespace test ignored",
+      "03685f2 Clippy passed and 22 affected tests passed again; namespace test still ignored",
+      "cargo-deny 0.20.2 failed bans and licenses: ring introduces prohibited cc; #306 remains open",
+      "Owner TLS-provider decision and disposable two-node target required; #291 stays open; no release"
+    ],
+    "elapsed_seconds": 984,
+    "validated_revision": "03685f2",
+    "commits": [
+      "d609568",
+      "67cb727",
+      "556877f",
+      "bfc19b2",
+      "c026bfb",
+      "2d31793",
+      "f9362ad",
+      "03685f2"
+    ],
+    "build_execution_seconds": [
+      2,
+      7,
+      38,
+      101,
+      28,
+      73,
+      109
+    ],
+    "build_wait_note": "Volume-reaper and slot waits observed, exact interval bounds unavailable. Execution seconds are nested in elapsed time, not added.",
+    "parallel_agent_hours": null,
+    "agents": [
+      "codex/root",
+      "acceptance_review",
+      "watch_review"
+    ],
+    "note": "Two review agents; watch reviewer also edited checked fixture access. Unknown token/active/parallel timing remains null. Final record commit and reporting follow this cutoff."
   }
 }
