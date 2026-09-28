@@ -39,15 +39,16 @@ The owner requires flowsdn identity for CRDs it owns (#299). Current planning
 code still hardcodes `cilium.io`; do not describe that migration as implemented.
 Read compatibility formats separately from ownership/attribution. PVCs are
 provided by the built-in stormblock driver, not a flowsdn storage controller.
-Current build orchestration is stormcentral; removal of the obsolete GitHub
-workflow is #304. Do not reactivate it while refreshing documentation.
+Current builds/tests use sc-build after push and flowsdn goldens use
+stormcentral component stage flowsdn. GitHub Actions is disabled; #304 removes
+the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
 ### Remove obsolete GitHub workflow — #304
 
 - [x] Read issue/comments and confirm GitHub Actions remains disabled through the read-only permissions API.
-- [ ] Remove crates.yml and replace active build/publication/runner promises with sc-build and stormcentral golden orchestration.
+- [x] Remove crates.yml and replace active build/publication/runner promises with sc-build and stormcentral golden orchestration; source/docs review complete.
 - [ ] Push then validate the focused change with sc-build; close with exact verification evidence. No runtime or version change intended.
 
 Implementation checkpoints remain saved separately: #299 at f35b620 on

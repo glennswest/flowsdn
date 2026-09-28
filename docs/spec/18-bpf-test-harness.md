@@ -34,6 +34,21 @@ Sibling documents, referenced and not duplicated:
 
 ---
 
+## Build and execution ownership — #304
+
+[Build and test orchestration](../build-and-test.md) governs execution.
+Builds and build-time checks use `sc-build` after pushing the source commit.
+Stormcentral schedules managed test Jobs with explicit kernel, architecture,
+page-size and capability requirements. Running-component checks belong in the
+`flowsdn-test` container built from `test/`; BPF fixture Jobs additionally declare
+the disposable VM and privileged kernel resources they need. There is no GitHub
+Actions execution or runner-registration requirement.
+
+The corpus, matrix and proposed runner commands below specify target behavior.
+They do not establish that all cases, VM provisioning or scheduled Jobs exist.
+Record the actual tests executed and their environment; planned coverage is not
+validation evidence. Reference tooling names and output formats remain intact.
+
 ## 1. Scope
 
 ### 1.1 In scope
@@ -1194,7 +1209,7 @@ value.
 
 | Tier | Needs | Where it runs |
 |---|---|---|
-| **Tier 0** — packet builder, masks, renderers, ABI layout asserts, harvest consistency, map key/value codecs, monitor decoders | nothing | `cargo test` on any host, macOS included; part of the normal edit loop |
+| **Tier 0** — packet builder, masks, renderers, ABI layout asserts, harvest consistency, map key/value codecs, monitor decoders | nothing | unprivileged Cargo tests through the managed build/check path; no test kernel required |
 | **`direct`** — library functions in a tc/XDP wrapper (§3.9) | `CAP_BPF` + `CAP_PERFMON` | Linux VM |
 | **`progrun`** — the main corpus | `CAP_BPF`, `CAP_PERFMON`, `CAP_IPC_LOCK` (perf mmap), `CAP_NET_ADMIN` (`CGROUP_SOCK*` load at M2), `CAP_SYS_ADMIN` (netns) | Linux VM |
 | **`netns`** — real delivery, attach behaviour | the above plus `CONFIG_VETH`, `CONFIG_NETKIT` (6.7+), `CONFIG_NET_NS` | Linux VM |
@@ -1203,24 +1218,33 @@ value.
 harness does not pretend otherwise.** `unshare -Urn` gives `CAP_BPF` inside a
 user namespace, but `bpf(2)` checks program-load capability against the initial
 user namespace for `SCHED_CLS`, `XDP` and cgroup program types, so a rootless
-run cannot load the datapath. The supported answer is root inside a throwaway
-VM — which is what CI does, and what a developer gets from
-`cargo xtask bpftest --vm 6.12`, a one-command wrapper that boots the matching
-LVH or Rocky image, mounts the workspace, and runs `cargo nextest` inside.
-Tier-0 tests exist precisely so the inner loop does not require that.
+run cannot load the datapath. Privileged rows require a disposable VM allocated
+by the test infrastructure, with declared capabilities and the selected kernel.
+Session agents do not obtain host-root access to work around missing facilities.
+The proposed `cargo xtask bpftest --vm 6.12` wrapper describes a provisioning
+interface, not a currently installed execution lane; any implementation must use
+the managed allocation/results path. Tier-0 checks remain unprivileged.
 
 `RLIMIT_MEMLOCK` is not raised: BPF memory is memcg-accounted from 5.11 and the
 floor is 6.6. The perf mmap still counts against memlock, hence `CAP_IPC_LOCK`.
 
 ### 10.4 CI without a cluster
 
-The whole corpus is cluster-free by construction. The CI job is: build the
-`flowsdn-bpf` ELFs on `<build-host>` (cross-project rule: never on the Mac), boot
-each matrix VM, `cargo nextest run -p flowsdn-bpftest`, collect
-`target/bpf-stats/*.json` and the coverage summary, and publish both. No kind,
-no Docker network, no CNI, no image registry. Wall-clock target for the PR gate
-is under 8 minutes per kernel row with the grouped isolation mode (§5.1); the
-`reload` mode and the arm64 TCG rows run nightly.
+The corpus is cluster-free by construction. Build the `flowsdn-bpf` ELFs and
+fixture executables from the pushed revision through `sc-build`, then schedule
+each supported kernel/architecture row as a managed Job in a disposable VM.
+Its declared command runs `cargo nextest run -p flowsdn-bpftest` when that runner
+and its fixtures are available. Collect `target/bpf-stats/*.json`, JUnit and the
+coverage summary through stormcentral's results path, with sanitized validation
+records committed to the repository. No GitHub workflow dispatch or Actions
+artifact-upload action is involved.
+
+The BPF corpus does not require kind, a Docker network, CNI or an application
+cluster; managed Job/container delivery is separate from the fixture's network
+requirements. The intended pre-merge budget is under eight minutes per kernel
+row in grouped isolation mode (§5.1); `reload` and arm64 TCG rows are intended
+nightly requirements. Their presence in this specification does not mean the
+Jobs are provisioned or these budgets have been measured for flowsdn.
 
 ---
 

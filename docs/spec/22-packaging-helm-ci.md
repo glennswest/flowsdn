@@ -11,8 +11,7 @@ the section 11 crate lists of specs `00`–`16`. Reference cilium v1.20.1
 `.github/actions/**`, `Makefile*`, `contrib/**`. Governed by ADR-0001 (full
 scope, boundary compatibility), ADR-0002 (Rust only, no C), ADR-0003 (no
 iptables), ADR-0004 (no Hive/StateDB), ADR-0005 (harvest tests, Rust harnesses),
-and the cross-project rules in `../CLAUDE.md` (build on `<build-host>`, cargo
-target dirs under `<cargo-target-dir>`, nothing persists on the SSD).
+and the project build rules described in [build and test](../build-and-test.md).
 
 Normative language: MUST / SHOULD / MAY as in RFC 2119. **DEVIATION** marks a
 deliberate difference from the reference with its reason and ADR.
@@ -23,14 +22,37 @@ candidates; §3.10.2 gains the **ADR-0007** cloud-fake pull-request jobs and the
 weekly live-cloud drift-detection job, and the "cloud conformance jobs are
 deferred" note is corrected, since ADR-0007 supersedes it.
 
+## Build execution override — issue #304 (2026-09-27)
+
+GitHub Actions is disabled for this repository. The owner removed the dormant
+workflow; runner registration, `FLOWSDN_CI_ENABLED`, workflow dispatch and a
+first Actions run are not implementation or release prerequisites. References
+to upstream `.github/` paths above remain provenance, not instructions to
+activate Actions here. This amendment supersedes the earlier execution and
+publication proposals throughout this draft.
+
+Commit and push each logical change, then run `sc-build` from the checkout.
+It fetches the pushed revision into a disposable build checkout, runs the
+requested validation, and deletes that checkout on success or failure. There
+is no persistent remote checkout to use, and working trees are not copied
+between hosts. Current commands and limitations are documented in
+[build and test](../build-and-test.md).
+
+After implementation and required validation pass, request the flowsdn golden
+once with `stormcentral component stage flowsdn --url "$STORMCENTRAL_URL"`.
+Staging records the immutable golden and files the release request; it does not
+claim that the release has shipped. GitHub Releases remain the transfer path
+for distributable artifacts when explicitly published. A tag, push or successful
+build does not automatically publish release assets, images or charts.
+
 ## 1. Scope
 
 In scope: the set of binaries flowsdn ships and how each is targeted, sized and
 built; the container images and their multi-arch construction with podman; the
 Helm chart as a compatibility contract over the reference's values surface; the
 Cargo workspace, the two Rust toolchains and the BPF object build; versioning,
-tagging and artifact publication; the CI workflow set, its kernel × architecture
-matrix and its relationship to `<build-host>`; the local developer loop.
+tagging and explicit artifact publication; validation coverage and its kernel ×
+architecture matrix; the commit/push/build developer loop.
 
 Out of scope, owned elsewhere: the meaning of any individual config key (spec
 `00` §6.4); CNI plugin behaviour (spec `09`); the datapath variant set and what
@@ -215,15 +237,16 @@ budget report is keyed by (§9.2).
 
 #### 3.3.2 Multi-arch construction with podman
 
-Per the user's rules: **podman, always; `scratch` base; OCI is a build-time
-input only.** The build runs on `<build-host>`; nothing is built on the Mac.
+This remains a planned optional OCI packaging contract: **podman, `scratch`
+base, OCI as build input.** Execute implemented packaging commands through
+`sc-build` after push; this example does not install an image publication job.
 
 ```bash
-# On <build-host>. Binaries are already cross-built (§3.8.5) into
-# <cargo-target-dir>/<triple>/release/.
-export SOURCE_DATE_EPOCH=$(git -C "$SRC" show -s --format=%ct HEAD)
-export REG=sbregistry:5100            # or ghcr.io/glennswest, see §3.9.4
-export VER=0.4.0
+# Within the managed build command, after cross-building (§3.8.5).
+# CARGO_TARGET_DIR is supplied by the build service.
+export SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
+export REG="${FLOWSDN_REGISTRY:?set the publication registry}" # see §3.9.4
+export VER="${FLOWSDN_VERSION:?set the reviewed release version}"
 
 for arch in amd64 arm64; do
   podman build \
@@ -235,7 +258,7 @@ for arch in amd64 arm64; do
     --build-arg VERSION="${VER}" \
     --build-arg REVISION="$(git rev-parse HEAD)" \
     --tag "${REG}/flowsdn:${VER}-${arch}" \
-    <cargo-target-dir>
+    "$CARGO_TARGET_DIR"
 done
 
 podman manifest create "${REG}/flowsdn:${VER}"
@@ -886,7 +909,10 @@ both agent binaries.
 
 #### 3.8.5 Cross compilation
 
-Native builds run on `<build-host>` (x86-64). arm64 uses `cross`:
+Builds run through `sc-build` after push, including cross-compilation checks.
+Toolchain and target availability must be verified by the requested check; a
+cross-compile pass is not arm64 runtime acceptance. The following remains a
+planned `cross` configuration for the packaging matrix:
 
 ```toml
 # Cross.toml
@@ -897,27 +923,10 @@ passthrough = ["FLOWSDN_BPF_OBJDIR", "SOURCE_DATE_EPOCH", "CARGO_TARGET_DIR"]
 image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl:0.2.5"
 ```
 
-```bash
-ssh <build-user>@<build-host> '
-  export CARGO_TARGET_DIR=<cargo-target-dir>
-  export CROSS_CONTAINER_ENGINE=podman
-  cd <checkout> && cross build --release --target aarch64-unknown-linux-musl \
-     -p flowsdn-agent -p flowsdn-cni -p flowsdn-operator -p flowsdn-dbg \
-     -p flowsdn-hubble-relay -p flowsdn-connectivity'
-```
-
-Rules from `../CLAUDE.md`, restated because they are load-bearing here:
-
-- `CARGO_TARGET_DIR=<cargo-target-dir>` **always**. The SSD root is for
-  working trees only; a target dir on `/` has filled it before, and the failure
-  mode is `rustc-LLVM ERROR: IO failure on output stream`, which reads as a
-  broken toolchain.
-- Images and tarballs go to `/build/images`; downloaded assets to `/build/cache`.
-- **Never write a disk or container image into `/tmp` on dev** — it is a tmpfs
-  sized at half of RAM (7.8 GiB), and a sparse image there consumes RAM that is
-  never returned.
-- Check before and after: `df -h / /build; du -sh /build/* | sort -rh | head`.
-- Unmount anything loop-mounted, including on the failure path.
+Do not SSH into or create a remote project checkout. The build service owns the
+scratch directory and its cleanup. Tests requiring VMs, networking privileges
+or physical hardware must declare those requirements and run in the assigned
+test environment, rather than assuming the build service provides them.
 
 `cross` needs `binfmt_misc` for the arm64 *test* runs; unit tests for arm64 run
 in a QEMU `virt` VM (§3.10), not under `cross`, because the privileged tests
@@ -951,10 +960,11 @@ binaries, layers and image digests.** Method:
 6. The BPF objects are pinned by `bpf-objects.lock` and reproduced by the same
    nightly + `bpf-linker` pin.
 
-Verification: the nightly `reproducible` job builds the release commit twice
-(once on `<build-host>`, once on a GitHub hosted runner with the same toolchain)
-and compares `sha256` of every binary and the pushed manifest digest. A
-mismatch fails and the diff is bisected with `diffoscope` where available.
+Verification remains a packaging acceptance requirement: build the same pushed
+release revision in two separately recorded clean environments with matching
+toolchains, and compare binary and image digests. This is not an enabled
+scheduled job or a GitHub-hosted build. Record failures and investigate with
+`diffoscope` where available; do not report unexecuted comparisons as passed.
 
 #### 3.8.8 `cargo deny`
 
@@ -1038,133 +1048,113 @@ the `flowsdn.io/cilium-compat` annotation, not in the version.
 #### 3.9.3 Release procedure
 
 1. Land all work; `CHANGELOG.md` `[Unreleased]` is complete.
-2. `cargo xtask version set X.Y.Z` → commit `chore(release): vX.Y.Z` (version
-   bump is its own commit, per `../CLAUDE.md`).
+2. Update every implemented version location and commit
+   `chore(release): vX.Y.Z`; the version bump is its own commit.
 3. Transform `CHANGELOG.md`: move `[Unreleased]` content under
    `## [vX.Y.Z] — YYYY-MM-DD`, regrouped into `Added` / `Fixed` / `Changed` /
    `Breaking` / `Documentation` from the `feat:`/`fix:`/`refactor:`/`perf:`/
    `BREAKING:`/`docs:` prefixes; open a fresh `[Unreleased]`.
-4. `git tag vX.Y.Z && git push origin vX.Y.Z`.
-5. The `release` workflow (§3.10) builds, tests, publishes and attaches
-   artifacts. It re-derives the version from the tag and **fails if it does not
-   match `xtask version check`**.
+4. Push the version commit and run required checks through `sc-build`.
+5. After validation, create and push `vX.Y.Z`, verifying that it agrees with
+   source versions. No Actions workflow runs on the tag.
+6. For the verified flowsdn component, request its golden with
+   `stormcentral component stage flowsdn --url "$STORMCENTRAL_URL"`. Record
+   the resulting golden and release request, then continue work without waiting
+   for the release train. Publish GitHub Release assets only as an explicit,
+   separately recorded publication step.
 
-#### 3.9.4 Artifacts, and the GHCR question
+#### 3.9.4 Artifact publication and golden delivery
 
-The user's MikroTik/stormcos rules say: *CI attaches `docker save` tarballs to
-GitHub releases; stormcos preloads them into the node image store at image-build
-time; GHCR is deliberately not used; nothing on the start path pulls.*
+The supported flowsdn delivery path is a stormcentral-staged golden. Staging
+records the immutable golden and files a release request; release composition
+and publication are separate. This replaces the earlier proposal that a tag
+workflow automatically publishes OCI archives, registry images and charts.
 
-flowsdn is a Kubernetes CNI, and a Helm chart names images by reference. Those
-two facts look like a conflict; they are not, and the reconciliation is worth
-stating precisely:
+When distributable artifacts are explicitly published, use GitHub Releases as
+the transfer/results path and include checksums and the validated source
+revision. Candidate future packaging outputs include binary archives, OCI
+archives, SBOMs, verifier/size reports and Helm charts. Their presence and
+validation must be recorded individually; none is promised merely by a tag,
+`sc-build` success or golden staging.
 
-> **The stormcos rule forbids a *pull on the start path*, not an image
-> *reference*.** An image that is preloaded into the node's image store with
-> `imagePullPolicy: IfNotPresent` is never pulled — the kubelet finds it locally
-> and starts it. The reference in the manifest is a name, not a network
-> operation.
-
-Therefore:
-
-| Artifact | Where | Why |
-|---|---|---|
-| `flowsdn-<component>-<version>-<arch>.oci.tar` (`podman save --format oci-archive`), plus a manifest-list archive | **GitHub release assets, every release — mandatory** | This is what stormcos preloads at node-image build time. It is the supply path for the fleet and it keeps the start path pull-free |
-| `sha256sums.txt`, `sbom-<component>.cdx.json`, `verifier-budget.json`, `binary-sizes.json` | GitHub release assets | Verification and trend data (§9) |
-| `flowsdn-<version>.tgz` (Helm chart) + `index.yaml` | GitHub release assets, and a `gh-pages` chart repo when the repo goes public | `helm install` from a URL |
-| `flowsdn-dbg`, `flowsdn-connectivity` for `linux-{amd64,arm64}` and `darwin-arm64` | GitHub release assets | workstation tools |
-| Container images | **`sbregistry:5100`** (the private fleet registry) as the source of truth while the repo is private | The chart's default `image.repository` |
-| Container images | **GHCR (`ghcr.io/glennswest/flowsdn`) — recommended, and only once the repo is public** | Public consumers of a public CNI need a public registry; a tarball is not an installation method for someone who is not on this fleet |
-
-**Recommendation.** Publish tarballs unconditionally and to `sbregistry:5100`
-unconditionally; add GHCR as a *mirror* at the moment the repository becomes
-public, and never as the sole source. Set `image.pullPolicy: IfNotPresent` as
-the chart default (it already is in the reference) and document
-`flowsdn.preloaded=true` as the stormcos posture, which additionally sets
-`imagePullPolicy: Never` so a misconfigured node fails loudly instead of
-reaching for a registry. This satisfies the fleet rule exactly (no pull on the
-start path, golden preload, no auto-updater) while leaving flowsdn installable
-by anyone else.
-
-`quay.io` is not used: flowsdn has no account there and the reference's use of
-it is not a contract.
+Image preloading remains compatible with references in Kubernetes manifests:
+`imagePullPolicy: Never` requires a preloaded image, while `IfNotPresent` permits
+a pull when absent. Registry/chart publication for external consumers remains
+separate packaging work and requires an explicit publication step. This section
+authorizes no automatic registry mirror, chart push or release asset upload.
 
 #### 3.9.5 Reference-tag bumps
 
 The pinned reference (`cilium v1.20.1`, `7d68cfb394`) appears in: the vendored
 CRD YAML (spec `13`), the harvested test corpora (ADR-0005), the reused image
 digests (§3.4), and `mapping.toml`. Bumping it is a deliberate, reviewed
-operation with its own workflow: re-run `tools/reharvest.sh`, refresh the
-digests, re-run `xtask helm-diff`, and land the diff of `known-diffs.toml` as
-the review artefact.
+operation: refresh the corpora with the applicable Rust harvesting tools and
+record their provenance, refresh digests, perform the applicable chart comparison,
+and commit the reviewed differences. Run validation through `sc-build` after
+pushing; this is not an Actions workflow.
 
 ### 3.10 CI
 
-#### 3.10.1 Where jobs run
+#### 3.10.1 Where validation runs
 
-| Class | Runner | Why |
-|---|---|---|
-| lint, fmt, clippy, `cargo deny`, `xtask notice`, `xtask version check`, `helm lint`, `xtask chart check`, `xtask helm-diff`, doc link check | GitHub hosted `ubuntu-latest` | cheap, no kernel needed |
-| userspace unit tests (x86-64), scripttest, cptest, golden tests, **cloud-fake replay** | GitHub hosted | no kernel needed (fakes per ADR-0005; recorded cloud responses per ADR-0007, replayed against a local server — no network egress, no credentials) |
-| **BPF build, verifier gate, privileged BPF tests, privileged netlink tests, image builds, cross arm64, kind e2e** | **self-hosted runner on `<build-host>`**, labels `[self-hosted, linux, x64, dev-g8]` | needs KVM (LVH/QEMU VMs), needs podman, needs the pinned nightly + `bpf-linker`, and needs `/build` — per `../CLAUDE.md` heavy builds run on dev, never on the Mac and not on an ephemeral hosted runner where a 30-minute cold `cargo build` is the norm |
-| arm64 e2e, arm64 privileged tests | **Rose cluster node**, nightly, label `[self-hosted, linux, arm64, rose]` | real arm64 hardware and real NIC drivers; LVH publishes no arm64 kernels (`docs/kernel-requirements.md` §5.3) |
-| arm64 verifier + BPF unit tests | `<build-host>` under QEMU TCG | CPU-light; the verifier is arch-independent, so this row guards only JIT-support gates |
+Builds, unit tests, formatting/lint checks and other supported commands run
+through `sc-build` against pushed source in its disposable checkout. The
+service serializes shared build capacity; a queued build is not a failed build.
+Only the service's documented Cargo cache persists. Do not rely on a prior
+checkout, target directory, VM, image or registry cache being present.
 
-Every `<build-host>` job MUST:
-- set `CARGO_TARGET_DIR=<cargo-target-dir>`, `TMPDIR=/build/tmp`;
-- write VM images and OCI archives under `/build/images`;
-- run a pre-flight `df` guard that fails the job with a clear message if `/`
-  has < 20 GiB or `/build` < 100 GiB free, rather than failing later as
-  `rustc-LLVM ERROR: IO failure on output stream`;
-- run an `always()` cleanup step that unmounts every loop mount it made.
+Live component tests use a `flowsdn-test` container built from `test/` and run as
+a Job on each test machine under the component test standard. Tests declare
+architecture, kernel, capabilities and virtualization requirements. Privileged
+checks require isolated test environments; arm64 runtime acceptance requires
+suitable arm64 capacity. Missing capacity is an unavailable gate, never a pass.
+The build command alone does not establish that these runtime tests ran.
 
-#### 3.10.2 Workflow set
+#### 3.10.2 Validation coverage
 
-This matrix is normative planned acceptance, not a report that every workflow
-exists. In particular, cloud replay and the weekly live drift job still require
-implementation and validation; #259 resolves their documentation, not #260.
-Encryption acceptance also requires the `e2e-encryption` PR gate of spec 19:
-both WireGuard and IPsec with positive encrypted and negative plaintext capture
-assertions (#230). A missing required capability must fail, not pass by skipping.
+The following names describe planned acceptance suites, not GitHub workflows.
+GitHub event bindings are superseded by #304; required pre-merge/release gates
+and periodic coverage from spec 19 remain acceptance requirements. Scheduling
+and command availability must be recorded with actual results; duration figures
+are historical planning estimates, not measurements. Unimplemented suites,
+including cloud replay/drift and encryption acceptance, remain requirements.
+Encryption covers WireGuard and IPsec with positive encrypted and negative
+plaintext capture assertions (#230). Missing capabilities do not count as passes.
 
-| Workflow | Trigger | Gates | Approx. runtime |
+| Suite | Acceptance use | Gates | Planning estimate |
 |---|---|---|---|
-| `lint` | PR | `cargo fmt --check`, `cargo clippy --all-targets --all-features -D warnings`, `cargo deny check`, `xtask notice`, `xtask version check`, `taplo fmt --check`, spec cross-reference check | 6 min |
-| `chart` | PR | `helm lint`, `helm template` against 6 values profiles, `xtask chart check` (generated files match), **`xtask helm-diff`** against the reference render with `known-diffs.toml`, `kubeconform` against k8s 1.31–1.36 schemas | 5 min |
-| `unit` | PR | `cargo test --workspace` (x86-64 hosted) + `cargo test --workspace --target aarch64…` under QEMU user emulation for the pure crates | 12 min |
-| `bpf-build` | PR (dev-g8) | pinned nightly + `bpf-linker`, build every object variant, no-`memcpy`/no-panic relocation check, tail-slot name check, `bpf-objects.lock` match | 9 min |
-| `verifier` | PR (dev-g8) | load every variant with the all-features `.rodata` and with the default config in LVH 6.6 and 6.12 VMs, x86-64. **Fail** if any program > 800 000 processed instructions or > 480 B stack (spec `02` §9.4); **warn** at +10 % vs `docs/verifier-baseline.json`. Emits `verifier-budget.json` and a PR comment table | 14 min |
-| `bpf-tests` | PR (dev-g8) | `flowsdn-bpf-tests` under `BPF_PROG_RUN` in an LVH 6.12 VM (ADR-0005 corpus, `tests/bpf/CASES.toml`) | 18 min |
-| `privileged` | approved trusted-main dispatch (#242) | `cargo test --features privileged -- --ignored` in a 6.12 VM: map open/create, tcx/netkit/XDP/cgroup attach, netlink, nftables residual, netns | 15 min |
-| `scripttest` | PR | `cargo test -p flowsdn-scripttest` over the 168 harvested txtar scenarios (unprivileged, fakes) | 7 min |
-| `cloud-fixture-scan` | **PR** | pattern scan over `tests/cloud/**` for credentials, real account identifiers, ARNs, subscription/tenant IDs, tokens and signatures (ADR-0007 §2). Runs **before** any job reads a fixture and blocks them on failure, so a leak is caught at the gate rather than replayed | 1 min |
-| `cloud-fakes` | **PR** | `cargo test -p flowsdn-ipam-aws -p flowsdn-ipam-azure -p flowsdn-ipam-alibaba -p flowsdn-operator-ipam --features cloud-replay`, one matrix leg per provider, against the recorded fixtures in `tests/cloud/<provider>/<scenario>/` replayed at the **HTTP layer** so each SDK's signing, retry, pagination and error mapping stay in the tested path (ADR-0007 §3; spec `07` §9.1). Strict mode: an unmatched request *or* an unused recorded interaction fails. Hosted runner — no kernel, no cluster, **no credentials** | 8 min |
-| `images` | PR (dev-g8) | build all five images for both arches, assemble the manifest lists, **do not push**; `xtask size-check`; assert the image has exactly the expected file list and no shell | 16 min |
-| `e2e-smoke` | PR (dev-g8) | kind on LVH 6.12 x86-64, 2 nodes, `helm install` the built chart, `flowsdn-connectivity` M1 subset per spec `19` (pod-to-pod same/other node, ClusterIP, NodePort, pod-to-world, host-to-pod, DNS, policy allow/deny), plus `check-log-errors` and `no-unexpected-packet-drops` | 22 min |
-| `e2e-matrix` | **nightly** (dev-g8) | the reduced config set from `docs/kernel-requirements.md` §5.3: {vxlan+KPR, native+KPR+DSR, geneve+DSR-geneve, WireGuard, IPsec, egress gateway, host firewall, IPv6-only, netkit} on 6.12; 6.6 and 6.18 rows with the vxlan+KPR config | 3 h |
-| `e2e-arm64` | **nightly** (rose) | vxlan+KPR and native+DSR on the Rose cluster | 50 min |
-| `upgrade` | **nightly** (dev-g8) | flowsdn N-1 → N `helm upgrade` with `--include-conn-disrupt-test`; then N → N-1 downgrade; the Cilium→flowsdn drain migration of §3.7 as a scripted scenario | 70 min |
-| `mixed-cluster` | **nightly** (dev-g8) | one Cilium v1.20.1 node + one flowsdn node in one kind cluster; pod-to-pod and NodePort across the boundary; identities correct in Hubble (spec `02` §9.5) | 30 min |
-| `verifier-matrix` | **nightly** | verifier on {6.6, 6.12, 6.18} × {x86-64, arm64}; updates the trend, non-blocking on the 6.18 canary row | 45 min |
-| `reproducible` | **nightly** | build the head commit twice on two machines, compare binary and manifest digests (§3.8.7) | 40 min |
-| `fuzz` | **nightly** | `cargo fuzz run` for each target (BGP codec, policy distill, CNI netconf, gob encoder) for 15 min each against the harvested seeds | 60 min |
-| `release` | tag `v*` (dev-g8) | everything the PR gates run, then: build+push images to `sbregistry:5100` (+ GHCR when public), `podman save` archives, package the chart, generate SBOMs, create the GitHub release with all assets, verify `xtask version check` against the tag | 55 min |
-| `chart-publish` | push to `main` | publish a `-dev.<sha>` chart to the CI chart repo so `cilium install --chart-directory` equivalents work off main | 4 min |
-| `cloud-drift` | **weekly**, scheduled | re-run `cargo xtask cloud-record` against the live throwaway account for each provider and diff the normalized result against the committed `tests/cloud/**` fixtures; open or update one issue per provider on a difference. **Gates nothing.** ADR-0007 §5 | 20 min |
+| `lint` | Recorded validation | `cargo fmt --check`, `cargo clippy --all-targets --all-features -D warnings`, `cargo deny check`, `xtask notice`, `xtask version check`, `taplo fmt --check`, spec cross-reference check | 6 min |
+| `chart` | Recorded validation | `helm lint`, `helm template` against 6 values profiles, `xtask chart check` (generated files match), **`xtask helm-diff`** against the reference render with `known-diffs.toml`, `kubeconform` against k8s 1.31–1.36 schemas | 5 min |
+| `unit` | Recorded validation | `cargo test --workspace` (x86-64) + `cargo test --workspace --target aarch64…` under QEMU user emulation for the pure crates | 12 min |
+| `bpf-build` | Recorded validation | pinned nightly + `bpf-linker`, build every object variant, no-`memcpy`/no-panic relocation check, tail-slot name check, `bpf-objects.lock` match | 9 min |
+| `verifier` | Recorded validation | load every variant with the all-features `.rodata` and with the default config in LVH 6.6 and 6.12 VMs, x86-64. **Fail** if any program > 800 000 processed instructions or > 480 B stack (spec `02` §9.4); **warn** at +10 % vs `docs/verifier-baseline.json`. Emits `verifier-budget.json` and a PR comment table | 14 min |
+| `bpf-tests` | Recorded validation | `flowsdn-bpf-tests` under `BPF_PROG_RUN` in an LVH 6.12 VM (ADR-0005 corpus, `tests/bpf/CASES.toml`) | 18 min |
+| `privileged` | Recorded validation | `cargo test --features privileged -- --ignored` in a 6.12 VM: map open/create, tcx/netkit/XDP/cgroup attach, netlink, nftables residual, netns | 15 min |
+| `scripttest` | Recorded validation | `cargo test -p flowsdn-scripttest` over the 168 harvested txtar scenarios (unprivileged, fakes) | 7 min |
+| `cloud-fixture-scan` | Recorded validation | pattern scan over `tests/cloud/**` for credentials, real account identifiers, ARNs, subscription/tenant IDs, tokens and signatures (ADR-0007 §2). Runs **before** any job reads a fixture and blocks them on failure, so a leak is caught at the gate rather than replayed | 1 min |
+| `cloud-fakes` | Recorded validation | `cargo test -p flowsdn-ipam-aws -p flowsdn-ipam-azure -p flowsdn-ipam-alibaba -p flowsdn-operator-ipam --features cloud-replay`, one matrix leg per provider, against the recorded fixtures in `tests/cloud/<provider>/<scenario>/` replayed at the **HTTP layer** so each SDK's signing, retry, pagination and error mapping stay in the tested path (ADR-0007 §3; spec `07` §9.1). Strict mode: an unmatched request *or* an unused recorded interaction fails. No kernel, no cluster, **no credentials** | 8 min |
+| `images` | Recorded validation | build all five images for both arches, assemble the manifest lists, **do not push**; `xtask size-check`; assert the image has exactly the expected file list and no shell | 16 min |
+| `e2e-smoke` | Recorded validation | kind on LVH 6.12 x86-64, 2 nodes, `helm install` the built chart, `flowsdn-connectivity` M1 subset per spec `19` (pod-to-pod same/other node, ClusterIP, NodePort, pod-to-world, host-to-pod, DNS, policy allow/deny), plus `check-log-errors` and `no-unexpected-packet-drops` | 22 min |
+| `e2e-matrix` | Recorded validation | the reduced config set from `docs/kernel-requirements.md` §5.3: {vxlan+KPR, native+KPR+DSR, geneve+DSR-geneve, WireGuard, IPsec, egress gateway, host firewall, IPv6-only, netkit} on 6.12; 6.6 and 6.18 rows with the vxlan+KPR config | 3 h |
+| `e2e-arm64` | Recorded validation | vxlan+KPR and native+DSR on suitable physical arm64 hardware | 50 min |
+| `upgrade` | Recorded validation | flowsdn N-1 → N `helm upgrade` with `--include-conn-disrupt-test`; then N → N-1 downgrade; the Cilium→flowsdn drain migration of §3.7 as a scripted scenario | 70 min |
+| `mixed-cluster` | Recorded validation | one Cilium v1.20.1 node + one flowsdn node in one kind cluster; pod-to-pod and NodePort across the boundary; identities correct in Hubble (spec `02` §9.5) | 30 min |
+| `verifier-matrix` | Recorded validation | verifier on {6.6, 6.12, 6.18} × {x86-64, arm64}; updates the trend, non-blocking on the 6.18 canary row | 45 min |
+| `reproducible` | Recorded validation | build the head commit twice on two machines, compare binary and manifest digests (§3.8.7) | 40 min |
+| `fuzz` | Recorded validation | `cargo fuzz run` for each target (BGP codec, policy distill, CNI netconf, gob encoder) for 15 min each against the harvested seeds | 60 min |
+| `release` | Explicit release validation | Run applicable suites, verify source/tag agreement and record artifacts individually; golden staging and optional asset publication are separate steps (§3.9) | Not measured |
+| `chart-publish` | Explicit future packaging publication | Publish only a validated chart with recorded source revision; no push-triggered automation | Not measured |
+| `cloud-drift` | Recorded validation | re-run `cargo xtask cloud-record` against the live throwaway account for each provider and diff the normalized result against the committed `tests/cloud/**` fixtures; open or update one issue per provider on a difference. **Gates nothing.** ADR-0007 §5 | 20 min |
 
-`cloud-fixture-scan` and `cloud-fakes` are **required checks**: under ADR-0007
-the cloud IPAM modes of spec `07` §3.9–3.12 are a pull-request gate rather than
-an untested surface, and `cloud-fakes` MUST fail rather than fall back to a live
-endpoint when a fixture is missing.
+`cloud-fixture-scan` and `cloud-fakes` remain required validation for cloud
+IPAM changes under ADR-0007. Replay MUST fail rather than fall back to a live
+endpoint when a fixture is missing. These names do not represent enabled GitHub
+required-status checks.
 
-**`cloud-drift` is the only job in this repository that holds cloud
-credentials**, and they are read-only where the provider supports it. No
-pull-request job, no nightly job and no release job may be given a cloud
-credential; a workflow that requests one fails review. This is why the drift
-check is scheduled rather than triggered: a fixture set goes stale silently when
-a provider changes its API, and detecting that is worth one credentialed job a
-week, while making it block merges would put a third party's availability on the
-critical path of every change.
+Only an explicitly arranged live `cloud-drift` validation may use cloud
+credentials, read-only where supported. Ordinary builds, fixture replay and
+release validation receive none. Drift detection is advisory; no scheduled
+credentialed job is claimed by this specification.
 
 Deliberately **not** ported from the reference: the ginkgo suites (7k lines of
 Go harness; ADR-0005 keeps them as a behaviour checklist), `conformance-race`
@@ -1178,12 +1168,14 @@ spec `19` §11 item 9), and `lint-images-base` (there is no base image).
 
 #### 3.10.3 Kernel and architecture matrix
 
-Straight from `docs/kernel-requirements.md` §5.3, restated as CI rows:
+Coverage from `docs/kernel-requirements.md` §5.3 is retained below. PR/nightly
+labels are historical coverage priorities, not enabled schedules or Actions
+triggers; record actual execution through the current validation path.
 
 | Kernel | x86-64 image | arm64 image | Verifier | BPF unit | Privileged userspace | e2e |
 |---|---|---|---|---|---|---|
 | 6.6 (minimum) | LVH `6.6` | upstream 6.6.y QEMU `virt` | PR | PR | nightly | nightly |
-| 6.12 (supported line) | LVH `6.12` + a Rocky 10 `el10` VM | Rocky 10 `aarch64` VM / Rose node | PR (both) | PR (both) | PR (both) | **PR** (x86, Rocky kernel); nightly arm64 |
+| 6.12 (supported line) | LVH `6.12` + a Rocky 10 `el10` VM | Rocky 10 `aarch64` VM / physical arm64 node | PR (both) | PR (both) | PR (both) | **PR** (x86, Rocky kernel); nightly arm64 |
 | 6.18 (next) | LVH `6.18` | upstream 6.18.y | PR (x86), nightly (arm64) | nightly | nightly | nightly |
 | latest / bpf-next | when published | — | nightly, non-blocking | — | — | — |
 | 4.18 (rhel8), 5.15, 6.1 | — | — | not run — below the floor | | | |
@@ -1228,69 +1220,45 @@ The oldest verifier in the matrix (6.6, x86-64) is the row to watch, and the
   and comparing table snapshots to golden files. `--update-golden` regenerates.
 - **fuzz seeds** — `tests/fuzz/corpus/**` with `PROVENANCE`, driven nightly.
 
-#### 3.10.6 Caching
+#### 3.10.6 Build state and caching
 
-| Cache | Key | Notes |
-|---|---|---|
-| Cargo registry + git checkouts | `Cargo.lock` hash | hosted runners; `actions/cache` |
-| `sccache` object cache | rustc version + target + `Cargo.lock` | on `<build-host>` a persistent local cache under `/build/cache/sccache`, capped at 40 GiB with `SCCACHE_CACHE_SIZE` |
-| `target/` on dev | not cached across toolchain bumps — deleted by `xtask clean --toolchain-changed` | avoids the classic "stale artefacts from a different rustc" failure |
-| BPF nightly toolchain + `bpf-linker` | pinned versions | installed once on dev, re-installed only when the pin changes |
-| LVH / Rocky VM images | image digest | under `/build/cache/vm`, never `/tmp` |
-| Built container images | commit sha | `containers-storage` on dev; a GC step keeps the last 20 |
-| helm chart repo index | — | rebuilt each publish |
-
-A weekly `cache-gc` workflow prunes `/build/cache` and `/build/cargo` to keep
-`/build` under 70 % and reports the result, so the disk never becomes an
-incident.
+`sc-build` fetches pushed source into a scratch checkout and removes it on both
+success and failure. Cargo's service-managed cache is the only persistent build
+state promised by the current path. There is no Actions cache, persistent project
+checkout, per-crate target cache contract or weekly cache-GC workflow. Do not
+clean shared caches or depend on artifacts left by another invocation.
 
 ### 3.11 Developer workflow
 
-`cargo xtask` is the single entry point. A thin `Makefile` forwards the same
-names (`make build` → `cargo xtask build`) for muscle memory, but it contains no
-logic — all of it is Rust in `xtask/`, which is testable and cross-platform.
-
-| Target | What it does |
-|---|---|
-| `xtask build [--target …] [--remote]` | build the workspace; `--remote` (the default on macOS) rsyncs to `<build-host>` and builds there with `CARGO_TARGET_DIR=<cargo-target-dir>` |
-| `xtask bpf` | build every BPF object variant with the pinned nightly (§3.8.4) |
-| `xtask test [--privileged] [--kernel 6.12]` | unit tests locally; with `--privileged`, inside a VM on dev |
-| `xtask verifier [--kernel] [--arch] [--update-baseline]` | §3.10.4 |
-| `xtask image [--component agent] [--arch …] [--push]` | podman build + manifest (§3.3.2) |
-| `xtask chart {gen,check,lint,diff}` | generate/verify the chart, `helm lint`, `helm-diff` vs the reference (§3.6.1) |
-| `xtask kind {up,down,load}` | create a kind cluster on dev with a chosen kernel/LVH image and node count; `load` does `podman save` + `kind load image-archive` |
-| `xtask deploy [--context …]` | `helm upgrade --install flowsdn ./install/kubernetes/flowsdn` with the locally built images |
-| `xtask e2e [--test …]` | run `flowsdn-connectivity` against the current context (spec `19`) |
-| `xtask size-check`, `xtask notice`, `xtask deny`, `xtask version {check,set}` | the corresponding PR gates, runnable locally |
-| `xtask clean [--toolchain-changed] [--all]` | remove target dirs under `<cargo-target-dir>`; never touches anything else on `/build` |
-
-**The local loop against kind**, end to end:
+Use the current [build and test procedure](../build-and-test.md): update the
+work plan and documentation, commit and push each logical change, then invoke
+`sc-build` from the checkout. For example:
 
 ```bash
-# From the Mac. Everything heavy happens on dev.
-cargo xtask kind up --nodes 3 --kernel 6.12          # LVH VM on dev, kind inside it
-cargo xtask build --remote                            # cross-build both arches on dev
-cargo xtask image --component agent --arch amd64
-cargo xtask kind load                                 # podman save | kind load
-cargo xtask deploy --set debug.enabled=true
-kubectl -n kube-system rollout status ds/cilium
-cargo xtask e2e --test 'no-policies/'
-cargo xtask kind down
+git push
+sc-build
+# A narrower command may be selected for the changed component:
+sc-build 'cargo test -p flowsdn-k8s'
 ```
 
-Iterating on the agent only: `xtask build --remote -p flowsdn-agent && xtask
-image --component agent && xtask kind load && kubectl -n kube-system rollout
-restart ds/cilium` — about 90 s warm.
+`sc-build` defaults to `cargo build && cargo test`. Choose additional checks
+required by the change and report their observed outcomes. Tests needing
+privileges or a running cluster use the component test environment and declare
+requirements. Never infer runtime acceptance from compilation or unit tests.
 
-Iterating on the datapath: `xtask bpf && xtask verifier --kernel 6.12` first
-(fast, catches complexity and panic-path regressions before a cluster is
-involved), then the image loop.
+Earlier proposals for `xtask --remote`, copying source with rsync, persistent
+remote checkouts and local-session builds are superseded. Future Rust `xtask`
+subcommands may organize validation, but must run through the supported build
+path and must not imply an implemented command merely because this draft names it.
 
-**Rule, restated because it is the one people break:** editing on the Mac is
-fine; believing a Mac build is not. `cargo test` reports 258 tests on macOS and
-303 on dev — the 45 that differ are the ones touching `io_uring`, `ublk`,
-`/dev/kmsg`, `mlockall` and the whole storage and BPF path. `xtask` therefore
-defaults to `--remote` on macOS and prints a one-line reminder when it does.
+After verified component work, request the golden once:
+
+```bash
+stormcentral component stage flowsdn --url "$STORMCENTRAL_URL"
+```
+
+This submits the special-component stage path and records its golden/release
+request. It does not replace validation or automatically publish GitHub assets.
 
 ## 4. Data model
 
@@ -1368,15 +1336,13 @@ Environment variables the build honours:
 
 | Variable | Default | Effect |
 |---|---|---|
-| `CARGO_TARGET_DIR` | **must** be `<cargo-target-dir>` on dev | `../CLAUDE.md`; `xtask` sets it and refuses to run on dev without it |
+| `CARGO_TARGET_DIR` | build-service managed | standard Cargo target override; no persistent project target directory is promised |
 | `SOURCE_DATE_EPOCH` | commit time | reproducibility (§3.8.7) |
 | `FLOWSDN_VERSION`, `FLOWSDN_REVISION` | derived from git | injected build metadata; CI sets them explicitly |
 | `FLOWSDN_BPF_OBJDIR` | unset | pre-built BPF objects; when unset the build script runs `xtask bpf` |
-| `FLOWSDN_REMOTE_HOST` | `<build-user>@<build-host>` | `xtask --remote` target |
 | `CROSS_CONTAINER_ENGINE` | `podman` | never docker (user rule) |
-| `SCCACHE_DIR`, `SCCACHE_CACHE_SIZE` | `/build/cache/sccache`, `40G` | §3.10.6 |
-| `TMPDIR` | `/build/tmp` on dev | **never** `/tmp` (tmpfs, §3.8.5) |
-| `FLOWSDN_REGISTRY` | `sbregistry:5100` | image push target |
+| `TMPDIR` | build-service managed scratch | service owns scratch cleanup |
+| `FLOWSDN_REGISTRY` | `<registry>` | image push target |
 
 Helm values owned by this spec: the `flowsdn.*` tree of §3.6.5. Config keys
 owned: none — every key belongs to an area spec; this spec only maps values onto
@@ -1392,17 +1358,16 @@ them.
 | Kernel below 6.6 | many helpers missing | startup check refuses to run with the missing feature named; `flowsdn.kernelCheck.mode=warn` overrides for bring-up only |
 | Verifier rejects a program on a node whose kernel is older than CI's oldest row | agent fails to load the datapath | the agent logs the full verifier log for that program and exits; the CI gate exists so this cannot reach a release, and the log is the bug report |
 | `bpf-objects.lock` mismatch at build time | build script error | fail with "the datapath changed; run `xtask bpf` and commit `bpf-objects.lock`" — never silently rebuild |
-| Image built on the Mac | wrong target, missing Linux-only code | `xtask image` refuses to run on macOS with a message pointing at `--remote` |
-| `/` full on dev | `rustc-LLVM ERROR: IO failure on output stream` and a dozen unrelated crate failures | the `df` guard fails the job first with "SSD root is for working trees only; target dirs go to <cargo-target-dir>" |
-| `/tmp` full on dev (tmpfs) | `no storage space` from an unrelated writer | `TMPDIR=/build/tmp` in every job; the guard checks it |
-| Leaked loop mounts | a tmpfs stays full after a job | `always()` cleanup step unmounts; a nightly job reports stray `/build/tmp/tmp.*` mounts |
-| `helm-diff` reports an unexplained key | PR fails | either the mapping is wrong (fix it) or the divergence is intended (add a `known-diffs.toml` entry with a reason and an ADR) |
+| Build requested outside its supported environment | wrong target or missing Linux facilities | use the declared sc-build/test environment; do not assume an unimplemented `xtask image` or `--remote` guard exists |
+| Build storage exhausted | compiler I/O failures | record the exact service error and have the build service owner resolve capacity; do not create alternate remote checkouts |
+| Leaked test mounts | test resources remain allocated | test environment must clean up its own resources on success and failure; no scheduled cleanup job is assumed |
+| `helm-diff` reports an unexplained key | Recorded validation | either the mapping is wrong (fix it) or the divergence is intended (add a `known-diffs.toml` entry with a reason and an ADR) |
 | Reference chart bumped upstream | `helm-diff` fails wholesale | reference-tag bumps are a deliberate operation (§3.9.5), not a passive dependency |
 | Registry unreachable at install time on a stormcos node | pods `ImagePullBackOff` | should not happen: images are preloaded and `imagePullPolicy: IfNotPresent`; with `flowsdn.preloaded=true` the policy is `Never`, so the failure is immediate and legible instead of a retry loop |
 | Upstream reused image (Envoy, hubble-ui) yanked or re-tagged | pods fail to pull | all reused images are **digest-pinned** in values, as the reference pins them; a digest cannot be re-pointed |
-| `cargo deny` flags a new transitive GPL dependency | PR fails | no exception without an ADR (`docs/licensing.md`); the fix is a different dependency, not an `ignore` entry |
+| `cargo deny` flags a new transitive GPL dependency | Recorded validation | no exception without an ADR (`docs/licensing.md`); the fix is a different dependency, not an `ignore` entry |
 | Nightly toolchain bump breaks `flowsdn-bpf` | BPF build fails | the pin is exact and separate; the workspace keeps building on stable while the BPF pin is fixed in its own PR |
-| arm64 e2e runner (Rose) offline | nightly arm64 rows skip | jobs are `continue-on-error: false` but `if: always()` reporting; a skipped arm64 row blocks a **release**, not a PR |
+| Required arm64 test capacity unavailable | acceptance cannot run | record the gate as unavailable; never report a skipped runtime check as a pass |
 | Two agents on one node during migration | both try to own the same pins | prevented by the drain procedure (§3.7) and by an exclusive `flock` on `<state-dir>/agent.lock`; the second agent exits with a clear message |
 
 ## 8. Observability of the build
@@ -1418,10 +1383,10 @@ each area spec's §8.
 | `verifier-budget.json` | CI artifact per run **and** a release asset; trended per program per kernel. The chart to keep is `bpf_host` NodePort insns on 6.6 x86-64 |
 | `binary-sizes.json` | CI artifact + release asset; trended per binary and per image |
 | SBOM (`sbom-<component>.cdx.json`, CycloneDX via `cargo cyclonedx`) | release asset; the input to `cargo audit`-style post-release CVE tracking |
-| Build provenance | GitHub artifact attestations on the release assets; verifiable with `gh attestation verify` |
+| Build provenance | record pushed revision, validation command/outcome and golden/release-request identifiers; artifact attestations are not generated automatically |
 | `sha256sums.txt` | release asset covering every binary, archive and chart |
-| CI job durations and cache hit rates | a nightly `ci-health` job summarising the last 7 days; a PR gate whose p50 exceeds its §3.10.2 budget by 50 % opens an issue |
-| `/build` disk usage | reported by the `df` guard at the start and end of every dev job; the weekly `cache-gc` job records the trend |
+| Validation duration and cache observations | record measured outcomes in validation evidence; no scheduled health-summary job is claimed |
+| Build storage usage | build-service diagnostics; no project cache-GC workflow |
 
 ## 9. Test plan
 
@@ -1480,7 +1445,7 @@ Unit (u), integration (i), privileged (p), end-to-end (e).
 - [ ] (e) `upgrade`: flowsdn N-1 → N with `--include-conn-disrupt-test` shows no interrupted connections.
 - [ ] (e) `mixed-cluster`: pod-to-pod and NodePort across a Cilium node and a flowsdn node, with correct identities in Hubble.
 - [ ] (e) The §3.7 Cilium→flowsdn drain migration runs end to end as a script on a 3-node kind cluster and ends with `cilium-cli status` healthy.
-- [ ] (i) The `df` guard fails a job when `/build` is artificially filled, with the documented message.
+- [ ] (i) Build storage exhaustion is reported clearly and scratch cleanup runs on failure.
 
 ## 10. Kernel and platform requirements
 
@@ -1495,7 +1460,7 @@ This spec adds none of its own; it *encodes* `docs/kernel-requirements.md`:
 - The **kernel config fragment** of §2.6 is what a node must satisfy; the chart
   cannot check it, and the agent's startup check (§4.7) is the enforcement
   point. `flowsdn.kernelCheck.mode` is the only escape hatch.
-- **Build hosts**: `<build-host>` (x86-64 Linux) for everything heavy; a Rose
+- **Build hosts**: `<build-host>` (x86-64 Linux) for everything heavy; a physical arm64
   cluster node (arm64) for nightly arm64 e2e. macOS is an editor.
 - **Container runtime for building**: podman only (user rule). Docker is not
   used anywhere, including in `cross` (`CROSS_CONTAINER_ENGINE=podman`).
@@ -1600,19 +1565,16 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    executable, installed as loopback (also addressable as flowsdn-loopback). Spec 09
    owns dispatch and CNI semantics. Do not bundle the upstream Go loopback executable.
 
-6. **arm64 e2e hardware.** Options: (a) Rose cluster nightly (current plan);
-   (b) a cloud arm64 runner (Graviton) per PR; (c) QEMU TCG for e2e too.
-   **Recommendation: (a)**, with (b) as a paid upgrade if arm64 regressions
-   start reaching releases. (c) is too slow for e2e and would test QEMU's
-   virtio-net rather than a real driver.
+6. **arm64 e2e hardware.** Runtime acceptance requires dedicated physical
+   arm64 test capacity; emulation does not establish real NIC-driver support.
+   This is a capability requirement, not a GitHub runner provisioning task.
 
-7. **Resolved #242: privileged runners accept trusted dispatch only.**
-   Hosted runners handle pull requests. The privileged lane requires an
-   approved workflow_dispatch from this repository on refs/heads/main; it
-   never checks out an arbitrary ref or fork input. Reject pull_request_target
-   and automatic PR/push events for this lane. Promotion of a reviewed fork
-   change to trusted main precedes privileged testing. The Rust policy helper
-   fails closed; actual workflow wiring remains a milestone 4 gate.
+7. **#242 execution mechanism superseded by #304.** The earlier GitHub-hosted
+   PR and approved `workflow_dispatch` model is historical. Actions remains
+   disabled; no runner registration or dispatch wiring is required. Privileged
+   validation still requires trusted source and isolated test environments.
+   Existing policy-helper tests preserve historical behavior only; they do not
+   authorize activating the retired workflow.
 
 8. **Seccomp profile (#243).** The reference ships agent seccomp Unconfined.
    `tools/trace-seccomp` generates an opt-in OCI profile from a reviewed runtime
@@ -1635,9 +1597,10 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    integration; agent Pod seccomp does not cover it. Verify effective filters
    for privileged containers before claiming the opt-in enforces restrictions.
 
-9. **Resolved #244: publish charts through OCI and public Pages.** OCI is
+9. **#244 packaging target; no automatic publication.** OCI is
    the primary chart transport; enable Pages for helm repo add when the
-   repository is public. Both transports publish the same validated chart.
+   repository is public. Future explicit publication through either transport must
+   use the same validated chart; no enabled Pages or OCI publishing job is claimed.
    Signing, index updates and publication remain release-pipeline work.
 
 10. **Resolved — #245.** Commit bpf-objects.lock alongside source changes that alter the
@@ -1666,7 +1629,7 @@ For #235, retain a 10,000,000-byte quick set on every run for seven days and ful
 failure evidence up to 2 GiB for fourteen days. Failure quick sets share the
 fourteen-day retention. Use 100,000 retained flows nightly and 1,000,000 for PR
 runs. Existing manifest/truncation ordering remains mandatory; these are caps,
-not a claim that the collector or upload workflow exists.
+not a claim that the collector or publication automation exists.
 
 External conformance tools (#290) are consumed as pinned published upstream
 binaries/images with source/license provenance and checksum verification, driven
@@ -1687,18 +1650,14 @@ suites remain milestone 4 acceptance work (ADR0005, spec21).
   no image is production-ready before the store/security conformance gates.
 - #229/#241 place nightly arm64 e2e on dedicated physical arm64 CI capacity;
   #246 places privileged tests in isolated ephemeral VMs on trusted Linux
-  runners. Missing capacity is an unavailable gate, never a pass. #231 retains
+  test environments. Missing capacity is an unavailable gate, never a pass. #231 retains
   a pinned, checksummed weekly advisory upstream CLI comparison; #234 separates
   five-node real datapath and 100-node simulated controller scaling.
 
-The affected-crate workflow supplies conservative dependency selection, separate
-package caches, serialized shared-host builds, both musl checks and separate
-BPF selection/cache. Specification edits run workspace tests because tests embed
-spec data; ordinary prose edits skip them. Documentation edits do not rebuild
-BPF objects. Pushes and manual dispatch execute only trusted main; PR execution
-is not enabled on the shared host. Runner registration, isolated privileged VM
-provisioning, first successful workflow run and required status checks remain
-#264/#294 work. No runner was registered at the batch's GitHub API audit, so
-committing this workflow is not CI activation.
-
-The workflow remains dormant until `FLOWSDN_CI_ENABLED=true` is configured after runner provisioning. Its skipped state is not an acceptance gate.
+The earlier affected-crate Actions workflow and its activation plan are removed
+by #304. Do not provision GitHub runners, configure `FLOWSDN_CI_ENABLED`, or wait
+for a first workflow run. Conservative dependency selection and separate BPF
+validation remain useful requirements for choosing `sc-build` commands, without
+claiming that selection or cache automation is implemented. Compilation and live
+acceptance gaps remain tracked by their owning milestones; Actions activation
+is no longer one of those gaps.

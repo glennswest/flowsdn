@@ -2,11 +2,17 @@
 
 ## Rule #1 — GitHub is the transfer and results path
 
-- Commit and push changes to GitHub, then clone or pull them on dev.g8.lo.
+- Commit and push changes to GitHub, then build/test through `sc-build`.
+  It fetches the pushed revision into a disposable directory; do not create
+  or use a persistent checkout on the build host.
 - Never rsync, scp, or otherwise copy working trees or build results between hosts.
 - Commit source changes, lockfiles, formatting fixes, and validation records back
   to GitHub from the host where they were produced, then pull on other hosts.
-- Publish distributable build artifacts through GitHub Releases.
+- GitHub Actions is disabled. Explicitly published distributable artifacts use
+  GitHub Releases; no Actions workflow builds or publishes them.
+- Goldens use stormcentral orchestration. For flowsdn, request
+  `stormcentral component stage flowsdn --url http://stormcentral.g8.lo` after
+  validation; ordinary components use `component build`, not flowsdn.
 - Commit and push at each completed work step so validated work is preserved.
 - Maintain CHANGELOG.md and a versioned GitHub release history. Release only
   after validation, and distinguish foundation prereleases from usable networking.
@@ -14,8 +20,9 @@
 ## Development
 
 Read CLAUDE.md, README.md, the architecture decisions and the relevant spec.
-Build and test on dev.g8.lo, never on the Mac. Set
-CARGO_TARGET_DIR=/build/cargo/flowsdn and TMPDIR=/build/tmp.
+Build and test only through `sc-build` after push, never on the session VM.
+Keep its configured Cargo target cache and disposable work directory. For task
+scratch use `tmp/` in the checkout and `TMPDIR="$PWD/tmp"`.
 Write Rust from the specifications; follow docs/licensing.md.
 
 ## Parallel work
@@ -29,12 +36,13 @@ operations from the coordinator instead of waiting on duplicate approval flows.
 ## Shared build host disk discipline
 
 - /build is the spinning drive (/dev/sdc); root is the smaller SSD.
-- Follow neighboring projects: target output under /build/cargo/flowsdn,
-  temporary files under /build/tmp, artifacts under /build/images or /build/cache.
+- Let sc-build own its target-cache and temporary-directory paths. Never
+  redirect builds into a persistent checkout or another project's cache.
 - Inspect disk space before and after builds. Limit build concurrency on this
   shared host; default CARGO_BUILD_JOBS=2 unless capacity is checked.
-- After publishing or committing results, run cargo clean --target-dir
-  /build/cargo/flowsdn and remove only temporary files created by this task.
+- After publishing or committing results, remove only this task's temporary
+  files. If Cargo cleanup is required, run it through sc-build against its
+  configured target directory, with no overlapping build for this project.
 - Never clean another project's targets, shared caches, or installed toolchains.
 
 Before builds, verify test -c /dev/null. A regular-file replacement caused
@@ -65,4 +73,4 @@ permitted; do not commit Python scripts. Static txtar, YAML, TOML and JSON test
 data are permitted. Keep internal operating rules and actual machine names,
 addresses and filesystem paths out of customer-facing documentation, help
 messages and release notes. Public build instructions use standard Cargo
-configuration; internal builds still use the required shared-host paths above.
+configuration; internal builds use the sc-build orchestration above.

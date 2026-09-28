@@ -119,10 +119,12 @@ uses standard Cargo configuration. Privileged runtime fixtures have additional
 requirements documented in [flowsdn-bpftest](crates/flowsdn-bpftest/README.md);
 cross-compilation alone does not prove runtime support.
 
-Current project builds are dispatched through stormcentral. The retained
-GitHub Actions workflow is historical configuration awaiting removal in
-[#304](https://github.com/glennswest/flowsdn/issues/304), not the current build
-service. This documentation audit adds no new runtime validation claim.
+Maintainer builds and tests run with `sc-build` after a commit is pushed; it
+fetches that revision into a disposable build directory. GitHub Actions is
+disabled and no GitHub workflow builds, tests or publishes this project.
+flowsdn goldens use `stormcentral component stage flowsdn`; stormcentral records
+the golden and files the release request. See [build and publication](docs/build-and-test.md)
+for the actual commands and the distinction from ordinary Cargo development.
 
 Start with the [documentation guide](docs/README.md), current runtime/API and
 deployment references. `docs/spec/` defines intended contracts;

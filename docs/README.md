@@ -13,6 +13,7 @@ points, rather than treating specifications as a list of implemented features.
 | Implemented libraries versus integrated runtime | [Implementation status](implementation-status.md) |
 | Remaining networking acceptance | [Milestones](milestones.md), issues #291–#294 |
 | Configuration library, separate from agent JSON | [Catalogue README](../crates/flowsdn-config/README.md) |
+| Builds, tests and golden publication | [Build and publication](build-and-test.md) |
 | Privileged fixture requirements | [BPF test harness](../crates/flowsdn-bpftest/README.md) |
 
 ## Specifications and historical evidence
@@ -33,6 +34,7 @@ stormcos golden delivery path.
 
 `validation/` and `workcycles/` are dated evidence for named revisions. Earlier
 open-issue counts, runner availability and unsupported-path measurements should
-be read at their recorded date. The GitHub workflow is awaiting removal (#304);
-current builds use stormcentral. No test was rerun merely by refreshing these
-pages. `velocity/` records observed time and usage with its stated cutoffs.
+be read at their recorded date. GitHub Actions is disabled and the obsolete
+workflow was removed under #304. Current builds use sc-build and goldens use
+stormcentral staging; see [the current build contract](build-and-test.md).
+Historical runner/workflow records do not authorize re-enabling Actions. `velocity/` records observed time and usage with its stated cutoffs.

@@ -25,6 +25,21 @@ scope and the gap is restated to say only that.
 
 ---
 
+## Build and execution ownership — #304
+
+[Build and test orchestration](../build-and-test.md) is authoritative. Source
+builds and build-time checks use `sc-build` after the commit is pushed.
+Stormcentral coordinates acceptance; running-component checks use the
+`flowsdn-test` container built from `test/`, dispatched as managed Jobs on the
+test machines with explicit architecture, kernel, capability and topology
+requirements. No GitHub Actions runner registration or workflow dispatch is
+part of this contract. Upstream workflow paths below are reference provenance.
+
+The matrix and schedules in this specification are intended acceptance gates,
+not evidence that a Job, provisioner or test container is implemented. Results
+must identify the pushed revision, actual environment and checks executed;
+missing infrastructure cannot become a passing or silently skipped row.
+
 ## 1. Scope
 
 In scope:
@@ -521,7 +536,7 @@ Requires `enable-host-firewall`.
 
 Requires `enable-bgp-control-plane` and a peer. In CI the peer is a
 containerised BGP speaker on the kind network (the suite does not require a
-router); on the Rose cluster it is the real RouterOS device (`15-bgp.md` §3.9
+router); on the reserved physical test cluster it is the real RouterOS device (`15-bgp.md` §3.9
 `Advertiser` trait, RouterOS backend).
 
 | ID | What | Expect |
@@ -991,7 +1006,7 @@ release asset and as a scratch image. Subcommands:
 
 Flags are §6. Output formats: human (default, a live-updating summary plus a
 final table), `--output=json` (the full `RunReport`, §4.4), `--output=junit
-<file>` (§4.5), `--output=markdown` (a GitHub step-summary table). More than one
+<file>` (§4.5), `--output=markdown` (an orchestration report table). More than one
 `--output` may be given.
 
 ---
@@ -1391,9 +1406,10 @@ are exposed for CI:
 - **Live progress**: a line per scenario as it completes, with duration and
   status, written to stderr; `--output=human` adds a final table grouped by
   scenario group with counts and the slowest ten scenarios.
-- **A step summary**: `--output=markdown` produces the table CI writes to
-  `$GITHUB_STEP_SUMMARY`, plus the feature-set table (the equivalent of the
-  reference's `features status -o markdown`).
+- **A run summary**: `--output=markdown` produces a portable report table for
+  the orchestration result, plus the feature-set table (the equivalent of the
+  reference's `features status -o markdown`). No Actions environment variable
+  is required.
 - **Structured logs**: `--log-format=json` emits one JSON object per event
   (scenario start/end, probe, assertion, barrier wait with its duration) so a
   slow run can be profiled without instrumenting the suite. Barrier durations in
@@ -1473,8 +1489,8 @@ End to end:
 
 ### 10.1 What the suite itself needs
 
-The suite binary needs only a Kubernetes API endpoint; it runs on the CI runner
-or a laptop, on either arch. The **testpod** needs `CAP_NET_RAW` for ICMP and
+The planned suite binary needs a Kubernetes API endpoint; a managed test Job
+provides its execution environment on the declared architecture. The **testpod** needs `CAP_NET_RAW` for ICMP and
 capture modes and `hostNetwork` for the host rows; the **capture** mode
 additionally needs to run on the node under test. The `--leak-check=kprobe`
 mode needs `CAP_BPF` + `CAP_PERFMON` and a kernel with kprobe BPF (every kernel
@@ -1510,62 +1526,39 @@ control-plane + 2 workers + **1 worker with no agent** (labelled
 `flowsdn.io/no-agent`, tainted so nothing else schedules there), a secondary
 docker network attached (`--secondary-network`) so multi-device rows are real,
 and one external-target container on the kind network. Provisioning is
-a future Rust provisioning command over `kind` and the LVH runner; no shell
-provisioner is shipped. `ci/acceptance-matrix.json` pins the external CLI and
+a future Rust provisioning command over `kind` and an LVH VM executor; no shell
+provisioner is shipped. Stormcentral owns scheduling and disposable allocation. `ci/acceptance-matrix.json` pins the external CLI and
 bounds scheduling to one privileged VM and two build jobs. Rotate nightly
-rows when the shared runner cannot finish the complete matrix in one night;
+rows when the allocated executor cannot finish the complete matrix in one night;
 all supported rows remain mandatory before release.
 
 Additionally, the **stormcos row**: a Rocky 10 VM running the exact
 `kernel-6.12.0-2xx.el10` stormcos pins, with `kind` inside it. This is the only
 row that tests the kernel flowsdn actually ships on, and it is a PR gate.
 
-**arm64 — the honest position.** There is no LVH arm64 image; the reference has
-no arm64 kernel VMs at all (its arm64 coverage is image builds and Go
-integration tests on arm64 runners). So flowsdn has to build this itself. The
-options, with what each actually gives:
+**arm64 placement.** Managed Jobs must declare their requirements rather than
+assume a particular machine. Distinguish three forms of evidence:
 
-| Option | Gives | Costs / limits |
+| Placement | Evidence | Limits |
 |---|---|---|
-| (a) GitHub-hosted arm64 runners (`ubuntu-24.04-arm`) | real arm64 CPU, `kind` works, fast | the runner's kernel is Ubuntu's, **not** 6.12-el10 or an LVH image — so this row tests the arch, not the kernel. Private-repo arm64 minutes are billed. |
-| (b) Self-hosted arm64 runner on the **Rose / stormcos nodes** | real arm64 **and** the real kernel **and** the real NIC drivers (`al_eth` — the one that has no `ndo_bpf`, per kernel-requirements §5.1) | needs the nodes registered as Actions runners and reachable; capacity is finite; a broken test can take a real node down |
-| (c) QEMU `aarch64` (TCG) on `<build-host>` | any kernel, including a Rocky 10 aarch64 or an upstream 6.6/6.18 build; no extra hardware | ~10–20× slower under TCG. Fine for the verifier and `BPF_PROG_RUN` unit-test rows (CPU-light, per kernel-requirements §5.3); **too slow for a full e2e connectivity run** — a 15-minute run becomes hours. |
-| (d) An Ampere/Graviton cloud VM, nested `kind` | real arm64 with a chosen kernel | recurring cost; another environment to maintain |
+| Reserved physical arm64 test nodes | Real CPU, selected kernel and NIC drivers, including page-size and driver-specific checks | Destructive/disruptive cases require disposable test nodes; allocation is a prerequisite, not implied by this spec |
+| Independent managed arm64 smoke environment | Binary/image startup and a small connectivity row | A different kernel or NIC does not validate the target deployment combination |
+| Managed QEMU aarch64 VM | Verifier and `BPF_PROG_RUN` rows for selected kernels | Emulated CPU evidence only; too slow for the full connectivity matrix and cannot replace physical NIC validation |
 
-**Recommendation.** Use all three of (a), (b), (c), for different jobs, and do
-not pretend any one of them covers arm64 on its own:
-
-1. **PR gate, arm64**: nothing. Verifier complexity is arch-independent
-   (kernel-requirements §5.2), so the x86 verifier gate covers the load path;
-   the arm64 JIT gates are covered by the nightly BPF unit tests. Making a PR
-   wait on arm64 e2e would be paying a large latency cost for a small marginal
-   signal.
-2. **Nightly, arm64 e2e**: option (b) — a 3-node cluster on the Rose/stormcos
-   arm64 nodes, provisioned by stormboot golden clone swap rather than `kind`
-   (these are real nodes; there is no docker-in-docker to nest), running the
-   `vxlan-kpr`, `native-kpr-dsr` and `wireguard` configs. This is the row that
-   catches an arm64 JIT bug, a 64K-page perf-ring bug, and the `al_eth`/XDP
-   reality. It is the highest-value arm64 signal available and it uses hardware
-   that already exists.
-3. **Nightly, arm64 arch smoke**: option (a) — one `kind` run of the
-   `vxlan-kpr` config on a GitHub arm64 runner, purely to catch "the arm64
-   binary does not start" and "the arm64 image is wrong" quickly and
-   independently of the Rose cluster's availability.
-4. **Nightly, arm64 kernel matrix (non-e2e)**: option (c) on `<build-host>` — QEMU
-   aarch64 VMs at 6.6, 6.12 and 6.18 running the verifier and `BPF_PROG_RUN`
-   rows only, per kernel-requirements §5.3. Their VM images and the build
-   outputs live under `/build/images` and `/build/cache`, never on the SSD root
-   and never in `/tmp` (per the cross-project rules).
-
-`<build-host>` is also the natural host for the **nightly x86-64 matrix**: it has
-the 2 TB `/build` volume for LVH images and sysdumps, and running the long
-matrix there keeps GitHub-hosted minutes for the PR gate. Register it as a
-self-hosted runner with a label (`flowsdn-dev-x86`).
+Physical nightly connectivity requires three reserved nodes and tests
+`vxlan-kpr`, `native-kpr-dsr` and `wireguard`. An independent arm64 smoke Job
+exercises `vxlan-kpr`. QEMU Jobs cover the 6.6/6.12/6.18 verifier and BPF unit
+rows. These are scheduling requirements; no hardware allocation or installed
+Job is claimed here. Stormcentral selects suitable capacity and serializes
+shared privileged resources. Neither these rows nor the x86 matrix require
+GitHub-hosted minutes or Actions self-hosted runner registration.
 
 ### 10.4 The CI matrix
 
-Legend: **PR** = required check on every pull request; **merge** = runs on the
-merge queue / after merge to `main`; **nightly** = scheduled; **weekly** = once.
+Legend: **PR** = intended pre-merge acceptance requirement; **merge** =
+post-merge requirement; **nightly** and **weekly** = intended stormcentral
+schedules. These labels express gate policy, not GitHub workflow triggers.
+The orchestrator records evidence for each required row and associated revision.
 
 | Job | Config × kernel × arch | When | Budget |
 |---|---|---|---|
@@ -1579,13 +1572,13 @@ merge queue / after merge to `main`; **nightly** = scheduled; **weekly** = once.
 | `e2e-full-matrix` | all 12 configs × {6.6, 6.12, 6.18} x86-64 | nightly | ~6 h wall, parallel |
 | `e2e-egressgw`, `e2e-netkit`, `e2e-kubeproxy` | on 6.12 and 6.18 x86-64 | nightly | 25 min each |
 | `e2e-upgrade` | previous minor → PR build → downgrade, `vxlan-kpr` + `ipsec` + `wireguard`, 6.12 x86-64, with `conn-disrupt` around each step | nightly, and **PR** for the `vxlan-kpr` row only | 45 min (PR row: 25 min) |
-| `e2e-arm64-rose` | `vxlan-kpr`, `native-kpr-dsr`, `wireguard` on the Rose 3-node arm64 cluster, kernel 6.12 el10 aarch64 | nightly | 40 min |
-| `e2e-arm64-smoke` | `vxlan-kpr` on a GitHub arm64 runner, kind | nightly | 15 min |
-| `arm64-verifier-bpftest` | verifier + `BPF_PROG_RUN` on QEMU aarch64 6.6/6.12/6.18 (`<build-host>`) | nightly | 90 min |
+| `e2e-arm64-physical` | `vxlan-kpr`, `native-kpr-dsr`, `wireguard` on a reserved physical 3-node arm64 test cluster, kernel 6.12 el10 aarch64 | nightly | 40 min |
+| `e2e-arm64-smoke` | `vxlan-kpr` in an independent managed arm64 smoke environment, kind | nightly | 15 min |
+| `arm64-verifier-bpftest` | verifier + `BPF_PROG_RUN` on QEMU aarch64 6.6/6.12/6.18 | nightly | 90 min |
 | `e2e-clustermesh` | two kind clusters, `vxlan-kpr` and `wireguard`, 6.12 x86-64 | nightly | 45 min |
 | `e2e-interop` | §3.5, 4-node kind, 6.12 x86-64 | nightly | 30 min |
-| `e2e-bgp` | `misc`-style config + a containerised peer, 6.12 x86-64; and the RouterOS peer on the Rose cluster | nightly (kind), weekly (RouterOS) | 25 min |
-| `perf-smoke` | §3.7 on a fixed-shape 2-node cluster, 6.12 x86-64 and arm64 Rose | nightly | 40 min |
+| `e2e-bgp` | `misc`-style config + a containerised peer, 6.12 x86-64; and the RouterOS peer on the reserved physical test cluster | nightly (kind), weekly (RouterOS) | 25 min |
+| `perf-smoke` | §3.7 on a fixed-shape 2-node cluster, 6.12 x86-64 and physical arm64 | nightly | 40 min |
 | `scale-smoke` | §3.7 scale rows, 6.12 x86-64, 5 nodes | nightly | 40 min |
 | `e2e-canary` | `vxlan-kpr` on the newest LVH kernel available | weekly, non-blocking | 20 min |
 | `k8s-conformance` | upstream `[sig-network]` e2e and NetworkPolicy e2e, `vxlan-kpr` 6.12 | nightly | 90 min |
@@ -1602,16 +1595,22 @@ environmental reasons and would train people to ignore red.
 
 | Job class | On failure |
 |---|---|
-| PR gate | blocks the PR |
+| PR gate | records failed acceptance for the source revision; blocks merge under project gate policy |
 | nightly x86-64 | opens/updates a single tracking issue per job with the sysdump attached; three consecutive failures escalate to blocking the next release |
-| nightly arm64 Rose | same, plus a note that a hardware/environment cause must be ruled out before treating it as a code regression |
+| nightly physical arm64 | same, plus a note that a hardware/environment cause must be ruled out before treating it as a code regression |
 | interop | files an issue tagged `interop`, never blocks a PR; a change in upstream behaviour is a finding, not a flowsdn bug |
 | canary | never blocks; a failure is a heads-up about the next kernel |
 | perf/scale | a `performance-regression` failure opens an issue with the baseline, the measurement and the spread; it blocks a release, not a PR |
 
-Every job uploads: the JUnit XML, the `RunReport` JSON, the feature-set
-markdown into the step summary, and — on failure — the sysdump archive, retained
-30 days (7 for nightly, to keep storage bounded).
+Every managed Job must return JUnit XML, `RunReport` JSON and the feature-set
+Markdown through the orchestration results path. Failure diagnostics include a
+bounded sysdump. JUnit remains the Ant/`surefire` format; compatibility with
+upstream reporters does not require GitHub Actions. Commit sanitized validation
+records to the repository and publish distributable outputs through GitHub
+Releases as described in [build and test orchestration](../build-and-test.md).
+Evidence retention follows the resolved §12 #235 policy: a 10 MB quick set for
+seven days on success/fourteen on failure, with failure sysdumps capped at 2 GiB
+for fourteen days. Result collection and publication remain implementation work.
 
 ### 10.6 Expected runtimes and the shape they assume
 
@@ -1658,10 +1657,10 @@ CLI; `serde`/`serde_json`; `quick-xml` for JUnit; `zstd` + `tar` for the
 sysdump; `pnet_packet` or a hand-rolled parser for pcap writing; `socket2` for
 raw and AF_PACKET sockets; `hdrhistogram` for the perf rows; `insta` for the
 report snapshot tests. No `libc`-gated code outside the testpod's socket paths,
-so the suite binary itself builds and runs on macOS for development (it only
-talks to an API server), which matters because the repository's build rule keeps
-compilation on `<build-host>` — the suite is one of the few crates a developer can
-usefully `cargo check` locally.
+so the proposed suite can remain a portable API client. Portability does not
+change the project's execution path: compile and check pushed revisions through
+`sc-build`, and run acceptance through the managed test allocation described in
+[build and test orchestration](../build-and-test.md).
 
 **Exec without `kubectl`.** `kube::api::Api::<Pod>::exec` returns an
 `AttachedProcess` giving `stdin`/`stdout`/`stderr` as async streams over the
@@ -1832,6 +1831,6 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
 `flowsdn-connectivity` is currently a library, not the e2e executable. It supplies
 bounded per-group flow storage, CT observation comparisons and declarative lane
 placements. It has no Hubble client, cluster provisioner, simulator, packet
-traffic generator or workflow runner. The matrix above describes target gates;
+traffic generator or acceptance Job executor. The matrix above describes target gates;
 its presence does not mean any row has been installed or passed. Payload sizes
 and discovered node count must also be bounded by the eventual ingestion owner.
