@@ -51,6 +51,7 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 - [x] Add a bounded Unix-socket liveness command and validation DaemonSet exec probe, with failure/timeout coverage; source review complete, remote tests pending.
 - [ ] Keep operator and relay availability explicit: accepted architecture requires separate operator and relay processes.
 - [ ] Vendor the verified reference CRD schema bundle and expose owned registration payloads, a prerequisite for a real leader-elected operator; implement client/election/controllers next.
+- [ ] Implement Lease election state/optimistic writes with monotonic expiry observation and terminal leadership-loss behavior, then connect the authenticated client and leader-scope controllers.
 - [ ] Validate multi-node allocation and lifecycle rather than treating process scaffolding as a complete operator.
 - [ ] Push and validate via sc-build; close only when operator/network and deployment acceptance obligations are satisfied.
 

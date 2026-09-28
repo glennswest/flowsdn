@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Plan optimistic Lease election with bounded renewal and terminal loss as the next operator prerequisite.
 - **feat:** Add bounded Unix-socket agent health CLI, startup/liveness exec probes and explicit host BTF mount to the validation deployment; document separate operator/relay requirements (#296).
 - **docs:** Record the accepted separate operator/relay architecture and schema-bundle prerequisite for executable operator integration.
 - **docs:** Plan stormcos Unix-socket supervision integration for #296; retain explicit operator, relay and pod-network acceptance gaps.
