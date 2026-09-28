@@ -1,7 +1,9 @@
 //! Kubernetes compatibility plans and guarded patch construction from spec 13.
-//! Includes a verified reference schema bundle; no HTTP client or controller.
+//! Verified schemas, bounded HTTPS transport and watch state; no live controller.
 #![forbid(unsafe_code)]
 
+pub mod client;
+pub mod watch;
 pub mod patch;
 pub mod plan;
 pub mod schemas;

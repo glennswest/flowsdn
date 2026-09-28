@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **feat:** Checkpoint bounded Kubernetes watch state and verified HTTPS operator requests with per-call deadlines, token rotation and owned-CRD write boundaries; remote dependency resolution pending.
 - **docs:** Plan ownership-checked CRD reconciliation and readiness; preserve upstream license whitespace as exact reference data.
 - **feat:** Embed 22 exact reference CRD schemas with provenance and SHA-256 verification; generate flowsdn-owned registration payloads and exercise actual schema identity constraints (#296).
 - **docs:** Isolate operator election under the flowsdn-owned Lease name and preserve configuration provenance links.

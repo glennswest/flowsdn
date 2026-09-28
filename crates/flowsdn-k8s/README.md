@@ -37,7 +37,20 @@ enums and prove other selected schema content is preserved. See
 [corpus provenance](crds/PROVENANCE.md). The raw YAML is reference data and
 must not be applied as flowsdn installation manifests.
 
-This crate does not implement an HTTP client, probes, informers, controllers,
+The `client` module provides verified HTTPS JSON transport with per-request token
+rotation and bounded lists, frames and operator request/response bodies. Generic
+operator calls retain HTTP status for optimistic concurrency and use explicit
+per-call deadlines; they do not retry writes. URLs are restricted to the supported
+built-in and flowsdn endpoints; upstream CRD writes are rejected. Watch frames
+preserve partial bytes and deadlines across task cancellation.
+
+The `watch` module stages bounded Node/local-Pod lists and atomically publishes
+complete snapshots. Resource versions are opaque; bookmarks and UID-safe deletion
+are supported. No runtime driver currently connects these modules to the agent.
+New transport dependencies must be resolved remotely and committed before locked
+validation; this source checkpoint is not a validated operator or pod network.
+
+This crate does not implement runtime probes, informer drivers, controllers,
 resource types, CEL admission or stored-instance migration. Tests use both the
 verified reference corpus and synthetic documents with local patch application;
 they do not establish Kubernetes conformance or performance. JSON is baseline;
