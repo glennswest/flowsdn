@@ -1,4 +1,4 @@
-//! Validation of a defaulted CiliumGatewayClassConfig resource. Unknown fields
+//! Validation of a defaulted FlowsdnGatewayClassConfig resource. Unknown fields
 //! are left untouched; CRD admission remains responsible for the full schema.
 use serde_json::{Value, json};
 use std::collections::BTreeSet;

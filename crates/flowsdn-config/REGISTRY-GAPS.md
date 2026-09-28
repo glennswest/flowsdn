@@ -45,7 +45,7 @@ NAT and neighbour defaults are fixed defaults, not dynamic sizing calculations.
 
 | Key | Resolved parser input | Owning declaration |
 |---|---|---|
-| `agent-not-ready-taint-key` | `node.cilium.io/agent-not-ready` | [spec 12, line 1415](../../docs/spec/12-operator.md#L1415) |
+| `agent-not-ready-taint-key` | `node.flowsdn.io/agent-not-ready` | [ADR-0016](../../docs/decisions/0016-flowsdn-resource-identity.md) |
 | `bpf-lb-algorithm` | `random` | [spec 05, line 926](../../docs/spec/05-service-loadbalancing.md#L926) |
 | `bpf-lb-dsr-dispatch` | `opt` | [spec 05, line 925](../../docs/spec/05-service-loadbalancing.md#L925) |
 | `bpf-lb-maglev-hash-seed` | `JLfvgnHc2kaSUFaI` | [spec 05, line 929](../../docs/spec/05-service-loadbalancing.md#L929) |

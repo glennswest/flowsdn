@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **BREAKING:** Attribute owned Kubernetes registration, controller names, taints, status conditions and configuration defaults to flowsdn; retain explicit reference-schema migration and document runtime compatibility names (#299).
 - **docs:** Plan owned Kubernetes identity migration and explicit runtime compatibility naming for #299.
 
 ### 2026-09-27

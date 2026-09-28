@@ -23,6 +23,28 @@ depends on it is named (agent, kubelet, scheduler, `cilium-dbg`, another
 cluster). Where flowsdn deviates, the paragraph is marked **DEVIATION** with
 the reason and the ADR.
 
+
+## Ownership override — issue #299 (2026-09-27)
+
+**DEVIATION:** flowsdn-owned custom resources use `flowsdn.io/v1alpha1`,
+`Flowsdn*` kinds and category `flowsdn`. Reference Cilium resource names,
+paths and tables below describe upstream provenance or compatible input
+shape; they do not authorize creating, reconciling or deleting Cilium-owned
+objects. The flowsdn controller identity is `io.flowsdn/gateway-controller`,
+its object prefixes are `flowsdn-gateway-` and `flowsdn-ingress-`, and its
+secrets namespace is `flowsdn-secrets`. Its readiness taint defaults to
+`node.flowsdn.io/agent-not-ready`. GAMMA status condition types are
+`gamma.flowsdn.io/GammaRoutesAttached` and
+`gamma.flowsdn.io/GammaRoutesProgrammed`; condition reasons retain their
+existing shape. Owned gateway configuration is `FlowsdnGatewayClassConfig`.
+
+Garbage collection and status/taint patches MUST restrict ownership to
+flowsdn resources and exact observed UID/resourceVersion preconditions.
+Renaming a controller or prefix MUST NOT broaden deletion to Cilium-owned
+objects. Reading a Cilium object for compatibility does not transfer its
+ownership. No automatic adoption, deletion or taint migration is implied.
+Historical fixtures remain unchanged as provenance evidence.
+
 ## 1. Scope
 
 `flowsdn-operator` is the single-leader, cluster-scoped control plane companion

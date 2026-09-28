@@ -13,10 +13,15 @@
 
 ## Trademarks
 
-"Cilium" and "Hubble" are trademarks of The Linux Foundation. flowsdn uses
-those words only to describe compatibility ("Hubble-compatible API",
-"accepts CiliumNetworkPolicy"). CRD group names (`cilium.io`) are retained
-because they are the compatibility interface; this is nominative use.
+"Cilium" and "Hubble" are used to identify the upstream projects and describe
+specific compatibility formats. flowsdn-owned Kubernetes resources use
+`flowsdn.io/v1alpha1`, `Flowsdn*` kinds and category `flowsdn`; flowsdn does not
+publish or claim ownership of resources in `cilium.io`. Upstream schema names in
+reference data and explicit migration inputs remain unchanged, with their
+provenance and required attribution. Retained CNI/interface/BPF compatibility
+names do not assert upstream implementation identity. See
+[ADR-0016](decisions/0016-flowsdn-resource-identity.md) for the ownership boundary
+and the decision on node-visible names.
 
 ## Clean-room protocol
 

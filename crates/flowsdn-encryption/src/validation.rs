@@ -9,6 +9,7 @@ pub struct Encryption {
     pub l7_proxy: bool,
     pub dns_transparent: bool,
     pub insecure_ipsec_proxy_override: bool,
+    /// Compatibility option spelling; enables the owned FlowsdnNode resource.
     pub ciliumnode_crd: bool,
     pub tunnel: bool,
     pub xfrm_output_mark_mask: bool,
@@ -46,7 +47,7 @@ impl Encryption {
             return Err(Error("WireGuard and IPsec are mutually exclusive"));
         }
         if (self.wireguard || self.ipsec) && !self.ciliumnode_crd {
-            return Err(Error("encryption requires CiliumNode CRD"));
+            return Err(Error("encryption requires FlowsdnNode CRD"));
         }
         if self.ipsec && self.strict_ingress {
             return Err(Error("IPsec strict ingress awaits dedicated leak tests"));

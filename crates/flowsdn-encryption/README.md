@@ -10,3 +10,6 @@ resolve gateways, prove peer membership, observe health or perform migration.
 Build-feature plans name required diagnostic features; the BPF instrumentation
 and diagnostic objects remain unimplemented. Tests validate local plans and hash
 vectors, not encryption or reference packet-path interoperability.
+
+The legacy `ciliumnode_crd` option spelling refers to the owned `FlowsdnNode`
+resource in `flowsdn.io/v1alpha1`; it does not authorize managing Cilium CRDs.

@@ -134,3 +134,9 @@ for IPv4, so IPv6 prefixes remain exact beyond JSON/JavaScript integer limits.
 Releasing an excluded address removes its allocation but does not remove the
 exclusion. Summaries inspect sparse allocation/exclusion metadata; they never
 scan the IPv6 address space or materialize exclusions merely to count them.
+
+## Compatibility field identity
+
+The persisted `CiliumEndpointUID` JSON field retains its compatibility spelling.
+It is not a CRD kind, API group or permission to adopt upstream objects. Owned
+Kubernetes resources follow [ADR-0016](decisions/0016-flowsdn-resource-identity.md).

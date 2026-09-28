@@ -35,8 +35,9 @@ After validated implementation work, flowsdn uses the special-component
 Documentation-only work is not a networking release. Cargo.lock pins select
 which dependency revisions are built; sibling changes do not arrive implicitly.
 
-The owner requires flowsdn identity for CRDs it owns (#299). Current planning
-code still hardcodes `cilium.io`; do not describe that migration as implemented.
+The owner requires flowsdn identity for CRDs it owns (#299). Registration
+plans use flowsdn.io/v1alpha1; explicit reference-schema migration is separate.
+No live custom-resource controller or stored-instance migration is implemented.
 Read compatibility formats separately from ownership/attribution. PVCs are
 provided by the built-in stormblock driver, not a flowsdn storage controller.
 Current build orchestration is stormcentral; removal of the obsolete GitHub
@@ -46,8 +47,8 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 
 ### Owned Kubernetes identity — #299
 
-- [ ] Project registration into flowsdn.io/v1alpha1 with Flowsdn kinds, owned names/category and schema label; retain explicit reference-schema input only.
-- [ ] Cover registration rejection/migration and owned operator resource scopes; document runtime-name compatibility decisions and correct ownership specifications.
+- [x] Project registration into flowsdn.io/v1alpha1 with Flowsdn kinds, owned names/category and schema label; retain explicit reference-schema input only.
+- [x] Cover registration rejection/migration and owned operator resource scopes; document runtime-name compatibility decisions and correct ownership specifications.
 - [ ] Commit/push each unit, validate through sc-build, record results, release/stage as appropriate and close with evidence.
 
 Work is isolated on work/299-crd-identity. #291 watch/transport checkpoints

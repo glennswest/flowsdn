@@ -52,12 +52,20 @@ These additions are awaiting live validation and do not complete cluster accepta
   [configuration library](crates/flowsdn-config/README.md) is a compatibility
   catalogue, **not** the executable's accepted CLI or active feature set.
 
-Cilium wire formats, reference fixtures and compatibility names are not a claim
-that flowsdn is Cilium. The owner requires flowsdn-owned CRDs to use flowsdn's
-identity. The current Kubernetes planning library still hardcodes `cilium.io`;
-that unresolved implementation and runtime-name migration is tracked in
-[#299](https://github.com/glennswest/flowsdn/issues/299). The standalone daemon
-does not currently register or reconcile CRDs.
+flowsdn-owned CRD plans use `flowsdn.io/v1alpha1`, `Flowsdn*` kinds and the
+`flowsdn` category. An explicit migration projection reads upstream CRD schemas
+and emits flowsdn registration payloads; it is not a live Cilium policy reader
+or an instance migration service. The standalone daemon does not register or
+reconcile CRDs, and flowsdn must not adopt or garbage-collect existing
+`cilium.io` objects.
+
+Compatibility concerns data shape: the agent serves only the Unix-socket REST
+subset documented above, while Hubble observer/relay remain planned. Existing
+CNI aliases and specified interface/BPF names are retained for executable lookup,
+datapath ABI and restoration compatibility; they do not identify upstream-owned
+resources as ours. New configuration/controller defaults use flowsdn names.
+See the [resource identity decision](docs/decisions/0016-flowsdn-resource-identity.md)
+for migration boundaries and the runtime-name rationale.
 
 ## How it ships in stormcos
 
