@@ -85,7 +85,7 @@ impl Connector {
             self.handle
                 .link()
                 .get()
-                .match_name("lo".into())
+                .match_name("lo")
                 .execute()
                 .try_next()
                 .await?

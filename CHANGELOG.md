@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **fix:** Remove ambiguous conversion in loopback link lookup exposed by the combined CNI/Kubernetes build (#291).
 - **chore:** Resolve and lock the recovered Kubernetes transport dependencies and format milestone-one source (#291).
 - **feat:** Recover bounded Node/Pod list-watch state and authenticated HTTPS transport from the saved #291 branch; dependency resolution and runtime integration remain pending.
 - **docs:** Resume #291 from saved CNI and Kubernetes watch checkpoints, with integration and two-node acceptance still required.
