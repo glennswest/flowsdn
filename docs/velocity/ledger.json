@@ -4978,9 +4978,10 @@
     "build_execution_seconds": 412,
     "golden_request": {
       "id": "ea5a8e9a2762",
-      "source_revision": "f8d5cc8",
       "state": "queued behind stormvm fetch",
-      "observed_utc": "2026-09-28T01:02:55Z"
+      "observed_utc": "2026-09-28T01:02:55Z",
+      "main_revision_at_request": "f8d5cc8",
+      "built_revision": null
     }
   }
 }
