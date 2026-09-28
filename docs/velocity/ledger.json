@@ -5057,5 +5057,17 @@
     "token_endpoint": null,
     "active_work_seconds": null,
     "outcomes": []
+  },
+  "issue_299_recovery": {
+    "start_utc": "2026-09-28T17:18:38Z",
+    "end_utc": null,
+    "agent": "codex/root",
+    "scope": "project/shared",
+    "source_revision": "e1a1e7b",
+    "token_baseline": null,
+    "token_endpoint": null,
+    "active_work_seconds": null,
+    "outcomes": [],
+    "note": "Overlaps queued Fedora TLS validation; do not sum overlapping project elapsed windows."
   }
 }

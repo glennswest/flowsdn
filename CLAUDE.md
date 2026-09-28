@@ -61,6 +61,13 @@ transport lock dependencies and remote validation pending); #291 watch branch
 is preserved. Do not overwrite these branches or claim them complete.
 
 
+### Owned Kubernetes identity — #299, resumed 2026-09-28
+
+- [x] Read issue/comments and open backlog; inspect preserved implementation f35b620.
+- [ ] Recover owned flowsdn.io/v1alpha1 CRDs, explicit upstream migration projection and documented runtime compatibility-name decisions; reconcile with current OpenSSL transport.
+- [ ] Review ownership boundaries and tests; push source before serialized sc-build validation.
+- [ ] Validate affected crates, format/lint and regression coverage; record results, stage the golden and close #299 only with verified evidence.
+
 ### Milestone 1 implementation — #291, resumed 2026-09-28
 
 - [x] Read acceptance and acknowledge open backlog; synchronize the previous audit already published upstream.

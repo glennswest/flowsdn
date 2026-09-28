@@ -3,7 +3,8 @@
 ## [Unreleased]
 
 ### 2026-09-28
-- **chore:** Resolve the Fedora OpenSSL dependency lock and format TLS regression tests through the managed build. 
+- **docs:** Resume #299 from its saved ownership implementation; plan recovery, cross-review and managed validation alongside queued TLS validation.
+- **chore:** Resolve the Fedora OpenSSL dependency lock and format TLS regression tests through the managed build.
 - **test:** Add verified local HTTPS trust/hostname tests and graph-based musl selection that retains native validation for system-OpenSSL consumers.
 - **fix:** Select Fedora system OpenSSL for Kubernetes TLS; record the owner-approved scoped C exception, prohibit vendored backends and document GNU/runtime requirements (#291/#306).
 - **docs:** Plan owner-approved Fedora OpenSSL transport, scoped dependency-policy amendment and deployment dependency for #291/#306.
