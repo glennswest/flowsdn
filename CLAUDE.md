@@ -49,7 +49,9 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 
 - [x] Read issue/comments and existing deployment/API contract; preserve #299 at f35b620 on work/299-crd-identity with its sc-build pending.
 - [ ] Add a bounded Unix-socket liveness command and validation DaemonSet exec probe, with failure/timeout coverage.
-- [ ] Keep operator and relay availability explicit; implement missing integration without pretending static manifests provide working multi-node networking.
+- [ ] Keep operator and relay availability explicit: accepted architecture requires separate operator and relay processes.
+- [ ] Vendor the verified reference CRD schema bundle and expose owned registration payloads, a prerequisite for a real leader-elected operator; implement client/election/controllers next.
+- [ ] Validate multi-node allocation and lifecycle rather than treating process scaffolding as a complete operator.
 - [ ] Push and validate via sc-build; close only when operator/network and deployment acceptance obligations are satisfied.
 
 Current #296 work is isolated on work/296-stormcos-integration. Earlier #291
