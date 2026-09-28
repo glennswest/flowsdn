@@ -118,7 +118,12 @@ impl Connector {
     pub fn address_prefixes(&self, index: u32) -> Result<Vec<(IpAddr, u8)>> {
         use rtnetlink::packet_route::address::AddressAttribute;
         self.run(async {
-            let mut stream = self.handle.address().get().set_link_index_filter(index).execute();
+            let mut stream = self
+                .handle
+                .address()
+                .get()
+                .set_link_index_filter(index)
+                .execute();
             let mut addresses = Vec::new();
             while let Some(message) = stream.try_next().await? {
                 for attribute in message.attributes {
