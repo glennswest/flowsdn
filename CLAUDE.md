@@ -61,11 +61,13 @@ transport lock dependencies and remote validation pending); #291 watch branch
 is preserved. Do not overwrite these branches or claim them complete.
 
 
-### Milestone 1 implementation — #291, 2026-09-27
+### Milestone 1 implementation — #291, resumed 2026-09-28
 
 - [x] Read acceptance and acknowledge open backlog; synchronize the previous audit already published upstream.
-- [ ] Implement Rust loopback CNI dispatch and compatibility binary installation from spec 09 and ADRs 0012–0013; add failure and overwrite coverage.
-- [ ] Push source, then validate with sc-build; preserve exact errors and measured results.
+- [x] Rust loopback/install source is on main through 816c8c9; validation remains pending.
+- [ ] Recover saved Node/Pod watch state and bounded HTTPS transport from work/291-watch-state; resolve dependency lock and formatting through sc-build, then validate CNI and Kubernetes suites.
+- [ ] Connect watch reconciliation, identity/ipcache and owned remote routes to the endpoint agent; review ADR acceptance in parallel.
+- [ ] Push each source checkpoint before sc-build; preserve exact errors and measured results.
 - [ ] Continue Kubernetes Node/Pod watch, identity/ipcache and remote routing integration, then disposable two-node IPv4/IPv6 acceptance.
 - [ ] Close #291 only after every acceptance gate passes; stage the flowsdn golden after verified implementation.
 

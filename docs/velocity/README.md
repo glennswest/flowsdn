@@ -266,3 +266,7 @@ The earlier golden request failed and is tracked in stormcos#155; no golden
 or release was produced. Usage counters and active work time remain null;
 the gap between sessions is not counted as active time. Final publication
 and issue closure follow this cutoff.
+
+#291 recovery started 2026-09-28T15:46:33Z from `13cfc45`. Initial reading preceded this
+baseline. Recover saved watch transport and validate CNI, then integrate
+controllers and perform cluster acceptance. Usage counters remain unavailable.
