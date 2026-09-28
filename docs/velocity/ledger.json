@@ -4956,5 +4956,18 @@
     "token_endpoint": null,
     "active_work_seconds": null,
     "outcomes": []
+  },
+  "issue_299": {
+    "start_utc": "2026-09-28T00:16:43Z",
+    "end_utc": null,
+    "scope": "project/shared",
+    "agent": "codex/root",
+    "source_revision": "816c8c9",
+    "token_baseline": null,
+    "token_endpoint": null,
+    "active_work_seconds": null,
+    "outcomes": [
+      "Plan owned CRD identity; earlier milestone build remains queued"
+    ]
   }
 }

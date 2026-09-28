@@ -44,6 +44,18 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 
 ## Work plan
 
+### Owned Kubernetes identity — #299
+
+- [ ] Project registration into flowsdn.io/v1alpha1 with Flowsdn kinds, owned names/category and schema label; retain explicit reference-schema input only.
+- [ ] Cover registration rejection/migration and owned operator resource scopes; document runtime-name compatibility decisions and correct ownership specifications.
+- [ ] Commit/push each unit, validate through sc-build, record results, release/stage as appropriate and close with evidence.
+
+Work is isolated on work/299-crd-identity. #291 watch/transport checkpoints
+remain on work/291-watch-state at 6bab09a; dependency resolution is pending.
+The sc-build for main 816c8c9 remains queued and may publish formatting to main.
+Do not merge unvalidated watch dependencies into this ownership change.
+
+
 ### Milestone 1 implementation — #291, 2026-09-27
 
 - [x] Read acceptance and acknowledge open backlog; synchronize the previous audit already published upstream.

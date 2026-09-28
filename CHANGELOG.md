@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-09-28
+- **docs:** Plan owned Kubernetes identity migration and explicit runtime compatibility naming for #299.
+
 ### 2026-09-27
 - **feat:** Add atomic Rust CNI installation with compatibility names, overwrite controls and installer regression tests; align loopback fixtures with workspace lint rules.
 - **fix:** Match locked netlink link flags and reject malformed loopback prevResult before namespace mutation; cover disabled IPv6.

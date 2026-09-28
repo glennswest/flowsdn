@@ -246,3 +246,9 @@ Final commit/publication is outside this cutoff.
 Started 2026-09-27T23:20:08Z; initial issue review preceded this baseline.
 Loopback/install implementation is the first checkpoint. Usage telemetry is
 unavailable; counters and active work time remain null.
+
+## Owned Kubernetes identity #299
+
+Started 2026-09-28T00:16:43Z. Registration, ownership documentation and regression tests;
+validation pending. Token counters and active time unavailable. Earlier #291
+watch transport is checkpointed separately; shared build is still queued.
