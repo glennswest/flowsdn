@@ -67,7 +67,7 @@ is preserved. Do not overwrite these branches or claim them complete.
 - [x] Recover owned flowsdn.io/v1alpha1 CRDs, explicit upstream migration projection and documented runtime compatibility-name decisions; reconcile with current OpenSSL transport.
 - [x] Reviewed all four ownership requirements; source e02d811 and formatting 9c1ea61 pushed. No further owner decision needed.
 - [x] Full workspace build, formatting/Clippy, 710 tests and both musl checks passed at 9c1ea61 (283 seconds); one existing namespace fixture ignored.
-- [ ] Request the flowsdn golden once and record its outcome; close #299 with the verified ownership behavior and validation limits.
+- [x] Requested golden cdb5f2d45638 once at 06fcc81; stormcos staging failed after 34 seconds with flowsdn not staged. Existing stormcos#155 updated; no golden produced. Source issue #299 is verified and ready for closure with these limits.
 
 ### Milestone 1 implementation — #291, resumed 2026-09-28
 

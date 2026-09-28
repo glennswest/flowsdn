@@ -5077,7 +5077,7 @@
   },
   "issue_299_recovery": {
     "start_utc": "2026-09-28T17:18:38Z",
-    "end_utc": null,
+    "end_utc": "2026-09-28T17:32:22Z",
     "agent": "codex/root",
     "scope": "project/shared",
     "source_revision": "e1a1e7b",
@@ -5087,7 +5087,7 @@
     "outcomes": [
       "All four #299 requirements implemented and independently reviewed",
       "Full build, formatting/Clippy, all 710 tests and both musl checks passed; one namespace fixture ignored",
-      "Golden request and issue closure pending"
+      "Source verification complete; golden staging failed in owning project, stormcos#155 updated; #299 ready for verified closure"
     ],
     "note": "Overlaps queued Fedora TLS validation; do not sum overlapping project elapsed windows.",
     "validation_cutoff_utc": "2026-09-28T17:30:48Z",
@@ -5101,6 +5101,10 @@
       "e02d811",
       "9c1ea61"
     ],
-    "parallel_agent_hours": null
+    "parallel_agent_hours": null,
+    "elapsed_seconds": 824,
+    "golden_request": "cdb5f2d45638",
+    "golden_execution_seconds": 34,
+    "golden_outcome": "Failed in stormcos#155: flowsdn named in ONLY and not staged; no golden or release request"
   }
 }

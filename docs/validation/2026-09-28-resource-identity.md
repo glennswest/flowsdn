@@ -47,3 +47,12 @@ instance migration or two-node networking acceptance. The standalone daemon
 still does not register CRDs. Milestone 1 remains open. Per the milestone release
 contract, package version remains 0.14.0 until milestone acceptance; the breaking
 owned API change is recorded in Unreleased. Golden staging is requested separately.
+
+## Golden handoff
+
+The required single request cdb5f2d45638 selected flowsdn 06fcc81 with stormcos
+54d6d0134e50. It failed after 34 seconds: `named in ONLY and not staged: flowsdn`.
+The component table omitted flowsdn and the audit found zero goldens. No golden
+or release request was produced. This repeats the existing stormcos#155 failure,
+which received the exact request/revision evidence and proposed dispatch fix.
+Source verification for #299 is complete; deployment repair belongs to stormcos.

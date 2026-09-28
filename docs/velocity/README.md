@@ -301,3 +301,8 @@ Elapsed through validation record: 730 seconds; managed execution:
 283 seconds. Token counters and active/parallel-agent time are unknown.
 This interval overlaps Fedora TLS work; do not sum them. Golden staging and
 closure follow this cutoff. See [validation](../validation/2026-09-28-resource-identity.md).
+
+#299 final work cutoff: 2026-09-28T17:32:22Z; total observed elapsed 824 seconds.
+Golden request cdb5f2d45638 failed in 34 seconds under stormcos#155, producing
+no golden. Source verification is complete; final issue closure/reporting follow
+this cutoff. No token-usage estimate is available.
