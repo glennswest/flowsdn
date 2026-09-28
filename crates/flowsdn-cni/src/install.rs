@@ -20,15 +20,21 @@ pub struct InstallOptions {
 impl InstallOptions {
     /// An explicit source avoids assuming the packaging layout or copying the agent.
     pub fn from_env(source: PathBuf, env: &BTreeMap<OsString, OsString>) -> Self {
-        let host = env.get(&OsString::from("HOST_PREFIX"))
-            .map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/host"));
+        let host = env
+            .get(&OsString::from("HOST_PREFIX"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/host"));
         Self {
             source,
-            cni_dir: env.get(&OsString::from("CNI_DIR"))
-                .map(PathBuf::from).unwrap_or_else(|| host.join("opt/cni")),
-            overwrite_cilium: env.get(&OsString::from("OVERWRITE_CILIUM"))
+            cni_dir: env
+                .get(&OsString::from("CNI_DIR"))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| host.join("opt/cni")),
+            overwrite_cilium: env
+                .get(&OsString::from("OVERWRITE_CILIUM"))
                 .is_none_or(|v| v != "false"),
-            overwrite_loopback: env.get(&OsString::from("OVERWRITE_LOOPBACK"))
+            overwrite_loopback: env
+                .get(&OsString::from("OVERWRITE_LOOPBACK"))
                 .is_some_and(|v| v == "true"),
         }
     }
@@ -54,8 +60,10 @@ pub fn install(options: &InstallOptions) -> io::Result<InstallReport> {
         copy_atomic(&options.source, &plugin)?;
         report.plugin_replaced = true;
     } else if !fs::symlink_metadata(&plugin)?.file_type().is_file() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "retained cilium-cni must be a regular file"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "retained cilium-cni must be a regular file",
+        ));
     }
     for name in ["flowsdn-cni", "flowsdn"] {
         link_atomic(&plugin, &bin.join(name))?;
@@ -70,7 +78,9 @@ pub fn install(options: &InstallOptions) -> io::Result<InstallReport> {
         Ok::<_, io::Error>(())
     })();
     if let Err(error) = loopback_result {
-        report.warnings.push(format!("could not install loopback: {error}"));
+        report
+            .warnings
+            .push(format!("could not install loopback: {error}"));
     }
     Ok(report)
 }
@@ -86,22 +96,40 @@ fn exists(path: &Path) -> io::Result<bool> {
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 struct Temporary(PathBuf);
 impl Drop for Temporary {
-    fn drop(&mut self) { let _ = fs::remove_file(&self.0); }
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
 }
 fn temporary(destination: &Path) -> PathBuf {
     let mut name = OsString::from(".");
-    name.push(destination.file_name().expect("installer destination has a filename"));
-    name.push(format!(".new.{}.{}", std::process::id(), NEXT_TEMP.fetch_add(1, Ordering::Relaxed)));
+    name.push(
+        destination
+            .file_name()
+            .expect("installer destination has a filename"),
+    );
+    name.push(format!(
+        ".new.{}.{}",
+        std::process::id(),
+        NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+    ));
     destination.with_file_name(name)
 }
 fn copy_atomic(source: &Path, destination: &Path) -> io::Result<()> {
     let mut input = File::open(source)?;
     if !input.metadata()?.is_file() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "CNI source must be a regular file"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "CNI source must be a regular file",
+        ));
     }
     let (temporary, mut output) = loop {
         let path = temporary(destination);
-        match OpenOptions::new().write(true).create_new(true).mode(0o600).open(&path) {
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)
+        {
             Ok(file) => break (Temporary(path), file),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(e),

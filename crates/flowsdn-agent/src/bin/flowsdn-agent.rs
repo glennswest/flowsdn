@@ -34,9 +34,11 @@ fn main() -> flowsdn_agent::state::Result<()> {
             Ok(())
         }
         [cni, install, flag, source]
-            if cni == "cni" && install == "install" && flag == "--source" => {
+            if cni == "cni" && install == "install" && flag == "--source" =>
+        {
             let options = flowsdn_cni::install::InstallOptions::from_env(
-                source.into(), &std::env::vars_os().collect(),
+                source.into(),
+                &std::env::vars_os().collect(),
             );
             let report = flowsdn_cni::install::install(&options)?;
             for warning in report.warnings {
