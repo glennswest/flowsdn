@@ -1,6 +1,6 @@
 # ADR-0016: Fedora OpenSSL for Kubernetes TLS
 
-Date: 2026-09-28. Status: accepted owner direction; validation pending.
+Date: 2026-09-28. Status: accepted owner direction; library validation passed at e1a1e7b.
 
 The owner selected a C provider from Fedora to resolve the TLS dependency
 conflict in #291/#306. Use Fedora's system OpenSSL through kube's

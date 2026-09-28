@@ -283,3 +283,12 @@ and reporting are outside this cutoff.
 
 Fedora TLS migration started 2026-09-28T16:52:14Z from `170183a`; initial review
 preceded the baseline. Owner approved a Fedora C provider. Usage unavailable.
+
+## Fedora OpenSSL checkpoint — 2026-09-28
+
+Library validation at e1a1e7b passed 33 tests, lint/format, both static CNI
+compile targets, system OpenSSL linkage and all dependency-policy gates.
+Observed elapsed: 1857 seconds including storage/slot waits; managed
+execution: 6 and 168 seconds. Usage counters and parallel-agent time are unknown.
+This interval overlaps #299 recovery and must not be added to it. See
+[validation](../validation/2026-09-28-fedora-tls.md); #291 remains incomplete.

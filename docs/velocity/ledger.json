@@ -5049,14 +5049,31 @@
   },
   "fedora_tls": {
     "start_utc": "2026-09-28T16:52:14Z",
-    "end_utc": null,
+    "end_utc": "2026-09-28T17:23:11Z",
     "agent": "codex/root",
     "scope": "project/shared",
     "source_revision": "170183a",
     "token_baseline": null,
     "token_endpoint": null,
     "active_work_seconds": null,
-    "outcomes": []
+    "outcomes": [
+      "Fedora OpenSSL provider and scoped policy passed tests, Clippy, both CNI musl targets, system linkage and all cargo-deny gates",
+      "stormcos#171 owns GNU/OpenSSL runtime; #291 moved behind it and remains incomplete"
+    ],
+    "elapsed_seconds": 1857,
+    "validated_revision": "e1a1e7b",
+    "commits": [
+      "9f39aad",
+      "c66d35a",
+      "e1a1e7b"
+    ],
+    "build_execution_seconds": [
+      6,
+      168
+    ],
+    "tests_passed": 33,
+    "parallel_agent_hours": null,
+    "note": "Elapsed includes storage/slot waits and overlaps issue_299_recovery. Do not sum overlapping windows. Missing usage and parallel timing remain null; review agents fedora_review and tls_targets contributed. Final record publication follows cutoff."
   },
   "issue_299_recovery": {
     "start_utc": "2026-09-28T17:18:38Z",

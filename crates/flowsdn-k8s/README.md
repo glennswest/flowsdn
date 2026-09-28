@@ -62,5 +62,5 @@ The owner selected Fedora system OpenSSL via kube `openssl-tls` with default
 features disabled; see [ADR-0016](../../docs/decisions/0016-fedora-openssl.md).
 Build with Fedora `openssl-devel` and `pkgconf-pkg-config`. Vendoring is disabled;
 TLS consumers require the matching Fedora GNU/OpenSSL runtime. The former
-ring dependency-policy failure is historical; replacement validation is pending.
+ring dependency-policy failure is resolved; see the [verified TLS checkpoint](../../docs/validation/2026-09-28-fedora-tls.md).
 This remains a library checkpoint, not agent controller integration.
