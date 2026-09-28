@@ -45,6 +45,12 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Comment mining — 2026-09-28
+
+- [ ] Review all 32 issues updated since September 27 and their recent comments.
+- [ ] Search owning repositories, file uncovered findings/owner decisions, and supplement existing issues only when evidence is missing.
+- [ ] Publish the source-comment-to-tracker table and accounting; no implementation fixes or release.
+
 ### Stormcos integration — #296, resumed 2026-09-28
 
 - [x] Read #296 body/comments, open backlog, current deployment contract and saved branch at 4a7eb49. #299 ownership prerequisite is now implemented and verified.

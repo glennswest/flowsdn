@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Plan the September 28 issue-comment mining pass; no implementation changes.
 - **docs:** Record successful managed documentation checks and #296 owner-question handoff; runtime acceptance remains unverified.
 - **docs:** Reassess #296 after CRD ownership validation; record the missing disposable acceptance target and preserve saved operator work pending the owner decision.
 - **docs:** Record #299 golden handoff failure in stormcos#155; source verification is complete, but no golden or deployment is claimed.
