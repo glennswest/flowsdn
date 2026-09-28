@@ -94,6 +94,14 @@ image.repository=` still works.
 
 ## 3. Behavior
 
+### Fedora TLS amendment — 2026-09-28
+
+[ADR-0016](../decisions/0016-fedora-openssl.md) supersedes musl/static/scratch
+requirements below for any binary linking the Kubernetes TLS client. Such
+binaries require the GNU/glibc target and Fedora OpenSSL runtime for their
+architecture. CNI remains eligible for static musl while it has no TLS dependency.
+The historical binary-size budgets do not establish the new runtime image size.
+
 ### 3.1 The binary set
 
 flowsdn ships **six** shipped binaries plus one dev-only tool. Everything that
@@ -934,11 +942,11 @@ need a real kernel.
 
 #### 3.8.6 Static linking
 
-All shipped binaries are `*-unknown-linux-musl` and fully static. `crt-static`
-is the musl default. `rustls` (never OpenSSL) removes the last C dependency —
-enforced by `deny.toml` banning `openssl-sys` (§3.8.8). `aws-lc-rs` is likewise
-banned in favour of `ring` or `rustls`'s pure-Rust provider; if a pinned
-dependency drags in `aws-lc-sys`, that is a C dependency and needs an ADR.
+Non-TLS binaries may use static musl. TLS consumers use Fedora system OpenSSL
+and GNU/glibc targets under ADR-0016; their runtime must include the matching
+dynamic loader, libraries, provider/configuration files and trust roots.
+Vendored OpenSSL, ring and AWS-LC remain banned. There is no general exemption
+from the Rust project-source requirement.
 
 #### 3.8.7 Reproducible builds
 
@@ -982,12 +990,12 @@ exceptions = []
 multiple-versions = "warn"
 wildcards = "deny"
 deny = [
-  { name = "openssl-sys",  reason = "C dependency; rustls only (ADR-0002)" },
-  { name = "openssl" },
+  { name = "openssl-src", reason = "Fedora system OpenSSL only; ADR-0016" },
+  { name = "ring", reason = "Fedora system OpenSSL only; ADR-0016" },
   { name = "aws-lc-sys",   reason = "C dependency (ADR-0002)" },
   { name = "libnftnl-sys", reason = "C dependency and GPL-2.0 (ADR-0002, licensing.md)" },
   { name = "bindgen",      reason = "implies a C header somewhere" },
-  { name = "cc",           reason = "implies a C compiler in the build (ADR-0002)" },
+  { name = "cc", wrappers = ["openssl-sys"], reason = "OpenSSL header probes only; ADR-0016" },
 ]
 
 [advisories]
@@ -1430,10 +1438,10 @@ Unit (u), integration (i), privileged (p), end-to-end (e).
 
 - [ ] (u) `bpf-objects.lock` mismatch fails the build with the documented message.
 - [ ] (i) The BPF post-processing check catches an injected `memcpy` relocation and an injected `core::panicking` reference.
-- [ ] (i) `cargo deny check` fails on an injected GPL dependency and on an injected `openssl-sys`.
+- [ ] (i) `cargo deny check` fails on an injected GPL dependency and on injected vendored OpenSSL or a non-approved C dependency.
 - [ ] (u) `xtask version check` fails when any one of the §3.9.2 locations disagrees.
 - [ ] (i) `xtask notice` fails when a dependency is added without a NOTICE update.
-- [ ] (i) A cross-built arm64 binary is `ET_EXEC`/static (`ldd` reports "not a dynamic executable") for every shipped binary.
+- [ ] (i) A cross-built arm64 binary is `ET_EXEC`/static (`ldd` reports "not a dynamic executable") for each non-TLS binary; TLS binaries load the matching Fedora GNU/OpenSSL runtime.
 
 **CI and matrix**
 

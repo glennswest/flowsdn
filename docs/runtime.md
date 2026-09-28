@@ -136,3 +136,13 @@ projection still uses the Cilium API group; the ownership correction requested
 in [#299](https://github.com/glennswest/flowsdn/issues/299) remains pending.
 Compatibility with Cilium formats is an integration goal, not a claim that
 all Cilium APIs, CRDs, CLIs or networking features work today.
+
+## Fedora TLS build boundary
+
+The Kubernetes client now selects Fedora system OpenSSL under
+[ADR-0016](decisions/0016-fedora-openssl.md). Building TLS consumers requires `openssl-devel` and
+`pkgconf-pkg-config`; runtime requires matching `openssl-libs`, GNU/glibc,
+OpenSSL configuration/provider files and certificate trust. Vendoring is disabled.
+The current standalone agent/CNI have not yet integrated this client; their
+existing static delivery is historical evidence, not a guarantee for a future
+TLS-enabled agent. Its golden packaging must change before deployment.

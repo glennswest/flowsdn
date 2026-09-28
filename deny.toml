@@ -9,13 +9,22 @@ exceptions = []
 multiple-versions = "warn"
 wildcards = "deny"
 deny = [
-  { name = "openssl-sys", reason = "No C dependencies; ADR-0002" },
-  { name = "openssl" },
+  # ADR-0016 permits Fedora system OpenSSL and its Rust bindings.
+  { name = "openssl-src", reason = "Use Fedora OpenSSL, not vendored sources; ADR-0016" },
+  { name = "ring", reason = "Use Fedora system OpenSSL; ADR-0016" },
   { name = "aws-lc-sys", reason = "No C dependencies; ADR-0002" },
   { name = "libnftnl-sys", reason = "No C or GPL dependencies" },
   { name = "bindgen", reason = "No C headers; ADR-0002" },
-  { name = "cc", reason = "No C compiler; ADR-0002" },
+  { name = "cc", wrappers = ["openssl-sys"], reason = "Only system OpenSSL header probes; ADR-0016" },
 ]
+
+[[bans.features]]
+name = "openssl"
+deny = ["vendored"]
+
+[[bans.features]]
+name = "openssl-sys"
+deny = ["vendored"]
 
 [advisories]
 yanked = "deny"

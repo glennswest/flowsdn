@@ -114,7 +114,9 @@ cargo xtask deny
 ```
 
 `check` runs formatting, Clippy, tests and compile checks for x86-64/arm64 Linux
-musl, including feature-gated fixtures. `deny` requires `cargo-deny`. Build output
+musl for non-TLS dependency closures, including feature-gated fixtures.
+TLS consumers use native GNU checks and require Fedora OpenSSL; target
+sysroots and runtime checks are needed for cross-architecture TLS validation. `deny` requires `cargo-deny`. Build output
 uses standard Cargo configuration. Privileged runtime fixtures have additional
 requirements documented in [flowsdn-bpftest](crates/flowsdn-bpftest/README.md);
 cross-compilation alone does not prove runtime support.
@@ -137,3 +139,13 @@ Rust; fixture data uses txtar, JSON, YAML and TOML.
 
 Apache License 2.0. See [LICENSE](LICENSE), [NOTICE](NOTICE) and the
 [licensing and clean-room rules](docs/licensing.md).
+
+## Fedora TLS build boundary
+
+The Kubernetes client now selects Fedora system OpenSSL under
+[ADR-0016](docs/decisions/0016-fedora-openssl.md). Building TLS consumers requires `openssl-devel` and
+`pkgconf-pkg-config`; runtime requires matching `openssl-libs`, GNU/glibc,
+OpenSSL configuration/provider files and certificate trust. Vendoring is disabled.
+The current standalone agent/CNI have not yet integrated this client; their
+existing static delivery is historical evidence, not a guarantee for a future
+TLS-enabled agent. Its golden packaging must change before deployment.

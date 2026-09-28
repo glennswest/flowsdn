@@ -49,3 +49,11 @@ Permitted: MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, MPL-2.0 (file-level
 copyleft, acceptable), Unicode. Not permitted without a decision record:
 GPL, LGPL, AGPL, SSPL, BUSL. The workspace policy in `deny.toml` is enforced
 with `cargo xtask deny` against the locked dependency graph.
+
+## Fedora TLS exception
+
+[ADR-0016](decisions/0016-fedora-openssl.md) permits distribution OpenSSL
+and its Rust bindings/header probes. Vendored OpenSSL and other C backends
+remain prohibited. Package license/provenance and matching runtime libraries
+must be recorded by the golden builder; Cargo dependency checks alone do not
+audit system RPM contents.

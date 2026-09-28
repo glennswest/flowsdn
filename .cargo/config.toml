@@ -3,3 +3,7 @@ xtask = "run --locked --package xtask --"
 
 [build]
 jobs = 2
+
+# ADR-0016: use distribution OpenSSL; never silently compile a vendored copy.
+[env]
+OPENSSL_NO_VENDOR = { value = "1", force = true }

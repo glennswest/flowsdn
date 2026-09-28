@@ -59,18 +59,27 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Ok(());
         }
         run(&["fmt", "--all", "--", "--check"])?;
+        let musl_packages = changed::musl_packages(Some(&packages))?;
         for (action, target) in [
             ("clippy", None),
             ("test", None),
             ("check", Some("x86_64-unknown-linux-musl")),
             ("check", Some("aarch64-unknown-linux-musl")),
         ] {
+            let selected = if target.is_some() {
+                &musl_packages
+            } else {
+                &packages
+            };
+            if selected.is_empty() {
+                continue;
+            }
             let mut invocation = vec![
                 action.to_owned(),
                 "--locked".to_owned(),
                 "--all-features".to_owned(),
             ];
-            for package in &packages {
+            for package in selected {
                 invocation.extend(["-p".to_owned(), package.clone()]);
             }
             if action != "test" {
@@ -103,16 +112,23 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "warnings",
             ])?;
             run(&["test", "--workspace", "--all-features", "--locked"])?;
+            let packages = changed::musl_packages(None)?;
             for target in ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"] {
-                run(&[
+                if packages.is_empty() {
+                    continue;
+                }
+                let mut invocation = vec![
                     "check",
-                    "--workspace",
                     "--all-targets",
                     "--all-features",
                     "--locked",
                     "--target",
                     target,
-                ])?;
+                ];
+                for package in &packages {
+                    invocation.extend(["-p", package.as_str()]);
+                }
+                run(&invocation)?;
             }
             Ok(())
         }

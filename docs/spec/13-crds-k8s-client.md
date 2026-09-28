@@ -1358,7 +1358,8 @@ flowsdn-k8s/
     conformance/           the §9.5 binary
 ```
 
-Dependencies: `kube` (client + runtime + derive) with `rustls`, `k8s-openapi`
+Dependencies: `kube` (client + runtime + derive) with Fedora system OpenSSL (`openssl-tls`, defaults disabled;
+[ADR-0016](../decisions/0016-fedora-openssl.md)), `k8s-openapi`
 **only** for the handful of full built-in types flowsdn writes (Lease, Event,
 CRD), `serde`/`serde_json`/`serde_yaml`, `schemars` (for T-CRD-3), `tower`
 (rate limit and the rotating layer), `tokio`, `semver`. `k8s-openapi`'s full

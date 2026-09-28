@@ -2,6 +2,12 @@
 
 Date: 2026-09-07. Status: accepted (user decision).
 
+## Subsequent owner direction
+
+[ADR-0016](0016-fedora-openssl.md) permits Fedora-provided OpenSSL for TLS
+and its Rust binding build probes. All project and BPF code remains Rust.
+The original decision below applies outside that narrow exception.
+
 ## Decision
 
 flowsdn contains no C. The BPF datapath programs are written in Rust with

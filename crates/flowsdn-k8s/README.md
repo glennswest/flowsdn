@@ -27,7 +27,7 @@ The caller still must connect the transport to this state, issue pagination
 requests, apply retry/backoff and implement agent reconciliation. The state
 layer alone does not establish Kubernetes connectivity or pod networking.
 
-## HTTPS transport checkpoint (dependency policy blocked)
+## HTTPS transport checkpoint (Fedora OpenSSL)
 
 `client::JsonClient` loads an explicit kubeconfig or in-cluster configuration,
 requires verified HTTPS, and reads a token-file credential for each request.
@@ -40,9 +40,9 @@ frames have byte/time limits. HTTP failures do not collect unbounded response
 bodies. Partial frame bytes and deadlines survive cancellation; EOF, malformed
 frames, timeouts and watch ERROR events require relisting.
 
-The locked checkpoint compiles and its unit tests and Clippy pass through the
-managed build service. It fails dependency policy: the selected ring provider
-brings in the banned cc build dependency; the license gate also fails (#306).
-A TLS-provider decision is required before acceptance. Real HTTPS integration
-and agent controller orchestration are not verified. The implementation follows the pinned
-[kube 4.2.0 client API](https://docs.rs/kube/4.2.0/kube/struct.Client.html).
+The owner selected Fedora system OpenSSL via kube `openssl-tls` with default
+features disabled; see [ADR-0016](../../docs/decisions/0016-fedora-openssl.md).
+Build with Fedora `openssl-devel` and `pkgconf-pkg-config`. Vendoring is disabled;
+TLS consumers require the matching Fedora GNU/OpenSSL runtime. The former
+ring dependency-policy failure is historical; replacement validation is pending.
+This remains a library checkpoint, not agent controller integration.

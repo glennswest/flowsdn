@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **test:** Add verified local HTTPS trust/hostname tests and graph-based musl selection that retains native validation for system-OpenSSL consumers.
+- **fix:** Select Fedora system OpenSSL for Kubernetes TLS; record the owner-approved scoped C exception, prohibit vendored backends and document GNU/runtime requirements (#291/#306).
 - **docs:** Plan owner-approved Fedora OpenSSL transport, scoped dependency-policy amendment and deployment dependency for #291/#306.
 - **docs:** Record passing recovered-checkpoint lint/tests and failing TLS dependency policy (#306); pause #291 for the provider decision without weakening the Rust-only rule.
 - **chore:** Format checked milestone-one fixture access after remote lint feedback (#291).

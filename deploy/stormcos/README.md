@@ -120,3 +120,16 @@ IPv4/IPv6, pod churn, agent restart/recovery and cleanup. Service routing,
 network policy, operator controllers and flow/relay APIs have their own
 [implementation acceptance gates](../../docs/milestones.md). No example here
 marks those gates complete.
+
+## Fedora TLS build boundary
+
+The Kubernetes client now selects Fedora system OpenSSL under
+[ADR-0016](../../docs/decisions/0016-fedora-openssl.md). Building TLS consumers requires `openssl-devel` and
+`pkgconf-pkg-config`; runtime requires matching `openssl-libs`, GNU/glibc,
+OpenSSL configuration/provider files and certificate trust. Vendoring is disabled.
+The current standalone agent/CNI have not yet integrated this client; their
+existing static delivery is historical evidence, not a guarantee for a future
+TLS-enabled agent. Its golden packaging must change before deployment.
+
+Runtime packaging for that integration is tracked in
+[stormcos#171](https://github.com/glennswest/stormcos/issues/171).

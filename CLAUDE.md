@@ -69,7 +69,7 @@ is preserved. Do not overwrite these branches or claim them complete.
 - [x] At 03685f2, Clippy passed and affected Kubernetes/loopback tests passed again; 86 broader tests passed earlier at bfc19b2.
 - [x] Owner approved a Fedora-provided C TLS provider on 2026-09-28; choose system OpenSSL via kube openssl-tls.
 - [ ] Record the narrow ADR/policy exception, replace ring/rustls transport features, resolve lock through sc-build, validate tests/Clippy/policy and Fedora linkage.
-- [ ] File stormcos packaging dependency for the future GNU/Fedora-linked agent; keep #291 integration and cluster acceptance open.
+- [x] Filed stormcos#171 for GNU/Fedora OpenSSL golden runtime; #291 integration and cluster acceptance remain open.
 - [ ] Connect watch reconciliation, identity/ipcache and owned remote routes to the endpoint agent; review ADR acceptance in parallel.
 - [ ] Push each source checkpoint before sc-build; preserve exact errors and measured results.
 - [ ] Continue Kubernetes Node/Pod watch, identity/ipcache and remote routing integration, then disposable two-node IPv4/IPv6 acceptance.

@@ -12,6 +12,9 @@ binaries ship in a stormcos golden; the historical image strategy below is not
 the current delivery path. See the [current README](../../README.md). This ADR
 records intended scope, not a claim that every feature is implemented.
 
+[ADR-0016](0016-fedora-openssl.md) supersedes static/scratch-only packaging
+for TLS consumers: they require a Fedora-compatible GNU/OpenSSL runtime.
+
 ## Decision
 
 flowsdn reimplements the complete Cilium feature set in Rust. A feature is

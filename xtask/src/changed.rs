@@ -178,6 +178,118 @@ pub fn plan(base: &str) -> Result<Vec<String>, Box<dyn Error>> {
     let (packages, files) = inputs(base)?;
     Ok(select(&packages, &files).into_iter().collect())
 }
+
+/// Classify by resolved package IDs, so aliases and multiple crate versions do
+/// not confuse the transitive system-library dependency closure. Metadata must
+/// include all features and dependency kinds, matching our all-targets checks.
+fn musl_selection(metadata: &Value) -> Result<BTreeMap<String, bool>, Box<dyn Error>> {
+    let packages = metadata
+        .get("packages")
+        .and_then(Value::as_array)
+        .ok_or("missing packages")?;
+    let nodes = metadata
+        .pointer("/resolve/nodes")
+        .and_then(Value::as_array)
+        .ok_or("missing resolved dependency graph")?;
+    let mut system_tls = BTreeSet::new();
+    let mut names = BTreeMap::new();
+    for package in packages {
+        let id = package
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or("missing package id")?;
+        let name = package
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or("missing package name")?;
+        names.insert(id, name);
+        if matches!(name, "openssl" | "openssl-sys") {
+            system_tls.insert(id);
+        }
+    }
+    let mut dependencies = BTreeMap::new();
+    for node in nodes {
+        let id = node
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or("missing resolved package id")?;
+        let deps = node
+            .get("dependencies")
+            .and_then(Value::as_array)
+            .ok_or("missing resolved dependencies")?
+            .iter()
+            .map(|dependency| dependency.as_str().ok_or("invalid resolved dependency id"))
+            .collect::<Result<Vec<_>, _>>()?;
+        dependencies.insert(id, deps);
+    }
+    for (id, deps) in &dependencies {
+        if !names.contains_key(id)
+            || deps
+                .iter()
+                .any(|dep| !names.contains_key(dep) || !dependencies.contains_key(dep))
+        {
+            return Err("incomplete resolved dependency graph".into());
+        }
+    }
+    loop {
+        let before = system_tls.len();
+        for (id, deps) in &dependencies {
+            if deps.iter().any(|dep| system_tls.contains(dep)) {
+                system_tls.insert(*id);
+            }
+        }
+        if system_tls.len() == before {
+            break;
+        }
+    }
+    metadata
+        .get("workspace_members")
+        .and_then(Value::as_array)
+        .ok_or("missing workspace members")?
+        .iter()
+        .map(|member| {
+            let id = member.as_str().ok_or("invalid workspace member")?;
+            if !dependencies.contains_key(id) {
+                return Err("workspace member missing from resolved graph".into());
+            }
+            let name = names.get(id).ok_or("workspace member missing package")?;
+            Ok(((*name).to_owned(), !system_tls.contains(id)))
+        })
+        .collect()
+}
+
+/// System OpenSSL consumers are validated natively. Keep musl compile checks
+/// for every other selected workspace package, including future additions.
+pub fn musl_packages(selected: Option<&[String]>) -> Result<Vec<String>, Box<dyn Error>> {
+    let metadata: Value = serde_json::from_slice(&output(Command::new("cargo").args([
+        "metadata",
+        "--locked",
+        "--format-version",
+        "1",
+        "--all-features",
+    ]))?)?;
+    let classification = musl_selection(&metadata)?;
+    if let Some(selected) = selected {
+        for name in selected {
+            if !classification.contains_key(name) {
+                return Err(format!("selected package missing from metadata: {name}").into());
+            }
+        }
+    }
+    let mut eligible = Vec::new();
+    for (name, portable) in classification {
+        if selected.is_some_and(|selected| !selected.contains(&name)) {
+            continue;
+        }
+        if portable {
+            eligible.push(name);
+        } else {
+            println!("musl: skipping {name}: system OpenSSL dependency; native checks apply");
+        }
+    }
+    println!("musl: selected packages: {}", eligible.join(", "));
+    Ok(eligible)
+}
 fn bpf_changed(files: &[String]) -> bool {
     files.iter().any(|file| {
         file.starts_with("crates/flowsdn-bpf/")
@@ -221,6 +333,61 @@ pub fn ci_plan(base: &str) -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn resolved_workspace() -> Value {
+        // Resolved edges use IDs, not manifest aliases. The external dev helper
+        // and optional all-features TLS adapter both lead to system OpenSSL.
+        let entries = [
+            ("agent-id", "agent", vec!["adapter-v1"]),
+            ("adapter-v1", "adapter", vec!["openssl-id"]),
+            ("openssl-id", "openssl", vec!["sys-id"]),
+            ("sys-id", "openssl-sys", vec![]),
+            ("tests-id", "test-tool", vec!["dev-helper-id"]),
+            ("dev-helper-id", "dev-helper", vec!["sys-id"]),
+            ("portable-id", "portable", vec!["adapter-v2"]),
+            ("adapter-v2", "adapter", vec![]),
+            ("cycle-a-id", "cycle-a", vec!["cycle-b-id"]),
+            ("cycle-b-id", "cycle-b", vec!["cycle-a-id", "sys-id"]),
+        ];
+        serde_json::json!({
+            "workspace_members": ["agent-id", "tests-id", "portable-id", "cycle-a-id"],
+            "packages": entries.iter().map(|(id, name, _)| {
+                serde_json::json!({"id": id, "name": name})
+            }).collect::<Vec<_>>(),
+            "resolve": {"nodes": entries.iter().map(|(id, _, dependencies)| {
+                serde_json::json!({"id": id, "dependencies": dependencies})
+            }).collect::<Vec<_>>()}
+        })
+    }
+    #[test]
+    fn musl_selection_tracks_external_dependencies_by_resolved_id() -> Result<(), Box<dyn Error>> {
+        assert_eq!(
+            musl_selection(&resolved_workspace())?,
+            BTreeMap::from([
+                ("agent".to_owned(), false),
+                ("test-tool".to_owned(), false),
+                ("portable".to_owned(), true),
+                ("cycle-a".to_owned(), false),
+            ])
+        );
+        Ok(())
+    }
+    #[test]
+    fn musl_selection_fails_closed_on_incomplete_metadata() -> Result<(), Box<dyn Error>> {
+        let mut metadata = resolved_workspace();
+        *metadata.get_mut("resolve").ok_or("missing fixture resolve")? = Value::Null;
+        assert!(musl_selection(&metadata).is_err());
+        let mut metadata = resolved_workspace();
+        *metadata
+            .pointer_mut("/resolve/nodes/0/dependencies")
+            .ok_or("missing fixture dependencies")? = serde_json::json!(["missing-id"]);
+        assert!(musl_selection(&metadata).is_err());
+        let mut metadata = resolved_workspace();
+        *metadata
+            .get_mut("workspace_members")
+            .ok_or("missing fixture members")? = serde_json::json!(["missing-id"]);
+        assert!(musl_selection(&metadata).is_err());
+        Ok(())
+    }
     fn workspace() -> BTreeMap<String, Package> {
         [
             ("table", "crates/table", vec![]),
