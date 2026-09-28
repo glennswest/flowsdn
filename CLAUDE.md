@@ -51,7 +51,8 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 - [x] Remove crates.yml and replace active build/publication/runner promises with sc-build and stormcentral golden orchestration; source/docs review complete.
 - [x] Validate #304 at 9e7144f through sc-build: workflow absence, locked xtask/packaging build and 16 passing tests; execution 412 seconds, scratch removed.
 - [x] Request the flowsdn golden once: ea5a8e9a2762; main was f8d5cc8 when requested. Queued behind stormvm fetch; actual built revision awaits the result.
-- [ ] Record the staging result and close #304 with verification evidence. No runtime or version change.
+- [x] Recover staging result: job ea5a8e9a2762 selected flowsdn 4092ba1 but produced no golden; stormcos#155 tracks `named in ONLY and not staged: flowsdn`.
+- [ ] Revalidate the final pushed workflow-removal state through sc-build, record the result, and close #304. Golden repair belongs to stormcos#155; no runtime or version change.
 
 Implementation checkpoints remain saved separately: #299 at f35b620 on
 work/299-crd-identity (validation deferred before execution for current #304); #296 at 4a7eb49 on
