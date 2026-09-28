@@ -60,3 +60,15 @@ clears the holder with the last confirmed UID/resourceVersion; it never deletes
 the Lease or overwrites a replacement owner. These plans do not run a controller
 or establish live multi-replica acceptance. Tests use a simulated optimistic API
 server to exercise acquisition races, local expiry, stale replies and release.
+
+## Owned registration reconciliation
+
+`registration::plan` consumes verified desired schemas and a fresh API object.
+Creates mark `app.kubernetes.io/managed-by=flowsdn-operator`; normal reconciliation
+rejects unmarked/foreign objects instead of adopting them. Skip mode observes
+matching GitOps-owned CRDs without writing. Conditional replacements preserve
+metadata, carry UID/resourceVersion and never claim status. Conflicts and unknown
+write outcomes require a fresh GET. Newer schema revisions are never downgraded,
+even when their schema is missing. Readiness requires a uniquely served
+`v1alpha1` object schema and Established status without termination/name conflict.
+This is a planner, not an executing registration controller.

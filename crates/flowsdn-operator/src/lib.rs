@@ -3,6 +3,7 @@ pub mod ces;
 pub mod lifecycle;
 pub mod lease;
 pub mod readiness;
+pub mod registration;
 pub mod taints;
 
 pub const DEFAULT_CES_MODE: &str = "default";

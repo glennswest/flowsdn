@@ -420,6 +420,7 @@ dependencies = [
 name = "flowsdn-operator"
 version = "0.14.0"
 dependencies = [
+ "flowsdn-k8s",
  "serde",
  "serde_json",
 ]

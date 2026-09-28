@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **feat:** Checkpoint owned-CRD reconciliation with no implicit adoption, conditional metadata-preserving updates, downgrade protection and served-version readiness; runtime integration pending.
 - **feat:** Add optimistic Lease election with guarded acquisition/renewal/release, monotonic deadlines, MicroTime normalization and preserved metadata; driver integration pending (#296).
 - **feat:** Checkpoint bounded Kubernetes watch state and verified HTTPS operator requests with per-call deadlines, token rotation and owned-CRD write boundaries; remote dependency resolution pending.
 - **docs:** Plan ownership-checked CRD reconciliation and readiness; preserve upstream license whitespace as exact reference data.

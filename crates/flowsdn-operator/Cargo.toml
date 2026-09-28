@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 serde_json.workspace = true
+flowsdn-k8s = { path = "../flowsdn-k8s", version = "=0.14.0" }
 serde = "=1.0.229"
 
 [lints]

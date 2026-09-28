@@ -1534,3 +1534,18 @@ Gateway API type ownership (#21) follows spec21§12.11: flowsdn-k8s owns
 hand-declared schema-backed types pinned to Gateway API1.6.1. The current
 Gateway validation library consumes JSON resources; this decision does not
 claim that the complete generated/schema corpus or typed client exists.
+
+
+## Owned registration reconciliation amendment — #296
+
+Normal operator registration marks new CRDs with
+`app.kubernetes.io/managed-by=flowsdn-operator`. Existing unmarked or foreign
+objects are ownership conflicts, never implicitly adopted. `skip-crd-creation`
+may observe matching externally managed CRDs without writing. Replacements
+preserve other metadata and labels, carry fetched UID/resourceVersion, and omit
+server-maintained status. Every conflict or uncertain write requires a fresh
+GET and re-plan before readiness. Newer schema-version labels take precedence
+over missing-schema repair so an older operator never downgrades them.
+Established readiness also requires exactly one served `v1alpha1` object schema;
+an unsupported newer API remains preserved but unready. These rules supersede
+historical replace-all-labels/adoption behavior in the reference description.

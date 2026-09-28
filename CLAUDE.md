@@ -54,7 +54,7 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 - [x] Restore #291 watch/client checkpoint and extend bounded authenticated JSON transport for operator operations; remote dependency lock resolution and tests pending.
 - [x] Implement Lease election state/optimistic writes with monotonic expiry observation and terminal leadership loss; reviewed source, remote tests pending.
 - [ ] Connect authenticated transport, election and registration to the operator process, with leader-scope cancellation and real API acceptance.
-- [ ] Add owned-CRD registration reconciliation with strict ownership conflicts, newer-schema preservation, conditional updates and Established readiness; connect it to the leader scope.
+- [x] Add owned-CRD registration reconciliation with strict ownership conflicts, newer-schema preservation, conditional updates and Established readiness; source reviewed, tests and leader-scope integration pending.
 - [ ] Validate multi-node allocation and lifecycle rather than treating process scaffolding as a complete operator.
 - [ ] Push and validate via sc-build; close only when operator/network and deployment acceptance obligations are satisfied.
 
