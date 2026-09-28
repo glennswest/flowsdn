@@ -4959,7 +4959,7 @@
   },
   "issue_304": {
     "start_utc": "2026-09-28T00:40:56Z",
-    "end_utc": null,
+    "end_utc": "2026-09-28T15:41:30Z",
     "scope": "project/shared",
     "agent": "codex/root",
     "source_revision": "816c8c9",
@@ -4970,7 +4970,7 @@
       "Workflow removal and build/publication documentation pushed to main",
       "sc-build: xtask and packaging build passed; 16 tests passed; scratch checkout removed",
       "GitHub Actions permissions remain enabled=false",
-      "Golden staging and issue closure pending"
+      "Golden staging failed in stormcos#155; workflow-removal verification complete and ready for issue closure"
     ],
     "validation_cutoff_utc": "2026-09-28T00:59:26Z",
     "elapsed_to_validation_seconds": 1110,
@@ -4978,10 +4978,27 @@
     "build_execution_seconds": 412,
     "golden_request": {
       "id": "ea5a8e9a2762",
-      "state": "queued behind stormvm fetch",
+      "state": "failed: flowsdn named in ONLY but not staged",
       "observed_utc": "2026-09-28T01:02:55Z",
       "main_revision_at_request": "f8d5cc8",
-      "built_revision": null
+      "built_revision": null,
+      "selected_flowsdn_revision": "4092ba1",
+      "failure_issue": "glennswest/stormcos#155"
+    },
+    "completion_verification": {
+      "start_utc": "2026-09-28T15:39:15Z",
+      "end_utc": "2026-09-28T15:41:30Z",
+      "elapsed_seconds": 135,
+      "agent": "codex/root",
+      "scope": "project/shared",
+      "source_revision": "d54ee442ce7b",
+      "documentation_commit": "600b7d2",
+      "build_execution_seconds": 26,
+      "tests_passed": 16,
+      "token_baseline": null,
+      "token_endpoint": null,
+      "active_work_seconds": null,
+      "note": "Initial recovery reading preceded this observed baseline. Gap since prior session is not active work. Final publication and closure follow this cutoff."
     }
   }
 }

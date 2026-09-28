@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Record #304 completion verification: pushed tooling build and 16 tests passed again through sc-build; preserve the separate stormcos staging failure and elapsed accounting.
 - **docs:** Replace the remaining automatic CI coverage-publication promise with explicit sc-build validation reporting (#304).
 - **docs:** Resume #304 final verification and record the failed golden stage in stormcos#155; no golden or release was produced.
 - **docs:** Distinguish the revision observed at staging request from the still-unreported built revision.

@@ -257,3 +257,12 @@ validation remain separate. Token counters and active time unavailable.
 sc-build (412 seconds execution): build plus all 16 xtask/packaging tests.
 Observed elapsed to this cutoff: 1110 seconds; active time and token
 counters remain unknown. Golden staging and issue closure are pending.
+
+#304 completion recovery: 2026-09-28T15:39:15Z–2026-09-28T15:41:30Z, **135 seconds** observed;
+initial reading preceded this baseline. Pushed `d54ee44` passed the locked
+build and all 16 tooling tests through sc-build (26 seconds execution); drive
+deletion confirmed. `600b7d2` clarifies explicit coverage-report publication.
+The earlier golden request failed and is tracked in stormcos#155; no golden
+or release was produced. Usage counters and active work time remain null;
+the gap between sessions is not counted as active time. Final publication
+and issue closure follow this cutoff.
