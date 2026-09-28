@@ -374,7 +374,9 @@ mod tests {
     #[test]
     fn musl_selection_fails_closed_on_incomplete_metadata() -> Result<(), Box<dyn Error>> {
         let mut metadata = resolved_workspace();
-        *metadata.get_mut("resolve").ok_or("missing fixture resolve")? = Value::Null;
+        *metadata
+            .get_mut("resolve")
+            .ok_or("missing fixture resolve")? = Value::Null;
         assert!(musl_selection(&metadata).is_err());
         let mut metadata = resolved_workspace();
         *metadata

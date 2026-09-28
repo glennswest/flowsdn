@@ -25,8 +25,8 @@ use std::{
 const DEADLINE: Duration = Duration::from_secs(10);
 
 fn certificate() -> (PKey<Private>, X509) {
-    let key = PKey::from_rsa(Rsa::generate(2048).expect("fixture RSA key"))
-        .expect("fixture private key");
+    let key =
+        PKey::from_rsa(Rsa::generate(2048).expect("fixture RSA key")).expect("fixture private key");
     let mut name = X509NameBuilder::new().expect("certificate name");
     name.append_entry_by_text("CN", "localhost")
         .expect("common name");
@@ -91,7 +91,9 @@ fn server(key: &PKey<Private>, cert: &X509) -> (u16, thread::JoinHandle<bool>) {
             }
         };
         socket.set_read_timeout(Some(DEADLINE)).expect("read bound");
-        socket.set_write_timeout(Some(DEADLINE)).expect("write bound");
+        socket
+            .set_write_timeout(Some(DEADLINE))
+            .expect("write bound");
         let Ok(mut stream) = acceptor.accept(socket) else {
             return false;
         };
@@ -138,7 +140,10 @@ fn trusted_local_https_returns_node_list() {
     let (port, task) = server(&key, &cert);
     let result = list("localhost", port, &cert);
     assert!(task.join().expect("server thread"));
-    assert_eq!(result.expect("verified HTTPS"), serde_json::json!({"items": []}));
+    assert_eq!(
+        result.expect("verified HTTPS"),
+        serde_json::json!({"items": []})
+    );
 }
 
 #[test]
@@ -148,7 +153,10 @@ fn untrusted_ca_is_rejected() {
     let (port, task) = server(&key, &cert);
     let result = list("localhost", port, &other_root);
     assert!(!task.join().expect("server thread"));
-    assert_eq!(result.expect_err("untrusted CA").0, "Kubernetes request failed; relist required");
+    assert_eq!(
+        result.expect_err("untrusted CA").0,
+        "Kubernetes request failed; relist required"
+    );
 }
 
 #[test]
@@ -158,5 +166,8 @@ fn trusted_certificate_with_wrong_hostname_is_rejected() {
     // Certificate has only a DNS localhost SAN, never an IP SAN.
     let result = list("127.0.0.1", port, &cert);
     assert!(!task.join().expect("server thread"));
-    assert_eq!(result.expect_err("hostname mismatch").0, "Kubernetes request failed; relist required");
+    assert_eq!(
+        result.expect_err("hostname mismatch").0,
+        "Kubernetes request failed; relist required"
+    );
 }
