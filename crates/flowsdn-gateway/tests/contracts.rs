@@ -170,8 +170,16 @@ fn reason_strings_preserve_reference_quirks_but_not_config_validation_bug() {
         assert_eq!(kind.missing_parent_reason(), expected);
     }
     for (kind, reason, condition_type) in [
-        (GammaCondition::Attached, "Accepted", "gamma.flowsdn.io/GammaRoutesAttached"),
-        (GammaCondition::Programmed, "Programmed", "gamma.flowsdn.io/GammaRoutesProgrammed"),
+        (
+            GammaCondition::Attached,
+            "Accepted",
+            "gamma.flowsdn.io/GammaRoutesAttached",
+        ),
+        (
+            GammaCondition::Programmed,
+            "Programmed",
+            "gamma.flowsdn.io/GammaRoutesProgrammed",
+        ),
     ] {
         for success in [true, false] {
             let condition = kind.project(success);

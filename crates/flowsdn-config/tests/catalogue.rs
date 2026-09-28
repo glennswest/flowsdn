@@ -595,12 +595,21 @@ fn owned_kubernetes_defaults_do_not_claim_reference_identity() {
     let schema = catalogue::partial_known_defaults_registry().unwrap();
     let resolved = schema.resolve([]).unwrap();
     for (key, expected) in [
-        ("agent-not-ready-taint-key", "node.flowsdn.io/agent-not-ready"),
-        ("config-sources", r#"[{"kind":"config-map","namespace":"kube-system","name":"flowsdn-config"}]"#),
+        (
+            "agent-not-ready-taint-key",
+            "node.flowsdn.io/agent-not-ready",
+        ),
+        (
+            "config-sources",
+            r#"[{"kind":"config-map","namespace":"kube-system","name":"flowsdn-config"}]"#,
+        ),
         ("gateway-api-secrets-namespace", "flowsdn-secrets"),
         ("ingress-secrets-namespace", "flowsdn-secrets"),
         ("policy-secrets-namespace", "flowsdn-secrets"),
     ] {
-        assert_eq!(resolved.get(key).unwrap().value, Value::String(expected.into()));
+        assert_eq!(
+            resolved.get(key).unwrap().value,
+            Value::String(expected.into())
+        );
     }
 }

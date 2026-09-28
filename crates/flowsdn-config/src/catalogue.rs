@@ -171,9 +171,11 @@ impl Definition {
             }
             "envoy-access-log-buffer-size" => "docs/spec/16-l7-envoy-dns.md:1500",
             "identity-allocation-mode" => "docs/spec/20-clustermesh-kvstore.md:1575",
-            "agent-not-ready-taint-key" | "config-sources" | "gateway-api-secrets-namespace"
-            | "ingress-secrets-namespace" | "policy-secrets-namespace" =>
-                "docs/decisions/0017-flowsdn-resource-identity.md",
+            "agent-not-ready-taint-key"
+            | "config-sources"
+            | "gateway-api-secrets-namespace"
+            | "ingress-secrets-namespace"
+            | "policy-secrets-namespace" => "docs/decisions/0017-flowsdn-resource-identity.md",
             "bpf-lb-algorithm" => "docs/spec/05-service-loadbalancing.md:943",
             "bpf-lb-dsr-dispatch" => "docs/spec/05-service-loadbalancing.md:942",
             "bpf-lb-maglev-hash-seed" => "docs/spec/05-service-loadbalancing.md:946",

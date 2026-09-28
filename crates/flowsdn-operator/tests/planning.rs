@@ -195,7 +195,11 @@ fn default_readiness_taint_does_not_adopt_cilium_taints() {
     let observed = vec![foreign.clone()];
     let desired = taints::add_not_ready(&observed, taints::AGENT_NOT_READY_KEY);
     assert_eq!(desired.len(), 2);
-    assert!(desired.iter().any(|taint| taint.key == "node.flowsdn.io/agent-not-ready"));
+    assert!(
+        desired
+            .iter()
+            .any(|taint| taint.key == "node.flowsdn.io/agent-not-ready")
+    );
     assert_eq!(
         taints::remove_not_ready(&desired, taints::AGENT_NOT_READY_KEY),
         observed
