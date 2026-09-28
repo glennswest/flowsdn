@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Record focused workflow-removal validation and defer the unstarted earlier implementation build.
 - **chore:** Remove the disabled GitHub Actions workflow and replace active runner, build and artifact-publication guidance with sc-build and stormcentral staging (#304).
 - **docs:** Plan removal of obsolete GitHub workflow and refresh current build/publication contracts for #304.
 
