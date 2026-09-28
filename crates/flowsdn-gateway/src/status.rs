@@ -26,8 +26,8 @@ pub enum GammaCondition {
 impl GammaCondition {
     pub const fn kind(self) -> &'static str {
         match self {
-            Self::Attached => "gamma.cilium.io/GammaRoutesAttached",
-            Self::Programmed => "gamma.cilium.io/GammaRoutesProgrammed",
+            Self::Attached => "gamma.flowsdn.io/GammaRoutesAttached",
+            Self::Programmed => "gamma.flowsdn.io/GammaRoutesProgrammed",
         }
     }
     pub const fn reason(self) -> &'static str {

@@ -1,6 +1,6 @@
 //! Pure desired-taint calculation. Kubernetes patches must still test the exact
 //! observed array before replacing it; this library performs no API writes.
-pub const AGENT_NOT_READY_KEY: &str = "node.cilium.io/agent-not-ready";
+pub const AGENT_NOT_READY_KEY: &str = "node.flowsdn.io/agent-not-ready";
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Taint {
     pub key: String,

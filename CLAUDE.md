@@ -35,8 +35,8 @@ After validated implementation work, flowsdn uses the special-component
 Documentation-only work is not a networking release. Cargo.lock pins select
 which dependency revisions are built; sibling changes do not arrive implicitly.
 
-The owner requires flowsdn identity for CRDs it owns (#299). Current planning
-code still hardcodes `cilium.io`; do not describe that migration as implemented.
+The owner requires flowsdn identity for CRDs it owns (#299). Owned registration now projects `flowsdn.io/v1alpha1`; upstream schema input
+is explicit migration only. See ADR-0017; remote verification is pending.
 Read compatibility formats separately from ownership/attribution. PVCs are
 provided by the built-in stormblock driver, not a flowsdn storage controller.
 Current builds/tests use sc-build after push and flowsdn goldens use
@@ -64,7 +64,7 @@ is preserved. Do not overwrite these branches or claim them complete.
 ### Owned Kubernetes identity — #299, resumed 2026-09-28
 
 - [x] Read issue/comments and open backlog; inspect preserved implementation f35b620.
-- [ ] Recover owned flowsdn.io/v1alpha1 CRDs, explicit upstream migration projection and documented runtime compatibility-name decisions; reconcile with current OpenSSL transport.
+- [x] Recover owned flowsdn.io/v1alpha1 CRDs, explicit upstream migration projection and documented runtime compatibility-name decisions; reconcile with current OpenSSL transport.
 - [ ] Review ownership boundaries and tests; push source before serialized sc-build validation.
 - [ ] Validate affected crates, format/lint and regression coverage; record results, stage the golden and close #299 only with verified evidence.
 

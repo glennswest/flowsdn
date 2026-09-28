@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **BREAKING:** Recover flowsdn-owned CRD identity, explicit upstream schema projection, controller/configuration attribution and compatibility-name decisions from #299; reconcile ADR-0017 with the current TLS backend.
 - **docs:** Resume #299 from its saved ownership implementation; plan recovery, cross-review and managed validation alongside queued TLS validation.
 - **chore:** Resolve the Fedora OpenSSL dependency lock and format TLS regression tests through the managed build.
 - **test:** Add verified local HTTPS trust/hostname tests and graph-based musl selection that retains native validation for system-OpenSSL consumers.

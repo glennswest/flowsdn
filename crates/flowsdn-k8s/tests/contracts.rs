@@ -43,49 +43,141 @@ fn version_floor_fallback_and_capabilities_are_independent() {
     );
     assert!(node_patch_mode(Probe::Unknown, Probe::Supported).is_err());
 }
-fn document(plural: &str) -> Value {
-    json!({"metadata":{"annotations":{"discard":"me"}}, "spec":{"group":"cilium.io", "scope":"Cluster", "names":{"kind":"Example", "plural":plural, "singular":"example", "listKind":"ExampleList", "categories":["cilium"]}, "versions":[{"name":"v2", "served":true, "storage":true, "schema":{"openAPIV3Schema":{"type":"object", "x-kubernetes-validations":[{"rule":"self == oldSelf"}]}}}, {"name":"v2alpha1", "served":true, "storage":false, "deprecated":true}]}})
+const CASES: [(&str, &str, &str, &str); 22] = [
+    ("NetworkPolicy", "networkpolicies", "Namespaced", "v2"),
+    ("ClusterwideNetworkPolicy", "clusterwidenetworkpolicies", "Cluster", "v2"),
+    ("CIDRGroup", "cidrgroups", "Cluster", "v2"),
+    ("Endpoint", "endpoints", "Namespaced", "v2"),
+    ("EndpointSlice", "endpointslices", "Cluster", "v2alpha1"),
+    ("Identity", "identities", "Cluster", "v2"),
+    ("Node", "nodes", "Cluster", "v2"),
+    ("NodeConfig", "nodeconfigs", "Namespaced", "v2"),
+    ("LocalRedirectPolicy", "localredirectpolicies", "Namespaced", "v2"),
+    ("EgressGatewayPolicy", "egressgatewaypolicies", "Cluster", "v2"),
+    ("EnvoyConfig", "envoyconfigs", "Namespaced", "v2"),
+    ("ClusterwideEnvoyConfig", "clusterwideenvoyconfigs", "Cluster", "v2"),
+    ("LoadBalancerIPPool", "loadbalancerippools", "Cluster", "v2"),
+    ("L2AnnouncementPolicy", "l2announcementpolicies", "Cluster", "v2alpha1"),
+    ("PodIPPool", "podippools", "Cluster", "v2alpha1"),
+    ("BGPClusterConfig", "bgpclusterconfigs", "Cluster", "v2"),
+    ("BGPPeerConfig", "bgppeerconfigs", "Cluster", "v2"),
+    ("BGPAdvertisement", "bgpadvertisements", "Cluster", "v2"),
+    ("BGPNodeConfig", "bgpnodeconfigs", "Cluster", "v2"),
+    ("BGPNodeConfigOverride", "bgpnodeconfigoverrides", "Cluster", "v2"),
+    ("GatewayClassConfig", "gatewayclassconfigs", "Namespaced", "v2alpha1"),
+    ("DatapathPlugin", "datapathplugins", "Cluster", "v2alpha1"),
+];
+fn document(case: (&str, &str, &str, &str)) -> Value {
+    let (kind, plural, scope, version) = case;
+    let plural = format!("cilium{plural}");
+    let mut versions = vec![json!({"name":version,"served":true,"storage":true,"deprecated":true,"deprecationWarning":"upstream warning","schema":{"openAPIV3Schema":{"type":"object","x-kubernetes-validations":[{"rule":"self == oldSelf"}]}},"subresources":{"status":{}},"additionalPrinterColumns":[{"name":"Age","type":"date","jsonPath":".metadata.creationTimestamp"}]})];
+    if DUAL_VERSION_PLURALS.contains(&plural.as_str()) {
+        versions.push(json!({"name":"v2alpha1","served":true,"storage":false,"deprecated":true,"schema":{"openAPIV3Schema":{"type":"object","description":"non-storage schema must not win"}}}));
+    }
+    json!({"metadata":{"name":format!("{plural}.cilium.io"),"annotations":{"discard":"me"}},"spec":{"group":"cilium.io","scope":scope,"names":{"kind":format!("Cilium{kind}"),"plural":plural,"singular":format!("cilium{}",kind.to_lowercase()),"listKind":format!("Cilium{kind}List"),"categories":["cilium"],"shortNames":["upstreamalias"]},"versions":versions}})
 }
 #[test]
-fn registration_retains_all_versions_and_whitelisted_metadata() {
-    assert_eq!(
-        REGISTRATION_PLURALS
-            .iter()
-            .collect::<std::collections::BTreeSet<_>>()
-            .len(),
-        22
-    );
-    assert!(REGISTRATION_PLURALS.contains(&"ciliumgatewayclassconfigs"));
-    let spec = include_str!("../../../docs/spec/13-crds-k8s-client.md");
-    for plural in REGISTRATION_PLURALS {
-        assert!(spec.contains(&format!("| {plural} |")));
-    }
-    for plural in DUAL_VERSION_PLURALS {
-        let source = document(plural);
-        let payload = registration_payload(&source).expect("projection");
-        assert_eq!(
-            payload.pointer("/spec/versions"),
-            source.pointer("/spec/versions")
-        );
-        assert!(payload.pointer("/spec/names/listKind").is_none());
+fn all_resources_migrate_to_owned_identity_and_project_idempotently() {
+    assert_eq!(REGISTRATION_PLURALS.iter().collect::<std::collections::BTreeSet<_>>().len(), 22);
+    for case in CASES {
+        let source = document(case);
+        assert!(registration_payload(&source).is_err(), "upstream needs explicit migration");
+        let payload = migration_registration_payload(&source).expect("migration projection");
+        let (kind, plural, scope, _) = case;
+        let owned_plural = format!("flowsdn{plural}");
+        assert!(REGISTRATION_PLURALS.contains(&owned_plural.as_str()));
+        assert_eq!(payload.pointer("/metadata/name"), Some(&json!(format!("{owned_plural}.flowsdn.io"))));
+        assert_eq!(payload.pointer("/spec/group"), Some(&json!("flowsdn.io")));
+        assert_eq!(payload.pointer("/spec/scope"), Some(&json!(scope)));
+        assert_eq!(payload.pointer("/spec/names"), Some(&json!({"kind":format!("Flowsdn{kind}"),"plural":owned_plural,"singular":format!("flowsdn{}",kind.to_lowercase()),"listKind":format!("Flowsdn{kind}List"),"categories":["flowsdn"]})));
+        assert_eq!(payload.pointer("/spec/versions").and_then(Value::as_array).expect("versions").len(), 1);
+        assert_eq!(payload.pointer("/spec/versions/0/name"), Some(&json!("v1alpha1")));
+        assert_eq!(payload.pointer("/spec/versions/0/served"), Some(&json!(true)));
+        assert_eq!(payload.pointer("/spec/versions/0/storage"), Some(&json!(true)));
+        for field in ["schema", "subresources", "additionalPrinterColumns"] {
+            assert_eq!(payload.pointer(&format!("/spec/versions/0/{field}")), source.pointer(&format!("/spec/versions/0/{field}")));
+        }
+        for field in ["deprecated", "deprecationWarning"] { assert!(payload.pointer(&format!("/spec/versions/0/{field}")).is_none()); }
         assert!(payload.pointer("/metadata/annotations").is_none());
-        assert_eq!(
-            payload.pointer("/metadata/labels"),
-            Some(&json!({"io.cilium.k8s.crd.schema.version":"1.33.11"}))
-        );
-        let mut stripped = source.clone();
-        stripped
-            .pointer_mut("/spec/versions")
-            .and_then(Value::as_array_mut)
-            .expect("versions")
-            .pop();
-        assert!(registration_payload(&stripped).is_err());
-        let mut multiple_storage = source;
-        *multiple_storage
-            .pointer_mut("/spec/versions/1/storage")
-            .expect("flag") = json!(true);
-        assert!(registration_payload(&multiple_storage).is_err());
+        assert_eq!(payload.pointer("/metadata/labels"), Some(&json!({"io.flowsdn.k8s.crd.schema.version":"1.33.11"})));
+        assert_eq!(registration_payload(&payload).expect("idempotent"), payload);
+        assert!(migration_registration_payload(&payload).is_err());
     }
+}
+#[test]
+fn registration_rejects_spoofed_identity_and_invalid_version_contracts() {
+    let source = document(("BGPNodeConfig", "bgpnodeconfigs", "Cluster", "v2"));
+    for (path, replacement) in [
+        ("/spec/group", json!("other.io")),
+        ("/spec/names/kind", json!("FlowsdnBGPNodeConfig")),
+        ("/spec/names/plural", json!("ciliumnodes")),
+        ("/spec/names/singular", json!("ciliumnode")),
+        ("/spec/names/listKind", json!("CiliumNodeList")),
+        ("/metadata/name", json!("ciliumnodes.cilium.io")),
+        ("/spec/scope", json!("Namespaced")),
+        ("/spec/versions/0/storage", json!(false)),
+        ("/spec/versions/0/served", json!(false)),
+        ("/spec/versions/0/schema", json!({})),
+        ("/spec/versions/1/storage", json!(true)),
+        ("/spec/versions/1/name", json!("v2")),
+        ("/spec/versions/1/served", json!(false)),
+        ("/spec/versions/1/deprecated", json!(false)),
+    ] {
+        let mut bad = source.clone();
+        *bad.pointer_mut(path).expect("test path") = replacement;
+        assert!(migration_registration_payload(&bad).is_err(), "accepted {path}");
+    }
+    let mut truncated = source.clone();
+    truncated.pointer_mut("/spec/versions").and_then(Value::as_array_mut).expect("versions").pop();
+    assert!(migration_registration_payload(&truncated).is_err());
+    let mut conversion = source.clone();
+    conversion.get_mut("spec").and_then(Value::as_object_mut).expect("spec").insert("conversion".into(), json!({"strategy":"Webhook"}));
+    assert!(migration_registration_payload(&conversion).is_err());
+    conversion.get_mut("spec").and_then(Value::as_object_mut).expect("spec").insert("conversion".into(), json!({"strategy":"None"}));
+    let owned = migration_registration_payload(&conversion).expect("None conversion");
+    assert_eq!(registration_payload(&owned).expect("idempotent None conversion"), owned);
+    for (path, replacement) in [
+        ("/spec/versions/0/name", json!("v2")),
+        ("/spec/names/kind", json!("CiliumBGPNodeConfig")),
+        ("/spec/names/plural", json!("flowsdnnodes")),
+        ("/spec/scope", json!("Namespaced")),
+    ] {
+        let mut bad = owned.clone();
+        *bad.pointer_mut(path).expect("path") = replacement;
+        assert!(registration_payload(&bad).is_err(), "accepted owned {path}");
+    }
+}
+#[test]
+fn migration_adapts_embedded_identity_constraints_but_preserves_other_values() {
+    let mut source = document(("BGPNodeConfig", "bgpnodeconfigs", "Cluster", "v2"));
+    let schema = source.pointer_mut("/spec/versions/0/schema/openAPIV3Schema").expect("schema");
+    *schema = json!({"type":"object","properties":{
+        "apiVersion":{"type":"string","const":"cilium.io/v2"},
+        "spec":{"type":"object","properties":{
+            "peers":{"type":"array","items":{"type":"object","properties":{
+                "peerConfigRef":{"type":"object","properties":{
+                    "group":{"default":"cilium.io","description":"reference cilium.io"},
+                    "kind":{"default":"CiliumBGPPeerConfig"}
+                }}
+            }}},
+            "envoyConfig":{"type":"object","properties":{
+                "kind":{"enum":["CiliumEnvoyConfig","CiliumClusterwideEnvoyConfig","OtherExternalKind"]}
+            }},
+            "arbitraryValue":{"default":"cilium.io"},
+            "arbitraryObject":{"default":{"properties":{"kind":{"default":"CiliumNode"}}}}
+        }}
+    }});
+    let payload = migration_registration_payload(&source).expect("projection");
+    let schema = payload.pointer("/spec/versions/0/schema/openAPIV3Schema").expect("schema");
+    assert_eq!(schema.pointer("/properties/apiVersion/const"), Some(&json!("flowsdn.io/v1alpha1")));
+    let peer = schema.pointer("/properties/spec/properties/peers/items/properties/peerConfigRef/properties").expect("peer reference");
+    assert_eq!(peer.pointer("/group/default"), Some(&json!("flowsdn.io")));
+    assert_eq!(peer.pointer("/kind/default"), Some(&json!("FlowsdnBGPPeerConfig")));
+    assert_eq!(peer.pointer("/group/description"), Some(&json!("reference cilium.io")));
+    assert_eq!(schema.pointer("/properties/spec/properties/envoyConfig/properties/kind/enum"), Some(&json!(["FlowsdnEnvoyConfig","FlowsdnClusterwideEnvoyConfig","OtherExternalKind"])));
+    assert_eq!(schema.pointer("/properties/spec/properties/arbitraryValue/default"), Some(&json!("cilium.io")));
+    assert_eq!(schema.pointer("/properties/spec/properties/arbitraryObject/default/properties/kind/default"), Some(&json!("CiliumNode")));
+    assert_eq!(registration_payload(&payload).expect("idempotent"), payload);
 }
 #[test]
 fn endpoint_defaults_and_namespace_plans() {
@@ -154,9 +246,14 @@ fn endpoint_defaults_and_namespace_plans() {
         .plan()
         .is_err()
     );
-    for plural in ["ciliumnodeconfigs", "ciliumgatewayclassconfigs"] {
+    for plural in ["flowsdnnodeconfigs", "flowsdngatewayclassconfigs"] {
         assert_eq!(operator_config_scope(plural), Ok(ListScope::AllNamespaces));
     }
+}
+#[test]
+fn upstream_configuration_plurals_are_not_owned() {
+    assert!(operator_config_scope("ciliumnodeconfigs").is_err());
+    assert!(operator_config_scope("ciliumgatewayclassconfigs").is_err());
 }
 // Small atomic RFC6902 subset interpreter exercises generated operations against
 // independently modified objects. Production HTTP transport is not implemented.

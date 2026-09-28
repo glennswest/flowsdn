@@ -28,11 +28,32 @@ depends on it is named (`kubectl`, users' stored CRs, cilium-dbg, the operator,
 another implementation's agent during migration). Where flowsdn deviates, the
 paragraph is marked **DEVIATION** with the reason and the ADR.
 
+## Ownership amendment — #299, 2026-09-27
+
+[ADR-0017](../decisions/0017-flowsdn-resource-identity.md) supersedes the original
+upstream-identity contract. flowsdn creates only `flowsdn.io/v1alpha1` custom
+resources with `Flowsdn*` kinds, `flowsdn*` names and category `flowsdn`.
+Existing `cilium.io` CRDs and instances MUST NOT be adopted, reconciled, written
+or garbage-collected. Explicit migration projection accepts upstream schemas as
+input; it does not implement live policy consumption or instance migration.
+
+Reference names in semantic descriptions, capability examples, source paths,
+annotation tables and the catalogue below identify the upstream data contract.
+For flowsdn-owned watcher/write/RBAC obligations, substitute the owned identity
+mapping in §2.1; they never authorize access to upstream custom resources.
+Reference label values and compatibility annotations are not globally renamed.
+Migration rewrites known identity values only in `default`, `enum` and `const`
+of schema properties named `group`, `kind` or `apiVersion`, so embedded
+resource references use flowsdn identity. Descriptions and other compatibility
+fields retain their input values. Current runtime availability is recorded separately:
+CRD projection is a library and the standalone daemon has no CRD controller.
+
 ## 1. Scope
 
 In scope:
 
-- The **CRD catalogue**: the 22 `cilium.io` CustomResourceDefinitions, their
+- The **reference CRD catalogue**: the 22 upstream `cilium.io` definitions and
+  their explicit projection to flowsdn-owned definitions, including their
   identity (group, kind, plural, singular, short names, categories, scope),
   served and storage versions, subresources, printer columns, and the
   schema-version label; the rule that flowsdn **vendors the reference YAML
@@ -81,22 +102,23 @@ the full flattened field tables and remains the reference for them.
 
 ### 2.1 CRD documents
 
-| Interface | MUST match | Consumer |
+| Interface | flowsdn-owned contract | Consumer |
 |---|---|---|
-| The 22 CRD YAML documents | byte-identical to the reference files under `pkg/k8s/apis/cilium.io/client/crds/{v2,v2alpha1}/` at 7d68cfb394 | every CR a user has ever `kubectl apply`ed; `kubectl explain`; admission validation |
-| CRD object names | `<plural>.cilium.io` | `kubectl get crd`, RBAC `resourceNames` |
-| `spec.names` | kind, plural, singular, shortNames, categories exactly as §4.1 | `kubectl get cnp`, `kubectl get cilium` (category) |
-| `spec.scope` | as §4.1 | client URL construction |
-| `spec.versions[].{name,served,storage,deprecated}` | as §4.1 | stored CRs, `kubectl` version negotiation |
-| `spec.versions[].subresources` | as §4.1; **CiliumEndpoint has none** | status writers on both sides |
-| `spec.versions[].additionalPrinterColumns` | as §4.1 | `kubectl get` output users script against |
-| `spec.conversion` | absent → server default strategy `None` | multi-version CRDs (schemas are identical) |
-| CRD label `io.cilium.k8s.crd.schema.version` | `1.33.11` | the update comparison (§3.2), `cilium-dbg`/support bundles, mixed-version clusters |
-| Group | `cilium.io` | everything |
+| Reference YAML | Byte-identical pinned upstream documents, retained only as provenance and migration/schema inputs | schema verification |
+| Group and API version | `flowsdn.io/v1alpha1` | flowsdn clients |
+| CRD object names | `<flowsdn-plural>.flowsdn.io` | discovery and RBAC |
+| Names | `Flowsdn*` kind, `flowsdn*` plural/singular, sole category `flowsdn`, no upstream short names | `kubectl get flowsdn` |
+| Scope | Preserve reference scope | URL construction |
+| Versions | Exactly one `v1alpha1`, served and storage; migration selects the upstream storage version's schema | flowsdn clients |
+| Subresources | Preserve selected schema contract; endpoint has no status subresource | status writers |
+| Printer columns | Preserve selected version's columns | operator display |
+| Conversion | Absent or normalized to `{strategy: None}`; no claim of upstream version serving | API server |
+| Schema label | `io.flowsdn.k8s.crd.schema.version: 1.33.11` | schema revision comparison, not flowsdn API maturity |
 
-**DEVIATION (none, deliberate):** flowsdn keeps the `cilium.io` group and the
-`io.cilium.*` label/annotation keys. `docs/licensing.md` records this as
-nominative use: the group name is the compatibility interface, not branding.
+**DEVIATION (#299):** Identity is flowsdn's even when schema shape is derived
+from upstream. The normal registration planner rejects upstream identity;
+explicit migration projection is a separate entry point. It never mutates an
+upstream CRD or transfers ownership of its stored objects. See ADR-0017.
 
 ### 2.2 Rust type ↔ YAML round-trip
 
@@ -121,7 +143,7 @@ provide the feature; "Degraded" = flowsdn works with the stated fallback.
 | # | Capability | Where used | Level |
 |---|---|---|---|
 | C1 | `apiextensions.k8s.io/v1` CRD create/get/update, with `status.conditions[type=Established]` reaching `True` and `NamesAccepted=False` reported on conflict | operator registration (§3.2) | Required |
-| C2 | Structural-schema validation of CRs, including `format: cidr\|ipv4\|idn-hostname\|date-time`, `pattern`, `enum`, `minItems/maxItems`, `minLength/maxLength`, `minimum/maximum` | every `cilium.io` write by a user or by flowsdn | Required |
+| C2 | Structural-schema validation of CRs, including `format: cidr\|ipv4\|idn-hostname\|date-time`, `pattern`, `enum`, `minItems/maxItems`, `minLength/maxLength`, `minimum/maximum` | every `flowsdn.io` write by a user or by flowsdn | Required |
 | C3 | `x-kubernetes-validations` (CEL), including `has(self.spec) \|\| has(self.specs)` (CNP/CCNP top level), `self == oldSelf` immutability rules, `isIP()`/`isCIDR()` calls | CNP/CCNP, LB IP pool, BGP CRDs | Required |
 | C4 | Schema **defaulting** (`default:` in the schema) — e.g. ICMP `family: IPv4` | CNP/CCNP; flowsdn does not re-default client-side | Required |
 | C5 | `x-kubernetes-int-or-string` | CNP ICMP `type`, Service `targetPort` | Required |
@@ -161,8 +183,12 @@ A conformance suite that mechanically exercises C1–C36 is specified in §9.5.
 
 ### 2.5 Config keys
 
-Every key in §6 MUST keep its reference-compatible name so an existing
-`cilium-config` ConfigMap continues to work (spec 00 §2).
+Key names remain compatibility inputs. The resolved ConfigMap default is
+`flowsdn-config`, and the resolved readiness taint is
+`node.flowsdn.io/agent-not-ready`. Catalogue reference expressions retain the
+upstream values for provenance. The standalone JSON daemon does not consume
+ConfigMaps or run the taint controller; these defaults are library/planned
+controller contracts, not live ConfigMap compatibility.
 
 ## 3. Behavior
 
@@ -215,7 +241,7 @@ split is safe.
 | **T-CRD-3a** known-diff allowlist | Entries in `crds/known-diffs.toml` are `(crd, version, json-pointer, reason)`; each suppresses one T-CRD-3 difference. The test fails if an allowlist entry no longer matches anything | a stale suppression hides a real drift |
 | **T-CRD-4** instance round-trip | Golden CRs under `crates/flowsdn-k8s/testdata/crs/<plural>/*.yaml` (one per CRD minimum, plus every example in the reference documentation and every fixture the sibling specs' tests need) are deserialized into the Rust type, re-serialized, and compared field-for-field to the input after applying schema defaults | a type drops or mangles a field a user can write |
 | **T-CRD-5** unknown-field tolerance | Each golden CR is re-run with an extra unknown object key at every level and an unknown enum value at each enum; deserialization MUST still succeed and the known fields MUST be unchanged | a type is accidentally strict |
-| **T-CRD-6** registration payload | The object flowsdn would POST for each CRD is compared to a golden file, asserting: `metadata.name`, `metadata.labels` = exactly the schema-version label, `metadata.annotations` **absent**, `spec.group`, `spec.names.{kind,plural,singular,shortNames,categories}` (no `listKind`), `spec.scope`, `spec.versions` copied verbatim, `spec.conversion` copied verbatim (absent), `spec.preserveUnknownFields = false` | the registration payload drifts from §3.2 |
+| **T-CRD-6** registration payload | The object flowsdn would POST for each CRD is compared to a golden file, asserting: `metadata.name`, `metadata.labels` = exactly the schema-version label, `metadata.annotations` **absent**, `spec.group`, `spec.names.{kind,listKind,plural,singular,categories}` (`shortNames` absent), `spec.scope`, `spec.versions` projected to the sole owned `v1alpha1` version, `spec.conversion` absent or normalized to `{strategy: None}`, `spec.preserveUnknownFields = false` | the registration payload drifts from §3.2 |
 | **T-CRD-7** property test | `proptest` generates arbitrary values of each Rust CRD type, serializes, and validates the result against the vendored schema with a CEL-less structural validator | flowsdn can emit a document its own CRD rejects |
 
 T-CRD-3's allowlist is expected to be non-empty and small. Known permitted
@@ -235,19 +261,21 @@ under which leader election.
 
 Registration for each CRD:
 
-1. Build the payload from the vendored YAML: keep `spec.group` = `cilium.io`,
-   `spec.names.{kind,plural,singular,shortNames,categories}` (drop `listKind`;
-   the server defaults it — C36), `spec.scope`, `spec.versions` verbatim,
-   `spec.conversion` verbatim. Set `metadata.name` = `<plural>.cilium.io` and
-   `metadata.labels` = `{ io.cilium.k8s.crd.schema.version: "1.33.11" }`.
-   Do **not** copy `metadata.annotations` from the YAML (the
-   `controller-gen.kubebuilder.io/version` annotation is informational and the
-   reference drops it too).
+1. Build an owned payload with §2.1 identity. Normal registration accepts
+   `flowsdn.io` only. Explicit migration selects the upstream storage schema,
+   maps `Cilium*` to `Flowsdn*` and `cilium*` resource names to `flowsdn*`, drops
+   upstream short names, and assigns category `flowsdn`. Set the CRD name to
+   `<flowsdn-plural>.flowsdn.io`, the owned schema label to `1.33.11`, and the
+   only served/storage version to `v1alpha1`. Preserve scope, selected schema,
+   subresources and printer columns, with the embedded-reference identity
+   projection described in the ownership amendment. Do not copy metadata annotations or claim
+   upstream ownership. All following lookups and updates target this owned
+   identity only; an existing upstream CRD is never an update candidate.
 2. `GET` the CRD. On `404`, `POST` it; a `409 AlreadyExists` is success (two
    operators raced).
 3. Decide whether an update is needed:
    - if the existing CRD's `spec.versions[0].schema` is absent → update;
-   - if the existing CRD has no `io.cilium.k8s.crd.schema.version` label →
+   - if the existing CRD has no `io.flowsdn.k8s.crd.schema.version` label →
      update;
    - if the label does not parse as semver, or parses **strictly less than**
      `1.33.11` → update;
@@ -264,7 +292,7 @@ Registration for each CRD:
 `--skip-crd-creation` (default false) skips steps 1–5 entirely, for clusters
 where an administrator applies the CRDs out of band.
 
-**Readiness gating (agent).** Before starting any watcher for a `cilium.io`
+**Readiness gating (agent).** Before starting any watcher for a `flowsdn.io`
 resource, the agent MUST wait until every CRD in its required set exists:
 
 - It lists and watches `customresourcedefinitions.apiextensions.k8s.io` with
@@ -299,7 +327,7 @@ The required set is computed from configuration:
 `ciliumnodeconfigs` and `ciliumgatewayclassconfigs` are registered by the
 operator but are **not** in the agent's required set.
 
-Every `cilium.io` watcher MUST be constructed with a handle to the readiness
+Every `flowsdn.io` watcher MUST be constructed with a handle to the readiness
 fence (spec 00 §3.4) so its first list cannot be issued before the fence
 opens.
 
@@ -330,20 +358,20 @@ reconcilers are revision-driven (spec 00 §3.2) and do not need it.
 | `v1 configmaps` | full | direct `GET` by ns/name | — | — | `config-sources` (spec 00 §3.3) |
 | `apiextensions.k8s.io/v1 customresourcedefinitions` | PartialObjectMetadata | — | — | name | CRD readiness gate (§3.2) |
 | `coordination.k8s.io/v1 leases` | full | — | — | — | L2 announcement leadership (spec 05) |
-| `cilium.io/v2 ciliumnodes` | JSON | — | — | name | node/IPAM (spec 07) |
-| `cilium.io/v2 ciliumendpoints` | JSON, lazily transformed to the slim CEP of §4.3 | — | — | namespace, `localNode` (by `status.networking.node`) | ipcache remote endpoints (spec 03); own CEP |
-| `cilium.io/v2alpha1 ciliumendpointslices` | JSON | — | — | namespace (from `spec`-level field, CES is cluster-scoped), `localNode` | ipcache when CES mode is on |
-| `cilium.io/v2 ciliumidentities` | JSON | — | — | **by-key**: the canonical label-set string of `security-labels` | identity allocator, CRD mode (spec 03) |
-| `cilium.io/v2 ciliumnetworkpolicies`, `ciliumclusterwidenetworkpolicies`, `ciliumcidrgroups` | JSON | — | — | — | policy (spec 06) |
-| `cilium.io/v2 ciliumegressgatewaypolicies` | JSON | — | — | — | egress gateway (spec 14) |
-| `cilium.io/v2 ciliumlocalredirectpolicies` | JSON | — | — | — | LRP (spec 05) |
-| `cilium.io/v2 ciliumenvoyconfigs`, `ciliumclusterwideenvoyconfigs` | JSON | — | — | — | L7 (spec 16) |
-| `cilium.io/v2 ciliumloadbalancerippools` | JSON | — | — | — | LB IPAM read side (spec 05) |
-| `cilium.io/v2 ciliumbgpnodeconfigs`, `ciliumbgpadvertisements`, `ciliumbgppeerconfigs` | JSON | — | — | — | BGP (spec 15) |
-| `cilium.io/v2 ciliumnodeconfigs` | JSON | — | — | — | dynamic config (spec 00) |
-| `cilium.io/v2alpha1 ciliumpodippools` | JSON | — | — | — | multi-pool IPAM (spec 07) |
-| `cilium.io/v2alpha1 ciliuml2announcementpolicies` | JSON | — | — | — | L2 announcements (spec 05) |
-| `cilium.io/v2alpha1 ciliumdatapathplugins` | JSON | — | — | — | datapath plugins |
+| `flowsdn.io/v1alpha1 flowsdnnodes` | JSON | — | — | name | node/IPAM (spec 07) |
+| `flowsdn.io/v1alpha1 flowsdnendpoints` | JSON, lazily transformed to the slim CEP of §4.3 | — | — | namespace, `localNode` (by `status.networking.node`) | ipcache remote endpoints (spec 03); own CEP |
+| `flowsdn.io/v1alpha1 flowsdnendpointslices` | JSON | — | — | namespace (from `spec`-level field, CES is cluster-scoped), `localNode` | ipcache when CES mode is on |
+| `flowsdn.io/v1alpha1 flowsdnidentities` | JSON | — | — | **by-key**: the canonical label-set string of `security-labels` | identity allocator, CRD mode (spec 03) |
+| `flowsdn.io/v1alpha1 flowsdnnetworkpolicies`, `flowsdnclusterwidenetworkpolicies`, `flowsdncidrgroups` | JSON | — | — | — | policy (spec 06) |
+| `flowsdn.io/v1alpha1 flowsdnegressgatewaypolicies` | JSON | — | — | — | egress gateway (spec 14) |
+| `flowsdn.io/v1alpha1 flowsdnlocalredirectpolicies` | JSON | — | — | — | LRP (spec 05) |
+| `flowsdn.io/v1alpha1 flowsdnenvoyconfigs`, `flowsdnclusterwideenvoyconfigs` | JSON | — | — | — | L7 (spec 16) |
+| `flowsdn.io/v1alpha1 flowsdnloadbalancerippools` | JSON | — | — | — | LB IPAM read side (spec 05) |
+| `flowsdn.io/v1alpha1 flowsdnbgpnodeconfigs`, `flowsdnbgpadvertisements`, `flowsdnbgppeerconfigs` | JSON | — | — | — | BGP (spec 15) |
+| `flowsdn.io/v1alpha1 flowsdnnodeconfigs` | JSON | — | — | — | dynamic config (spec 00) |
+| `flowsdn.io/v1alpha1 flowsdnpodippools` | JSON | — | — | — | multi-pool IPAM (spec 07) |
+| `flowsdn.io/v1alpha1 flowsdnl2announcementpolicies` | JSON | — | — | — | L2 announcements (spec 05) |
+| `flowsdn.io/v1alpha1 flowsdndatapathplugins` | JSON | — | — | — | datapath plugins |
 | `/readyz`, `/version` | — | — | — | — | heartbeat, version detection (§3.5, §3.10) |
 | `v1 events` (write only) | full | — | — | — | Hubble drop-event emitter (spec 11), optional |
 
@@ -382,15 +410,15 @@ that server-side selector caching and audit logs match the reference.
 | `v1 services` | slim | §3.3.1 | namespace | LB IPAM, ClusterMesh sync, Ingress/Gateway |
 | `discovery.k8s.io/v1 endpointslices` | slim | §3.3.1 | namespace | ClusterMesh mirroring, Gateway backends |
 | `v1 secrets` | full | — | — | BGP session auth, policy secret sync |
-| `cilium.io/v2 ciliumendpoints` | JSON | — | namespace, **identity** (`status.identity.id`) | identity GC liveness, CEP GC, CES batching |
-| `cilium.io/v2alpha1 ciliumendpointslices` | JSON | — | — | CES controller |
-| `cilium.io/v2 ciliumnodes` | JSON | — | **node-ip** (`spec.addresses[]` of type Internal/External) | cloud IPAM, node GC |
-| `cilium.io/v2 ciliumidentities` | JSON | — | by-key | identity GC |
-| `cilium.io/v2 ciliumnetworkpolicies`, `ciliumclusterwidenetworkpolicies` | JSON | — | — | validation → `status.conditions[Valid]`, `toGroups` derivation |
-| `cilium.io/v2 ciliumcidrgroups` | JSON | — | — | `toGroups` external CIDR groups |
-| `cilium.io/v2 ciliumloadbalancerippools` | JSON | — | — | LB IPAM |
-| `cilium.io/v2alpha1 ciliumpodippools` | JSON | — | — | multi-pool IPAM; operator auto-creates the default pool |
-| `cilium.io/v2 ciliumbgpclusterconfigs`, `ciliumbgppeerconfigs`, `ciliumbgpadvertisements`, `ciliumbgpnodeconfigoverrides` | JSON | — | — | BGP node config generation |
+| `flowsdn.io/v1alpha1 flowsdnendpoints` | JSON | — | namespace, **identity** (`status.identity.id`) | identity GC liveness, CEP GC, CES batching |
+| `flowsdn.io/v1alpha1 flowsdnendpointslices` | JSON | — | — | CES controller |
+| `flowsdn.io/v1alpha1 flowsdnnodes` | JSON | — | **node-ip** (`spec.addresses[]` of type Internal/External) | cloud IPAM, node GC |
+| `flowsdn.io/v1alpha1 flowsdnidentities` | JSON | — | by-key | identity GC |
+| `flowsdn.io/v1alpha1 flowsdnnetworkpolicies`, `flowsdnclusterwidenetworkpolicies` | JSON | — | — | validation → `status.conditions[Valid]`, `toGroups` derivation |
+| `flowsdn.io/v1alpha1 flowsdncidrgroups` | JSON | — | — | `toGroups` external CIDR groups |
+| `flowsdn.io/v1alpha1 flowsdnloadbalancerippools` | JSON | — | — | LB IPAM |
+| `flowsdn.io/v1alpha1 flowsdnpodippools` | JSON | — | — | multi-pool IPAM; operator auto-creates the default pool |
+| `flowsdn.io/v1alpha1 flowsdnbgpclusterconfigs`, `flowsdnbgppeerconfigs`, `flowsdnbgpadvertisements`, `flowsdnbgpnodeconfigoverrides` | JSON | — | — | BGP node config generation |
 | `apiextensions.k8s.io/v1 customresourcedefinitions` | full (needs schemas) | — | — | registration (§3.2) |
 | `coordination.k8s.io/v1 leases` | full | — | — | leader election |
 
@@ -511,7 +539,7 @@ client's dialer and resolver.
 **Codecs.** Built-in groups (`""`, `discovery.k8s.io`, `networking.k8s.io`,
 `apiextensions.k8s.io`, `coordination.k8s.io`, `policy.networking.k8s.io`) are
 requested with `application/vnd.kubernetes.protobuf` in the reference; the
-`cilium.io` group is JSON because CRDs have no protobuf representation.
+`flowsdn.io` group is JSON because CRDs have no protobuf representation.
 
 **DEVIATION:** flowsdn's first implementation requests **JSON for all groups**.
 Reason: `kube-rs` has no protobuf codec, and the reference's protobuf advantage
@@ -540,11 +568,11 @@ level of every object it deserializes, and MUST NOT error on them. Concretely:
   write to a built-in resource is a patch of named paths (§3.9), never a
   whole-object update. This is a hard rule — a slim `Update` would silently
   delete every field not in §4.3.
-- For `cilium.io` objects flowsdn *does* write whole objects
+- For `flowsdn.io` objects flowsdn *does* write whole objects
   (`CiliumEndpoint`, `CiliumNode`, `CiliumIdentity`). Those types are the full
   types, and unknown fields inside a
   `x-kubernetes-preserve-unknown-fields` subtree are preserved verbatim
-  (§3.1 rule 6). For all other unknown fields on a `cilium.io` object, flowsdn
+  (§3.1 rule 6). For all other unknown fields on a `flowsdn.io` object, flowsdn
   MUST use a read-modify-write with the *decoded* object and accept the loss
   of fields the API server would have rejected anyway (the schema is
   structural and prunes them server-side).
@@ -653,23 +681,23 @@ capability rows C12–C17.
 
 | Object | Operation | Method | Notes |
 |---|---|---|---|
-| `CiliumEndpoint` | create | `POST` | `ownerReferences` → the Pod (or the endpoint's owner), `controller: true` |
-| `CiliumEndpoint` | status update | `PATCH` type `application/json-patch+json` on the **object** (no subresource) with `[{"op":"test","path":"/metadata/uid","value":<uid>},{"op":"replace","path":"/status","value":<status>}]` | The `test` op makes the patch a no-op-or-fail if the CEP was recreated under a new UID. A `409 Conflict` is not an error: the next controller run retries |
-| `CiliumEndpoint` | delete | `DELETE` | on endpoint removal; kube GC via ownerReference is the backstop |
-| `CiliumNode` | create/update | `POST` / `PUT` | own node object |
-| `CiliumNode` | status | `PUT` on `ciliumnodes/<name>/status` | IPAM status (spec 07) |
-| `CiliumIdentity` | create | `POST` with `metadata.name` = the decimal identity | uniqueness on `metadata.name` is the allocation race resolver (C28) |
-| `CiliumIdentity` | update | `PUT` | to clear the `io.cilium.heartbeat` annotation when re-acquiring |
-| `CiliumL2AnnouncementPolicy` | status | `PATCH` JSON patch on `…/status` | `fieldManager: cilium-agent-l2-announcer` |
-| `CiliumBGPNodeConfig` | status | `PATCH` JSON patch on `…/status` | agent side |
+| `FlowsdnEndpoint` | create | `POST` | `ownerReferences` → the Pod (or the endpoint's owner), `controller: true` |
+| `FlowsdnEndpoint` | status update | `PATCH` type `application/json-patch+json` on the **object** (no subresource) with `[{"op":"test","path":"/metadata/uid","value":<uid>},{"op":"replace","path":"/status","value":<status>}]` | The `test` op makes the patch a no-op-or-fail if the CEP was recreated under a new UID. A `409 Conflict` is not an error: the next controller run retries |
+| `FlowsdnEndpoint` | delete | `DELETE` | on endpoint removal; kube GC via ownerReference is the backstop |
+| `FlowsdnNode` | create/update | `POST` / `PUT` | own node object |
+| `FlowsdnNode` | status | `PUT` on `flowsdnnodes/<name>/status` | IPAM status (spec 07) |
+| `FlowsdnIdentity` | create | `POST` with `metadata.name` = the decimal identity | uniqueness on `metadata.name` is the allocation race resolver (C28) |
+| `FlowsdnIdentity` | update | `PUT` | to clear the `io.cilium.heartbeat` annotation when re-acquiring |
+| `FlowsdnL2AnnouncementPolicy` | status | `PATCH` JSON patch on `…/status` | `fieldManager: flowsdn-agent-l2-announcer` |
+| `FlowsdnBGPNodeConfig` | status | `PATCH` JSON patch on `…/status` | agent side |
 | `nodes/<name>/status` | annotations | `PATCH` strategic merge | `annotateK8sNode` (§3.8) |
-| `nodes/<name>/status` | `NetworkUnavailable=False`, reason `CiliumIsUp` | `PATCH` strategic merge with `{"status":{"conditions":[…]}}` | operator; conditions merge on key `type` |
+| `nodes/<name>/status` | `NetworkUnavailable=False`, reason `FlowsdnIsUp` | `PATCH` strategic merge with `{"status":{"conditions":[…]}}` | operator; conditions merge on key `type` |
 | `nodes/<name>` | taint removal / addition | `PATCH` JSON patch `[{"op":"test","path":"/spec/taints","value":<old>},{"op":"replace","path":"/spec/taints","value":<new>}]` | operator; the `test` op is the optimistic-concurrency mechanism |
-| `CiliumLoadBalancerIPPool` | status | `PATCH` JSON patch on `…/status` | operator, `fieldManager: cilium-operator-lb-ipam` |
-| `CiliumNetworkPolicy` / `CiliumClusterwideNetworkPolicy` | `status.conditions[Valid]` | `PUT` on `…/status` | operator validator |
-| `CiliumCIDRGroup` | create/update | `POST`/`PUT`, `fieldManager: cilium.io/external-group-controller` | operator, `toGroups` derivation |
-| `CiliumEndpointSlice` | full CRUD | `POST`/`PUT`/`DELETE`/`deletecollection` | operator CES controller |
-| `CiliumPodIPPool` | create | `POST` | operator auto-creates the default pool |
+| `FlowsdnLoadBalancerIPPool` | status | `PATCH` JSON patch on `…/status` | operator, `fieldManager: flowsdn-operator-lb-ipam` |
+| `FlowsdnNetworkPolicy` / `FlowsdnClusterwideNetworkPolicy` | `status.conditions[Valid]` | `PUT` on `…/status` | operator validator |
+| `FlowsdnCIDRGroup` | create/update | `POST`/`PUT`, `fieldManager: flowsdn.io/external-group-controller` | operator, `toGroups` derivation |
+| `FlowsdnEndpointSlice` | full CRUD | `POST`/`PUT`/`DELETE`/`deletecollection` | operator CES controller |
+| `FlowsdnPodIPPool` | create | `POST` | operator auto-creates the default pool |
 | `Lease` | create/get/update | `POST`/`GET`/`PUT` | leader election, L2 announcements |
 | `v1 events` | create/patch | `POST`/`PATCH` | Hubble drop emitter, optional |
 | `customresourcedefinitions` | create/update | `POST`/`PUT` | operator registration (§3.2) |
@@ -706,9 +734,12 @@ its use MUST be logged at warn level.
 
 ## 4. Data model
 
-### 4.1 CRD catalogue
+### 4.1 Reference CRD catalogue (not registration identity)
 
-Common to all 22: `apiVersion: apiextensions.k8s.io/v1`, group `cilium.io`,
+The following table preserves the pinned upstream identities and versions.
+It is migration/schema provenance; flowsdn registration uses §2.1 instead.
+
+Common to all 22 upstream definitions: `apiVersion: apiextensions.k8s.io/v1`, group `cilium.io`,
 CRD name `<plural>.cilium.io`, no `conversion` stanza (server default `None`),
 label `io.cilium.k8s.crd.schema.version: 1.33.11` applied at registration, and
 `metadata.annotations` dropped from the registration payload. **Storage version
@@ -742,24 +773,19 @@ in bold.** "Owner" is the sibling spec that owns the resource's semantics.
 For each of the 22, the following is normative:
 
 > flowsdn MUST vendor the reference YAML for this CRD byte-for-byte (§3.1), MUST
-> register it with the payload of §3.2, and MUST provide a Rust type that
+> project it into the owned registration payload of §3.2, and MUST provide a Rust type that
 > round-trips every document valid against its schema. Test **T-CRD-3** (schema
 > ↔ type diff) and **T-CRD-4** (instance round-trip) MUST pass for it in CI, and
 > **T-CRD-6** MUST match the golden registration payload. The field semantics
 > are owned by the spec named in the "Owner spec" column; this spec does not
 > restate them.
 
-Version and deprecation policy inherited from the reference: a new CRD starts
-at `v2alpha1`; graduation adds a `v2` served + storage version with a
-**byte-identical schema** and marks `v2alpha1` `served: true, storage: false,
-deprecated: true` with no `deprecationWarning` and no conversion webhook.
-Removal of a served version has not happened for any CRD and MUST NOT happen in
-flowsdn without a decision record. Seven CRDs have graduated: CiliumCIDRGroup,
-CiliumLoadBalancerIPPool, and all five BGP CRDs listed above.
-
-`CiliumDatapathPlugin` is served as `v2alpha1` **and** flagged `deprecated:
-true` in the same (only) version; this is intentional in the reference and
-flowsdn reproduces it verbatim rather than "fixing" it.
+Upstream version history starts at `v2alpha1`; graduated definitions serve
+`v2` and deprecated `v2alpha1`. The seven graduated reference schemas and the
+upstream deprecated `CiliumDatapathPlugin` definition remain unchanged in the
+reference corpus. These versions are not flowsdn-owned served versions.
+flowsdn starts with the sole served/storage `v1alpha1`; future graduation and
+stored-instance migrations require a separate decision and validation.
 
 ### 4.2 Vendored file layout
 
@@ -915,12 +941,12 @@ NOT grant any write on `pods`, `services`, `namespaces` or `endpointslices`.
 | `""` | `nodes/status` | patch | `annotateK8sNode` enabled |
 | `coordination.k8s.io` | `leases` | create, get, update, list, delete | L2 announcements enabled |
 | `apiextensions.k8s.io` | `customresourcedefinitions` | list, watch, get | always |
-| `cilium.io` | `ciliumloadbalancerippools`, `ciliumbgpnodeconfigs`, `ciliumbgpadvertisements`, `ciliumbgppeerconfigs`, `ciliumclusterwideenvoyconfigs`, `ciliumclusterwidenetworkpolicies`, `ciliumegressgatewaypolicies`, `ciliumendpoints`, `ciliumendpointslices`, `ciliumenvoyconfigs`, `ciliumidentities`, `ciliumlocalredirectpolicies`, `ciliumnetworkpolicies`, `ciliumnodes`, `ciliumnodeconfigs`, `ciliumcidrgroups`, `ciliuml2announcementpolicies`, `ciliumpodippools`, `ciliumdatapathplugins` | list, watch | always |
-| `cilium.io` | `ciliumidentities`, `ciliumendpoints`, `ciliumnodes` | create | always |
-| `cilium.io` | `ciliumidentities` | update | always (heartbeat-annotation removal) |
-| `cilium.io` | `ciliumendpoints` | delete, get | always |
-| `cilium.io` | `ciliumnodes`, `ciliumnodes/status` | get, update | always |
-| `cilium.io` | `ciliumendpoints/status`, `ciliumendpoints`, `ciliuml2announcementpolicies/status`, `ciliumbgpnodeconfigs/status` | patch | always |
+| `flowsdn.io` | `flowsdnloadbalancerippools`, `flowsdnbgpnodeconfigs`, `flowsdnbgpadvertisements`, `flowsdnbgppeerconfigs`, `flowsdnclusterwideenvoyconfigs`, `flowsdnclusterwidenetworkpolicies`, `flowsdnegressgatewaypolicies`, `flowsdnendpoints`, `flowsdnendpointslices`, `flowsdnenvoyconfigs`, `flowsdnidentities`, `flowsdnlocalredirectpolicies`, `flowsdnnetworkpolicies`, `flowsdnnodes`, `flowsdnnodeconfigs`, `flowsdncidrgroups`, `flowsdnl2announcementpolicies`, `flowsdnpodippools`, `flowsdndatapathplugins` | list, watch | always |
+| `flowsdn.io` | `flowsdnidentities`, `flowsdnendpoints`, `flowsdnnodes` | create | always |
+| `flowsdn.io` | `flowsdnidentities` | update | always (heartbeat-annotation removal) |
+| `flowsdn.io` | `flowsdnendpoints` | delete, get | always |
+| `flowsdn.io` | `flowsdnnodes`, `flowsdnnodes/status` | get, update | always |
+| `flowsdn.io` | `flowsdnendpoints/status`, `flowsdnendpoints`, `flowsdnl2announcementpolicies/status`, `flowsdnbgpnodeconfigs/status` | patch | always |
 | `policy.networking.k8s.io` | `clusternetworkpolicies` | get, list, watch | `enable-k8s-cluster-network-policy` |
 
 Note `ciliumendpoints` appears in the `patch` rule **without** a subresource:
@@ -953,7 +979,7 @@ does not roll back the cluster's schemas.
 
 Each watcher is a list-then-watch loop feeding a table (spec 00 §3.1):
 
-1. Await the CRD fence (for `cilium.io` resources only).
+1. Await the CRD fence (for `flowsdn.io` resources only).
 2. LIST with `resourceVersion=0` (any cached version is acceptable for the
    initial fill). If the server rejects it, retry with a consistent read and
    page with `limit=500`, following `metadata.continue`.
@@ -1045,7 +1071,7 @@ Keys owned by this spec. All are registered in the config registry of spec 00
 | `label-prefix-file` | path | `""` | replaces the default filter list |
 | `node-labels` | list | `[]` | filter list for node identities |
 | `enable-node-selector-labels` | bool | false | enable node-label-based selectors |
-| `agent-not-ready-taint-key` | string | `node.cilium.io/agent-not-ready` | taint key the operator manages |
+| `agent-not-ready-taint-key` | string | `node.flowsdn.io/agent-not-ready` | taint key the operator manages |
 | `k8s-force-version` | string | `""` (hidden) | override version detection; test only |
 | `user-agent` | string | `""` | suffix appended to the user agent |
 
@@ -1403,7 +1429,7 @@ kube::runtime::watcher(Api<T>, watcher::Config { field_selector, label_selector,
 change streams (spec 00 §3.1) for the reconcilers. The `watcher` stream's
 `Event::Init`/`InitApply`/`InitDone` sequence maps onto the table's replace
 transaction; `Event::Apply`/`Delete` map onto insert/delete. The CRD fence is
-awaited before the stream is created, so a `cilium.io` watcher issues no
+awaited before the stream is created, so a `flowsdn.io` watcher issues no
 request before its CRD exists.
 
 Consumers subscribe to `Table::watch(revision)` rather than to the watcher, so
@@ -1438,13 +1464,13 @@ numbers as an optimization behind a config key.
 count on a 5,000-pod cluster; if it is under ~50 MB per agent, (a) is fine.
 Blocked on whether rustkube speaks protobuf at all (C21).
 
-**12.2 Resolved #166: preserve every served version.** All seven graduated
-CRDs (CIDRGroup, LB IP pool and all five BGP kinds) MUST retain served `v2`
-and deprecated served `v2alpha1`, with `v2` the sole storage version and no
-conversion webhook (strategy `None`). Registration MUST preserve the complete
-vendored versions array. C10 is required; absence is an explicit incompatibility,
-never permission to strip a version. Existing stored versions must be migrated
-before any future served-version removal. This also resolves BGP #184.
+**12.2 #166/#184 superseded for owned identity by #299.** Preserve every
+upstream served-version schema in the reference corpus and migration-input
+verification. flowsdn-owned registration instead selects the storage schema
+and serves only `flowsdn.io/v1alpha1` (ADR-0017). This creates a separate API;
+it must not remove upstream versions or migrate/delete existing upstream
+stored instances. C10 remains a general API-server/reference conformance test,
+not a requirement to register upstream versions as flowsdn's API.
 
 **12.3 Resolved #167: guarded JSON patch fallback.** Strategic merge remains
 the default for node annotations and conditions on `nodes/status`. Only an

@@ -8,8 +8,9 @@ pub mod plan;
 pub mod version;
 pub mod watch;
 
+/// Reference schema provenance, independent of the owned API version v1alpha1.
 pub const SCHEMA_VERSION: &str = "1.33.11";
-pub const SCHEMA_VERSION_LABEL: &str = "io.cilium.k8s.crd.schema.version";
+pub const SCHEMA_VERSION_LABEL: &str = "io.flowsdn.k8s.crd.schema.version";
 /// JSON is the baseline for built-in and custom resources. Protobuf remains
 /// pending measured benefit and server capability evidence (#165).
 pub const JSON_CONTENT_TYPE: &str = "application/json";

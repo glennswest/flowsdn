@@ -39,9 +39,9 @@ inventory/exact IPAM reads (`c8f4133`, formatted by `ce8f4d2`).
 These are implementation and focused validation results, not completion of
 [the four networking milestones](milestones.md). Issues #291–#294 remain the
 acceptance trackers. Operator/relay and two-node deployment integration remain
-tracked by #296; native CRD ownership by #299. Current code still projects
-`cilium.io` CRDs, so it must not be described as already using a flowsdn-owned
-API group.
+tracked by #296. The #299 registration projection uses `flowsdn.io/v1alpha1`
+with flowsdn kinds/names; explicit reference-schema migration input is separate
+from normal registration. These are library plans, not running CRD controllers.
 
 Validation records under [validation/](validation/) retain their source,
 platform and scope. In particular, compile checks on arm64 are not arm64 runtime

@@ -184,3 +184,24 @@ fn taint_removal_matches_key_and_preserves_every_other_field() {
     );
     assert_eq!(taints::remove_not_ready(&custom, "custom"), observed);
 }
+
+#[test]
+fn default_readiness_taint_does_not_adopt_cilium_taints() {
+    let foreign = Taint {
+        key: "node.cilium.io/agent-not-ready".into(),
+        value: String::new(),
+        effect: "NoSchedule".into(),
+    };
+    let observed = vec![foreign.clone()];
+    let desired = taints::add_not_ready(&observed, taints::AGENT_NOT_READY_KEY);
+    assert_eq!(desired.len(), 2);
+    assert!(desired.iter().any(|taint| taint.key == "node.flowsdn.io/agent-not-ready"));
+    assert_eq!(
+        taints::remove_not_ready(&desired, taints::AGENT_NOT_READY_KEY),
+        observed
+    );
+    assert_eq!(
+        taints::remove_not_ready(std::slice::from_ref(&foreign), taints::AGENT_NOT_READY_KEY),
+        vec![foreign]
+    );
+}

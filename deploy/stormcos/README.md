@@ -133,3 +133,8 @@ TLS-enabled agent. Its golden packaging must change before deployment.
 
 Runtime packaging for that integration is tracked in
 [stormcos#171](https://github.com/glennswest/stormcos/issues/171).
+
+Existing `/var/run/cilium` compatibility paths do not establish upstream ownership.
+The [resource identity decision](../../docs/decisions/0017-flowsdn-resource-identity.md)
+separates retained runtime paths, interface/map names and CNI aliases from
+flowsdn-owned Kubernetes resources.

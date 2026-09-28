@@ -171,7 +171,9 @@ impl Definition {
             }
             "envoy-access-log-buffer-size" => "docs/spec/16-l7-envoy-dns.md:1500",
             "identity-allocation-mode" => "docs/spec/20-clustermesh-kvstore.md:1575",
-            "agent-not-ready-taint-key" => "docs/spec/12-operator.md:1434",
+            "agent-not-ready-taint-key" | "config-sources" | "gateway-api-secrets-namespace"
+            | "ingress-secrets-namespace" | "policy-secrets-namespace" =>
+                "docs/decisions/0017-flowsdn-resource-identity.md",
             "bpf-lb-algorithm" => "docs/spec/05-service-loadbalancing.md:943",
             "bpf-lb-dsr-dispatch" => "docs/spec/05-service-loadbalancing.md:942",
             "bpf-lb-maglev-hash-seed" => "docs/spec/05-service-loadbalancing.md:946",
@@ -187,9 +189,8 @@ impl Definition {
             "enable-bbr" => "docs/spec/10-node-routing-nftables.md:1383",
             "enable-bbr-hostns-only" => "docs/spec/10-node-routing-nftables.md:1383",
             "enable-dynamic-source-lookup-nodeport" => "docs/spec/05-service-loadbalancing.md:957",
-            "enable-node-ipam" => "docs/spec/12-operator.md:1471",
+            "enable-node-ipam" => "docs/spec/12-operator.md:1493",
             "fixed-identity-mapping" => "docs/spec/03-identity-ipcache.md:950",
-            "gateway-api-secrets-namespace" => "docs/spec/21-gateway-api-ingress.md:1736",
             "hubble-drop-events-reasons" => "docs/spec/11-hubble-monitor.md:2548",
             "hubble-event-buffer-capacity" => "docs/spec/11-hubble-monitor.md:2499",
             "hubble-lost-event-send-interval" => "docs/spec/11-hubble-monitor.md:2502",
@@ -197,11 +198,9 @@ impl Definition {
             "hubble-tls-cert-file" => "docs/spec/11-hubble-monitor.md:2505",
             "hubble-tls-client-ca-files" => "docs/spec/11-hubble-monitor.md:2507",
             "hubble-tls-key-file" => "docs/spec/11-hubble-monitor.md:2506",
-            "ingress-secrets-namespace" => "docs/spec/21-gateway-api-ingress.md:1753",
             "ipam-multi-pool-pre-allocation" => "docs/spec/07-ipam.md:1265",
             "kvstore" => "docs/spec/20-clustermesh-kvstore.md:1533",
             "node-port-range" => "docs/spec/05-service-loadbalancing.md:936",
-            "policy-secrets-namespace" => "docs/spec/12-operator.md:1468",
             "policy-secrets-only-from-secrets-namespace" => "docs/spec/16-l7-envoy-dns.md:1523",
             "socket-path" => "docs/spec/08-endpoint-agent-api.md:1338",
             _ => SPECIFICATION,

@@ -13,6 +13,12 @@ expressions, owning-spec provenance, conflicts, missing help/hidden metadata
 and area-validator requirements. `Definition::default_provenance()` preserves
 the source of each resolved default without changing its original expression.
 
+Owned Kubernetes defaults use `flowsdn-config`, `flowsdn-secrets` and
+`node.flowsdn.io/agent-not-ready`. Original reference expressions remain
+unchanged; [ADR-0017](../../docs/decisions/0017-flowsdn-resource-identity.md)
+records these deliberate overrides. The standalone agent does not yet consume
+this registry as its live configuration source.
+
 Eight flowsdn-only keys are declared separately in `catalogue::EXTENSIONS`:
 `strict-config=false`, `endpoint-id-max=4095`, `force-config-change=false`,
 `bpf-ipcache-map-max=512000`, `bgp-strict-update-errors=false`,
