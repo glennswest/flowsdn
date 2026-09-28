@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-27
+- **feat:** Checkpoint bounded Kubernetes HTTPS transport, per-request token rotation and cancellation-safe watch framing; remote dependency resolution and validation remain pending.
 - **fix:** Accept omitted/null optional watch fields and reserve table revisions only for actual UID-matching deletes.
 - **feat:** Add bounded Node/Pod watch-state staging, atomic relists, bookmarks and UID-safe deletion using the existing table; authenticated transport and agent reconciliation remain outstanding.
 - **feat:** Add atomic Rust CNI installation with compatibility names, overwrite controls and installer regression tests; align loopback fixtures with workspace lint rules.

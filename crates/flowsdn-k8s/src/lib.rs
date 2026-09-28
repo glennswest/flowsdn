@@ -1,7 +1,8 @@
 //! Kubernetes compatibility plans and guarded patch construction from spec 13.
-//! Includes transport-independent built-in ListWatch state; no HTTP client or controller.
+//! Includes bounded HTTPS transport and built-in ListWatch state; no running controller.
 #![forbid(unsafe_code)]
 
+pub mod client;
 pub mod patch;
 pub mod plan;
 pub mod version;

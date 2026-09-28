@@ -49,6 +49,8 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 - [x] Read acceptance and acknowledge open backlog; synchronize the previous audit already published upstream.
 - [x] Implement Rust loopback CNI dispatch and compatibility binary installation from spec 09 and ADRs 0012–0013; add failure and overwrite coverage. Source through `816c8c9`; runtime validation pending.
 - [x] Implement the transport-independent Node/Pod watch-state layer with bounded pagination, atomic replacement and UID-safe deletion; tests pending.
+- [x] Checkpoint bounded HTTPS transport source and tests on the watch branch; dependency lock resolution and all new Kubernetes validation pending.
+- [ ] Before testing this branch, resolve only the new k8s dependencies through sc-build (`cargo update -p flowsdn-k8s`), format, commit/push generated lock/format changes, then run checks.
 - [ ] Connect authenticated Kubernetes transport and watch state to the agent; native route reconciliation and identity/ipcache remain unfinished.
 - [ ] Push source, then validate with sc-build; preserve exact errors and measured results.
 - [ ] Continue Kubernetes Node/Pod watch, identity/ipcache and remote routing integration, then disposable two-node IPv4/IPv6 acceptance.
