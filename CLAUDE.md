@@ -52,6 +52,7 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 - [ ] Keep operator and relay availability explicit: accepted architecture requires separate operator and relay processes.
 - [x] Vendor the verified reference CRD schema bundle and expose owned registration payloads; source review complete, remote tests pending. Implement client/election/controllers next.
 - [ ] Implement Lease election state/optimistic writes with monotonic expiry observation and terminal leadership-loss behavior, then connect the authenticated client and leader-scope controllers.
+- [ ] Add owned-CRD registration reconciliation with strict ownership conflicts, newer-schema preservation, conditional updates and Established readiness; connect it to the leader scope.
 - [ ] Validate multi-node allocation and lifecycle rather than treating process scaffolding as a complete operator.
 - [ ] Push and validate via sc-build; close only when operator/network and deployment acceptance obligations are satisfied.
 
