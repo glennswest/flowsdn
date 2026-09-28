@@ -4956,5 +4956,18 @@
     "token_endpoint": null,
     "active_work_seconds": null,
     "outcomes": []
+  },
+  "issue_304": {
+    "start_utc": "2026-09-28T00:40:56Z",
+    "end_utc": null,
+    "scope": "project/shared",
+    "agent": "codex/root",
+    "source_revision": "816c8c9",
+    "token_baseline": null,
+    "token_endpoint": null,
+    "active_work_seconds": null,
+    "outcomes": [
+      "Actions permissions API confirms enabled=false; removal planned"
+    ]
   }
 }

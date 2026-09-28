@@ -44,6 +44,19 @@ workflow is #304. Do not reactivate it while refreshing documentation.
 
 ## Work plan
 
+### Remove obsolete GitHub workflow — #304
+
+- [x] Read issue/comments and confirm GitHub Actions remains disabled through the read-only permissions API.
+- [ ] Remove crates.yml and replace active build/publication/runner promises with sc-build and stormcentral golden orchestration.
+- [ ] Push then validate the focused change with sc-build; close with exact verification evidence. No runtime or version change intended.
+
+Implementation checkpoints remain saved separately: #299 at f35b620 on
+work/299-crd-identity (sc-build queued); #296 at 4a7eb49 on
+work/296-stormcos-integration (schema/election/client source, unresolved new
+transport lock dependencies and remote validation pending); #291 watch branch
+is preserved. Do not overwrite these branches or claim them complete.
+
+
 ### Milestone 1 implementation — #291, 2026-09-27
 
 - [x] Read acceptance and acknowledge open backlog; synchronize the previous audit already published upstream.

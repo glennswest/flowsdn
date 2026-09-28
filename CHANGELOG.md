@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-09-28
+- **docs:** Plan removal of obsolete GitHub workflow and refresh current build/publication contracts for #304.
+
 ### 2026-09-27
 - **feat:** Add atomic Rust CNI installation with compatibility names, overwrite controls and installer regression tests; align loopback fixtures with workspace lint rules.
 - **fix:** Match locked netlink link flags and reject malformed loopback prevResult before namespace mutation; cover disabled IPv6.

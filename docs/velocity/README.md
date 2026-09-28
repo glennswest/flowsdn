@@ -246,3 +246,9 @@ Final commit/publication is outside this cutoff.
 Started 2026-09-27T23:20:08Z; initial issue review preceded this baseline.
 Loopback/install implementation is the first checkpoint. Usage telemetry is
 unavailable; counters and active work time remain null.
+
+## GitHub workflow removal #304
+
+Started 2026-09-28T00:40:56Z. GitHub Actions is disabled; workflow and active build
+contract cleanup planned. Earlier implementation branches and their pending
+validation remain separate. Token counters and active time unavailable.
