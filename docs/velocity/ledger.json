@@ -4967,7 +4967,14 @@
     "token_endpoint": null,
     "active_work_seconds": null,
     "outcomes": [
-      "Actions permissions API confirms enabled=false; removal planned"
-    ]
+      "Workflow removal and build/publication documentation pushed to main",
+      "sc-build: xtask and packaging build passed; 16 tests passed; scratch checkout removed",
+      "GitHub Actions permissions remain enabled=false",
+      "Golden staging and issue closure pending"
+    ],
+    "validation_cutoff_utc": "2026-09-28T00:59:26Z",
+    "elapsed_to_validation_seconds": 1110,
+    "validated_revision": "9e7144fec889",
+    "build_execution_seconds": 412
   }
 }

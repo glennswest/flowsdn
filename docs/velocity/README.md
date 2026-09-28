@@ -252,3 +252,8 @@ unavailable; counters and active work time remain null.
 Started 2026-09-28T00:40:56Z. GitHub Actions is disabled; workflow and active build
 contract cleanup planned. Earlier implementation branches and their pending
 validation remain separate. Token counters and active time unavailable.
+
+#304 validation at 2026-09-28T00:59:26Z: pushed revision `9e7144f` passed
+sc-build (412 seconds execution): build plus all 16 xtask/packaging tests.
+Observed elapsed to this cutoff: 1110 seconds; active time and token
+counters remain unknown. Golden staging and issue closure are pending.
