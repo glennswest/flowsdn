@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Record 32-issue/25-comment mining results: new provisioning tracker stormcos#183 (P1), supplemented owner decision stormcentral#83, and existing coverage for remaining findings.
 - **docs:** Plan the September 28 issue-comment mining pass; no implementation changes.
 - **docs:** Record successful managed documentation checks and #296 owner-question handoff; runtime acceptance remains unverified.
 - **docs:** Reassess #296 after CRD ownership validation; record the missing disposable acceptance target and preserve saved operator work pending the owner decision.

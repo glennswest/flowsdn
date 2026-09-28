@@ -47,9 +47,10 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ### Comment mining — 2026-09-28
 
-- [ ] Review all 32 issues updated since September 27 and their recent comments.
-- [ ] Search owning repositories, file uncovered findings/owner decisions, and supplement existing issues only when evidence is missing.
-- [ ] Publish the source-comment-to-tracker table and accounting; no implementation fixes or release.
+- [x] Review all 32 updated issues and 25 recent comments; confirm no older comment edits in the window.
+- [x] Search owning repositories; file stormcos#183 (P1) for supported testbed provisioning and supplement existing owner decision stormcentral#83 with the flowsdn pair requirement.
+- [x] Mark stormcentral#83 needs-owner and link both trackers from #296; remaining findings already covered.
+- [x] Publish source-comment mapping in docs/workcycles/2026-09-28-comment-mining.md and accounting. No implementation fixes, tests, golden or release.
 
 ### Stormcos integration — #296, resumed 2026-09-28
 
