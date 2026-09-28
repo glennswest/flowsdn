@@ -2,7 +2,8 @@
 
 Kubernetes contract primitives from specification 13: version floor and
 capability checks, the 22-resource registration plan and payload projection,
-namespace and endpoint-mode plans, and guarded node JSON-patch construction.
+namespace and endpoint-mode plans, guarded node JSON-patch construction, and
+a hash-verified embedded reference schema bundle.
 
 Owned CRDs use `flowsdn.io/v1alpha1`, `Flowsdn` kinds, `flowsdn`-prefixed
 plural/singular names, matching list kinds, and the sole category `flowsdn`.
@@ -26,8 +27,18 @@ been hash-verified. Callers must verify input schemas separately.
 Node fallback patches test UID and resourceVersion before any mutation. Callers
 must probe capabilities, send to nodes/status, and reread/rebuild after conflicts.
 
+`schemas::registration_payloads()` verifies the version-bound manifest and all
+22 embedded reference YAML hashes, parses every document, and returns the complete
+owned registration set. All seven dual-version reference definitions remain
+intact in the corpus; only their storage schemas are projected. The actual
+BGP group/kind defaults occur in deprecated v2alpha1 schemas and do not leak
+into the selected v2 storage projection. Tests exercise the real policy kind
+enums and prove other selected schema content is preserved. See
+[corpus provenance](crds/PROVENANCE.md). The raw YAML is reference data and
+must not be applied as flowsdn installation manifests.
+
 This crate does not implement an HTTP client, probes, informers, controllers,
-vendored CRD schemas, schema hash validation, resource types, CEL admission or
-storage migration. Tests use synthetic documents and local patch application;
+resource types, CEL admission or stored-instance migration. Tests use both the
+verified reference corpus and synthetic documents with local patch application;
 they do not establish Kubernetes conformance or performance. JSON is baseline;
 protobuf remains an open measurement question.

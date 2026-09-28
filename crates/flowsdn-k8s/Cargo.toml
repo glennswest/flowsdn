@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 serde_json.workspace = true
+yaml-rust2.workspace = true
+sha2 = "=0.10.9"
 
 [lints]
 workspace = true

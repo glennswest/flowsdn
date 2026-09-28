@@ -1,9 +1,10 @@
 //! Kubernetes compatibility plans and guarded patch construction from spec 13.
-//! No HTTP client, discovery, informer, schema vendoring or controller is implemented.
+//! Includes a verified reference schema bundle; no HTTP client or controller.
 #![forbid(unsafe_code)]
 
 pub mod patch;
 pub mod plan;
+pub mod schemas;
 pub mod version;
 
 /// Reference schema provenance, independent of the owned API version v1alpha1.

@@ -4981,7 +4981,9 @@
     "token_endpoint": null,
     "active_work_seconds": null,
     "outcomes": [
-      "Plan bounded Unix-socket supervision; operator/relay integration remains open"
+      "Health CLI, validation exec probes and host BTF mount pushed in857b1ea",
+      "Verified reference-schema bundle implemented; remote validation pending",
+      "Separate operator Lease/client prerequisites in progress; no running operator or relay claimed"
     ]
   }
 }
