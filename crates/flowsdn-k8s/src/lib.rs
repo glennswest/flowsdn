@@ -1,10 +1,12 @@
 //! Kubernetes compatibility plans and guarded patch construction from spec 13.
-//! No HTTP client, discovery, informer, schema vendoring or controller is implemented.
+//! Includes bounded HTTPS transport and built-in ListWatch state; no running controller.
 #![forbid(unsafe_code)]
 
+pub mod client;
 pub mod patch;
 pub mod plan;
 pub mod version;
+pub mod watch;
 
 pub const SCHEMA_VERSION: &str = "1.33.11";
 pub const SCHEMA_VERSION_LABEL: &str = "io.cilium.k8s.crd.schema.version";
