@@ -189,7 +189,7 @@ impl Definition {
             "enable-bbr" => "docs/spec/10-node-routing-nftables.md:1383",
             "enable-bbr-hostns-only" => "docs/spec/10-node-routing-nftables.md:1383",
             "enable-dynamic-source-lookup-nodeport" => "docs/spec/05-service-loadbalancing.md:957",
-            "enable-node-ipam" => "docs/spec/12-operator.md:1493",
+            "enable-node-ipam" => "docs/spec/12-operator.md:1494",
             "fixed-identity-mapping" => "docs/spec/03-identity-ipcache.md:950",
             "hubble-drop-events-reasons" => "docs/spec/11-hubble-monitor.md:2548",
             "hubble-event-buffer-capacity" => "docs/spec/11-hubble-monitor.md:2499",

@@ -32,7 +32,8 @@ paths and tables below describe upstream provenance or compatible input
 shape; they do not authorize creating, reconciling or deleting Cilium-owned
 objects. The flowsdn controller identity is `io.flowsdn/gateway-controller`,
 its object prefixes are `flowsdn-gateway-` and `flowsdn-ingress-`, and its
-secrets namespace is `flowsdn-secrets`. Its readiness taint defaults to
+secrets namespace is `flowsdn-secrets`; its election Lease is
+`flowsdn-operator-resource-lock`, isolated from the upstream lock. Its readiness taint defaults to
 `node.flowsdn.io/agent-not-ready`. GAMMA status condition types are
 `gamma.flowsdn.io/GammaRoutesAttached` and
 `gamma.flowsdn.io/GammaRoutesProgrammed`; condition reasons retain their

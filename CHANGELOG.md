@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Isolate operator election under the flowsdn-owned Lease name and preserve configuration provenance links.
 - **docs:** Plan optimistic Lease election with bounded renewal and terminal loss as the next operator prerequisite.
 - **feat:** Add bounded Unix-socket agent health CLI, startup/liveness exec probes and explicit host BTF mount to the validation deployment; document separate operator/relay requirements (#296).
 - **docs:** Record the accepted separate operator/relay architecture and schema-bundle prerequisite for executable operator integration.
