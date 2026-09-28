@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Reassess #296 after CRD ownership validation; record the missing disposable acceptance target and preserve saved operator work pending the owner decision.
 - **docs:** Record #299 golden handoff failure in stormcos#155; source verification is complete, but no golden or deployment is claimed.
 - **docs:** Verify #299 at 9c1ea61: full workspace build, formatting/Clippy, 710 passing tests and both supported musl compile targets; record the unchanged live-integration limits.
 - **chore:** Format recovered CRD ownership implementation through the managed build (#299).

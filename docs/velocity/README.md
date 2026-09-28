@@ -306,3 +306,10 @@ closure follow this cutoff. See [validation](../validation/2026-09-28-resource-i
 Golden request cdb5f2d45638 failed in 34 seconds under stormcos#155, producing
 no golden. Source verification is complete; final issue closure/reporting follow
 this cutoff. No token-usage estimate is available.
+
+## Stormcos integration target review — #296
+
+Started 2026-09-28T17:45:01Z; initial reading preceded this baseline.
+Rechecked managed inventory and preserved the saved operator branch. Owner
+designation of a disposable flowsdn pair is required for acceptance; no host
+was changed. Usage and active/parallel timing are unavailable.

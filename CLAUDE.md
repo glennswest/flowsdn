@@ -45,6 +45,19 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Stormcos integration — #296, resumed 2026-09-28
+
+- [x] Read #296 body/comments, open backlog, current deployment contract and saved branch at 4a7eb49. #299 ownership prerequisite is now implemented and verified.
+- [x] Recheck managed test inventory: only one Cilium test machine is registered, no disposable flowsdn pair. No host has been selected or modified.
+- [ ] Stop implementation for the owner's target decision, as explicitly requested in this session; record the question on #296 and move its queue item to wait-owner.
+- [ ] After the owner designates/registers a disposable flowsdn pair, recover and review saved liveness/schema/election/registration work against current Fedora OpenSSL and flowsdn ownership; complete operator integration and relay/deployment contracts.
+- [ ] Push before sc-build; verify operator/network acceptance before closure. Keep #291 integration and stormcos packaging dependencies explicit.
+
+The separate operator/relay architecture is already specified; no new architecture
+choice is requested. The missing decision is the disposable acceptance target.
+Saved #296 code remains on work/296-stormcos-integration and is not validated
+or merged by this audit. No runtime, version, golden or release change.
+
 ### Remove obsolete GitHub workflow — #304
 
 - [x] Read issue/comments and confirm GitHub Actions remains disabled through the read-only permissions API.
