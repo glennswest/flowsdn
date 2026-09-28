@@ -1,6 +1,7 @@
 //! Operator planning primitives from spec 12. No controller or HTTP server.
 pub mod ces;
 pub mod lifecycle;
+pub mod lease;
 pub mod readiness;
 pub mod taints;
 
