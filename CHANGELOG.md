@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Record the partial #291 recovery, 86 passing tests, outstanding integration contracts and the required disposable two-node test target.
 - **chore:** Apply remote rustfmt feedback to the loopback address lookup; 86 agent/CNI/Kubernetes tests passed, with the namespace fixture still unrun (#291).
 - **fix:** Remove ambiguous conversion in loopback link lookup exposed by the combined CNI/Kubernetes build (#291).
 - **chore:** Resolve and lock the recovered Kubernetes transport dependencies and format milestone-one source (#291).

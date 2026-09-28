@@ -64,12 +64,15 @@ is preserved. Do not overwrite these branches or claim them complete.
 ### Milestone 1 implementation — #291, resumed 2026-09-28
 
 - [x] Read acceptance and acknowledge open backlog; synchronize the previous audit already published upstream.
-- [x] Rust loopback/install source is on main through 816c8c9; validation remains pending.
-- [ ] Recover saved Node/Pod watch state and bounded HTTPS transport from work/291-watch-state; resolve dependency lock and formatting through sc-build, then validate CNI and Kubernetes suites.
+- [x] Rust loopback/install source is on main; combined build/tests passed at bfc19b2 (86 tests across agent/CNI/Kubernetes). Namespace runtime fixture remains unrun.
+- [x] Recover saved watch state/HTTPS transport in 67cb727; remote lock/format in 556877f; fix ambiguous loopback lookup in bfc19b2.
+- [ ] Finish lint/dependency gates at c026bfb after the 86 passing tests; see docs/validation/2026-09-28-m1-recovery.md.
 - [ ] Connect watch reconciliation, identity/ipcache and owned remote routes to the endpoint agent; review ADR acceptance in parallel.
 - [ ] Push each source checkpoint before sc-build; preserve exact errors and measured results.
 - [ ] Continue Kubernetes Node/Pod watch, identity/ipcache and remote routing integration, then disposable two-node IPv4/IPv6 acceptance.
 - [ ] Close #291 only after every acceptance gate passes; stage the flowsdn golden after verified implementation.
+
+Owner input needed before two-node acceptance: provide/register a disposable flowsdn pair or an existing managed target. Only a Cilium machine is registered; the referenced provisioning script requires prohibited root SSH. Do not repurpose it or close #291.
 
 User reports stormcentral#102 and sandbox Git writes fixed. Recheck through the
 normal build path; never use a persistent checkout on the build host.
