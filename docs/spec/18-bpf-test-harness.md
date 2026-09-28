@@ -1054,7 +1054,8 @@ cluster. Numbers are recorded per kernel row for trend-watching.
 
 ### 8.4 Coverage reporting
 
-`cargo xtask cases --summary` prints, and CI publishes, the §5.3 numbers:
+`cargo xtask cases --summary` prints the §5.3 numbers. Maintainers record its
+output in the validation report after running it through `sc-build`:
 ported/total overall, per milestone, per pipeline, per reference file; the list
 of unported M1 cases; the list of cases skipped on each kernel row with the
 reason. The M1 number is the one that appears in the project status.

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-09-28
+- **docs:** Replace the remaining automatic CI coverage-publication promise with explicit sc-build validation reporting (#304).
 - **docs:** Resume #304 final verification and record the failed golden stage in stormcos#155; no golden or release was produced.
 - **docs:** Distinguish the revision observed at staging request from the still-unreported built revision.
 - **docs:** Preserve the requested golden staging job and its queued status after successful workflow-removal validation.
