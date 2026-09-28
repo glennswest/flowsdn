@@ -313,3 +313,9 @@ Started 2026-09-28T17:45:01Z; initial reading preceded this baseline.
 Rechecked managed inventory and preserved the saved operator branch. Owner
 designation of a disposable flowsdn pair is required for acceptance; no host
 was changed. Usage and active/parallel timing are unavailable.
+
+Cutoff 2026-09-28T17:46:40Z: 99 observed seconds. Documentation
+at 46bf8f3 passed sc-build whitespace/file-presence checks (0 seconds, no slot
+wait); drive deleted. No compilation or runtime tests. Local run-history write
+was sandbox-denied after remote success. Owner question posted on #296 and
+wait-owner succeeded; issue remains open. Counters remain unavailable.
