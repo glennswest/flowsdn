@@ -45,6 +45,21 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Test containers — #303, 2026-10-03
+
+One image (`test/Containerfile`, context repo root) answers `/test short|medium|long`
+per stormcentral docs/test-standard.md. Every suite runs the commit's own agent, CNI and
+BPF objects in anonymous network/mount namespaces inside a privileged pod (declared in
+`test/requires.toml`); nothing touches host links or the host bpffs. A read-only node
+probe reports skip unless the node carries the flowsdn CNI.
+
+- [ ] `test/` crate `flowsdn-test`: report (JSON lines, exit 0/1/2), preflight (kernel >= 6.6, BTF, privileges -> skip/2), node probe, real agent+CNI driver.
+- [ ] short: two dual-stack endpoints, UDP both ways, DEL, no residue (< 2 min).
+- [ ] medium: short + each namespace-isolated fixture (smoke, endpoint, native-routing, cni-runtime, agent-runtime, packet/uplink ingress, loader-features, socket-live), logs under /results.
+- [ ] long: endpoint-churn waves sized from the pod's CPUs/memory; per-wave ADD latency and residue (agent fds/RSS, pins, state, links); slowdown or growing residue fails.
+- [ ] `test/build.sh`: pinned nightly via rustup + SHA-pinned bpf-linker 0.11.1, BPF objects, musl binaries staged in test/.stage.
+- [ ] sc-build: workspace build/tests and `test/build.sh` (STAGE_ONLY) pass; docs, changelog; close #303.
+
 ### Aya feature verification — #3, 2026-10-03
 
 - [x] Read the issue. `.rodata.config`, XDP frags and TCX pin/update already passed kernel probes on 2026-09-22.
