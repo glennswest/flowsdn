@@ -45,6 +45,11 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Milestone 2 acceptance — #292, 2026-10-03
+
+- [x] Read the issue and docs/milestones.md: milestone 2 depends on milestone 1's pod network; service/policy code is primitives only.
+- [x] Commented on #292 and proposed it after #291. Nothing implemented.
+
 ### Test containers — #303, 2026-10-03
 
 One image (`test/Containerfile`, context repo root) answers `/test short|medium|long`
