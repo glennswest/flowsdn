@@ -46,7 +46,7 @@ paths, configure both sides consistently.
 
 ## Installing the CNI on a node
 
-The CNI executable has one argument form: `flowsdn-cni install` (a runtime never
+The CNI executable treats a first argument `install` as the node installer (a runtime never
 passes arguments). It copies its own executable into `$CNI_DIR/bin` and writes
 the network configuration, then prints a JSON report (`installed`, `conflist`,
 `plugin_replaced`, `loopback_replaced`, `warnings`); failure exits 1.

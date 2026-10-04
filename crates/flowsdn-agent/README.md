@@ -21,16 +21,23 @@ Queue lock/list/delete failures stop startup and retain valid failed entries
 for a later restart; malformed entries are logged and discarded. This interim
 behavior avoids silently losing deletions before endpoint GC exists.
 
-The JSON configuration requires `socket-path`, `state-dir`, `bpf-object`,
-`device-mtu` and `route-mtu`, plus at least one of `ipv4-pool`/`ipv6-pool` in
-CIDR form and the corresponding `ipv4-gateway`/`ipv6-gateway`. The optional
-`delete-queue` defaults to `deleteQueue` beside the socket. Gateways are excluded
-from allocation; both MTUs must be at least 1280 and route MTU cannot exceed
-device MTU. Optional `bpf-pin-root` enables persistent map/TCX ownership in a
-dedicated writable bpffs directory; omitted/null/empty disables pinning. See
-[the runtime guide](../../docs/runtime.md) for every key and default. The supplied BPF object
-must be the trusted `local-delivery` build. Run with Linux network/BPF privileges
-and configure CNI to use the same socket and queue.
+The JSON configuration requires `socket-path`, `state-dir`, `device-mtu` and
+`route-mtu`, plus at least one of `ipv4-pool`/`ipv6-pool` in CIDR form and the
+corresponding `ipv4-gateway`/`ipv6-gateway`. The optional `delete-queue` defaults
+to `deleteQueue` beside the socket. Gateways are excluded from allocation; both
+MTUs must be at least 1280 and route MTU cannot exceed device MTU. Optional
+`bpf-pin-root` enables persistent map/TCX ownership in a dedicated writable
+bpffs directory; omitted/null/empty disables pinning.
+
+The `local-delivery` BPF object built from this commit is embedded
+(`bpf/local-delivery`, rebuilt by `tools/build-bpf.sh`; `test/build.sh` refuses
+a copy whose code differs). An omitted or empty `bpf-object` loads it; a path
+loads that trusted build instead. `egress` is `fib` (default: BPF FIB-redirects
+traffic that is not to a local endpoint) or `stack` (it goes to the host stack,
+and each endpoint address gets a host route over its host link); anything else
+fails startup. See [the runtime guide](../../docs/runtime.md) for every key and
+default. Run with Linux network/BPF privileges and configure CNI to use the same
+socket and queue.
 
 The bounded HTTP/1.1 subset supports config/health, allocation/release, endpoint
 creation/list/detail/health, exact IPAM pool summaries, module health, health
@@ -55,11 +62,11 @@ are not yet supported.
 `--help` and `--version` exit successfully without loading configuration. The
 daemon opens no TCP listener or Hubble/relay service. `/v1/healthz` reports API
 availability after restore, not complete pod-network readiness. stormcos ships
-the static musl agent and CNI in a golden; required runtime resources and the
-validation manifest are documented in [the deployment contract](../../deploy/stormcos/README.md).
+the static musl agent and CNI in a golden; the edition manifests and runtime
+resources are documented in [the deployment contract](../../deploy/stormcos/README.md).
 
 `flowsdn-agent cni install --source PATH` installs the supplied Rust CNI binary
 under primary compatibility names and the loopback entry point. See the
 [CNI installation reference](../flowsdn-cni/README.md#install-binaries) for
 destination and overwrite controls. This command does not load BPF, start the
-API or publish a conflist.
+API or publish a conflist; `flowsdn-cni install` also writes the conflist.

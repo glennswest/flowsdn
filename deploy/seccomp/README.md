@@ -13,7 +13,7 @@ Run on the target Linux architecture using a baseline approved for that runtime:
 cargo run -p flowsdn-trace-seccomp --bin flowsdn-trace-seccomp -- \
   --baseline runtime-default.json --arch amd64 \
   --caps CAP_BPF,CAP_PERFMON,CAP_NET_ADMIN,CAP_SYS_ADMIN \
-  --exe /usr/local/bin/flowsdn-agent --exe /opt/cni/bin/flowsdn-cni \
+  --exe /flowsdn-agent --exe /opt/cni/bin/flowsdn \
   --trace trace.1234 --trace trace.1235 \
   --output flowsdn-amd64.json --report syscall-counts.json
 ```
@@ -53,6 +53,11 @@ securityContext:
     type: Localhost
     localhostProfile: flowsdn/agent.json
 ```
+
+**On stormcos this profile is a no-op.** The stormcos kubelet parses
+`seccompProfile`, but its stormpump runtime enforces no seccomp filter and drops
+no capabilities, so the declaration changes nothing there. It applies only on a
+runtime that enforces seccomp.
 
 Seccomp settings on the agent Pod do not constrain a host-invoked CNI executable.
 Applying a profile to that process needs its actual launcher/runtime integration.

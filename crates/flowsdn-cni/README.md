@@ -64,5 +64,21 @@ written through; retaining a canonical symlink is rejected.
 `loopback` is copied from the same Rust source binary when absent or when
 `OVERWRITE_LOOPBACK=true`. Loopback installation failures produce warnings,
 consistent with spec 09. Publication is atomic per name, not across the whole
-set; a failed installation can be retried. The installer does not write a
+set; a failed installation can be retried. This form does not write a
 conflist, start an agent, or uninstall configuration.
+
+## Node installer
+
+`flowsdn-cni install` (an `install` first argument; a CNI runtime
+passes none) is what the stormcos edition's init container runs. It performs the
+installation above with its own executable as the source, then atomically
+writes `00-flowsdn.conflist` (mode 0644) into `CNI_CONF_DIR`, default
+`$HOST_PREFIX/etc/cni/net.d`:
+
+```json
+{"cniVersion":"1.1.0","name":"flowsdn","plugins":[{"type":"cilium-cni"}]}
+```
+
+The `00-` prefix sorts ahead of a leftover `05-cilium.conflist`. It prints a JSON
+report (`installed`, `conflist`, `plugin_replaced`, `loopback_replaced`,
+`warnings`) and exits 1 with a message on failure.

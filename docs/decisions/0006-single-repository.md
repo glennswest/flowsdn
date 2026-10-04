@@ -38,6 +38,11 @@ trees checked out side by side and pins nothing. The `mkfs-ext4`/`fio-ext4`
 lockstep pin is another instance of the same tax. That pattern is a known cost
 here and this project does not need to pay it again.
 
+> Correction (2026-10-03, #308): rustkube-node now takes rustkube's apimachinery
+> as a git dependency pinned to a revision in its `Cargo.toml`, not a sibling
+> path. The sibling-path cost described above was the state when this ADR was
+> written; the decision does not depend on it.
+
 ## What this does not preclude
 
 Two crates have a plausible audience outside flowsdn and may be **extracted and
