@@ -1,5 +1,37 @@
 # StormOS / stormcos integration contract
 
+## The flowsdn edition's manifests (#296, stormcos#261)
+
+[`manifests/`](manifests/) is what stormcos applies in the flowsdn edition in
+place of the cilium manifests (10–75). It contains a ServiceAccount and
+read-only RBAC, the agent ConfigMap and the agent DaemonSet:
+
+- **Image.** The DaemonSet runs the node's flowsdn golden (`image: flowsdn`):
+  `/flowsdn-agent`, and `/opt/cni/bin/flowsdn` with the BPF object embedded in
+  the agent. Nothing is pulled.
+- **CNI install.** An init container runs `flowsdn install`. It copies the
+  plugin into the node's `/opt/cni/bin` (as `cilium-cni`, `flowsdn-cni`,
+  `flowsdn` and, if absent, `loopback`) and atomically writes
+  `/etc/cni/net.d/00-flowsdn.conflist`. The `00-` prefix means a leftover
+  `05-cilium.conflist` cannot win.
+- **Agent.** It runs `egress: stack`. Pod-to-pod traffic on the node is
+  delivered in BPF; everything else goes to the node's stack, and each pod
+  gets a host route.
+
+What the node must provide besides the manifests:
+
+- **Services.** kube-proxy must run: flowsdn has no service load balancer yet
+  (milestone 2, #292), and the cilium edition runs none because Cilium
+  replaces it.
+- **Off-node egress.** `net.ipv4.ip_forward=1` and a masquerade for
+  `10.244.0.0/24` leaving the node.
+- **Kernel.** 6.6 or newer, with TCX and BTF.
+
+**Limits.** This is one node per cluster: the pool is static and the agent does
+not read Node podCIDRs or route to other nodes (#291). Without a pin root, an
+agent restart briefly pauses pod traffic while it reinstalls endpoints from
+state. The sections below describe the earlier standalone validation examples.
+
 These examples describe the **current standalone endpoint runtime**. They do
 not install a functioning Kubernetes pod network. They address the deployment
 boundary in [issue #296](https://github.com/glennswest/flowsdn/issues/296) while

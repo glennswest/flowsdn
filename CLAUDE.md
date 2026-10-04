@@ -54,11 +54,12 @@ nothing writes /etc/cni/net.d, and stormcos runs no kube-proxy (Cilium replaced 
 BPF FIB-redirect path drops pod->host traffic and bypasses netfilter, so ClusterIPs could
 not work even with kube-proxy.
 
-- [ ] BPF/loader/agent: `egress: stack` hands non-endpoint traffic to the host stack (.rodata.config global); agent adds host /32,/128 routes to endpoints in that mode.
-- [ ] Agent embeds the local-delivery object (used when `bpf-object` is absent); committed object, rebuild check in test/build.sh.
-- [ ] CNI `install` subcommand: copy plugin (+loopback) into host /opt/cni/bin, write /etc/cni/net.d/05-flowsdn.conflist atomically.
-- [ ] deploy/stormcos/manifests: ServiceAccount/RBAC, ConfigMap, DaemonSet (image `flowsdn` -> golden), single-node pool.
-- [ ] sc-build; post the stormcos side on stormcos#261 (copy manifests in flowsdn edition, run kube-proxy, masquerade); stage the golden.
+- [x] BPF/loader/agent: `egress: stack` hands non-endpoint traffic to the host stack (.rodata.config global); agent adds host /32,/128 routes to endpoints in that mode.
+- [x] Agent embeds the local-delivery object (used when `bpf-object` is absent); committed object, rebuild check in test/build.sh.
+- [x] CNI `install` subcommand: copy plugin (+loopback) into host /opt/cni/bin, write /etc/cni/net.d/05-flowsdn.conflist atomically.
+- [x] deploy/stormcos/manifests: ServiceAccount/RBAC, ConfigMap, DaemonSet (image `flowsdn` -> golden), single-node pool.
+- [x] sc-build at a98a3e5: fmt, workspace Clippy, 676 tests, test/build.sh (embedded object check), static musl agent/CNI.
+- [ ] Post the stormcos side on stormcos#261; stage the flowsdn golden; live check on pvetest2 once it answers (it did not, 2026-10-03 21:xx).
 
 ### Policy oracle decision — #103, 2026-10-03
 

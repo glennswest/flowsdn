@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### 2026-10-03
+- **feat:** Add the stormcos flowsdn edition manifests (`deploy/stormcos/manifests`, #296, stormcos#261): RBAC, agent ConfigMap and a DaemonSet running the flowsdn golden.
+- **feat:** Add `flowsdn-cni install`: installs the plugin into the host `/opt/cni/bin` and atomically writes `/etc/cni/net.d/00-flowsdn.conflist`.
+- **feat:** The agent embeds the local-delivery BPF object (`bpf-object` is now optional) and accepts `egress: fib|stack`. Stack egress hands non-endpoint traffic to the host stack (a `.rodata.config` switch) and adds host routes to endpoints.
+- **build:** Add `tools/build-bpf.sh`, a path-remapped BPF build; `test/build.sh` uses it and refuses an embedded object whose code differs.
 - **docs:** Resolve #103 in ADR-0018: the independent policy simulator and kernel-map scan are the oracles, and every mapstate/frontend/index optimization is gated on agreement with them. Connecting the complete Rule-to-kernel compiler to both oracles remains a milestone-2 obligation (#292).
 - **docs:** Record that milestone 2 (#292) is blocked on milestone 1 (#291) and queued after it.
 - **docs:** Record that #303 is blocked on test-machine registry space (stormcentral#376): pvetest1 and pvetest2 return 507 on push.
