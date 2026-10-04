@@ -1,0 +1,5 @@
+# The only image built with the repository root as context is the test image
+# (test/Containerfile, stormcentral docs/test-standard.md). test/build.sh stages
+# everything it needs under test/.stage; keep the rest of the tree out.
+*
+!test/.stage

@@ -1,0 +1,28 @@
+# What flowsdn-test needs beyond the runner's namespace-only Role
+# (stormcentral docs/test-standard.md, #303).
+#
+# Every suite runs the commit's own agent, CNI and BPF programs inside
+# anonymous network and mount namespaces of the pod: loading BPF, creating
+# veths and mounting a private bpffs need a privileged pod. Nothing is attached
+# to the node's links or pinned in the node's bpffs, and no cluster object is
+# created.
+#
+# The read-only host paths are for the node probe: /opt/cni/bin shows whether
+# the node carries flowsdn's CNI (the flowsdn flavor; otherwise skip), and /run
+# holds the node agent's socket (/run/cilium/cilium.sock), probed with GETs only.
+#
+# requires: kernel >= 6.6 (TCX) with BTF. The test checks and reports skip
+# where the machine lacks them. No hardware, NIC or core count is assumed;
+# long sizes its waves from the pod's CPUs and memory limit (STORM_WAVE_MAX caps
+# it).
+[short]
+privileged = true
+host_paths_read_only = ["/opt/cni/bin", "/run"]
+
+[medium]
+privileged = true
+host_paths_read_only = ["/opt/cni/bin", "/run"]
+
+[long]
+privileged = true
+host_paths_read_only = ["/opt/cni/bin", "/run"]

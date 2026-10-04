@@ -1,0 +1,15 @@
+# flowsdn's test image (stormcentral docs/test-standard.md, #303): one image for
+# all three suites, started as `/test short|medium|long`.
+#
+# test/build.sh builds on the build box and stages under test/.stage: /test, the
+# commit's agent and CNI, the kernel fixtures and the BPF objects. The build
+# context is the repo root (.containerignore keeps it to the stage).
+#
+# fedora-minimal, not scratch: the kernel fixtures and the test's own namespace
+# setup call `ip` and `nft`.
+FROM registry.fedoraproject.org/fedora-minimal:43
+RUN microdnf -y install --setopt=install_weak_deps=0 iproute nftables && microdnf clean all
+LABEL storm.io/test-of="flowsdn"
+COPY test/.stage/opt/flowsdn /opt/flowsdn
+COPY test/.stage/test /test
+ENTRYPOINT ["/test"]

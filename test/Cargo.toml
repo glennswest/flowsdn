@@ -1,0 +1,25 @@
+[package]
+name = "flowsdn-test"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "flowsdn's test container: short, medium and long suites per stormcentral docs/test-standard.md (#303)."
+
+[lints]
+workspace = true
+
+# A workspace member, so the one Cargo.lock pins it and `cargo test` builds it.
+# The suites drive the agent, CNI and BPF objects of the same commit as
+# separate executables, the way a node runs them; the API client is the only
+# flowsdn library used.
+[dependencies]
+serde_json.workspace = true
+nix = { version = "=0.30.1", default-features = false, features = ["sched", "mount"] }
+flowsdn-api-client = { path = "../crates/flowsdn-api-client", version = "=0.14.0" }
+
+[[bin]]
+name = "flowsdn-test"
+path = "src/main.rs"
