@@ -1083,7 +1083,11 @@ tests, at the tiers of §10.3.
 - [ ] `BPF_PROG_TEST_RUN` round-trip: a trivial `#[classifier]` that returns
       `TC_ACT_OK` and copies `data_in` to `data_out` unchanged — asserts the
       syscall plumbing, buffer sizing and verdict decoding.
-- [ ] `ctx_in`/`ctx_out` field matrix: for each of `mark`, `priority`,
+- [ ] `ctx_in`/`ctx_out` field matrix (**probe implemented, #256**:
+      `crates/flowsdn-bpf/src/bin/skb-ctx.rs` and
+      `crates/flowsdn-bpftest/src/bin/skb-ctx-matrix.rs`, run as
+      `fixture-skb-ctx-matrix` in the test container's `medium` suite; not yet
+      run on any kernel): for each of `mark`, `priority`,
       `cb[0..5]`, `ifindex`, `tstamp`, `wire_len`, `gso_segs`, `gso_size`,
       `hwtstamp`, `tc_index`, `ingress_ifindex`: set it, read it back in the
       program, mutate it, read it back in `ctx_out`. Records a per-kernel

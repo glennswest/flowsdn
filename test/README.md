@@ -21,7 +21,7 @@ in the cluster.
 | suite | budget | checks |
 |---|---|---|
 | `short` | < 2 min | `agent-start`; `endpoint-add` (two dual-stack sandboxes); `pod-traffic-ipv4`/`-ipv6` (UDP both ways through BPF); `endpoint-del` (endpoints, IPAM, pins, links and state back to baseline) |
-| `medium` | < 30 min | `short`, then the fixtures from [flowsdn-bpftest](../crates/flowsdn-bpftest/README.md), each a `fixture-<name>` line with its log in `/results`: smoke, packet-ingress, loader-features, uplink-ingress, endpoint, native-routing, cni-runtime, agent-runtime and socket-live |
+| `medium` | < 30 min | `short`, then the fixtures from [flowsdn-bpftest](../crates/flowsdn-bpftest/README.md), each a `fixture-<name>` line with its log in `/results`: smoke, packet-ingress, loader-features, uplink-ingress, endpoint, native-routing, cni-runtime, agent-runtime, skb-ctx-matrix (the spec 18 §9.1 `__sk_buff` `ctx_in` table; its last line is the per-kernel matrix, #256) and socket-live |
 | `long` | night window | waves of sandboxes against one agent: size from the pod's CPUs and memory limit (16 per CPU, half the memory at 16 MiB each, at most 500 for the endpoint map, capped by `STORM_WAVE_MAX`); sizes cycle full, half, three quarters; traffic on up to 32 pairs per family; agent restart under load every third wave; drain. One `wave-<n>` line per wave, the trend in `/results/waves.jsonl`, then `wave-slowdown` (mean ADD over 2x wave 1 + 5 ms) and `wave-residue` (any object above wave 1's drained count, agent fds +4, RSS +50% + 16 MiB) |
 
 Every suite starts with a read-only **node probe**. `node-cni` checks for

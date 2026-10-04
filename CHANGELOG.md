@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-03
+- **test:** Add the `__sk_buff` `ctx_in`/`ctx_out` field matrix probe (`skb-ctx` BPF object and `skb-ctx-matrix` harness, spec 18 §9.1, #256) and run it in the test container's medium suite. It has not yet run on a kernel; which kernel rows count is an open question on #256.
 - **feat:** Add the stormcos flowsdn edition manifests (`deploy/stormcos/manifests`, #296, stormcos#261): RBAC, agent ConfigMap and a DaemonSet running the flowsdn golden.
 - **feat:** Add `flowsdn-cni install`: installs the plugin into the host `/opt/cni/bin` and atomically writes `/etc/cni/net.d/00-flowsdn.conflist`.
 - **feat:** The agent embeds the local-delivery BPF object (`bpf-object` is now optional) and accepts `egress: fib|stack`. Stack egress hands non-endpoint traffic to the host stack (a `.rodata.config` switch) and adds host routes to endpoints.
