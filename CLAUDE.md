@@ -45,6 +45,15 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### __sk_buff ctx_in matrix — #256, 2026-10-03
+
+Spec 18 §3.3(d)/§9.1: set each __sk_buff field through BPF_PROG_TEST_RUN ctx_in, read it in
+the program, write some back, read ctx_out; record a per-kernel table on 6.6/6.12/6.18.
+
+- [ ] BPF `skb-ctx` (observe + write programs) and `skb-ctx-matrix` harness (flowsdn-bpftest); JSON table, exit 1 if a relied-upon field is unusable.
+- [ ] Add to the test container's medium suite (the stormcos test machines' kernel row).
+- [ ] sc-build; run on test machines where possible; 6.6/6.18 rows need a kernel-matrix runner (none exists) -> stormcentral dependency.
+
 ### stormcos flowsdn edition pod network — #296 (P0), 2026-10-03
 
 Master: 11.79-flowsdn on pvetest2 has no pod network (stormcos#261): no flowsdn manifests;
