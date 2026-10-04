@@ -241,7 +241,9 @@ mod node_install_tests {
         let written: serde_json::Value =
             serde_json::from_slice(&fs::read(&conf).expect("conflist")).expect("JSON");
         assert_eq!(
-            written.pointer("/plugins/0/type").and_then(serde_json::Value::as_str),
+            written
+                .pointer("/plugins/0/type")
+                .and_then(serde_json::Value::as_str),
             Some("cilium-cni")
         );
         // Rewriting is atomic and idempotent; no temporary files remain.
