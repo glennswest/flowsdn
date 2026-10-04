@@ -1902,7 +1902,9 @@ Closed design choices do not claim Kubernetes, REST or datapath integration.
 
 11. **Resolved #102.** Retain lockdown default false for compatibility and alarm at pressure >= 0.9 with exact integer rounding. pressure() provides the tested planning primitive, not a live metric or map write. Overflow must remain a reported enforcement failure; runtime lockdown and pre-1.0 security review remain required.
 
-12. **Simulator — #103 remains open for the complete oracle gate.**
+12. **Resolved #103 (ADR-0018): the simulator is the oracle.** Mapstate and
+    frontend optimizations merge only when the agreement gates below pass. The
+    complete-compiler connection is a remaining milestone-2 obligation (#292).
     `oracle::evaluate` remains independent of optimized lookup construction.
     A new `mapstate::MapState` compiles the current resolved exact/wildcard
     identity L3/L4 rule domain into identity/protocol buckets and disjoint port
@@ -1943,8 +1945,8 @@ Closed design choices do not claim Kubernetes, REST or datapath integration.
     This index is not the kernel LPM mapstate of §§5.4–5.8. Authentication
     inheritance, aggregate identities, cookies/origins, full selector import,
     and sustained fuzz comparison against the complete kernel-map builder remain
-    outstanding. Both resolved paths explicitly reject authentication. #103 remains
-    open for that complete gate; replay of the harvested seeds establishes only
+    outstanding. Both resolved paths explicitly reject authentication. That complete
+    gate is a remaining obligation (ADR-0018, #292); replay of the harvested seeds establishes only
     the stated simulator/frontend domain, not Kubernetes policy enforcement.
 
 ### Simulator source clarification
@@ -2014,7 +2016,7 @@ orders across local, remote-node, world and remote-cluster identity categories.
 `cargo test -p flowsdn-policy --test kernel_map deterministic_soak`.
 This is bounded deterministic fuzzing, not coverage-guided fuzzing or BPF execution.
 
-#103 remains open: the Rule-to-kernel compiler still lacks full same-identity
+Remaining under ADR-0018 (#292): the Rule-to-kernel compiler still lacks full same-identity
 precedence normalization, cross-identity covering insertion, Pass reranking and
 incremental origin/cookie handling. The raw-ABI differential gate and partial
 auth propagation now exist; the complete policy compiler must eventually be

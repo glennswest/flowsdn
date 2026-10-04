@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-03
+- **docs:** Resolve #103 in ADR-0018: the independent policy simulator and kernel-map scan are the oracles, and every mapstate/frontend/index optimization is gated on agreement with them. Connecting the complete Rule-to-kernel compiler to both oracles remains a milestone-2 obligation (#292).
 - **docs:** Record that milestone 2 (#292) is blocked on milestone 1 (#291) and queued after it.
 - **docs:** Record that #303 is blocked on test-machine registry space (stormcentral#376): pvetest1 and pvetest2 return 507 on push.
 - **feat:** Add the short/medium/long test container (`test/`, #303) per stormcentral's test standard. It runs the commit's agent, CNI and BPF objects in isolated namespaces of a privileged pod, with a read-only node probe, JSON-line results and exit 0/1/2. `long` runs capacity-sized endpoint-churn waves with slowdown and residue checks.
