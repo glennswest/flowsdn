@@ -60,7 +60,15 @@ fn fields() -> Vec<Field> {
         relied_upon,
     };
     let mut all = vec![
-        f("mark", 8, 4, 0, 0x1234_5678, Some((WRITE_MARK, false)), true),
+        f(
+            "mark",
+            8,
+            4,
+            0,
+            0x1234_5678,
+            Some((WRITE_MARK, false)),
+            true,
+        ),
         f("priority", 32, 4, 1, 5, Some((WRITE_PRIORITY, false)), true),
     ];
     for (i, write) in WRITE_CB.iter().enumerate() {
@@ -81,12 +89,28 @@ fn fields() -> Vec<Field> {
     }
     all.extend([
         f("ifindex", 40, 4, 7, 1, None, true),
-        f("tstamp", 152, 8, 8, 1_000_000_123, Some((WRITE_TSTAMP, true)), true),
+        f(
+            "tstamp",
+            152,
+            8,
+            8,
+            1_000_000_123,
+            Some((WRITE_TSTAMP, true)),
+            true,
+        ),
         f("wire_len", 160, 4, 9, 1500, None, true),
         f("gso_segs", 164, 4, 10, 3, None, true),
         f("gso_size", 176, 4, 11, 1400, None, true),
         f("hwtstamp", 184, 8, 12, 2_000_000_456, None, true),
-        f("tc_index", 44, 4, 13, 0x21, Some((WRITE_TC_INDEX, true)), false),
+        f(
+            "tc_index",
+            44,
+            4,
+            13,
+            0x21,
+            Some((WRITE_TC_INDEX, true)),
+            false,
+        ),
         f("ingress_ifindex", 36, 4, 14, 1, None, false),
     ]);
     all
@@ -342,7 +366,10 @@ fn main() -> Result<()> {
     let extra_fd = match extra.load() {
         Ok(()) => Some(extra.fd()?.as_fd().as_raw_fd()),
         Err(error) => {
-            println!("{}", json!({"field": "tc_index/tstamp writes", "verifier": error.to_string()}));
+            println!(
+                "{}",
+                json!({"field": "tc_index/tstamp writes", "verifier": error.to_string()})
+            );
             None
         }
     };
@@ -403,6 +430,9 @@ fn main() -> Result<()> {
     if ok {
         Ok(())
     } else {
-        Err(format!("ctx_in fields the corpus relies on are unusable on {kernel}: {unusable:?}").into())
+        Err(
+            format!("ctx_in fields the corpus relies on are unusable on {kernel}: {unusable:?}")
+                .into(),
+        )
     }
 }
