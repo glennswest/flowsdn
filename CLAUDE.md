@@ -59,7 +59,8 @@ not work even with kube-proxy.
 - [x] CNI `install` subcommand: copy plugin (+loopback) into host /opt/cni/bin, write /etc/cni/net.d/05-flowsdn.conflist atomically.
 - [x] deploy/stormcos/manifests: ServiceAccount/RBAC, ConfigMap, DaemonSet (image `flowsdn` -> golden), single-node pool.
 - [x] sc-build at a98a3e5: fmt, workspace Clippy, 676 tests, test/build.sh (embedded object check), static musl agent/CNI.
-- [ ] Post the stormcos side on stormcos#261; stage the flowsdn golden; live check on pvetest2 once it answers (it did not, 2026-10-03 21:xx).
+- [x] Posted the stormcos side on stormcos#261 (apply manifests, run kube-proxy, forwarding/masquerade). Golden golden-flowsdn-600aa332b66d at 4627158 (release request stormcos#255; first attempt hit a stage-platform sync error).
+- [ ] Live check on pvetest2 (container probe) after stormcos ships the edition change; pvetest2 did not answer on :6443 tonight.
 
 ### Policy oracle decision — #103, 2026-10-03
 
