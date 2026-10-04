@@ -1,0 +1,36 @@
+# flowsdn's identity in the cluster (stormcos flowsdn edition, #296,
+# stormcos#261). The current agent uses no Kubernetes API: it allocates from the
+# static pool in 61-flowsdn-config.yaml, and its pod mounts no token. These are
+# the read-only grants its Node/Pod watches will need (#291), declared now so
+# the edition's RBAC does not change shape when they land.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flowsdn
+  namespace: kube-system
+  labels: { app.kubernetes.io/name: flowsdn-agent, app.kubernetes.io/part-of: flowsdn }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flowsdn
+  labels: { app.kubernetes.io/part-of: flowsdn }
+rules:
+  - apiGroups: [""]
+    resources: [nodes, pods, namespaces]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flowsdn
+  labels: { app.kubernetes.io/part-of: flowsdn }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: flowsdn
+subjects:
+  - kind: ServiceAccount
+    name: flowsdn
+    namespace: kube-system

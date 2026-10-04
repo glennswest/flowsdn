@@ -1,6 +1,7 @@
 //! Initial Unix API for primary host-scope CNI and persisted endpoint ownership.
 //! This daemon has no Kubernetes discovery, policy or identity controller.
 use crate::{endpoints::Manager, state::Result};
+use flowsdn_bpf_loader::kernel::{Egress, Object};
 use flowsdn_cni::queue::{Queue, ReplayRequest};
 use flowsdn_ipam::{HostScope, Ipam};
 use nix::sys::socket::{AddressFamily, SockFlag, SockType, UnixAddr, connect, socket};
@@ -65,10 +66,16 @@ fn optional<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
     }
 }
 
+/// The local-delivery object built from this commit's `crates/flowsdn-bpf`
+/// (tools/build-bpf.sh; test/build.sh refuses a stale copy). Used when the
+/// config names no `bpf-object`, so a node needs nothing beside the binary.
+static EMBEDDED_OBJECT: &[u8] = include_bytes!("../bpf/local-delivery");
+
 struct Config {
     socket: PathBuf,
     state: PathBuf,
-    object: PathBuf,
+    object: Option<PathBuf>,
+    egress: Egress,
     pin_root: Option<PathBuf>,
     queue: PathBuf,
     v4: Option<(IpAddr, u8)>,
@@ -89,7 +96,15 @@ impl Config {
         let value: Value = serde_json::from_slice(&bytes)?;
         let socket = PathBuf::from(string(&value, "socket-path")?);
         let state = PathBuf::from(string(&value, "state-dir")?);
-        let object = PathBuf::from(string(&value, "bpf-object")?);
+        let object = match optional(&value, "bpf-object")? {
+            "" => None,
+            path => Some(PathBuf::from(path)),
+        };
+        let egress = match optional(&value, "egress")? {
+            "" | "fib" => Egress::Fib,
+            "stack" => Egress::Stack,
+            _ => return fail(400, "egress must be fib or stack"),
+        };
         let pin_root = match optional(&value, "bpf-pin-root")? {
             "" => None,
             path => Some(PathBuf::from(path)),
@@ -167,6 +182,7 @@ impl Config {
             socket,
             state,
             object,
+            egress,
             pin_root,
             queue,
             v4,
@@ -859,12 +875,17 @@ pub fn run(config_path: &Path) -> Result<()> {
     let config = Config::read(config_path)?;
     // The manager's exclusive state lock is acquired before inspecting or
     // removing a stale socket, preventing a second owner of this state tree.
-    let manager = Manager::restore_with_pins(
+    let object = match &config.object {
+        Some(path) => Object::File(path),
+        None => Object::Bytes(EMBEDDED_OBJECT),
+    };
+    let manager = Manager::restore_with_egress(
         &config.state,
-        &config.object,
+        object,
         config.ipam()?,
         config.endpoint_id_max,
         config.pin_root.as_deref(),
+        config.egress,
     )?;
     let mut api = Api {
         config,

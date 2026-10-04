@@ -285,3 +285,30 @@ fn ipam_inventory_counts_are_lossless_decimal_strings_and_disabled_families_abse
         json!({"pools":[]})
     );
 }
+
+#[test]
+fn egress_mode_and_embedded_object_default() {
+    let temp = Temp::new();
+    let path = temp.0.join("config.json");
+    let mut config = json!({"socket-path":temp.0.join("agent.sock"),"state-dir":temp.0.join("state"),"ipv4-pool":"198.18.0.0/29","ipv4-gateway":"198.18.0.1","device-mtu":1500,"route-mtu":1450});
+    fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
+    let read = Config::read(&path).expect("config without bpf-object");
+    assert!(read.object.is_none(), "absent bpf-object selects the embedded object");
+    assert_eq!(read.egress, Egress::Fib);
+    for (value, expected) in [
+        (json!("fib"), Some(Egress::Fib)),
+        (json!("stack"), Some(Egress::Stack)),
+        (json!("tunnel"), None),
+        (json!(1), None),
+    ] {
+        config
+            .as_object_mut()
+            .expect("config object")
+            .insert("egress".into(), value);
+        fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
+        assert_eq!(Config::read(&path).ok().map(|c| c.egress), expected);
+    }
+    // The embedded object is an ELF built for BPF (EM_BPF = 247).
+    assert_eq!(EMBEDDED_OBJECT.get(..4), Some(&b"\x7fELF"[..]));
+    assert_eq!(EMBEDDED_OBJECT.get(18..20), Some(&247u16.to_le_bytes()[..]));
+}

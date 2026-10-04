@@ -1,5 +1,31 @@
 use std::{collections::BTreeMap, io::Read};
 fn main() {
+    // `flowsdn-cni install`: a CNI runtime never passes arguments, so an
+    // argument is the node installer (copy the plugin, write the conflist).
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("install")) {
+        let outcome = std::env::current_exe().and_then(|source| {
+            flowsdn_cni::install::install_node(source, &std::env::vars_os().collect())
+        });
+        match outcome {
+            Ok((report, conf)) => {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "installed": true,
+                        "conflist": conf,
+                        "plugin_replaced": report.plugin_replaced,
+                        "loopback_replaced": report.loopback_replaced,
+                        "warnings": report.warnings,
+                    })
+                );
+                return;
+            }
+            Err(error) => {
+                eprintln!("flowsdn-cni install: {error}");
+                std::process::exit(1);
+            }
+        }
+    }
     let env: BTreeMap<String, String> = std::env::vars().collect();
     let mut input = Vec::new();
     let result = std::io::stdin()

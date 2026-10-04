@@ -1,0 +1,33 @@
+# The agent's configuration (docs/runtime.md). One node: the pool is static and
+# the agent does not read Node podCIDRs yet (#291), so two nodes would hand out
+# the same addresses and have no routes to each other's pods.
+#
+# - IPv4 only, as the cilium edition runs. 10.244.0.0/24 stays clear of the
+#   Service range (10.96.0.0/12) and the node networks.
+# - egress: stack. Traffic to anything but a local pod goes to the node's own
+#   stack, so pods reach the node (the apiserver), Services (through kube-proxy)
+#   and, with forwarding and masquerade on the node, the outside.
+# - No bpf-object: the agent loads the object embedded in it. No bpf-pin-root:
+#   links are owned by the process and reinstalled from state at restart, so a
+#   restart pauses pod traffic briefly; bpffs is not assumed on the node.
+# - The socket and delete queue are where the CNI plugin looks by default.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flowsdn-config
+  namespace: kube-system
+  labels: { app.kubernetes.io/part-of: flowsdn }
+data:
+  agent.json: |
+    {
+      "socket-path": "/var/run/cilium/cilium.sock",
+      "delete-queue": "/var/run/cilium/deleteQueue",
+      "state-dir": "/var/lib/flowsdn",
+      "egress": "stack",
+      "ipv4-pool": "10.244.0.0/24",
+      "ipv4-gateway": "10.244.0.254",
+      "device-mtu": 1500,
+      "route-mtu": 1500,
+      "endpoint-id-max": 1000
+    }

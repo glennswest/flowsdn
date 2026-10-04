@@ -151,3 +151,99 @@ fn link_atomic(source: &Path, destination: &Path) -> io::Result<()> {
     };
     fs::rename(&temporary.0, destination)
 }
+
+/// The network configuration the kubelet loads: the first file in the conf
+/// dir by name. `00-` so a leftover `05-cilium.conflist` from another edition
+/// cannot win. The plugin keeps its compatibility type (ADR-0012 #123).
+pub const CONFLIST_NAME: &str = "00-flowsdn.conflist";
+
+pub fn conflist() -> String {
+    serde_json::json!({
+        "cniVersion": "1.1.0",
+        "name": "flowsdn",
+        "plugins": [{"type": "cilium-cni"}],
+    })
+    .to_string()
+}
+
+/// Write [`conflist`] into `dir` atomically (a reader never sees a partial
+/// file); returns its path.
+pub fn write_conflist(dir: &Path) -> io::Result<PathBuf> {
+    fs::create_dir_all(dir)?;
+    let destination = dir.join(CONFLIST_NAME);
+    let (temporary, mut output) = loop {
+        let path = temporary(&destination);
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o644)
+            .open(&path)
+        {
+            Ok(file) => break (Temporary(path), file),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    };
+    io::Write::write_all(&mut output, conflist().as_bytes())?;
+    output.sync_all()?;
+    fs::rename(&temporary.0, &destination)?;
+    Ok(destination)
+}
+
+/// `flowsdn-cni install`: what a node's agent pod runs before the agent.
+/// Copies this executable into `$CNI_DIR/bin` (default `$HOST_PREFIX/opt/cni`)
+/// under its plugin names and `loopback`, then writes the conflist into
+/// `$CNI_CONF_DIR` (default `$HOST_PREFIX/etc/cni/net.d`).
+pub fn install_node(
+    source: PathBuf,
+    env: &BTreeMap<OsString, OsString>,
+) -> io::Result<(InstallReport, PathBuf)> {
+    let options = InstallOptions::from_env(source, env);
+    let report = install(&options)?;
+    let conf_dir = env
+        .get(&OsString::from("CNI_CONF_DIR"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            env.get(&OsString::from("HOST_PREFIX"))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("/host"))
+                .join("etc/cni/net.d")
+        });
+    Ok((report, write_conflist(&conf_dir)?))
+}
+
+#[cfg(test)]
+mod node_install_tests {
+    use super::*;
+
+    #[test]
+    fn installs_plugin_names_and_writes_the_conflist() {
+        let root = std::env::temp_dir().join(format!(
+            "flowsdn-install-{}-{}",
+            std::process::id(),
+            NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).expect("root");
+        let source = root.join("plugin");
+        fs::write(&source, b"#!plugin").expect("source");
+        let env: BTreeMap<OsString, OsString> =
+            [(OsString::from("HOST_PREFIX"), root.join("host").into_os_string())].into();
+        let (report, conf) = install_node(source, &env).expect("install");
+        assert!(report.plugin_replaced);
+        for name in ["cilium-cni", "flowsdn-cni", "flowsdn", "loopback"] {
+            let path = root.join("host/opt/cni/bin").join(name);
+            assert_eq!(fs::read(&path).expect("installed"), b"#!plugin", "{name}");
+        }
+        assert_eq!(conf, root.join("host/etc/cni/net.d").join(CONFLIST_NAME));
+        let written: serde_json::Value =
+            serde_json::from_slice(&fs::read(&conf).expect("conflist")).expect("JSON");
+        assert_eq!(written["plugins"][0]["type"], "cilium-cni");
+        // Rewriting is atomic and idempotent; no temporary files remain.
+        install_node(root.join("plugin"), &env).expect("reinstall");
+        let leftovers = fs::read_dir(root.join("host/etc/cni/net.d"))
+            .expect("conf dir")
+            .count();
+        assert_eq!(leftovers, 1);
+        fs::remove_dir_all(&root).expect("cleanup");
+    }
+}
