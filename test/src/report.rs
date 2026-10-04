@@ -56,6 +56,7 @@ impl Report {
     }
     /// The run cannot proceed for a reason outside flowsdn: exit 2.
     pub fn infrastructure(&mut self, test: &str, detail: &str) {
+        self.fail = self.fail.saturating_add(1);
         self.line(test, "fail", Duration::ZERO, detail);
         self.infrastructure = Some(detail.to_owned());
     }

@@ -109,7 +109,7 @@ Remaining acceptance is tracked by [four milestones](docs/milestones.md):
 working Kubernetes pod networking (#291), services/policy (#292), advanced
 networking/observability (#293), and compatibility/release hardening (#294).
 The console plugin (#297), `sc net` integration (#298), presentation (#302) and
-short/medium/long component test containers (#303) remain separate work.
+short/medium/long component test containers (#303) are in [test/](test/README.md).
 
 ## Building, testing and reading the repository
 
@@ -128,6 +128,9 @@ sysroots and runtime checks are needed for cross-architecture TLS validation. `d
 uses standard Cargo configuration. Privileged runtime fixtures have additional
 requirements documented in [flowsdn-bpftest](crates/flowsdn-bpftest/README.md);
 cross-compilation alone does not prove runtime support.
+
+On test machines, stormcentral runs the [test container](test/README.md) (`/test
+short|medium|long`) against the commit's own agent, CNI and BPF objects.
 
 Maintainer builds and tests run with `sc-build` after a commit is pushed; it
 fetches that revision into a disposable build directory. GitHub Actions is

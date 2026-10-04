@@ -53,12 +53,13 @@ BPF objects in anonymous network/mount namespaces inside a privileged pod (decla
 `test/requires.toml`); nothing touches host links or the host bpffs. A read-only node
 probe reports skip unless the node carries the flowsdn CNI.
 
-- [ ] `test/` crate `flowsdn-test`: report (JSON lines, exit 0/1/2), preflight (kernel >= 6.6, BTF, privileges -> skip/2), node probe, real agent+CNI driver.
-- [ ] short: two dual-stack endpoints, UDP both ways, DEL, no residue (< 2 min).
-- [ ] medium: short + each namespace-isolated fixture (smoke, endpoint, native-routing, cni-runtime, agent-runtime, packet/uplink ingress, loader-features, socket-live), logs under /results.
-- [ ] long: endpoint-churn waves sized from the pod's CPUs/memory; per-wave ADD latency and residue (agent fds/RSS, pins, state, links); slowdown or growing residue fails.
-- [ ] `test/build.sh`: pinned nightly via rustup + SHA-pinned bpf-linker 0.11.1, BPF objects, musl binaries staged in test/.stage.
-- [ ] sc-build: workspace build/tests and `test/build.sh` (STAGE_ONLY) pass; docs, changelog; close #303.
+- [x] `test/` crate `flowsdn-test`: report (JSON lines, exit 0/1/2), preflight (kernel >= 6.6, BTF, privileges -> skip/2), node probe, real agent+CNI driver.
+- [x] short: two dual-stack endpoints, UDP both ways, DEL, no residue (< 2 min).
+- [x] medium: short + each namespace-isolated fixture (smoke, endpoint, native-routing, cni-runtime, agent-runtime, packet/uplink ingress, loader-features, socket-live), logs under /results.
+- [x] long: endpoint-churn waves sized from the pod's CPUs/memory; per-wave ADD latency and residue (agent fds/RSS, pins, state, links); slowdown or growing residue fails.
+- [x] `test/build.sh`: pinned nightly via rustup + SHA-pinned bpf-linker 0.11.1, BPF objects, musl binaries staged in test/.stage.
+- [x] sc-build at 3c3c7a6+: workspace fmt/Clippy/build/tests, test/build.sh and podman build pass; the image run unprivileged reports exit 2 as designed.
+- [ ] Run short/medium through `stormcentral test run flowsdn` on a test machine (pvetest2 is the flowsdn flavor); record results; close #303.
 
 ### Aya feature verification — #3, 2026-10-03
 
