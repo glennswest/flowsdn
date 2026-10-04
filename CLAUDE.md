@@ -13,21 +13,26 @@ in `CHANGELOG.md`; Cargo.lock records workspace packages when versions change.
 Main contains unreleased endpoint agent/CNI work beyond that foundation release.
 This documentation-only audit does not warrant a version bump or release.
 
-As of 2026-09-27, source through `ce8f4d2` runs a standalone JSON-configured
-agent over a Unix socket and a primary veth CNI. Persisted ownership, pinned
-endpoint maps/TCX links, offline deletion, bounded endpoint reads and exact IPAM
-summaries are implemented. No TCP listener, Kubernetes watches, complete
-service/policy integration, operator executable or Hubble observer/relay exists.
-See `docs/runtime.md`, `docs/agent-api.md`, `docs/implementation-status.md` and
-`deploy/stormcos/README.md` before changing runtime behavior. Fixture traffic
-and cross-architecture compilation do not establish two-node pod networking.
+As of 2026-10-03, source through `7c8a095` runs a standalone JSON-configured
+agent over a Unix socket and a primary veth + loopback CNI. The agent embeds its
+`local-delivery` BPF object (`bpf-object` optional) and has `egress: fib|stack`;
+`flowsdn-cni install` installs the plugin and `00-flowsdn.conflist` on a node.
+Persisted ownership, pinned endpoint maps/TCX links, offline deletion, bounded
+endpoint reads and exact IPAM summaries are implemented. No TCP listener,
+Kubernetes watches in the agent (the k8s watch client is library only),
+complete service/policy integration, operator executable or Hubble
+observer/relay exists. See `docs/runtime.md`, `docs/agent-api.md`,
+`docs/implementation-status.md` and `deploy/stormcos/README.md` before changing
+runtime behavior. Fixture traffic and cross-architecture compilation do not
+establish two-node pod networking. Docs were last refreshed from code on
+2026-10-03 (`git log --since=2026-09-25`).
 
 ## Shipping and ownership
 
-The stormcos flowsdn edition carries the static musl agent and CNI in the
-`flowsdn` golden. A matching BPF object and the documented host resources are
-required; the current golden recipe omits that object and has unverified host
-CNI exposure (stormcos#145). Source pushes do not update nodes until a new golden is composed into
+The stormcos flowsdn edition carries the static musl agent (BPF object
+embedded) and CNI in the `flowsdn` golden; `deploy/stormcos/manifests/` runs it
+as `image: flowsdn` with a CNI-install init container (stormcos#261 applies
+them). Latest golden: golden-flowsdn-600aa332b66d at 4627158. Source pushes do not update nodes until a new golden is composed into
 a release. Authority:
 [stormcos/docs/goldens.md](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 After validated implementation work, flowsdn uses the special-component
@@ -44,6 +49,13 @@ stormcentral component stage flowsdn. GitHub Actions is disabled; #304 removes
 the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
+
+### Docs refresh from code — 2026-10-03
+
+- [x] Read `git log --since=2026-09-25` and compared README, docs/, crate READMEs, deploy/ and CLAUDE.md to the code.
+- [x] README/runtime/deploy: embedded BPF object, `egress`, `flowsdn-cni install` + conflist, edition manifests, golden 600aa332b66d; validation examples fixed (#308).
+- [x] Seccomp no-op under stormpump, ADR-0006 correction (#308); kernel-requirements stormcos-kernel correction and spec 13 protobuf fact (#309).
+- [x] Changelog; comments on #308/#309. No code, version or golden change.
 
 ### __sk_buff ctx_in matrix — #256, 2026-10-03
 
@@ -65,7 +77,7 @@ not work even with kube-proxy.
 
 - [x] BPF/loader/agent: `egress: stack` hands non-endpoint traffic to the host stack (.rodata.config global); agent adds host /32,/128 routes to endpoints in that mode.
 - [x] Agent embeds the local-delivery object (used when `bpf-object` is absent); committed object, rebuild check in test/build.sh.
-- [x] CNI `install` subcommand: copy plugin (+loopback) into host /opt/cni/bin, write /etc/cni/net.d/05-flowsdn.conflist atomically.
+- [x] CNI `install` subcommand: copy plugin (+loopback) into host /opt/cni/bin, write /etc/cni/net.d/00-flowsdn.conflist atomically.
 - [x] deploy/stormcos/manifests: ServiceAccount/RBAC, ConfigMap, DaemonSet (image `flowsdn` -> golden), single-node pool.
 - [x] sc-build at a98a3e5: fmt, workspace Clippy, 676 tests, test/build.sh (embedded object check), static musl agent/CNI.
 - [x] Posted the stormcos side on stormcos#261 (apply manifests, run kube-proxy, forwarding/masquerade). Golden golden-flowsdn-600aa332b66d at 4627158 (release request stormcos#255; first attempt hit a stage-platform sync error).
