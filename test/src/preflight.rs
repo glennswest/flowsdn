@@ -33,9 +33,8 @@ fn effective_capabilities() -> Option<u64> {
 }
 
 fn on_path(tool: &str) -> bool {
-    std::env::var_os("PATH").is_some_and(|path| {
-        std::env::split_paths(&path).any(|dir| dir.join(tool).is_file())
-    })
+    std::env::var_os("PATH")
+        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(tool).is_file()))
 }
 
 pub fn check(env: &Env) -> Preflight {

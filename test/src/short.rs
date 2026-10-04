@@ -13,7 +13,12 @@ pub fn run(report: &mut Report, env: &Env) {
         let lab = Lab::start(env, "short")?;
         Ok((lab, "agent healthy on a private bpffs".into()))
     }) else {
-        for test in ["endpoint-add", "pod-traffic-ipv4", "pod-traffic-ipv6", "endpoint-del"] {
+        for test in [
+            "endpoint-add",
+            "pod-traffic-ipv4",
+            "pod-traffic-ipv6",
+            "endpoint-del",
+        ] {
             report.skip(test, "agent did not start");
         }
         return;
@@ -30,7 +35,10 @@ pub fn run(report: &mut Report, env: &Env) {
         }
         let listed = lab.endpoints()?;
         if listed.len() != 2 {
-            return Err(format!("agent lists {} endpoints, expected 2", listed.len()));
+            return Err(format!(
+                "agent lists {} endpoints, expected 2",
+                listed.len()
+            ));
         }
         Ok((endpoints, format!("2 sandboxes: {}", addresses.join(" "))))
     }) else {
@@ -46,7 +54,10 @@ pub fn run(report: &mut Report, env: &Env) {
             };
             exchange(a, b, v6)?;
             exchange(b, a, v6)?;
-            Ok(((), "UDP both ways through BPF; kernel forwarding refused".into()))
+            Ok((
+                (),
+                "UDP both ways through BPF; kernel forwarding refused".into(),
+            ))
         });
     }
     report.check("endpoint-del", || {

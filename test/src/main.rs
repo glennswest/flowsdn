@@ -47,7 +47,10 @@ fn run(suite: &str) -> ExitCode {
         }
     }
     if let Err(e) = lab::isolate_process() {
-        report.infrastructure("isolate", &format!("cannot isolate the test's namespaces: {e}"));
+        report.infrastructure(
+            "isolate",
+            &format!("cannot isolate the test's namespaces: {e}"),
+        );
         return report.finish();
     }
     match env.suite.as_str() {

@@ -47,7 +47,9 @@ pub fn probe(report: &mut Report, env: &Env) {
         if health.status != 200 {
             return Err(format!("GET /v1/healthz returned {}", health.status));
         }
-        let config = client.config().map_err(|e| format!("GET /v1/config: {e}"))?;
+        let config = client
+            .config()
+            .map_err(|e| format!("GET /v1/config: {e}"))?;
         if config.status != 200 {
             return Err(format!("GET /v1/config returned {}", config.status));
         }

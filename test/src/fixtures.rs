@@ -22,26 +22,62 @@ const FIXTURE_LIMIT: Duration = Duration::from_secs(300);
 fn fixtures(env: &Env) -> Vec<(&'static str, PathBuf, Vec<PathBuf>)> {
     let delivery = env.bpf("local-delivery");
     vec![
-        ("fixture-smoke", env.fixture("flowsdn-bpftest"), vec![env.bpf("smoke")]),
-        ("fixture-packet-ingress", env.fixture("packet-ingress"), vec![env.bpf("smoke")]),
-        ("fixture-loader-features", env.fixture("loader-features"), vec![env.bpf("loader-features")]),
-        ("fixture-uplink-ingress", env.fixture("uplink-ingress"), vec![delivery.clone()]),
-        ("fixture-endpoint", env.fixture("flowsdn-endpoint-test"), vec![delivery.clone()]),
-        ("fixture-native-routing", env.fixture("native-routing"), vec![delivery.clone()]),
-        ("fixture-cni-runtime", env.fixture("cni-runtime"), vec![env.cni(), delivery.clone()]),
+        (
+            "fixture-smoke",
+            env.fixture("flowsdn-bpftest"),
+            vec![env.bpf("smoke")],
+        ),
+        (
+            "fixture-packet-ingress",
+            env.fixture("packet-ingress"),
+            vec![env.bpf("smoke")],
+        ),
+        (
+            "fixture-loader-features",
+            env.fixture("loader-features"),
+            vec![env.bpf("loader-features")],
+        ),
+        (
+            "fixture-uplink-ingress",
+            env.fixture("uplink-ingress"),
+            vec![delivery.clone()],
+        ),
+        (
+            "fixture-endpoint",
+            env.fixture("flowsdn-endpoint-test"),
+            vec![delivery.clone()],
+        ),
+        (
+            "fixture-native-routing",
+            env.fixture("native-routing"),
+            vec![delivery.clone()],
+        ),
+        (
+            "fixture-cni-runtime",
+            env.fixture("cni-runtime"),
+            vec![env.cni(), delivery.clone()],
+        ),
         (
             "fixture-agent-runtime",
             env.fixture("agent-runtime"),
             vec![env.cni(), env.agent(), delivery],
         ),
-        ("fixture-socket-live", env.fixture("socket-live"), vec![env.bpf("socket-context")]),
+        (
+            "fixture-socket-live",
+            env.fixture("socket-live"),
+            vec![env.bpf("socket-context")],
+        ),
     ]
 }
 
 pub fn run(report: &mut Report, env: &Env) {
     for (test, binary, args) in fixtures(env) {
         if let Some(absent) = std::iter::once(&binary).chain(&args).find(|p| !p.is_file()) {
-            report.fail(test, Duration::ZERO, &format!("image incomplete: {} missing", absent.display()));
+            report.fail(
+                test,
+                Duration::ZERO,
+                &format!("image incomplete: {} missing", absent.display()),
+            );
             continue;
         }
         let log = env.results.join(format!("{test}.log"));
@@ -68,7 +104,11 @@ pub fn run(report: &mut Report, env: &Env) {
                 thread::sleep(Duration::from_millis(100));
             };
             let output = fs::read_to_string(&log).unwrap_or_default();
-            let last = output.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("");
+            let last = output
+                .lines()
+                .rev()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("");
             let passes = output.lines().filter(|l| l.contains("PASS")).count();
             if status.success() {
                 Ok(((), format!("{passes} PASS lines; last: {last}")))

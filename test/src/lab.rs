@@ -46,7 +46,9 @@ pub fn isolate_process() -> Result<()> {
     run("ip", &["link", "set", "dev", "lo", "up"])?;
     run(
         "nft",
-        &["add table inet flowsdn_test; add chain inet flowsdn_test forward { type filter hook forward priority 0; policy drop; }"],
+        &[
+            "add table inet flowsdn_test; add chain inet flowsdn_test forward { type filter hook forward priority 0; policy drop; }",
+        ],
     )?;
     unshare(CloneFlags::CLONE_NEWNS).map_err(|e| format!("unshare(mnt): {e}"))?;
     mount(
@@ -90,7 +92,10 @@ impl Endpoint {
         let output = process.stdout.take().ok_or("worker stdout")?;
         let (send, replies) = mpsc::channel();
         thread::spawn(move || {
-            for line in BufReader::new(output).lines().map_while(std::result::Result::ok) {
+            for line in BufReader::new(output)
+                .lines()
+                .map_while(std::result::Result::ok)
+            {
                 if send.send(line).is_err() {
                     break;
                 }
@@ -123,13 +128,30 @@ impl Endpoint {
     /// Bind the worker's sockets to the addresses of a CNI ADD result.
     pub fn configure(&mut self, result: &Value) -> Result<()> {
         let mut addresses = Vec::new();
-        for ip in result.get("ips").and_then(Value::as_array).ok_or("CNI result has no ips")? {
-            let cidr = ip.get("address").and_then(Value::as_str).ok_or("CNI ip has no address")?;
+        for ip in result
+            .get("ips")
+            .and_then(Value::as_array)
+            .ok_or("CNI result has no ips")?
+        {
+            let cidr = ip
+                .get("address")
+                .and_then(Value::as_str)
+                .ok_or("CNI ip has no address")?;
             let address = cidr.split('/').next().unwrap_or_default();
-            addresses.push(address.parse::<IpAddr>().map_err(|e| format!("{cidr}: {e}"))?);
+            addresses.push(
+                address
+                    .parse::<IpAddr>()
+                    .map_err(|e| format!("{cidr}: {e}"))?,
+            );
         }
-        let v4 = addresses.iter().find(|a| a.is_ipv4()).ok_or("CNI result has no IPv4")?;
-        let v6 = addresses.iter().find(|a| a.is_ipv6()).ok_or("CNI result has no IPv6")?;
+        let v4 = addresses
+            .iter()
+            .find(|a| a.is_ipv4())
+            .ok_or("CNI result has no IPv4")?;
+        let v6 = addresses
+            .iter()
+            .find(|a| a.is_ipv6())
+            .ok_or("CNI result has no IPv6")?;
         let bound = self.command(&format!("configure {v4} {v6}"))?;
         self.sockets = bound
             .split_whitespace()
@@ -204,7 +226,8 @@ fn worker() -> Result<()> {
     ensure(*verb == "configure", "expected configure")?;
     let bind = |ip: &str| -> Result<UdpSocket> {
         let ip: IpAddr = ip.parse().map_err(|e| format!("{ip}: {e}"))?;
-        let socket = UdpSocket::bind(SocketAddr::new(ip, 0)).map_err(|e| format!("bind {ip}: {e}"))?;
+        let socket =
+            UdpSocket::bind(SocketAddr::new(ip, 0)).map_err(|e| format!("bind {ip}: {e}"))?;
         socket
             .set_read_timeout(Some(Duration::from_millis(1500)))
             .map_err(text)?;
@@ -232,7 +255,9 @@ fn worker() -> Result<()> {
                 let socket = if *which == "6" { &v6 } else { &v4 };
                 let mut bytes = [0u8; 2048];
                 match socket.recv_from(&mut bytes) {
-                    Ok((n, _)) => say(&String::from_utf8_lossy(bytes.get(..n).unwrap_or_default()))?,
+                    Ok((n, _)) => {
+                        say(&String::from_utf8_lossy(bytes.get(..n).unwrap_or_default()))?
+                    }
                     Err(e) if matches!(e.kind(), ErrorKind::TimedOut | ErrorKind::WouldBlock) => {
                         say("TIMEOUT")?
                     }
@@ -311,8 +336,14 @@ impl Lab {
             dir,
         };
         fs::create_dir(&pins).map_err(text)?;
-        mount(Some("bpffs"), &pins, Some("bpf"), MsFlags::empty(), None::<&str>)
-            .map_err(|e| format!("mount bpffs: {e}"))?;
+        mount(
+            Some("bpffs"),
+            &pins,
+            Some("bpf"),
+            MsFlags::empty(),
+            None::<&str>,
+        )
+        .map_err(|e| format!("mount bpffs: {e}"))?;
         lab.mounted = true;
         let config = json!({
             "socket-path": lab.socket(), "state-dir": lab.dir.join("state"),
@@ -351,10 +382,16 @@ impl Lab {
         let start = Instant::now();
         loop {
             if let Some(status) = agent.try_wait().map_err(text)? {
-                return Err(format!("agent exited during startup: {status}; see {}", self.log.display()));
+                return Err(format!(
+                    "agent exited during startup: {status}; see {}",
+                    self.log.display()
+                ));
             }
-            let health = Client::new(self.socket(), Duration::from_millis(500))
-                .request(Method::Get, "/v1/healthz", None);
+            let health = Client::new(self.socket(), Duration::from_millis(500)).request(
+                Method::Get,
+                "/v1/healthz",
+                None,
+            );
             if health.is_ok_and(|r| r.status == 200) {
                 self.agent = Some(agent);
                 return Ok(());
@@ -395,7 +432,10 @@ impl Lab {
             .env("CNI_PATH", self.cni.parent().unwrap_or(Path::new("/")))
             .env(
                 "CNI_ARGS",
-                format!("K8S_POD_NAMESPACE=flowsdn-test;K8S_POD_NAME=pod{}", endpoint.id),
+                format!(
+                    "K8S_POD_NAMESPACE=flowsdn-test;K8S_POD_NAME=pod{}",
+                    endpoint.id
+                ),
             )
             .env("CILIUM_SOCK", self.socket())
             .env("FLOWSDN_DELETE_QUEUE", self.queue())
@@ -407,7 +447,9 @@ impl Lab {
         let out = capture(process.stdout.take());
         let err = capture(process.stderr.take());
         if let Some(mut stdin) = process.stdin.take() {
-            stdin.write_all(self.conf.to_string().as_bytes()).map_err(text)?;
+            stdin
+                .write_all(self.conf.to_string().as_bytes())
+                .map_err(text)?;
         }
         let start = Instant::now();
         let status = loop {
@@ -443,7 +485,10 @@ impl Lab {
             .client()
             .request(Method::Get, "/v1/endpoint", None)
             .map_err(|e| format!("GET /v1/endpoint: {e}"))?;
-        ensure(response.status == 200, format!("GET /v1/endpoint: {}", response.status))?;
+        ensure(
+            response.status == 200,
+            format!("GET /v1/endpoint: {}", response.status),
+        )?;
         response
             .json
             .and_then(|v| v.as_array().cloned())

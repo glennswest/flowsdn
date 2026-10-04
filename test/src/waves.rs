@@ -55,8 +55,7 @@ pub fn wave_max(cpus: usize, memory: Option<u64>, cap: Option<usize>) -> usize {
     by_cpu
         .min(by_memory)
         .min(cap.unwrap_or(usize::MAX))
-        .min(MAX_ENDPOINTS)
-        .max(4)
+        .clamp(4, MAX_ENDPOINTS)
 }
 
 /// Waves vary their size: full, half, three quarters, repeating.
@@ -82,7 +81,9 @@ fn micros(d: Duration) -> u64 {
 }
 
 fn mean(samples: &[Duration]) -> u64 {
-    let total = samples.iter().fold(0u64, |s, d| s.saturating_add(micros(*d)));
+    let total = samples
+        .iter()
+        .fold(0u64, |s, d| s.saturating_add(micros(*d)));
     total
         .checked_div(u64::try_from(samples.len()).unwrap_or(u64::MAX))
         .unwrap_or(0)
@@ -133,7 +134,11 @@ fn one_wave(lab: &mut Lab, size: usize, restart: bool) -> Result<Wave, String> {
     })
 }
 
-fn pair(endpoints: &mut [Endpoint], i: usize, j: usize) -> Result<(&mut Endpoint, &mut Endpoint), String> {
+fn pair(
+    endpoints: &mut [Endpoint],
+    i: usize,
+    j: usize,
+) -> Result<(&mut Endpoint, &mut Endpoint), String> {
     if i == j {
         return Err("a pair needs two endpoints".into());
     }
@@ -162,20 +167,37 @@ fn leaks(first: &Residue, this: &Residue) -> Vec<String> {
         .map(|(f, t)| format!("{} {} -> {}", f.0, f.1, t.1))
         .collect();
     if this.agent_fds > first.agent_fds.saturating_add(4) {
-        found.push(format!("agent_fds {} -> {}", first.agent_fds, this.agent_fds));
+        found.push(format!(
+            "agent_fds {} -> {}",
+            first.agent_fds, this.agent_fds
+        ));
     }
-    if this.agent_rss_kib > first.agent_rss_kib.saturating_add(first.agent_rss_kib / 2).saturating_add(16_384) {
-        found.push(format!("agent_rss_kib {} -> {}", first.agent_rss_kib, this.agent_rss_kib));
+    if this.agent_rss_kib
+        > first
+            .agent_rss_kib
+            .saturating_add(first.agent_rss_kib / 2)
+            .saturating_add(16_384)
+    {
+        found.push(format!(
+            "agent_rss_kib {} -> {}",
+            first.agent_rss_kib, this.agent_rss_kib
+        ));
     }
     found
 }
 
 pub fn run(report: &mut Report, env: &Env) {
     let started = Instant::now();
-    let deadline = env.timeout.saturating_sub(MARGIN).max(Duration::from_secs(60));
+    let deadline = env
+        .timeout
+        .saturating_sub(MARGIN)
+        .max(Duration::from_secs(60));
     let max = wave_max(cpus(), memory_limit(), env.wave_max);
     let Some(mut lab) = report.check("agent-start", || {
-        Ok((Lab::start(env, "long")?, format!("wave max {max} sandboxes ({} CPUs)", cpus())))
+        Ok((
+            Lab::start(env, "long")?,
+            format!("wave max {max} sandboxes ({} CPUs)", cpus()),
+        ))
     }) else {
         for test in ["waves", "wave-slowdown", "wave-residue"] {
             report.skip(test, "agent did not start");
@@ -225,18 +247,26 @@ pub fn run(report: &mut Report, env: &Env) {
         return;
     };
     if waves.len() < 2 {
-        let why = failure.map_or("budget allowed one wave".to_string(), |n| format!("wave {n} failed"));
+        let why = failure.map_or("budget allowed one wave".to_string(), |n| {
+            format!("wave {n} failed")
+        });
         report.skip("wave-slowdown", &why);
         report.skip("wave-residue", &why);
         return;
     }
     let elapsed = started.elapsed();
-    let first_slow = waves.iter().position(|w| slower(first.add_mean_us, w.add_mean_us));
+    let first_slow = waves
+        .iter()
+        .position(|w| slower(first.add_mean_us, w.add_mean_us));
     match first_slow {
         None => report.pass(
             "wave-slowdown",
             elapsed,
-            &format!("{} waves; mean ADD stayed within 2x of wave 1 ({} us)", waves.len(), first.add_mean_us),
+            &format!(
+                "{} waves; mean ADD stayed within 2x of wave 1 ({} us)",
+                waves.len(),
+                first.add_mean_us
+            ),
         ),
         Some(i) => report.fail(
             "wave-slowdown",
@@ -257,9 +287,16 @@ pub fn run(report: &mut Report, env: &Env) {
         None => report.pass(
             "wave-residue",
             elapsed,
-            &format!("every drained wave returned to wave 1's: {}", first.residue.json()),
+            &format!(
+                "every drained wave returned to wave 1's: {}",
+                first.residue.json()
+            ),
         ),
-        Some((n, found)) => report.fail("wave-residue", elapsed, &format!("wave {n}: {}", found.join(", "))),
+        Some((n, found)) => report.fail(
+            "wave-residue",
+            elapsed,
+            &format!("wave {n}: {}", found.join(", ")),
+        ),
     }
 }
 
