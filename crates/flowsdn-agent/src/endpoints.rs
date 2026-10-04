@@ -2,7 +2,7 @@
 //! Identity/policy reconciliation and API request authorization remain caller work.
 use crate::state::{DEFAULT_ENDPOINT_ID_MAX, IdPool, Record, Result, Store};
 use flowsdn_bpf_abi::endpoint::EndpointInfo;
-use flowsdn_bpf_loader::kernel::LocalDelivery;
+use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object};
 use flowsdn_connector::Connector;
 use flowsdn_ipam::Ipam;
 use serde_json::{Value, json};
@@ -88,6 +88,7 @@ pub struct Manager {
     deleting: BTreeSet<String>,
     driver: LocalDelivery,
     ipam: Ipam,
+    egress: Egress,
 }
 impl Manager {
     /// Restore into a fresh object before the caller exposes its API. Stale or
@@ -112,6 +113,26 @@ impl Manager {
         id_max: u32,
         pin_root: Option<&Path>,
     ) -> Result<Self> {
+        Self::restore_with_egress(
+            path,
+            Object::File(object),
+            ipam,
+            id_max,
+            pin_root,
+            Egress::Fib,
+        )
+    }
+    /// [`Self::restore_with_pins`] with an explicit [`Egress`]. In stack mode
+    /// every endpoint also gets host routes to its addresses over its host
+    /// link, so the host stack can reach and answer it.
+    pub fn restore_with_egress(
+        path: &Path,
+        object: Object<'_>,
+        ipam: Ipam,
+        id_max: u32,
+        pin_root: Option<&Path>,
+        egress: Egress,
+    ) -> Result<Self> {
         let ids = IdPool::new(id_max)?;
         let store = Store::open(path)?;
         let records = store.restore()?;
@@ -131,10 +152,11 @@ impl Manager {
             addresses: BTreeMap::new(),
             deleting: BTreeSet::new(),
             driver: kernel(match pin_root {
-                Some(root) => LocalDelivery::load_pinned(object, root),
-                None => LocalDelivery::load(object),
+                Some(root) => LocalDelivery::load_pinned_object(object, root, egress),
+                None => LocalDelivery::load_object(object, egress),
             })?,
             ipam,
+            egress,
         };
         let connector = Connector::open()?;
         // Validate every persisted identity/address before installing any link.
@@ -286,7 +308,7 @@ impl Manager {
                 .insert(record.attachment.clone(), record.clone());
             self.deleting.insert(record.attachment.clone());
             staged.publish()?;
-            if let Err(error) = install(&mut self.driver, &record) {
+            if let Err(error) = install(&mut self.driver, &record, self.egress) {
                 // Retain ID, addresses and durable intent on any uncertain
                 // rollback. DEL/restart can then complete recovery safely.
                 if uninstall(&mut self.driver, &record).is_ok()
@@ -327,14 +349,14 @@ impl Manager {
         Ok(true)
     }
     fn install(&mut self, record: &Record) -> Result<()> {
-        install(&mut self.driver, record)
+        install(&mut self.driver, record, self.egress)
     }
 }
 fn mac_value(bytes: &[u8]) -> Result<u64> {
     let [a, b, c, d, e, f]: [u8; 6] = bytes.try_into().map_err(|_| "invalid Ethernet link MAC")?;
     Ok(u64::from_le_bytes([a, b, c, d, e, f, 0, 0]))
 }
-fn install(driver: &mut LocalDelivery, record: &Record) -> Result<()> {
+fn install(driver: &mut LocalDelivery, record: &Record, egress: Egress) -> Result<()> {
     let endpoint = info(record)?;
     let mut installed = Vec::new();
     let outcome = (|| {
@@ -343,7 +365,15 @@ fn install(driver: &mut LocalDelivery, record: &Record) -> Result<()> {
             kernel(driver.upsert(ip, endpoint))?;
             installed.push((ip, old));
         }
-        kernel(driver.attach(text(&record.document, "IfName")))
+        kernel(driver.attach(text(&record.document, "IfName")))?;
+        if egress == Egress::Stack {
+            // The routes go with the host link: deleting it removes them.
+            let connector = Connector::open()?;
+            for ip in addresses(&record.document)? {
+                connector.replace_host_route(endpoint.ifindex, ip)?;
+            }
+        }
+        Ok(())
     })();
     if outcome.is_err() {
         for (ip, old) in installed {

@@ -346,6 +346,20 @@ impl Connector {
             Ok(())
         })
     }
+    /// A host route to one address over a link (scope link, /32 or /128),
+    /// replacing an existing route to it so restore and retries are idempotent.
+    pub fn replace_host_route(&self, index: u32, destination: IpAddr) -> Result<()> {
+        let prefix = if destination.is_ipv4() { 32 } else { 128 };
+        let message = RouteMessageBuilder::<IpAddr>::new()
+            .destination_prefix(destination, prefix)?
+            .output_interface(index)
+            .scope(RouteScope::Link)
+            .build();
+        self.run(async {
+            self.handle.route().add(message).replace().execute().await?;
+            Ok(())
+        })
+    }
     pub fn neighbour(&self, index: u32, address: IpAddr, mac: [u8; 6]) -> Result<()> {
         self.run(async {
             self.handle

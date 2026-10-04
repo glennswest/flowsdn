@@ -39,9 +39,54 @@ enum OwnedLink {
     Ephemeral(SchedClassifierLink),
     Persistent { link: FdLink, path: PathBuf },
 }
+/// Where local delivery sends a packet whose destination is not a local
+/// endpoint: a FIB-lookup redirect (native routing between router
+/// namespaces, the default) or the host network stack, so routing, netfilter
+/// and kube-proxy handle pod-to-host, Service and off-node traffic.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Egress {
+    #[default]
+    Fib,
+    Stack,
+}
+
+/// A local-delivery ELF: a trusted file, or bytes embedded in the caller.
+#[derive(Clone, Copy, Debug)]
+pub enum Object<'a> {
+    File(&'a Path),
+    Bytes(&'a [u8]),
+}
+impl Object<'_> {
+    fn read(&self) -> KernelResult<Vec<u8>> {
+        // A fresh allocation also gives aya's ELF parser aligned input.
+        Ok(match self {
+            Self::File(path) => std::fs::read(path)?,
+            Self::Bytes(bytes) => bytes.to_vec(),
+        })
+    }
+}
+
+/// The `.rodata.config` value that selects [`Egress::Stack`].
+static STACK_EGRESS: u32 = 1;
+
+fn loader<'a>(egress: Egress) -> EbpfLoader<'a> {
+    let mut loader = EbpfLoader::new();
+    if egress == Egress::Stack {
+        // must_exist: an object without the switch cannot honour stack egress.
+        loader.override_global("__config_stack_egress", &STACK_EGRESS, true);
+    }
+    loader
+}
+
 impl LocalDelivery {
     pub fn load(object: impl AsRef<Path>) -> KernelResult<Self> {
-        Self::from_bpf(Ebpf::load_file(object)?, None)
+        Self::load_with(object, Egress::Fib)
+    }
+    pub fn load_with(object: impl AsRef<Path>, egress: Egress) -> KernelResult<Self> {
+        Self::load_object(Object::File(object.as_ref()), egress)
+    }
+    pub fn load_object(object: Object<'_>, egress: Egress) -> KernelResult<Self> {
+        Self::from_bpf(loader(egress).load(&object.read()?)?, None)
     }
     fn from_bpf(mut bpf: Ebpf, pin_root: Option<PathBuf>) -> KernelResult<Self> {
         let map = bpf.take_map("cilium_lxc").ok_or("missing endpoint map")?;
@@ -68,6 +113,22 @@ impl LocalDelivery {
     /// The caller exclusively owns this dedicated bpffs directory and serializes
     /// restoration with its durable endpoint state. Never share it between agents.
     pub fn load_pinned(object: impl AsRef<Path>, root: &Path) -> KernelResult<Self> {
+        Self::load_pinned_with(object, root, Egress::Fib)
+    }
+    /// [`Self::load_pinned`] with an explicit [`Egress`].
+    pub fn load_pinned_with(
+        object: impl AsRef<Path>,
+        root: &Path,
+        egress: Egress,
+    ) -> KernelResult<Self> {
+        Self::load_pinned_object(Object::File(object.as_ref()), root, egress)
+    }
+    /// [`Self::load_pinned_with`] for a file or embedded [`Object`].
+    pub fn load_pinned_object(
+        object: Object<'_>,
+        root: &Path,
+        egress: Egress,
+    ) -> KernelResult<Self> {
         use std::{fs, os::unix::ffi::OsStrExt};
         if !root.is_absolute()
             || root.as_os_str().as_bytes().contains(&0)
@@ -102,9 +163,9 @@ impl LocalDelivery {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(e.into()),
         }
-        let bpf = EbpfLoader::new()
+        let bpf = loader(egress)
             .map_pin_path("cilium_lxc", &map_path)
-            .load_file(object)?;
+            .load(&object.read()?)?;
         Self::from_bpf(bpf, Some(root.to_owned()))
     }
 
