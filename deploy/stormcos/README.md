@@ -30,78 +30,59 @@ What the node must provide besides the manifests:
 **Limits.** This is one node per cluster: the pool is static and the agent does
 not read Node podCIDRs or route to other nodes (#291). Without a pin root, an
 agent restart briefly pauses pod traffic while it reinstalls endpoints from
-state. The sections below describe the earlier standalone validation examples.
+state.
 
-These examples describe the **current standalone endpoint runtime**. They do
-not install a functioning Kubernetes pod network. They address the deployment
-boundary in [issue #296](https://github.com/glennswest/flowsdn/issues/296) while
-its operator, Kubernetes and relay requirements remain open.
+The DaemonSet carries no probe: the agent's health is on its Unix socket only
+(see below). It runs privileged as a validation baseline, not a measured
+minimum-capability profile. The stormpump runtime enforces no seccomp profile
+and drops no capabilities, so [deploy/seccomp](../seccomp) is a no-op on stormcos.
 
-The executable accepts `--config PATH`, whose content is JSON. The ConfigMap
-in [50-config.yaml](50-config.yaml) is a complete example of the keys that the
-current executable reads. It does not consume the full compatibility config
-catalogue, Kubernetes Node PodCIDRs, Cilium Helm values, or generic Cilium
-command-line flags. The pool/gateway values are illustrative and must not
-conflict with the node's network. Each enabled family needs a gateway; it is
-excluded from allocation. Both MTUs must be at least 1280 and route MTU must
-not exceed device MTU. This example is native veth mode; no encapsulation or
-service load balancing is enabled by these keys. `endpoint-id-max` bounds the
-ID allocator, not the capacity of the current fixed-size endpoint BPF map.
+## Golden delivery
 
-## Golden delivery boundary
-
-The current stormcos recipe seals the agent and CNI binaries into the flowsdn
-golden, mounted at `/pallets/flowsdn`. It does not yet include the required BPF
-object. Its internal `opt/cni/bin/flowsdn` path also does not by itself prove
-installation into the separate host `/opt/cni/bin` mount. These packaging and
-boot-verification gaps are tracked in
-[stormcos#145](https://github.com/glennswest/stormcos/issues/145). The authoritative
+The golden carries `/flowsdn-agent` (with the `local-delivery` BPF object
+embedded) and `/opt/cni/bin/flowsdn`, both static musl, mounted on a node at
+`/pallets/flowsdn`. The stormcos kubelet's stormpump runtime maps an image name
+to `/pallets/<last path component>`, so `image: flowsdn` roots the container on
+the golden; a different last component (for example `flowsdn-runtime`) is a
+registry pull instead. The init container puts the plugin on the host, so the
+golden's internal CNI path does not have to be exposed separately. The latest
+golden is `golden-flowsdn-600aa332b66d` (`4627158`). The authoritative
 [golden documentation](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md)
-moved from stormpump to stormcos on 2026-09-22.
+is stormcos's.
 
-## Required host resources
+## Standalone validation examples
+
+The numbered files beside `manifests/` (`10-namespace.yaml`, `50-config.yaml`,
+`60-agent-validation.yaml`, `90-cni-example.yaml`) are the earlier
+single-node validation setup, in its own `flowsdn-system` namespace. They differ
+from the edition in using a bpffs pin root and dual-stack pools, and in not
+installing CNI. Do not apply them together with the edition manifests.
+
+The executable accepts `--config PATH`, whose content is JSON; every key is in
+[the runtime reference](../../docs/runtime.md). It does not consume the full
+compatibility config catalogue, Kubernetes Node PodCIDRs, Cilium Helm values,
+or generic Cilium command-line flags. Pool/gateway values are illustrative and
+must not conflict with the node's network. `endpoint-id-max` bounds the ID
+allocator, not the capacity of the fixed-size endpoint BPF map.
 
 | Resource | Contract |
 |---|---|
-| Agent executable | Trusted `flowsdn-agent`, same architecture as the kernel; execute as root with Linux BPF/network privileges. The example's source hostPath must be adjusted to the actual golden layout. |
-| BPF object | Trusted `local-delivery` ELF from the matching source/ABI build, installed separately at the configured `bpf-object` path. Shipping only agent and CNI binaries is insufficient. |
-| Kernel | Supported Linux with TCX (6.6 or newer), BPF syscall support, and readable kernel BTF at `/sys/kernel/btf/vmlinux`; see [kernel requirements](../../docs/kernel-requirements.md). |
-| Network namespace | The agent must operate in the host network namespace so it can validate and attach to host veths. Use `hostNetwork: true` for a pod. |
-| bpffs | `/sys/fs/bpf` must already be mounted as bpffs, writable and shared with the host. The dedicated `bpf-pin-root` holds endpoint map/TCX ownership. A normal directory is not a substitute. |
-| State | `/var/lib/flowsdn` must be durable, writable and owned by one agent. Startup takes an exclusive state lock. Preserve it together with its matching pins. |
-| Runtime directory | `/var/run/cilium` must be shared with the host CNI process. The compatibility socket is `cilium.sock`, mode 0600, and the offline queue is `deleteQueue`. This directory should remain available across agent process restarts. |
-| CNI executable | `/opt/cni/bin/flowsdn` must exist on the host. The golden contains this path internally, but host exposure through the separate CNI mount still needs verification (stormcos#145). No copy-binaries init container is included. The container runtime also needs its ordinary CNI loopback setup. |
-| Host PID/IPC namespaces | Not required by the present agent. The host-invoked CNI receives the sandbox namespace path from the container runtime and performs namespace/link configuration itself. |
-| Kubernetes credentials | Not used by this runtime. The sample disables ServiceAccount token mounting and grants no API permissions. |
+| Agent executable | `/flowsdn-agent` from the golden (`image: flowsdn`), same architecture as the kernel; root with Linux BPF/network privileges. |
+| BPF object | Embedded in the agent. Set `bpf-object` only to load a different `local-delivery` build of the matching source. |
+| Kernel | Linux with TCX (6.6 or newer), BPF syscall support and readable BTF at `/sys/kernel/btf/vmlinux`; see [kernel requirements](../../docs/kernel-requirements.md). |
+| Network namespace | Host network namespace (`hostNetwork: true`), so the agent can attach to host veths. |
+| bpffs | Only with `bpf-pin-root`: `/sys/fs/bpf` mounted as bpffs, writable and shared with the host. PID 1 mounts it; the example adds no mount init container. |
+| State | `/var/lib/flowsdn` durable, writable and owned by one agent (exclusive lock). Keep it together with its matching pins. |
+| Runtime directory | `/var/run/cilium` shared with the host CNI process: `cilium.sock` (mode 0600) and `deleteQueue`. |
+| CNI executable | On the host's `/opt/cni/bin`. The validation example does not install it; run `flowsdn-cni install` (as the edition's init container does) or install it by hand. |
+| Kubernetes credentials | Not used. The examples mount no ServiceAccount token. |
 
-[60-agent-validation.yaml](60-agent-validation.yaml) expresses these mounts and
-namespaces. It deliberately contains an image placeholder: Kubernetes still
-requires a trusted container image even when the executable is bind-mounted
-from a golden. No flowsdn runtime image is claimed to exist at that placeholder.
-Replace it with a pinned image digest and verify the two `File` hostPaths.
-The golden must also carry the matching BPF object; there is no init-container
-download. PID 1 already owns bpffs mounting, so no mount-bpffs init container is
-included. `HostToContainer` shares existing mounts without granting the pod a
-bidirectional mount channel.
-
-The DaemonSet selects only nodes explicitly labelled
+[60-agent-validation.yaml](60-agent-validation.yaml) selects only nodes labelled
 `flowsdn.io/validation-node=a`; use exactly one node with its example pool.
-`OnDelete` avoids implying that rolling datapath upgrades are accepted. Its
-privileged security context is an explicit validation baseline, **not** a
-measured minimum-capability production profile. The restricted seccomp work in
-[deploy/seccomp](../seccomp) does not establish every future agent feature's
-syscall requirements. Do not run this owner alongside an active Cilium agent,
-another flowsdn supervisor, or a network operator reconciling Cilium workloads.
-A host-supervised golden can instead provide the same resources directly; no
-DaemonSet, image pull, ServiceAccount or RBAC is then needed.
-
-The CNI file in [90-cni-example.yaml](90-cni-example.yaml) is staging data only.
-It selects the host binary named `flowsdn`, with no chained plugin or delegated
-IPAM. Applying that ConfigMap does not write the host CNI directory. The current
-plugin uses `CILIUM_SOCK` and `FLOWSDN_DELETE_QUEUE` environment overrides, not
-JSON socket/queue keys; the example uses its built-in paths so no environment
-overrides are required. Do not activate it as a node's primary CNI until the
-network acceptance gates below are met.
+`OnDelete` avoids implying that rolling datapath upgrades are accepted. Do not
+run it alongside an active Cilium agent or another flowsdn agent.
+[90-cni-example.yaml](90-cni-example.yaml) is staging data only: applying the
+ConfigMap does not write the host CNI directory.
 
 ## API and supervision
 
@@ -117,7 +98,7 @@ Kubernetes/network readiness. `/v1/health/modules` reports the missing
 controllers as degraded. A supervisor that only accepts a TCP HTTP path must
 add Unix-socket probing or an explicit local adapter; pointing it at `/healthz`
 on an invented TCP port would repeatedly restart a functioning process. The
-sample therefore supplies no unsupported Kubernetes HTTP probe. Keep readiness
+manifests therefore supply no Kubernetes HTTP probe. Keep readiness
 for pod-network use gated on the actual cluster tests.
 
 ## Current behavior and remaining integration
@@ -155,13 +136,11 @@ marks those gates complete.
 
 ## Fedora TLS build boundary
 
-The Kubernetes client now selects Fedora system OpenSSL under
-[ADR-0016](../../docs/decisions/0016-fedora-openssl.md). Building TLS consumers requires `openssl-devel` and
-`pkgconf-pkg-config`; runtime requires matching `openssl-libs`, GNU/glibc,
-OpenSSL configuration/provider files and certificate trust. Vendoring is disabled.
-The current standalone agent/CNI have not yet integrated this client; their
-existing static delivery is historical evidence, not a guarantee for a future
-TLS-enabled agent. Its golden packaging must change before deployment.
+The Kubernetes client selects Fedora system OpenSSL under
+[ADR-0016](../../docs/decisions/0016-fedora-openssl.md). Its runtime needs
+matching `openssl-libs`, GNU/glibc, OpenSSL configuration/provider files and
+certificate trust. The current agent/CNI do not use this client and stay static
+musl; a Kubernetes-connected agent needs its golden packaging changed.
 
 Runtime packaging for that integration is tracked in
 [stormcos#171](https://github.com/glennswest/stormcos/issues/171).

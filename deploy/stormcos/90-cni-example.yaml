@@ -1,15 +1,16 @@
 # Review-only staging document. Applying this ConfigMap does NOT activate CNI.
-# The host's owner must install the data as /etc/cni/net.d/05-flowsdn.conflist
-# after satisfying README.md's acceptance gates and removing conflicting CNI.
+# `flowsdn-cni install` writes this same file (/etc/cni/net.d/00-flowsdn.conflist)
+# and the plugin binaries; use it, after README.md's acceptance gates, rather
+# than copying this data by hand.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: flowsdn-cni-staging-example
   namespace: flowsdn-system
 data:
-  05-flowsdn.conflist: |
+  00-flowsdn.conflist: |
     {
       "cniVersion": "1.1.0",
       "name": "flowsdn",
-      "plugins": [{"type": "flowsdn"}]
+      "plugins": [{"type": "cilium-cni"}]
     }

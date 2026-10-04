@@ -1,7 +1,7 @@
 # Current runtime configuration and deployment
 
-This describes the executable code as of 2026-09-27, including changes since
-2026-09-18. The standalone agent owns local endpoints and host-scope IPAM; it
+This describes the executable code as of 2026-10-03 (source through
+`7c8a095`), including changes since 2026-09-25. The standalone agent owns local endpoints and host-scope IPAM; it
 is not yet a Kubernetes network controller. The broader configuration catalogue
 and specifications describe library contracts and planned integrations, not
 additional options accepted by this executable.
@@ -32,18 +32,37 @@ limited to 1 MiB. The authoritative reader is
 
 Unknown JSON keys are currently ignored; they do not enable features. Gateway
 addresses must match their family and cannot be unspecified, multicast,
-loopback, or IPv4 broadcast addresses. The full example is
-[the standalone ConfigMap](../deploy/stormcos/50-config.yaml).
+loopback, or IPv4 broadcast addresses. An invalid `egress` value fails startup.
+Examples: the stormcos edition's
+[ConfigMap](../deploy/stormcos/manifests/61-flowsdn-config.yaml) and the
+dual-stack [validation ConfigMap](../deploy/stormcos/50-config.yaml) (pinned).
 
 The CNI executable is invoked through CNI environment variables and JSON on
 stdin, not the agent's command-line interface. Its agent socket defaults to
 `/var/run/cilium/cilium.sock`, overridden by `CILIUM_SOCK`; its offline queue
 defaults to `/var/run/cilium/deleteQueue`, overridden by `FLOWSDN_DELETE_QUEUE`.
 These are environment overrides, not CNI JSON keys. When using custom agent
-paths, configure both sides consistently. The golden carries the plugin at its internal `/opt/cni/bin/flowsdn` path.
-The host CNI invocation path must be provided separately: the image mounts the
-flowsdn golden at `/pallets/flowsdn`, while `/opt/cni/bin` is a separate volume.
-Do not infer host installation merely from the file existing inside the golden.
+paths, configure both sides consistently.
+
+## Installing the CNI on a node
+
+The CNI executable has one argument form: `flowsdn-cni install` (a runtime never
+passes arguments). It copies its own executable into `$CNI_DIR/bin` and writes
+the network configuration, then prints a JSON report (`installed`, `conflist`,
+`plugin_replaced`, `loopback_replaced`, `warnings`); failure exits 1.
+
+| Environment | Default | Meaning |
+|---|---|---|
+| `HOST_PREFIX` | `/host` | Prefix for the two defaults below. |
+| `CNI_DIR` | `$HOST_PREFIX/opt/cni` | Its `bin/` gets `cilium-cni` (copied atomically), hardlinks `flowsdn-cni` and `flowsdn`, and `loopback`. |
+| `CNI_CONF_DIR` | `$HOST_PREFIX/etc/cni/net.d` | Gets `00-flowsdn.conflist`, written atomically with mode 0644. |
+| `OVERWRITE_CILIUM` | `true` | `false` keeps an existing regular `cilium-cni` and relinks the aliases to it. |
+| `OVERWRITE_LOOPBACK` | `false` | `true` replaces an existing `loopback`; otherwise it is copied only when absent. Loopback failures are warnings. |
+
+The conflist is `{"cniVersion":"1.1.0","name":"flowsdn","plugins":[{"type":"cilium-cni"}]}`:
+no chained plugins, no delegated IPAM. The `00-` prefix sorts ahead of a
+leftover `05-cilium.conflist`. `flowsdn-agent cni install --source PATH` does the
+binary half only (same variables, no conflist). Neither removes an installation.
 
 ## CNI input
 
@@ -55,7 +74,7 @@ versions without contacting the agent. The other supported commands require
 | Input | Behavior/default |
 |---|---|
 | JSON `name` | Required nonempty network name for ADD/CHECK. |
-| JSON `type` | The runtime uses `flowsdn` to select the installed plugin; this executable does not validate it. |
+| JSON `type` | The runtime uses it to select the installed binary: the installed conflist names `cilium-cni`; `flowsdn` and `flowsdn-cni` are hardlinks to it. This executable does not validate it (except `loopback`/`flowsdn-loopback`, which select the loopback adapter). |
 | JSON `chaining-mode` | Absent/empty; a nonempty string is rejected. |
 | JSON `ipam.type` | Absent/empty; delegated IPAM is rejected. Allocation comes from the agent. |
 | JSON `prevResult` | Absent/null for primary ADD; CHECK uses prior interfaces, IPs and routes for validation. |
@@ -76,8 +95,8 @@ The CNI executable also dispatches by `loopback`/`flowsdn-loopback` basename or
 configuration type. This adapter operates on namespace `lo` independently of
 the agent: ADD raises it and returns its addresses, CHECK requires UP, and DEL
 lowers it (a missing namespace succeeds). VERSION and STATUS require no namespace.
-Only CNI 1.0.0/1.1.0 are currently supported. Install the compatibility names with `flowsdn-agent cni install --source PATH`;
-`CNI_DIR` and overwrite controls are described in [the CNI crate](../crates/flowsdn-cni/README.md).
+Only CNI 1.0.0/1.1.0 are currently supported. The installers above publish the
+`loopback` name.
 
 ## Ports and APIs
 
@@ -105,45 +124,51 @@ allocation uses the configured local pools, without Kubernetes PodCIDR lookup.
 The agent and CNI implement native veth attachment, local IPv4/IPv6 allocation,
 endpoint persistence, teardown and offline deletion replay. Configured bpffs
 pins retain endpoint maps and TCX ownership across process absence and allow
-validated reuse at restore. This does not establish rolling upgrade support.
+validated reuse at restore. Without a pin root, links belong to the process and
+are reinstalled from state at restart, briefly pausing endpoint traffic. This
+does not establish rolling upgrade support. In `egress: stack` mode the agent
+replaces a host route to each endpoint address over its host link; deleting the
+link removes the routes.
+
 Kubernetes Node/Pod watches, automatic remote routes/neighbors, uplink ingress
 attachment and identity/policy reconciliation are not wired into this daemon.
+The watch client and HTTPS transport in `flowsdn-k8s` are library code only.
 An independent routing fixture is evidence for the routing primitive, not a
 working two-node Kubernetes deployment.
 
-stormcos ships flowsdn as a **golden** containing static musl agent and CNI
-binaries. The current recipe seals a 64 MiB golden with `/flowsdn-agent` and
-`/opt/cni/bin/flowsdn`; it does not include the required `local-delivery` BPF
-object. Nodes clone goldens copy-on-write; this delivery path does not pull
-an OCI image. The golden/release authority is
+stormcos ships flowsdn as a **golden** containing the static musl agent
+(`/flowsdn-agent`, BPF object embedded) and CNI (`/opt/cni/bin/flowsdn`). Nodes
+clone goldens copy-on-write and mount it at `/pallets/flowsdn`; nothing is
+pulled. The latest golden is `golden-flowsdn-600aa332b66d`, staged from
+`4627158`. The golden/release authority is
 [stormcos's golden documentation](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
-The builder and its authority moved from stormpump to stormcos on 2026-09-22.
 The flowsdn edition and composition are owned by stormcos; source changes reach
-nodes through a rebuilt golden and composed release, not through a Git push
-alone. The version still reported by the current workspace is `0.14.0`; the
-subsequent agent work is unreleased in this repository's version history.
+nodes through a newly staged golden and composed release, not through a Git
+push alone. The workspace version is still `0.14.0`; the subsequent agent work
+is unreleased in this repository's version history.
 
-The [deployment contract](../deploy/stormcos/README.md) specifies the required
-BPF object, writable bpffs and durable state, host network namespace and
-privileges. Its DaemonSet is a validation example with an image placeholder,
-not a published production image. A host-supervised golden can provide these
-resources directly. The missing object and host CNI exposure are tracked in
-[stormcos#145](https://github.com/glennswest/stormcos/issues/145). The example CNI ConfigMap does not install itself into the
-host's CNI configuration directory.
+The [deployment contract](../deploy/stormcos/README.md) describes the edition
+manifests (`deploy/stormcos/manifests/`): a DaemonSet with `image: flowsdn`
+(the golden itself under the stormpump runtime), an init container running
+`flowsdn-cni install`, and the agent with `egress: stack` and a static
+single-node IPv4 pool. Whether stormcos applies them is
+[stormcos#261](https://github.com/glennswest/stormcos/issues/261); the node must
+also run kube-proxy and provide forwarding/masquerade.
 
 `flowsdn-operator` and `flowsdn-hubble` are libraries, without operator or relay
-service binaries. Their duties have not moved into the agent. Kubernetes CRD
-projection still uses the Cilium API group; the ownership correction requested
-in [#299](https://github.com/glennswest/flowsdn/issues/299) remains pending.
-Compatibility with Cilium formats is an integration goal, not a claim that
-all Cilium APIs, CRDs, CLIs or networking features work today.
+service binaries. Their duties have not moved into the agent. CRD registration
+plans use flowsdn's own `flowsdn.io/v1alpha1` group with `Flowsdn*` kinds
+([ADR-0017](decisions/0017-flowsdn-resource-identity.md), #299); `cilium.io`
+schemas are read only by the explicit migration projection. The agent does not
+register or reconcile CRDs. Compatibility with Cilium formats is an integration
+goal, not a claim that all Cilium APIs, CRDs, CLIs or networking features work today.
 
 ## Fedora TLS build boundary
 
-The Kubernetes client now selects Fedora system OpenSSL under
+The Kubernetes client selects Fedora system OpenSSL under
 [ADR-0016](decisions/0016-fedora-openssl.md). Building TLS consumers requires `openssl-devel` and
 `pkgconf-pkg-config`; runtime requires matching `openssl-libs`, GNU/glibc,
 OpenSSL configuration/provider files and certificate trust. Vendoring is disabled.
-The current standalone agent/CNI have not yet integrated this client; their
-existing static delivery is historical evidence, not a guarantee for a future
-TLS-enabled agent. Its golden packaging must change before deployment.
+The current agent/CNI do not use this client and remain static musl. A
+Kubernetes-connected agent needs a different golden runtime
+([stormcos#171](https://github.com/glennswest/stormcos/issues/171)).

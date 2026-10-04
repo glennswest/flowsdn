@@ -1,5 +1,6 @@
 # One validation node only. Allocate distinct non-overlapping pools for any
 # additional node; this agent does not watch Kubernetes Node PodCIDRs.
+# No bpf-object: the agent loads the local-delivery object embedded in it.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,7 +11,6 @@ data:
     {
       "socket-path": "/var/run/cilium/cilium.sock",
       "state-dir": "/var/lib/flowsdn",
-      "bpf-object": "/opt/flowsdn/bpf/local-delivery",
       "bpf-pin-root": "/sys/fs/bpf/flowsdn/endpoint-runtime",
       "delete-queue": "/var/run/cilium/deleteQueue",
       "ipv4-pool": "10.244.1.0/24",

@@ -6,18 +6,37 @@ services, policy and observability. **That full stack is not implemented yet.**
 
 ## What works today
 
-As of 2026-09-27 (source through `ce8f4d2`), the executable pair is
+As of 2026-10-03 (source through `7c8a095`), the executable pair is
 `flowsdn-agent` and `flowsdn-cni`. The standalone agent provides persisted
 endpoint ownership, host-pool IPv4/IPv6 allocation and a bounded HTTP API over a
 Unix socket. The primary veth CNI supports ADD, CHECK, DEL, STATUS and VERSION,
-including queued offline deletion. With `bpf-pin-root` configured, pinned endpoint
-maps and TCX links preserve forwarding across agent downtime; restoration checks interface ownership.
+including queued offline deletion, and the same executable is the loopback
+plugin. With `bpf-pin-root` configured, pinned endpoint maps and TCX links
+preserve forwarding across agent downtime; restoration checks interface ownership.
+
+- **The BPF object is embedded.** The agent carries the `local-delivery` object
+  built from its own commit and loads it when `bpf-object` is not configured, so
+  a node needs nothing beside the binary. `test/build.sh` rebuilds the object
+  and refuses an embedded copy whose code differs.
+- **Two egress modes.** `egress: fib` (default) FIB-redirects non-local traffic
+  in BPF for native routing. `egress: stack` hands everything that is not a
+  local endpoint to the host stack (routing, netfilter, kube-proxy) and adds a
+  host `/32`/`/128` route per endpoint address. The stormcos edition uses `stack`.
+- **Node CNI installation.** `flowsdn-cni install` copies the plugin into the
+  host's `/opt/cni/bin` (`cilium-cni`, `flowsdn-cni`, `flowsdn`, and `loopback`
+  if absent) and atomically writes `/etc/cni/net.d/00-flowsdn.conflist`.
+- **stormcos edition manifests.** [`deploy/stormcos/manifests/`](deploy/stormcos/manifests/)
+  holds the ServiceAccount/RBAC, agent ConfigMap and DaemonSet that stormcos
+  applies in the flowsdn edition: one node per cluster, static IPv4 pool.
 
 Privileged fixtures have exercised same-node IPv4/IPv6 delivery, explicit native
 routing between isolated router namespaces, duplicate attachment, rollback and
-restart. Those fixtures are **not acceptance of a two-node Kubernetes network**.
-The agent still lacks Node/Pod watches, remote-route reconciliation, integrated
+restart. Those fixtures are **not acceptance of a two-node Kubernetes network**,
+and the edition has not yet been checked live on a stormcos node. The agent
+still lacks Node/Pod watches, remote-route reconciliation, integrated
 service/policy controllers, an operator process and Hubble observer/relay.
+The Kubernetes watch client and HTTPS transport exist as a library and are not
+wired into the agent.
 
 Libraries also implement configuration resolution, identity and map layouts,
 policy and service planning, Maglev tables, BGP codecs/session state, encryption
@@ -29,11 +48,6 @@ The package version and latest published foundation prerelease remain
 **0.14.0**. Current main contains unreleased runtime work beyond that prerelease.
 A stormcos golden's pinned source revision identifies what a node actually runs;
 the package version alone does not distinguish these unreleased commits.
-
-The Rust CNI executable now includes a loopback adapter, and
-`flowsdn-agent cni install --source PATH` installs the primary compatibility
-names and loopback binary. See [installation](crates/flowsdn-cni/README.md#install-binaries).
-These additions are awaiting live validation and do not complete cluster acceptance.
 
 ## Interfaces and configuration
 
@@ -69,47 +83,55 @@ for migration boundaries and the runtime-name rationale.
 
 ## How it ships in stormcos
 
-flowsdn ships as the **`flowsdn` golden** in the stormcos flowsdn edition: static
-musl agent and CNI binaries are sealed into the release and mounted under
-`/pallets/flowsdn`. The golden contains `/flowsdn-agent` and
-`/opt/cni/bin/flowsdn` internally; host CNI exposure still needs verification
-against the separate host CNI mount. Nodes clone
-the golden copy-on-write. This delivery path does not pull a flowsdn container
-image. A source push alone does not update nodes: the selected revision must be
-built into a new golden and composed into a stormcos release.
+flowsdn ships as the **`flowsdn` golden** in the stormcos flowsdn edition: the
+static musl agent (`/flowsdn-agent`, BPF object embedded) and CNI
+(`/opt/cni/bin/flowsdn`) are sealed into the golden. Nodes clone it
+copy-on-write and mount it at `/pallets/flowsdn`. The latest golden,
+`golden-flowsdn-600aa332b66d`, was staged from `4627158`. A source push alone
+does not update nodes: the revision must be staged into a new golden and
+composed into a stormcos release.
 
-The authority for that lifecycle is
+On a node, the edition's DaemonSet runs `image: flowsdn`. The stormcos kubelet
+(stormpump runtime) roots a container named `…/flowsdn` on the flowsdn golden,
+so nothing is pulled. Its init container runs `/opt/cni/bin/flowsdn install` to
+put the plugin and conflist on the host; the agent runs privileged in the host
+network namespace with `/var/run/cilium` and `/var/lib/flowsdn` from the host.
+The node itself must run kube-proxy (flowsdn has no service load balancer yet)
+and provide forwarding and masquerade for off-node egress. Applying the
+manifests is stormcos's side
+([stormcos#261](https://github.com/glennswest/stormcos/issues/261)). See the
+[deployment contract](deploy/stormcos/README.md).
+
+The authority for the golden lifecycle is
 [stormcos's golden documentation](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
-This authority moved from stormpump to stormcos on 2026-09-22.
 Dependency versions and Git revisions in `Cargo.lock` remain build inputs; a
 sibling dependency's new commit is not selected automatically.
-
-The agent also requires a matching `local-delivery` BPF object, mounted bpffs,
-persistent state, host networking and Linux BPF/network privileges. Shipping
-only the two binaries is insufficient to start this datapath. The current golden
-recipe omits the BPF object; that and host CNI exposure are tracked in
-[stormcos#145](https://github.com/glennswest/stormcos/issues/145). The
-[deployment contract and validation manifests](deploy/stormcos/README.md)
-describe these resources, CNI ownership and Unix-socket supervision. The example
-DaemonSet uses an image placeholder and is not an installable production chart.
 There is no operator or relay binary to deploy. Storage/PVC provisioning belongs
 to stormcos's built-in stormblock driver, not to flowsdn.
 
-## What changed since 2026-09-18
+## What changed since 2026-09-25
 
-The history through `ce8f4d2` adds the standalone agent and persisted recovery,
-configuration/CNI ownership checks, persistent BPF attachment, endpoint inventory
-and exact IPAM read APIs, deployment examples and successful help/version flags.
-It also adds operator/Kubernetes/Hubble and advanced-networking library
-primitives, independent policy checks, kernel probes and an opt-in amd64 seccomp
-profile. [Implementation status](docs/implementation-status.md) links the source
-and validation records and separates those additions from the remaining gates.
+- CNI: Rust loopback entry point, `flowsdn-agent cni install --source PATH`
+  (plugin names and loopback only) and `flowsdn-cni install` (also writes the
+  conflist).
+- Agent: optional `bpf-object` with the embedded object as default; `egress`
+  key (`fib`/`stack`) with host routes in stack mode.
+- Kubernetes library: bounded Node/Pod watch transport over Fedora system
+  OpenSSL ([ADR-0016](docs/decisions/0016-fedora-openssl.md)); owned CRDs use
+  `flowsdn.io/v1alpha1` ([ADR-0017](docs/decisions/0017-flowsdn-resource-identity.md), #299).
+- Policy: the simulator is the map-state oracle ([ADR-0018](docs/decisions/0018-policy-simulator-oracle.md), #103).
+- Deployment: stormcos edition manifests and the reproducible
+  `tools/build-bpf.sh` object build (#296).
+- Tests: the `short`/`medium`/`long` [test container](test/README.md) (#303) and
+  the `__sk_buff` `ctx_in` matrix probe `skb-ctx-matrix` (#256).
+- Build: the disabled GitHub workflow was removed; builds run through `sc-build`
+  and goldens through `stormcentral component stage flowsdn` (#304).
 
 Remaining acceptance is tracked by [four milestones](docs/milestones.md):
 working Kubernetes pod networking (#291), services/policy (#292), advanced
 networking/observability (#293), and compatibility/release hardening (#294).
-The console plugin (#297), `sc net` integration (#298), presentation (#302) and
-short/medium/long component test containers (#303) are in [test/](test/README.md).
+Open product items include the console plugin (#297), `sc net` integration
+(#298) and a presentation (#302).
 
 ## Building, testing and reading the repository
 
@@ -153,10 +175,8 @@ Apache License 2.0. See [LICENSE](LICENSE), [NOTICE](NOTICE) and the
 
 ## Fedora TLS build boundary
 
-The Kubernetes client now selects Fedora system OpenSSL under
-[ADR-0016](docs/decisions/0016-fedora-openssl.md). Building TLS consumers requires `openssl-devel` and
-`pkgconf-pkg-config`; runtime requires matching `openssl-libs`, GNU/glibc,
-OpenSSL configuration/provider files and certificate trust. Vendoring is disabled.
-The current standalone agent/CNI have not yet integrated this client; their
-existing static delivery is historical evidence, not a guarantee for a future
-TLS-enabled agent. Its golden packaging must change before deployment.
+The Kubernetes client links Fedora system OpenSSL
+([ADR-0016](docs/decisions/0016-fedora-openssl.md)); building it needs
+`openssl-devel` and `pkgconf-pkg-config`. The shipped agent and CNI do not use
+that client yet and stay static musl. A Kubernetes-connected agent needs a
+GNU/OpenSSL runtime in its golden ([stormcos#171](https://github.com/glennswest/stormcos/issues/171)).

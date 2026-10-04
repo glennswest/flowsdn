@@ -1,6 +1,7 @@
 # This is a reviewed host-resource contract, not a production CNI installer.
-# Replace the image placeholder with a trusted pinned runtime image digest.
-# Stage the two File hostPaths and select exactly one validation node first.
+# `image: flowsdn` is the node's flowsdn golden under the stormcos stormpump
+# runtime (/pallets/flowsdn); nothing is pulled. The BPF object is embedded in
+# the agent. Select exactly one validation node first.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -27,21 +28,14 @@ spec:
         - operator: Exists
       containers:
         - name: agent
-          image: registry.example.invalid/stormcos/flowsdn-runtime:replace-with-pinned-digest
-          imagePullPolicy: IfNotPresent
-          command: ["/opt/flowsdn/bin/flowsdn-agent"]
+          image: flowsdn
+          command: ["/flowsdn-agent"]
           args: ["--config", "/etc/flowsdn/agent.json"]
           securityContext:
             runAsUser: 0
             privileged: true
             readOnlyRootFilesystem: true
           volumeMounts:
-            - name: agent-binary
-              mountPath: /opt/flowsdn/bin/flowsdn-agent
-              readOnly: true
-            - name: bpf-object
-              mountPath: /opt/flowsdn/bpf/local-delivery
-              readOnly: true
             - name: config
               mountPath: /etc/flowsdn
               readOnly: true
@@ -53,16 +47,6 @@ spec:
             - name: state
               mountPath: /var/lib/flowsdn
       volumes:
-        - name: agent-binary
-          hostPath:
-            # Required staging path for this example, not a claim about the
-            # golden's current internal layout. Adjust to the real mounted file.
-            path: /pallets/flowsdn/bin/flowsdn-agent
-            type: File
-        - name: bpf-object
-          hostPath:
-            path: /pallets/flowsdn/bpf/local-delivery
-            type: File
         - name: config
           configMap:
             name: flowsdn-agent-example-a
