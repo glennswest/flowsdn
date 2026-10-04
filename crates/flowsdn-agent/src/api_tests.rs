@@ -293,7 +293,10 @@ fn egress_mode_and_embedded_object_default() {
     let mut config = json!({"socket-path":temp.0.join("agent.sock"),"state-dir":temp.0.join("state"),"ipv4-pool":"198.18.0.0/29","ipv4-gateway":"198.18.0.1","device-mtu":1500,"route-mtu":1450});
     fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
     let read = Config::read(&path).expect("config without bpf-object");
-    assert!(read.object.is_none(), "absent bpf-object selects the embedded object");
+    assert!(
+        read.object.is_none(),
+        "absent bpf-object selects the embedded object"
+    );
     assert_eq!(read.egress, Egress::Fib);
     for (value, expected) in [
         (json!("fib"), Some(Egress::Fib)),

@@ -5,10 +5,11 @@
 #
 # Uses the nightly pinned in crates/flowsdn-bpf/rust-toolchain.toml (installed
 # through rustup if absent) and bpf-linker 0.11.1 (downloaded and SHA-256
-# checked if not on PATH). Build paths are remapped so the same commit gives
-# the same bytes wherever it is built: the agent embeds local-delivery
-# (crates/flowsdn-agent/bpf/local-delivery), and test/build.sh rebuilds it and
-# refuses a stale copy. Copies smoke, local-delivery, loader-features and
+# checked if not on PATH). Build paths are remapped, so the code sections are
+# the same wherever the commit is built (debug info still carries a hash of the
+# checkout path). The agent embeds local-delivery
+# (crates/flowsdn-agent/bpf/local-delivery); test/build.sh rebuilds it and
+# refuses a copy whose code differs. Copies smoke, local-delivery, loader-features and
 # socket-context into OUT_DIR.
 set -euo pipefail
 out=${1:?usage: tools/build-bpf.sh OUT_DIR}

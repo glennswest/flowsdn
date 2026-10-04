@@ -226,8 +226,11 @@ mod node_install_tests {
         fs::create_dir_all(&root).expect("root");
         let source = root.join("plugin");
         fs::write(&source, b"#!plugin").expect("source");
-        let env: BTreeMap<OsString, OsString> =
-            [(OsString::from("HOST_PREFIX"), root.join("host").into_os_string())].into();
+        let env: BTreeMap<OsString, OsString> = [(
+            OsString::from("HOST_PREFIX"),
+            root.join("host").into_os_string(),
+        )]
+        .into();
         let (report, conf) = install_node(source, &env).expect("install");
         assert!(report.plugin_replaced);
         for name in ["cilium-cni", "flowsdn-cni", "flowsdn", "loopback"] {
@@ -237,7 +240,10 @@ mod node_install_tests {
         assert_eq!(conf, root.join("host/etc/cni/net.d").join(CONFLIST_NAME));
         let written: serde_json::Value =
             serde_json::from_slice(&fs::read(&conf).expect("conflist")).expect("JSON");
-        assert_eq!(written["plugins"][0]["type"], "cilium-cni");
+        assert_eq!(
+            written.pointer("/plugins/0/type").and_then(serde_json::Value::as_str),
+            Some("cilium-cni")
+        );
         // Rewriting is atomic and idempotent; no temporary files remain.
         install_node(root.join("plugin"), &env).expect("reinstall");
         let leftovers = fs::read_dir(root.join("host/etc/cni/net.d"))

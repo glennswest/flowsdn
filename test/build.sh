@@ -22,8 +22,16 @@ rm -rf "$stage"
 mkdir -p "$stage/opt/flowsdn/bin" "$stage/opt/flowsdn/fixtures" "$stage/opt/flowsdn/bpf"
 "$root/tools/build-bpf.sh" "$stage/opt/flowsdn/bpf"
 # The agent embeds local-delivery; a copy older than this commit's BPF source
-# would ship a datapath nobody built from it.
-if ! cmp -s "$stage/opt/flowsdn/bpf/local-delivery" "$root/crates/flowsdn-agent/bpf/local-delivery"; then
+# would ship a datapath nobody built from it. Compared without debug info, BTF
+# and symbols: cargo's metadata hash for path dependencies follows the checkout
+# path and renames codegen units there, while the code, relocations, maps,
+# .rodata.config and license must match exactly.
+code() {
+    objcopy -I elf64-little --strip-all --remove-section=.BTF --remove-section=.BTF.ext "$1" "$2"
+}
+code "$stage/opt/flowsdn/bpf/local-delivery" "$tmp/local-delivery.built"
+code "$root/crates/flowsdn-agent/bpf/local-delivery" "$tmp/local-delivery.embedded"
+if ! cmp -s "$tmp/local-delivery.built" "$tmp/local-delivery.embedded"; then
     echo "test/build.sh: crates/flowsdn-agent/bpf/local-delivery is stale;" \
         "run tools/build-bpf.sh and commit the new local-delivery" >&2
     exit 1
