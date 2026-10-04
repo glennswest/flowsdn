@@ -59,7 +59,7 @@ probe reports skip unless the node carries the flowsdn CNI.
 - [x] long: endpoint-churn waves sized from the pod's CPUs/memory; per-wave ADD latency and residue (agent fds/RSS, pins, state, links); slowdown or growing residue fails.
 - [x] `test/build.sh`: pinned nightly via rustup + SHA-pinned bpf-linker 0.11.1, BPF objects, musl binaries staged in test/.stage.
 - [x] sc-build at f5a97b9: workspace fmt/Clippy/build/tests, test/build.sh and podman build pass; the image run unprivileged reports exit 2 as designed.
-- [ ] Run short/medium through `stormcentral test run flowsdn` on a test machine. pvetest1 push failed 507 (registry full, stormcentral#376); C2NR0Q2 is off for the night; waiting for pvetest2 (flowsdn flavor) to finish installing.
+- [ ] Run short/medium through `stormcentral test run flowsdn` on a test machine. pvetest1 push failed 507 (registry full, stormcentral#376); pvetest2 (flowsdn flavor; its 11.79 install failed) also 507s, run 39d1523f0c; C2NR0Q2 is off overnight. Proposed after stormcentral#376. Rerun `stormcentral test run flowsdn short|medium --tag <machine>` when a registry has space.
 
 ### Aya feature verification — #3, 2026-10-03
 

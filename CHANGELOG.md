@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-03
+- **docs:** Record that #303 is blocked on test-machine registry space (stormcentral#376): pvetest1 and pvetest2 return 507 on push.
 - **feat:** Add the short/medium/long test container (`test/`, #303) per stormcentral's test standard. It runs the commit's agent, CNI and BPF objects in isolated namespaces of a privileged pod, with a read-only node probe, JSON-line results and exit 0/1/2. `long` runs capacity-sized endpoint-churn waves with slowdown and residue checks.
 - **docs:** Confirm from aya-obj 0.3.0 source that kfunc/`.ksyms` relocation is absent (#3); the other three loader capabilities already have kernel evidence. How to fill the gap is an owner decision.
 
