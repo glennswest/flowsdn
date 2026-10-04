@@ -45,6 +45,21 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### stormcos flowsdn edition pod network — #296 (P0), 2026-10-03
+
+Master: 11.79-flowsdn on pvetest2 has no pod network (stormcos#261): no flowsdn manifests;
+stormcos applied cilium's. Deliver manifests stormcos ships in the flowsdn edition. Findings:
+the golden has the agent and CNI but no BPF object, the CNI is not in the host /opt/cni/bin,
+nothing writes /etc/cni/net.d, and stormcos runs no kube-proxy (Cilium replaced it). The
+BPF FIB-redirect path drops pod->host traffic and bypasses netfilter, so ClusterIPs could
+not work even with kube-proxy.
+
+- [ ] BPF/loader/agent: `egress: stack` hands non-endpoint traffic to the host stack (.rodata.config global); agent adds host /32,/128 routes to endpoints in that mode.
+- [ ] Agent embeds the local-delivery object (used when `bpf-object` is absent); committed object, rebuild check in test/build.sh.
+- [ ] CNI `install` subcommand: copy plugin (+loopback) into host /opt/cni/bin, write /etc/cni/net.d/05-flowsdn.conflist atomically.
+- [ ] deploy/stormcos/manifests: ServiceAccount/RBAC, ConfigMap, DaemonSet (image `flowsdn` -> golden), single-node pool.
+- [ ] sc-build; post the stormcos side on stormcos#261 (copy manifests in flowsdn edition, run kube-proxy, masquerade); stage the golden.
+
 ### Policy oracle decision — #103, 2026-10-03
 
 - [x] Adopt spec 06's recommendation in ADR-0018 (ADR-0011–0013 precedent: choice + normative spec; compiler connection stays a #292 obligation). Confirmed mapstate never calls oracle::evaluate.
