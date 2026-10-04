@@ -52,3 +52,9 @@ name = "socket-context"
 path = "src/bin/socket-context.rs"
 test = false
 bench = false
+
+[[bin]]
+name = "skb-ctx"
+path = "src/bin/skb-ctx.rs"
+test = false
+bench = false

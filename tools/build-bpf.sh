@@ -9,8 +9,8 @@
 # the same wherever the commit is built (debug info still carries a hash of the
 # checkout path). The agent embeds local-delivery
 # (crates/flowsdn-agent/bpf/local-delivery); test/build.sh rebuilds it and
-# refuses a copy whose code differs. Copies smoke, local-delivery, loader-features and
-# socket-context into OUT_DIR.
+# refuses a copy whose code differs. Copies smoke, local-delivery, loader-features,
+# socket-context and skb-ctx into OUT_DIR.
 set -euo pipefail
 out=${1:?usage: tools/build-bpf.sh OUT_DIR}
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -49,6 +49,6 @@ CARGO_TARGET_BPFEL_UNKNOWN_NONE_RUSTFLAGS="-C debuginfo=2 -C link-arg=--btf \
     cargo "+$nightly" build --manifest-path "$root/crates/flowsdn-bpf/Cargo.toml" \
     --target bpfel-unknown-none -Z build-std=core --release --locked \
     --target-dir "$target"
-for o in smoke local-delivery loader-features socket-context; do
+for o in smoke local-delivery loader-features socket-context skb-ctx; do
     cp "$target/bpfel-unknown-none/release/$o" "$out/"
 done

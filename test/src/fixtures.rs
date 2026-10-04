@@ -63,6 +63,11 @@ fn fixtures(env: &Env) -> Vec<(&'static str, PathBuf, Vec<PathBuf>)> {
             vec![env.cni(), env.agent(), delivery],
         ),
         (
+            "fixture-skb-ctx-matrix",
+            env.fixture("skb-ctx-matrix"),
+            vec![env.bpf("skb-ctx")],
+        ),
+        (
             "fixture-socket-live",
             env.fixture("socket-live"),
             vec![env.bpf("socket-context")],
