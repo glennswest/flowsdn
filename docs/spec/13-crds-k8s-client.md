@@ -1462,7 +1462,8 @@ numbers as an optimization behind a config key.
 (c) Protobuf from the start.
 *Recommendation:* (b). The measurement that decides it is the initial-list byte
 count on a 5,000-pod cluster; if it is under ~50 MB per agent, (a) is fine.
-Blocked on whether rustkube speaks protobuf at all (C21).
+rustkube does serve `application/vnd.kubernetes.protobuf` for requests (watch
+stays JSON; see 9.5), so the choice is not blocked on the server; it is #165.
 
 **12.2 #166/#184 superseded for owned identity by #299.** Preserve every
 upstream served-version schema in the reference corpus and migration-input

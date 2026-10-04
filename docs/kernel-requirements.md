@@ -21,6 +21,15 @@ never compare **version strings** (section 4.7).
 
 ## 0. Decisions at a glance
 
+> **Correction (2026-10-03, #309).** stormcos does not run the Rocky 10 6.12
+> line this document was written against. It ships Fedora kernels, fetched by
+> `KERNEL=<n-v-r>`: `7.2.5-100.fc43` in every current initramfs golden
+> (6.17.1-300.fc43 on 11.29–11.30); the Rocky pin in stormcos `kernel/README.md`
+> is stale. So the `e2e-stormcos` row below tests a kernel no stormcos release
+> runs, and "6.12 (stormcos)" is not the shipped line. The 6.6 general minimum
+> (TCX) is unaffected; which kernel rows to verify is the owner question on #256.
+
+
 | Question | Decision | Section |
 |---|---|---|
 | Supported kernel line, x86-64 | **6.12** — the Rocky Linux 10 `kernel-6.12.0-2xx.el10` line stormcos already pins (RHEL kABI, consumed as-is, no custom config) | 2.4 |
