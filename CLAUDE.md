@@ -50,6 +50,10 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Comment mining — 2026-10-03 (since 2026-09-29)
+
+- [x] Read comments on the 32 issues updated since 2026-09-29. Filed stormcentral#383 (Decide: second flowsdn-flavor machine, P1, needs-owner), flowsdn#314 (aya kfunc relocation, P3), stormcentral#384 (scheduled jobs with secrets, P3) and stormconsole#83 (flowsdn plugin, P3). Commented on #291 (pvetest1 is cilium, so it isn't a flowsdn pair), stormcentral#360 and stormcentral#367 (the golden no longer needs the toolchain). No fixes.
+
 ### Docs refresh from code — 2026-10-03
 
 - [x] Read `git log --since=2026-09-25` and compared README, docs/, crate READMEs, deploy/ and CLAUDE.md to the code.
