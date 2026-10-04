@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-10-03
+- **docs:** Confirm from aya-obj 0.3.0 source that kfunc/`.ksyms` relocation is absent (#3); the other three loader capabilities already have kernel evidence. How to fill the gap is an owner decision.
+
 ### 2026-09-28
 - **docs:** Recheck #296 owner-target decision and managed inventory; preserve implementation pending disposable pair allocation and supported provisioning.
 - **docs:** Record 32-issue/25-comment mining results: new provisioning tracker stormcos#183 (P1), supplemented owner decision stormcentral#83, and existing coverage for remaining findings.

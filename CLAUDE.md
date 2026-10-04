@@ -45,6 +45,12 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Aya feature verification — #3, 2026-10-03
+
+- [x] Read the issue. `.rodata.config`, XDP frags and TCX pin/update already passed kernel probes on 2026-09-22.
+- [x] Confirmed from the aya-obj 0.3.0 source that kfunc relocation is absent; recorded in spec 01.
+- [ ] Owner decision (asked on #3, wait-owner): use SOCK_DIAG for M3 and close as verified (recommended), implement a flowsdn kfunc relocation pass, or wait for upstream. Nothing implemented yet.
+
 ### Comment mining — 2026-09-28
 
 - [x] Review all 32 updated issues and 25 recent comments; confirm no older comment edits in the window.

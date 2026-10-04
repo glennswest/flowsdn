@@ -1420,3 +1420,10 @@ link update, same-map restart and foreign-interface rejection passed in the
 agent lifecycle fixture. The separate kfunc object failed Aya relocation with
 `UnknownFunction` in `sock_destroy_probe`; no socket was destroyed. #3 remains
 open for a validated kfunc relocation implementation.
+
+Source check (2026-10-03): aya-obj 0.3.0 `relocate_calls` resolves calls
+only against functions inside the object (`UnknownFunction` otherwise). It has
+no `.ksyms` or kernel-BTF kfunc resolution, and `BPF_PSEUDO_KFUNC_CALL` appears
+only in generated bindings. How to fill the gap (SOCK_DIAG `SOCK_DESTROY` for M3,
+a flowsdn relocation pass, or waiting for upstream) is waiting on an owner
+decision on #3.
