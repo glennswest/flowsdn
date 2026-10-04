@@ -48,7 +48,7 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 ### Policy oracle decision — #103, 2026-10-03
 
 - [x] Adopt spec 06's recommendation in ADR-0018 (ADR-0011–0013 precedent: choice + normative spec; compiler connection stays a #292 obligation). Confirmed mapstate never calls oracle::evaluate.
-- [ ] sc-build: flowsdn-policy tests with a 4096-case kernel_map soak, Clippy; then close #103 with the evidence.
+- [x] sc-build at 31b3ba2: flowsdn-policy Clippy -D warnings; 29 tests (kernel_map 6, mapstate 4, oracle 5, primitives 10, simulator 4) and a 4096-case kernel_map soak (31.9 s) pass. #103 closed.
 
 ### Milestone 2 acceptance — #292, 2026-10-03
 
