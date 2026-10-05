@@ -7,90 +7,16 @@ use aya::{
 use nix::sched::{CloneFlags, unshare};
 use std::{
     error::Error,
-    fs::{self, File},
+    fs::File,
     io::{Read, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream},
-    path::{Component, Path, PathBuf},
     process::Command,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
-struct Cgroup {
-    original: PathBuf,
-    temporary: PathBuf,
-    moved: bool,
-}
-impl Cgroup {
-    fn create() -> Result<Self> {
-        let membership = fs::read_to_string("/proc/self/cgroup")?;
-        let path = membership
-            .lines()
-            .find_map(|line| line.strip_prefix("0::"))
-            .ok_or("unified cgroup v2 membership required")?;
-        if !path.starts_with('/')
-            || Path::new(path).components().any(|c| {
-                matches!(
-                    c,
-                    Component::ParentDir | Component::CurDir | Component::Prefix(_)
-                )
-            })
-        {
-            return Err("unsafe cgroup membership path".into());
-        }
-        let original = Path::new("/sys/fs/cgroup").join(path.trim_start_matches('/'));
-        if !Path::new("/sys/fs/cgroup/cgroup.controllers").is_file() {
-            return Err("cgroup v2 mount required".into());
-        }
-        // Make a child of our own current cgroup, never relocate another task.
-        let temporary = original.join(format!(
-            "flowsdn-socket-test-{}-{}",
-            std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
-        ));
-        fs::create_dir(&temporary)?;
-        let mut guard = Self {
-            original,
-            temporary,
-            moved: false,
-        };
-        fs::write(
-            guard.temporary.join("cgroup.procs"),
-            std::process::id().to_string(),
-        )?;
-        guard.moved = true;
-        Ok(guard)
-    }
-    fn restore(&mut self) -> Result<()> {
-        if self.moved {
-            fs::write(
-                self.original.join("cgroup.procs"),
-                std::process::id().to_string(),
-            )?;
-            self.moved = false;
-        }
-        fs::remove_dir(&self.temporary)?;
-        Ok(())
-    }
-}
-impl Drop for Cgroup {
-    fn drop(&mut self) {
-        if self.moved {
-            if let Err(error) = fs::write(
-                self.original.join("cgroup.procs"),
-                std::process::id().to_string(),
-            ) {
-                eprintln!("failed to restore own cgroup membership: {error}");
-                return;
-            }
-            self.moved = false;
-        }
-        if let Err(error) = fs::remove_dir(&self.temporary)
-            && error.kind() != std::io::ErrorKind::NotFound
-        {
-            eprintln!("failed to remove owned temporary cgroup: {error}");
-        }
-    }
-}
+#[path = "cgroup/temporary.rs"]
+mod cgroup;
+use cgroup::Cgroup;
 fn exchange(listener: &TcpListener, destination: SocketAddr, want: SocketAddr) -> Result<()> {
     let mut client = TcpStream::connect_timeout(&destination, Duration::from_secs(3))?;
     if client.peer_addr()? != want {

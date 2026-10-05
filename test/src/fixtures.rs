@@ -72,6 +72,11 @@ fn fixtures(env: &Env) -> Vec<(&'static str, PathBuf, Vec<PathBuf>)> {
             env.fixture("socket-live"),
             vec![env.bpf("socket-context")],
         ),
+        (
+            "fixture-socket-lb-live",
+            env.fixture("socket-lb-live"),
+            vec![env.bpf("socket-lb")],
+        ),
     ]
 }
 

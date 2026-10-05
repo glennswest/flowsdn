@@ -421,6 +421,7 @@ dependencies = [
  "flowsdn-cni",
  "flowsdn-connector",
  "flowsdn-ipam",
+ "flowsdn-lb",
  "httparse",
  "nix",
  "serde_json",

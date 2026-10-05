@@ -17,6 +17,12 @@
 #   skips it instead).
 # - egress: stack, as in manifests/: pod traffic that isn't for a local pod goes
 #   through the node's stack (and its routes to the other nodes).
+# - service-lb (default on, #292): ClusterIP Services without kube-proxy. The
+#   agent watches Services and EndpointSlices and attaches its socket-lb
+#   programs to the host's cgroup v2 root (cgroup-root, mounted from the host
+#   by the DaemonSet), so connect/sendmsg to a ClusterIP:port from any pod or
+#   host process goes straight to a ready backend. Covers TCP and UDP,
+#   IPv4/IPv6; GET /v1/service on the agent socket lists what is programmed.
 # - Changing a node from the static pool to auto needs its endpoints gone
 #   (a fresh install, or drained); restore refuses addresses outside the pool.
 ---
@@ -38,6 +44,8 @@ data:
       "route-mtu": 1500,
       "endpoint-id-max": 1000,
       "kubernetes": {
-        "auto-direct-node-routes": true
+        "auto-direct-node-routes": true,
+        "service-lb": true,
+        "cgroup-root": "/run/flowsdn/cgroupv2"
       }
     }

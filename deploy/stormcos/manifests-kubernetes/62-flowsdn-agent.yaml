@@ -14,8 +14,10 @@
 # /etc/cni/net.d/00-flowsdn.conflist. Pods created before the agent answers
 # fail CNI ADD and are retried by the kubelet.
 #
-# hostNetwork and privileged: the agent loads BPF, attaches TCX to host veths
-# and adds host routes. It is a validation baseline, not a measured
+# hostNetwork and privileged: the agent loads BPF, attaches TCX to host veths,
+# attaches its socket-lb programs to the host cgroup v2 root (hostPath
+# /sys/fs/cgroup at /run/flowsdn/cgroupv2: a container's own /sys/fs/cgroup
+# may be a cgroup namespace view) and adds host routes. It is a validation baseline, not a measured
 # minimum-capability profile.
 ---
 apiVersion: apps/v1
@@ -65,6 +67,7 @@ spec:
             - { name: config, mountPath: /etc/flowsdn, readOnly: true }
             - { name: run, mountPath: /var/run/cilium }
             - { name: state, mountPath: /var/lib/flowsdn }
+            - { name: cgroup, mountPath: /run/flowsdn/cgroupv2 }
       volumes:
         - name: config
           configMap: { name: flowsdn-config }
@@ -72,6 +75,8 @@ spec:
           hostPath: { path: /var/run/cilium, type: DirectoryOrCreate }
         - name: state
           hostPath: { path: /var/lib/flowsdn, type: DirectoryOrCreate }
+        - name: cgroup
+          hostPath: { path: /sys/fs/cgroup, type: Directory }
         - name: cni-path
           hostPath: { path: /opt/cni/bin, type: DirectoryOrCreate }
         - name: etc-cni-netd

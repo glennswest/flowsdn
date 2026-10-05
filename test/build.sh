@@ -40,7 +40,7 @@ for o in local-delivery socket-lb; do
 done
 
 fixtures=(flowsdn-bpftest flowsdn-endpoint-test agent-runtime cni-runtime loader-features
-    native-routing packet-ingress socket-live uplink-ingress skb-ctx-matrix)
+    native-routing packet-ingress socket-live socket-lb-live uplink-ingress skb-ctx-matrix)
 cargo build --manifest-path "$root/Cargo.toml" --release --locked --target "$target" \
     -p flowsdn-agent -p flowsdn-cni -p flowsdn-bpftest -p flowsdn-test
 out=${CARGO_TARGET_DIR:-$root/target}/$target/release
