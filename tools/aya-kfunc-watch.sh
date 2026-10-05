@@ -56,8 +56,15 @@ for src in "${sources[@]}"; do
     rm -f "$dir/Cargo.lock"
     dep=$(dependency "$src")
     sed -i "s|^aya = .*# aya-kfunc-watch: replaced per run$|$dep|" "$dir/Cargo.toml"
-    # The repository's pinned stable, whatever directory TMPDIR is.
-    toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$root/rust-toolchain.toml")
+    # pinned: the repository's toolchain; release/main: the latest stable,
+    # since aya main follows new rustc releases (it needed 1.98 on 2026-10-05).
+    if [ "$src" = pinned ]; then
+        toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$root/rust-toolchain.toml")
+    else
+        toolchain=stable
+        rustup toolchain list | grep -q '^stable' ||
+            rustup toolchain install stable --profile minimal >&2
+    fi
     if cargo "+$toolchain" build --release --quiet --manifest-path "$dir/Cargo.toml" \
         --target-dir "$work/target-$src" >"$work/$src.build" 2>&1; then
         version=$(awk '/^name = "aya"$/{getline; v=$3; getline; s=$3; print v, s; exit}' \
