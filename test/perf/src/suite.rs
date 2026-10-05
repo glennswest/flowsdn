@@ -58,7 +58,10 @@ pub fn run() -> ExitCode {
         .unwrap_or_else(|| "unknown".into());
     let (Some(namespace), Some(run_id)) = (env("STORM_NAMESPACE"), env("STORM_RUN_ID")) else {
         let mut report = Report::new(&flavor, "");
-        report.infrastructure("perf-setup", "STORM_NAMESPACE and STORM_RUN_ID are required (run by stormcentral)");
+        report.infrastructure(
+            "perf-setup",
+            "STORM_NAMESPACE and STORM_RUN_ID are required (run by stormcentral)",
+        );
         return report.finish();
     };
     let kube = match Kube::connect(namespace, run_id) {
@@ -86,7 +89,10 @@ pub fn run() -> ExitCode {
         }
     };
     let other = nodes.iter().map(|(n, _)| n.clone()).find(|n| *n != node);
-    let allocatable = nodes.iter().find(|(n, _)| *n == node).map_or(110, |(_, p)| *p);
+    let allocatable = nodes
+        .iter()
+        .find(|(n, _)| *n == node)
+        .map_or(110, |(_, p)| *p);
     let seconds = env("STORM_PERF_SECONDS")
         .and_then(|s| s.parse().ok())
         .map_or(Duration::from_secs(10), Duration::from_secs);
@@ -95,7 +101,9 @@ pub fn run() -> ExitCode {
         Duration::ZERO,
         &format!(
             "flavor {flavor} (agent {}), {} ready nodes, client on {node}, cross-node peer {}",
-            agent.as_ref().map_or("not found".into(), |a| format!("pid {}", a.pid)),
+            agent
+                .as_ref()
+                .map_or("not found".into(), |a| format!("pid {}", a.pid)),
             nodes.len(),
             other.as_deref().unwrap_or("none")
         ),
@@ -129,7 +137,10 @@ fn rr_metrics(kind: &str, mut result: RrResult) -> (String, Value) {
     let p50 = result.samples.percentile_us(0.5).unwrap_or(0.0);
     let p99 = result.samples.percentile_us(0.99).unwrap_or(0.0);
     (
-        format!("{kind}: p50 {p50:.1} us, p99 {p99:.1} us, {per_second} tx/s, {} lost", result.lost),
+        format!(
+            "{kind}: p50 {p50:.1} us, p99 {p99:.1} us, {per_second} tx/s, {} lost",
+            result.lost
+        ),
         metrics,
     )
 }
@@ -152,7 +163,8 @@ impl Suite {
         let cross = match self.other.clone() {
             Some(other) => self.server("perf-server-cross", &other),
             None => {
-                self.report.skip("cross-node", "one ready node: no cross-node peer");
+                self.report
+                    .skip("cross-node", "one ready node: no cross-node peer");
                 None
             }
         };
@@ -190,7 +202,10 @@ impl Suite {
     fn cost(&mut self, test: &str, work: impl FnOnce(&mut Self)) {
         let Some(agent) = self.agent.clone() else {
             work(self);
-            self.report.skip(test, "no flowsdn-agent or cilium-agent process in the host PID namespace");
+            self.report.skip(
+                test,
+                "no flowsdn-agent or cilium-agent process in the host PID namespace",
+            );
             return;
         };
         let started = Instant::now();
@@ -203,7 +218,9 @@ impl Suite {
                 &format!("{} agent: {cpu}% of a core, {rss} MiB RSS", agent.flavor),
                 json!({"cpu_percent": cpu, "rss_mib": rss, "pid": agent.pid}),
             ),
-            None => self.report.fail(test, started.elapsed(), "agent process vanished"),
+            None => self
+                .report
+                .fail(test, started.elapsed(), "agent process vanished"),
         }
     }
 
@@ -212,7 +229,9 @@ impl Suite {
     fn readiness(&mut self) {
         let node = self.node.clone();
         let image = self.image.clone();
-        let names: Vec<String> = (0..READINESS_PODS).map(|i| format!("perf-ready-{i}")).collect();
+        let names: Vec<String> = (0..READINESS_PODS)
+            .map(|i| format!("perf-ready-{i}"))
+            .collect();
         let started = Instant::now();
         let mut created = Vec::new();
         for name in &names {
@@ -243,7 +262,9 @@ impl Suite {
         self.report.pass(
             "pod-network-ready",
             started.elapsed(),
-            &format!("{READINESS_PODS} pods created together on {node}: create -> Running with pod IP"),
+            &format!(
+                "{READINESS_PODS} pods created together on {node}: create -> Running with pod IP"
+            ),
             metrics,
         );
         for (name, _) in created {
@@ -261,7 +282,8 @@ impl Suite {
                 self.track(format!("{}/{name}", self.kube.pods_path()));
                 let address = SocketAddr::new(placed.ip, RR_PORT);
                 if !wait_reachable(address, Duration::from_secs(60)) {
-                    self.report.fail(name, started.elapsed(), &format!("{address} not reachable"));
+                    self.report
+                        .fail(name, started.elapsed(), &format!("{address} not reachable"));
                     return None;
                 }
                 self.report.pass(
@@ -283,16 +305,18 @@ impl Suite {
     /// RR latency, 1 and 8 stream throughput (and connect rate) to `ip`.
     fn traffic(&mut self, prefix: &str, where_: &str, ip: IpAddr, with_cost: bool) {
         let seconds = self.seconds;
-        self.report.measure(&format!("{prefix}-tcp-rr-{where_}"), || {
-            wire::tcp_rr(SocketAddr::new(ip, RR_PORT), seconds)
-                .map(|r| rr_metrics("TCP_RR", r))
-                .map_err(|e| e.to_string())
-        });
-        self.report.measure(&format!("{prefix}-udp-rr-{where_}"), || {
-            wire::udp_rr(SocketAddr::new(ip, RR_PORT), seconds)
-                .map(|r| rr_metrics("UDP_RR", r))
-                .map_err(|e| e.to_string())
-        });
+        self.report
+            .measure(&format!("{prefix}-tcp-rr-{where_}"), || {
+                wire::tcp_rr(SocketAddr::new(ip, RR_PORT), seconds)
+                    .map(|r| rr_metrics("TCP_RR", r))
+                    .map_err(|e| e.to_string())
+            });
+        self.report
+            .measure(&format!("{prefix}-udp-rr-{where_}"), || {
+                wire::udp_rr(SocketAddr::new(ip, RR_PORT), seconds)
+                    .map(|r| rr_metrics("UDP_RR", r))
+                    .map_err(|e| e.to_string())
+            });
         for streams in [1usize, 8] {
             let test = format!("{prefix}-tcp-stream-{streams}-{where_}");
             let run = |s: &mut Self| {
@@ -314,23 +338,25 @@ impl Suite {
                 run(self);
             }
         }
-        self.report.measure(&format!("{prefix}-connect-rate-{where_}"), || {
-            let (mut result, failed) = wire::connect_rate(SocketAddr::new(ip, ACCEPT_PORT), seconds);
-            let per_second = result.per_second();
-            let mut metrics = result.samples.summary();
-            if let Some(object) = metrics.as_object_mut() {
-                object.insert("connections_per_second".into(), json!(per_second));
-                object.insert("failed".into(), json!(failed));
-            }
-            if failed > 0 && result.samples.is_empty() {
-                return Err(format!("{failed} connects failed, none succeeded"));
-            }
-            let p50 = result.samples.percentile_us(0.5).unwrap_or(0.0);
-            Ok((
-                format!("{per_second} connections/s, connect p50 {p50:.1} us, {failed} failed"),
-                metrics,
-            ))
-        });
+        self.report
+            .measure(&format!("{prefix}-connect-rate-{where_}"), || {
+                let (mut result, failed) =
+                    wire::connect_rate(SocketAddr::new(ip, ACCEPT_PORT), seconds);
+                let per_second = result.per_second();
+                let mut metrics = result.samples.summary();
+                if let Some(object) = metrics.as_object_mut() {
+                    object.insert("connections_per_second".into(), json!(per_second));
+                    object.insert("failed".into(), json!(failed));
+                }
+                if failed > 0 && result.samples.is_empty() {
+                    return Err(format!("{failed} connects failed, none succeeded"));
+                }
+                let p50 = result.samples.percentile_us(0.5).unwrap_or(0.0);
+                Ok((
+                    format!("{per_second} connections/s, connect p50 {p50:.1} us, {failed} failed"),
+                    metrics,
+                ))
+            });
     }
 
     fn pod_to_pod(&mut self, where_: &str, server: &Placed, with_cost: bool) {
@@ -363,7 +389,8 @@ impl Suite {
             .and_then(Value::as_str)
             .and_then(|ip| ip.parse::<IpAddr>().ok())
         else {
-            self.report.fail("svc-ready", started.elapsed(), "Service has no clusterIP");
+            self.report
+                .fail("svc-ready", started.elapsed(), "Service has no clusterIP");
             return;
         };
         if !wait_reachable(SocketAddr::new(ip, RR_PORT), Duration::from_secs(60)) {
@@ -417,7 +444,8 @@ impl Suite {
         });
         let started = Instant::now();
         if let Err(e) = self.kube.create(&self.kube.policies_path(), &deny) {
-            self.report.fail("policy-deny-enforced", started.elapsed(), &e);
+            self.report
+                .fail("policy-deny-enforced", started.elapsed(), &e);
             return;
         }
         self.track(path.clone());
@@ -441,7 +469,10 @@ impl Suite {
             Some(after) => self.report.pass(
                 "policy-remove-restored",
                 removed.elapsed(),
-                &format!("traffic back {} ms after the policy was deleted", after.as_millis()),
+                &format!(
+                    "traffic back {} ms after the policy was deleted",
+                    after.as_millis()
+                ),
                 json!({"restore_ms": after.as_millis()}),
             ),
             None => self.report.fail(
@@ -451,7 +482,8 @@ impl Suite {
             ),
         }
         let Some(own) = self.own_ip else {
-            self.report.skip("policy-rules", "this pod has no pod IP in its status");
+            self.report
+                .skip("policy-rules", "this pod has no pod IP in its status");
             return;
         };
         for rules in [100usize, 1000] {
@@ -470,7 +502,11 @@ impl Suite {
                     "ports": [{"protocol": "TCP", "port": STREAM_PORT}]})
             })
             .collect();
-        let own_cidr = if own.is_ipv4() { format!("{own}/32") } else { format!("{own}/128") };
+        let own_cidr = if own.is_ipv4() {
+            format!("{own}/32")
+        } else {
+            format!("{own}/128")
+        };
         ingress.push(json!({"from": [{"ipBlock": {"cidr": own_cidr}}]}));
         let body = json!({
             "apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy",
@@ -488,8 +524,10 @@ impl Suite {
         thread::sleep(Duration::from_secs(3));
         let seconds = self.seconds;
         self.report.measure(&test, || {
-            let (bytes, elapsed) = wire::tcp_stream(SocketAddr::new(server.ip, STREAM_PORT), 1, seconds)
-                .map_err(|e| format!("allowed client blocked or stream failed under {rules} rules: {e}"))?;
+            let (bytes, elapsed) =
+                wire::tcp_stream(SocketAddr::new(server.ip, STREAM_PORT), 1, seconds).map_err(
+                    |e| format!("allowed client blocked or stream failed under {rules} rules: {e}"),
+                )?;
             let rate = gbps(bytes, elapsed);
             Ok((
                 format!("{rules} ingress rules selecting the server: {rate} Gbit/s"),
@@ -509,7 +547,9 @@ impl Suite {
         let mut names = Vec::new();
         for i in 0..count {
             let name = format!("perf-scale-{i}");
-            let body = self.kube.pod(&name, "perf-scale", &node, &image, &["server"]);
+            let body = self
+                .kube
+                .pod(&name, "perf-scale", &node, &image, &["server"]);
             match self.kube.create(&self.kube.pods_path(), &body) {
                 Ok(_) => {
                     self.track(format!("{}/{name}", self.kube.pods_path()));
@@ -533,21 +573,31 @@ impl Suite {
                 Err(e) => errors.push(e),
             }
         }
-        let rate = if last.is_zero() { 0.0 } else { (ready as f64 / last.as_secs_f64() * 10.0).round() / 10.0 };
+        let rate = if last.is_zero() {
+            0.0
+        } else {
+            (ready as f64 / last.as_secs_f64() * 10.0).round() / 10.0
+        };
         let metrics = json!({"requested": count, "ready": ready, "all_ready_ms": last.as_millis(),
             "pods_per_second": rate, "allocatable_pods": allocatable});
         if errors.is_empty() {
             self.report.pass(
                 "scale-pods-ready",
                 started.elapsed(),
-                &format!("{ready}/{count} pods on {node} with pod IPs in {} ms", last.as_millis()),
+                &format!(
+                    "{ready}/{count} pods on {node} with pod IPs in {} ms",
+                    last.as_millis()
+                ),
                 metrics,
             );
         } else {
             self.report.fail(
                 "scale-pods-ready",
                 started.elapsed(),
-                &format!("{ready}/{count} ready; first error: {}", errors.first().map_or("", String::as_str)),
+                &format!(
+                    "{ready}/{count} ready; first error: {}",
+                    errors.first().map_or("", String::as_str)
+                ),
             );
         }
         if ready > 0 {
@@ -580,7 +630,11 @@ impl Suite {
         let mut endpoints = 0;
         let deadline = Duration::from_secs(120);
         while started.elapsed() < deadline {
-            endpoints = self.kube.get(&slices).map(|v| kube::ready_endpoints(&v)).unwrap_or(0);
+            endpoints = self
+                .kube
+                .get(&slices)
+                .map(|v| kube::ready_endpoints(&v))
+                .unwrap_or(0);
             if endpoints >= ready {
                 break;
             }
@@ -609,7 +663,11 @@ impl Suite {
         };
         let address = SocketAddr::new(ip, ACCEPT_PORT);
         if !wait_reachable(address, Duration::from_secs(60)) {
-            self.report.fail("scale-svc-connect", started.elapsed(), &format!("{address} not reachable"));
+            self.report.fail(
+                "scale-svc-connect",
+                started.elapsed(),
+                &format!("{address} not reachable"),
+            );
             return;
         }
         let before = host::conntrack_entries(&self.proc_root);
@@ -618,20 +676,31 @@ impl Suite {
             let (mut result, failed) = wire::connect_rate(address, seconds);
             let per_second = result.per_second();
             if failed > 0 {
-                return Err(format!("{failed} of {} connects through the Service failed", result.samples.len().saturating_add(usize::try_from(failed).unwrap_or(usize::MAX))));
+                return Err(format!(
+                    "{failed} of {} connects through the Service failed",
+                    result
+                        .samples
+                        .len()
+                        .saturating_add(usize::try_from(failed).unwrap_or(usize::MAX))
+                ));
             }
             let mut metrics = result.samples.summary();
             if let Some(object) = metrics.as_object_mut() {
                 object.insert("connections_per_second".into(), json!(per_second));
                 object.insert("endpoints".into(), json!(endpoints));
             }
-            Ok((format!("{per_second} connections/s across {endpoints} endpoints"), metrics))
+            Ok((
+                format!("{per_second} connections/s across {endpoints} endpoints"),
+                metrics,
+            ))
         });
         match (before, host::conntrack_entries(&self.proc_root)) {
             (Some(before), Some(after)) => self.report.pass(
                 "conntrack-entries",
                 Duration::ZERO,
-                &format!("host netfilter conntrack: {before} before, {after} after the connect run"),
+                &format!(
+                    "host netfilter conntrack: {before} before, {after} after the connect run"
+                ),
                 json!({"before": before, "after": after}),
             ),
             _ => self.report.skip(
@@ -658,7 +727,11 @@ fn wait_reachable(address: SocketAddr, timeout: Duration) -> bool {
 }
 /// Time from `since` until `condition` holds three probes in a row (the
 /// first of them counts), or None after `timeout`.
-fn until(timeout: Duration, mut condition: impl FnMut() -> bool, since: Instant) -> Option<Duration> {
+fn until(
+    timeout: Duration,
+    mut condition: impl FnMut() -> bool,
+    since: Instant,
+) -> Option<Duration> {
     let mut first: Option<Duration> = None;
     let mut streak = 0u8;
     while since.elapsed() < timeout {
@@ -676,4 +749,3 @@ fn until(timeout: Duration, mut condition: impl FnMut() -> bool, since: Instant)
     }
     None
 }
-

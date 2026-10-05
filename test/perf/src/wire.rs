@@ -24,8 +24,10 @@ const MAX_SAMPLES: usize = 1_000_000;
 
 /// Serve all three protocols on every address until the process ends.
 pub fn serve() -> io::Result<()> {
-    let rr = TcpListener::bind(("::", RR_PORT)).or_else(|_| TcpListener::bind(("0.0.0.0", RR_PORT)))?;
-    let udp = UdpSocket::bind(("::", RR_PORT)).or_else(|_| UdpSocket::bind(("0.0.0.0", RR_PORT)))?;
+    let rr =
+        TcpListener::bind(("::", RR_PORT)).or_else(|_| TcpListener::bind(("0.0.0.0", RR_PORT)))?;
+    let udp =
+        UdpSocket::bind(("::", RR_PORT)).or_else(|_| UdpSocket::bind(("0.0.0.0", RR_PORT)))?;
     let stream = TcpListener::bind(("::", STREAM_PORT))
         .or_else(|_| TcpListener::bind(("0.0.0.0", STREAM_PORT)))?;
     let accept = TcpListener::bind(("::", ACCEPT_PORT))
@@ -150,7 +152,12 @@ pub fn udp_rr(address: SocketAddr, duration: Duration) -> io::Result<RrResult> {
                     break;
                 }
                 Ok(_) => {}
-                Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut) => {
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                    ) =>
+                {
                     lost = lost.saturating_add(1);
                     break;
                 }
@@ -273,7 +280,7 @@ mod tests {
     fn protocols_against_a_loopback_server() {
         // Ports are fixed; a second test process on the box would collide,
         // so the server is shared by this one test.
-        thread::spawn(|| serve());
+        thread::spawn(serve);
         let deadline = Instant::now()
             .checked_add(Duration::from_secs(5))
             .expect("deadline");

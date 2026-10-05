@@ -20,7 +20,11 @@ pub struct Agent {
 pub fn find_agent(proc_root: &Path) -> Option<Agent> {
     let mut found: Vec<Agent> = Vec::new();
     for entry in fs::read_dir(proc_root).ok()?.flatten() {
-        let Some(pid) = entry.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|n| n.parse::<u32>().ok())
+        else {
             continue;
         };
         let Ok(comm) = fs::read_to_string(entry.path().join("comm")) else {
@@ -84,7 +88,11 @@ impl Usage {
         let ticks = cpu_ticks(&fs::read_to_string(dir.join("stat")).ok()?)?;
         let rss = rss_kib(&fs::read_to_string(dir.join("status")).ok()?)?;
         let used = ticks.checked_sub(self.ticks)? as f64 / ticks_per_second();
-        let seconds = self.begun.elapsed().max(Duration::from_millis(1)).as_secs_f64();
+        let seconds = self
+            .begun
+            .elapsed()
+            .max(Duration::from_millis(1))
+            .as_secs_f64();
         let percent = (used / seconds * 1000.0).round() / 10.0;
         Some((percent, (rss as f64 / 1024.0 * 10.0).round() / 10.0))
     }
@@ -121,7 +129,12 @@ mod tests {
     #[test]
     fn agent_is_found_by_comm() {
         let root = std::env::temp_dir().join(format!("flowsdn-perf-proc-{}", std::process::id()));
-        for (pid, comm) in [("1", "systemd"), ("900", "flowsdn-agent"), ("77", "bash"), ("x", "flowsdn-agent")] {
+        for (pid, comm) in [
+            ("1", "systemd"),
+            ("900", "flowsdn-agent"),
+            ("77", "bash"),
+            ("x", "flowsdn-agent"),
+        ] {
             fs::create_dir_all(root.join(pid)).expect("dir");
             fs::write(root.join(pid).join("comm"), format!("{comm}\n")).expect("comm");
         }
@@ -132,8 +145,11 @@ mod tests {
                 flavor: "flowsdn"
             })
         );
-        fs::write(root.join("900").join("stat"), "900 (flowsdn-agent) S 1 1 1 0 -1 0 0 0 0 0 10 5 0 0 20 0 1 0 1 0 0")
-            .expect("stat");
+        fs::write(
+            root.join("900").join("stat"),
+            "900 (flowsdn-agent) S 1 1 1 0 -1 0 0 0 0 0 10 5 0 0 20 0 1 0 1 0 0",
+        )
+        .expect("stat");
         fs::write(root.join("900").join("status"), "VmRSS:\t2048 kB\n").expect("status");
         let usage = Usage::start(&root, 900).expect("start");
         let (cpu, rss) = usage.finish().expect("finish");

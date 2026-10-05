@@ -40,8 +40,10 @@ fn perf() -> ExitCode {
     let error = std::process::Command::new("/opt/flowsdn/bin/flowsdn-perf")
         .arg("run")
         .exec();
-    report::emit(&serde_json::json!({"test": "perf-setup", "status": "fail", "ms": 0,
-        "detail": format!("cannot start /opt/flowsdn/bin/flowsdn-perf: {error}")}));
+    report::emit(
+        &serde_json::json!({"test": "perf-setup", "status": "fail", "ms": 0,
+        "detail": format!("cannot start /opt/flowsdn/bin/flowsdn-perf: {error}")}),
+    );
     report::emit(&serde_json::json!({"summary": {"pass": 0, "fail": 1, "skip": 0}}));
     ExitCode::from(2)
 }

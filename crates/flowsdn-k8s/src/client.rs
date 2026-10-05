@@ -264,9 +264,9 @@ impl JsonClient {
         let take = u64::try_from(self.limits.list_bytes).unwrap_or(u64::MAX);
         let mut reader = Box::pin(stream).take(take);
         tokio::time::timeout(self.limits.timeout, reader.read_to_end(&mut bytes))
-        .await
-        .map_err(|_| Error("Kubernetes response timeout".into()))?
-        .map_err(|_| Error("Kubernetes response read failed".into()))?;
+            .await
+            .map_err(|_| Error("Kubernetes response timeout".into()))?
+            .map_err(|_| Error("Kubernetes response read failed".into()))?;
         let value = if bytes.iter().all(u8::is_ascii_whitespace) {
             Value::Null
         } else {

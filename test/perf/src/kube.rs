@@ -143,11 +143,19 @@ impl Kube {
 
     /// Poll a pod until it has a pod IP and is Running; returns the IP and the
     /// time from `created`.
-    pub fn wait_ip(&self, name: &str, created: Instant, timeout: Duration) -> Result<(IpAddr, Duration)> {
+    pub fn wait_ip(
+        &self,
+        name: &str,
+        created: Instant,
+        timeout: Duration,
+    ) -> Result<(IpAddr, Duration)> {
         let path = format!("{}/{name}", self.pods_path());
         loop {
             let pod = self.get(&path)?;
-            let phase = pod.pointer("/status/phase").and_then(Value::as_str).unwrap_or("");
+            let phase = pod
+                .pointer("/status/phase")
+                .and_then(Value::as_str)
+                .unwrap_or("");
             if let Some(ip) = pod
                 .pointer("/status/podIP")
                 .and_then(Value::as_str)
@@ -160,7 +168,9 @@ impl Kube {
                 return Err(format!("pod {name} ended: {phase}"));
             }
             if created.elapsed() > timeout {
-                return Err(format!("pod {name} has no pod IP after {timeout:?} (phase {phase:?})"));
+                return Err(format!(
+                    "pod {name} has no pod IP after {timeout:?} (phase {phase:?})"
+                ));
             }
             std::thread::sleep(Duration::from_millis(100));
         }
@@ -169,7 +179,10 @@ impl Kube {
     /// Create a server pod on `node` and wait for its pod IP.
     pub fn place_server(&self, name: &str, app: &str, node: &str, image: &Image) -> Result<Placed> {
         let created = Instant::now();
-        self.create(&self.pods_path(), &self.pod(name, app, node, image, &["server"]))?;
+        self.create(
+            &self.pods_path(),
+            &self.pod(name, app, node, image, &["server"]),
+        )?;
         let (ip, ip_after) = self.wait_ip(name, created, Duration::from_secs(180))?;
         Ok(Placed {
             name: name.into(),
@@ -226,13 +239,20 @@ pub fn nodes(kube: &Kube) -> Result<Vec<(String, u64)>> {
 }
 pub fn ready_nodes(list: &Value) -> Vec<(String, u64)> {
     let mut out = Vec::new();
-    for node in list.get("items").and_then(Value::as_array).into_iter().flatten() {
+    for node in list
+        .get("items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
         let ready = node
             .pointer("/status/conditions")
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .any(|c| c.get("type") == Some(&json!("Ready")) && c.get("status") == Some(&json!("True")));
+            .any(|c| {
+                c.get("type") == Some(&json!("Ready")) && c.get("status") == Some(&json!("True"))
+            });
         let unschedulable = node.pointer("/spec/unschedulable") == Some(&json!(true));
         let pods = node
             .pointer("/status/allocatable/pods")
@@ -256,9 +276,18 @@ pub fn ready_endpoints(slices: &Value) -> usize {
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .flat_map(|s| s.get("endpoints").and_then(Value::as_array).into_iter().flatten())
+        .flat_map(|s| {
+            s.get("endpoints")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+        })
         .filter(|e| e.pointer("/conditions/ready") != Some(&json!(false)))
-        .map(|e| e.get("addresses").and_then(Value::as_array).map_or(0, Vec::len))
+        .map(|e| {
+            e.get("addresses")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len)
+        })
         .sum()
 }
 
@@ -276,7 +305,10 @@ mod tests {
             {"metadata":{"name":"c"},"status":{"conditions":[{"type":"Ready","status":"False"}]}},
             {"metadata":{"name":"d"},"status":{"conditions":[{"type":"Ready","status":"True"}]}}
         ]});
-        assert_eq!(ready_nodes(&list), vec![("a".to_owned(), 250), ("d".to_owned(), 110)]);
+        assert_eq!(
+            ready_nodes(&list),
+            vec![("a".to_owned(), 250), ("d".to_owned(), 110)]
+        );
         let slices = json!({"items":[
             {"endpoints":[{"addresses":["10.0.0.1"]},{"addresses":["10.0.0.2"],"conditions":{"ready":false}}]},
             {"endpoints":[{"addresses":["10.0.0.3"],"conditions":{"ready":true}}]}

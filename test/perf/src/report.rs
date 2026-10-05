@@ -35,8 +35,10 @@ impl Report {
         }
     }
     fn line(&self, test: &str, status: &str, elapsed: Duration, detail: &str, metrics: &Value) {
-        emit(&json!({"test": test, "status": status, "ms": ms(elapsed), "detail": detail,
-            "flavor": self.flavor, "node": self.node, "metrics": metrics}));
+        emit(
+            &json!({"test": test, "status": status, "ms": ms(elapsed), "detail": detail,
+            "flavor": self.flavor, "node": self.node, "metrics": metrics}),
+        );
     }
     pub fn pass(&mut self, test: &str, elapsed: Duration, detail: &str, metrics: Value) {
         self.pass = self.pass.saturating_add(1);
@@ -51,7 +53,11 @@ impl Report {
         self.line(test, "skip", Duration::ZERO, detail, &json!({}));
     }
     /// Run one measurement: Ok((detail, metrics)) passes, Err(detail) fails.
-    pub fn measure(&mut self, test: &str, f: impl FnOnce() -> Result<(String, Value), String>) -> bool {
+    pub fn measure(
+        &mut self,
+        test: &str,
+        f: impl FnOnce() -> Result<(String, Value), String>,
+    ) -> bool {
         let start = Instant::now();
         match f() {
             Ok((detail, metrics)) => {
@@ -70,8 +76,10 @@ impl Report {
         self.line(test, "fail", Duration::ZERO, detail, &json!({}));
     }
     pub fn finish(self) -> ExitCode {
-        emit(&json!({"summary": {"pass": self.pass, "fail": self.fail, "skip": self.skip},
-            "flavor": self.flavor, "node": self.node}));
+        emit(
+            &json!({"summary": {"pass": self.pass, "fail": self.fail, "skip": self.skip},
+            "flavor": self.flavor, "node": self.node}),
+        );
         if self.infrastructure {
             ExitCode::from(2)
         } else if self.fail > 0 {

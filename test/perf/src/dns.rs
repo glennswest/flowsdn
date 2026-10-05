@@ -42,7 +42,9 @@ pub fn query(id: u16, name: &str, kind: u16) -> Option<Vec<u8>> {
     packet.extend_from_slice(&id.to_be_bytes());
     packet.extend_from_slice(&[0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0]);
     for label in name.trim_end_matches('.').split('.') {
-        let length = u8::try_from(label.len()).ok().filter(|n| (1..64).contains(n))?;
+        let length = u8::try_from(label.len())
+            .ok()
+            .filter(|n| (1..64).contains(n))?;
         packet.push(length);
         packet.extend_from_slice(label.as_bytes());
     }
@@ -115,11 +117,14 @@ mod tests {
 
     #[test]
     fn query_and_response_codec() {
-        let packet = query(0x1234, "kube-dns.kube-system.svc.cluster.local.", TYPE_A)
-            .expect("query");
+        let packet =
+            query(0x1234, "kube-dns.kube-system.svc.cluster.local.", TYPE_A).expect("query");
         assert_eq!(packet.get(..2), Some([0x12, 0x34].as_slice()));
         assert_eq!(packet.get(12), Some(&8));
-        assert_eq!(packet.len(), 12 + 1 + 8 + 1 + 11 + 1 + 3 + 1 + 7 + 1 + 5 + 1 + 4);
+        assert_eq!(
+            packet.len(),
+            12 + 1 + 8 + 1 + 11 + 1 + 3 + 1 + 7 + 1 + 5 + 1 + 4
+        );
         assert!(query(1, "a..b", TYPE_A).is_none());
         assert!(query(1, &"x".repeat(64), TYPE_A).is_none());
         let mut reply = packet.clone();
