@@ -1,4 +1,5 @@
-//! Bounded JSON Node/Pod transport. Callers own relist, backoff and publication.
+//! Bounded JSON Node/Pod transport, and single JSON requests (`send_json`).
+//! Callers own relist, backoff and publication.
 //! TLS/authentication use kube; no informer or runtime controller is implied.
 use crate::{Error, watch::Scope};
 use futures::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, TryStreamExt};
@@ -177,6 +178,10 @@ impl JsonClient {
             .header(ACCEPT, crate::JSON_CONTENT_TYPE)
             .body(Body::empty())
             .map_err(|_| Error("invalid Kubernetes request".into()))?;
+        self.authorize(&mut request).await?;
+        Ok(request)
+    }
+    async fn authorize(&self, request: &mut Request<Body>) -> Result<(), Error> {
         if let Some(path) = &self.token_file {
             // Follow projected-secret symlinks, but never block on a FIFO or
             // read from another special file. Async file work stays off the executor.
@@ -211,7 +216,64 @@ impl JsonClient {
             header.set_sensitive(true);
             request.headers_mut().insert(AUTHORIZATION, header);
         }
-        Ok(request)
+        Ok(())
+    }
+    /// One JSON request to an API `path` (absolute, with any query string):
+    /// create, read, patch or delete an object. Returns the HTTP status and the
+    /// response body (`Null` when empty), bounded like a list. A non-success
+    /// status is returned, not an error, so the caller can handle 404/409.
+    pub async fn send_json(
+        &self,
+        method: http::Method,
+        path: &str,
+        body: Option<&Value>,
+    ) -> Result<(u16, Value), Error> {
+        if !path.starts_with('/') || path.contains(['\r', '\n', ' ']) {
+            return Err(Error("invalid Kubernetes API path".into()));
+        }
+        let content = match body {
+            Some(value) => Body::from(
+                serde_json::to_vec(value).map_err(|_| Error("invalid request body".into()))?,
+            ),
+            None => Body::empty(),
+        };
+        let content_type = if method == http::Method::PATCH {
+            "application/merge-patch+json"
+        } else {
+            crate::JSON_CONTENT_TYPE
+        };
+        let mut request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(ACCEPT, crate::JSON_CONTENT_TYPE)
+            .header(http::header::CONTENT_TYPE, content_type)
+            .body(content)
+            .map_err(|_| Error("invalid Kubernetes request".into()))?;
+        self.authorize(&mut request).await?;
+        let response = tokio::time::timeout(self.limits.timeout, self.client.send(request))
+            .await
+            .map_err(|_| Error("Kubernetes request timeout".into()))?
+            .map_err(|_| Error("Kubernetes request failed".into()))?;
+        let status = response.status().as_u16();
+        let stream = response
+            .into_body()
+            .into_data_stream()
+            .map_err(io::Error::other)
+            .into_async_read();
+        let mut bytes = Vec::new();
+        let take = u64::try_from(self.limits.list_bytes).unwrap_or(u64::MAX);
+        let mut reader = Box::pin(stream).take(take);
+        tokio::time::timeout(self.limits.timeout, reader.read_to_end(&mut bytes))
+        .await
+        .map_err(|_| Error("Kubernetes response timeout".into()))?
+        .map_err(|_| Error("Kubernetes response read failed".into()))?;
+        let value = if bytes.iter().all(u8::is_ascii_whitespace) {
+            Value::Null
+        } else {
+            serde_json::from_slice(&bytes)
+                .map_err(|_| Error(format!("Kubernetes HTTP {status}: invalid JSON body")))?
+        };
+        Ok((status, value))
     }
     async fn open(&self, scope: &Scope, query: &Query<'_>) -> Result<Reader, Error> {
         let response = self

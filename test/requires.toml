@@ -26,3 +26,15 @@ host_paths_read_only = ["/opt/cni/bin", "/run"]
 [long]
 privileged = true
 host_paths_read_only = ["/opt/cni/bin", "/run"]
+
+# The network performance suite (#321): the same measurements on any CNI
+# flavor, so a Cilium and a flowsdn run on the same machines compare. It runs
+# in the pod network (not privileged, no host network): it creates server
+# pods, Services and NetworkPolicies in its own namespace and pins them to its
+# node and another one, so it reads the cluster's nodes. host_pid lets it find
+# the CNI agent (flowsdn-agent or cilium-agent) for the flavor and its CPU and
+# memory, and the host's conntrack count (/proc/1/net/stat/nf_conntrack).
+[perf]
+budget_secs = 1800
+host_pid = true
+cluster_read = [{ apiGroup = "", resource = "nodes" }]

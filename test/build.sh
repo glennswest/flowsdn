@@ -9,6 +9,7 @@
 #   - the BPF objects, with tools/build-bpf.sh (pinned nightly and bpf-linker),
 #     and checks the agent's embedded local-delivery and socket-lb are this commit's,
 #   - the agent, CNI, kernel fixtures and /test (static musl),
+#   - flowsdn-perf, the perf suite (GNU, Fedora OpenSSL),
 # and stages them in test/.stage. It does not build the image itself.
 set -euo pipefail
 target=${1:-x86_64-unknown-linux-musl}
@@ -46,9 +47,14 @@ cargo build --manifest-path "$root/Cargo.toml" --release --locked --target "$tar
 out=${CARGO_TARGET_DIR:-$root/target}/$target/release
 
 cp "$out/flowsdn-test" "$stage/test"
+# The perf suite (#321) talks to the Kubernetes API over Fedora system OpenSSL
+# (ADR-0016), so it is a GNU binary; the image carries openssl-libs.
+gnu=x86_64-unknown-linux-gnu
+cargo build --manifest-path "$root/Cargo.toml" --release --locked --target "$gnu" -p flowsdn-perf
+cp "${CARGO_TARGET_DIR:-$root/target}/$gnu/release/flowsdn-perf" "$stage/opt/flowsdn/bin/"
 cp "$out/flowsdn-agent" "$out/flowsdn-cni" "$stage/opt/flowsdn/bin/"
 for f in "${fixtures[@]}"; do cp "$out/$f" "$stage/opt/flowsdn/fixtures/"; done
-for f in "$stage/test" "$stage"/opt/flowsdn/bin/* "$stage"/opt/flowsdn/fixtures/*; do
+for f in "$stage/test" "$stage"/opt/flowsdn/bin/flowsdn-{agent,cni} "$stage"/opt/flowsdn/fixtures/*; do
     if file "$f" | grep -q 'dynamically linked'; then
         echo "test/build.sh: $f is not static" >&2
         exit 1

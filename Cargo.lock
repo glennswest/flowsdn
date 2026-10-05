@@ -593,6 +593,17 @@ name = "flowsdn-packaging"
 version = "0.14.0"
 
 [[package]]
+name = "flowsdn-perf"
+version = "0.14.0"
+dependencies = [
+ "flowsdn-k8s",
+ "http",
+ "libc",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "flowsdn-policy"
 version = "0.14.0"
 dependencies = [

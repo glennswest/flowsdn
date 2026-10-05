@@ -1,5 +1,6 @@
 //! flowsdn's test container (stormcentral docs/test-standard.md, #303): one
-//! image, started as `/test short|medium|long`.
+//! image, started as `/test short|medium|long`, and `/test perf`, the network
+//! performance suite (#321, `flowsdn-perf`).
 //!
 //! Every suite first probes the node's own flowsdn read-only (a skip where the
 //! node is not the flowsdn flavor), then runs the datapath of the commit under
@@ -24,11 +25,25 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [mode] if mode == "--endpoint" => lab::endpoint_worker(),
         [suite] if ["short", "medium", "long"].contains(&suite.as_str()) => run(suite),
+        [suite] if suite == "perf" => perf(),
         _ => {
-            eprintln!("usage: /test short|medium|long");
+            eprintln!("usage: /test short|medium|long|perf");
             ExitCode::from(2)
         }
     }
+}
+
+/// The network performance suite (#321) is a separate GNU binary (it talks
+/// to the Kubernetes API over Fedora OpenSSL); hand the process over to it.
+fn perf() -> ExitCode {
+    use std::os::unix::process::CommandExt;
+    let error = std::process::Command::new("/opt/flowsdn/bin/flowsdn-perf")
+        .arg("run")
+        .exec();
+    report::emit(&serde_json::json!({"test": "perf-setup", "status": "fail", "ms": 0,
+        "detail": format!("cannot start /opt/flowsdn/bin/flowsdn-perf: {error}")}));
+    report::emit(&serde_json::json!({"summary": {"pass": 0, "fail": 1, "skip": 0}}));
+    ExitCode::from(2)
 }
 
 fn run(suite: &str) -> ExitCode {

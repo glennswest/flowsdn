@@ -1,0 +1,25 @@
+[package]
+name = "flowsdn-perf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "flowsdn's network performance suite (#321): the same measurements on any CNI flavor, for flowsdn vs Cilium."
+
+[lints]
+workspace = true
+
+# A GNU binary: the Kubernetes API client is flowsdn-k8s over Fedora system
+# OpenSSL (ADR-0016). `/test perf` (static musl) execs it.
+[dependencies]
+serde_json.workspace = true
+libc.workspace = true
+http = "=1.3.1"
+tokio = { workspace = true, features = ["rt", "time"] }
+flowsdn-k8s = { path = "../../crates/flowsdn-k8s", version = "=0.14.0" }
+
+[[bin]]
+name = "flowsdn-perf"
+path = "src/main.rs"
