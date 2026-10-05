@@ -201,7 +201,11 @@ fn controller_lists_watches_and_derives_the_pool() {
                 .nodes
                 .iter()
                 .any(|n| n.name == "peer" && n.internal_ips.len() == 2);
-            if view.nodes_synced && view.pods_synced && peer_v6 && watches.load(Ordering::SeqCst) >= 2 {
+            if view.nodes_synced
+                && view.pods_synced
+                && peer_v6
+                && watches.load(Ordering::SeqCst) >= 2
+            {
                 assert_eq!(view.health().get("state"), Some(&json!("Ok")));
                 let ips = view.ip_list();
                 let rows = ips.as_array().expect("rows");
