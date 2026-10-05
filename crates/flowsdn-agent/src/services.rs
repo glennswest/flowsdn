@@ -114,7 +114,11 @@ pub fn frontends(services: &[ServiceInfo], slices: &[SliceInfo]) -> Vec<Frontend
                         } else {
                             continue;
                         };
-                        for address in endpoint.addresses.iter().filter(|a| a.is_ipv4() == ip.is_ipv4()) {
+                        for address in endpoint
+                            .addresses
+                            .iter()
+                            .filter(|a| a.is_ipv4() == ip.is_ipv4())
+                        {
                             set.insert(Address {
                                 ip: *address,
                                 port: target,

@@ -362,11 +362,7 @@ fn load_socket_lb(
 /// Own the socket-LB maps: on every new frontend set (after both lists are
 /// complete) and every 30 s, plan from what the kernel holds and apply.
 /// Nothing is pruned before the first complete lists.
-fn service_loop(
-    receiver: &mpsc::Receiver<Vec<socket::Service>>,
-    view: &Shared,
-    lb: &mut SocketLb,
-) {
+fn service_loop(receiver: &mpsc::Receiver<Vec<socket::Service>>, view: &Shared, lb: &mut SocketLb) {
     let mut desired: Option<Vec<socket::Service>> = None;
     loop {
         match receiver.recv_timeout(RECONCILE_INTERVAL) {
@@ -403,8 +399,7 @@ fn program(
     let current = lb.dump().map_err(|e| format!("read LB maps: {e}"))?;
     let want = socket::desired(&current, services)?;
     let ops = socket::plan(&current, &want.maps);
-    lb.apply(&ops)
-        .map_err(|e| format!("write LB maps: {e}"))?;
+    lb.apply(&ops).map_err(|e| format!("write LB maps: {e}"))?;
     Ok(want.ids)
 }
 

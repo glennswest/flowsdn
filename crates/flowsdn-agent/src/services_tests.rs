@@ -122,7 +122,10 @@ fn terminating_endpoints_serve_only_when_none_is_ready() {
     assert_eq!(backends(&out, 53, PROTO_UDP), vec!["10.172.0.8:53"]);
     let out = frontends(
         &[kube_dns()],
-        &[dns_slice(vec![terminating, endpoint("10.172.0.9", true, true, false)])],
+        &[dns_slice(vec![
+            terminating,
+            endpoint("10.172.0.9", true, true, false),
+        ])],
     );
     assert_eq!(backends(&out, 53, PROTO_UDP), vec!["10.172.0.9:53"]);
     // No slices: frontends exist without backends (connect fails).
@@ -144,13 +147,20 @@ fn families_ports_and_protocols_must_match() {
     foreign.namespace = "default".into();
     let out = frontends(
         &[service],
-        &[dns_slice(vec![endpoint("10.172.0.5", true, true, false)]), v6, renamed, foreign],
+        &[
+            dns_slice(vec![endpoint("10.172.0.5", true, true, false)]),
+            v6,
+            renamed,
+            foreign,
+        ],
     );
     // 2 IPs x 3 TCP/UDP ports; SCTP is skipped.
     assert_eq!(out.len(), 6);
     let v6_dns = out
         .iter()
-        .find(|f| f.service.frontend.ip == ip("fd00:10:96::a") && f.service.frontend.proto == PROTO_UDP)
+        .find(|f| {
+            f.service.frontend.ip == ip("fd00:10:96::a") && f.service.frontend.proto == PROTO_UDP
+        })
         .expect("v6 frontend");
     assert_eq!(v6_dns.service.backends.len(), 1);
     assert_eq!(

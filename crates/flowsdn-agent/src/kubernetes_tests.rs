@@ -196,7 +196,10 @@ fn ip_list_has_node_identities_pod_labels_and_host_ips() {
     assert_eq!(view.health().get("state"), Some(&json!("Ok")));
     view.service_lb = true;
     assert_eq!(view.health().get("state"), Some(&json!("Warning")));
-    assert!(view.refresh_frontends().is_none(), "no frontends before both lists");
+    assert!(
+        view.refresh_frontends().is_none(),
+        "no frontends before both lists"
+    );
     view.services_synced = true;
     view.slices_synced = true;
     assert_eq!(view.refresh_frontends(), Some(vec![]));

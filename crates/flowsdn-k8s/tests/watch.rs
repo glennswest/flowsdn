@@ -345,25 +345,41 @@ fn services_parse_dual_stack_cluster_ips_and_skip_headless() {
     assert_eq!(parsed.service_type, "ClusterIP");
     assert_eq!(
         parsed.cluster_ips,
-        vec!["10.96.0.10".parse::<std::net::IpAddr>().expect("ip"), "fd00:10:96::a".parse().expect("ip")]
+        vec![
+            "10.96.0.10".parse::<std::net::IpAddr>().expect("ip"),
+            "fd00:10:96::a".parse().expect("ip")
+        ]
     );
     assert_eq!(parsed.ports.len(), 3);
     let unnamed = parsed.ports.get(2).expect("port");
-    assert_eq!((unnamed.name.as_str(), unnamed.protocol.as_str(), unnamed.port), ("", "TCP", 9153));
+    assert_eq!(
+        (
+            unnamed.name.as_str(),
+            unnamed.protocol.as_str(),
+            unnamed.port
+        ),
+        ("", "TCP", 9153)
+    );
     let headless = json!({"metadata":meta("headless"),"spec":{"clusterIP":"None","clusterIPs":["None"],
         "ports":[{"port":80}]}});
     let Resource::Service(parsed) = Scope::Services.parse(&headless).expect("headless") else {
         panic!("service row expected");
     };
     assert!(parsed.cluster_ips.is_empty());
-    let external = json!({"metadata":meta("ext"),"spec":{"type":"ExternalName","externalName":"example.com"}});
+    let external =
+        json!({"metadata":meta("ext"),"spec":{"type":"ExternalName","externalName":"example.com"}});
     let Resource::Service(parsed) = Scope::Services.parse(&external).expect("external") else {
         panic!("service row expected");
     };
     assert!(parsed.cluster_ips.is_empty() && parsed.ports.is_empty());
-    let bad_port = json!({"metadata":meta("bad"),"spec":{"clusterIP":"10.96.0.2","ports":[{"port":0}]}});
+    let bad_port =
+        json!({"metadata":meta("bad"),"spec":{"clusterIP":"10.96.0.2","ports":[{"port":0}]}});
     assert!(Scope::Services.parse(&bad_port).is_err());
-    assert!(Scope::Services.parse(&json!({"kind":"Pod","metadata":meta("x"),"spec":{}})).is_err());
+    assert!(
+        Scope::Services
+            .parse(&json!({"kind":"Pod","metadata":meta("x"),"spec":{}}))
+            .is_err()
+    );
 }
 
 #[test]
@@ -377,7 +393,8 @@ fn endpoint_slices_parse_conditions_and_ports() {
             {"addresses":["10.172.0.6"],"conditions":{"ready":false,"serving":true,"terminating":true}},
             {"addresses":["10.172.0.7"]}],
         "ports":[{"name":"dns","protocol":"UDP","port":53},{"name":"all"}]});
-    let Resource::EndpointSlice(parsed) = Scope::EndpointSlices.parse(&slice).expect("slice") else {
+    let Resource::EndpointSlice(parsed) = Scope::EndpointSlices.parse(&slice).expect("slice")
+    else {
         panic!("slice row expected");
     };
     assert_eq!(parsed.service_name, "kube-dns");
@@ -387,8 +404,18 @@ fn endpoint_slices_parse_conditions_and_ports() {
         .iter()
         .map(|e| (e.ready, e.serving, e.terminating))
         .collect();
-    assert_eq!(states, vec![(true, true, false), (false, true, true), (true, true, false)]);
-    assert_eq!(parsed.endpoints.first().map(|e| e.node_name.as_str()), Some("pvetest1"));
+    assert_eq!(
+        states,
+        vec![
+            (true, true, false),
+            (false, true, true),
+            (true, true, false)
+        ]
+    );
+    assert_eq!(
+        parsed.endpoints.first().map(|e| e.node_name.as_str()),
+        Some("pvetest1")
+    );
     assert_eq!(parsed.ports.first().and_then(|p| p.port), Some(53));
     assert_eq!(parsed.ports.get(1).and_then(|p| p.port), None);
     assert!(Scope::EndpointSlices.namespaced());
