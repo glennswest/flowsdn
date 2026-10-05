@@ -50,6 +50,23 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### ClusterIP service datapath — #292 (P0), 2026-10-05
+
+Owner (stormcos#265, 2026-10-05): no kube-proxy at all; flowsdn routes ClusterIPs itself, kube-dns and
+the `kubernetes` Service on a single flowsdn node first. Design: socket LB (spec 05 §3.8, retained for
+milestone 2 by ADR-0011) — cgroup v2 connect/sendmsg/recvmsg/getpeername hooks (v4, v6, v4-mapped)
+over the Cilium-format `cilium_lb{4,6}_services_v2`/`_backends_v3`/`_reverse_sk` maps; translation at
+the socket, so no packet DNAT/conntrack and it works for pods and the host. The agent fills the maps
+from Service + EndpointSlice watches (`kubernetes` feature) with a stateless diff against kernel map
+contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots/backends after).
+
+- [ ] BPF `socket-lb` object (8 cgroup programs, random backend slot, UDP reverse map); embedded in the agent; test/build.sh stale check.
+- [ ] flowsdn-lb `socket` planner (desired frontends -> map contents -> ordered upserts/deletes, stable service/backend IDs) with tests.
+- [ ] Loader `SocketLb` (load, optional pins, cgroup attach AllowMultiple, map apply).
+- [ ] flowsdn-k8s Service/EndpointSlice scopes; agent watches, services thread, `GET /v1/service`, config `kubernetes.service-lb`/`cgroup-root`.
+- [ ] Manifests (RBAC services/endpointslices, host cgroup mount), docs, changelog; live fixture `socket-lb-live` in the medium suite.
+- [ ] sc-build; golden via `stormcentral component stage flowsdn`; status on #292 (remaining milestone-2 boxes stay open).
+
 ### Kubernetes-connected agent — #291 (P0), 2026-10-05
 
 Master (stormcos#171): flowsdn builds the Kubernetes-connected agent (flowsdn-k8s, glibc, system
