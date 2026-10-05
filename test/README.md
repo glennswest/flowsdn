@@ -86,6 +86,25 @@ themselves don't fail a run: comparing them is stormcentral's side-by-side view.
 Run it on the same machines with each flavor installed: pvetest1+pvetest2
 as a pair, then the Dell and a blade.
 
+## `perf-scale`: how far each flavor goes (#321)
+
+The owner asked for "a set of tests with both, in 100 unit (containers), and see
+how far we go". `/test perf-scale` adds server pods in steps of 100,
+round-robin over the ready nodes, all behind one ClusterIP Service. A step
+passes when:
+
+- every new pod gets a pod IP within 10 minutes;
+- the Service's EndpointSlices hold every pod;
+- 3 s of connects through the ClusterIP all succeed;
+- the newest pod answers TCP_RR.
+
+Each `scale-step-<n>` line carries the total pods, the step's p50/p99 to a pod
+IP and the agent's CPU and RSS. The ramp stops at the first failing step, or at
+the cluster's allocatable pods (`STORM_SCALE_MAX` caps it). Then `scale-max`
+reports the most pods that had working networking and why it stopped, and
+`scale-drain` deletes everything and times the Service emptying. The budget is
+4 h, so it is a night run on a pve VM.
+
 ## Machine requirements
 
 [`requires.toml`](requires.toml) declares a privileged pod for each suite, plus

@@ -6,7 +6,7 @@ paginate: true
 
 <!-- Render: npx @marp-team/marp-cli docs/presentation.md (HTML), add --pdf for PDF.
      Facts as of 2026-10-05, flowsdn main (golden-flowsdn-a7ee3f63195b from c6c96c7,
-     perf suite at e397e16). Every claim points at code or a doc you can check. -->
+     perf suite at e397e16; sizes from sc-build 2026-10-05). Every claim points at code or a doc you can check. -->
 
 # flowsdn
 
@@ -180,6 +180,44 @@ Tracked by milestone issues; none of this is claimed to work:
 
 Not yet: a test-machine run of medium or perf (registries full,
 stormcentral#376), or a two-node cluster run.
+
+---
+
+## flowsdn vs Cilium: what ships
+
+| | flowsdn (golden-flowsdn-a7ee3f63195b) | Cilium v1.20.1 (`quay.io/cilium/cilium`) |
+|---|---|---|
+| Language | Rust userspace; Rust (aya) BPF, compiled at build time | Go userspace; C BPF compiled **on the node** (clang + llc in the image) |
+| Executables on a node | **2**: `flowsdn-agent`, `flowsdn-cni` (BPF objects embedded, 172 KB + 199 KB) | **18** in the agent image (agent, dbg, health, bugtool, hubble, envoy, clang, llc, bpftool, cni, …) |
+| Size of those executables | agent **9.9 MB** (GNU, Kubernetes mode) or 4.1 MB (static musl), CNI **3.1 MB**: about **13 MB** | **607.5 MB** of executables (`cilium-agent` alone 133.6 MB); 257.7 MB compressed image |
+| Other images | none (operator/relay not built yet, #296) | operator, hubble-relay, clustermesh-apiserver, envoy: separate pulls |
+
+The golden is 64 MB with its Fedora glibc/OpenSSL runtime and `nft`. Cilium's
+figures were measured on 2026-09-22 (`docs/validation/cilium-image-sizes-2026-09-22.json`).
+**Not like for like:** Cilium also does policy, Hubble, L7/Envoy, encryption and
+ClusterMesh, which flowsdn doesn't yet.
+
+---
+
+## flowsdn vs Cilium: scale and memory
+
+**Cilium, published:**
+- [Scalability report](https://docs.cilium.io/en/latest/operations/performance/scalability/report/):
+  1,000 nodes (2 vCPU / 4 GB), 50,000 pods. Agent memory averaged 438 MiB
+  (max 573 MiB), plus 10.5 KiB per pod in the cluster; eBPF maps up to
+  462.7 MiB; agent CPU averaged 3.38% of a 2-vCPU node.
+- [Cilium 1.5](https://cilium.io/blog/2019/04/24/cilium-15/): 5,000 nodes and
+  100,000 pods. [ClusterMesh](https://docs.cilium.io/en/stable/network/clustermesh/setup/):
+  255 clusters (511 with fewer identities).
+
+**flowsdn, today:**
+- **Not measured yet.** `perf` (#321) measures agent CPU/RSS, readiness and
+  throughput on the same machines as Cilium. `perf-scale` adds pods in steps
+  of 100 until a step fails, on both flavors.
+- Limits in the code: 1,024 local endpoints per node (endpoint map); endpoint
+  IDs up to 4,095 by default; socket LB 65,536 service-map entries (frontends
+  plus backend slots) and 65,536 backends per family; one route per other
+  node, with no node-count limit coded. Only one node has run it so far.
 
 ---
 
