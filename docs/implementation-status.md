@@ -28,8 +28,15 @@ pinning or subsystem libraries are absent are **not current status**.
   feature (GNU target, #291) wires the watches in: `auto` pools from the Node
   (spec 07 §3.4), direct node routes (spec 10 §3.2.3, persisted ownership,
   conflict and reachability checks), forwarding sysctls and the `GET /v1/ip`
-  / `GET /v1/node/routes` views. Verified by unit tests and a controller test
-  against a loopback HTTPS API server; not yet on a cluster (two-node
+  / `GET /v1/node/routes` views. With `service-lb` (#292) it watches Services
+  and EndpointSlices and load balances ClusterIPs at the socket: the
+  `socket-lb` cgroup programs (TCP/UDP, IPv4/IPv6/IPv4-mapped, UDP reverse
+  translation) over the Cilium-layout LB maps, programmed by a stateless
+  planner (`flowsdn_lb::socket`) in spec 05 §3.4 write order; `GET
+  /v1/service`. NodePort/LoadBalancer, affinity, Maglev, socket termination,
+  tc-level LB and policy are not implemented. Verified by unit tests and a
+  controller test against a loopback HTTPS API server; the `socket-lb-live`
+  kernel fixture is in the medium suite but has not run on a test machine; not yet on a cluster (two-node
   acceptance on pvetest1 + pvetest2, stormcentral#360; the golden's GNU
   runtime, stormcos#171). No cluster identity allocator, BPF ipcache, Hubble
   or operator. `deploy/stormcos/manifests-kubernetes/` is its deployment.

@@ -69,3 +69,14 @@ The BPF crate is a separate workspace with its own lockfile and toolchain.
 Format it separately with `cargo +nightly-2026-04-03 fmt --manifest-path
 crates/flowsdn-bpf/Cargo.toml`. Its dependency policy must also be checked
 against the repository's `deny.toml`.
+
+Run `socket-lb-live` with the `socket-lb` BPF object for the ClusterIP socket
+LB (#292). In an anonymous network namespace it loads the object through the
+agent's `SocketLb` owner, attaches the eight cgroup programs to a temporary
+child of its own cgroup, and programs frontends with the agent's planner
+(`flowsdn_lb::socket`), checking that the kernel maps then equal the plan. It
+checks TCP connect over IPv4, IPv6 and IPv4-mapped IPv6; unconnected and
+connected UDP with the reply source and `getpeername` reverse translated; EPERM
+for a frontend without backends; an untouched non-frontend address; a backend
+move; both of two backends chosen over 64 connects; and frontend removal down
+to empty maps. It restores its cgroup membership on exit.

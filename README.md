@@ -96,11 +96,15 @@ On a node, the edition's DaemonSet runs `image: flowsdn`. The stormcos kubelet
 so nothing is pulled. Its init container runs `/opt/cni/bin/flowsdn install` to
 put the plugin and conflist on the host; the agent runs privileged in the host
 network namespace with `/var/run/cilium` and `/var/lib/flowsdn` from the host.
-ClusterIPs don't route yet: the edition runs no kube-proxy, and flowsdn's own
-Service datapath is milestone 2 (#292). The node provides masquerade for
-off-node egress. A multi-node cluster uses the Kubernetes-mode manifests
+The edition runs no kube-proxy. ClusterIP Services go through flowsdn's own
+socket load balancing in the Kubernetes-mode agent (#292): its cgroup
+`connect`/`sendmsg`/`recvmsg`/`getpeername` programs send a socket aimed at a
+ClusterIP:port straight to a ready EndpointSlice backend, before routing,
+for every pod and host process. The static single-node manifests have no
+Service handling. The node provides masquerade for off-node egress. A
+multi-node cluster uses the Kubernetes-mode manifests
 (`deploy/stormcos/manifests-kubernetes/`): pod CIDRs from the Node, direct
-routes to the other nodes' pods (#291). Applying the
+routes to the other nodes' pods (#291), and ClusterIP socket LB (#292). Applying the
 manifests is stormcos's side
 ([stormcos#261](https://github.com/glennswest/stormcos/issues/261)). See the
 [deployment contract](deploy/stormcos/README.md).

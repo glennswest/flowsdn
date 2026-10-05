@@ -53,7 +53,10 @@ These initial limits and socket permissions are narrower than the full API spec.
 
 With the `kubernetes` feature (GNU target, Fedora OpenSSL) and a `kubernetes`
 config section, the agent watches Nodes and Pods, resolves `auto` pools from its
-Node and owns direct routes to the other nodes' pod CIDRs; see
+Node and owns direct routes to the other nodes' pod CIDRs. With `service-lb`
+(default on) it also watches Services and EndpointSlices and load balances
+ClusterIPs at the socket with the embedded `socket-lb` object (`bpf/socket-lb`,
+checked like `local-delivery`), attached to `cgroup-root`; see
 [runtime](../../docs/runtime.md#kubernetes-mode). Identity allocation, policy
 reconciliation, stale-pod garbage collection and graceful shutdown remain
 outstanding. Configured pins allow endpoint maps

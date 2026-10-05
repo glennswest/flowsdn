@@ -35,7 +35,7 @@ built from `test/`, run as Jobs on the test machines, with hardware/kernel/resou
 requirements declared rather than assuming a particular machine. flowsdn's image
 is described in [test/README.md](../test/README.md): `test/build.sh` builds the
 BPF objects with `tools/build-bpf.sh`, refuses a stale embedded
-`local-delivery` in the agent, and builds the static musl binaries; and stormcentral
+`local-delivery` or `socket-lb` in the agent, and builds the static musl binaries; and stormcentral
 runs `/test short|medium|long` with `stormcentral test run flowsdn <suite>`.
 Running it on a test machine is still open
 ([#303](https://github.com/glennswest/flowsdn/issues/303)).

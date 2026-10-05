@@ -124,7 +124,8 @@ expiration time out after 600 seconds.
 
 `GET /v1/healthz` reports initial API availability after restoration and queued
 deletion replay; in Kubernetes mode it adds a `kubernetes` member (`Ok` once
-the Node and Pod lists are synced and nothing failed). `/healthz` and `/readyz`
+the Node and Pod lists, and with `service-lb` the Service and EndpointSlice
+lists, are synced and nothing failed). `/healthz` and `/readyz`
 are not implemented. Module health marks identity and policy controllers as
 unavailable. The config response's `ipam-mode: kubernetes` is a compatibility
 value: allocation uses the configured pools, or with `auto` the pool resolved
@@ -162,16 +163,65 @@ With the `kubernetes` feature and section the agent:
   `<state-dir>/direct-routes.json` before they are added, so routes for nodes
   that left while the agent was down are deleted on the next reconcile. It
   reconciles on every change of the desired set and every 30 s;
-- serves `GET /v1/ip` and `GET /v1/node/routes` ([API](agent-api.md)).
+- with `service-lb` (default on), lists and watches Services and
+  EndpointSlices and load balances ClusterIPs at the socket (below);
+- serves `GET /v1/ip`, `GET /v1/node/routes` and `GET /v1/service`
+  ([API](agent-api.md)).
 
 Not yet: a cluster identity allocator (pod IP cache entries carry labels but no
-numeric identity), BPF ipcache maps, tunnel routing, masquerade, Services
-(#292) and policy. Unit tests and a loopback-HTTPS controller test cover the
+numeric identity), BPF ipcache maps, tunnel routing, masquerade, NodePort and
+LoadBalancer Services, and policy. Unit tests and a loopback-HTTPS controller test cover the
 watch and route logic; two-node pod traffic has not been demonstrated
 (pvetest1 + pvetest2, stormcentral#360).
 
-Without Kubernetes mode the agent does no Node/Pod discovery and installs no
-remote routes; uplink ingress attachment is not wired in either mode.
+### ClusterIP socket LB (#292)
+
+Spec 05 §3.8. The agent embeds the `socket-lb` BPF object: eight
+`cgroup_sock_addr` programs (`connect4/6`, `sendmsg4/6`, `recvmsg4/6`,
+`getpeername4/6`) over `cilium_lb{4,6}_services_v2`, `cilium_lb{4,6}_backends_v3`
+and `cilium_lb{4,6}_reverse_sk` (spec 01 layouts). At startup it loads them
+and attaches them with `BPF_F_ALLOW_MULTI` to `kubernetes.cgroup-root`
+(default `/sys/fs/cgroup`; the manifests mount the host's root at
+`/run/flowsdn/cgroupv2`). A cgroup program sees every socket of every process
+below it, whatever its network namespace, so pods and the host are covered.
+
+- `connect` (TCP, connected UDP) and `sendmsg` (unconnected UDP) to a
+  frontend `ClusterIP:port/proto` pick a backend slot uniformly at random and
+  rewrite the destination before routing; the packets carry the backend
+  address, so there is no packet DNAT and no conntrack entry. IPv4-mapped
+  IPv6 destinations use the IPv4 maps.
+- For UDP the program records `(socket cookie, backend) -> frontend` in the
+  LRU reverse map; `recvmsg` and `getpeername` show the backend as the
+  frontend, so resolvers that check the reply source accept it.
+- A frontend whose backend count is 0 fails `connect`/`sendmsg` with EPERM.
+  Other destinations are untouched.
+
+The frontends: every cluster IP (`spec.clusterIPs`, headless skipped) x every
+TCP/UDP port of every Service; backends are the addresses of the Service's
+EndpointSlices of the same family on the slice port with the same name and
+protocol, `ready` endpoints first, serving-terminating ones only when none is
+ready. A services thread owns the maps. Once both lists are complete, on each
+change and every 30 s, it reads the maps, plans the difference
+(`flowsdn_lb::socket`: service IDs and backend IDs are kept from what the
+maps hold, and new IDs never reuse a live one) and writes in spec 05 §3.4
+order: backends, slots, then the master entry that publishes the new count,
+then stale masters, slots and backends. A failed write is retried from the
+kernel state on the next pass and reported in health (`services`).
+
+With `bpf-pin-root` the maps and links are pinned under `<pin root>/socket-lb`.
+A restarted agent reuses the maps (a pinned map with another layout refuses
+startup), attaches its programs, then releases the old links. Without a pin
+root the links detach when the agent exits. Not implemented: NodePort and
+LoadBalancer/externalIPs frontends, session affinity, Maglev, topology
+hints, `internalTrafficPolicy: Local`, skip-LB for local redirect policy,
+socket termination when a backend goes away (an existing connection stays
+on its backend), SCTP, and tc-level LB for traffic that arrives from outside
+the node. `socket-lb-live` (medium test suite) checks the programs on a
+kernel; no cluster run yet.
+
+Without Kubernetes mode the agent does no Node/Pod discovery, installs no
+remote routes and has no Service handling; uplink ingress attachment is not
+wired in either mode.
 
 stormcos ships flowsdn as a **golden** containing the static musl agent
 (`/flowsdn-agent`, BPF object embedded) and CNI (`/opt/cni/bin/flowsdn`). Nodes
@@ -190,9 +240,10 @@ manifests (`deploy/stormcos/manifests/`): a DaemonSet with `image: flowsdn`
 `flowsdn-cni install`, and the agent with `egress: stack` and a static
 single-node IPv4 pool. Whether stormcos applies them is
 [stormcos#261](https://github.com/glennswest/stormcos/issues/261); the node
-provides masquerade. The edition runs no kube-proxy: ClusterIPs wait on
-flowsdn's Service datapath (#292). `deploy/stormcos/manifests-kubernetes/` is
-the multi-node set for the Kubernetes-connected agent (below).
+provides masquerade. The edition runs no kube-proxy: ClusterIPs are handled by
+the Kubernetes-mode agent's socket LB (#292, below), so they need
+`deploy/stormcos/manifests-kubernetes/`, the multi-node set for the
+Kubernetes-connected agent.
 
 `flowsdn-operator` and `flowsdn-hubble` are libraries, without operator or relay
 service binaries. Their duties have not moved into the agent. CRD registration

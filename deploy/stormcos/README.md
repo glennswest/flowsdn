@@ -20,9 +20,9 @@ read-only RBAC, the agent ConfigMap and the agent DaemonSet:
 
 What the node must provide besides the manifests:
 
-- **Services.** None yet: the owner chose flowsdn's own service handling over
-  kube-proxy (stormcos#265), which is milestone 2 (#292). Until it lands,
-  ClusterIPs don't route in the flowsdn edition.
+- **Services.** Not with these manifests. The owner chose flowsdn's own
+  service handling over kube-proxy (stormcos#265). It is the Kubernetes-mode
+  agent's socket LB (#292, below), so ClusterIPs need `manifests-kubernetes/`.
 - **Off-node egress.** `net.ipv4.ip_forward=1` and a masquerade for
   `10.244.0.0/24` leaving the node. flowsdn does not masquerade yet.
 - **Kernel.** 6.6 or newer, with TCX and BTF.
@@ -55,12 +55,25 @@ musl agent refuses its configuration. The differences:
   that is only reachable through a router is reported as an error.
 - The agent sets `net.ipv4.ip_forward`, `net.ipv4.conf.all.forwarding` (IPv6
   forwarding with an IPv6 pool) to 1 and `net.ipv4.conf.all.rp_filter` to 0.
+- `service-lb` (#292): ClusterIP Services without kube-proxy. The agent also
+  watches Services and EndpointSlices (RBAC adds `services` and
+  `discovery.k8s.io/endpointslices`, read-only) and attaches its socket-lb
+  programs to the host's cgroup v2 root, mounted from the host's
+  `/sys/fs/cgroup` at `/run/flowsdn/cgroupv2` (`cgroup-root`). A socket that
+  connects or sends to a ClusterIP:port (TCP or UDP, IPv4, IPv6 or
+  IPv4-mapped) is pointed at a random ready backend before routing; UDP
+  replies are shown as from the ClusterIP. That covers kube-dns
+  (10.96.0.10:53) and the `kubernetes` Service (10.96.0.1:443 -> the
+  apiserver). NodePort, LoadBalancer IPs, externalIPs and session affinity
+  are not handled; a ClusterIP:port with no ready backend fails `connect`
+  with EPERM. Without a pin root the programs detach when the agent exits,
+  and ClusterIPs stop working until it is back.
 
 Off-node egress still needs a masquerade, now for the node's derived pool.
 Moving a node from the static pool to `auto` needs its endpoints gone (a fresh
 install or a drain): restore refuses addresses outside the pool. Status is on
-the agent socket: `GET /v1/healthz` (`kubernetes` member), `GET /v1/node/routes`
-and `GET /v1/ip`.
+the agent socket: `GET /v1/healthz` (`kubernetes` member), `GET /v1/node/routes`,
+`GET /v1/ip` and `GET /v1/service`.
 
 The DaemonSet carries no probe: the agent's health is on its Unix socket only
 (see below). It runs privileged as a validation baseline, not a measured
@@ -70,7 +83,7 @@ and drops no capabilities, so [deploy/seccomp](../seccomp) is a no-op on stormco
 ## Golden delivery
 
 The golden carries `/flowsdn-agent` (with the `local-delivery` BPF object
-embedded) and `/opt/cni/bin/flowsdn`, both static musl, mounted on a node at
+embedded; the Kubernetes-mode agent also embeds `socket-lb`) and `/opt/cni/bin/flowsdn`, both static musl, mounted on a node at
 `/pallets/flowsdn`. The stormcos kubelet's stormpump runtime maps an image name
 to `/pallets/<last path component>`, so `image: flowsdn` roots the container on
 the golden; a different last component (for example `flowsdn-runtime`) is a
