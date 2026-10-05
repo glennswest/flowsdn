@@ -50,6 +50,20 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Network performance suite — #321 (P0), 2026-10-05
+
+Owner: flowsdn "totally done" with performance comparisons against Cilium, the data for making it
+primary. A `perf` suite (declared in test/requires.toml, budget 1800 s) runs unchanged on both
+flavors: an orchestrator pod (pod network, host PID for agent cost, cluster read of nodes) places
+server pods (same image, `flowsdn-perf server`) on its own node and on another node through the
+Kubernetes API, and measures with Rust clients. JSON lines per metric with `flavor`.
+`flowsdn-perf` is a GNU binary (flowsdn-k8s, Fedora OpenSSL, ADR-0016); `/test` stays static musl.
+
+- [ ] flowsdn-k8s: generic JSON request (create/get/delete namespaced objects).
+- [ ] `test/perf` crate `flowsdn-perf`: server; TCP_RR/UDP_RR p50/p99; TCP stream 1 and 8; connect rate; DNS latency; pod network readiness; policy enforcement time and 100/1,000-rule throughput; scale (pods ready, endpoints per Service, conntrack); agent CPU/RSS idle and under load. Unit tests for stats, DNS codec, wire protocol, flavor detection.
+- [ ] `/test perf` dispatch; requires.toml `[perf]`; Containerfile/build.sh; docs, changelog.
+- [ ] sc-build; run `stormcentral test run flowsdn perf` on a Cilium and a flowsdn machine when the test registries have space (stormcentral#376).
+
 ### ClusterIP service datapath — #292 (P0), 2026-10-05
 
 Owner (stormcos#265, 2026-10-05): no kube-proxy at all; flowsdn routes ClusterIPs itself, kube-dns and
