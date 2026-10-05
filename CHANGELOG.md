@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-10-04
+- **docs:** Comment mining since 2026-10-04 (24 comments, 33 issues): no new issues; additions on stormcentral#360 (install the flavor under test on both, per #383) and #309 (the #256 row recommendation). Two-node target settled by stormcentral#383.
+
 ### 2026-10-03
 - **docs:** Comment mining since 2026-09-29: filed stormcentral#383/#384, stormconsole#83, flowsdn#314; corrected the two-node pair claim on #291.
 - **docs:** Refresh README, `docs/runtime.md`, `docs/implementation-status.md`, `docs/build-and-test.md`, `docs/README.md`, the agent/CNI crate READMEs, `deploy/stormcos/README.md` and CLAUDE.md from the code changed since 2026-09-25: the embedded BPF object and optional `bpf-object`, `egress: fib|stack`, the `flowsdn-cni install` node installer (`CNI_CONF_DIR`, `00-flowsdn.conflist`, type `cilium-cni`), the edition manifests and golden-flowsdn-600aa332b66d. The validation examples now run `image: flowsdn` with the embedded object, and their conflist matches the installer. The seccomp README says stormpump does not enforce seccomp. CRD docs now say `flowsdn.io/v1alpha1` (#299 done). ADR-0006 notes that rustkube-node now uses a pinned git dependency (#308). The kernel requirements note that stormcos ships Fedora 7.2.5, not Rocky 6.12, and spec 13 notes that rustkube serves protobuf (#309).
