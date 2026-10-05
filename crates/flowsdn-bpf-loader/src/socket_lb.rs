@@ -52,7 +52,10 @@ pub struct SocketLb {
     links: Vec<FdLink>,
 }
 
-fn take<K: aya::Pod, V: aya::Pod>(bpf: &mut Ebpf, name: &str) -> KernelResult<HashMap<MapData, K, V>> {
+fn take<K: aya::Pod, V: aya::Pod>(
+    bpf: &mut Ebpf,
+    name: &str,
+) -> KernelResult<HashMap<MapData, K, V>> {
     let map = bpf
         .take_map(name)
         .ok_or_else(|| format!("socket-lb object has no map {name}"))?;
