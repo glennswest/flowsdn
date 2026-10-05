@@ -28,3 +28,6 @@ build/
 tmp/
 temp/
 test/.stage/
+
+# Generated per run by tools/aya-kfunc-watch.sh
+tools/aya-kfunc-watch/Cargo.lock
