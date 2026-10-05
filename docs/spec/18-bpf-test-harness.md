@@ -382,8 +382,9 @@ non-copied field is non-zero. The subset flowsdn relies on is `priority`,
 `hwtstamp`. **to-verify:** whether `ifindex` selects a real device in the
 current netns (and therefore requires the harness to create one before the
 run) or is advisory, and whether `tc_index` and `ingress_ifindex` are settable,
-differ across the 6.6/6.12/6.18 rows of the kernel matrix; §9.1 pins this down
-with a harness self-test on every matrix row before the corpus is trusted.
+differ across the kernel rows; §9.1 pins this down with a harness self-test on
+every row before the corpus is trusted. The rows are the kernels stormcos ships
+(owner, #256; §10.2).
 Where a field turns out not to be settable, the affected cases move to the
 netns tier (§3.7). Like the reference, flowsdn sends a 256-byte `ctx_in`
 buffer (larger than `sizeof(struct __sk_buff)`, zero-padded) so that kernels
@@ -1078,7 +1079,7 @@ verifier-safe Rust/BPF coverage tool appears (§12.6).
 The harness is test infrastructure, so its own bugs are silent. It gets its own
 tests, at the tiers of §10.3.
 
-### 9.1 Harness self-tests, privileged (run first on every kernel matrix row)
+### 9.1 Harness self-tests, privileged (run first on every kernel row: the kernels stormcos ships, §10.2)
 
 - [ ] `BPF_PROG_TEST_RUN` round-trip: a trivial `#[classifier]` that returns
       `TC_ACT_OK` and copies `data_in` to `data_out` unchanged — asserts the
@@ -1186,7 +1187,14 @@ way (§3.9).
 
 ### 10.2 Kernel matrix
 
-The harness runs on every row of `docs/kernel-requirements.md` §5.3:
+**Decision (owner, 2026-10-05, #256):** the rows that gate the harness are the
+kernels stormcos ships: Fedora `7.2.5-100.fc43` today. They run in the test
+container's `medium` suite on the stormcos test machines
+(`stormcentral test run flowsdn medium`). The table below is the original
+reference-derived plan. It is kept for reference and is not a gate; a kernel
+matrix runner for it is added only if a user needs another kernel.
+
+The original plan ran the harness on every row of `docs/kernel-requirements.md` §5.3:
 
 | Row | Kernel | x86-64 | arm64 | BPF unit tests |
 |---|---|---|---|---|

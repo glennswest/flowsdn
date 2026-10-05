@@ -102,7 +102,8 @@ the program, write some back, read ctx_out; record a per-kernel table on 6.6/6.1
 
 - [x] BPF `skb-ctx` (observe + write programs) and `skb-ctx-matrix` harness (flowsdn-bpftest); JSON table, exit 1 if a relied-upon field is unusable. Built and Clippy-clean at 2c1ee75.
 - [x] Added to the test container's medium suite; stormcentral's runner built the image (run ca5226ff48) but the push hit 507 (stormcentral#376).
-- [ ] Owner decision asked on #256 (wait-owner): stormcos boots 7.2.5 (stormcos#57), not the documented 6.6/6.12/6.18 rows, and nothing runs a chosen kernel. Rows to verify?
+- [x] Owner decision (2026-10-05, option 1): the rows are the kernels stormcos ships (7.2.5-100.fc43 today); spec 18 §3.3(d)/§9.1/§10.2 and kernel-requirements §5.3 updated.
+- [ ] Run `stormcentral test run flowsdn medium` on a test machine; close #256 when fixture-skb-ctx-matrix passes and record the per-field table in spec 18.
 
 ### stormcos flowsdn edition pod network — #296 (P0), 2026-10-03
 

@@ -27,7 +27,7 @@ never compare **version strings** (section 4.7).
 > (6.17.1-300.fc43 on 11.29–11.30); the Rocky pin in stormcos `kernel/README.md`
 > is stale. So the `e2e-stormcos` row below tests a kernel no stormcos release
 > runs, and "6.12 (stormcos)" is not the shipped line. The 6.6 general minimum
-> (TCX) is unaffected; which kernel rows to verify is the owner question on #256.
+> (TCX) is unaffected. Which kernel rows to verify was settled on #256: see §5.3.
 
 > **Socket termination (2026-10-05, #3).** The owner chose netlink
 > `SOCK_DIAG` `SOCK_DESTROY` for socket termination (milestone 3). The
@@ -698,6 +698,17 @@ BPF unit tests (`BPF_PROG_RUN`) and e2e must run on arm64 too because they
 exercise the JIT output and the drivers.
 
 ### 5.3 Test matrix recommendation
+
+> **Decision (owner, 2026-10-05, #256).** The kernel rows that gate flowsdn
+> are **the kernels stormcos ships**: today's release kernel is Fedora
+> `7.2.5-100.fc43`, later the one stormcos#246/#254 settle on. They run
+> through flowsdn's test container (`test/`, `stormcentral test run flowsdn
+> <suite>`) on the stormcos test machines. flowsdn exists to be stormcos's
+> network, and stormcos ships only Fedora kernels. The 6.6/6.12/6.18, Rocky and
+> LVH rows below come from the reference's CI and this spec's origins, not
+> from any machine flowsdn runs. They are not gates. A wider matrix (a kernel
+> matrix runner) is added only if a user needs another kernel. The 6.6
+> minimum (TCX) stays a documented floor; nothing runs it.
 
 Start from the reference's LVH set (`quay.io/lvh-images/kind:{5.15,6.1,6.6,
 6.12,6.18}-<date>`, amd64 only) and drop the rows below the flowsdn minimum.

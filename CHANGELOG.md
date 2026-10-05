@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-05
+- **docs:** The kernel rows for the `__sk_buff` ctx matrix and the BPF harness are the kernels stormcos ships (owner decision on #256): spec 18 §3.3(d), §9.1, §10.2 and kernel-requirements §5.3. The 6.6/6.12/6.18 and Rocky rows are reference only.
 - **docs:** Resolve #3: `.rodata.config`, XDP frags and TCX pin/update verified, and the kfunc gap is recorded. Socket termination uses netlink `SOCK_DESTROY` (owner, option 1), with #315 watching aya. The kernel requirements now require `INET_DIAG_DESTROY=y`, and the shipped Fedora `7.2.5-100.fc43` kernel config sets it.
 - **feat:** Add `tools/aya-kfunc-watch.sh` and the `tools/aya-kfunc-watch` probe (#315). It loads the `loader-kfunc` object with the latest aya release and aya main, built with the pinned and latest bpf-linker. It exits 0 while none can relocate `bpf_sock_destroy`, 3 when one can (`--file-issue` opens the P1 switch issue), and 1 when the check breaks. First run: 0.14.0 fails with `UnknownFunction`. aya main fails with `ExternNotFound`: it resolves `.ksyms` externs since aya-rs/aya#1372, but bpf-linker emits no `.ksyms` entry for a Rust extern.
 - **chore:** Stage golden-flowsdn-84a7153fcfd0 at 26b7aea (release request stormcos#255); agreed on stormcos#265 that the flowsdn edition runs kube-proxy until milestone 2 (#292).
