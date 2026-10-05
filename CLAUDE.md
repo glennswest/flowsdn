@@ -50,6 +50,21 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Kubernetes-connected agent — #291 (P0), 2026-10-05
+
+Master (stormcos#171): flowsdn builds the Kubernetes-connected agent (flowsdn-k8s, glibc, system
+OpenSSL) first; stormcos packages its Fedora runtime. Two-node target settled: pvetest1 + pvetest2,
+both flowsdn flavor (stormcentral#383, run by stormcentral#360). No stormcos node sets
+`spec.podCIDR`, so the agent derives its pod CIDR as spec 07 §3.4 says (10.<last IPv4 byte>.0.0/16).
+
+- [ ] Agent cargo feature `kubernetes` (off by default; the musl golden build is unchanged).
+- [ ] Config `kubernetes{node-name, kubeconfig, auto-direct-node-routes, direct-routing-skip-unreachable}`; pools/gateways `auto` from the Node (spec 07 §3.4).
+- [ ] Node + cluster Pod watches (flowsdn-k8s, relist with backoff) on a controller thread.
+- [ ] Remote node routes `<podCIDR> via <nodeIP> proto kernel` (spec 10 §3.2.3/§5.2): conflict check, persisted set for prune across restarts.
+- [ ] IP cache view `GET /v1/ip` (pods, node IPs with reserved host/remote-node identities) and `GET /v1/node/routes`; health module for Kubernetes.
+- [ ] Docs, changelog; sc-build with `--features kubernetes` (gnu) plus the default build.
+- [ ] Hand the binary to stormcos#171; propose #291 after it. Remaining: cluster identity allocation, two-node acceptance on pvetest1+2.
+
 ### aya kfunc watch — #315 (P2), 2026-10-05
 
 Owner (via #3, option 1): M3 socket termination uses netlink SOCK_DIAG/SOCK_DESTROY; check aya
