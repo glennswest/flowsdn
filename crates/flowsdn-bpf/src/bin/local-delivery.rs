@@ -18,9 +18,12 @@ use flowsdn_bpf_abi::endpoint::{EndpointInfo, EndpointKey};
 static CILIUM_LXC: HashMap<EndpointKey, EndpointInfo> =
     HashMap::with_max_entries(1024, BPF_F_NO_PREALLOC);
 
-/// Nonzero: a destination that is not a local endpoint goes to the host
-/// stack (routing, netfilter, kube-proxy) instead of a FIB redirect. The
-/// loader overrides it before load (`egress: stack` in the agent config).
+/// Nonzero: every frame from an endpoint goes to the host stack (routing,
+/// netfilter, kube-proxy) instead of a BPF redirect, including traffic to
+/// another local endpoint: a reply from a local Service backend must pass
+/// conntrack for its reverse DNAT, and the endpoint's ARP replies must reach
+/// the host so it can deliver routed packets. The loader overrides it before
+/// load (`egress: stack` in the agent config).
 // SAFETY: unique immutable symbol in the loader configuration datasec.
 #[unsafe(link_section = ".rodata.config")]
 #[unsafe(no_mangle)]
@@ -28,6 +31,11 @@ static __config_stack_egress: u32 = 0;
 
 #[classifier]
 pub fn local_delivery(ctx: TcContext) -> i32 {
+    // SAFETY: valid immutable global; volatile prevents constant folding so
+    // the loader's pre-load override is what the kernel program reads.
+    if unsafe { core::ptr::read_volatile(&raw const __config_stack_egress) } != 0 {
+        return TC_ACT_OK;
+    }
     let Some(key) = destination(&ctx) else {
         return TC_ACT_SHOT;
     };
@@ -35,11 +43,6 @@ pub fn local_delivery(ctx: TcContext) -> i32 {
     // lookup storage is RCU protected for this invocation. Copy immediately,
     // retain no reference across helpers, and never write through the pointer.
     let Some(endpoint) = (unsafe { CILIUM_LXC.get(key).copied() }) else {
-        // SAFETY: valid immutable global; volatile prevents constant folding so
-        // the loader's pre-load override is what the kernel program reads.
-        if unsafe { core::ptr::read_volatile(&raw const __config_stack_egress) } != 0 {
-            return TC_ACT_OK;
-        }
         return flowsdn_bpf::native_routing::route(&ctx);
     };
     deliver(&ctx, endpoint)
