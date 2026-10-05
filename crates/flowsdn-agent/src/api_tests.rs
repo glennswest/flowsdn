@@ -364,6 +364,7 @@ fn auto_pools_need_kubernetes_and_resolve_from_the_node() {
     }
     #[cfg(not(feature = "kubernetes"))]
     {
+        fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
         let mut read = Config::read(&path).expect("auto pool");
         assert!(connect_kubernetes(&mut read).is_err());
     }
