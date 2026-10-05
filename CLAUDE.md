@@ -62,7 +62,8 @@ Kubernetes API, and measures with Rust clients. JSON lines per metric with `flav
 - [x] flowsdn-k8s: generic JSON request (`send_json`).
 - [x] `test/perf` crate `flowsdn-perf` with all metric groups; unit tests (stats, DNS codec, loopback wire protocols, /proc parsing, node/endpoint parsing).
 - [x] `/test perf` dispatch; requires.toml `[perf]`; Containerfile/build.sh; docs (test/README metric table), changelog.
-- [ ] sc-build; run `stormcentral test run flowsdn perf` on a Cilium and a flowsdn machine when the test registries have space (stormcentral#376).
+- [x] sc-build at e397e16: fmt, Clippy, 705 tests, test/build.sh, podman build; `/test perf` execs flowsdn-perf in the image. Status on #321; format on stormcentral#412.
+- [ ] Runs on both flavors: 8c822b3547 (C2NR0Q2) 507 on push (stormcentral#376); f0107a4784/f68f31432b no pvetest VMs until install. Proposed after stormcentral#376.
 
 ### ClusterIP service datapath — #292 (P0), 2026-10-05
 
