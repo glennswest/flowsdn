@@ -220,14 +220,8 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
         u32::MAX,
     );
     let mut service_ids: BTreeMap<Address, u16> = BTreeMap::new();
-    let masters4 = current
-        .services4
-        .iter()
-        .map(|(k, v)| (frontend4(*k), *v));
-    let masters6 = current
-        .services6
-        .iter()
-        .map(|(k, v)| (frontend6(*k), *v));
+    let masters4 = current.services4.iter().map(|(k, v)| (frontend4(*k), *v));
+    let masters6 = current.services6.iter().map(|(k, v)| (frontend6(*k), *v));
     let mut used_services: BTreeSet<u32> = BTreeSet::new();
     for ((frontend, slot), value) in masters4.chain(masters6) {
         let rev = LbService::from_bytes(value).rev_nat_index;

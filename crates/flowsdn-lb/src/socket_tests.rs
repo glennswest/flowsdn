@@ -51,7 +51,10 @@ fn cluster_ip_resolves_to_each_backend() {
     let got = resolve(&maps, udp).expect("present").expect("valid");
     assert_eq!(
         got,
-        vec![addr("10.172.0.5", 53, PROTO_UDP), addr("10.172.0.9", 53, PROTO_UDP)]
+        vec![
+            addr("10.172.0.5", 53, PROTO_UDP),
+            addr("10.172.0.9", 53, PROTO_UDP)
+        ]
     );
     // Two frontends (UDP, TCP) x (master + 2 slots); four distinct backends.
     assert_eq!(maps.services4.len(), 6);
@@ -90,7 +93,10 @@ fn ids_survive_restart_and_churn() {
         vec![addr("10.172.0.9", 53, PROTO_UDP)]
     );
     sync(&mut maps, &dns(&[]));
-    assert_eq!(resolve(&maps, udp).expect("present").expect("valid"), vec![]);
+    assert_eq!(
+        resolve(&maps, udp).expect("present").expect("valid"),
+        vec![]
+    );
     assert!(maps.backends4.is_empty());
     // Service removed entirely.
     sync(&mut maps, &[]);
@@ -142,7 +148,8 @@ fn dual_stack_and_mixed_backends() {
         vec![addr("fd00::1", 6443, PROTO_TCP)]
     );
     assert_eq!(maps.backends6.len(), 1);
-    assert!(desired(&maps, &[services[0].clone(), services[0].clone()]).is_err());
+    let twice: Vec<Service> = services.iter().take(1).cycle().take(2).cloned().collect();
+    assert!(desired(&maps, &twice).is_err());
 }
 
 #[test]
