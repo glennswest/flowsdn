@@ -59,3 +59,49 @@ fn route_dump_preserves_gateway_host_prefix_and_mtu() {
         assert_eq!(route.gateway, None);
     }
 }
+
+#[test]
+fn main_route_dump_keeps_protocol_and_any_device() {
+    for (destination, gateway) in [("10.2.0.0", "192.0.2.2"), ("fd02::", "2001:db8::2")] {
+        let destination: IpAddr = destination.parse().expect("destination");
+        let gateway: IpAddr = gateway.parse().expect("gateway");
+        let mut value = message(destination.is_ipv6());
+        value.header.destination_prefix_length = 24;
+        value.header.protocol = RouteProtocol::Kernel;
+        value
+            .attributes
+            .push(RouteAttribute::Destination(destination.into()));
+        value
+            .attributes
+            .push(RouteAttribute::Gateway(gateway.into()));
+        let route = main_route_info(value.clone()).expect("main route");
+        assert_eq!(
+            route,
+            MainRoute {
+                destination,
+                prefix: 24,
+                gateway: Some(gateway),
+                protocol: 2,
+            }
+        );
+        value.header.protocol = RouteProtocol::Static;
+        assert_eq!(main_route_info(value.clone()).map(|r| r.protocol), Some(4));
+        value.attributes.push(RouteAttribute::Table(100));
+        assert!(main_route_info(value).is_none());
+    }
+    let built = gateway_route(
+        "10.2.0.0".parse().expect("ip"),
+        24,
+        "192.0.2.2".parse().expect("ip"),
+    )
+    .expect("route");
+    assert_eq!(built.header.protocol, RouteProtocol::Kernel);
+    assert!(
+        gateway_route(
+            "10.2.0.0".parse().expect("ip"),
+            24,
+            "2001:db8::2".parse().expect("ip"),
+        )
+        .is_err()
+    );
+}

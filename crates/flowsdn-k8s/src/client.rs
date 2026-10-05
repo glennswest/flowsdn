@@ -67,7 +67,7 @@ pub fn request_uri(scope: &Scope, query: &Query<'_>) -> Result<String, Error> {
     }
     let path = match scope {
         Scope::Nodes => "/api/v1/nodes",
-        Scope::LocalPods { .. } => "/api/v1/pods",
+        Scope::LocalPods { .. } | Scope::Pods => "/api/v1/pods",
     };
     let mut params = Vec::new();
     if let Some(selector) = scope.field_selector() {

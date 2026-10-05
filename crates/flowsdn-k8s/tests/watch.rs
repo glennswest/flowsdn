@@ -299,3 +299,38 @@ fn sparse_and_nullable_optional_fields_remain_empty() {
         assert!(parsed.pod_cidrs.is_empty() && parsed.internal_ips.is_empty());
     }
 }
+
+#[test]
+fn cluster_pod_scope_accepts_every_node_and_unscheduled_pods() {
+    assert_eq!(Scope::Pods.field_selector(), None);
+    assert!(Scope::Pods.namespaced());
+    assert!(!Scope::Nodes.namespaced());
+    let mut value = pod("pod", "uid", "rv");
+    *value.pointer_mut("/spec/nodeName").expect("node name") = json!("node-b");
+    let Resource::Pod(parsed) = Scope::Pods.parse(&value).expect("remote pod") else {
+        panic!("pod")
+    };
+    assert_eq!(parsed.node_name, "node-b");
+    value
+        .pointer_mut("/spec")
+        .and_then(Value::as_object_mut)
+        .expect("spec")
+        .remove("nodeName");
+    let Resource::Pod(parsed) = Scope::Pods.parse(&value).expect("pending pod") else {
+        panic!("pod")
+    };
+    assert_eq!(parsed.node_name, "");
+    run(async {
+        let mut watch = WatchState::new(Scope::Pods, Limits::default()).expect("state");
+        watch.begin_list();
+        watch
+            .list_page(&list(vec![value.clone()], "1", ""))
+            .await
+            .expect("list");
+        watch
+            .event(&event("DELETED", value))
+            .await
+            .expect("delete");
+        assert_eq!(watch.snapshot().len(), 0);
+    });
+}

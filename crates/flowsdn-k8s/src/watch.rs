@@ -55,16 +55,21 @@ impl Keyed for Resource {
 pub enum Scope {
     Nodes,
     LocalPods { node_name: String },
+    /// Every Pod in the cluster (the IP cache); unscheduled Pods have an empty node.
+    Pods,
 }
 impl Scope {
     pub fn field_selector(&self) -> Option<String> {
         match self {
-            Self::Nodes => None,
+            Self::Nodes | Self::Pods => None,
             Self::LocalPods { node_name } => Some(format!("spec.nodeName={node_name}")),
         }
     }
+    pub fn namespaced(&self) -> bool {
+        !matches!(self, Self::Nodes)
+    }
     pub fn parse(&self, value: &Value) -> Result<Resource, Error> {
-        let namespaced = matches!(self, Self::LocalPods { .. });
+        let namespaced = self.namespaced();
         if let Some(kind) = value.get("kind") {
             let expected = if namespaced { "Pod" } else { "Node" };
             if text(kind)? != expected {
@@ -98,14 +103,21 @@ impl Scope {
                     internal_ips: ips,
                 }))
             }
-            Self::LocalPods { node_name } => {
-                let actual = required(
-                    value.get("spec").ok_or_else(|| error("missing Pod spec"))?,
-                    "nodeName",
-                )?;
-                if actual != node_name {
-                    return Err(error("Pod does not match local node selector"));
-                }
+            Self::LocalPods { .. } | Self::Pods => {
+                let spec = value.get("spec").ok_or_else(|| error("missing Pod spec"))?;
+                let actual = match self {
+                    Self::LocalPods { node_name } => {
+                        let actual = required(spec, "nodeName")?;
+                        if actual != node_name {
+                            return Err(error("Pod does not match local node selector"));
+                        }
+                        actual
+                    }
+                    _ => match spec.get("nodeName") {
+                        None | Some(Value::Null) => "",
+                        Some(v) => text(v)?,
+                    },
+                };
                 let host_network = match value.pointer("/spec/hostNetwork") {
                     None | Some(Value::Null) => false,
                     Some(v) => v.as_bool().ok_or_else(|| error("invalid hostNetwork"))?,
@@ -425,7 +437,7 @@ impl WatchState {
         } else {
             Some(self.scope.parse(object)?)
         };
-        let meta = metadata(object, matches!(self.scope, Scope::LocalPods { .. }))?;
+        let meta = metadata(object, self.scope.namespaced())?;
         let key = format!("{}/{}", meta.namespace, meta.name).into_bytes();
         let snapshot = self.table.snapshot();
         let previous = snapshot

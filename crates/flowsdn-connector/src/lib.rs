@@ -8,7 +8,10 @@ use rtnetlink::{
         address::AddressHeaderFlags,
         link::{LinkAttribute, LinkFlags, LinkMessage},
         neighbour::NeighbourState,
-        route::{RouteAddress, RouteAttribute, RouteMessage, RouteMetric, RouteScope, RouteType},
+        route::{
+            RouteAddress, RouteAttribute, RouteMessage, RouteMetric, RouteProtocol, RouteScope,
+            RouteType,
+        },
     },
 };
 use std::{error::Error, fs::File, future::Future, net::IpAddr, os::fd::AsRawFd, time::Duration};
@@ -68,6 +71,16 @@ pub struct Route {
     pub prefix: u8,
     pub gateway: Option<IpAddr>,
     pub mtu: Option<u32>,
+}
+
+/// A main-table unicast route to one prefix on any device, with its protocol
+/// (`RTPROT_KERNEL` is 2). Used to own direct node routes (spec 10 §5.2).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MainRoute {
+    pub destination: IpAddr,
+    pub prefix: u8,
+    pub gateway: Option<IpAddr>,
+    pub protocol: u8,
 }
 
 /// A synchronous facade with one namespace-bound socket and a bounded request
@@ -360,6 +373,57 @@ impl Connector {
             Ok(())
         })
     }
+    /// Main-table unicast routes whose destination is exactly `destination/prefix`.
+    pub fn main_routes_to(&self, destination: IpAddr, prefix: u8) -> Result<Vec<MainRoute>> {
+        self.run(async {
+            let mut request = RouteMessage::default();
+            request.header.address_family = if destination.is_ipv4() {
+                rtnetlink::packet_route::AddressFamily::Inet
+            } else {
+                rtnetlink::packet_route::AddressFamily::Inet6
+            };
+            let mut stream = self.handle.route().get(request).execute();
+            let mut result = Vec::new();
+            while let Some(message) = stream.try_next().await? {
+                if let Some(route) = main_route_info(message)
+                    && route.destination == destination
+                    && route.prefix == prefix
+                {
+                    result.push(route);
+                }
+            }
+            Ok(result)
+        })
+    }
+    /// `ip route replace <destination/prefix> via <gateway> proto kernel`; the
+    /// kernel picks the device and rejects a gateway that is not on a link.
+    pub fn replace_gateway_route(
+        &self,
+        destination: IpAddr,
+        prefix: u8,
+        gateway: IpAddr,
+    ) -> Result<()> {
+        let message = gateway_route(destination, prefix, gateway)?;
+        self.run(async {
+            self.handle.route().add(message).replace().execute().await?;
+            Ok(())
+        })
+    }
+    /// Delete exactly that route; an absent route (ESRCH) is success.
+    pub fn delete_gateway_route(
+        &self,
+        destination: IpAddr,
+        prefix: u8,
+        gateway: IpAddr,
+    ) -> Result<()> {
+        let message = gateway_route(destination, prefix, gateway)?;
+        self.run(async {
+            match self.handle.route().del(message).execute().await {
+                Err(rtnetlink::Error::NetlinkError(error)) if error.raw_code() == -3 => Ok(()),
+                result => Ok(result?),
+            }
+        })
+    }
     pub fn neighbour(&self, index: u32, address: IpAddr, mac: [u8; 6]) -> Result<()> {
         self.run(async {
             self.handle
@@ -422,6 +486,43 @@ pub fn in_namespace<T: Send + 'static>(
     })
     .join()
     .map_err(|_| "namespace worker panicked")?
+}
+
+fn gateway_route(destination: IpAddr, prefix: u8, gateway: IpAddr) -> Result<RouteMessage> {
+    if gateway.is_ipv4() != destination.is_ipv4() {
+        return Err("invalid route gateway family".into());
+    }
+    Ok(RouteMessageBuilder::<IpAddr>::new()
+        .destination_prefix(destination, prefix)?
+        .gateway(gateway)?
+        .protocol(RouteProtocol::Kernel)
+        .build())
+}
+
+fn main_route_info(message: RouteMessage) -> Option<MainRoute> {
+    use rtnetlink::packet_route::AddressFamily;
+    let mut route = MainRoute {
+        destination: match message.header.address_family {
+            AddressFamily::Inet => IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+            AddressFamily::Inet6 => IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED),
+            _ => return None,
+        },
+        prefix: message.header.destination_prefix_length,
+        gateway: None,
+        protocol: u8::from(message.header.protocol),
+    };
+    let mut table = u32::from(message.header.table);
+    for attribute in message.attributes {
+        match attribute {
+            RouteAttribute::Table(value) => table = value,
+            RouteAttribute::Destination(RouteAddress::Inet(ip)) => route.destination = ip.into(),
+            RouteAttribute::Destination(RouteAddress::Inet6(ip)) => route.destination = ip.into(),
+            RouteAttribute::Gateway(RouteAddress::Inet(ip)) => route.gateway = Some(ip.into()),
+            RouteAttribute::Gateway(RouteAddress::Inet6(ip)) => route.gateway = Some(ip.into()),
+            _ => {}
+        }
+    }
+    (table == 254 && message.header.kind == RouteType::Unicast).then_some(route)
 }
 
 fn route_info(message: RouteMessage, index: u32) -> Option<Route> {
