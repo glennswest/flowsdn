@@ -1321,7 +1321,7 @@ aya gaps and how each is filled:
 | BTF decl tags | not used (§3.7, §3.8 DEVIATIONS); tables in the ABI crate |
 | `.rodata.config` `set_global` | Aya 0.14 aliases this deprecated API to `override_global`; kernel map-observation probe must confirm default and overridden values, with wrong-size/missing-symbol negative controls; loader additionally validates the datasec name |
 | reachability analysis | new code over `aya_obj::Object` instruction slices (`Vec<Instruction>` with relocation info); ~1.5k lines |
-| kfunc/ksym relocation for `bpf_sock_destroy` | **Confirmed gap (2026-09-22):** pinned aya-obj 0.3 ordinary call relocation resolves object-local functions, not kernel BTF kfunc IDs. A dedicated relocation path or validated alternative is required; do not claim support from generated kfunc constants or generic CO-RE support |
+| kfunc/ksym relocation for `bpf_sock_destroy` | **Confirmed gap (2026-09-22):** pinned aya-obj 0.3 ordinary call relocation resolves object-local functions, not kernel BTF kfunc IDs. A dedicated relocation path or validated alternative is required; do not claim support from generated kfunc constants or generic CO-RE support. **2026-10-05:** aya main resolves `.ksyms` externs (aya-rs/aya#1372), but it is unreleased, and bpf-linker 0.11.1 emits no `.ksyms` entry for a Rust extern. M3 uses `SOCK_DESTROY` (owner, #3), and `tools/aya-kfunc-watch.sh` watches for the switch (#315). |
 | `PROG_ATTACH` without flags | shim (aya's `CgroupAttachMode` always sets a flag) |
 | possible-CPU count | `aya::util::nr_cpus()` reads `possible`; used for perf arrays, per-CPU maps and `.data.aux` |
 
@@ -1424,6 +1424,10 @@ open for a validated kfunc relocation implementation.
 Source check (2026-10-03): aya-obj 0.3.0 `relocate_calls` resolves calls
 only against functions inside the object (`UnknownFunction` otherwise). It has
 no `.ksyms` or kernel-BTF kfunc resolution, and `BPF_PSEUDO_KFUNC_CALL` appears
-only in generated bindings. How to fill the gap (SOCK_DIAG `SOCK_DESTROY` for M3,
-a flowsdn relocation pass, or waiting for upstream) is waiting on an owner
-decision on #3.
+only in generated bindings. Owner decision (#3, 2026-10-05): M3 socket termination uses netlink
+SOCK_DIAG `SOCK_DESTROY`, and the kfunc path waits for upstream.
+`tools/aya-kfunc-watch.sh` (#315) loads `loader-kfunc` with the latest aya
+release and aya main, using the pinned and latest bpf-linker. On 2026-10-05,
+0.14.0 failed with `UnknownFunction`. aya main (`1668342`, with aya-rs/aya#1372)
+failed with `ExternNotFound`: it resolves externs in the `.ksyms` BTF datasec,
+and the Rust object lists none.

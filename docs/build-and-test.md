@@ -42,6 +42,14 @@ Running it on a test machine is still open
 Unit tests, cross-compilation and namespace fixtures alone do not establish
 multi-node Kubernetes acceptance.
 
+`tools/aya-kfunc-watch.sh` checks whether the latest aya release, aya main or
+the latest bpf-linker can now relocate the `bpf_sock_destroy` kfunc. It exits 0
+while they can't, 3 once one can, and 1 if the check itself breaks. It is meant
+to run weekly through stormcentral
+([stormcentral#384](https://github.com/glennswest/stormcentral/issues/384)).
+See [its README](../tools/aya-kfunc-watch/README.md) and
+[#315](https://github.com/glennswest/flowsdn/issues/315).
+
 ## Goldens and release artifacts
 
 After an implementation is pushed and verified, request the flowsdn golden once:
