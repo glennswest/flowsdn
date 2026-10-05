@@ -56,10 +56,12 @@ Owner (via #3, option 1): M3 socket termination uses netlink SOCK_DIAG/SOCK_DEST
 weekly for kfunc relocation and switch to bpf_sock_destroy when it lands. GitHub Actions is off
 (#304) and stormcentral has no scheduled component jobs yet (stormcentral#384).
 
-- [ ] `tools/aya-kfunc-watch` probe (standalone crate, aya version chosen per run) + `tools/aya-kfunc-watch.sh`: builds loader-kfunc, loads it with the latest aya release and aya main; exit 0 still missing, 3 aya relocates kfuncs, 1 check broken; `--file-issue` opens/updates the P1 switch issue; `--load` adds the kernel load where privileged.
-- [ ] Docs (spec 01, kernel-requirements, tools README), changelog.
-- [ ] sc-build: run the watch against pinned/release/main; expect "missing".
-- [ ] Ask stormcentral#384 for the weekly run; #315 stays open for the switch (part 2) and is proposed after it.
+- [x] `tools/aya-kfunc-watch` probe + `tools/aya-kfunc-watch.sh` (aya release/main/pinned x bpf-linker pinned/latest; exit 0 missing, 3 relocates, 1 broken; `--file-issue`, `--load`).
+- [x] Finding: aya main resolves `.ksyms` externs (aya-rs/aya#1372, unreleased); the Rust object from bpf-linker 0.11.1 has no `.ksyms` entry -> `ExternNotFound`. 0.14.0 -> `UnknownFunction`.
+- [x] sc-build at ea8ddd2: watch exit 0 (missing everywhere); f9fd312: rustfmt, Clippy -D warnings, cargo metadata --locked (#316 fmt failure fixed and closed).
+- [x] Docs (tool README, build-and-test, spec 01), changelog.
+- [x] Asked stormcentral#384 for the weekly sc-build run (exit 3 -> P1 switch issue). #315 open for the switch; proposed after stormcentral#384.
+- [ ] When the watch exits 3: bump aya, declare bpf_sock_destroy into `.ksyms`, eBPF termination with SOCK_DESTROY fallback, a test per path.
 
 ### Services for the flowsdn edition — #292 (P0 via stormcos#265), 2026-10-05
 
