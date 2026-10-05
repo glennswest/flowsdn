@@ -23,6 +23,9 @@ use std::{
 #[path = "tcx_identity.rs"]
 mod tcx_identity;
 
+#[path = "socket_lb.rs"]
+pub mod socket_lb;
+
 pub type KernelResult<T> = Result<T, Box<dyn Error>>;
 
 /// Owns the loaded program, its attachments and an anonymous endpoint map.

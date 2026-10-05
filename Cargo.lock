@@ -405,6 +405,7 @@ dependencies = [
  "aya",
  "aya-obj",
  "flowsdn-bpf-abi",
+ "flowsdn-lb",
  "libc",
 ]
 

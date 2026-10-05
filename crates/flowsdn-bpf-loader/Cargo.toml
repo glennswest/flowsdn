@@ -15,7 +15,8 @@ flowsdn-bpf-abi = { path = "../flowsdn-bpf-abi", version = "=0.14.0" }
 aya = { version = "=0.14.0", optional = true }
 aya-obj = { version = "=0.3.0", optional = true }
 libc = { workspace = true, optional = true }
+flowsdn-lb = { path = "../flowsdn-lb", version = "=0.14.0", optional = true }
 
 [features]
 default = []
-kernel = ["dep:aya", "dep:aya-obj", "dep:libc"]
+kernel = ["dep:aya", "dep:aya-obj", "dep:libc", "dep:flowsdn-lb"]
