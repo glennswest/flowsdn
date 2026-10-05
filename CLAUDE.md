@@ -64,7 +64,7 @@ both flowsdn flavor (stormcentral#383, run by stormcentral#360). No stormcos nod
 - [x] IP cache view `GET /v1/ip` (pods, node IPs with reserved host/remote-node identities) and `GET /v1/node/routes`; health module for Kubernetes.
 - [x] Forwarding sysctls (spec 10 §3.6); `deploy/stormcos/manifests-kubernetes/`; kube-proxy advice removed from docs (owner: no kube-proxy).
 - [x] Docs, changelog. sc-build at 91fca2c: fmt, workspace Clippy -D warnings, 685 tests (0 failed, 1 ignored), agent `--features kubernetes` Clippy + 37 tests (incl. loopback-HTTPS controller test), musl agent/CNI, test/build.sh. GNU release agent links libssl/libcrypto.so.3, libz, libgcc_s, glibc.
-- [ ] Hand the binary to stormcos#171; propose #291 after it. Remaining: cluster identity allocation, two-node acceptance on pvetest1+2.
+- [x] Handed the build to stormcos#171 (comment 5998765683); #291 status comment; proposed after stormcos#171. Remaining: cluster identity allocation, two-node acceptance on pvetest1+2.
 
 ### aya kfunc watch — #315 (P2), 2026-10-05
 
