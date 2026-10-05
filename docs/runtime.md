@@ -19,7 +19,7 @@ limited to 1 MiB. The authoritative reader is
 | `socket-path` | Required nonempty string | Unix HTTP socket; created with mode 0600. |
 | `state-dir` | Required nonempty string | Durable endpoint state; exclusive ownership lock. |
 | `bpf-object` | Omitted, null or empty: the object embedded in the agent | A `local-delivery` BPF ELF to load instead of the embedded one (built from this commit by `tools/build-bpf.sh`; `test/build.sh` refuses an embedded copy whose code differs). |
-| `egress` | `fib` | `fib`: a destination that is not a local endpoint is FIB-redirected in BPF (native routing between router namespaces). `stack`: it goes to the host stack (routing, netfilter, kube-proxy), and every endpoint also gets host `/32`/`/128` routes over its host link. The stormcos edition uses `stack`. |
+| `egress` | `fib` | `fib`: a destination that is not a local endpoint is FIB-redirected in BPF (native routing between router namespaces). `stack`: every frame from an endpoint goes to the host stack (routing, netfilter, kube-proxy), same-node pod-to-pod included, so a reply from a local Service backend passes conntrack's reverse NAT and the endpoint's ARP replies reach the host; every endpoint also gets host `/32`/`/128` routes over its host link. The stormcos edition uses `stack`. |
 | `bpf-pin-root` | Omitted, null or empty: disabled | Dedicated bpffs directory for persistent map and TCX ownership. |
 | `delete-queue` | Omitted, null or empty: `deleteQueue` in the socket's parent directory | Durable CNI offline deletion queue. |
 | `ipv4-pool` | Omitted, null or empty: disabled | IPv4 host allocation CIDR. |

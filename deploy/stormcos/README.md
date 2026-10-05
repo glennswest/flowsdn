@@ -14,9 +14,10 @@ read-only RBAC, the agent ConfigMap and the agent DaemonSet:
   `flowsdn` and, if absent, `loopback`) and atomically writes
   `/etc/cni/net.d/00-flowsdn.conflist`. The `00-` prefix means a leftover
   `05-cilium.conflist` cannot win.
-- **Agent.** It runs `egress: stack`. Pod-to-pod traffic on the node is
-  delivered in BPF; everything else goes to the node's stack, and each pod
-  gets a host route.
+- **Agent.** It runs `egress: stack`. Every frame from a pod, pod-to-pod on
+  the node included, goes to the node's stack, and each pod gets a host
+  route. So kube-proxy's DNAT and its reverse NAT apply to every Service
+  flow, including a reply from a backend on the same node (CoreDNS).
 
 What the node must provide besides the manifests:
 

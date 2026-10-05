@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-10-05
+- **fix:** `egress: stack` now hands every frame from an endpoint to the host stack (#292, stormcos#265). Same-node pod-to-pod was still redirected in BPF, so a reply from a local Service backend (CoreDNS behind 10.96.0.10) skipped kube-proxy's reverse DNAT, and non-IP frames were dropped, including the pod's ARP replies, so the host could not deliver routed packets to an IPv4 pod. The agent's embedded `local-delivery` object is rebuilt. `fib` mode is unchanged.
+
 ### 2026-10-04
 - **docs:** Comment mining since 2026-10-04 (24 comments, 33 issues): no new issues; additions on stormcentral#360 (install the flavor under test on both, per #383) and #309 (the #256 row recommendation). Two-node target settled by stormcentral#383.
 

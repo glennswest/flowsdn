@@ -33,8 +33,9 @@ The `local-delivery` BPF object built from this commit is embedded
 (`bpf/local-delivery`, rebuilt by `tools/build-bpf.sh`; `test/build.sh` refuses
 a copy whose code differs). An omitted or empty `bpf-object` loads it; a path
 loads that trusted build instead. `egress` is `fib` (default: BPF FIB-redirects
-traffic that is not to a local endpoint) or `stack` (it goes to the host stack,
-and each endpoint address gets a host route over its host link); anything else
+traffic that is not to a local endpoint) or `stack` (every endpoint frame, same-node
+pod-to-pod included, goes to the host stack, and each endpoint address gets a
+host route over its host link); anything else
 fails startup. See [the runtime guide](../../docs/runtime.md) for every key and
 default. Run with Linux network/BPF privileges and configure CNI to use the same
 socket and queue.

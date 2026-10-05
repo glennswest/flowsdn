@@ -10,7 +10,8 @@ pinning or subsystem libraries are absent are **not current status**.
 - `flowsdn-agent` serves a persisted local endpoint and host-pool IPAM API on
   a Unix socket. It embeds the `local-delivery` BPF object built from its commit
   (a configured `bpf-object` overrides it) and has two egress modes: `fib`
-  (BPF FIB redirect) and `stack` (host stack plus per-endpoint host routes).
+  (BPF FIB redirect) and `stack` (every endpoint frame, same-node pod-to-pod
+  included, to the host stack, plus per-endpoint host routes).
   Endpoint map/TCX pins can preserve ownership during agent absence. Restore
   validates ownership and replays offline deletes.
 - `flowsdn-cni` implements the primary veth CNI and the loopback plugin.

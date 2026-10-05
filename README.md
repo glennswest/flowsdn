@@ -19,9 +19,9 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
   a node needs nothing beside the binary. `test/build.sh` rebuilds the object
   and refuses an embedded copy whose code differs.
 - **Two egress modes.** `egress: fib` (default) FIB-redirects non-local traffic
-  in BPF for native routing. `egress: stack` hands everything that is not a
-  local endpoint to the host stack (routing, netfilter, kube-proxy) and adds a
-  host `/32`/`/128` route per endpoint address. The stormcos edition uses `stack`.
+  in BPF for native routing. `egress: stack` hands every frame from an
+  endpoint to the host stack (routing, netfilter, kube-proxy), same-node
+  pod-to-pod included, and adds a host `/32`/`/128` route per endpoint address. The stormcos edition uses `stack`.
 - **Node CNI installation.** `flowsdn-cni install` copies the plugin into the
   host's `/opt/cni/bin` (`cilium-cni`, `flowsdn-cni`, `flowsdn`, and `loopback`
   if absent) and atomically writes `/etc/cni/net.d/00-flowsdn.conflist`.
