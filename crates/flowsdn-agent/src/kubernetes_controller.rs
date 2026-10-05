@@ -259,10 +259,17 @@ async fn cycle(
         ..Query::default()
     };
     let mut frames = client.watch(scope, &query).await?;
+    let opened = Instant::now();
     loop {
         let event = match frames.next().await {
             Ok(event) => event,
-            Err(error) if error.0 == WATCH_ENDED => return Ok(()),
+            Err(error) if error.0 == WATCH_ENDED => {
+                // A server that ends watches at once must not make us spin.
+                if opened.elapsed() < Duration::from_secs(1) {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+                return Ok(());
+            }
             Err(error) => return Err(error),
         };
         state.event(&event).await?;

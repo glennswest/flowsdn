@@ -30,3 +30,6 @@ flowsdn-bpf-loader = { path = "../flowsdn-bpf-loader", version = "=0.14.0", feat
 flowsdn-bpf-abi = { path = "../flowsdn-bpf-abi", version = "=0.14.0" }
 flowsdn-ipam = { path = "../flowsdn-ipam", version = "=0.14.0" }
 flowsdn-connector = { path = "../flowsdn-connector", version = "=0.14.0" }
+
+[dev-dependencies]
+openssl = "=0.10.81"

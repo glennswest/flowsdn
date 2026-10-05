@@ -374,6 +374,7 @@ dependencies = [
  "futures",
  "httparse",
  "nix",
+ "openssl",
  "serde_json",
  "tokio",
  "uuid",
