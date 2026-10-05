@@ -72,6 +72,8 @@ pub fn request_uri(scope: &Scope, query: &Query<'_>) -> Result<String, Error> {
     let path = match scope {
         Scope::Nodes => "/api/v1/nodes",
         Scope::LocalPods { .. } | Scope::Pods => "/api/v1/pods",
+        Scope::Services => "/api/v1/services",
+        Scope::EndpointSlices => "/apis/discovery.k8s.io/v1/endpointslices",
     };
     let mut params = Vec::new();
     if let Some(selector) = scope.field_selector() {

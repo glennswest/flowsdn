@@ -1,12 +1,18 @@
-//! The Kubernetes controller thread: Node and cluster Pod ListWatch through
-//! flowsdn-k8s (relist with backoff), publishing into the shared view, and a
-//! route thread that owns the direct node routes (spec 10 §3.2.3, §5.2).
+//! The Kubernetes controller thread: Node, cluster Pod, Service and
+//! EndpointSlice ListWatch through flowsdn-k8s (relist with backoff),
+//! publishing into the shared view; a route thread that owns the direct node
+//! routes (spec 10 §3.2.3, §5.2); and a services thread that owns the
+//! socket-LB maps (spec 05 §3.4, §3.8).
 use super::*;
+use crate::services::{self, ServiceInfo, SliceInfo};
+use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_connector::Connector;
 use flowsdn_k8s::{
     client::{JsonClient, Query, TransportLimits, WATCH_ENDED},
     watch::{Limits, PageResult, Resource, Scope, WatchState},
 };
+use flowsdn_lb::socket;
+use futures::FutureExt;
 use std::{
     fs,
     io::Write,
@@ -77,11 +83,21 @@ impl Controller {
     }
     /// Set the datapath-init sysctls, then start the watch thread (and the
     /// route thread when auto-direct-node-routes is on); the returned view is
-    /// what the API serves.
-    pub fn spawn(self, ipv6: bool) -> Result<Shared> {
+    /// what the API serves. With service-lb on, Services and EndpointSlices
+    /// are watched too; given the socket-lb object it is loaded (maps pinned
+    /// under `pin_root`), attached to the cgroup root and kept programmed by
+    /// a services thread. A load or attach failure is reported in the view's
+    /// health, and the rest of the agent keeps running.
+    pub fn spawn(
+        self,
+        ipv6: bool,
+        socket_lb: Option<&[u8]>,
+        pin_root: Option<&Path>,
+    ) -> Result<Shared> {
         let view: Shared = Arc::new(Mutex::new(View {
             local_node: self.settings.node_name.clone(),
             direct_routes: self.settings.auto_direct_node_routes,
+            service_lb: self.settings.service_lb,
             ..View::default()
         }));
         let failed = apply_sysctls(Path::new("/proc/sys"), ipv6);
@@ -101,6 +117,27 @@ impl Controller {
             Some(sender)
         } else {
             None
+        };
+        let lb = match socket_lb.filter(|_| self.settings.service_lb) {
+            Some(object) => match load_socket_lb(object, pin_root, &self.settings.cgroup_root) {
+                Ok(lb) => {
+                    let (sender, receiver) = mpsc::channel();
+                    let lb_view = Arc::clone(&view);
+                    std::thread::Builder::new()
+                        .name("flowsdn-services".into())
+                        .spawn(move || {
+                            let mut lb = lb;
+                            service_loop(&receiver, &lb_view, &mut lb);
+                        })?;
+                    Some(sender)
+                }
+                Err(error) => {
+                    eprintln!("socket LB unavailable: {error}");
+                    lock(&view).errors.insert("services".into(), error);
+                    None
+                }
+            },
+            None => None,
         };
         let watch_view = Arc::clone(&view);
         std::thread::Builder::new()
@@ -140,7 +177,54 @@ impl Controller {
                     view.pods = pods;
                     view.pods_synced = true;
                 });
-                runtime.block_on(async { futures::future::join(nodes, pods).await });
+                let mut parts = vec![nodes.boxed_local(), pods.boxed_local()];
+                if settings.service_lb {
+                    let (svc_view, svc_lb) = (Arc::clone(&watch_view), lb.clone());
+                    parts.push(
+                        watch_forever(
+                            &client,
+                            Scope::Services,
+                            "services-watch",
+                            &watch_view,
+                            move |state| {
+                                let rows = service_rows(state);
+                                let frontends = {
+                                    let mut view = lock(&svc_view);
+                                    view.services = rows;
+                                    view.services_synced = true;
+                                    view.refresh_frontends()
+                                };
+                                if let (Some(sender), Some(frontends)) = (&svc_lb, frontends) {
+                                    let _ = sender.send(frontends);
+                                }
+                            },
+                        )
+                        .boxed_local(),
+                    );
+                    let slice_view = Arc::clone(&watch_view);
+                    parts.push(
+                        watch_forever(
+                            &client,
+                            Scope::EndpointSlices,
+                            "endpointslices-watch",
+                            &watch_view,
+                            move |state| {
+                                let rows = slice_rows(state);
+                                let frontends = {
+                                    let mut view = lock(&slice_view);
+                                    view.slices = rows;
+                                    view.slices_synced = true;
+                                    view.refresh_frontends()
+                                };
+                                if let (Some(sender), Some(frontends)) = (&lb, frontends) {
+                                    let _ = sender.send(frontends);
+                                }
+                            },
+                        )
+                        .boxed_local(),
+                    );
+                }
+                runtime.block_on(futures::future::join_all(parts));
             })?;
         Ok(view)
     }
@@ -181,7 +265,7 @@ fn node_rows(state: &WatchState) -> Vec<NodeInfo> {
         .all()
         .filter_map(|(row, _)| match &*row {
             Resource::Node(node) => Some(node_info(node)),
-            Resource::Pod(_) => None,
+            _ => None,
         })
         .collect()
 }
@@ -198,9 +282,130 @@ fn pod_rows(state: &WatchState) -> Vec<PodInfo> {
                 ips: pod.pod_ips.clone(),
                 labels: pod.labels.clone(),
             }),
-            Resource::Node(_) => None,
+            _ => None,
         })
         .collect()
+}
+fn service_rows(state: &WatchState) -> Vec<ServiceInfo> {
+    state
+        .snapshot()
+        .all()
+        .filter_map(|(row, _)| match &*row {
+            Resource::Service(service) => Some(ServiceInfo {
+                namespace: service.metadata.namespace.clone(),
+                name: service.metadata.name.clone(),
+                service_type: service.service_type.clone(),
+                cluster_ips: service.cluster_ips.clone(),
+                ports: service
+                    .ports
+                    .iter()
+                    .map(|p| services::ServicePort {
+                        name: p.name.clone(),
+                        protocol: p.protocol.clone(),
+                        port: p.port,
+                    })
+                    .collect(),
+            }),
+            _ => None,
+        })
+        .collect()
+}
+fn slice_rows(state: &WatchState) -> Vec<SliceInfo> {
+    state
+        .snapshot()
+        .all()
+        .filter_map(|(row, _)| match &*row {
+            Resource::EndpointSlice(slice) => Some(SliceInfo {
+                namespace: slice.metadata.namespace.clone(),
+                name: slice.metadata.name.clone(),
+                service: slice.service_name.clone(),
+                address_type: slice.address_type.clone(),
+                endpoints: slice
+                    .endpoints
+                    .iter()
+                    .map(|e| services::Endpoint {
+                        addresses: e.addresses.clone(),
+                        ready: e.ready,
+                        serving: e.serving,
+                        terminating: e.terminating,
+                    })
+                    .collect(),
+                ports: slice
+                    .ports
+                    .iter()
+                    .map(|p| services::SlicePort {
+                        name: p.name.clone(),
+                        protocol: p.protocol.clone(),
+                        port: p.port,
+                    })
+                    .collect(),
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Load the socket-lb object and attach it to the cgroup root.
+fn load_socket_lb(
+    object: &[u8],
+    pin_root: Option<&Path>,
+    cgroup_root: &Path,
+) -> std::result::Result<SocketLb, String> {
+    let pins = pin_root.map(|root| root.join("socket-lb"));
+    let mut lb = SocketLb::load(Object::Bytes(object), pins.as_deref())
+        .map_err(|e| format!("load socket-lb: {e}"))?;
+    lb.attach(cgroup_root)
+        .map_err(|e| format!("attach socket-lb to {}: {e}", cgroup_root.display()))?;
+    Ok(lb)
+}
+
+/// Own the socket-LB maps: on every new frontend set (after both lists are
+/// complete) and every 30 s, plan from what the kernel holds and apply.
+/// Nothing is pruned before the first complete lists.
+fn service_loop(
+    receiver: &mpsc::Receiver<Vec<socket::Service>>,
+    view: &Shared,
+    lb: &mut SocketLb,
+) {
+    let mut desired: Option<Vec<socket::Service>> = None;
+    loop {
+        match receiver.recv_timeout(RECONCILE_INTERVAL) {
+            Ok(next) => {
+                let mut next = next;
+                while let Ok(newer) = receiver.try_recv() {
+                    next = newer;
+                }
+                desired = Some(next);
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => return,
+        }
+        if let Some(services) = &desired {
+            let result = program(lb, services);
+            let mut view = lock(view);
+            match result {
+                Ok(ids) => {
+                    view.service_ids = ids;
+                    view.errors.remove("services");
+                }
+                Err(error) => {
+                    eprintln!("socket LB: {error}");
+                    view.errors.insert("services".into(), error);
+                }
+            }
+        }
+    }
+}
+fn program(
+    lb: &mut SocketLb,
+    services: &[socket::Service],
+) -> std::result::Result<BTreeMap<socket::Address, u16>, String> {
+    let current = lb.dump().map_err(|e| format!("read LB maps: {e}"))?;
+    let want = socket::desired(&current, services)?;
+    let ops = socket::plan(&current, &want.maps);
+    lb.apply(&ops)
+        .map_err(|e| format!("write LB maps: {e}"))?;
+    Ok(want.ids)
 }
 
 async fn list_nodes(client: &JsonClient) -> std::result::Result<Vec<NodeInfo>, flowsdn_k8s::Error> {

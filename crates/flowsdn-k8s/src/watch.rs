@@ -32,16 +32,65 @@ pub struct Pod {
     pub pod_ips: Vec<IpAddr>,
     pub labels: BTreeMap<String, String>,
 }
+/// A Service port: `name` is empty for an unnamed port; `protocol` is the
+/// Kubernetes spelling (`TCP`, `UDP`, `SCTP`).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ServicePort {
+    pub name: String,
+    pub protocol: String,
+    pub port: u16,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Service {
+    pub metadata: Metadata,
+    /// `spec.type`; `ClusterIP` when absent.
+    pub service_type: String,
+    /// `spec.clusterIPs` (else `spec.clusterIP`) without `None` (headless)
+    /// and values that are not addresses.
+    pub cluster_ips: Vec<IpAddr>,
+    pub ports: Vec<ServicePort>,
+}
+/// An EndpointSlice port; `port` is absent for "all ports".
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EndpointPort {
+    pub name: String,
+    pub protocol: String,
+    pub port: Option<u16>,
+}
+/// One endpoint. Unset `ready`/`serving` conditions count as true and unset
+/// `terminating` as false, as the EndpointSlice API asks consumers to.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Endpoint {
+    pub addresses: Vec<IpAddr>,
+    pub ready: bool,
+    pub serving: bool,
+    pub terminating: bool,
+    pub node_name: String,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EndpointSlice {
+    pub metadata: Metadata,
+    /// The `kubernetes.io/service-name` label; empty when absent.
+    pub service_name: String,
+    /// `IPv4`, `IPv6` or `FQDN`.
+    pub address_type: String,
+    pub endpoints: Vec<Endpoint>,
+    pub ports: Vec<EndpointPort>,
+}
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Resource {
     Node(Node),
     Pod(Pod),
+    Service(Service),
+    EndpointSlice(EndpointSlice),
 }
 impl Resource {
     pub fn metadata(&self) -> &Metadata {
         match self {
             Self::Node(n) => &n.metadata,
             Self::Pod(p) => &p.metadata,
+            Self::Service(s) => &s.metadata,
+            Self::EndpointSlice(e) => &e.metadata,
         }
     }
 }
@@ -59,12 +108,16 @@ pub enum Scope {
     },
     /// Every Pod in the cluster (the IP cache); unscheduled Pods have an empty node.
     Pods,
+    /// Every Service in the cluster (socket LB frontends).
+    Services,
+    /// Every `discovery.k8s.io/v1` EndpointSlice (socket LB backends).
+    EndpointSlices,
 }
 impl Scope {
     pub fn field_selector(&self) -> Option<String> {
         match self {
-            Self::Nodes | Self::Pods => None,
             Self::LocalPods { node_name } => Some(format!("spec.nodeName={node_name}")),
+            _ => None,
         }
     }
     pub fn namespaced(&self) -> bool {
@@ -73,7 +126,12 @@ impl Scope {
     pub fn parse(&self, value: &Value) -> Result<Resource, Error> {
         let namespaced = self.namespaced();
         if let Some(kind) = value.get("kind") {
-            let expected = if namespaced { "Pod" } else { "Node" };
+            let expected = match self {
+                Self::Nodes => "Node",
+                Self::LocalPods { .. } | Self::Pods => "Pod",
+                Self::Services => "Service",
+                Self::EndpointSlices => "EndpointSlice",
+            };
             if text(kind)? != expected {
                 return Err(error("unexpected resource kind"));
             }
@@ -150,8 +208,103 @@ impl Scope {
                     labels,
                 }))
             }
+            Self::Services => parse_service(value, metadata).map(Resource::Service),
+            Self::EndpointSlices => parse_slice(value, metadata).map(Resource::EndpointSlice),
         }
     }
+}
+
+fn optional_text<'a>(value: &'a Value, key: &str, default: &'a str) -> Result<&'a str, Error> {
+    match value.get(key) {
+        None | Some(Value::Null) => Ok(default),
+        Some(v) => text(v),
+    }
+}
+fn port_number(value: &Value) -> Result<u16, Error> {
+    value
+        .as_u64()
+        .and_then(|n| u16::try_from(n).ok())
+        .filter(|n| *n != 0)
+        .ok_or_else(|| error("invalid port"))
+}
+fn condition(value: &Value, key: &str, default: bool) -> Result<bool, Error> {
+    match value.pointer(&format!("/conditions/{key}")) {
+        None | Some(Value::Null) => Ok(default),
+        Some(v) => v
+            .as_bool()
+            .ok_or_else(|| Error(format!("invalid {key} condition"))),
+    }
+}
+fn parse_service(value: &Value, metadata: Metadata) -> Result<Service, Error> {
+    let spec = value
+        .get("spec")
+        .ok_or_else(|| error("missing Service spec"))?;
+    let mut raw = Vec::new();
+    for ip in array(spec.get("clusterIPs"))? {
+        raw.push(text(ip)?);
+    }
+    if raw.is_empty() {
+        raw.push(optional_text(spec, "clusterIP", "")?);
+    }
+    // "None" (headless) and empty mean no virtual IP; the API server
+    // validates the rest, and one odd value must not fail the whole list.
+    let cluster_ips = raw.into_iter().filter_map(|ip| ip.parse().ok()).collect();
+    let mut ports = Vec::new();
+    for port in array(spec.get("ports"))? {
+        ports.push(ServicePort {
+            name: optional_text(port, "name", "")?.into(),
+            protocol: optional_text(port, "protocol", "TCP")?.into(),
+            port: port_number(port.get("port").unwrap_or(&Value::Null))?,
+        });
+    }
+    Ok(Service {
+        metadata,
+        service_type: optional_text(spec, "type", "ClusterIP")?.into(),
+        cluster_ips,
+        ports,
+    })
+}
+fn parse_slice(value: &Value, metadata: Metadata) -> Result<EndpointSlice, Error> {
+    let service_name = match value.pointer("/metadata/labels/kubernetes.io~1service-name") {
+        None | Some(Value::Null) => "",
+        Some(v) => text(v)?,
+    };
+    let address_type = required(value, "addressType")?;
+    let mut endpoints = Vec::new();
+    for endpoint in array(value.get("endpoints"))? {
+        let mut addresses = Vec::new();
+        if address_type != "FQDN" {
+            for address in array(endpoint.get("addresses"))? {
+                addresses.push(parse_ip(text(address)?)?);
+            }
+        }
+        let ready = condition(endpoint, "ready", true)?;
+        endpoints.push(Endpoint {
+            addresses,
+            ready,
+            serving: condition(endpoint, "serving", ready)?,
+            terminating: condition(endpoint, "terminating", false)?,
+            node_name: optional_text(endpoint, "nodeName", "")?.into(),
+        });
+    }
+    let mut ports = Vec::new();
+    for port in array(value.get("ports"))? {
+        ports.push(EndpointPort {
+            name: optional_text(port, "name", "")?.into(),
+            protocol: optional_text(port, "protocol", "TCP")?.into(),
+            port: match port.get("port") {
+                None | Some(Value::Null) => None,
+                Some(v) => Some(port_number(v)?),
+            },
+        });
+    }
+    Ok(EndpointSlice {
+        metadata,
+        service_name: service_name.into(),
+        address_type: address_type.into(),
+        endpoints,
+        ports,
+    })
 }
 
 fn error(message: &str) -> Error {

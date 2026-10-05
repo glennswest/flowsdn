@@ -7,7 +7,7 @@
 # on the build box, then runs `podman build -f test/Containerfile` with the repo
 # root as context. It builds, from this commit:
 #   - the BPF objects, with tools/build-bpf.sh (pinned nightly and bpf-linker),
-#     and checks the agent's embedded local-delivery is this commit's,
+#     and checks the agent's embedded local-delivery and socket-lb are this commit's,
 #   - the agent, CNI, kernel fixtures and /test (static musl),
 # and stages them in test/.stage. It does not build the image itself.
 set -euo pipefail
@@ -21,7 +21,7 @@ stage="$root/test/.stage"
 rm -rf "$stage"
 mkdir -p "$stage/opt/flowsdn/bin" "$stage/opt/flowsdn/fixtures" "$stage/opt/flowsdn/bpf"
 "$root/tools/build-bpf.sh" "$stage/opt/flowsdn/bpf"
-# The agent embeds local-delivery; a copy older than this commit's BPF source
+# The agent embeds local-delivery and socket-lb; a copy older than this commit's BPF source
 # would ship a datapath nobody built from it. Compared without debug info, BTF
 # and symbols: cargo's metadata hash for path dependencies follows the checkout
 # path and renames codegen units there, while the code, relocations, maps,
@@ -29,13 +29,15 @@ mkdir -p "$stage/opt/flowsdn/bin" "$stage/opt/flowsdn/fixtures" "$stage/opt/flow
 code() {
     objcopy -I elf64-little --strip-all --remove-section=.BTF --remove-section=.BTF.ext "$1" "$2"
 }
-code "$stage/opt/flowsdn/bpf/local-delivery" "$tmp/local-delivery.built"
-code "$root/crates/flowsdn-agent/bpf/local-delivery" "$tmp/local-delivery.embedded"
-if ! cmp -s "$tmp/local-delivery.built" "$tmp/local-delivery.embedded"; then
-    echo "test/build.sh: crates/flowsdn-agent/bpf/local-delivery is stale;" \
-        "run tools/build-bpf.sh and commit the new local-delivery" >&2
-    exit 1
-fi
+for o in local-delivery socket-lb; do
+    code "$stage/opt/flowsdn/bpf/$o" "$tmp/$o.built"
+    code "$root/crates/flowsdn-agent/bpf/$o" "$tmp/$o.embedded"
+    if ! cmp -s "$tmp/$o.built" "$tmp/$o.embedded"; then
+        echo "test/build.sh: crates/flowsdn-agent/bpf/$o is stale;" \
+            "run tools/build-bpf.sh and commit the new $o" >&2
+        exit 1
+    fi
+done
 
 fixtures=(flowsdn-bpftest flowsdn-endpoint-test agent-runtime cni-runtime loader-features
     native-routing packet-ingress socket-live uplink-ingress skb-ctx-matrix)

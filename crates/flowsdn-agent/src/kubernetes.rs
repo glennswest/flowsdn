@@ -2,7 +2,9 @@
 //! (spec 07 §3.4), direct node routes (spec 10 §3.2.3) and the IP cache view.
 //! This part is pure data; the watch/route controller needs the `kubernetes`
 //! feature (Fedora OpenSSL through flowsdn-k8s, ADR-0016).
+use crate::services::{Frontend, ServiceInfo, SliceInfo};
 use crate::state::Result;
+use flowsdn_lb::socket::Address;
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -29,7 +31,15 @@ pub struct Settings {
     pub kubeconfig: Option<PathBuf>,
     pub auto_direct_node_routes: bool,
     pub skip_unreachable: bool,
+    /// Socket LB for ClusterIP Services (spec 05 §3.8), default on: watch
+    /// Services and EndpointSlices and attach the socket-lb programs.
+    pub service_lb: bool,
+    /// The cgroup v2 directory the socket-lb programs attach to; the host's
+    /// root covers every pod and host process.
+    pub cgroup_root: PathBuf,
 }
+/// Where a DaemonSet mounts the host's cgroup v2 root.
+pub const DEFAULT_CGROUP_ROOT: &str = "/sys/fs/cgroup";
 impl Settings {
     /// `kubernetes` absent or null disables discovery. `node-name` falls back to
     /// `K8S_NODE_NAME`, then `NODE_NAME` (the DaemonSet's downward API).
@@ -75,11 +85,22 @@ impl Settings {
             );
         }
         let kubeconfig = text("kubeconfig")?;
+        let cgroup_root = text("cgroup-root")?;
+        let cgroup_root = if cgroup_root.is_empty() {
+            PathBuf::from(DEFAULT_CGROUP_ROOT)
+        } else {
+            PathBuf::from(cgroup_root)
+        };
+        if !cgroup_root.is_absolute() {
+            return Err("kubernetes.cgroup-root must be an absolute path".into());
+        }
         Ok(Some(Self {
             node_name,
             kubeconfig: (!kubeconfig.is_empty()).then(|| PathBuf::from(kubeconfig)),
             auto_direct_node_routes: flag("auto-direct-node-routes", true)?,
             skip_unreachable: flag("direct-routing-skip-unreachable", false)?,
+            service_lb: flag("service-lb", true)?,
+            cgroup_root,
         }))
     }
 }
@@ -214,6 +235,16 @@ pub struct View {
     pub direct_routes: bool,
     /// Destination CIDR text -> (route, state text).
     pub routes: BTreeMap<String, (DesiredRoute, String)>,
+    /// Socket LB: Services and EndpointSlices are watched.
+    pub service_lb: bool,
+    pub services: Vec<ServiceInfo>,
+    pub slices: Vec<SliceInfo>,
+    pub services_synced: bool,
+    pub slices_synced: bool,
+    /// The frontends derived from both lists, and the service ID the maps
+    /// hold for each one that is programmed.
+    pub frontends: Vec<Frontend>,
+    pub service_ids: BTreeMap<Address, u16>,
     /// The latest failure of each controller part (`nodes`, `pods`, `routes`).
     pub errors: BTreeMap<String, String>,
 }
@@ -277,6 +308,19 @@ impl View {
                 .collect(),
         )
     }
+    /// Recompute the frontends once both Service and EndpointSlice lists
+    /// are complete; None until then (nothing may be pruned before).
+    pub fn refresh_frontends(&mut self) -> Option<Vec<flowsdn_lb::socket::Service>> {
+        if !(self.services_synced && self.slices_synced) {
+            return None;
+        }
+        self.frontends = crate::services::frontends(&self.services, &self.slices);
+        Some(self.frontends.iter().map(|f| f.service.clone()).collect())
+    }
+    /// `GET /v1/service`.
+    pub fn service_list(&self) -> Value {
+        crate::services::service_list(&self.frontends, &self.service_ids)
+    }
     /// The `kubernetes` member of `GET /v1/healthz`.
     pub fn health(&self) -> Value {
         let errors: Vec<_> = self
@@ -284,16 +328,25 @@ impl View {
             .iter()
             .map(|(part, error)| format!("{part}: {error}"))
             .collect();
-        let (state, msg) = match (errors.is_empty(), self.nodes_synced && self.pods_synced) {
+        let synced = self.nodes_synced
+            && self.pods_synced
+            && (!self.service_lb || (self.services_synced && self.slices_synced));
+        let (state, msg) = match (errors.is_empty(), synced) {
             (false, _) => ("Warning", errors.join("; ")),
-            (true, false) => ("Warning", "waiting for the initial Node/Pod lists".into()),
+            (true, false) => ("Warning", "waiting for the initial Kubernetes lists".into()),
             (true, true) => (
                 "Ok",
-                format!("{} nodes, {} pods", self.nodes.len(), self.pods.len()),
+                format!(
+                    "{} nodes, {} pods, {} service frontends ({} programmed)",
+                    self.nodes.len(),
+                    self.pods.len(),
+                    self.frontends.len(),
+                    self.service_ids.len()
+                ),
             ),
         };
         json!({"state":state,"msg":msg,"node-name":self.local_node,
-            "auto-direct-node-routes":self.direct_routes})
+            "auto-direct-node-routes":self.direct_routes,"service-lb":self.service_lb})
     }
 }
 

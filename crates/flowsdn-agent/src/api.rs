@@ -71,6 +71,9 @@ fn optional<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
 /// (tools/build-bpf.sh; test/build.sh refuses a stale copy). Used when the
 /// config names no `bpf-object`, so a node needs nothing beside the binary.
 static EMBEDDED_OBJECT: &[u8] = include_bytes!("../bpf/local-delivery");
+/// The socket-lb object (ClusterIP socket LB), built and checked the same way.
+#[cfg(feature = "kubernetes")]
+static SOCKET_LB_OBJECT: &[u8] = include_bytes!("../bpf/socket-lb");
 
 struct Config {
     socket: PathBuf,
@@ -341,17 +344,17 @@ impl Api {
                 }
                 return Ok((200, status));
             }
-            ("GET", "/v1/ip" | "/v1/node/routes") => {
+            ("GET", "/v1/ip" | "/v1/node/routes" | "/v1/service") => {
                 let Some(view) = &self.kubernetes else {
                     return fail(404, "kubernetes node discovery is not enabled");
                 };
                 let view = crate::kubernetes::lock(view);
                 return Ok((
                     200,
-                    if path == "/v1/ip" {
-                        view.ip_list()
-                    } else {
-                        view.route_list()
+                    match path {
+                        "/v1/ip" => view.ip_list(),
+                        "/v1/service" => view.service_list(),
+                        _ => view.route_list(),
                     },
                 ));
             }
@@ -993,11 +996,19 @@ fn connect_kubernetes(config: &mut Config) -> Result<Option<Kubernetes>> {
     Ok(None)
 }
 #[cfg(feature = "kubernetes")]
-fn spawn_kubernetes(controller: Kubernetes, ipv6: bool) -> Result<crate::kubernetes::Shared> {
-    controller.spawn(ipv6)
+fn spawn_kubernetes(
+    controller: Kubernetes,
+    ipv6: bool,
+    pin_root: Option<&Path>,
+) -> Result<crate::kubernetes::Shared> {
+    controller.spawn(ipv6, Some(SOCKET_LB_OBJECT), pin_root)
 }
 #[cfg(not(feature = "kubernetes"))]
-fn spawn_kubernetes(never: Kubernetes, _ipv6: bool) -> Result<crate::kubernetes::Shared> {
+fn spawn_kubernetes(
+    never: Kubernetes,
+    _ipv6: bool,
+    _pin_root: Option<&Path>,
+) -> Result<crate::kubernetes::Shared> {
     match never {}
 }
 
@@ -1022,7 +1033,7 @@ pub fn run(config_path: &Path) -> Result<()> {
     // holds its exclusive lock.
     let ipv6 = config.v6.is_some();
     let kubernetes = kubernetes
-        .map(|controller| spawn_kubernetes(controller, ipv6))
+        .map(|controller| spawn_kubernetes(controller, ipv6, config.pin_root.as_deref()))
         .transpose()?;
     let enabled = kubernetes.is_some();
     let mut api = Api {

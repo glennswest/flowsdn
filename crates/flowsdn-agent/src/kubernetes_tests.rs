@@ -33,10 +33,13 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert_eq!(parsed.node_name, "a");
     assert_eq!(parsed.kubeconfig, None);
     assert!(parsed.auto_direct_node_routes);
+    assert!(parsed.service_lb);
+    assert_eq!(parsed.cgroup_root, PathBuf::from(DEFAULT_CGROUP_ROOT));
     let parsed = Settings::parse(
         Some(
             &json!({"node-name":"n1","kubeconfig":"/k","auto-direct-node-routes":false,
-            "direct-routing-skip-unreachable":true}),
+            "direct-routing-skip-unreachable":true,"service-lb":false,
+            "cgroup-root":"/run/flowsdn/cgroupv2"}),
         ),
         &env(&[("K8S_NODE_NAME", "a")]),
     )
@@ -45,6 +48,15 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert_eq!(parsed.node_name, "n1");
     assert_eq!(parsed.kubeconfig, Some(PathBuf::from("/k")));
     assert!(!parsed.auto_direct_node_routes && parsed.skip_unreachable);
+    assert!(!parsed.service_lb);
+    assert_eq!(parsed.cgroup_root, PathBuf::from("/run/flowsdn/cgroupv2"));
+    assert!(
+        Settings::parse(
+            Some(&json!({"node-name":"n1","cgroup-root":"relative"})),
+            &env(&[])
+        )
+        .is_err()
+    );
     assert!(Settings::parse(Some(&json!({})), &env(&[])).is_err());
     assert!(Settings::parse(Some(&json!({"node-name":"bad name"})), &env(&[])).is_err());
 }
@@ -181,6 +193,13 @@ fn ip_list_has_node_identities_pod_labels_and_host_ips() {
     assert_eq!(view.health().get("state"), Some(&json!("Warning")));
     view.nodes_synced = true;
     view.pods_synced = true;
+    assert_eq!(view.health().get("state"), Some(&json!("Ok")));
+    view.service_lb = true;
+    assert_eq!(view.health().get("state"), Some(&json!("Warning")));
+    assert!(view.refresh_frontends().is_none(), "no frontends before both lists");
+    view.services_synced = true;
+    view.slices_synced = true;
+    assert_eq!(view.refresh_frontends(), Some(vec![]));
     assert_eq!(view.health().get("state"), Some(&json!("Ok")));
     view.errors.insert("routes".into(), "boom".into());
     assert_eq!(view.health().get("msg"), Some(&json!("routes: boom")));

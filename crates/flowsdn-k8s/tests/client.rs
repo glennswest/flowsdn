@@ -12,6 +12,18 @@ fn runtime() -> tokio::runtime::Runtime {
         .expect("runtime")
 }
 #[test]
+fn service_and_endpoint_slice_paths() {
+    assert_eq!(
+        request_uri(&Scope::Services, &Query::default()).expect("URI"),
+        "/api/v1/services"
+    );
+    assert_eq!(
+        request_uri(&Scope::EndpointSlices, &Query::default()).expect("URI"),
+        "/apis/discovery.k8s.io/v1/endpointslices"
+    );
+}
+
+#[test]
 fn request_paths_and_opaque_values_are_encoded() {
     assert_eq!(
         request_uri(&Scope::Nodes, &Query::default()).expect("URI"),

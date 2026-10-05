@@ -136,7 +136,23 @@ fn server(key: PKey<Private>, cert: X509, watches: Arc<AtomicUsize>) -> u16 {
                     thread::sleep(Duration::from_secs(30));
                     return;
                 }
-                let body = if nodes {
+                let body = if line.starts_with("GET /api/v1/services") {
+                    json!({"metadata":{"resourceVersion":"30"},"items":[
+                        {"metadata":{"name":"kube-dns","namespace":"kube-system","uid":"s1","resourceVersion":"29"},
+                         "spec":{"clusterIP":"10.96.0.10","clusterIPs":["10.96.0.10"],
+                            "ports":[{"name":"dns","protocol":"UDP","port":53},
+                                     {"name":"dns-tcp","protocol":"TCP","port":53}]}}
+                    ]})
+                } else if line.starts_with("GET /apis/discovery.k8s.io/v1/endpointslices") {
+                    json!({"metadata":{"resourceVersion":"40"},"items":[
+                        {"metadata":{"name":"kube-dns-1","namespace":"kube-system","uid":"e1","resourceVersion":"39",
+                            "labels":{"kubernetes.io/service-name":"kube-dns"}},
+                         "addressType":"IPv4",
+                         "endpoints":[{"addresses":["10.173.0.53"],"conditions":{"ready":true}}],
+                         "ports":[{"name":"dns","protocol":"UDP","port":53},
+                                  {"name":"dns-tcp","protocol":"TCP","port":53}]}
+                    ]})
+                } else if nodes {
                     json!({"metadata":{"resourceVersion":"10"},"items":[
                         node("local", "8", &[], &["192.0.2.172"]),
                         node("peer", "9", &[], &["192.0.2.173"]),
@@ -184,13 +200,17 @@ fn controller_lists_watches_and_derives_the_pool() {
         kubeconfig: Some(PathBuf::from(&kubeconfig)),
         auto_direct_node_routes: false,
         skip_unreachable: false,
+        service_lb: true,
+        cgroup_root: PathBuf::from("/sys/fs/cgroup"),
     };
     let controller = Controller::connect(settings, &dir).expect("connect");
     let (pool4, pool6) = controller.wait_for_pools(true, true).expect("pools");
     assert_eq!(pool4, Some(("10.172.0.0".parse().expect("IP"), 16)));
     // No node IPv6, so IPv6 derives from the IPv4 alloc CIDR.
     assert_eq!(pool6, Some(("f00d::aac:0:0:0".parse().expect("IP"), 96)));
-    let view = controller.spawn(false).expect("spawn");
+    // No socket-lb object: Services and EndpointSlices are watched, nothing
+    // is attached (that needs CAP_BPF and a cgroup).
+    let view = controller.spawn(false, None, None).expect("spawn");
     let deadline = Instant::now()
         .checked_add(Duration::from_secs(20))
         .expect("deadline");
@@ -203,6 +223,8 @@ fn controller_lists_watches_and_derives_the_pool() {
                 .any(|n| n.name == "peer" && n.internal_ips.len() == 2);
             if view.nodes_synced
                 && view.pods_synced
+                && view.services_synced
+                && view.slices_synced
                 && peer_v6
                 && watches.load(Ordering::SeqCst) >= 2
             {
@@ -227,6 +249,23 @@ fn controller_lists_watches_and_derives_the_pool() {
                     "the peer's two InternalIPs are remote-node"
                 );
                 assert!(view.routes.is_empty(), "auto-direct-node-routes is off");
+                let dns: Vec<_> = view
+                    .frontends
+                    .iter()
+                    .map(|f| {
+                        let backends: Vec<_> =
+                            f.service.backends.iter().map(ToString::to_string).collect();
+                        format!("{} -> {}", f.service.frontend, backends.join(","))
+                    })
+                    .collect();
+                assert_eq!(
+                    dns,
+                    vec![
+                        "10.96.0.10:53/TCP -> 10.173.0.53:53/TCP",
+                        "10.96.0.10:53/UDP -> 10.173.0.53:53/UDP"
+                    ]
+                );
+                assert!(view.service_ids.is_empty(), "nothing is programmed");
                 break;
             }
         }

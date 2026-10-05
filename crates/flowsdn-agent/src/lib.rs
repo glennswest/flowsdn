@@ -3,4 +3,5 @@
 pub mod api;
 pub mod endpoints;
 pub mod kubernetes;
+pub mod services;
 pub mod state;

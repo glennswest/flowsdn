@@ -331,3 +331,71 @@ fn cluster_pod_scope_accepts_every_node_and_unscheduled_pods() {
         assert_eq!(watch.snapshot().len(), 0);
     });
 }
+
+#[test]
+fn services_parse_dual_stack_cluster_ips_and_skip_headless() {
+    let meta = |name: &str| json!({"name":name,"namespace":"kube-system","uid":name,"resourceVersion":"1"});
+    let dns = json!({"kind":"Service","metadata":meta("kube-dns"),"spec":{"type":"ClusterIP",
+        "clusterIP":"10.96.0.10","clusterIPs":["10.96.0.10","fd00:10:96::a"],
+        "ports":[{"name":"dns","protocol":"UDP","port":53},{"name":"dns-tcp","protocol":"TCP","port":53},
+                 {"port":9153}]}});
+    let Resource::Service(parsed) = Scope::Services.parse(&dns).expect("service") else {
+        panic!("service row expected");
+    };
+    assert_eq!(parsed.service_type, "ClusterIP");
+    assert_eq!(
+        parsed.cluster_ips,
+        vec!["10.96.0.10".parse::<std::net::IpAddr>().expect("ip"), "fd00:10:96::a".parse().expect("ip")]
+    );
+    assert_eq!(parsed.ports.len(), 3);
+    let unnamed = parsed.ports.get(2).expect("port");
+    assert_eq!((unnamed.name.as_str(), unnamed.protocol.as_str(), unnamed.port), ("", "TCP", 9153));
+    let headless = json!({"metadata":meta("headless"),"spec":{"clusterIP":"None","clusterIPs":["None"],
+        "ports":[{"port":80}]}});
+    let Resource::Service(parsed) = Scope::Services.parse(&headless).expect("headless") else {
+        panic!("service row expected");
+    };
+    assert!(parsed.cluster_ips.is_empty());
+    let external = json!({"metadata":meta("ext"),"spec":{"type":"ExternalName","externalName":"example.com"}});
+    let Resource::Service(parsed) = Scope::Services.parse(&external).expect("external") else {
+        panic!("service row expected");
+    };
+    assert!(parsed.cluster_ips.is_empty() && parsed.ports.is_empty());
+    let bad_port = json!({"metadata":meta("bad"),"spec":{"clusterIP":"10.96.0.2","ports":[{"port":0}]}});
+    assert!(Scope::Services.parse(&bad_port).is_err());
+    assert!(Scope::Services.parse(&json!({"kind":"Pod","metadata":meta("x"),"spec":{}})).is_err());
+}
+
+#[test]
+fn endpoint_slices_parse_conditions_and_ports() {
+    let slice = json!({"kind":"EndpointSlice","apiVersion":"discovery.k8s.io/v1",
+        "metadata":{"name":"kube-dns-abc","namespace":"kube-system","uid":"u","resourceVersion":"7",
+            "labels":{"kubernetes.io/service-name":"kube-dns"}},
+        "addressType":"IPv4",
+        "endpoints":[
+            {"addresses":["10.172.0.5"],"conditions":{"ready":true},"nodeName":"pvetest1"},
+            {"addresses":["10.172.0.6"],"conditions":{"ready":false,"serving":true,"terminating":true}},
+            {"addresses":["10.172.0.7"]}],
+        "ports":[{"name":"dns","protocol":"UDP","port":53},{"name":"all"}]});
+    let Resource::EndpointSlice(parsed) = Scope::EndpointSlices.parse(&slice).expect("slice") else {
+        panic!("slice row expected");
+    };
+    assert_eq!(parsed.service_name, "kube-dns");
+    assert_eq!(parsed.address_type, "IPv4");
+    let states: Vec<_> = parsed
+        .endpoints
+        .iter()
+        .map(|e| (e.ready, e.serving, e.terminating))
+        .collect();
+    assert_eq!(states, vec![(true, true, false), (false, true, true), (true, true, false)]);
+    assert_eq!(parsed.endpoints.first().map(|e| e.node_name.as_str()), Some("pvetest1"));
+    assert_eq!(parsed.ports.first().and_then(|p| p.port), Some(53));
+    assert_eq!(parsed.ports.get(1).and_then(|p| p.port), None);
+    assert!(Scope::EndpointSlices.namespaced());
+    let fqdn = json!({"metadata":{"name":"f","namespace":"n","uid":"u","resourceVersion":"1"},
+        "addressType":"FQDN","endpoints":[{"addresses":["example.com"]}]});
+    let Resource::EndpointSlice(parsed) = Scope::EndpointSlices.parse(&fqdn).expect("fqdn") else {
+        panic!("slice row expected");
+    };
+    assert!(parsed.endpoints.iter().all(|e| e.addresses.is_empty()));
+}
