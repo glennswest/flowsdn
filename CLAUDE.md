@@ -59,9 +59,9 @@ server pods (same image, `flowsdn-perf server`) on its own node and on another n
 Kubernetes API, and measures with Rust clients. JSON lines per metric with `flavor`.
 `flowsdn-perf` is a GNU binary (flowsdn-k8s, Fedora OpenSSL, ADR-0016); `/test` stays static musl.
 
-- [ ] flowsdn-k8s: generic JSON request (create/get/delete namespaced objects).
-- [ ] `test/perf` crate `flowsdn-perf`: server; TCP_RR/UDP_RR p50/p99; TCP stream 1 and 8; connect rate; DNS latency; pod network readiness; policy enforcement time and 100/1,000-rule throughput; scale (pods ready, endpoints per Service, conntrack); agent CPU/RSS idle and under load. Unit tests for stats, DNS codec, wire protocol, flavor detection.
-- [ ] `/test perf` dispatch; requires.toml `[perf]`; Containerfile/build.sh; docs, changelog.
+- [x] flowsdn-k8s: generic JSON request (`send_json`).
+- [x] `test/perf` crate `flowsdn-perf` with all metric groups; unit tests (stats, DNS codec, loopback wire protocols, /proc parsing, node/endpoint parsing).
+- [x] `/test perf` dispatch; requires.toml `[perf]`; Containerfile/build.sh; docs (test/README metric table), changelog.
 - [ ] sc-build; run `stormcentral test run flowsdn perf` on a Cilium and a flowsdn machine when the test registries have space (stormcentral#376).
 
 ### ClusterIP service datapath — #292 (P0), 2026-10-05

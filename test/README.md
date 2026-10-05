@@ -1,6 +1,6 @@
 # flowsdn test container
 
-flowsdn's suites under stormcentral's
+flowsdn's suites (and the `perf` comparison suite, below) under stormcentral's
 [test standard](https://github.com/glennswest/stormcentral/blob/main/docs/test-standard.md)
 (#303). There is one image, built from `test/Containerfile` with the repository
 root as context, and it runs as `/test short|medium|long`. stormcentral runs it
@@ -33,6 +33,58 @@ Left out of `medium`: `socket-context`, because the kernel's test-run of
 connect hooks is unsupported (errno 524 on 6.17), and `socket-live` covers those
 programs instead. The load-only kfunc probe is also left out, because running it
 would destroy sockets (#3).
+
+## `perf`: flowsdn vs Cilium (#321)
+
+`/test perf` is the network performance suite, declared in
+[`requires.toml`](requires.toml) with a 1800 s budget, so it runs by day:
+`stormcentral test run flowsdn perf --tag <machine>`. Unlike the other
+suites, it doesn't test the commit's own datapath. It measures **the cluster's
+pod network as any pod sees it**, and nothing in it is flowsdn-specific, so
+it runs unchanged on a Cilium-flavor and a flowsdn-flavor machine. The two
+runs compare metric by metric. **Primary** (owner, #321) means every probe
+passes on the flowsdn flavor, and each metric equals Cilium's or is better,
+or the owner accepts the gap.
+
+The suite is `flowsdn-perf`, a GNU binary that reaches the Kubernetes API
+over Fedora OpenSSL. `/test perf` execs it. The test pod is the client, on
+its pod network. It creates server pods from the same image
+(`flowsdn-perf server`: TCP/UDP echo on 5201, a stream sink on 5202 that
+returns the bytes it read, accept-and-close on 5203). It pins them with
+`nodeName` to its own node and to another ready node, plus a ClusterIP
+Service and NetworkPolicies, all in its run namespace and labelled with the
+run id. It deletes them at the end. `host_pid` lets it find the CNI agent by
+process name (`flowsdn-agent` or `cilium-agent`), which gives the flavor
+(`STORM_FLAVOR` overrides when there is none) and the agent's CPU and memory.
+`cluster_read` of nodes picks the peer. Each measurement runs 10 s
+(`STORM_PERF_SECONDS`).
+
+| test | measures |
+|---|---|
+| `perf-setup` | flavor, ready nodes, the cross-node peer |
+| `agent-cost-idle`, `agent-cost-load` | agent CPU (% of one core) and RSS, idle and during the same-node 8-stream run |
+| `pod-network-ready` | 10 pods created together on the node: create to Running with a pod IP, p50/p99/max ms |
+| `cni-ready-after-boot` | skip: the network phase of stormcentral's boot breakdown (stormcentral#365) |
+| `perf-server-same`, `perf-server-cross` | server pod placement and reachability |
+| `pod-tcp-rr-*`, `pod-udp-rr-*` | 1-byte request/response latency p50/p90/p99/max and transactions/s (netperf TCP_RR/UDP_RR equivalents), `same-node` and `cross-node` |
+| `pod-tcp-stream-1-*`, `pod-tcp-stream-8-*` | throughput in Gbit/s of what the server received, 1 and 8 streams (iperf3 equivalent) |
+| `pod-connect-rate-*` | TCP connections/s and connect latency |
+| `svc-ready`, `svc-*-clusterip` | the same through a ClusterIP Service (backend on the peer node when there is one), plus Service create to first connect |
+| `dns-lookup` | 200 A/AAAA lookups each of the run's Service and `kubernetes.default` via the pod's nameserver (kube-dns), p50/p99 |
+| `policy-deny-enforced`, `policy-remove-restored` | NetworkPolicy deny-all ingress create to enforcement, delete to traffic back (3 probes in a row, 60 s limit) |
+| `policy-rules-100-*`, `policy-rules-1000-*` | single-stream throughput to a pod selected by a policy with 100 / 1,000 ingress rules (one allows the client) |
+| `scale-pods-ready` | up to 100 pods (at most half the node's allocatable) on the node: how many got a pod IP, and how fast |
+| `scale-endpoints`, `scale-svc-connect` | one Service over them: ready endpoints in its EndpointSlices, then connects/s spread over them with no failures |
+| `conntrack-entries` | the host namespace's netfilter conntrack count before and after the connect run (skip without nf_conntrack) |
+
+Each line is the standard test line plus `flavor`, `node` and a `metrics`
+object, e.g. `{"test":"pod-tcp-rr-cross-node","status":"pass",…,
+"flavor":"flowsdn","node":"pvetest1","metrics":{"p50_us":41.2,"p99_us":88.0,
+"transactions_per_second":23011,…}}`. A probe fails when the network doesn't
+do the thing at all, for example a policy that is never enforced. The numbers
+themselves don't fail a run: comparing them is stormcentral's side-by-side view.
+Run it on the same machines with each flavor installed: pvetest1+pvetest2
+as a pair, then the Dell and a blade.
 
 ## Machine requirements
 
