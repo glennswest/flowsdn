@@ -58,3 +58,9 @@ name = "skb-ctx"
 path = "src/bin/skb-ctx.rs"
 test = false
 bench = false
+
+[[bin]]
+name = "socket-lb"
+path = "src/bin/socket-lb.rs"
+test = false
+bench = false
