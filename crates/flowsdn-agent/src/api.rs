@@ -993,11 +993,11 @@ fn connect_kubernetes(config: &mut Config) -> Result<Option<Kubernetes>> {
     Ok(None)
 }
 #[cfg(feature = "kubernetes")]
-fn spawn_kubernetes(controller: Kubernetes) -> Result<crate::kubernetes::Shared> {
-    controller.spawn()
+fn spawn_kubernetes(controller: Kubernetes, ipv6: bool) -> Result<crate::kubernetes::Shared> {
+    controller.spawn(ipv6)
 }
 #[cfg(not(feature = "kubernetes"))]
-fn spawn_kubernetes(never: Kubernetes) -> Result<crate::kubernetes::Shared> {
+fn spawn_kubernetes(never: Kubernetes, _ipv6: bool) -> Result<crate::kubernetes::Shared> {
     match never {}
 }
 
@@ -1020,7 +1020,10 @@ pub fn run(config_path: &Path) -> Result<()> {
     )?;
     // Routes are written under the state directory, so start after restore
     // holds its exclusive lock.
-    let kubernetes = kubernetes.map(spawn_kubernetes).transpose()?;
+    let ipv6 = config.v6.is_some();
+    let kubernetes = kubernetes
+        .map(|controller| spawn_kubernetes(controller, ipv6))
+        .transpose()?;
     let enabled = kubernetes.is_some();
     let mut api = Api {
         config,

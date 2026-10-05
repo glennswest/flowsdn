@@ -75,14 +75,19 @@ impl Controller {
             std::thread::sleep(Duration::from_secs(1));
         }
     }
-    /// Start the watch thread (and the route thread when auto-direct-node-routes
-    /// is on); the returned view is what the API serves.
-    pub fn spawn(self) -> Result<Shared> {
+    /// Set the datapath-init sysctls, then start the watch thread (and the
+    /// route thread when auto-direct-node-routes is on); the returned view is
+    /// what the API serves.
+    pub fn spawn(self, ipv6: bool) -> Result<Shared> {
         let view: Shared = Arc::new(Mutex::new(View {
             local_node: self.settings.node_name.clone(),
             direct_routes: self.settings.auto_direct_node_routes,
             ..View::default()
         }));
+        let failed = apply_sysctls(Path::new("/proc/sys"), ipv6);
+        if !failed.is_empty() {
+            lock(&view).errors.insert("sysctl".into(), failed.join("; "));
+        }
         let routes = if self.settings.auto_direct_node_routes {
             let (sender, receiver) = mpsc::channel();
             let route_view = Arc::clone(&view);
@@ -137,6 +142,28 @@ impl Controller {
             })?;
         Ok(view)
     }
+}
+
+/// Spec 10 §3.6 datapath init: forwarding on (pods on other nodes reach ours
+/// through this host) and `all.rp_filter` 0. Returns the keys that failed.
+fn apply_sysctls(root: &Path, ipv6: bool) -> Vec<String> {
+    let mut keys = vec![
+        "net/ipv4/conf/all/rp_filter",
+        "net/ipv4/ip_forward",
+        "net/ipv4/conf/all/forwarding",
+    ];
+    if ipv6 {
+        keys.push("net/ipv6/conf/all/forwarding");
+    }
+    let mut failed = Vec::new();
+    for key in keys {
+        let value = if key.ends_with("rp_filter") { "0" } else { "1" };
+        if let Err(error) = fs::write(root.join(key), value) {
+            eprintln!("cannot set {key}={value}: {error}");
+            failed.push(format!("{}={value}: {error}", key.replace('/', ".")));
+        }
+    }
+    failed
 }
 
 fn node_info(node: &flowsdn_k8s::watch::Node) -> NodeInfo {
@@ -449,6 +476,24 @@ fn save_routes(file: &Path, routes: &BTreeSet<Key>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sysctls_follow_the_enabled_families() {
+        let root = std::env::temp_dir().join(format!("flowsdn-sysctl-{}", std::process::id()));
+        for dir in ["net/ipv4/conf/all", "net/ipv6/conf/all"] {
+            fs::create_dir_all(root.join(dir)).expect("dir");
+        }
+        assert!(apply_sysctls(&root, false).is_empty());
+        let read = |key: &str| fs::read_to_string(root.join(key)).ok();
+        assert_eq!(read("net/ipv4/ip_forward").as_deref(), Some("1"));
+        assert_eq!(read("net/ipv4/conf/all/forwarding").as_deref(), Some("1"));
+        assert_eq!(read("net/ipv4/conf/all/rp_filter").as_deref(), Some("0"));
+        assert_eq!(read("net/ipv6/conf/all/forwarding"), None);
+        assert!(apply_sysctls(&root, true).is_empty());
+        assert_eq!(read("net/ipv6/conf/all/forwarding").as_deref(), Some("1"));
+        let _ = fs::remove_dir_all(&root);
+        assert_eq!(apply_sysctls(&root, true).len(), 4);
+    }
 
     #[test]
     fn persisted_routes_round_trip() {
