@@ -139,8 +139,8 @@ working two-node Kubernetes deployment.
 stormcos ships flowsdn as a **golden** containing the static musl agent
 (`/flowsdn-agent`, BPF object embedded) and CNI (`/opt/cni/bin/flowsdn`). Nodes
 clone goldens copy-on-write and mount it at `/pallets/flowsdn`; nothing is
-pulled. The latest golden is `golden-flowsdn-600aa332b66d`, staged from
-`4627158`. The golden/release authority is
+pulled. The latest golden is `golden-flowsdn-84a7153fcfd0`, staged from
+`26b7aea`. The golden/release authority is
 [stormcos's golden documentation](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 The flowsdn edition and composition are owned by stormcos; source changes reach
 nodes through a newly staged golden and composed release, not through a Git

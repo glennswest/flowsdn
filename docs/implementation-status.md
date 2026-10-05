@@ -47,7 +47,7 @@ oracle decision (`31b3ba2`, ADR-0018, #103); stack egress and host routes
 (`4f9fa43`), the reproducible BPF build (`a3b771c`) and the edition manifests,
 node installer and embedded object (`8c873aa`, #296); and the `__sk_buff`
 `ctx_in` matrix probe (`60030ff`, #256). The flowsdn golden
-`golden-flowsdn-600aa332b66d` was staged from `4627158`.
+`golden-flowsdn-84a7153fcfd0` was staged from `26b7aea`.
 
 These are implementation and focused validation results, not completion of
 [the four networking milestones](milestones.md). Issues #291–#294 remain the

@@ -32,7 +32,7 @@ establish two-node pod networking. Docs were last refreshed from code on
 The stormcos flowsdn edition carries the static musl agent (BPF object
 embedded) and CNI in the `flowsdn` golden; `deploy/stormcos/manifests/` runs it
 as `image: flowsdn` with a CNI-install init container (stormcos#261 applies
-them). Latest golden: golden-flowsdn-600aa332b66d at 4627158. Source pushes do not update nodes until a new golden is composed into
+them). Latest golden: golden-flowsdn-84a7153fcfd0 at 26b7aea. Source pushes do not update nodes until a new golden is composed into
 a release. Authority:
 [stormcos/docs/goldens.md](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 After validated implementation work, flowsdn uses the special-component
@@ -60,11 +60,12 @@ block it: same-node pod->pod is redirected in BPF (replies from a local backend 
 skip conntrack's reverse DNAT), and non-IP frames are dropped (the pod's ARP replies, so the host
 cannot deliver routed packets to an IPv4 pod).
 
-- [ ] BPF: in stack mode local_delivery hands every frame to the host stack; rebuild the embedded object via sc-build.
-- [ ] Docs/changelog (runtime.md, deploy/stormcos/README.md, agent README).
-- [ ] sc-build: workspace tests + test/build.sh (embedded object check).
-- [ ] Agree on stormcos#265: kube-proxy in the edition with this golden; stage a golden.
-- [ ] #292 stays open (milestone 2 not delivered); status comment.
+- [x] BPF: in stack mode local_delivery hands every frame to the host stack; embedded object rebuilt from sc-build output (sha256 cc22678a…) at f19cba3.
+- [x] Docs/changelog (README, runtime.md, implementation-status, deploy/stormcos/README.md, agent README) at 26b7aea.
+- [x] sc-build at 26b7aea: fmt, workspace Clippy -D warnings, 676 tests (0 failed, 1 ignored), test/build.sh embedded-object check passed (194 s).
+- [x] Golden golden-flowsdn-84a7153fcfd0 at 26b7aea (release request stormcos#255). Agreed on stormcos#265: the edition runs rustkube-node kube-proxy (iptables) until milestone 2; stormcos applies flowsdn's manifests, ip_forward, masquerade.
+- [x] #292 stays open (milestone 2 not delivered); status comment; proposed after #291.
+- [ ] Live check on a flowsdn node once stormcos ships kube-proxy: a pod resolves kubernetes.default via 10.96.0.10 and reaches 10.96.0.1:443.
 
 ### Comment mining — 2026-10-04 (since 2026-10-04)
 
