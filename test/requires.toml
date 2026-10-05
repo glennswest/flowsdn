@@ -38,3 +38,13 @@ host_paths_read_only = ["/opt/cni/bin", "/run"]
 budget_secs = 1800
 host_pid = true
 cluster_read = [{ apiGroup = "", resource = "nodes" }]
+
+# The scale ramp (#321; owner, 2026-10-05: "a set of tests with both, in 100
+# unit (containers), and see how far we go"): server pods in steps of 100,
+# round-robin over the ready nodes, behind one Service, until a step fails or
+# the cluster's allocatable pods are reached; then drain. Night only, on a pve
+# VM (its budget is over 30 min). STORM_SCALE_MAX caps it.
+[perf-scale]
+budget_secs = 14400
+host_pid = true
+cluster_read = [{ apiGroup = "", resource = "nodes" }]

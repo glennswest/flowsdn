@@ -29,6 +29,10 @@ const READINESS_PODS: usize = 10;
 const SCALE_PODS: u64 = 100;
 const POLICY_TIMEOUT: Duration = Duration::from_secs(60);
 const DNS_LOOKUPS: usize = 200;
+/// Pods added per `perf-scale` step (owner, 2026-10-05: "100 unit").
+const RAMP_STEP: u64 = 100;
+/// How long one step's pods may take to get pod IPs.
+const RAMP_STEP_TIMEOUT: Duration = Duration::from_secs(600);
 
 struct Suite {
     kube: Kube,
@@ -48,7 +52,9 @@ fn env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.is_empty())
 }
 
-pub fn run() -> ExitCode {
+/// `ramp`: the `perf-scale` suite (steps of [`RAMP_STEP`] pods until one
+/// fails); otherwise the `perf` suite.
+pub fn run(ramp: bool) -> ExitCode {
     let proc_root = PathBuf::from("/proc");
     let agent = host::find_agent(&proc_root);
     let flavor = agent
@@ -122,7 +128,11 @@ pub fn run() -> ExitCode {
         agent,
         created: Vec::new(),
     };
-    suite.all(allocatable);
+    if ramp {
+        suite.ramp(&nodes);
+    } else {
+        suite.all(allocatable);
+    }
     suite.cleanup();
     suite.report.finish()
 }
@@ -708,6 +718,225 @@ impl Suite {
                 "no /proc/1/net/stat/nf_conntrack (nf_conntrack not loaded in the host namespace)",
             ),
         }
+    }
+}
+
+impl Suite {
+    /// `perf-scale`: add RAMP_STEP server pods at a time, round-robin over
+    /// the ready nodes, behind one Service. A step passes when every new pod
+    /// gets a pod IP within RAMP_STEP_TIMEOUT, the Service's EndpointSlices
+    /// hold every pod, connects through the ClusterIP all succeed and the
+    /// newest pod answers TCP_RR. Stops at the first failing step or at the
+    /// cluster's allocatable pods (less what the node already runs is not
+    /// known, so a capacity stop shows as a step whose pods stay Pending).
+    /// `scale-max` reports the most pods with working networking.
+    fn ramp(&mut self, nodes: &[(String, u64)]) {
+        let capacity: u64 = nodes.iter().map(|(_, p)| *p).sum();
+        let limit = env("STORM_SCALE_MAX")
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(capacity)
+            .min(capacity);
+        let service = match self.ramp_service() {
+            Ok(ip) => ip,
+            Err(e) => {
+                self.report.fail("scale-ramp", Duration::ZERO, &e);
+                return;
+            }
+        };
+        let image = self.image.clone();
+        let mut total: u64 = 0;
+        let mut best: u64 = 0;
+        let mut stop = String::from("reached the cluster's allocatable pods");
+        let started = Instant::now();
+        let mut step: u64 = 0;
+        while total < limit {
+            step = step.saturating_add(1);
+            let size = RAMP_STEP.min(limit.saturating_sub(total));
+            let test = format!("scale-step-{step}");
+            let step_started = Instant::now();
+            let usage = self.agent.clone().and_then(|a| Usage::start(&self.proc_root, a.pid));
+            let mut created = Vec::new();
+            for i in 0..size {
+                let index = total.saturating_add(i);
+                let node = nodes
+                    .get(usize::try_from(index).unwrap_or(0) % nodes.len().max(1))
+                    .map_or(self.node.clone(), |(n, _)| n.clone());
+                let name = format!("perf-ramp-{index}");
+                let body = self.kube.pod(&name, "perf-ramp", &node, &image, &["server"]);
+                let at = Instant::now();
+                match self.kube.create(&self.kube.pods_path(), &body) {
+                    Ok(_) => {
+                        self.track(format!("{}/{name}", self.kube.pods_path()));
+                        created.push((name, at));
+                    }
+                    Err(e) => {
+                        stop = format!("step {step}: create failed: {e}");
+                        break;
+                    }
+                }
+            }
+            let mut samples = Samples::default();
+            let mut newest = None;
+            let mut failure = None;
+            for (name, at) in &created {
+                let remaining = RAMP_STEP_TIMEOUT.saturating_sub(step_started.elapsed());
+                match self.kube.wait_ip(name, *at, remaining.max(Duration::from_secs(1))) {
+                    Ok((ip, after)) => {
+                        samples.push(after);
+                        newest = Some(ip);
+                    }
+                    Err(e) => {
+                        failure = Some(e);
+                        break;
+                    }
+                }
+            }
+            let ready = u64::try_from(samples.len()).unwrap_or(0);
+            let now = total.saturating_add(ready);
+            if failure.is_none() && ready == size {
+                failure = self.ramp_check(&service, usize::try_from(now).unwrap_or(usize::MAX), newest);
+            }
+            let cost = usage.and_then(|u| u.finish());
+            let mut metrics = ms_summary(&mut samples);
+            if let Some(object) = metrics.as_object_mut() {
+                object.insert("pods_total".into(), json!(now));
+                object.insert("step_pods".into(), json!(size));
+                object.insert("step_ms".into(), json!(step_started.elapsed().as_millis()));
+                if let Some((cpu, rss)) = cost {
+                    object.insert("agent_cpu_percent".into(), json!(cpu));
+                    object.insert("agent_rss_mib".into(), json!(rss));
+                }
+            }
+            match failure {
+                None if ready == size => {
+                    total = now;
+                    best = now;
+                    let p99 = metrics.get("p99_ms").cloned().unwrap_or(Value::Null);
+                    self.report.pass(
+                        &test,
+                        step_started.elapsed(),
+                        &format!("{now} pods with working networking (step p99 to pod IP {p99} ms)"),
+                        metrics,
+                    );
+                }
+                other => {
+                    let why = other.unwrap_or_else(|| format!("{ready}/{size} pods created"));
+                    stop = format!("step {step} ({now} pods): {why}");
+                    self.report.fail(&test, step_started.elapsed(), &why);
+                    break;
+                }
+            }
+        }
+        let rss = self
+            .agent
+            .clone()
+            .and_then(|a| Usage::start(&self.proc_root, a.pid))
+            .and_then(|u| u.finish())
+            .map(|(_, rss)| rss);
+        self.report.pass(
+            "scale-max",
+            started.elapsed(),
+            &format!("{best} pods with working networking; stopped: {stop}"),
+            json!({"max_pods": best, "nodes": nodes.len(), "allocatable_pods": capacity,
+                "limit": limit, "agent_rss_mib": rss, "stopped": stop}),
+        );
+        // Drain: delete every ramp pod, then the time for the Service to empty.
+        let drained = Instant::now();
+        let pods: Vec<String> = self
+            .created
+            .iter()
+            .filter(|p| p.contains("/pods/perf-ramp-"))
+            .cloned()
+            .collect();
+        for path in &pods {
+            let _ = self.kube.delete(path);
+        }
+        self.created.retain(|p| !pods.contains(p));
+        let slices = self.kube.slices_path("perf-ramp-svc");
+        let mut left = usize::MAX;
+        while drained.elapsed() < Duration::from_secs(600) {
+            left = self.kube.get(&slices).map(|v| kube::ready_endpoints(&v)).unwrap_or(usize::MAX);
+            if left == 0 {
+                break;
+            }
+            thread::sleep(Duration::from_secs(1));
+        }
+        let rss_after = self
+            .agent
+            .clone()
+            .and_then(|a| Usage::start(&self.proc_root, a.pid))
+            .and_then(|u| u.finish())
+            .map(|(_, rss)| rss);
+        if left == 0 {
+            self.report.pass(
+                "scale-drain",
+                drained.elapsed(),
+                &format!("{best} pods deleted; Service empty after {} ms", drained.elapsed().as_millis()),
+                json!({"drain_ms": drained.elapsed().as_millis(), "agent_rss_mib": rss_after}),
+            );
+        } else {
+            self.report.fail(
+                "scale-drain",
+                drained.elapsed(),
+                &format!("{left} endpoints still ready 600 s after deleting the pods"),
+            );
+        }
+    }
+
+    /// The Service in front of every ramp pod; its ClusterIP.
+    fn ramp_service(&mut self) -> Result<IpAddr, String> {
+        let body = json!({
+            "apiVersion": "v1", "kind": "Service",
+            "metadata": {"name": "perf-ramp-svc", "labels": self.kube.labels("perf-ramp-svc")},
+            "spec": {"selector": {"app": "perf-ramp"}, "ports": [
+                {"name": "accept", "protocol": "TCP", "port": ACCEPT_PORT, "targetPort": ACCEPT_PORT}]},
+        });
+        let created = self.kube.create(&self.kube.services_path(), &body)?;
+        self.track(format!("{}/perf-ramp-svc", self.kube.services_path()));
+        created
+            .pointer("/spec/clusterIP")
+            .and_then(Value::as_str)
+            .and_then(|ip| ip.parse::<IpAddr>().ok())
+            .ok_or_else(|| "perf-ramp-svc has no clusterIP".to_string())
+    }
+
+    /// After a step: endpoints for every pod, clean connects through the
+    /// ClusterIP, and TCP_RR to the newest pod. None when all hold.
+    fn ramp_check(&mut self, service: &IpAddr, pods: usize, newest: Option<IpAddr>) -> Option<String> {
+        let slices = self.kube.slices_path("perf-ramp-svc");
+        let waited = Instant::now();
+        let mut endpoints = 0;
+        while waited.elapsed() < Duration::from_secs(120) {
+            endpoints = self.kube.get(&slices).map(|v| kube::ready_endpoints(&v)).unwrap_or(0);
+            if endpoints >= pods {
+                break;
+            }
+            thread::sleep(Duration::from_millis(500));
+        }
+        if endpoints < pods {
+            return Some(format!("{endpoints}/{pods} endpoints in the Service after 120 s"));
+        }
+        let address = SocketAddr::new(*service, ACCEPT_PORT);
+        if !wait_reachable(address, Duration::from_secs(60)) {
+            return Some(format!("ClusterIP {address} not reachable"));
+        }
+        let (result, failed) = wire::connect_rate(address, Duration::from_secs(3));
+        if failed > 0 {
+            return Some(format!(
+                "{failed} of {} connects through the ClusterIP failed",
+                result.samples.len().saturating_add(usize::try_from(failed).unwrap_or(0))
+            ));
+        }
+        if let Some(ip) = newest {
+            let target = SocketAddr::new(ip, RR_PORT);
+            if !wait_reachable(target, Duration::from_secs(60)) {
+                return Some(format!("newest pod {target} not reachable"));
+            }
+            if let Err(e) = wire::tcp_rr(target, Duration::from_secs(1)) {
+                return Some(format!("TCP_RR to newest pod {target}: {e}"));
+            }
+        }
+        None
     }
 }
 

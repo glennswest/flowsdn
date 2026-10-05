@@ -25,9 +25,10 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [mode] if mode == "--endpoint" => lab::endpoint_worker(),
         [suite] if ["short", "medium", "long"].contains(&suite.as_str()) => run(suite),
-        [suite] if suite == "perf" => perf(),
+        [suite] if suite == "perf" => perf("run"),
+        [suite] if suite == "perf-scale" => perf("run-scale"),
         _ => {
-            eprintln!("usage: /test short|medium|long|perf");
+            eprintln!("usage: /test short|medium|long|perf|perf-scale");
             ExitCode::from(2)
         }
     }
@@ -35,10 +36,10 @@ fn main() -> ExitCode {
 
 /// The network performance suite (#321) is a separate GNU binary (it talks
 /// to the Kubernetes API over Fedora OpenSSL); hand the process over to it.
-fn perf() -> ExitCode {
+fn perf(mode: &str) -> ExitCode {
     use std::os::unix::process::CommandExt;
     let error = std::process::Command::new("/opt/flowsdn/bin/flowsdn-perf")
-        .arg("run")
+        .arg(mode)
         .exec();
     report::emit(
         &serde_json::json!({"test": "perf-setup", "status": "fail", "ms": 0,
