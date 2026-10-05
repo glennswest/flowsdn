@@ -52,8 +52,8 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ### Presentation — #302 (P1), 2026-10-05
 
-- [x] `docs/presentation.md`: Marp deck, 12 slides, every claim checked against code/docs (specs count, CNI CHECK, routes, config keys, milestones, golden). Linked from README and docs/README; changelog.
-- [ ] sc-build: render with marp-cli (HTML and PDF) if the build box can; close #302.
+- [x] `docs/presentation.md`: Marp deck, 11 slides, every claim checked against code/docs (specs count, CNI CHECK, routes, config keys, milestones, golden). Linked from README and docs/README; changelog.
+- [x] sc-build: marp-cli rendered HTML (11 slides); PDF needs a Chromium the build box lacks (#324 closed). #302 closed.
 
 ### Network performance suite — #321 (P0), 2026-10-05
 
