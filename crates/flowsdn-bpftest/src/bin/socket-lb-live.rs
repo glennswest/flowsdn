@@ -198,11 +198,11 @@ fn main() -> Result<()> {
         match client.peer_addr()?.ip() {
             IpAddr::V4(ip) if ip.octets() == [127, 0, 0, 1] => {
                 tcp4.accept()?;
-                one += 1;
+                one = one.saturating_add(1);
             }
             IpAddr::V4(ip) if ip.octets() == [127, 0, 0, 2] => {
                 tcp4b.accept()?;
-                two += 1;
+                two = two.saturating_add(1);
             }
             other => return Err(format!("unexpected backend {other}").into()),
         }
@@ -217,7 +217,11 @@ fn main() -> Result<()> {
     program(&mut lb, &services)?;
     match TcpStream::connect_timeout(&sa("192.0.2.10:80")?, TIMEOUT) {
         Ok(stream) => {
-            return Err(format!("removed frontend still connects to {:?}", stream.peer_addr()).into());
+            return Err(format!(
+                "removed frontend still connects to {:?}",
+                stream.peer_addr()
+            )
+            .into());
         }
         Err(error) if error.kind() == ErrorKind::PermissionDenied => {
             return Err("removed frontend still rejected as a service".into());
