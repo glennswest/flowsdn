@@ -7,6 +7,7 @@ points, rather than treating specifications as a list of implemented features.
 | Question | Current reference |
 |---|---|
 | Purpose, delivered features and golden delivery | [Project README](../README.md) |
+| A short deck: purpose, place in stormcos, what works, interfaces, shipping, status | [Presentation](presentation.md) (Marp; `npx @marp-team/marp-cli docs/presentation.md`) |
 | Executable configuration, defaults and ports | [Runtime reference](runtime.md) |
 | HTTP methods, bounded reads and health meaning | [Standalone agent API](agent-api.md) |
 | Edition manifests, host resources, CNI install | [stormcos integration](../deploy/stormcos/README.md) |

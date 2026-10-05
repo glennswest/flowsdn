@@ -50,6 +50,11 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Presentation — #302 (P1), 2026-10-05
+
+- [x] `docs/presentation.md`: Marp deck, 12 slides, every claim checked against code/docs (specs count, CNI CHECK, routes, config keys, milestones, golden). Linked from README and docs/README; changelog.
+- [ ] sc-build: render with marp-cli (HTML and PDF) if the build box can; close #302.
+
 ### Network performance suite — #321 (P0), 2026-10-05
 
 Owner: flowsdn "totally done" with performance comparisons against Cilium, the data for making it

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-05
+- **docs:** `docs/presentation.md` (#302): a 12-slide Marp deck covering purpose, place in stormcos (from stormcentral's relationships), how it works, what works today (from the code) and what is planned, interfaces, shipping and operation, tests, and status. Linked from README and docs/README.
 - **feat:** Network performance suite `perf` (#321): `/test perf` runs `flowsdn-perf` (new GNU crate `test/perf`), the same measurements on any CNI flavor so flowsdn and Cilium runs on the same machines compare. Server pods pinned to the client's node and another node; TCP_RR/UDP_RR latency, 1 and 8 stream throughput, connect rate, same-node, cross-node and through a ClusterIP; DNS lookups via kube-dns; pod create-to-IP; NetworkPolicy enforcement time and throughput under 100/1,000 rules; scale (pods ready, endpoints per Service, conntrack); agent CPU/RSS idle and under load. JSON lines with `flavor`, `node` and `metrics`. Declared in `test/requires.toml` (`budget_secs = 1800`, `host_pid`, cluster read of nodes); the image adds openssl-libs.
 - **feat:** `flowsdn-k8s`: `JsonClient::send_json` (one bounded JSON request to any API path, for create/get/delete).
 - **chore:** Stage golden-flowsdn-a7ee3f63195b at c6c96c7 (ClusterIP socket LB, #292; release request stormcos#255).

@@ -168,6 +168,7 @@ flowsdn goldens use `stormcentral component stage flowsdn`; stormcentral records
 the golden and files the release request. See [build and publication](docs/build-and-test.md)
 for the actual commands and the distinction from ordinary Cargo development.
 
+For a short overview, see the [presentation](docs/presentation.md) (a Marp deck).
 Start with the [documentation guide](docs/README.md), current runtime/API and
 deployment references. `docs/spec/` defines intended contracts;
 `docs/inventory/` describes Cilium v1.20.1 (`7d68cfb394`); historical decisions,
