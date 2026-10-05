@@ -50,6 +50,22 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Services for the flowsdn edition — #292 (P0 via stormcos#265), 2026-10-05
+
+Master: in the flowsdn edition no kube-proxy runs, so ClusterIPs don't route; agree with
+stormcos on #265 whether flowsdn's service handling lands now or the edition runs kube-proxy.
+flowsdn's service datapath (milestone 2) needs k8s watches, service maps and socket/tc LB
+integration that do not exist yet, so kube-proxy is the fast route. Two `egress: stack` bugs
+block it: same-node pod->pod is redirected in BPF (replies from a local backend such as CoreDNS
+skip conntrack's reverse DNAT), and non-IP frames are dropped (the pod's ARP replies, so the host
+cannot deliver routed packets to an IPv4 pod).
+
+- [ ] BPF: in stack mode local_delivery hands every frame to the host stack; rebuild the embedded object via sc-build.
+- [ ] Docs/changelog (runtime.md, deploy/stormcos/README.md, agent README).
+- [ ] sc-build: workspace tests + test/build.sh (embedded object check).
+- [ ] Agree on stormcos#265: kube-proxy in the edition with this golden; stage a golden.
+- [ ] #292 stays open (milestone 2 not delivered); status comment.
+
 ### Comment mining — 2026-10-04 (since 2026-10-04)
 
 - [x] Read the 24 comments on 33 issues updated since 2026-10-04. Everything was already filed (stormcos#266, #261; stormcentral#249, #376, #383, #384; stormconsole#83; flowsdn#314). Added the #383 decision to stormcentral#360 and the #256 row recommendation to #309. No fixes. stormcentral#383 settled the two-node pair: pvetest1 + pvetest2, both installed with the flowsdn flavor through #360. That makes the "Owner input needed before two-node acceptance" line under #291 stale.
