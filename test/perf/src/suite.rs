@@ -754,15 +754,20 @@ impl Suite {
             let size = RAMP_STEP.min(limit.saturating_sub(total));
             let test = format!("scale-step-{step}");
             let step_started = Instant::now();
-            let usage = self.agent.clone().and_then(|a| Usage::start(&self.proc_root, a.pid));
+            let usage = self
+                .agent
+                .clone()
+                .and_then(|a| Usage::start(&self.proc_root, a.pid));
             let mut created = Vec::new();
             for i in 0..size {
                 let index = total.saturating_add(i);
                 let node = nodes
-                    .get(usize::try_from(index).unwrap_or(0) % nodes.len().max(1))
+                    .get(usize::try_from(index).unwrap_or(0).checked_rem(nodes.len()).unwrap_or(0))
                     .map_or(self.node.clone(), |(n, _)| n.clone());
                 let name = format!("perf-ramp-{index}");
-                let body = self.kube.pod(&name, "perf-ramp", &node, &image, &["server"]);
+                let body = self
+                    .kube
+                    .pod(&name, "perf-ramp", &node, &image, &["server"]);
                 let at = Instant::now();
                 match self.kube.create(&self.kube.pods_path(), &body) {
                     Ok(_) => {
@@ -780,7 +785,10 @@ impl Suite {
             let mut failure = None;
             for (name, at) in &created {
                 let remaining = RAMP_STEP_TIMEOUT.saturating_sub(step_started.elapsed());
-                match self.kube.wait_ip(name, *at, remaining.max(Duration::from_secs(1))) {
+                match self
+                    .kube
+                    .wait_ip(name, *at, remaining.max(Duration::from_secs(1)))
+                {
                     Ok((ip, after)) => {
                         samples.push(after);
                         newest = Some(ip);
@@ -794,7 +802,8 @@ impl Suite {
             let ready = u64::try_from(samples.len()).unwrap_or(0);
             let now = total.saturating_add(ready);
             if failure.is_none() && ready == size {
-                failure = self.ramp_check(&service, usize::try_from(now).unwrap_or(usize::MAX), newest);
+                failure =
+                    self.ramp_check(&service, usize::try_from(now).unwrap_or(usize::MAX), newest);
             }
             let cost = usage.and_then(|u| u.finish());
             let mut metrics = ms_summary(&mut samples);
@@ -815,7 +824,9 @@ impl Suite {
                     self.report.pass(
                         &test,
                         step_started.elapsed(),
-                        &format!("{now} pods with working networking (step p99 to pod IP {p99} ms)"),
+                        &format!(
+                            "{now} pods with working networking (step p99 to pod IP {p99} ms)"
+                        ),
                         metrics,
                     );
                 }
@@ -855,7 +866,11 @@ impl Suite {
         let slices = self.kube.slices_path("perf-ramp-svc");
         let mut left = usize::MAX;
         while drained.elapsed() < Duration::from_secs(600) {
-            left = self.kube.get(&slices).map(|v| kube::ready_endpoints(&v)).unwrap_or(usize::MAX);
+            left = self
+                .kube
+                .get(&slices)
+                .map(|v| kube::ready_endpoints(&v))
+                .unwrap_or(usize::MAX);
             if left == 0 {
                 break;
             }
@@ -871,7 +886,10 @@ impl Suite {
             self.report.pass(
                 "scale-drain",
                 drained.elapsed(),
-                &format!("{best} pods deleted; Service empty after {} ms", drained.elapsed().as_millis()),
+                &format!(
+                    "{best} pods deleted; Service empty after {} ms",
+                    drained.elapsed().as_millis()
+                ),
                 json!({"drain_ms": drained.elapsed().as_millis(), "agent_rss_mib": rss_after}),
             );
         } else {
@@ -902,19 +920,30 @@ impl Suite {
 
     /// After a step: endpoints for every pod, clean connects through the
     /// ClusterIP, and TCP_RR to the newest pod. None when all hold.
-    fn ramp_check(&mut self, service: &IpAddr, pods: usize, newest: Option<IpAddr>) -> Option<String> {
+    fn ramp_check(
+        &mut self,
+        service: &IpAddr,
+        pods: usize,
+        newest: Option<IpAddr>,
+    ) -> Option<String> {
         let slices = self.kube.slices_path("perf-ramp-svc");
         let waited = Instant::now();
         let mut endpoints = 0;
         while waited.elapsed() < Duration::from_secs(120) {
-            endpoints = self.kube.get(&slices).map(|v| kube::ready_endpoints(&v)).unwrap_or(0);
+            endpoints = self
+                .kube
+                .get(&slices)
+                .map(|v| kube::ready_endpoints(&v))
+                .unwrap_or(0);
             if endpoints >= pods {
                 break;
             }
             thread::sleep(Duration::from_millis(500));
         }
         if endpoints < pods {
-            return Some(format!("{endpoints}/{pods} endpoints in the Service after 120 s"));
+            return Some(format!(
+                "{endpoints}/{pods} endpoints in the Service after 120 s"
+            ));
         }
         let address = SocketAddr::new(*service, ACCEPT_PORT);
         if !wait_reachable(address, Duration::from_secs(60)) {
@@ -924,7 +953,10 @@ impl Suite {
         if failed > 0 {
             return Some(format!(
                 "{failed} of {} connects through the ClusterIP failed",
-                result.samples.len().saturating_add(usize::try_from(failed).unwrap_or(0))
+                result
+                    .samples
+                    .len()
+                    .saturating_add(usize::try_from(failed).unwrap_or(0))
             ));
         }
         if let Some(ip) = newest {
