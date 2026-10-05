@@ -22,6 +22,10 @@ use std::{
 
 type Reader = Pin<Box<dyn AsyncBufRead + Send>>;
 
+/// The error text of a watch the server closed normally (its timeoutSeconds):
+/// the caller may resume from its last resourceVersion instead of relisting.
+pub const WATCH_ENDED: &str = "watch ended; relist required";
+
 #[derive(Clone, Copy, Debug)]
 pub struct TransportLimits {
     pub list_bytes: usize,
@@ -328,7 +332,7 @@ impl<R: AsyncBufRead + Unpin> JsonFrames<R> {
                 .await
                 .map_err(|_| Error("watch read failed; relist required".into()))?;
             if chunk.is_empty() {
-                return Err(Error("watch ended; relist required".into()));
+                return Err(Error(WATCH_ENDED.into()));
             }
             let newline = chunk.iter().position(|b| *b == b'\n');
             let length = newline.map_or(chunk.len(), |n| n.saturating_add(1));

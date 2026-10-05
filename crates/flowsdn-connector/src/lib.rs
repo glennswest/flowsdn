@@ -395,6 +395,31 @@ impl Connector {
             Ok(result)
         })
     }
+    /// `ip route get <destination>`: the gateway and output interface the kernel
+    /// would use. A node is directly reachable when there is no other gateway.
+    pub fn lookup(&self, destination: IpAddr) -> Result<(Option<IpAddr>, Option<u32>)> {
+        let mut request = RouteMessage::default();
+        request.header.address_family = if destination.is_ipv4() {
+            rtnetlink::packet_route::AddressFamily::Inet
+        } else {
+            rtnetlink::packet_route::AddressFamily::Inet6
+        };
+        request.header.destination_prefix_length = if destination.is_ipv4() { 32 } else { 128 };
+        request.attributes.push(RouteAttribute::Destination(match destination {
+            IpAddr::V4(ip) => RouteAddress::Inet(ip),
+            IpAddr::V6(ip) => RouteAddress::Inet6(ip),
+        }));
+        let message = self.run(async {
+            self.handle
+                .route()
+                .get(request)
+                .execute()
+                .try_next()
+                .await?
+                .ok_or_else(|| "no route to the address".into())
+        })?;
+        Ok(lookup_info(&message))
+    }
     /// `ip route replace <destination/prefix> via <gateway> proto kernel`; the
     /// kernel picks the device and rejects a gateway that is not on a link.
     pub fn replace_gateway_route(
@@ -497,6 +522,20 @@ fn gateway_route(destination: IpAddr, prefix: u8, gateway: IpAddr) -> Result<Rou
         .gateway(gateway)?
         .protocol(RouteProtocol::Kernel)
         .build())
+}
+
+fn lookup_info(message: &RouteMessage) -> (Option<IpAddr>, Option<u32>) {
+    let mut gateway = None;
+    let mut output = None;
+    for attribute in &message.attributes {
+        match attribute {
+            RouteAttribute::Oif(value) => output = Some(*value),
+            RouteAttribute::Gateway(RouteAddress::Inet(ip)) => gateway = Some((*ip).into()),
+            RouteAttribute::Gateway(RouteAddress::Inet6(ip)) => gateway = Some((*ip).into()),
+            _ => {}
+        }
+    }
+    (gateway, output)
 }
 
 fn main_route_info(message: RouteMessage) -> Option<MainRoute> {

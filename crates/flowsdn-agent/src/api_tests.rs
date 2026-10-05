@@ -315,3 +315,50 @@ fn egress_mode_and_embedded_object_default() {
     assert_eq!(EMBEDDED_OBJECT.get(..4), Some(&b"\x7fELF"[..]));
     assert_eq!(EMBEDDED_OBJECT.get(18..20), Some(&247u16.to_le_bytes()[..]));
 }
+
+#[test]
+fn auto_pools_need_kubernetes_and_resolve_from_the_node() {
+    let temp = Temp::new();
+    let path = temp.0.join("config.json");
+    let mut config = json!({"socket-path":temp.0.join("agent.sock"),"state-dir":temp.0.join("state"),"ipv4-pool":"auto","device-mtu":1500,"route-mtu":1450});
+    fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
+    assert!(Config::read(&path).is_err(), "auto without kubernetes");
+    config
+        .as_object_mut()
+        .expect("config object")
+        .insert("kubernetes".into(), json!({"node-name":"pvetest1"}));
+    fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
+    let mut read = Config::read(&path).expect("auto pool");
+    assert!(read.auto4 && !read.auto6 && read.v4.is_none());
+    let settings = read.kubernetes.clone().expect("settings");
+    assert_eq!(settings.node_name, "pvetest1");
+    assert!(settings.auto_direct_node_routes && !settings.skip_unreachable);
+    read.resolve_auto(Some(("10.172.0.0".parse().expect("IP"), 16)), None)
+        .expect("resolve");
+    assert_eq!(read.gateway4, Some("10.172.0.1".parse().expect("IP")));
+    let mut ipam = read.ipam().expect("IPAM");
+    assert!(ipam.allocate("10.172.0.1".parse().expect("IP"), "pod").is_err());
+    assert_eq!(
+        read.addressing().pointer("/ipv4/alloc-range"),
+        Some(&json!("10.172.0.0/16"))
+    );
+    // An explicit gateway contradicts an auto pool; a bad kubernetes section fails.
+    for (key, value) in [
+        ("ipv4-gateway", json!("10.172.0.1")),
+        ("kubernetes", json!({"node-name":"a/b"})),
+        ("kubernetes", json!({"node-name":"n","auto-direct-node-routes":"yes"})),
+        ("kubernetes", json!("n")),
+    ] {
+        let mut bad = config.clone();
+        bad.as_object_mut()
+            .expect("config object")
+            .insert(key.into(), value);
+        fs::write(&path, serde_json::to_vec(&bad).expect("JSON")).expect("config");
+        assert!(Config::read(&path).is_err(), "{key}");
+    }
+    #[cfg(not(feature = "kubernetes"))]
+    {
+        let mut read = Config::read(&path).expect("auto pool");
+        assert!(connect_kubernetes(&mut read).is_err());
+    }
+}

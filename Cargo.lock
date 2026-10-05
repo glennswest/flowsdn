@@ -370,6 +370,8 @@ dependencies = [
  "flowsdn-connector",
  "flowsdn-health",
  "flowsdn-ipam",
+ "flowsdn-k8s",
+ "futures",
  "httparse",
  "nix",
  "serde_json",

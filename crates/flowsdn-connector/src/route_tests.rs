@@ -105,3 +105,14 @@ fn main_route_dump_keeps_protocol_and_any_device() {
         .is_err()
     );
 }
+
+#[test]
+fn lookup_reports_gateway_and_device() {
+    let mut value = message(false);
+    assert_eq!(lookup_info(&value), (None, Some(7)));
+    let gateway: IpAddr = "192.0.2.1".parse().expect("gateway");
+    value
+        .attributes
+        .push(RouteAttribute::Gateway(gateway.into()));
+    assert_eq!(lookup_info(&value), (Some(gateway), Some(7)));
+}

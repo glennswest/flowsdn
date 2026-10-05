@@ -1,5 +1,6 @@
 //! Initial Unix API for primary host-scope CNI and persisted endpoint ownership.
-//! This daemon has no Kubernetes discovery, policy or identity controller.
+//! With the `kubernetes` feature and configuration it adds Node/Pod discovery,
+//! pod CIDRs from the Node and direct node routes; no policy or identity allocator.
 use crate::{endpoints::Manager, state::Result};
 use flowsdn_bpf_loader::kernel::{Egress, Object};
 use flowsdn_cni::queue::{Queue, ReplayRequest};
@@ -85,6 +86,12 @@ struct Config {
     device_mtu: u32,
     route_mtu: u32,
     endpoint_id_max: u32,
+    kubernetes: Option<crate::kubernetes::Settings>,
+    /// `ipv4-pool`/`ipv6-pool` `auto`: resolved from the Node before restore.
+    #[cfg_attr(not(feature = "kubernetes"), allow(dead_code))]
+    auto4: bool,
+    #[cfg_attr(not(feature = "kubernetes"), allow(dead_code))]
+    auto6: bool,
 }
 impl Config {
     fn read(path: &Path) -> Result<Self> {
@@ -131,9 +138,22 @@ impl Config {
             HostScope::new(ip, prefix, Default::default())?;
             Ok(Some((ip, prefix)))
         };
-        let v4 = pool("ipv4-pool", false)?;
-        let v6 = pool("ipv6-pool", true)?;
-        if v4.is_none() && v6.is_none() {
+        let kubernetes = crate::kubernetes::Settings::parse(
+            value.get("kubernetes"),
+            &std::env::vars_os().collect(),
+        )
+        .map_err(|error| Failure {
+            status: 400,
+            message: error.to_string(),
+        })?;
+        let auto4 = optional(&value, "ipv4-pool")? == "auto";
+        let auto6 = optional(&value, "ipv6-pool")? == "auto";
+        if (auto4 || auto6) && kubernetes.is_none() {
+            return fail(400, "an auto pool requires kubernetes node discovery");
+        }
+        let v4 = if auto4 { None } else { pool("ipv4-pool", false)? };
+        let v6 = if auto6 { None } else { pool("ipv6-pool", true)? };
+        if v4.is_none() && v6.is_none() && !auto4 && !auto6 {
             return fail(400, "at least one IP pool is required");
         }
         let gateway = |key, v6, enabled: bool| -> Result<Option<IpAddr>> {
@@ -155,8 +175,26 @@ impl Config {
             }
             Ok(Some(ip))
         };
-        let gateway4 = gateway("ipv4-gateway", false, v4.is_some())?;
-        let gateway6 = gateway("ipv6-gateway", true, v6.is_some())?;
+        // An auto pool's router address is derived with the pool.
+        let auto_gateway = |key| -> Result<()> {
+            if matches!(optional(&value, key)?, "" | "auto") {
+                Ok(())
+            } else {
+                fail(400, format!("{key} must be empty or auto with an auto pool"))
+            }
+        };
+        let gateway4 = if auto4 {
+            auto_gateway("ipv4-gateway")?;
+            None
+        } else {
+            gateway("ipv4-gateway", false, v4.is_some())?
+        };
+        let gateway6 = if auto6 {
+            auto_gateway("ipv6-gateway")?;
+            None
+        } else {
+            gateway("ipv6-gateway", true, v6.is_some())?
+        };
         let mtu = |key| -> Result<u32> {
             value
                 .get(key)
@@ -192,7 +230,32 @@ impl Config {
             device_mtu,
             route_mtu,
             endpoint_id_max,
+            kubernetes,
+            auto4,
+            auto6,
         })
+    }
+    /// Fill auto pools from the Node: the pool and its router address
+    /// (spec 07 §3.4, §3.16).
+    #[cfg_attr(not(feature = "kubernetes"), allow(dead_code))]
+    fn resolve_auto(
+        &mut self,
+        pool4: Option<(IpAddr, u8)>,
+        pool6: Option<(IpAddr, u8)>,
+    ) -> Result<()> {
+        for (auto, pool, slot, gateway) in [
+            (self.auto4, pool4, &mut self.v4, &mut self.gateway4),
+            (self.auto6, pool6, &mut self.v6, &mut self.gateway6),
+        ] {
+            if !auto {
+                continue;
+            }
+            let (ip, prefix) = pool.ok_or("the Node yielded no pod CIDR")?;
+            HostScope::new(ip, prefix, Default::default())?;
+            *gateway = Some(crate::kubernetes::router_ip((ip, prefix))?);
+            *slot = Some((ip, prefix));
+        }
+        Ok(())
     }
     fn ipam(&self) -> Result<Ipam> {
         let scope = |pool: Option<(IpAddr, u8)>| {
@@ -225,6 +288,7 @@ struct Api {
     config: Config,
     manager: Manager,
     leases: BTreeMap<IpAddr, Lease>,
+    kubernetes: Option<crate::kubernetes::Shared>,
 }
 impl Api {
     fn expire(&mut self) {
@@ -259,9 +323,24 @@ impl Api {
                 ));
             }
             ("GET", "/v1/healthz") => {
+                let mut status = json!({"cilium":{"state":"Ok","msg":"initial endpoint API ready"}});
+                if let (Some(view), Some(object)) = (&self.kubernetes, status.as_object_mut()) {
+                    object.insert("kubernetes".into(), crate::kubernetes::lock(view).health());
+                }
+                return Ok((200, status));
+            }
+            ("GET", "/v1/ip" | "/v1/node/routes") => {
+                let Some(view) = &self.kubernetes else {
+                    return fail(404, "kubernetes node discovery is not enabled");
+                };
+                let view = crate::kubernetes::lock(view);
                 return Ok((
                     200,
-                    json!({"cilium":{"state":"Ok","msg":"initial endpoint API ready"}}),
+                    if path == "/v1/ip" {
+                        view.ip_list()
+                    } else {
+                        view.route_list()
+                    },
                 ));
             }
             ("GET", "/v1/endpoint") => return Ok((200, endpoint_list(self.manager.records())?)),
@@ -871,8 +950,51 @@ fn replay_pending(
 /// Restore state and replay offline deletions before exposing the local API.
 /// The listener is root-only and intentionally supports one bounded request
 /// per connection. It does not provide authentication, watches or Kubernetes.
+#[cfg(feature = "kubernetes")]
+type Kubernetes = crate::kubernetes::controller::Controller;
+#[cfg(not(feature = "kubernetes"))]
+type Kubernetes = std::convert::Infallible;
+
+/// Connect and resolve auto pools from this node's Node (blocking until it
+/// has them), before endpoint restore needs the pools.
+#[cfg(feature = "kubernetes")]
+fn connect_kubernetes(config: &mut Config) -> Result<Option<Kubernetes>> {
+    let Some(settings) = config.kubernetes.clone() else {
+        return Ok(None);
+    };
+    let controller = Kubernetes::connect(settings, &config.state)?;
+    if config.auto4 || config.auto6 {
+        let (pool4, pool6) = controller.wait_for_pools(config.auto4, config.auto6)?;
+        config.resolve_auto(pool4, pool6)?;
+        eprintln!(
+            "pod CIDRs from the Node: {}",
+            config.addressing()
+        );
+    }
+    Ok(Some(controller))
+}
+#[cfg(not(feature = "kubernetes"))]
+fn connect_kubernetes(config: &mut Config) -> Result<Option<Kubernetes>> {
+    if config.kubernetes.is_some() {
+        return fail(
+            400,
+            "kubernetes is configured but this agent was built without the kubernetes feature",
+        );
+    }
+    Ok(None)
+}
+#[cfg(feature = "kubernetes")]
+fn spawn_kubernetes(controller: Kubernetes) -> Result<crate::kubernetes::Shared> {
+    controller.spawn()
+}
+#[cfg(not(feature = "kubernetes"))]
+fn spawn_kubernetes(never: Kubernetes) -> Result<crate::kubernetes::Shared> {
+    match never {}
+}
+
 pub fn run(config_path: &Path) -> Result<()> {
-    let config = Config::read(config_path)?;
+    let mut config = Config::read(config_path)?;
+    let kubernetes = connect_kubernetes(&mut config)?;
     // The manager's exclusive state lock is acquired before inspecting or
     // removing a stale socket, preventing a second owner of this state tree.
     let object = match &config.object {
@@ -887,10 +1009,15 @@ pub fn run(config_path: &Path) -> Result<()> {
         config.pin_root.as_deref(),
         config.egress,
     )?;
+    // Routes are written under the state directory, so start after restore
+    // holds its exclusive lock.
+    let kubernetes = kubernetes.map(spawn_kubernetes).transpose()?;
+    let enabled = kubernetes.is_some();
     let mut api = Api {
         config,
         manager,
         leases: BTreeMap::new(),
+        kubernetes,
     };
     // Without endpoint GC, never advertise readiness after skipping a deletion.
     // Preserve failed entries and fail startup so a supervisor can retry safely.
@@ -925,8 +1052,11 @@ pub fn run(config_path: &Path) -> Result<()> {
     // Writers that waited for replay recheck a now-listening API under their
     // shared lock, so they cannot enqueue a deletion missed by this replay.
     drop(replay);
-    let health = health_api::ModuleHealth::new()?;
-    eprintln!("initial endpoint API listening; Kubernetes and policy controllers are not enabled");
+    let health = health_api::ModuleHealth::new(enabled)?;
+    eprintln!(
+        "initial endpoint API listening; Kubernetes node discovery {}; identity and policy controllers are not enabled",
+        if enabled { "enabled" } else { "not enabled" }
+    );
     loop {
         api.expire();
         let mut stream = match listener.accept() {

@@ -8,7 +8,7 @@ pub(super) struct ModuleHealth {
     runtime: tokio::runtime::Runtime,
 }
 impl ModuleHealth {
-    pub(super) fn new() -> Result<Self> {
+    pub(super) fn new(kubernetes: bool) -> Result<Self> {
         let value = Self {
             registry: Registry::new(),
             runtime: tokio::runtime::Builder::new_current_thread().build()?,
@@ -23,7 +23,11 @@ impl ModuleHealth {
                 .await?;
             root.new_scope("controllers")?
                 .degraded(
-                    "Kubernetes, identity and policy controllers are not enabled",
+                    if kubernetes {
+                        "Kubernetes node discovery enabled; identity and policy controllers are not"
+                    } else {
+                        "Kubernetes, identity and policy controllers are not enabled"
+                    },
                     "not implemented",
                 )
                 .await?;
@@ -171,7 +175,7 @@ mod tests {
     use super::*;
     #[test]
     fn state_db_query_is_ordered_ndjson_with_reference_identifier_and_time_shapes() {
-        let health = ModuleHealth::new().expect("registry");
+        let health = ModuleHealth::new(false).expect("registry");
         let body = health
             .query(&json!({"table":"health","index":"id","key":"YWdlbnQ=","lowerbound":true}))
             .expect("query");
@@ -224,7 +228,7 @@ mod tests {
     }
     #[test]
     fn health_queries_validate_scope_and_base64_before_reading_rows() {
-        let health = ModuleHealth::new().expect("registry");
+        let health = ModuleHealth::new(false).expect("registry");
         for (body, expected) in [
             (
                 json!({"table":"secrets","index":"id","key":"","lowerbound":true}),
