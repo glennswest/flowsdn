@@ -19,6 +19,9 @@ pub const IDENTITY_REMOTE_NODE: u32 = 6;
 /// `ipv6-cluster-alloc-cidr` default `f00d::/64` (spec 07 §3.4).
 const IPV6_CLUSTER_ALLOC_BASE: [u16; 4] = [0xf00d, 0, 0, 0];
 
+/// A network address and prefix length.
+pub type Cidr = (IpAddr, u8);
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Settings {
     pub node_name: String,

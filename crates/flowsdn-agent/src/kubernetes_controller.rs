@@ -52,7 +52,7 @@ impl Controller {
         &self,
         v4: bool,
         v6: bool,
-    ) -> Result<(Option<(IpAddr, u8)>, Option<(IpAddr, u8)>)> {
+    ) -> Result<(Option<Cidr>, Option<Cidr>)> {
         let mut logged: Option<Instant> = None;
         loop {
             let reason = match self.runtime.block_on(list_nodes(&self.client)) {
