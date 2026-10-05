@@ -63,7 +63,7 @@ both flowsdn flavor (stormcentral#383, run by stormcentral#360). No stormcos nod
 - [x] Remote node routes `<podCIDR> via <nodeIP> proto kernel` (spec 10 §3.2.3/§5.2): conflict check, persisted set for prune across restarts.
 - [x] IP cache view `GET /v1/ip` (pods, node IPs with reserved host/remote-node identities) and `GET /v1/node/routes`; health module for Kubernetes.
 - [x] Forwarding sysctls (spec 10 §3.6); `deploy/stormcos/manifests-kubernetes/`; kube-proxy advice removed from docs (owner: no kube-proxy).
-- [ ] Docs, changelog; sc-build with `--features kubernetes` (gnu) plus the default build.
+- [x] Docs, changelog. sc-build at 91fca2c: fmt, workspace Clippy -D warnings, 685 tests (0 failed, 1 ignored), agent `--features kubernetes` Clippy + 37 tests (incl. loopback-HTTPS controller test), musl agent/CNI, test/build.sh. GNU release agent links libssl/libcrypto.so.3, libz, libgcc_s, glibc.
 - [ ] Hand the binary to stormcos#171; propose #291 after it. Remaining: cluster identity allocation, two-node acceptance on pvetest1+2.
 
 ### aya kfunc watch — #315 (P2), 2026-10-05
