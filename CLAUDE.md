@@ -60,12 +60,13 @@ the socket, so no packet DNAT/conntrack and it works for pods and the host. The 
 from Service + EndpointSlice watches (`kubernetes` feature) with a stateless diff against kernel map
 contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots/backends after).
 
-- [ ] BPF `socket-lb` object (8 cgroup programs, random backend slot, UDP reverse map); embedded in the agent; test/build.sh stale check.
-- [ ] flowsdn-lb `socket` planner (desired frontends -> map contents -> ordered upserts/deletes, stable service/backend IDs) with tests.
-- [ ] Loader `SocketLb` (load, optional pins, cgroup attach AllowMultiple, map apply).
-- [ ] flowsdn-k8s Service/EndpointSlice scopes; agent watches, services thread, `GET /v1/service`, config `kubernetes.service-lb`/`cgroup-root`.
-- [ ] Manifests (RBAC services/endpointslices, host cgroup mount), docs, changelog; live fixture `socket-lb-live` in the medium suite.
-- [ ] sc-build; golden via `stormcentral component stage flowsdn`; status on #292 (remaining milestone-2 boxes stay open).
+- [x] BPF `socket-lb` object (8 cgroup programs, random backend slot, UDP reverse map); embedded in the agent (`bpf/socket-lb`, sha256 62a680ff…); test/build.sh stale check. Disassembly reviewed (full key init, 4-byte ctx loads, u64 user_ip6 store at aligned offset 8).
+- [x] flowsdn-lb `socket` planner (stable IDs from kernel maps, spec 05 §3.4 order) with tests incl. every-intermediate-state resolution.
+- [x] Loader `SocketLb` (load, pins under `<pin root>/socket-lb`, cgroup attach AllowMultiple, dump/apply).
+- [x] flowsdn-k8s Service/EndpointSlice scopes; agent watches, services thread, `GET /v1/service`, `kubernetes.service-lb`/`cgroup-root`.
+- [x] Manifests (RBAC, host cgroup at /run/flowsdn/cgroupv2), docs, changelog; `socket-lb-live` fixture in medium suite.
+- [x] sc-build at c6c96c7: fmt, workspace + kubernetes Clippy -D warnings, 697 tests (0 failed, 1 ignored) + 40 agent kubernetes tests, GNU kubernetes release build, test/build.sh.
+- [ ] Medium suite run dbfc4e45b1 on C2NR0Q2 (fixture-socket-lb-live); golden via `stormcentral component stage flowsdn` (golden now carries the GNU kubernetes agent, stormcos#171); status on #292. Not implemented (stays open on #292): NodePort/LB/externalIPs, affinity, Maglev, DSR, NAT46/64, tc-level LB, socket termination, policy.
 
 ### Kubernetes-connected agent — #291 (P0), 2026-10-05
 
