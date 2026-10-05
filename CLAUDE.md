@@ -50,6 +50,17 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### aya kfunc watch — #315 (P2), 2026-10-05
+
+Owner (via #3, option 1): M3 socket termination uses netlink SOCK_DIAG/SOCK_DESTROY; check aya
+weekly for kfunc relocation and switch to bpf_sock_destroy when it lands. GitHub Actions is off
+(#304) and stormcentral has no scheduled component jobs yet (stormcentral#384).
+
+- [ ] `tools/aya-kfunc-watch` probe (standalone crate, aya version chosen per run) + `tools/aya-kfunc-watch.sh`: builds loader-kfunc, loads it with the latest aya release and aya main; exit 0 still missing, 3 aya relocates kfuncs, 1 check broken; `--file-issue` opens/updates the P1 switch issue; `--load` adds the kernel load where privileged.
+- [ ] Docs (spec 01, kernel-requirements, tools README), changelog.
+- [ ] sc-build: run the watch against pinned/release/main; expect "missing".
+- [ ] Ask stormcentral#384 for the weekly run; #315 stays open for the switch (part 2) and is proposed after it.
+
 ### Services for the flowsdn edition — #292 (P0 via stormcos#265), 2026-10-05
 
 Master: in the flowsdn edition no kube-proxy runs, so ClusterIPs don't route; agree with
