@@ -86,7 +86,9 @@ impl Controller {
         }));
         let failed = apply_sysctls(Path::new("/proc/sys"), ipv6);
         if !failed.is_empty() {
-            lock(&view).errors.insert("sysctl".into(), failed.join("; "));
+            lock(&view)
+                .errors
+                .insert("sysctl".into(), failed.join("; "));
         }
         let routes = if self.settings.auto_direct_node_routes {
             let (sender, receiver) = mpsc::channel();
