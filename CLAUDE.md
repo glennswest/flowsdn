@@ -104,6 +104,7 @@ the program, write some back, read ctx_out; record a per-kernel table on 6.6/6.1
 - [x] Added to the test container's medium suite; stormcentral's runner built the image (run ca5226ff48) but the push hit 507 (stormcentral#376).
 - [x] Owner decision (2026-10-05, option 1): the rows are the kernels stormcos ships (7.2.5-100.fc43 today); spec 18 §3.3(d)/§9.1/§10.2 and kernel-requirements §5.3 updated.
 - [ ] Run `stormcentral test run flowsdn medium` on a test machine; close #256 when fixture-skb-ctx-matrix passes and record the per-field table in spec 18.
+  2026-10-05: C2NR0Q2 run 5763251dcb hit 507 on push (registry full, stormcentral#376); pvetest1/2 refused (installing 11.80). Proposed after stormcentral#376.
 
 ### stormcos flowsdn edition pod network — #296 (P0), 2026-10-03
 
