@@ -1,8 +1,11 @@
 # Current runtime configuration and deployment
 
-This describes the executable code as of 2026-10-03 (source through
-`7c8a095`), including changes since 2026-09-25. The standalone agent owns local endpoints and host-scope IPAM; it
-is not yet a Kubernetes network controller. The broader configuration catalogue
+This describes the executable code as of 2026-10-05, including changes since
+2026-09-25. The agent owns local endpoints and host-scope IPAM. Built with the
+`kubernetes` feature and configured with a `kubernetes` section, it also
+watches Nodes and Pods, takes its pod CIDR from its Node and routes to the
+other nodes' pod CIDRs (#291); it has no identity allocator, policy or
+Services yet. The broader configuration catalogue
 and specifications describe library contracts and planned integrations, not
 additional options accepted by this executable.
 
@@ -19,16 +22,22 @@ limited to 1 MiB. The authoritative reader is
 | `socket-path` | Required nonempty string | Unix HTTP socket; created with mode 0600. |
 | `state-dir` | Required nonempty string | Durable endpoint state; exclusive ownership lock. |
 | `bpf-object` | Omitted, null or empty: the object embedded in the agent | A `local-delivery` BPF ELF to load instead of the embedded one (built from this commit by `tools/build-bpf.sh`; `test/build.sh` refuses an embedded copy whose code differs). |
-| `egress` | `fib` | `fib`: a destination that is not a local endpoint is FIB-redirected in BPF (native routing between router namespaces). `stack`: every frame from an endpoint goes to the host stack (routing, netfilter, kube-proxy), same-node pod-to-pod included, so a reply from a local Service backend passes conntrack's reverse NAT and the endpoint's ARP replies reach the host; every endpoint also gets host `/32`/`/128` routes over its host link. The stormcos edition uses `stack`. |
+| `egress` | `fib` | `fib`: a destination that is not a local endpoint is FIB-redirected in BPF (native routing between router namespaces). `stack`: every frame from an endpoint goes to the host stack (routing, netfilter), same-node pod-to-pod included, so the endpoint's ARP replies reach the host and host routes (including direct node routes) apply; every endpoint also gets host `/32`/`/128` routes over its host link. The stormcos edition uses `stack`. |
 | `bpf-pin-root` | Omitted, null or empty: disabled | Dedicated bpffs directory for persistent map and TCX ownership. |
 | `delete-queue` | Omitted, null or empty: `deleteQueue` in the socket's parent directory | Durable CNI offline deletion queue. |
 | `ipv4-pool` | Omitted, null or empty: disabled | IPv4 host allocation CIDR. |
 | `ipv6-pool` | Omitted, null or empty: disabled | IPv6 host allocation CIDR. At least one family must be enabled. |
-| `ipv4-gateway` | Required when IPv4 is enabled | IPv4 router address, excluded from allocation. Must be absent/empty when IPv4 is disabled. |
-| `ipv6-gateway` | Required when IPv6 is enabled | IPv6 router address, excluded from allocation. Must be absent/empty when IPv6 is disabled. |
+| `ipv4-pool`/`ipv6-pool` `auto` | Needs `kubernetes` | The pool comes from this node's Node (spec 07 §3.4): the first `spec.podCIDRs` entry of the family, else IPv4 `10.<last byte of the node's IPv4 InternalIP>.0.0/16`, IPv6 `f00d::<4 bytes of the IPv4 pool, else of the node IPv6>:0:0/96`. The agent waits for the Node before restore, logging every 5 s. |
+| `ipv4-gateway` | Required when IPv4 is enabled | IPv4 router address, excluded from allocation. Must be absent/empty when IPv4 is disabled. With an `auto` pool: absent, empty or `auto`, and the router is the pool's first host address. |
+| `ipv6-gateway` | Required when IPv6 is enabled | IPv6 router address, excluded from allocation. Must be absent/empty when IPv6 is disabled. Same `auto` rule. |
 | `device-mtu` | Required integer, at least 1280 | Device MTU. |
 | `route-mtu` | Required integer, at least 1280 | Route MTU; must not exceed device MTU. |
 | `endpoint-id-max` | `4095` | Integer in `1..=65535`; bounds ID allocation, not BPF map capacity. |
+| `kubernetes` | Omitted or null: disabled | Object; enables Node/Pod discovery. Needs an agent built with `--features kubernetes`; the default (static musl) build fails startup with it. |
+| `kubernetes.node-name` | `K8S_NODE_NAME`, then `NODE_NAME` | This node's Node name. |
+| `kubernetes.kubeconfig` | In-cluster service account | Explicit kubeconfig path. A developer's default kubeconfig is never consulted. HTTPS must verify. |
+| `kubernetes.auto-direct-node-routes` | `true` | Install `<podCIDR> via <InternalIP> proto kernel` for every other node (spec 10 §3.2.3). |
+| `kubernetes.direct-routing-skip-unreachable` | `false` | Skip, instead of reporting an error for, a node whose InternalIP is reached through a gateway. |
 
 Unknown JSON keys are currently ignored; they do not enable features. Gateway
 addresses must match their family and cannot be unspecified, multicast,
@@ -114,10 +123,12 @@ access is controlled by socket permissions. Pending leases requesting
 expiration time out after 600 seconds.
 
 `GET /v1/healthz` reports initial API availability after restoration and queued
-deletion replay. `/healthz` and `/readyz` are not implemented. Module health
-explicitly marks Kubernetes, identity and policy controllers as unavailable.
-The config response's `ipam-mode: kubernetes` is a compatibility value: actual
-allocation uses the configured local pools, without Kubernetes PodCIDR lookup.
+deletion replay; in Kubernetes mode it adds a `kubernetes` member (`Ok` once
+the Node and Pod lists are synced and nothing failed). `/healthz` and `/readyz`
+are not implemented. Module health marks identity and policy controllers as
+unavailable. The config response's `ipam-mode: kubernetes` is a compatibility
+value: allocation uses the configured pools, or with `auto` the pool resolved
+from the Node at startup.
 
 ## Runtime behavior and shipping
 
@@ -130,11 +141,37 @@ does not establish rolling upgrade support. In `egress: stack` mode the agent
 replaces a host route to each endpoint address over its host link; deleting the
 link removes the routes.
 
-Kubernetes Node/Pod watches, automatic remote routes/neighbors, uplink ingress
-attachment and identity/policy reconciliation are not wired into this daemon.
-The watch client and HTTPS transport in `flowsdn-k8s` are library code only.
-An independent routing fixture is evidence for the routing primitive, not a
-working two-node Kubernetes deployment.
+## Kubernetes mode
+
+With the `kubernetes` feature and section the agent:
+
+- loads credentials (explicit kubeconfig, else in-cluster) and, when a pool is
+  `auto`, blocks until its Node yields a pool for every such family;
+- after restore, sets `net.ipv4.conf.all.rp_filter=0`, `net.ipv4.ip_forward=1`,
+  `net.ipv4.conf.all.forwarding=1` and, with an IPv6 pool,
+  `net.ipv6.conf.all.forwarding=1` (spec 10 §3.6). A failed write is reported
+  in health, not fatal;
+- lists and watches Nodes and all Pods on its own thread (pages of 500; a watch
+  the server ends resumes from its resourceVersion; any other failure relists
+  after 1 s doubling to 30 s, keeping the last good snapshot);
+- with `auto-direct-node-routes`, owns `<podCIDR> via <InternalIP> proto
+  kernel` routes in the main table for every other node, using the node's first
+  InternalIP of the family. Before installing it checks that the kernel reaches
+  the InternalIP without another gateway, and refuses to replace a route of
+  another protocol to the same prefix. Installed routes are recorded in
+  `<state-dir>/direct-routes.json` before they are added, so routes for nodes
+  that left while the agent was down are deleted on the next reconcile. It
+  reconciles on every change of the desired set and every 30 s;
+- serves `GET /v1/ip` and `GET /v1/node/routes` ([API](agent-api.md)).
+
+Not yet: a cluster identity allocator (pod IP cache entries carry labels but no
+numeric identity), BPF ipcache maps, tunnel routing, masquerade, Services
+(#292) and policy. Unit tests and a loopback-HTTPS controller test cover the
+watch and route logic; two-node pod traffic has not been demonstrated
+(pvetest1 + pvetest2, stormcentral#360).
+
+Without Kubernetes mode the agent does no Node/Pod discovery and installs no
+remote routes; uplink ingress attachment is not wired in either mode.
 
 stormcos ships flowsdn as a **golden** containing the static musl agent
 (`/flowsdn-agent`, BPF object embedded) and CNI (`/opt/cni/bin/flowsdn`). Nodes
@@ -152,8 +189,10 @@ manifests (`deploy/stormcos/manifests/`): a DaemonSet with `image: flowsdn`
 (the golden itself under the stormpump runtime), an init container running
 `flowsdn-cni install`, and the agent with `egress: stack` and a static
 single-node IPv4 pool. Whether stormcos applies them is
-[stormcos#261](https://github.com/glennswest/stormcos/issues/261); the node must
-also run kube-proxy and provide forwarding/masquerade.
+[stormcos#261](https://github.com/glennswest/stormcos/issues/261); the node
+provides masquerade. The edition runs no kube-proxy: ClusterIPs wait on
+flowsdn's Service datapath (#292). `deploy/stormcos/manifests-kubernetes/` is
+the multi-node set for the Kubernetes-connected agent (below).
 
 `flowsdn-operator` and `flowsdn-hubble` are libraries, without operator or relay
 service binaries. Their duties have not moved into the agent. CRD registration
@@ -169,6 +208,8 @@ The Kubernetes client selects Fedora system OpenSSL under
 [ADR-0016](decisions/0016-fedora-openssl.md). Building TLS consumers requires `openssl-devel` and
 `pkgconf-pkg-config`; runtime requires matching `openssl-libs`, GNU/glibc,
 OpenSSL configuration/provider files and certificate trust. Vendoring is disabled.
-The current agent/CNI do not use this client and remain static musl. A
-Kubernetes-connected agent needs a different golden runtime
-([stormcos#171](https://github.com/glennswest/stormcos/issues/171)).
+The default agent and the CNI do not link this client and stay static musl.
+`cargo build --release -p flowsdn-agent --features kubernetes` (GNU target)
+links it: the binary needs `libssl.so.3`, `libcrypto.so.3`, `libz.so.1`,
+`libgcc_s.so.1` and glibc at run time. Its golden runtime is
+[stormcos#171](https://github.com/glennswest/stormcos/issues/171).

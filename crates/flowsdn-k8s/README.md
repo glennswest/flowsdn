@@ -34,16 +34,19 @@ protobuf remains an open measurement question.
 
 ## Built-in watch state
 
-`watch::WatchState` projects slim Node and local Pod documents into the existing
+`watch::WatchState` projects slim Node and local (or, with `Scope::Pods`,
+cluster-wide) Pod documents into the existing
 `flowsdn-table`. It stages bounded list pages and publishes only after a complete
 consistent list. An interrupted or invalid relist preserves the last snapshot.
 Watch errors and disconnects require a new list; bookmarks advance the opaque
 resource version without changing rows. Deletes require a matching UID, protecting
 recreated Pods. Off-node Pod data rejects an ignored local field selector.
 
-The caller still must connect the transport to this state, issue pagination
-requests, apply retry/backoff and implement agent reconciliation. The state
-layer alone does not establish Kubernetes connectivity or pod networking.
+The caller connects the transport to this state, paginates and applies
+retry/backoff; the agent's `kubernetes` feature does this
+(`crates/flowsdn-agent/src/kubernetes_controller.rs`). `client::WATCH_ENDED` is
+the error text of a watch the server closed normally, which can resume from the
+last resource version instead of relisting.
 
 ## HTTPS transport checkpoint (Fedora OpenSSL)
 

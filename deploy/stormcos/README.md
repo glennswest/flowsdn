@@ -16,22 +16,51 @@ read-only RBAC, the agent ConfigMap and the agent DaemonSet:
   `05-cilium.conflist` cannot win.
 - **Agent.** It runs `egress: stack`. Every frame from a pod, pod-to-pod on
   the node included, goes to the node's stack, and each pod gets a host
-  route. So kube-proxy's DNAT and its reverse NAT apply to every Service
-  flow, including a reply from a backend on the same node (CoreDNS).
+  route, so the node's routing and netfilter see every pod flow.
 
 What the node must provide besides the manifests:
 
-- **Services.** kube-proxy must run: flowsdn has no service load balancer yet
-  (milestone 2, #292), and the cilium edition runs none because Cilium
-  replaces it.
+- **Services.** None yet: the owner chose flowsdn's own service handling over
+  kube-proxy (stormcos#265), which is milestone 2 (#292). Until it lands,
+  ClusterIPs don't route in the flowsdn edition.
 - **Off-node egress.** `net.ipv4.ip_forward=1` and a masquerade for
-  `10.244.0.0/24` leaving the node.
+  `10.244.0.0/24` leaving the node. flowsdn does not masquerade yet.
 - **Kernel.** 6.6 or newer, with TCX and BTF.
 
-**Limits.** This is one node per cluster: the pool is static and the agent does
-not read Node podCIDRs or route to other nodes (#291). Without a pin root, an
-agent restart briefly pauses pod traffic while it reinstalls endpoints from
-state.
+**Limits.** This is one node per cluster: the pool is static and this agent
+does not read Node podCIDRs or route to other nodes. Kubernetes mode, below,
+lifts that. Without a pin root, an agent restart briefly pauses pod traffic
+while it reinstalls endpoints from state.
+
+## Kubernetes mode: more than one node (#291)
+
+[`manifests-kubernetes/`](manifests-kubernetes/) replaces `manifests/` once
+the golden carries the GNU agent built with `cargo build --release -p
+flowsdn-agent --features kubernetes` and its Fedora OpenSSL runtime
+([stormcos#171](https://github.com/glennswest/stormcos/issues/171)). The static
+musl agent refuses its configuration. The differences:
+
+- The pod mounts its service account token and gets `K8S_NODE_NAME`. The agent
+  lists and watches Nodes and Pods with in-cluster credentials; the kubelet
+  points `KUBERNETES_SERVICE_HOST` at the node's apiserver.
+- `ipv4-pool: auto`. Each node's pool is its Node's first IPv4 `podCIDRs`
+  entry, else `10.<last byte of its InternalIP>.0.0/16` (spec 07 §3.4).
+  stormcos sets no podCIDR, so pvetest1 (192.168.31.172) gets
+  `10.172.0.0/16` and pvetest2 `10.173.0.0/16`. Node addresses ending in
+  96–111 would derive a pool inside the Service range; give such nodes a
+  podCIDR.
+- `auto-direct-node-routes`. The agent installs `<other node's podCIDR> via
+  <its InternalIP> proto kernel` and removes routes for nodes that leave, so
+  nodes on one L2 segment reach each other's pods without a tunnel. A node
+  that is only reachable through a router is reported as an error.
+- The agent sets `net.ipv4.ip_forward`, `net.ipv4.conf.all.forwarding` (IPv6
+  forwarding with an IPv6 pool) to 1 and `net.ipv4.conf.all.rp_filter` to 0.
+
+Off-node egress still needs a masquerade, now for the node's derived pool.
+Moving a node from the static pool to `auto` needs its endpoints gone (a fresh
+install or a drain): restore refuses addresses outside the pool. Status is on
+the agent socket: `GET /v1/healthz` (`kubernetes` member), `GET /v1/node/routes`
+and `GET /v1/ip`.
 
 The DaemonSet carries no probe: the agent's health is on its Unix socket only
 (see below). It runs privileged as a validation baseline, not a measured

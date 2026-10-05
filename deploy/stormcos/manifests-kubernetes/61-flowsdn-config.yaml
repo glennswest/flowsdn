@@ -1,0 +1,43 @@
+# The agent's configuration in Kubernetes mode (#291, docs/runtime.md). It needs
+# the GNU agent built with `--features kubernetes` (Fedora OpenSSL, stormcos#171);
+# the static musl agent refuses a `kubernetes` section.
+#
+# - ipv4-pool auto: the node's pod CIDR comes from its Node: the first IPv4
+#   spec.podCIDRs entry, else 10.<last byte of the node's InternalIP>.0.0/16
+#   (spec 07 §3.4; stormcos sets no podCIDR, so pvetest1 192.168.31.172 gets
+#   10.172.0.0/16). The router address is the CIDR's first host (10.172.0.1).
+#   Node IPs whose last byte is 96-111 would derive a pool inside the Service
+#   range 10.96.0.0/12; set podCIDR on such nodes.
+# - kubernetes.node-name comes from K8S_NODE_NAME (the DaemonSet's downward
+#   API). In-cluster credentials: the kubelet points KUBERNETES_SERVICE_HOST at
+#   the node's apiserver, so no Service routing is needed to reach it.
+# - auto-direct-node-routes: `<other node's podCIDR> via <its InternalIP>
+#   proto kernel`, so nodes on one L2 segment reach each other's pods without a
+#   tunnel. A node behind a router is an error (direct-routing-skip-unreachable
+#   skips it instead).
+# - egress: stack, as in manifests/: pod traffic that isn't for a local pod goes
+#   through the node's stack (and its routes to the other nodes).
+# - Changing a node from the static pool to auto needs its endpoints gone
+#   (a fresh install, or drained); restore refuses addresses outside the pool.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flowsdn-config
+  namespace: kube-system
+  labels: { app.kubernetes.io/part-of: flowsdn }
+data:
+  agent.json: |
+    {
+      "socket-path": "/var/run/cilium/cilium.sock",
+      "delete-queue": "/var/run/cilium/deleteQueue",
+      "state-dir": "/var/lib/flowsdn",
+      "egress": "stack",
+      "ipv4-pool": "auto",
+      "device-mtu": 1500,
+      "route-mtu": 1500,
+      "endpoint-id-max": 1000,
+      "kubernetes": {
+        "auto-direct-node-routes": true
+      }
+    }

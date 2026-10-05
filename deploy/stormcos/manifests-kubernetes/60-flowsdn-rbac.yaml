@@ -1,0 +1,34 @@
+# flowsdn's identity in the cluster, Kubernetes mode (#291): the agent lists
+# and watches Nodes (pod CIDRs, InternalIPs -> direct routes) and Pods (the IP
+# cache). Read-only; the same grants as deploy/stormcos/manifests/.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flowsdn
+  namespace: kube-system
+  labels: { app.kubernetes.io/name: flowsdn-agent, app.kubernetes.io/part-of: flowsdn }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flowsdn
+  labels: { app.kubernetes.io/part-of: flowsdn }
+rules:
+  - apiGroups: [""]
+    resources: [nodes, pods, namespaces]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flowsdn
+  labels: { app.kubernetes.io/part-of: flowsdn }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: flowsdn
+subjects:
+  - kind: ServiceAccount
+    name: flowsdn
+    namespace: kube-system

@@ -57,11 +57,12 @@ OpenSSL) first; stormcos packages its Fedora runtime. Two-node target settled: p
 both flowsdn flavor (stormcentral#383, run by stormcentral#360). No stormcos node sets
 `spec.podCIDR`, so the agent derives its pod CIDR as spec 07 §3.4 says (10.<last IPv4 byte>.0.0/16).
 
-- [ ] Agent cargo feature `kubernetes` (off by default; the musl golden build is unchanged).
-- [ ] Config `kubernetes{node-name, kubeconfig, auto-direct-node-routes, direct-routing-skip-unreachable}`; pools/gateways `auto` from the Node (spec 07 §3.4).
-- [ ] Node + cluster Pod watches (flowsdn-k8s, relist with backoff) on a controller thread.
-- [ ] Remote node routes `<podCIDR> via <nodeIP> proto kernel` (spec 10 §3.2.3/§5.2): conflict check, persisted set for prune across restarts.
-- [ ] IP cache view `GET /v1/ip` (pods, node IPs with reserved host/remote-node identities) and `GET /v1/node/routes`; health module for Kubernetes.
+- [x] Agent cargo feature `kubernetes` (off by default; the musl golden build is unchanged).
+- [x] Config `kubernetes{node-name, kubeconfig, auto-direct-node-routes, direct-routing-skip-unreachable}`; pools/gateways `auto` from the Node (spec 07 §3.4).
+- [x] Node + cluster Pod watches (flowsdn-k8s, relist with backoff) on a controller thread.
+- [x] Remote node routes `<podCIDR> via <nodeIP> proto kernel` (spec 10 §3.2.3/§5.2): conflict check, persisted set for prune across restarts.
+- [x] IP cache view `GET /v1/ip` (pods, node IPs with reserved host/remote-node identities) and `GET /v1/node/routes`; health module for Kubernetes.
+- [x] Forwarding sysctls (spec 10 §3.6); `deploy/stormcos/manifests-kubernetes/`; kube-proxy advice removed from docs (owner: no kube-proxy).
 - [ ] Docs, changelog; sc-build with `--features kubernetes` (gnu) plus the default build.
 - [ ] Hand the binary to stormcos#171; propose #291 after it. Remaining: cluster identity allocation, two-node acceptance on pvetest1+2.
 

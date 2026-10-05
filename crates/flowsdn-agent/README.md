@@ -51,8 +51,12 @@ cannot yet detect external replacement of BPF programs or policy convergence.
 Requests are serialized with two-second read and write budgets and 4 MiB bodies.
 These initial limits and socket permissions are narrower than the full API spec.
 
-Identity/policy reconciliation, Kubernetes watches, stale-pod garbage collection
-and graceful shutdown remain outstanding. Configured pins allow endpoint maps
+With the `kubernetes` feature (GNU target, Fedora OpenSSL) and a `kubernetes`
+config section, the agent watches Nodes and Pods, resolves `auto` pools from its
+Node and owns direct routes to the other nodes' pod CIDRs; see
+[runtime](../../docs/runtime.md#kubernetes-mode). Identity allocation, policy
+reconciliation, stale-pod garbage collection and graceful shutdown remain
+outstanding. Configured pins allow endpoint maps
 and TCX links to survive agent process absence. Without pinning, traffic depends
 on the live process and recovers after successful restore. This does not establish
 rolling upgrades or automatic recovery from incompatible BPF objects. Missing host links remove stale state during restore;

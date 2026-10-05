@@ -1,0 +1,78 @@
+# The flowsdn agent on every node, Kubernetes mode (#291): the same DaemonSet
+# as deploy/stormcos/manifests/ plus the service account token (the agent
+# lists/watches Nodes and Pods) and K8S_NODE_NAME. /flowsdn-agent must be the
+# GNU agent built with `--features kubernetes`, with its Fedora OpenSSL runtime
+# in the golden (stormcos#171).
+#
+# `image: flowsdn` is the node's flowsdn golden (/pallets/flowsdn): the
+# kubelet resolves an image by the last component of its name, and the golden
+# carries /flowsdn-agent and /opt/cni/bin/flowsdn, both static. Nothing is
+# pulled. A golden has no image config, so every container names its command.
+#
+# install-cni copies the plugin into the node's /opt/cni/bin (as cilium-cni,
+# flowsdn-cni, flowsdn and, if absent, loopback) and writes
+# /etc/cni/net.d/00-flowsdn.conflist. Pods created before the agent answers
+# fail CNI ADD and are retried by the kubelet.
+#
+# hostNetwork and privileged: the agent loads BPF, attaches TCX to host veths
+# and adds host routes. It is a validation baseline, not a measured
+# minimum-capability profile.
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: flowsdn
+  namespace: kube-system
+  labels: { k8s-app: flowsdn, app.kubernetes.io/name: flowsdn-agent, app.kubernetes.io/part-of: flowsdn }
+spec:
+  selector:
+    matchLabels: { k8s-app: flowsdn }
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 1 }
+  template:
+    metadata:
+      labels: { k8s-app: flowsdn, app.kubernetes.io/name: flowsdn-agent, app.kubernetes.io/part-of: flowsdn }
+    spec:
+      serviceAccountName: flowsdn
+      automountServiceAccountToken: true
+      hostNetwork: true
+      priorityClassName: system-node-critical
+      terminationGracePeriodSeconds: 5
+      nodeSelector: { kubernetes.io/os: linux }
+      tolerations:
+        - operator: Exists
+      initContainers:
+        - name: install-cni
+          image: flowsdn
+          command: ["/opt/cni/bin/flowsdn", "install"]
+          env:
+            - { name: HOST_PREFIX, value: /host }
+          volumeMounts:
+            - { name: cni-path, mountPath: /host/opt/cni/bin }
+            - { name: etc-cni-netd, mountPath: /host/etc/cni/net.d }
+      containers:
+        - name: flowsdn-agent
+          image: flowsdn
+          command: ["/flowsdn-agent", "--config", "/etc/flowsdn/agent.json"]
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef: { apiVersion: v1, fieldPath: spec.nodeName }
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - { name: config, mountPath: /etc/flowsdn, readOnly: true }
+            - { name: run, mountPath: /var/run/cilium }
+            - { name: state, mountPath: /var/lib/flowsdn }
+      volumes:
+        - name: config
+          configMap: { name: flowsdn-config }
+        - name: run
+          hostPath: { path: /var/run/cilium, type: DirectoryOrCreate }
+        - name: state
+          hostPath: { path: /var/lib/flowsdn, type: DirectoryOrCreate }
+        - name: cni-path
+          hostPath: { path: /opt/cni/bin, type: DirectoryOrCreate }
+        - name: etc-cni-netd
+          hostPath: { path: /etc/cni/net.d, type: DirectoryOrCreate }

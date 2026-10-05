@@ -20,7 +20,7 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
   and refuses an embedded copy whose code differs.
 - **Two egress modes.** `egress: fib` (default) FIB-redirects non-local traffic
   in BPF for native routing. `egress: stack` hands every frame from an
-  endpoint to the host stack (routing, netfilter, kube-proxy), same-node
+  endpoint to the host stack (routing, netfilter), same-node
   pod-to-pod included, and adds a host `/32`/`/128` route per endpoint address. The stormcos edition uses `stack`.
 - **Node CNI installation.** `flowsdn-cni install` copies the plugin into the
   host's `/opt/cni/bin` (`cilium-cni`, `flowsdn-cni`, `flowsdn`, and `loopback`
@@ -96,8 +96,11 @@ On a node, the edition's DaemonSet runs `image: flowsdn`. The stormcos kubelet
 so nothing is pulled. Its init container runs `/opt/cni/bin/flowsdn install` to
 put the plugin and conflist on the host; the agent runs privileged in the host
 network namespace with `/var/run/cilium` and `/var/lib/flowsdn` from the host.
-The node itself must run kube-proxy (flowsdn has no service load balancer yet)
-and provide forwarding and masquerade for off-node egress. Applying the
+ClusterIPs don't route yet: the edition runs no kube-proxy, and flowsdn's own
+Service datapath is milestone 2 (#292). The node provides masquerade for
+off-node egress. A multi-node cluster uses the Kubernetes-mode manifests
+(`deploy/stormcos/manifests-kubernetes/`): pod CIDRs from the Node, direct
+routes to the other nodes' pods (#291). Applying the
 manifests is stormcos's side
 ([stormcos#261](https://github.com/glennswest/stormcos/issues/261)). See the
 [deployment contract](deploy/stormcos/README.md).

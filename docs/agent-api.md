@@ -58,6 +58,8 @@ on recognized endpoint detail/IPAM address routes return HTTP 405.
 | `GET /v1/ipam` | Read the configured default-pool family summaries below. |
 | `POST /v1/ipam` | Allocate pending addresses; requires owner and supports family/default-pool selection. |
 | `DELETE /v1/ipam/{address}?pool=default` | Release an unused allocation; endpoint-owned addresses return 409. |
+| `GET /v1/ip` | Kubernetes mode: the IP cache view (reference `IPListEntry`). Each node InternalIP as `/32`/`/128` with identity 1 (this node) or 6 (remote node); each IP of a non-host-network Pod with `hostIP` (its node's InternalIP of the family), `metadata{source,namespace,name}` and the flowsdn `labels` extension (`k8s:<key>=<value>` plus `k8s:io.kubernetes.pod.namespace`). Pod entries have no `identity` until cluster identity allocation exists. No `cidr` query filter. 404 when Kubernetes mode is off. |
+| `GET /v1/node/routes` | Kubernetes mode (flowsdn): the direct node routes, `{destination, gateway, node, state}` with state `installed`, `skipped: …` or `error: …`. Empty before the first Node list or with `auto-direct-node-routes: false`. 404 when Kubernetes mode is off. |
 
 List, detail and pool summary reads perform no allocation or endpoint mutation.
 As with existing API requests, expired pending IP leases are processed first.
