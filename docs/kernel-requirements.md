@@ -29,6 +29,16 @@ never compare **version strings** (section 4.7).
 > runs, and "6.12 (stormcos)" is not the shipped line. The 6.6 general minimum
 > (TCX) is unaffected; which kernel rows to verify is the owner question on #256.
 
+> **Socket termination (2026-10-05, #3).** The owner chose netlink
+> `SOCK_DIAG` `SOCK_DESTROY` for socket termination (milestone 3). The
+> `bpf_sock_destroy` kfunc path below waits until aya and bpf-linker can relocate
+> it (#315), so `INET_DIAG=y|m`, `INET_TCP_DIAG`, `INET_UDP_DIAG` and
+> `INET_DIAG_DESTROY=y` are required, not just a fallback. The shipped kernel
+> has them: the `config` in Fedora's `kernel-core-7.2.5-100.fc43.x86_64.rpm`
+> (koji, RPM digests OK, sha256 `a71352da…ef672346`) sets `INET_DIAG=y`,
+> `INET_TCP_DIAG=y`, `INET_UDP_DIAG=y`, `INET_DIAG_DESTROY=y` and
+> `DEBUG_INFO_BTF=y`.
+
 
 | Question | Decision | Section |
 |---|---|---|

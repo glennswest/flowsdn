@@ -739,6 +739,10 @@ sysctls ~2.5k, monitor decode ~1.5k, tests ~3k.
 - aya specifics to verify on the target kernel/toolchain: `set_global` on
   `.rodata.config`, `prog_flags` for `BPF_F_XDP_HAS_FRAGS`, kfunc relocation
   for `bpf_sock_destroy`, tcx link pinning and update.
+  **Resolved #3 (2026-10-05):** `.rodata.config`, XDP frags and TCX pin/update
+  passed kernel probes. kfunc relocation is a confirmed aya gap. The owner chose
+  netlink `SOCK_DESTROY` for socket termination, and #315 watches upstream
+  (spec 01 §loader features).
 - **Resolved #4:** spec 01 §5.4 records reference source evidence: the C
   accessor uses only patched stride/max-offset; retain Go-compatible 64 B
   x86-64 and 128 B arm64 constants rather than runtime hardware cache lines.

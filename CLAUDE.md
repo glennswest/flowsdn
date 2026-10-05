@@ -151,7 +151,8 @@ probe reports skip unless the node carries the flowsdn CNI.
 
 - [x] Read the issue. `.rodata.config`, XDP frags and TCX pin/update already passed kernel probes on 2026-09-22.
 - [x] Confirmed from the aya-obj 0.3.0 source that kfunc relocation is absent; recorded in spec 01.
-- [ ] Owner decision (asked on #3, wait-owner): use SOCK_DIAG for M3 and close as verified (recommended), implement a flowsdn kfunc relocation pass, or wait for upstream. Nothing implemented yet.
+- [x] Owner decision (2026-10-05, option 1): SOCK_DIAG SOCK_DESTROY for M3; close #3 as verified; kfunc watch is #315.
+- [x] Release kernel 7.2.5-100.fc43 (koji kernel-core config) has INET_DIAG/TCP/UDP_DIAG and INET_DIAG_DESTROY=y, DEBUG_INFO_BTF=y; recorded in kernel-requirements, inventory 02, spec 01. #3 closed.
 
 ### Comment mining — 2026-09-28
 
