@@ -1,5 +1,7 @@
-//! Load-balancer input contracts from spec 05. No kernel or controller adapter yet.
+//! Load-balancer input contracts from spec 05, and socket-LB map planning
+//! (`socket`); the kernel adapter is flowsdn-bpf-loader's `SocketLb`.
 pub mod maglev;
+pub mod socket;
 use serde_json::Value;
 use std::collections::BTreeMap;
 

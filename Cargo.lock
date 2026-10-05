@@ -371,6 +371,7 @@ dependencies = [
  "flowsdn-health",
  "flowsdn-ipam",
  "flowsdn-k8s",
+ "flowsdn-lb",
  "futures",
  "httparse",
  "nix",
@@ -572,6 +573,7 @@ dependencies = [
 name = "flowsdn-lb"
 version = "0.14.0"
 dependencies = [
+ "flowsdn-bpf-abi",
  "serde_json",
  "yaml-rust2",
 ]
