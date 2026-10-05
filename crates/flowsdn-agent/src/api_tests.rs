@@ -337,7 +337,10 @@ fn auto_pools_need_kubernetes_and_resolve_from_the_node() {
         .expect("resolve");
     assert_eq!(read.gateway4, Some("10.172.0.1".parse().expect("IP")));
     let mut ipam = read.ipam().expect("IPAM");
-    assert!(ipam.allocate("10.172.0.1".parse().expect("IP"), "pod").is_err());
+    assert!(
+        ipam.allocate("10.172.0.1".parse().expect("IP"), "pod")
+            .is_err()
+    );
     assert_eq!(
         read.addressing().pointer("/ipv4/alloc-range"),
         Some(&json!("10.172.0.0/16"))
@@ -346,7 +349,10 @@ fn auto_pools_need_kubernetes_and_resolve_from_the_node() {
     for (key, value) in [
         ("ipv4-gateway", json!("10.172.0.1")),
         ("kubernetes", json!({"node-name":"a/b"})),
-        ("kubernetes", json!({"node-name":"n","auto-direct-node-routes":"yes"})),
+        (
+            "kubernetes",
+            json!({"node-name":"n","auto-direct-node-routes":"yes"}),
+        ),
         ("kubernetes", json!("n")),
     ] {
         let mut bad = config.clone();

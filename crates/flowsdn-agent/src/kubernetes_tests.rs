@@ -24,15 +24,20 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
         Settings::parse(Some(&Value::Null), &env(&[])).expect("null"),
         None
     );
-    let parsed = Settings::parse(Some(&json!({})), &env(&[("NODE_NAME", "b"), ("K8S_NODE_NAME", "a")]))
-        .expect("env")
-        .expect("enabled");
+    let parsed = Settings::parse(
+        Some(&json!({})),
+        &env(&[("NODE_NAME", "b"), ("K8S_NODE_NAME", "a")]),
+    )
+    .expect("env")
+    .expect("enabled");
     assert_eq!(parsed.node_name, "a");
     assert_eq!(parsed.kubeconfig, None);
     assert!(parsed.auto_direct_node_routes);
     let parsed = Settings::parse(
-        Some(&json!({"node-name":"n1","kubeconfig":"/k","auto-direct-node-routes":false,
-            "direct-routing-skip-unreachable":true})),
+        Some(
+            &json!({"node-name":"n1","kubeconfig":"/k","auto-direct-node-routes":false,
+            "direct-routing-skip-unreachable":true}),
+        ),
         &env(&[("K8S_NODE_NAME", "a")]),
     )
     .expect("explicit")
@@ -52,7 +57,10 @@ fn alloc_cidr_prefers_pod_cidrs_then_derives_the_reference_default() {
     let derived = node("b", &[], &["2001:db8::9", "192.168.31.172"]);
     assert_eq!(alloc_cidr(&derived, false), Some((ip("10.172.0.0"), 16)));
     // f00d:: + the IPv4 alloc CIDR's bytes 0a.ac.00.00 (f00d:0:0:0:aac::), /96.
-    assert_eq!(alloc_cidr(&derived, true), Some((ip("f00d::aac:0:0:0"), 96)));
+    assert_eq!(
+        alloc_cidr(&derived, true),
+        Some((ip("f00d::aac:0:0:0"), 96))
+    );
     let v6_only = node("c", &[], &["2001:db8::1:2"]);
     assert_eq!(alloc_cidr(&v6_only, false), None);
     assert_eq!(alloc_cidr(&v6_only, true), Some((ip("f00d::1:2:0:0"), 96)));
@@ -61,9 +69,18 @@ fn alloc_cidr_prefers_pod_cidrs_then_derives_the_reference_default() {
 
 #[test]
 fn router_ip_is_the_first_host_address() {
-    assert_eq!(router_ip((ip("10.172.0.0"), 16)).expect("v4"), ip("10.172.0.1"));
-    assert_eq!(router_ip((ip("10.172.3.7"), 24)).expect("v4"), ip("10.172.3.1"));
-    assert_eq!(router_ip((ip("f00d::aac:0:0:0"), 96)).expect("v6"), ip("f00d::aac:0:0:1"));
+    assert_eq!(
+        router_ip((ip("10.172.0.0"), 16)).expect("v4"),
+        ip("10.172.0.1")
+    );
+    assert_eq!(
+        router_ip((ip("10.172.3.7"), 24)).expect("v4"),
+        ip("10.172.3.1")
+    );
+    assert_eq!(
+        router_ip((ip("f00d::aac:0:0:0"), 96)).expect("v6"),
+        ip("f00d::aac:0:0:1")
+    );
     assert!(router_ip((ip("10.0.0.0"), 31)).is_err());
     assert!(router_ip((ip("fd00::"), 127)).is_err());
 }
@@ -77,12 +94,23 @@ fn desired_routes_cover_other_nodes_by_family() {
             &[("10.173.0.0", 16), ("f00d::aad:0:0:0", 96)],
             &["192.168.31.173", "2001:db8::173"],
         ),
-        node("v4-only", &[("10.174.0.0", 16), ("fd09::", 64)], &["192.168.31.174"]),
+        node(
+            "v4-only",
+            &[("10.174.0.0", 16), ("fd09::", 64)],
+            &["192.168.31.174"],
+        ),
     ];
     let routes = desired_routes("local", &nodes);
     let text: Vec<_> = routes
         .iter()
-        .map(|r| format!("{} via {} ({})", cidr_text(r.destination, r.prefix), r.gateway, r.node))
+        .map(|r| {
+            format!(
+                "{} via {} ({})",
+                cidr_text(r.destination, r.prefix),
+                r.gateway,
+                r.node
+            )
+        })
         .collect();
     assert_eq!(
         text,
@@ -131,14 +159,23 @@ fn ip_list_has_node_identities_pod_labels_and_host_ips() {
             .expect("row")
             .clone()
     };
-    assert_eq!(find("192.168.31.172/32").get("identity"), Some(&json!(IDENTITY_HOST)));
-    assert_eq!(find("192.168.31.173/32").get("identity"), Some(&json!(IDENTITY_REMOTE_NODE)));
+    assert_eq!(
+        find("192.168.31.172/32").get("identity"),
+        Some(&json!(IDENTITY_HOST))
+    );
+    assert_eq!(
+        find("192.168.31.173/32").get("identity"),
+        Some(&json!(IDENTITY_REMOTE_NODE))
+    );
     let pod = find("10.173.0.5/32");
     assert_eq!(pod.get("identity"), None);
     assert_eq!(pod.get("hostIP"), Some(&json!("192.168.31.173")));
     assert_eq!(
         pod.get("labels"),
-        Some(&json!(["k8s:app=web", "k8s:io.kubernetes.pod.namespace=ns"]))
+        Some(&json!([
+            "k8s:app=web",
+            "k8s:io.kubernetes.pod.namespace=ns"
+        ]))
     );
     assert_eq!(find("f00d::5/128").get("hostIP"), None);
     assert_eq!(view.health().get("state"), Some(&json!("Warning")));

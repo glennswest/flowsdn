@@ -54,7 +54,9 @@ impl Keyed for Resource {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Scope {
     Nodes,
-    LocalPods { node_name: String },
+    LocalPods {
+        node_name: String,
+    },
     /// Every Pod in the cluster (the IP cache); unscheduled Pods have an empty node.
     Pods,
 }

@@ -151,8 +151,16 @@ impl Config {
         if (auto4 || auto6) && kubernetes.is_none() {
             return fail(400, "an auto pool requires kubernetes node discovery");
         }
-        let v4 = if auto4 { None } else { pool("ipv4-pool", false)? };
-        let v6 = if auto6 { None } else { pool("ipv6-pool", true)? };
+        let v4 = if auto4 {
+            None
+        } else {
+            pool("ipv4-pool", false)?
+        };
+        let v6 = if auto6 {
+            None
+        } else {
+            pool("ipv6-pool", true)?
+        };
         if v4.is_none() && v6.is_none() && !auto4 && !auto6 {
             return fail(400, "at least one IP pool is required");
         }
@@ -180,7 +188,10 @@ impl Config {
             if matches!(optional(&value, key)?, "" | "auto") {
                 Ok(())
             } else {
-                fail(400, format!("{key} must be empty or auto with an auto pool"))
+                fail(
+                    400,
+                    format!("{key} must be empty or auto with an auto pool"),
+                )
             }
         };
         let gateway4 = if auto4 {
@@ -323,7 +334,8 @@ impl Api {
                 ));
             }
             ("GET", "/v1/healthz") => {
-                let mut status = json!({"cilium":{"state":"Ok","msg":"initial endpoint API ready"}});
+                let mut status =
+                    json!({"cilium":{"state":"Ok","msg":"initial endpoint API ready"}});
                 if let (Some(view), Some(object)) = (&self.kubernetes, status.as_object_mut()) {
                     object.insert("kubernetes".into(), crate::kubernetes::lock(view).health());
                 }
@@ -966,10 +978,7 @@ fn connect_kubernetes(config: &mut Config) -> Result<Option<Kubernetes>> {
     if config.auto4 || config.auto6 {
         let (pool4, pool6) = controller.wait_for_pools(config.auto4, config.auto6)?;
         config.resolve_auto(pool4, pool6)?;
-        eprintln!(
-            "pod CIDRs from the Node: {}",
-            config.addressing()
-        );
+        eprintln!("pod CIDRs from the Node: {}", config.addressing());
     }
     Ok(Some(controller))
 }

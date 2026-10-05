@@ -33,7 +33,10 @@ pub struct Settings {
 impl Settings {
     /// `kubernetes` absent or null disables discovery. `node-name` falls back to
     /// `K8S_NODE_NAME`, then `NODE_NAME` (the DaemonSet's downward API).
-    pub fn parse(value: Option<&Value>, env: &BTreeMap<OsString, OsString>) -> Result<Option<Self>> {
+    pub fn parse(
+        value: Option<&Value>,
+        env: &BTreeMap<OsString, OsString>,
+    ) -> Result<Option<Self>> {
         let object = match value {
             None | Some(Value::Null) => return Ok(None),
             Some(Value::Object(object)) => object,
@@ -67,7 +70,9 @@ impl Settings {
                 .chars()
                 .any(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '.')
         {
-            return Err("kubernetes.node-name (or K8S_NODE_NAME/NODE_NAME) must be a node name".into());
+            return Err(
+                "kubernetes.node-name (or K8S_NODE_NAME/NODE_NAME) must be a node name".into(),
+            );
         }
         let kubeconfig = text("kubeconfig")?;
         Ok(Some(Self {
@@ -144,12 +149,16 @@ pub fn router_ip((network, prefix): (IpAddr, u8)) -> Result<IpAddr> {
         IpAddr::V4(ip) if prefix <= 30 => {
             let host = u32::MAX.checked_shr(u32::from(prefix)).unwrap_or(0);
             let base = u32::from(ip) & !host;
-            Ok(IpAddr::V4(Ipv4Addr::from(base.checked_add(1).ok_or("router overflow")?)))
+            Ok(IpAddr::V4(Ipv4Addr::from(
+                base.checked_add(1).ok_or("router overflow")?,
+            )))
         }
         IpAddr::V6(ip) if prefix <= 126 => {
             let host = u128::MAX.checked_shr(u32::from(prefix)).unwrap_or(0);
             let base = u128::from(ip) & !host;
-            Ok(IpAddr::V6(Ipv6Addr::from(base.checked_add(1).ok_or("router overflow")?)))
+            Ok(IpAddr::V6(Ipv6Addr::from(
+                base.checked_add(1).ok_or("router overflow")?,
+            )))
         }
         _ => Err("pod CIDR too small for a router address".into()),
     }
@@ -190,7 +199,8 @@ pub fn desired_routes(local: &str, nodes: &[NodeInfo]) -> Vec<DesiredRoute> {
 pub type Shared = Arc<Mutex<View>>;
 /// A panicked writer leaves a usable view; never poison the API with it.
 pub fn lock(view: &Shared) -> MutexGuard<'_, View> {
-    view.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    view.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Shared between the controller thread and the API thread.

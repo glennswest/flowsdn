@@ -405,10 +405,12 @@ impl Connector {
             rtnetlink::packet_route::AddressFamily::Inet6
         };
         request.header.destination_prefix_length = if destination.is_ipv4() { 32 } else { 128 };
-        request.attributes.push(RouteAttribute::Destination(match destination {
-            IpAddr::V4(ip) => RouteAddress::Inet(ip),
-            IpAddr::V6(ip) => RouteAddress::Inet6(ip),
-        }));
+        request
+            .attributes
+            .push(RouteAttribute::Destination(match destination {
+                IpAddr::V4(ip) => RouteAddress::Inet(ip),
+                IpAddr::V6(ip) => RouteAddress::Inet6(ip),
+            }));
         let message = self.run(async {
             self.handle
                 .route()

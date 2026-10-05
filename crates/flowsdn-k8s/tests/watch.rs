@@ -327,10 +327,7 @@ fn cluster_pod_scope_accepts_every_node_and_unscheduled_pods() {
             .list_page(&list(vec![value.clone()], "1", ""))
             .await
             .expect("list");
-        watch
-            .event(&event("DELETED", value))
-            .await
-            .expect("delete");
+        watch.event(&event("DELETED", value)).await.expect("delete");
         assert_eq!(watch.snapshot().len(), 0);
     });
 }

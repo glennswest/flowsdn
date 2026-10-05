@@ -48,11 +48,7 @@ impl Controller {
     }
     /// Block until this node's Node object yields an allocation CIDR for every
     /// requested family (spec 07 §3.4/§3.5: IPAM waits, logging every 5 s).
-    pub fn wait_for_pools(
-        &self,
-        v4: bool,
-        v6: bool,
-    ) -> Result<(Option<Cidr>, Option<Cidr>)> {
+    pub fn wait_for_pools(&self, v4: bool, v6: bool) -> Result<(Option<Cidr>, Option<Cidr>)> {
         let mut logged: Option<Instant> = None;
         loop {
             let reason = match self.runtime.block_on(list_nodes(&self.client)) {
@@ -112,23 +108,24 @@ impl Controller {
                 let local = settings.node_name;
                 let node_view = Arc::clone(&watch_view);
                 let mut sent: Option<Vec<DesiredRoute>> = None;
-                let nodes = watch_forever(&client, Scope::Nodes, "nodes", &watch_view, move |state| {
-                    let nodes = node_rows(state);
-                    let desired = desired_routes(&local, &nodes);
-                    {
-                        let mut view = lock(&node_view);
-                        view.nodes = nodes;
-                        view.nodes_synced = true;
-                    }
-                    // Heartbeats modify Nodes constantly; reconcile on change only
-                    // (the route thread also repairs every 30 s).
-                    if let Some(sender) = &routes
-                        && sent.as_ref() != Some(&desired)
-                    {
-                        let _ = sender.send(desired.clone());
-                        sent = Some(desired);
-                    }
-                });
+                let nodes =
+                    watch_forever(&client, Scope::Nodes, "nodes", &watch_view, move |state| {
+                        let nodes = node_rows(state);
+                        let desired = desired_routes(&local, &nodes);
+                        {
+                            let mut view = lock(&node_view);
+                            view.nodes = nodes;
+                            view.nodes_synced = true;
+                        }
+                        // Heartbeats modify Nodes constantly; reconcile on change only
+                        // (the route thread also repairs every 30 s).
+                        if let Some(sender) = &routes
+                            && sent.as_ref() != Some(&desired)
+                        {
+                            let _ = sender.send(desired.clone());
+                            sent = Some(desired);
+                        }
+                    });
                 let pod_view = Arc::clone(&watch_view);
                 let pods = watch_forever(&client, Scope::Pods, "pods", &watch_view, move |state| {
                     let pods = pod_rows(state);
@@ -313,13 +310,8 @@ fn route_loop(
         }
         // Nothing is pruned before the first complete Node list.
         if let Some(desired) = &desired {
-            let (states, error) = reconcile(
-                &connector,
-                desired,
-                &mut installed,
-                file,
-                skip_unreachable,
-            );
+            let (states, error) =
+                reconcile(&connector, desired, &mut installed, file, skip_unreachable);
             let mut view = lock(view);
             view.routes = states;
             match error {
@@ -385,7 +377,10 @@ fn install(
     let (gateway, _) = connector.lookup(route.gateway)?;
     if let Some(gateway) = gateway.filter(|g| !g.is_unspecified() && *g != route.gateway) {
         if skip_unreachable {
-            return Ok(format!("skipped: route to {} uses gateway {gateway}", route.gateway));
+            return Ok(format!(
+                "skipped: route to {} uses gateway {gateway}",
+                route.gateway
+            ));
         }
         return Err(format!(
             "route to destination {} contains gateway {gateway}, must be directly reachable. \
@@ -455,8 +450,16 @@ mod tests {
         let file = dir.join(ROUTES_FILE);
         assert!(load_routes(&file).expect("absent").is_empty());
         let routes: BTreeSet<Key> = [
-            ("10.173.0.0".parse().expect("ip"), 16, "192.0.2.173".parse().expect("ip")),
-            ("f00d::aad:0:0:0".parse().expect("ip"), 96, "2001:db8::173".parse().expect("ip")),
+            (
+                "10.173.0.0".parse().expect("ip"),
+                16,
+                "192.0.2.173".parse().expect("ip"),
+            ),
+            (
+                "f00d::aad:0:0:0".parse().expect("ip"),
+                96,
+                "2001:db8::173".parse().expect("ip"),
+            ),
         ]
         .into_iter()
         .collect();
