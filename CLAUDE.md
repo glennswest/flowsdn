@@ -32,7 +32,7 @@ establish two-node pod networking. Docs were last refreshed from code on
 The stormcos flowsdn edition carries the static musl agent (BPF object
 embedded) and CNI in the `flowsdn` golden; `deploy/stormcos/manifests/` runs it
 as `image: flowsdn` with a CNI-install init container (stormcos#261 applies
-them). Latest golden: golden-flowsdn-84a7153fcfd0 at 26b7aea. Source pushes do not update nodes until a new golden is composed into
+them). Latest golden: golden-flowsdn-a7ee3f63195b at c6c96c7 (ClusterIP socket LB, #292). Source pushes do not update nodes until a new golden is composed into
 a release. Authority:
 [stormcos/docs/goldens.md](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 After validated implementation work, flowsdn uses the special-component
@@ -66,7 +66,8 @@ contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots
 - [x] flowsdn-k8s Service/EndpointSlice scopes; agent watches, services thread, `GET /v1/service`, `kubernetes.service-lb`/`cgroup-root`.
 - [x] Manifests (RBAC, host cgroup at /run/flowsdn/cgroupv2), docs, changelog; `socket-lb-live` fixture in medium suite.
 - [x] sc-build at c6c96c7: fmt, workspace + kubernetes Clippy -D warnings, 697 tests (0 failed, 1 ignored) + 40 agent kubernetes tests, GNU kubernetes release build, test/build.sh.
-- [ ] Medium suite run dbfc4e45b1 on C2NR0Q2 (fixture-socket-lb-live); golden via `stormcentral component stage flowsdn` (golden now carries the GNU kubernetes agent, stormcos#171); status on #292. Not implemented (stays open on #292): NodePort/LB/externalIPs, affinity, Maglev, DSR, NAT46/64, tc-level LB, socket termination, policy.
+- [x] Golden golden-flowsdn-a7ee3f63195b at c6c96c7 (release request stormcos#255; carries the GNU kubernetes agent, stormcos#171). Status comment on #292 (5999829276).
+- [ ] fixture-socket-lb-live on a kernel: run dbfc4e45b1 (C2NR0Q2) failed on push, registry full (stormcentral#376). Rerun `stormcentral test run flowsdn medium --tag <machine>`; live kube-dns check on a flowsdn node after release. Not implemented (stays open on #292): NodePort/LB/externalIPs, affinity, Maglev, DSR, NAT46/64, tc-level LB, socket termination, policy.
 
 ### Kubernetes-connected agent — #291 (P0), 2026-10-05
 

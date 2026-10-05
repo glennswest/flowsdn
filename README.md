@@ -87,7 +87,7 @@ flowsdn ships as the **`flowsdn` golden** in the stormcos flowsdn edition: the
 static musl agent (`/flowsdn-agent`, BPF object embedded) and CNI
 (`/opt/cni/bin/flowsdn`) are sealed into the golden. Nodes clone it
 copy-on-write and mount it at `/pallets/flowsdn`. The latest golden,
-`golden-flowsdn-84a7153fcfd0`, was staged from `26b7aea`. A source push alone
+`golden-flowsdn-a7ee3f63195b`, was staged from `c6c96c7`. A source push alone
 does not update nodes: the revision must be staged into a new golden and
 composed into a stormcos release.
 

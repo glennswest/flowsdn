@@ -89,7 +89,7 @@ to `/pallets/<last path component>`, so `image: flowsdn` roots the container on
 the golden; a different last component (for example `flowsdn-runtime`) is a
 registry pull instead. The init container puts the plugin on the host, so the
 golden's internal CNI path does not have to be exposed separately. The latest
-golden is `golden-flowsdn-84a7153fcfd0` (`26b7aea`). The authoritative
+golden is `golden-flowsdn-a7ee3f63195b` (`26b7aea`). The authoritative
 [golden documentation](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md)
 is stormcos's.
 
