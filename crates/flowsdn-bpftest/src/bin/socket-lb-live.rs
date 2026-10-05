@@ -192,7 +192,7 @@ fn main() -> Result<()> {
         ];
     }
     program(&mut lb, &services)?;
-    let (mut one, mut two) = (0, 0);
+    let (mut one, mut two) = (0u32, 0u32);
     for _ in 0..64 {
         let client = TcpStream::connect_timeout(&sa("192.0.2.10:80")?, TIMEOUT)?;
         match client.peer_addr()?.ip() {
