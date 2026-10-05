@@ -762,7 +762,12 @@ impl Suite {
             for i in 0..size {
                 let index = total.saturating_add(i);
                 let node = nodes
-                    .get(usize::try_from(index).unwrap_or(0).checked_rem(nodes.len()).unwrap_or(0))
+                    .get(
+                        usize::try_from(index)
+                            .unwrap_or(0)
+                            .checked_rem(nodes.len())
+                            .unwrap_or(0),
+                    )
                     .map_or(self.node.clone(), |(n, _)| n.clone());
                 let name = format!("perf-ramp-{index}");
                 let body = self

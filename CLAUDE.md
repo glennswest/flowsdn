@@ -53,6 +53,7 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 ### Presentation — #302 (P1), 2026-10-05
 
 - [x] `docs/presentation.md`: Marp deck, 11 slides, every claim checked against code/docs (specs count, CNI CHECK, routes, config keys, milestones, golden). Linked from README and docs/README; changelog.
+- [x] Comparison slides (owner follow-up): what ships, and scale/memory with Cilium's published figures. Render: 13 slides.
 - [x] sc-build: marp-cli rendered HTML (11 slides); PDF needs a Chromium the build box lacks (#324 closed). #302 closed.
 
 ### Network performance suite — #321 (P0), 2026-10-05
@@ -68,7 +69,8 @@ Kubernetes API, and measures with Rust clients. JSON lines per metric with `flav
 - [x] `test/perf` crate `flowsdn-perf` with all metric groups; unit tests (stats, DNS codec, loopback wire protocols, /proc parsing, node/endpoint parsing).
 - [x] `/test perf` dispatch; requires.toml `[perf]`; Containerfile/build.sh; docs (test/README metric table), changelog.
 - [x] sc-build at e397e16: fmt, Clippy, 705 tests, test/build.sh, podman build; `/test perf` execs flowsdn-perf in the image. Status on #321; format on stormcentral#412.
-- [ ] Runs on both flavors: 8c822b3547 (C2NR0Q2) 507 on push (stormcentral#376); f0107a4784/f68f31432b no pvetest VMs until install. Proposed after stormcentral#376.
+- [x] `perf-scale` ramp (steps of 100 pods until a step fails; owner request) at 5dc4de3: Clippy clean, tests pass, test/build.sh.
+- [ ] Runs on both flavors (perf by day, perf-scale at night on a pve VM): 8c822b3547 (C2NR0Q2) 507 on push (stormcentral#376); f0107a4784/f68f31432b no pvetest VMs until install. Proposed after stormcentral#376.
 
 ### ClusterIP service datapath — #292 (P0), 2026-10-05
 
