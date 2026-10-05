@@ -48,7 +48,10 @@ fn main() -> ExitCode {
         Err(e) => return outcome(BROKEN, &format!("load failed otherwise: {e:?}")),
     };
     if !load {
-        return outcome(RELOCATES, "relocated bpf_sock_destroy (kernel load not run)");
+        return outcome(
+            RELOCATES,
+            "relocated bpf_sock_destroy (kernel load not run)",
+        );
     }
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         let iter: &mut aya::programs::Iter = ebpf
@@ -59,8 +62,14 @@ fn main() -> ExitCode {
         Ok(())
     })();
     match result {
-        Ok(()) => outcome(RELOCATES, "relocated bpf_sock_destroy and the kernel loaded it"),
-        Err(e) => outcome(BROKEN, &format!("relocated, but the kernel load failed: {e:?}")),
+        Ok(()) => outcome(
+            RELOCATES,
+            "relocated bpf_sock_destroy and the kernel loaded it",
+        ),
+        Err(e) => outcome(
+            BROKEN,
+            &format!("relocated, but the kernel load failed: {e:?}"),
+        ),
     }
 }
 
