@@ -5,7 +5,9 @@
 //! against. Relocation needs no privileges, so it runs anywhere; `--load` also
 //! loads the program into the kernel (privileged, never attached or run).
 //!
-//! Exit 0: aya still cannot relocate the kfunc (`UnknownFunction`).
+//! Exit 0: the kfunc still cannot be relocated: aya has no extern relocation
+//!         (`UnknownFunction`), or it has but the object carries no `.ksyms`
+//!         entry for it (`ExternNotFound`).
 //! Exit 3: aya relocates it (and, with `--load`, the kernel accepted it).
 //! Exit 1: anything else: the check itself needs attention.
 use std::process::ExitCode;
@@ -31,7 +33,17 @@ fn main() -> ExitCode {
         // error: UnknownFunction { .. } } -- the call is resolved only against
         // functions in the object, never kernel BTF.
         Err(e) if format!("{e:?}").contains("UnknownFunction") => {
-            return outcome(MISSING, &format!("{e:?}"));
+            return outcome(MISSING, &format!("aya has no extern relocation: {e:?}"));
+        }
+        // aya main since aya-rs/aya#1372 (2026-07-09) resolves externs listed
+        // in the object's `.ksyms` BTF datasec, as C's `__ksym` emits them.
+        // bpf-linker (0.11.1) drops a Rust `extern "C"` function from BTF, so
+        // the object lists none: the gap is now on the object side.
+        Err(e) if format!("{e:?}").contains("ExternNotFound") => {
+            return outcome(
+                MISSING,
+                &format!("aya resolves .ksyms externs, but the object has no .ksyms entry: {e:?}"),
+            );
         }
         Err(e) => return outcome(BROKEN, &format!("load failed otherwise: {e:?}")),
     };

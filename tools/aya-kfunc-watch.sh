@@ -5,12 +5,15 @@
 #
 # SOURCE is `release` (the latest aya on crates.io), `main` (aya's main
 # branch) or `pinned` (the aya the workspace uses); default: release main.
-# For each it builds tools/aya-kfunc-watch against that aya and loads the
-# loader-kfunc object (iter/tcp calling bpf_sock_destroy, built by
-# tools/build-bpf.sh). Relocation needs no privileges; --load also loads the
-# program into the kernel (privileged; never attached or run).
+# The loader-kfunc object (iter/tcp calling bpf_sock_destroy) is built by
+# tools/build-bpf.sh with the pinned bpf-linker and, if newer, with the latest
+# bpf-linker release: a Rust object needs the linker to emit the extern in a
+# `.ksyms` BTF datasec before any aya can resolve it. For each object and
+# SOURCE it builds tools/aya-kfunc-watch against that aya and loads the
+# object. Relocation needs no privileges; --load also loads the program into
+# the kernel (privileged; never attached or run).
 #
-# Exit 0: no aya relocates the kfunc yet; nothing to do.
+# Exit 0: no combination relocates the kfunc yet; nothing to do.
 # Exit 3: some aya does: switch socket termination to bpf_sock_destroy (#315).
 # Exit 1: the check is broken (an aya the probe does not build against, an
 #         unexpected load error): look at it.
@@ -34,12 +37,41 @@ rm -rf "$work"
 mkdir -p "$work"
 source "$HOME/.cargo/env" 2>/dev/null || true
 
-if ! "$root/tools/build-bpf.sh" "$work/bpf" >&2; then
+# Build loader-kfunc with the bpf-linker on PATH (or the pinned download).
+build_object() { # NAME
+    local target="$work/bpf-target-$1"
+    if ! CARGO_TARGET_DIR="$target" "$root/tools/build-bpf.sh" "$work/bpf-$1" >&2; then
+        return 1
+    fi
+    echo "$target/bpfel-unknown-none/release/loader-kfunc"
+}
+pinned_linker=v$(sed -n 's/^    version=\(.*\)$/\1/p' "$root/tools/build-bpf.sh")
+objects=() linkers=()
+if object=$(build_object pinned) && [ -f "$object" ]; then
+    objects+=("$object") linkers+=("bpf-linker $pinned_linker")
+else
     echo "aya-kfunc-watch: broken: tools/build-bpf.sh failed" >&2
     exit 1
 fi
-object=${CARGO_TARGET_DIR:-$root/crates/flowsdn-bpf/target}/bpfel-unknown-none/release/loader-kfunc
-[ -f "$object" ] || { echo "aya-kfunc-watch: broken: no $object" >&2; exit 1; }
+latest_linker=$(curl -fsSL https://api.github.com/repos/aya-rs/bpf-linker/releases/latest |
+    sed -n 's/^  "tag_name": "\(.*\)",$/\1/p')
+if [ -z "$latest_linker" ]; then
+    echo "aya-kfunc-watch: broken: cannot read the latest bpf-linker release" >&2
+    exit 1
+elif [ "$latest_linker" != "$pinned_linker" ]; then
+    # A watch, not a shipped build: the latest release is not checksum-pinned.
+    dir="$work/bpf-linker-$latest_linker"
+    mkdir -p "$dir"
+    if curl -fsSL "https://github.com/aya-rs/bpf-linker/releases/download/$latest_linker/bpf-linker-x86_64-unknown-linux-musl.tar.zst" |
+        tar --zstd -x -C "$dir" && linker=$(find "$dir" -type f -name bpf-linker | head -n1) &&
+        [ -n "$linker" ] && chmod +x "$linker" &&
+        object=$(PATH="$(dirname "$linker"):$PATH" build_object latest) && [ -f "$object" ]; then
+        objects+=("$object") linkers+=("bpf-linker $latest_linker")
+    else
+        echo "aya-kfunc-watch: broken: cannot build with bpf-linker $latest_linker" >&2
+        exit 1
+    fi
+fi
 
 dependency() {
     case $1 in
@@ -65,25 +97,28 @@ for src in "${sources[@]}"; do
         rustup toolchain list | grep -q '^stable' ||
             rustup toolchain install stable --profile minimal >&2
     fi
-    if cargo "+$toolchain" build --release --quiet --manifest-path "$dir/Cargo.toml" \
+    if ! cargo "+$toolchain" build --release --quiet --manifest-path "$dir/Cargo.toml" \
         --target-dir "$work/target-$src" >"$work/$src.build" 2>&1; then
-        version=$(awk '/^name = "aya"$/{getline; v=$3; getline; s=$3; print v, s; exit}' \
-            "$dir/Cargo.lock" | tr -d '"')
-        line=$("$work/target-$src/release/flowsdn-aya-kfunc-watch" "$object" "${load[@]}")
+        entry="$src aya (did not build): broken: the probe does not build against this aya: $(tail -n 20 "$work/$src.build")"
+        echo "aya-kfunc-watch: $entry"
+        summary+="- $entry"$'\n'
+        [ "$overall" = 3 ] || overall=1
+        continue
+    fi
+    version=$(awk '/^name = "aya"$/{getline; v=$3; getline; s=$3; print v, s; exit}' \
+        "$dir/Cargo.lock" | tr -d '"')
+    for i in "${!objects[@]}"; do
+        line=$("$work/target-$src/release/flowsdn-aya-kfunc-watch" "${objects[$i]}" "${load[@]}")
         rc=$?
-    else
-        version="(did not build)"
-        line="broken: the probe does not build against this aya: $(tail -n 20 "$work/$src.build")"
-        rc=1
-    fi
-    entry="$src aya ${version:-?}: $line"
-    echo "aya-kfunc-watch: $entry"
-    summary+="- $entry"$'\n'
-    if [ "$rc" = 3 ]; then
-        overall=3
-    elif [ "$rc" != 0 ] && [ "$overall" != 3 ]; then
-        overall=1
-    fi
+        entry="$src aya ${version:-?}, ${linkers[$i]}: $line"
+        echo "aya-kfunc-watch: $entry"
+        summary+="- $entry"$'\n'
+        if [ "$rc" = 3 ]; then
+            overall=3
+        elif [ "$rc" != 0 ] && [ "$overall" != 3 ]; then
+            overall=1
+        fi
+    done
 done
 
 if [ "$overall" = 3 ] && [ "$file_issue" = 1 ]; then
