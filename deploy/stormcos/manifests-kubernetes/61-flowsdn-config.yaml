@@ -36,6 +36,7 @@ data:
   agent.json: |
     {
       "socket-path": "/var/run/cilium/cilium.sock",
+      "http-listen": "127.0.0.1:9878",
       "delete-queue": "/var/run/cilium/deleteQueue",
       "state-dir": "/var/lib/flowsdn",
       "egress": "stack",

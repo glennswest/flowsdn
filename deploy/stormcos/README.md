@@ -72,8 +72,8 @@ musl agent refuses its configuration. The differences:
 Off-node egress still needs a masquerade, now for the node's derived pool.
 Moving a node from the static pool to `auto` needs its endpoints gone (a fresh
 install or a drain): restore refuses addresses outside the pool. Status is on
-the agent socket: `GET /v1/healthz` (`kubernetes` member), `GET /v1/node/routes`,
-`GET /v1/ip` and `GET /v1/service`.
+the agent socket and the read-only loopback port: `GET /v1/healthz` (`kubernetes`
+member), `GET /v1/node/routes`, `GET /v1/ip` and `GET /v1/service`.
 
 The DaemonSet carries no probe: the agent's health is on its Unix socket only
 (see below). It runs privileged as a validation baseline, not a measured
@@ -130,17 +130,20 @@ ConfigMap does not write the host CNI directory.
 ## API and supervision
 
 See the [agent API contract](../../docs/agent-api.md) for supported methods,
-response shapes and unimplemented routes. HTTP runs over the Unix socket only.
-There is no agent TCP listener, Kubernetes Service, Hubble observer listener on
-4244, or relay endpoint to expose. No Service manifest or guessed container
-port is included.
+response shapes and unimplemented routes. HTTP runs over the Unix socket and,
+read-only, on the node's loopback at `127.0.0.1:9878` (`http-listen`; the agent
+is on the host network). That port is for the stormcos console plugin
+(stormconsole#83, spec flowsdn#297): endpoints, IPAM, health, config and the
+statedb query; mutations return 403 and stay on the socket. There is no
+Kubernetes Service, Hubble observer listener on 4244, or relay endpoint to
+expose, so the flow view waits for Hubble. No Service manifest is included.
 
 `GET /v1/healthz` on the Unix socket is the present liveness check after startup
 restore and offline-deletion replay complete. It is **not** an assertion of
 Kubernetes/network readiness. `/v1/health/modules` reports the missing
-controllers as degraded. A supervisor that only accepts a TCP HTTP path must
-add Unix-socket probing or an explicit local adapter; pointing it at `/healthz`
-on an invented TCP port would repeatedly restart a functioning process. The
+controllers as degraded. A TCP HTTP probe must use `GET /v1/healthz` on the
+loopback port; bare `/healthz` does not exist, and a probe pointed at it would
+repeatedly restart a functioning process. The
 manifests therefore supply no Kubernetes HTTP probe. Keep readiness
 for pod-network use gated on the actual cluster tests.
 

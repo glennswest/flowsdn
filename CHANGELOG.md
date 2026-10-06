@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-05
+- **feat:** Agent `http-listen` (#297): an optional read-only HTTP listener on a loopback `IP:port` (non-loopback refused). `GET` routes and the statedb query answer as on the Unix socket; every other method returns 403, since TCP has no authentication. The stormcos edition manifests set `127.0.0.1:9878` so the stormconsole flowsdn plugin (stormconsole#83) can read endpoints, IPAM, health and config without mounting the socket.
 - **docs:** #293 milestone 3 assessed against code (primitives only); proposed after #292.
 - **docs:** #294 milestone 4 assessed against code; packaging/release scope (stormcos golden path vs Helm/GitHub Releases) raised as an owner decision.
 - **feat:** `perf-scale` suite (#321; owner: "100 unit (containers), and see how far we go"). Server pods in steps of 100 over the ready nodes behind one Service; each step checks pod IPs, endpoints, ClusterIP connects and pod RR, and records agent CPU/RSS. It stops at the first failing step or at allocatable capacity, then reports `scale-max` and drains. Declared night-only (`budget_secs = 14400`).

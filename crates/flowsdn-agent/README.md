@@ -68,7 +68,8 @@ primary workload endpoints; host/ingress endpoints and full reference migration
 are not yet supported.
 
 `--help` and `--version` exit successfully without loading configuration. The
-daemon opens no TCP listener or Hubble/relay service. `/v1/healthz` reports API
+daemon opens no Hubble/relay service; its only TCP listener is the optional
+read-only loopback `http-listen` (#297). `/v1/healthz` reports API
 availability after restore, not complete pod-network readiness. stormcos ships
 the static musl agent and CNI in a golden; the edition manifests and runtime
 resources are documented in [the deployment contract](../../deploy/stormcos/README.md).

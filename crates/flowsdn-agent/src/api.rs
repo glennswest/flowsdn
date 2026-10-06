@@ -1,4 +1,5 @@
-//! Initial Unix API for primary host-scope CNI and persisted endpoint ownership.
+//! Initial Unix API for primary host-scope CNI and persisted endpoint ownership,
+//! plus an optional read-only loopback TCP listener (`http-listen`, #297).
 //! With the `kubernetes` feature and configuration it adds Node/Pod discovery,
 //! pod CIDRs from the Node and direct node routes; no policy or identity allocator.
 use crate::{endpoints::Manager, state::Result};
@@ -12,7 +13,7 @@ use std::{
     fmt,
     fs::{self, File},
     io::{self, Read, Write},
-    net::IpAddr,
+    net::{IpAddr, SocketAddr, TcpListener, TcpStream},
     os::{
         fd::AsRawFd,
         unix::{
@@ -77,6 +78,8 @@ static SOCKET_LB_OBJECT: &[u8] = include_bytes!("../bpf/socket-lb");
 
 struct Config {
     socket: PathBuf,
+    /// `http-listen`: an optional read-only loopback TCP listener (#297).
+    http: Option<SocketAddr>,
     state: PathBuf,
     object: Option<PathBuf>,
     egress: Egress,
@@ -106,6 +109,20 @@ impl Config {
         let value: Value = serde_json::from_slice(&bytes)?;
         let socket = PathBuf::from(string(&value, "socket-path")?);
         let state = PathBuf::from(string(&value, "state-dir")?);
+        // No authentication on TCP: loopback only, and read-only (see `read_only`).
+        let http = match optional(&value, "http-listen")? {
+            "" => None,
+            raw => {
+                let address: SocketAddr = raw.parse().map_err(|_| Failure {
+                    status: 400,
+                    message: "http-listen must be IP:port".into(),
+                })?;
+                if !address.ip().is_loopback() || address.port() == 0 {
+                    return fail(400, "http-listen must be a loopback address with a port");
+                }
+                Some(address)
+            }
+        };
         let object = match optional(&value, "bpf-object")? {
             "" => None,
             path => Some(PathBuf::from(path)),
@@ -232,6 +249,7 @@ impl Config {
         }
         Ok(Self {
             socket,
+            http,
             state,
             object,
             egress,
@@ -741,13 +759,43 @@ fn query_values(query: &str) -> Result<BTreeMap<String, String>> {
     Ok(values)
 }
 
+/// A connection the API reads one request from and answers: the Unix socket
+/// or the loopback TCP listener.
+trait Connection: Read + Write {
+    fn read_deadline(&self, timeout: Duration) -> io::Result<()>;
+    fn write_deadline(&self, timeout: Duration) -> io::Result<()>;
+}
+impl Connection for UnixStream {
+    fn read_deadline(&self, timeout: Duration) -> io::Result<()> {
+        self.set_read_timeout(Some(timeout))
+    }
+    fn write_deadline(&self, timeout: Duration) -> io::Result<()> {
+        self.set_write_timeout(Some(timeout))
+    }
+}
+impl Connection for TcpStream {
+    fn read_deadline(&self, timeout: Duration) -> io::Result<()> {
+        self.set_read_timeout(Some(timeout))
+    }
+    fn write_deadline(&self, timeout: Duration) -> io::Result<()> {
+        self.set_write_timeout(Some(timeout))
+    }
+}
+
+/// Whether the read-only TCP listener serves a request: reads, and the
+/// read-only statedb query, which the reference also takes as POST.
+fn read_only(method: &str, target: &str) -> bool {
+    let path = target.split_once('?').map_or(target, |(path, _)| path);
+    method == "GET" || (method == "POST" && matches!(path, "/statedb/query" | "/v1/statedb/query"))
+}
+
 struct Request {
     method: String,
     target: String,
     body: Value,
     expiration: bool,
 }
-fn read_request(stream: &mut UnixStream) -> Result<Request> {
+fn read_request(stream: &mut impl Connection) -> Result<Request> {
     let start = Instant::now();
     let mut bytes = Vec::new();
     loop {
@@ -755,7 +803,7 @@ fn read_request(stream: &mut UnixStream) -> Result<Request> {
         if remaining.is_zero() {
             return fail(408, "request deadline exceeded");
         }
-        stream.set_read_timeout(Some(remaining))?;
+        stream.read_deadline(remaining)?;
         let mut part = [0u8; 4096];
         let count = match stream.read(&mut part) {
             Ok(0) => return fail(400, "truncated request"),
@@ -867,7 +915,7 @@ fn read_request(stream: &mut UnixStream) -> Result<Request> {
     }
 }
 
-fn write_response(stream: &mut UnixStream, status: u16, body: Vec<u8>) -> Result<()> {
+fn write_response(stream: &mut impl Connection, status: u16, body: Vec<u8>) -> Result<()> {
     let mut response=format!("HTTP/1.1 {status} Agent\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",body.len()).into_bytes();
     response.extend_from_slice(&body);
     let start = Instant::now();
@@ -877,7 +925,7 @@ fn write_response(stream: &mut UnixStream, status: u16, body: Vec<u8>) -> Result
         if remaining.is_zero() {
             return Err("response deadline exceeded".into());
         }
-        stream.set_write_timeout(Some(remaining))?;
+        stream.write_deadline(remaining)?;
         match stream.write(bytes) {
             Ok(0) => return Err("response write returned zero".into()),
             Ok(count) => bytes = bytes.get(count..).ok_or("invalid write count")?,
@@ -1080,47 +1128,93 @@ pub fn run(config_path: &Path) -> Result<()> {
         "initial endpoint API listening; Kubernetes node discovery {}; identity and policy controllers are not enabled",
         if enabled { "enabled" } else { "not enabled" }
     );
+    let http = match api.config.http {
+        Some(address) => {
+            let listener = TcpListener::bind(address)?;
+            listener.set_nonblocking(true)?;
+            eprintln!("read-only API listening on http://{address}");
+            Some(listener)
+        }
+        None => None,
+    };
     loop {
         api.expire();
-        let mut stream = match listener.accept() {
-            Ok((stream, _)) => stream,
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                std::thread::sleep(Duration::from_millis(20));
-                continue;
+        // Accepted streams are blocking; each is bounded by REQUEST_BUDGET.
+        let mut idle = true;
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                idle = false;
+                serve(&mut api, &health, &mut stream, false)?;
             }
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
+                ) => {}
             Err(error) => return Err(error.into()),
-        };
-        let result = read_request(&mut stream).and_then(|request| {
-            match (request.method.as_str(), request.target.as_str()) {
-                ("GET" | "POST", "/statedb/query" | "/v1/statedb/query") => {
-                    health.query(&request.body).map(|body| (200, body))
+        }
+        if let Some(http) = &http {
+            match http.accept() {
+                Ok((mut stream, _)) => {
+                    idle = false;
+                    serve(&mut api, &health, &mut stream, true)?;
                 }
-                ("GET", "/health/modules" | "/v1/health/modules") => {
-                    Ok((200, serde_json::to_vec(&health.modules()?)?))
-                }
-                _ => api
-                    .handle(request)
-                    .and_then(|(status, body)| Ok((status, serde_json::to_vec(&body)?))),
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
+                    ) => {}
+                // A TCP accept failure (such as EMFILE) must not stop the
+                // endpoint API the CNI depends on.
+                Err(error) => eprintln!("read-only API accept failed: {error}"),
             }
-        });
-        let (status, body) = match result {
-            Ok(reply) => reply,
-            Err(error) => {
-                let status = error
-                    .downcast_ref::<Failure>()
-                    .map(|e| e.status)
-                    .unwrap_or(500);
-                (
-                    status,
-                    serde_json::to_vec(&json!({"code":status,"message":error.to_string()}))?,
-                )
-            }
-        };
-        if let Err(error) = write_response(&mut stream, status, body) {
-            eprintln!("API response failed: {error}");
+        }
+        if idle {
+            std::thread::sleep(Duration::from_millis(20));
         }
     }
+}
+
+/// Answer one request; `read_only` refuses anything that could change state.
+fn serve(
+    api: &mut Api,
+    health: &health_api::ModuleHealth,
+    stream: &mut impl Connection,
+    read_only_listener: bool,
+) -> Result<()> {
+    let result = read_request(stream).and_then(|request| {
+        if read_only_listener && !read_only(&request.method, &request.target) {
+            return fail(403, "the TCP listener is read-only; use the Unix socket");
+        }
+        match (request.method.as_str(), request.target.as_str()) {
+            ("GET" | "POST", "/statedb/query" | "/v1/statedb/query") => {
+                health.query(&request.body).map(|body| (200, body))
+            }
+            ("GET", "/health/modules" | "/v1/health/modules") => {
+                Ok((200, serde_json::to_vec(&health.modules()?)?))
+            }
+            _ => api
+                .handle(request)
+                .and_then(|(status, body)| Ok((status, serde_json::to_vec(&body)?))),
+        }
+    });
+    let (status, body) = match result {
+        Ok(reply) => reply,
+        Err(error) => {
+            let status = error
+                .downcast_ref::<Failure>()
+                .map(|e| e.status)
+                .unwrap_or(500);
+            (
+                status,
+                serde_json::to_vec(&json!({"code":status,"message":error.to_string()}))?,
+            )
+        }
+    };
+    if let Err(error) = write_response(stream, status, body) {
+        eprintln!("API response failed: {error}");
+    }
+    Ok(())
 }
 
 #[cfg(test)]

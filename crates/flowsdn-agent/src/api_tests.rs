@@ -369,3 +369,72 @@ fn auto_pools_need_kubernetes_and_resolve_from_the_node() {
         assert!(connect_kubernetes(&mut read).is_err());
     }
 }
+
+#[test]
+fn http_listen_is_loopback_only() {
+    let temp = Temp::new();
+    let path = temp.0.join("config.json");
+    let mut config = json!({"socket-path":temp.0.join("agent.sock"),"state-dir":temp.0.join("state"),"ipv4-pool":"198.18.0.0/29","ipv4-gateway":"198.18.0.1","device-mtu":1500,"route-mtu":1450});
+    fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
+    assert_eq!(Config::read(&path).expect("config").http, None);
+    for (value, valid) in [
+        ("127.0.0.1:9878", true),
+        ("[::1]:9878", true),
+        ("0.0.0.0:9878", false),
+        ("192.168.8.1:9878", false),
+        ("127.0.0.1:0", false),
+        ("127.0.0.1", false),
+        ("localhost:9878", false),
+    ] {
+        config["http-listen"] = json!(value);
+        fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
+        assert_eq!(Config::read(&path).is_ok(), valid, "{value}");
+    }
+}
+
+#[test]
+fn read_only_listener_serves_reads_and_the_statedb_query_only() {
+    for (method, target) in [
+        ("GET", "/v1/endpoint"),
+        ("GET", "/v1/endpoint/42"),
+        ("GET", "/v1/ipam"),
+        ("GET", "/v1/config"),
+        ("GET", "/v1/health/modules"),
+        ("POST", "/v1/statedb/query"),
+        ("POST", "/statedb/query?x=1"),
+    ] {
+        assert!(read_only(method, target), "{method} {target}");
+    }
+    for (method, target) in [
+        ("POST", "/v1/ipam?owner=x"),
+        ("PUT", "/v1/endpoint/x"),
+        ("DELETE", "/v1/endpoint"),
+        ("DELETE", "/v1/ipam/10.0.0.2"),
+        ("PATCH", "/v1/config"),
+    ] {
+        assert!(!read_only(method, target), "{method} {target}");
+    }
+}
+
+#[test]
+fn requests_are_read_and_answered_over_loopback_tcp() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let address = listener.local_addr().expect("address");
+    let client = std::thread::spawn(move || {
+        let mut stream = TcpStream::connect(address).expect("connect");
+        stream
+            .write_all(b"GET /v1/ipam HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .expect("write");
+        let mut reply = String::new();
+        stream.read_to_string(&mut reply).expect("read");
+        reply
+    });
+    let (mut server, _) = listener.accept().expect("accept");
+    let request = read_request(&mut server).expect("request");
+    assert_eq!((request.method.as_str(), request.target.as_str()), ("GET", "/v1/ipam"));
+    write_response(&mut server, 200, b"{}".to_vec()).expect("response");
+    drop(server);
+    let reply = client.join().expect("client");
+    assert!(reply.starts_with("HTTP/1.1 200 "), "{reply}");
+    assert!(reply.ends_with("\r\n\r\n{}"), "{reply}");
+}

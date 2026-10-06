@@ -1,8 +1,12 @@
 # Standalone agent API
 
 `flowsdn-agent --config PATH` exposes HTTP/1.1 on the configured `socket-path`
-Unix socket, with mode 0600. It opens no TCP listener. Access depends on filesystem
-permissions; there is no HTTP authentication layer. Config is the standalone
+Unix socket, with mode 0600. With `http-listen` (a loopback `IP:port`; others are
+refused) it also serves a **read-only** TCP listener: `GET` routes and the
+statedb query (`GET`/`POST`) answer as on the socket, every other method returns
+403 `the TCP listener is read-only; use the Unix socket`. It is for the stormcos
+console plugin (#297). Socket access depends on filesystem permissions; there is
+no HTTP authentication layer, which is why TCP is loopback and read-only. Config is the standalone
 agent JSON format, not the full configuration catalogue. `--help` and `--version`
 exit successfully without loading config or starting the daemon.
 
@@ -19,6 +23,7 @@ Send a bounded request to the configured Unix socket, for example:
 
 ```sh
 curl --unix-socket /run/flowsdn/agent.sock http://localhost/v1/healthz
+curl http://127.0.0.1:9878/v1/endpoint     # with "http-listen": "127.0.0.1:9878"
 ```
 
 `localhost` is an HTTP request authority in this example, not a TCP destination.

@@ -18,7 +18,7 @@ agent over a Unix socket and a primary veth + loopback CNI. The agent embeds its
 `local-delivery` BPF object (`bpf-object` optional) and has `egress: fib|stack`;
 `flowsdn-cni install` installs the plugin and `00-flowsdn.conflist` on a node.
 Persisted ownership, pinned endpoint maps/TCX links, offline deletion, bounded
-endpoint reads and exact IPAM summaries are implemented. No TCP listener,
+endpoint reads and exact IPAM summaries are implemented. No non-loopback TCP listener (`http-listen` is loopback read-only, #297),
 Kubernetes watches in the agent (the k8s watch client is library only),
 complete service/policy integration, operator executable or Hubble
 observer/relay exists. See `docs/runtime.md`, `docs/agent-api.md`,
@@ -55,8 +55,8 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 The plugin is stormconsole's (stormconsole#83). flowsdn's part: the console (host network) needs a
 loopback port to default to; the API was Unix-socket only. Flows wait for Hubble (#296 §3, #293).
 
-- [ ] Agent `http-listen` (loopback only, refused otherwise): read-only TCP listener, GET routes and the statedb query; mutations 403 (no auth on TCP; they stay on the 0600 socket). Tests.
-- [ ] Edition manifests set `http-listen: 127.0.0.1:9878`; docs (agent-api, runtime, deploy README), changelog.
+- [x] Agent `http-listen` (loopback only, refused otherwise): read-only TCP listener, GET routes and the statedb query; mutations 403 (no auth on TCP; they stay on the 0600 socket). Tests.
+- [x] Edition manifests set `http-listen: 127.0.0.1:9878`; docs (agent-api, runtime, deploy README), changelog.
 - [ ] sc-build; golden via `component stage flowsdn`; tell stormconsole#83 the port and routes; `shipped`.
 
 ### Advanced networking acceptance — #293 (P0), 2026-10-05

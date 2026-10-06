@@ -53,8 +53,9 @@ the package version alone does not distinguish these unreleased commits.
 
 - `flowsdn-agent --config PATH` reads a standalone **JSON** configuration.
   `--help`/`-h` and `--version`/`-V` exit successfully without starting the agent.
-- The agent opens **no TCP ports**. Its HTTP API uses the configured mode-0600
-  Unix socket. There is no Hubble service on 4244, metrics listener or relay.
+- The agent's HTTP API uses the configured mode-0600 Unix socket; the optional
+  `http-listen` adds a read-only listener on a loopback port (403 for anything
+  that changes state), for the stormcos console. There is no Hubble service on 4244, metrics listener or relay.
 - `GET /v1/healthz` reports API availability after restore and deletion replay;
   it does not mean the pod network or policy controllers are ready.
   `/v1/health/modules` reports unavailable controllers as degraded.

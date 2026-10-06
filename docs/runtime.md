@@ -20,6 +20,7 @@ limited to 1 MiB. The authoritative reader is
 | Key | Required/default | Meaning |
 |---|---|---|
 | `socket-path` | Required nonempty string | Unix HTTP socket; created with mode 0600. |
+| `http-listen` | Omitted, null or empty: disabled | `IP:port` of a **read-only** HTTP listener; the address must be loopback (`127.0.0.1`, `::1`) and the port nonzero, or the config is refused. It serves the same routes as the socket for `GET` and the statedb query (`POST`); any other method returns 403, since TCP has no authentication. For the stormcos console plugin (#297); the edition manifests use `127.0.0.1:9878`. |
 | `state-dir` | Required nonempty string | Durable endpoint state; exclusive ownership lock. |
 | `bpf-object` | Omitted, null or empty: the object embedded in the agent | A `local-delivery` BPF ELF to load instead of the embedded one (built from this commit by `tools/build-bpf.sh`; `test/build.sh` refuses an embedded copy whose code differs). |
 | `egress` | `fib` | `fib`: a destination that is not a local endpoint is FIB-redirected in BPF (native routing between router namespaces). `stack`: every frame from an endpoint goes to the host stack (routing, netfilter), same-node pod-to-pod included, so the endpoint's ARP replies reach the host and host routes (including direct node routes) apply; every endpoint also gets host `/32`/`/128` routes over its host link. The stormcos edition uses `stack`. |
@@ -109,8 +110,10 @@ Only CNI 1.0.0/1.1.0 are currently supported. The installers above publish the
 
 ## Ports and APIs
 
-The agent opens **no TCP or UDP listener**. HTTP/1.1 is served on `socket-path`.
-It does not serve Hubble gRPC on port 4244, a relay, a metrics listener, or a
+HTTP/1.1 is served on `socket-path` and, with `http-listen`, read-only on a
+loopback TCP port (the edition manifests: `127.0.0.1:9878`; the agent runs on the
+host network, so that is the node's loopback). Nothing listens on a non-loopback
+address. It does not serve Hubble gRPC on port 4244, a relay, a metrics listener, or a
 Kubernetes Service endpoint. Port numbers in subsystem specifications or
 library configuration must not be used as evidence that the daemon listens.
 
@@ -119,7 +122,8 @@ shape: config, endpoint inventory/detail/publication/deletion, host IPAM,
 module health and the read-only health StateDB query. Requests are processed
 serially, one per connection, with 16 KiB headers, 4 MiB bodies and a two-second
 request budget. There is no pagination, watch endpoint or HTTP authentication;
-access is controlled by socket permissions. Pending leases requesting
+access is controlled by socket permissions, and the loopback listener refuses every
+method that can change state (403). Pending leases requesting
 expiration time out after 600 seconds.
 
 `GET /v1/healthz` reports initial API availability after restoration and queued
