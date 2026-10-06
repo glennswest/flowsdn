@@ -21,7 +21,7 @@ idempotent DEL with durable offline fallback. GC returns the specified
 unsupported-version error. Chaining, delegated/cloud IPAM and legacy result
 conversion remain outstanding and unsupported modes fail before allocation.
 
-The executable uses `CILIUM_SOCK` for a custom agent socket. The optional
+The executable uses `FLOWSDN_SOCK` for a custom agent socket (default `/var/run/flowsdn/flowsdn.sock`). The optional
 `FLOWSDN_DELETE_QUEUE` override selects a queue directory for isolated testing;
 the default preserves the Cilium queue location. This executable is not a
 complete networking installation: the deployable agent and cluster integration
@@ -55,9 +55,9 @@ crate tests cover dispatch, version/errors and namespace-free teardown.
 Run `flowsdn-agent cni install --source PATH` with the built `flowsdn-cni` binary.
 `CNI_DIR` selects the CNI directory (default `$HOST_PREFIX/opt/cni`, with
 `HOST_PREFIX=/host`). Its `bin` directory must be trusted and writable. The
-installer atomically replaces `cilium-cni`, then publishes hardlinks named
-`flowsdn-cni` and `flowsdn` for compatibility with existing configurations.
-`OVERWRITE_CILIUM=false` retains an existing regular canonical binary and
+installer atomically replaces `flowsdn-cni`, then publishes the hardlink
+`flowsdn` (the golden's path). No `cilium-cni` name is installed (#294).
+`OVERWRITE_PLUGIN=false` retains an existing regular canonical binary and
 relinks the aliases to it. Existing destination symlinks are replaced, never
 written through; retaining a canonical symlink is rejected.
 
@@ -76,7 +76,7 @@ writes `00-flowsdn.conflist` (mode 0644) into `CNI_CONF_DIR`, default
 `$HOST_PREFIX/etc/cni/net.d`:
 
 ```json
-{"cniVersion":"1.1.0","name":"flowsdn","plugins":[{"type":"cilium-cni"}]}
+{"cniVersion":"1.1.0","name":"flowsdn","plugins":[{"type":"flowsdn-cni"}]}
 ```
 
 The `00-` prefix sorts ahead of a leftover `05-cilium.conflist`. It prints a JSON

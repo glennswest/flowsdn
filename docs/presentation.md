@@ -133,7 +133,7 @@ Tracked by milestone issues; none of this is claimed to work:
 ## Interfaces
 
 - **Agent API:** HTTP over a Unix socket (`socket-path`, the manifests use
-  `/var/run/cilium/cilium.sock`). `GET /v1/config`, `/v1/healthz`,
+  `/var/run/flowsdn/flowsdn.sock`). `GET /v1/config`, `/v1/healthz`,
   `/v1/endpoint[/{id}[/healthz]]`, `PUT/DELETE /v1/endpoint/{attachment}`,
   `GET/POST /v1/ipam`, `DELETE /v1/ipam/{address}`, `/v1/health/modules`,
   `/v1/statedb/query`. Kubernetes mode adds `GET /v1/ip`, `/v1/node/routes`

@@ -49,8 +49,8 @@ dual-stack [validation ConfigMap](../deploy/stormcos/50-config.yaml) (pinned).
 
 The CNI executable is invoked through CNI environment variables and JSON on
 stdin, not the agent's command-line interface. Its agent socket defaults to
-`/var/run/cilium/cilium.sock`, overridden by `CILIUM_SOCK`; its offline queue
-defaults to `/var/run/cilium/deleteQueue`, overridden by `FLOWSDN_DELETE_QUEUE`.
+`/var/run/flowsdn/flowsdn.sock`, overridden by `FLOWSDN_SOCK`; its offline queue
+defaults to `/var/run/flowsdn/deleteQueue`, overridden by `FLOWSDN_DELETE_QUEUE`.
 These are environment overrides, not CNI JSON keys. When using custom agent
 paths, configure both sides consistently.
 
@@ -64,12 +64,12 @@ the network configuration, then prints a JSON report (`installed`, `conflist`,
 | Environment | Default | Meaning |
 |---|---|---|
 | `HOST_PREFIX` | `/host` | Prefix for the two defaults below. |
-| `CNI_DIR` | `$HOST_PREFIX/opt/cni` | Its `bin/` gets `cilium-cni` (copied atomically), hardlinks `flowsdn-cni` and `flowsdn`, and `loopback`. |
+| `CNI_DIR` | `$HOST_PREFIX/opt/cni` | Its `bin/` gets `flowsdn-cni` (copied atomically), the hardlink `flowsdn`, and `loopback`. |
 | `CNI_CONF_DIR` | `$HOST_PREFIX/etc/cni/net.d` | Gets `00-flowsdn.conflist`, written atomically with mode 0644. |
-| `OVERWRITE_CILIUM` | `true` | `false` keeps an existing regular `cilium-cni` and relinks the aliases to it. |
+| `OVERWRITE_PLUGIN` | `true` | `false` keeps an existing regular `flowsdn-cni` and relinks `flowsdn` to it. |
 | `OVERWRITE_LOOPBACK` | `false` | `true` replaces an existing `loopback`; otherwise it is copied only when absent. Loopback failures are warnings. |
 
-The conflist is `{"cniVersion":"1.1.0","name":"flowsdn","plugins":[{"type":"cilium-cni"}]}`:
+The conflist is `{"cniVersion":"1.1.0","name":"flowsdn","plugins":[{"type":"flowsdn-cni"}]}`:
 no chained plugins, no delegated IPAM. The `00-` prefix sorts ahead of a
 leftover `05-cilium.conflist`. `flowsdn-agent cni install --source PATH` does the
 binary half only (same variables, no conflist). Neither removes an installation.
@@ -84,14 +84,14 @@ versions without contacting the agent. The other supported commands require
 | Input | Behavior/default |
 |---|---|
 | JSON `name` | Required nonempty network name for ADD/CHECK. |
-| JSON `type` | The runtime uses it to select the installed binary: the installed conflist names `cilium-cni`; `flowsdn` and `flowsdn-cni` are hardlinks to it. This executable does not validate it (except `loopback`/`flowsdn-loopback`, which select the loopback adapter). |
+| JSON `type` | The runtime uses it to select the installed binary: the installed conflist names `flowsdn-cni`; `flowsdn` is a hardlink to it. This executable does not validate it (except `loopback`/`flowsdn-loopback`, which select the loopback adapter). |
 | JSON `chaining-mode` | Absent/empty; a nonempty string is rejected. |
 | JSON `ipam.type` | Absent/empty; delegated IPAM is rejected. Allocation comes from the agent. |
 | JSON `prevResult` | Absent/null for primary ADD; CHECK uses prior interfaces, IPs and routes for validation. |
 | `CNI_CONTAINERID`, `CNI_IFNAME`, `CNI_NETNS`, `CNI_PATH` | Required nonempty environment values for ADD/CHECK. Interface names must be shorter than 16 bytes and contain neither slash nor NUL. |
 | `CNI_ARGS` | Optional semicolon-separated `key=value` pairs. `K8S_POD_NAME`, `K8S_POD_NAMESPACE`, `K8S_POD_UID` default to empty metadata. |
-| `CILIUM_SOCK` | Default `/var/run/cilium/cilium.sock`. |
-| `FLOWSDN_DELETE_QUEUE` | Default `/var/run/cilium/deleteQueue` for offline DEL. |
+| `FLOWSDN_SOCK` | Default `/var/run/flowsdn/flowsdn.sock`. |
+| `FLOWSDN_DELETE_QUEUE` | Default `/var/run/flowsdn/deleteQueue` for offline DEL. |
 
 MTUs, gateways and pools come from the agent response, not extra CNI JSON
 options. DEL tolerates missing container/interface values and namespace for

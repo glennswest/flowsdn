@@ -10,10 +10,11 @@ read-only RBAC, the agent ConfigMap and the agent DaemonSet:
   `/flowsdn-agent`, and `/opt/cni/bin/flowsdn` with the BPF object embedded in
   the agent. Nothing is pulled.
 - **CNI install.** An init container runs `flowsdn install`. It copies the
-  plugin into the node's `/opt/cni/bin` (as `cilium-cni`, `flowsdn-cni`,
-  `flowsdn` and, if absent, `loopback`) and atomically writes
-  `/etc/cni/net.d/00-flowsdn.conflist`. The `00-` prefix means a leftover
-  `05-cilium.conflist` cannot win.
+  plugin into the node's `/opt/cni/bin` (as `flowsdn-cni`, `flowsdn` and,
+  if absent, `loopback`) and atomically writes
+  `/etc/cni/net.d/00-flowsdn.conflist` (plugin type `flowsdn-cni`). The `00-`
+  prefix means a leftover conflist from another edition (`05-...`) cannot win.
+  A `cilium-cni` file left in `/opt/cni/bin` by an older flowsdn is unused.
 - **Agent.** It runs `egress: stack`. Every frame from a pod, pod-to-pod on
   the node included, goes to the node's stack, and each pod gets a host
   route, so the node's routing and netfilter see every pod flow.
@@ -127,7 +128,7 @@ allocator, not the capacity of the fixed-size endpoint BPF map.
 | Network namespace | Host network namespace (`hostNetwork: true`), so the agent can attach to host veths. |
 | bpffs | Only with `bpf-pin-root`: `/sys/fs/bpf` mounted as bpffs, writable and shared with the host. PID 1 mounts it; the example adds no mount init container. |
 | State | `/var/lib/flowsdn` durable, writable and owned by one agent (exclusive lock). Keep it together with its matching pins. |
-| Runtime directory | `/var/run/cilium` shared with the host CNI process: `cilium.sock` (mode 0600) and `deleteQueue`. |
+| Runtime directory | `/var/run/flowsdn` shared with the host CNI process: `flowsdn.sock` (mode 0600) and `deleteQueue`. |
 | CNI executable | On the host's `/opt/cni/bin`. The validation example does not install it; run `flowsdn-cni install` (as the edition's init container does) or install it by hand. |
 | Kubernetes credentials | Not used. The examples mount no ServiceAccount token. |
 
@@ -202,7 +203,6 @@ musl; a Kubernetes-connected agent needs its golden packaging changed.
 Runtime packaging for that integration is tracked in
 [stormcos#171](https://github.com/glennswest/stormcos/issues/171).
 
-Existing `/var/run/cilium` compatibility paths do not establish upstream ownership.
 The [resource identity decision](../../docs/decisions/0017-flowsdn-resource-identity.md)
 separates retained runtime paths, interface/map names and CNI aliases from
 flowsdn-owned Kubernetes resources.

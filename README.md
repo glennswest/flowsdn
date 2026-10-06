@@ -23,7 +23,7 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
   endpoint to the host stack (routing, netfilter), same-node
   pod-to-pod included, and adds a host `/32`/`/128` route per endpoint address. The stormcos edition uses `stack`.
 - **Node CNI installation.** `flowsdn-cni install` copies the plugin into the
-  host's `/opt/cni/bin` (`cilium-cni`, `flowsdn-cni`, `flowsdn`, and `loopback`
+  host's `/opt/cni/bin` (`flowsdn-cni`, `flowsdn`, and `loopback`
   if absent) and atomically writes `/etc/cni/net.d/00-flowsdn.conflist`.
 - **stormcos edition manifests.** [`deploy/stormcos/manifests/`](deploy/stormcos/manifests/)
   holds the ServiceAccount/RBAC, agent ConfigMap and DaemonSet that stormcos
@@ -98,7 +98,7 @@ On a node, the edition's DaemonSet runs `image: flowsdn`. The stormcos kubelet
 (stormpump runtime) roots a container named `…/flowsdn` on the flowsdn golden,
 so nothing is pulled. Its init container runs `/opt/cni/bin/flowsdn install` to
 put the plugin and conflist on the host; the agent runs privileged in the host
-network namespace with `/var/run/cilium` and `/var/lib/flowsdn` from the host.
+network namespace with `/var/run/flowsdn` and `/var/lib/flowsdn` from the host.
 The edition runs no kube-proxy. ClusterIP Services go through flowsdn's own
 socket load balancing in the Kubernetes-mode agent (#292): its cgroup
 `connect`/`sendmsg`/`recvmsg`/`getpeername` programs send a socket aimed at a
