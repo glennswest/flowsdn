@@ -89,11 +89,12 @@ controllers, operator registration and the live run are split into sub-issues.
 - [x] `deploy/release/build.sh` → flowsdn-<ver>-{amd64,arm64}.tar.gz + SHA256SUMS (static agent/CNI, lock, LICENSE, NOTICE). sc-build at 9bf69e8: fmt, agent Clippy -D warnings, agent tests (lock test ok), test/build.sh lock check, both archives static. Not published.
 - [x] Chart object-name question posted on #294; `wait-owner` set (2026-10-06). Recommended flowsdn-* (ADR-0017).
 - [x] Owner (2026-10-06): flowsdn-* names (master's recommendation: values migration note, `sc net` instead of cilium-cli) and "no Cilium in flowsdn, period": no cilium-* object names, labels, config keys or compatibility shims in the chart or manifests.
-- [ ] ADR-0019/spec 22/ADR-0013 #237/ADR-0017 amended to the decision.
-- [ ] CNI: socket /var/run/flowsdn/flowsdn.sock (FLOWSDN_SOCK), queue /var/run/flowsdn/deleteQueue, install `flowsdn-cni` (+ `flowsdn`, loopback), conflist type flowsdn-cni; no cilium-cni alias. Manifests/paths follow.
-- [ ] CRD manifests: Cilium-free text/enums/printer columns (projection scrub for the shipped set); examples follow; test: no "cilium" in deploy/ manifests or the chart.
-- [ ] Chart install/kubernetes/flowsdn (flowsdn values, CRDs in crds/, agent DaemonSet, RBAC, ConfigMap; image.repository required), helm lint/template check, packaged by deploy/release/build.sh; agent image Containerfile; values migration note.
-- [ ] sc-build; issue for code-wide Cilium removal (BPF/pin/interface names, catalogue); golden for the CNI change; M4 stays open on #291–#293.
+- [x] ADR-0019/spec 22/ADR-0013 #237/ADR-0017 amended; #339 tracks Cilium names left in code (BPF/pin names, catalogue).
+- [x] CNI: /var/run/flowsdn socket/queue, FLOWSDN_SOCK, OVERWRITE_PLUGIN, `flowsdn-cni` (+ `flowsdn` link), conflist type flowsdn-cni; manifests follow (0040f60, b6bcf1d).
+- [x] Shipped CRDs Cilium-free (crd::flowsdn_text); examples follow; test no_cilium_in_shipped_manifests over deploy/ and install/kubernetes.
+- [x] Chart install/kubernetes/flowsdn + check.sh; images/agent; release packages chart; docs/helm.md (values, migration note).
+- [x] sc-build at b6bcf1d: fmt, workspace + kubernetes Clippy, 718 tests (0 failed, 1 ignored), chart check, test/build.sh, release (archives + chart + SHA256SUMS); image built and ran at cd18738.
+- [ ] Golden via `component stage flowsdn` (CNI + manifests change together); live chart install and upgrade/rollback need a cluster; M4 stays open on #291–#293.
 
 ### Presentation — #302 (P1), 2026-10-05
 
