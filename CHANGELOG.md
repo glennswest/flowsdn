@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-06
+- **docs:** build-and-test: the sc-build checkout is depth 1 with no fetch access, so history comparisons (`HEAD~1`) run in the session checkout before pushing, and the LVM thin-pool warning at the top of a job is not the failure (#317).
 - **chore:** Stage golden-flowsdn-eda35249a55e at b02c59f (release request stormcos#310): the loopback read-only API for the console plugin (#297), flowsdn-only CNI names and paths, and the flowsdn.io CRD manifests (#294, #325).
 - **BREAKING:** No Cilium names in flowsdn's CNI and manifests (owner, #294). The CNI installs `flowsdn-cni` (plus the golden's `flowsdn` link) and writes conflist type `flowsdn-cni`; the `cilium-cni` alias is gone. The agent socket and delete queue default to `/var/run/flowsdn/flowsdn.sock` and `/var/run/flowsdn/deleteQueue`; `CILIUM_SOCK` is `FLOWSDN_SOCK` and `OVERWRITE_CILIUM` is `OVERWRITE_PLUGIN`. The stormcos manifests follow. Ship the golden and manifests together, since an old manifest's socket path does not match the new CNI default.
 - **feat:** Shipped CRDs carry flowsdn names in every string (`FlowsdnInternalIP`, `io.flowsdn.k8s.policy.*`, descriptions). The test `no_cilium_in_shipped_manifests` refuses "cilium" in any manifest or chart file.

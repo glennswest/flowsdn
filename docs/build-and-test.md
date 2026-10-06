@@ -24,6 +24,16 @@ on the build host. Do not copy working trees or run builds on the session VM.
 A wait for a shared build slot is normal; let the request finish rather than
 submitting duplicate builds. Record the revision, command and actual result.
 
+The build checkout holds **only the pushed commit**: a depth-1 clone with no
+parent and no access to fetch more (#317). Commands that compare against history
+(`git diff --check HEAD~1 HEAD`, `git log`, `cargo xtask plan BASE`) fail there.
+Run change checks such as `git diff --check origin/main..HEAD` (whitespace) in the
+session checkout before pushing; they read Git objects and build nothing. Give
+sc-build whole-tree commands (`cargo metadata --locked`, `cargo fmt --check`,
+builds and tests). The `WARNING: Sum of all thin volume sizes ...` line at the top
+of every job is the build host's LVM notice (stormcentral#162), not a failure; the
+real error follows it.
+
 Commit and push fixes before the next validation run. Formatting or lockfile
 changes produced remotely must also return through GitHub before their disposable
 checkout is removed. Cargo caches are managed by the build service, not by a

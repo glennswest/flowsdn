@@ -65,6 +65,11 @@ loopback port to default to; the API was Unix-socket only. Flows wait for Hubble
 - [x] Every acceptance row needs the live cluster (#291) and services/policy (#292); proposed after #292. Nothing checked.
 - [ ] When #291/#292 pass: pick the subsystem order (likely Hubble first for the console, #297), implement each with live acceptance.
 
+### Build failure on HEAD~1 — #317 (2026-10-06)
+
+- [x] Cause: sc-build's checkout is depth 1 without fetch access (confirmed: `is-shallow-repository` true, 1 commit, deepen refused), so `git diff --check HEAD~1 HEAD` cannot run there. The LVM warning title is stormcentral#150/#162.
+- [x] docs/build-and-test.md: history checks run in the session checkout before push; changelog. #340 is the same failure (my repro).
+
 ### flowsdn.io CRD set — #325 (P0), 2026-10-06
 
 Owner: "for flowsdn, we need a complete set of kubernetes crds and related." Design per spec 13 §3.1:
