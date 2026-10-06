@@ -85,7 +85,7 @@ rules:
     resources: [flowsdnnodes, flowsdnnodes/status]
     verbs: [get, update]
   - apiGroups: [flowsdn.io]
-    resources: [flowsdnendpoints, flowsdnendpoints/status, flowsdnl2announcementpolicies/status, flowsdnbgpnodeconfigs/status]
+    resources: [flowsdnendpoints, flowsdnl2announcementpolicies/status, flowsdnbgpnodeconfigs/status]
     verbs: [patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

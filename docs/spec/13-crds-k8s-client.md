@@ -946,7 +946,7 @@ NOT grant any write on `pods`, `services`, `namespaces` or `endpointslices`.
 | `flowsdn.io` | `flowsdnidentities` | update | always (heartbeat-annotation removal) |
 | `flowsdn.io` | `flowsdnendpoints` | delete, get | always |
 | `flowsdn.io` | `flowsdnnodes`, `flowsdnnodes/status` | get, update | always |
-| `flowsdn.io` | `flowsdnendpoints/status`, `flowsdnendpoints`, `flowsdnl2announcementpolicies/status`, `flowsdnbgpnodeconfigs/status` | patch | always |
+| `flowsdn.io` | `flowsdnendpoints`, `flowsdnl2announcementpolicies/status`, `flowsdnbgpnodeconfigs/status` | patch | always (no `flowsdnendpoints/status`: the CRD has no status subresource, #325) |
 | `policy.networking.k8s.io` | `clusternetworkpolicies` | get, list, watch | `enable-k8s-cluster-network-policy` |
 
 Note `ciliumendpoints` appears in the `patch` rule **without** a subresource:

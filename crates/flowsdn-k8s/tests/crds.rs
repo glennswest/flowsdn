@@ -483,7 +483,11 @@ fn rbac_matches_the_crd_set() {
             .and_then(Value::as_str)
             .expect("plural");
         allowed.insert(plural.to_owned());
-        if crd.document.pointer("/spec/versions/0/subresources/status").is_some() {
+        if crd
+            .document
+            .pointer("/spec/versions/0/subresources/status")
+            .is_some()
+        {
             allowed.insert(format!("{plural}/status"));
         }
         crd_names.insert(format!("{plural}.flowsdn.io"));
@@ -507,19 +511,36 @@ fn rbac_matches_the_crd_set() {
                 };
                 if strings("apiGroups").contains(&"flowsdn.io".to_owned()) {
                     for resource in strings("resources") {
-                        assert!(allowed.contains(&resource), "{file}: {resource} is not a flowsdn.io CRD resource");
+                        assert!(
+                            allowed.contains(&resource),
+                            "{file}: {resource} is not a flowsdn.io CRD resource"
+                        );
                     }
                 }
-                if strings("resources") == ["customresourcedefinitions"] && strings("verbs") == ["update"] {
-                    operator_update = Some(strings("resourceNames").into_iter().collect::<BTreeSet<_>>());
+                if strings("resources") == ["customresourcedefinitions"]
+                    && strings("verbs") == ["update"]
+                {
+                    operator_update = Some(
+                        strings("resourceNames")
+                            .into_iter()
+                            .collect::<BTreeSet<_>>(),
+                    );
                 }
-                if strings("resources") == ["customresourcedefinitions"] && file.starts_with("60-") {
+                if strings("resources") == ["customresourcedefinitions"] && file.starts_with("60-")
+                {
                     for verb in strings("verbs") {
-                        assert!(["get", "list", "watch"].contains(&verb.as_str()), "the agent never writes CRDs");
+                        assert!(
+                            ["get", "list", "watch"].contains(&verb.as_str()),
+                            "the agent never writes CRDs"
+                        );
                     }
                 }
             }
         }
     }
-    assert_eq!(operator_update, Some(crd_names), "operator CRD update resourceNames");
+    assert_eq!(
+        operator_update,
+        Some(crd_names),
+        "operator CRD update resourceNames"
+    );
 }
