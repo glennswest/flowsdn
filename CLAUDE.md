@@ -65,6 +65,16 @@ loopback port to default to; the API was Unix-socket only. Flows wait for Hubble
 - [x] Every acceptance row needs the live cluster (#291) and services/policy (#292); proposed after #292. Nothing checked.
 - [ ] When #291/#292 pass: pick the subsystem order (likely Hubble first for the console, #297), implement each with live acceptance.
 
+### CLI and Kubernetes integration — #298 (P1), 2026-10-06
+
+`sc` is stormcos's CLI, so `sc net` is stormcos's to build. flowsdn provides the API, the CRD columns and the events.
+Schemas and columns for the 22 CRDs shipped with #325.
+
+- [ ] Agent events (core/v1, `kubernetes` feature): Pod `EndpointCreated`/`EndpointCreateFailed`/`IPAllocationFailed`; Node `PodCIDRSelected`/`DirectRouteFailed`/`ServiceLBUnavailable`/`SysctlFailed`; aggregated, bounded, non-blocking. RBAC events create/update (manifests-kubernetes, chart).
+- [ ] Stable API: agent-api.md stability section, `api::ROUTES` pinned to the doc table; healthz member `agent` (no Cilium).
+- [ ] Printer columns for the 5 kinds the reference leaves bare; test every column path is in the schema.
+- [ ] sc-build; stormcos issue for `sc net` (contract, `--node` with a loopback-only API); golden; close.
+
 ### Build failure on HEAD~1 — #317 (2026-10-06)
 
 - [x] Cause: sc-build's checkout is depth 1 without fetch access (confirmed: `is-shallow-repository` true, 1 commit, deepen refused), so `git diff --check HEAD~1 HEAD` cannot run there. The LVM warning title is stormcentral#150/#162.

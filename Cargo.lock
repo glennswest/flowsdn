@@ -373,6 +373,7 @@ dependencies = [
  "flowsdn-k8s",
  "flowsdn-lb",
  "futures",
+ "http",
  "httparse",
  "nix",
  "openssl",

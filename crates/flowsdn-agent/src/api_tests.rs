@@ -475,3 +475,21 @@ fn requests_are_read_and_answered_over_loopback_tcp() {
     assert!(reply.starts_with("HTTP/1.1 200 "), "{reply}");
     assert!(reply.ends_with("\r\n\r\n{}"), "{reply}");
 }
+
+#[test]
+fn documented_routes_are_the_served_routes() {
+    let doc = include_str!("../../../docs/agent-api.md");
+    let table = doc
+        .split("## Supported methods")
+        .nth(1)
+        .expect("Supported methods section");
+    let documented: Vec<&str> = table
+        .lines()
+        .skip_while(|line| !line.starts_with("|---"))
+        .skip(1)
+        .take_while(|line| line.starts_with('|'))
+        .filter_map(|line| line.split('|').nth(1))
+        .map(str::trim)
+        .collect();
+    assert_eq!(documented, ROUTES.to_vec(), "docs/agent-api.md and api::ROUTES differ");
+}

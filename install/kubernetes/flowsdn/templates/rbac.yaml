@@ -21,6 +21,11 @@ rules:
   - apiGroups: [discovery.k8s.io]
     resources: [endpointslices]
     verbs: [get, list, watch]
+  # Events on Pods (endpoint created/failed, IP allocation) and on this node
+  # (pod CIDR, direct routes, socket LB, sysctls), #298.
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, update]
 ---
 # The agent's flowsdn.io access (spec 13 §4.7); see docs/crds.md.
 apiVersion: rbac.authorization.k8s.io/v1

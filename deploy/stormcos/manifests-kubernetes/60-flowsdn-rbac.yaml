@@ -1,6 +1,7 @@
 # flowsdn's identity in the cluster, Kubernetes mode (#291, #292): the agent
 # lists and watches Nodes (pod CIDRs, InternalIPs -> direct routes), Pods (the
-# IP cache), and Services and EndpointSlices (ClusterIP socket LB). Read-only.
+# IP cache), and Services and EndpointSlices (ClusterIP socket LB), read-only,
+# and writes Events (#298).
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -21,6 +22,11 @@ rules:
   - apiGroups: [discovery.k8s.io]
     resources: [endpointslices]
     verbs: [get, list, watch]
+  # Events on Pods (endpoint created/failed, IP allocation) and on this node
+  # (pod CIDR, direct routes, socket LB, sysctls), #298.
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, update]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

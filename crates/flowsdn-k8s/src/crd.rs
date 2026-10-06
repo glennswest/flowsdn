@@ -135,6 +135,7 @@ pub fn owned_crds() -> Result<Vec<OwnedCrd>, Error> {
             let mut document = migration_registration_payload(&reference)
                 .map_err(|e| Error(format!("{source}: {e}")))?;
             rewrite_strings(&mut document);
+            add_printer_columns(&mut document);
             let name = document
                 .pointer("/spec/names/plural")
                 .and_then(Value::as_str)
@@ -146,6 +147,62 @@ pub fn owned_crds() -> Result<Vec<OwnedCrd>, Error> {
             })
         })
         .collect()
+}
+
+/// flowsdn's printer columns for kinds the reference gives none (#298), so
+/// `kubectl get` / `sc get` show more than a name. Each column is
+/// `(name, type, jsonPath)`; `Age` is appended, as the API server only adds
+/// it when a CRD defines no columns at all.
+pub const EXTRA_COLUMNS: [(&str, &[(&str, &str, &str)]); 5] = [
+    ("flowsdncidrgroups", &[("CIDRs", "string", ".spec.externalCIDRs")]),
+    (
+        "flowsdndatapathplugins",
+        &[
+            ("Attachment", "string", ".spec.attachmentPolicy"),
+            ("Version", "string", ".spec.version"),
+        ],
+    ),
+    (
+        "flowsdnendpointslices",
+        &[
+            ("Namespace", "string", ".namespace"),
+            ("Identities", "string", ".endpoints[*].id"),
+        ],
+    ),
+    ("flowsdnnodeconfigs", &[("Selector", "string", ".spec.nodeSelector.matchLabels")]),
+    (
+        "flowsdnpodippools",
+        &[
+            ("IPv4", "string", ".spec.ipv4.cidrs"),
+            ("IPv6", "string", ".spec.ipv6.cidrs"),
+        ],
+    ),
+];
+
+fn add_printer_columns(document: &mut Value) {
+    let plural = document
+        .pointer("/spec/names/plural")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let Some((_, columns)) = EXTRA_COLUMNS.iter().find(|(p, _)| *p == plural) else {
+        return;
+    };
+    let Some(version) = document
+        .pointer_mut("/spec/versions/0")
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+    if version.contains_key("additionalPrinterColumns") {
+        return;
+    }
+    let mut list: Vec<Value> = columns
+        .iter()
+        .map(|(name, kind, path)| serde_json::json!({"name":name,"type":kind,"jsonPath":path}))
+        .collect();
+    list.push(serde_json::json!({"name":"Age","type":"date","jsonPath":".metadata.creationTimestamp"}));
+    version.insert("additionalPrinterColumns".into(), Value::Array(list));
 }
 
 fn rewrite_strings(value: &mut Value) {

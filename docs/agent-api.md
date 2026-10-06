@@ -17,6 +17,25 @@ working multi-node pod network. The config response's `ipam-mode: kubernetes`
 is a compatibility value; this daemon allocates from configured local prefixes
 and does not discover Kubernetes PodCIDRs.
 
+## Stability (#298)
+
+This API is a supported boundary: `sc net` (stormcos), the stormconsole flowsdn
+plugin (stormconsole#83) and the CNI depend on it. Within `/v1`:
+
+- Routes, methods and the fields documented here keep their names, types and
+  meaning. New routes and new response fields may appear; clients must ignore
+  fields they do not know.
+- A removal or an incompatible change gets a new path (`/v2/...`), with `/v1`
+  kept for at least one release and the change in the changelog as **BREAKING**.
+- Status codes keep their meaning: 2xx success, 400 bad request, 403 a mutation on
+  the read-only TCP listener, 404 unknown object or route, 405 method, 409
+  conflict, 413 too large, 501 not implemented, 502 an internal allocation failure.
+- Error bodies are a JSON string with the message.
+
+`api::ROUTES` in the agent lists the routes below, and a test fails when this
+page's table differs from it, so a route change changes this page in the same
+commit.
+
 ## Transport and supervision
 
 Send a bounded request to the configured Unix socket, for example:
@@ -33,6 +52,10 @@ and startup signal, not policy/controller readiness. Bare `/healthz` and
 `/readyz` are not implemented. A supervisor that only probes TCP HTTP needs a
 Unix-socket-capable probe or an explicit adapter; do not configure a nonexistent
 path and restart an otherwise running daemon.
+
+The body is `{"agent":{"state":"Ok","msg":…}}`, plus a `kubernetes` member in
+Kubernetes mode. (Before #298 the member was named after the reference project;
+it is `agent` now.)
 
 `GET /v1/health/modules` reports component details, including the degraded
 unimplemented-controller state. Module rows and endpoint health are separate

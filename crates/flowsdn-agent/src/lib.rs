@@ -2,6 +2,7 @@
 //! Initial Unix API serving; identity resolution and controllers remain separate.
 pub mod api;
 pub mod endpoints;
+pub mod events;
 pub mod kubernetes;
 pub mod services;
 pub mod state;

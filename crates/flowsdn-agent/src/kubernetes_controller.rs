@@ -11,6 +11,7 @@ use flowsdn_k8s::{
     client::{JsonClient, Query, TransportLimits, WATCH_ENDED},
     watch::{Limits, PageResult, Resource, Scope, WatchState},
 };
+use crate::events::Type::Warning;
 use flowsdn_lb::socket;
 use futures::FutureExt;
 use std::{
@@ -45,6 +46,7 @@ impl Controller {
             settings.kubeconfig.as_deref(),
             TransportLimits::default(),
         ))?;
+        crate::events::start(settings.kubeconfig.clone(), settings.node_name.clone())?;
         Ok(Self {
             runtime,
             client,
@@ -102,6 +104,7 @@ impl Controller {
         }));
         let failed = apply_sysctls(Path::new("/proc/sys"), ipv6);
         if !failed.is_empty() {
+            crate::events::node(Warning, "SysctlFailed", failed.join("; "));
             lock(&view)
                 .errors
                 .insert("sysctl".into(), failed.join("; "));
@@ -133,6 +136,11 @@ impl Controller {
                 }
                 Err(error) => {
                     eprintln!("socket LB unavailable: {error}");
+                    crate::events::node(
+                        Warning,
+                        "ServiceLBUnavailable",
+                        format!("ClusterIP Services are not load balanced: {error}"),
+                    );
                     lock(&view).errors.insert("services".into(), error);
                     None
                 }
@@ -550,6 +558,9 @@ fn route_loop(
                 reconcile(&connector, desired, &mut installed, file, skip_unreachable);
             let mut view = lock(view);
             view.routes = states;
+            if let Some(error) = &error {
+                crate::events::node(Warning, "DirectRouteFailed", error.clone());
+            }
             match error {
                 Some(error) => view.errors.insert("routes".into(), error),
                 None => view.errors.remove("routes"),

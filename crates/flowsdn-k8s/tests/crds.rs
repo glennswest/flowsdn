@@ -598,3 +598,37 @@ fn no_cilium_in_shipped_manifests() {
         found.len()
     );
 }
+
+/// Every kind prints more than its name (#298): the reference's columns, or
+/// flowsdn's for the kinds the reference left bare. Each JSONPath names a
+/// field the schema has.
+#[test]
+fn every_kind_has_printer_columns_on_schema_fields() {
+    for crd in crds() {
+        let columns = crd
+            .document
+            .pointer("/spec/versions/0/additionalPrinterColumns")
+            .and_then(Value::as_array)
+            .unwrap_or_else(|| panic!("{} has no printer columns", crd.file));
+        assert!(!columns.is_empty(), "{}", crd.file);
+        for column in columns {
+            let path = column.get("jsonPath").and_then(Value::as_str).expect("jsonPath");
+            if path.starts_with(".metadata") || path.contains('?') {
+                continue;
+            }
+            let mut node = schema(&crd);
+            for step in path.trim_start_matches('.').split('.') {
+                let field = step.split('[').next().unwrap_or(step);
+                if node.get("type") == Some(&Value::from("array")) {
+                    node = node.get("items").expect("items");
+                }
+                node = node
+                    .pointer(&format!("/properties/{field}"))
+                    .unwrap_or_else(|| panic!("{}: column path {path} is not in the schema", crd.file));
+                if step.contains("[") {
+                    node = node.get("items").expect("items");
+                }
+            }
+        }
+    }
+}

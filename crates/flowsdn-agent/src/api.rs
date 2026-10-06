@@ -2,7 +2,7 @@
 //! plus an optional read-only loopback TCP listener (`http-listen`, #297).
 //! With the `kubernetes` feature and configuration it adds Node/Pod discovery,
 //! pod CIDRs from the Node and direct node routes; no policy or identity allocator.
-use crate::{endpoints::Manager, state::Result};
+use crate::{endpoints::Manager, events, state::Result};
 use flowsdn_bpf_loader::kernel::{Egress, Object};
 use flowsdn_cni::queue::{Queue, ReplayRequest};
 use flowsdn_ipam::{HostScope, Ipam};
@@ -316,6 +316,27 @@ struct Lease {
     uuid: String,
     expires: Option<Instant>,
 }
+/// Every route the agent serves, as the first column of docs/agent-api.md's
+/// "Supported methods" table; a test keeps the two equal (#298: the API is a
+/// supported boundary for `sc net` and the console plugin).
+pub const ROUTES: [&str; 16] = [
+    "`GET /v1/config`",
+    "`GET /v1/healthz`",
+    "`GET /v1/health/modules`",
+    "`GET` or `POST /v1/statedb/query`",
+    "`GET /v1/endpoint`",
+    "`GET /v1/endpoint/{id}`",
+    "`GET /v1/endpoint/{id}/healthz`",
+    "`PUT /v1/endpoint/{attachment}`",
+    "`DELETE /v1/endpoint/{attachment}`",
+    "`DELETE /v1/endpoint`",
+    "`GET /v1/ipam`",
+    "`POST /v1/ipam`",
+    "`DELETE /v1/ipam/{address}?pool=default`",
+    "`GET /v1/ip`",
+    "`GET /v1/service`",
+    "`GET /v1/node/routes`",
+];
 struct Api {
     config: Config,
     manager: Manager,
@@ -356,7 +377,7 @@ impl Api {
             }
             ("GET", "/v1/healthz") => {
                 let mut status =
-                    json!({"cilium":{"state":"Ok","msg":"initial endpoint API ready"}});
+                    json!({"agent":{"state":"Ok","msg":"initial endpoint API ready"}});
                 if let (Some(view), Some(object)) = (&self.kubernetes, status.as_object_mut()) {
                     object.insert("kubernetes".into(), crate::kubernetes::lock(view).health());
                 }
@@ -378,7 +399,23 @@ impl Api {
             }
             ("GET", "/v1/endpoint") => return Ok((200, endpoint_list(self.manager.records())?)),
             ("GET", "/v1/ipam") => return Ok((200, ipam_summary(self.manager.ipam()))),
-            ("POST", "/v1/ipam") => return self.allocate(&query, request.expiration),
+            ("POST", "/v1/ipam") => {
+                let result = self.allocate(&query, request.expiration);
+                if let Err(error) = &result
+                    && let Some((namespace, pod)) =
+                        query.get("owner").and_then(|owner| owner.split_once('/'))
+                {
+                    events::pod(
+                        namespace,
+                        pod,
+                        "",
+                        events::Type::Warning,
+                        "IPAllocationFailed",
+                        error.to_string(),
+                    );
+                }
+                return result;
+            }
             ("DELETE", "/v1/endpoint") => {
                 let cid = string(&request.body, "container-id")?;
                 let attachments: Vec<_> = self
@@ -453,7 +490,11 @@ impl Api {
             }
             let id = decode(id)?;
             return match request.method.as_str() {
-                "PUT" => self.create(&id, &request.body),
+                "PUT" => {
+                    let result = self.create(&id, &request.body);
+                    endpoint_event(&request.body, &result);
+                    result
+                }
                 "DELETE" => {
                     if self.manager.delete(&id)? {
                         Ok((200, json!(0)))
@@ -662,6 +703,42 @@ impl Api {
     }
 }
 
+/// The Pod's Event for an endpoint create (#298): what it got, or why not.
+fn endpoint_event(body: &Value, result: &Result<(u16, Value)>) {
+    let text = |key: &str| body.get(key).and_then(Value::as_str).unwrap_or("");
+    let address = |family: &str| {
+        body.pointer(&format!("/addressing/{family}"))
+            .and_then(Value::as_str)
+            .unwrap_or("")
+    };
+    let (kind, reason, message) = match result {
+        Ok((_, response)) => {
+            let id = response.get("id").and_then(Value::as_u64).unwrap_or(0);
+            let addresses: Vec<&str> = [address("ipv4"), address("ipv6")]
+                .into_iter()
+                .filter(|a| !a.is_empty())
+                .collect();
+            (
+                events::Type::Normal,
+                "EndpointCreated",
+                format!("flowsdn endpoint {id}: {}", addresses.join(", ")),
+            )
+        }
+        Err(error) => (
+            events::Type::Warning,
+            "EndpointCreateFailed",
+            error.to_string(),
+        ),
+    };
+    events::pod(
+        text("k8s-namespace"),
+        text("k8s-pod-name"),
+        text("k8s-uid"),
+        kind,
+        reason,
+        message,
+    );
+}
 fn read_endpoint<'a>(
     mut records: impl Iterator<Item = &'a crate::state::Record>,
     id: &str,
@@ -1030,6 +1107,11 @@ fn connect_kubernetes(config: &mut Config) -> Result<Option<Kubernetes>> {
         let (pool4, pool6) = controller.wait_for_pools(config.auto4, config.auto6)?;
         config.resolve_auto(pool4, pool6)?;
         eprintln!("pod CIDRs from the Node: {}", config.addressing());
+        events::node(
+            events::Type::Normal,
+            "PodCIDRSelected",
+            format!("pod CIDRs from the Node: {}", config.addressing()),
+        );
     }
     Ok(Some(controller))
 }
