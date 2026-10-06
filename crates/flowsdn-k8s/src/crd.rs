@@ -109,6 +109,8 @@ pub const REFERENCE: [(&str, &str); 22] = [
 
 /// Where the generated manifests are shipped, relative to the repository root.
 pub const MANIFEST_DIR: &str = "deploy/stormcos/manifests-kubernetes/crds";
+/// The same files in the standalone Helm chart (#294).
+pub const CHART_CRD_DIR: &str = "install/kubernetes/flowsdn/crds";
 
 /// One generated CRD: its file name in [`MANIFEST_DIR`], the registration
 /// document, and the vendored source it came from.

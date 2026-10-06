@@ -1,0 +1,59 @@
+# flowsdn chart values (ADR-0019, #294). See docs/helm.md for every value and
+# the mapping from other CNIs' charts.
+
+image:
+  # Required: the registry and repository of the flowsdn agent image
+  # (images/agent). No public image is published yet.
+  repository: ""
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  name: flowsdn
+
+agent:
+  # Pod address pools. `auto` takes the pool from the node's Node object
+  # (spec.podCIDRs, else 10.<last byte of its InternalIP>.0.0/16). A fixed CIDR
+  # needs the matching gateway (the router address, excluded from allocation).
+  ipv4Pool: auto
+  ipv4Gateway: ""
+  ipv6Pool: ""
+  ipv6Gateway: ""
+  # `stack`: every pod frame goes through the node's routing and netfilter.
+  # `fib`: traffic not for a local pod is FIB-redirected in BPF.
+  egress: stack
+  deviceMTU: 1500
+  routeMTU: 1500
+  endpointIdMax: 4095
+  # Read-only loopback HTTP API (GET routes only); "" disables it.
+  httpListen: "127.0.0.1:9878"
+  # A bpffs directory for persistent maps and links across agent restarts;
+  # "" keeps them in the agent process only.
+  bpfPinRoot: ""
+  # Routes to other nodes' pod CIDRs via their InternalIP (one L2 segment).
+  autoDirectNodeRoutes: true
+  directRoutingSkipUnreachable: false
+  # ClusterIP Services at the socket, without kube-proxy.
+  serviceLB: true
+  # Extra keys merged into the agent's JSON configuration (docs/runtime.md).
+  extraConfig: {}
+  resources: {}
+  priorityClassName: system-node-critical
+  nodeSelector:
+    kubernetes.io/os: linux
+  tolerations:
+    - operator: Exists
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  podLabels: {}
+  podAnnotations: {}
+
+cni:
+  # Copy flowsdn-cni into binPath and write 00-flowsdn.conflist into confPath.
+  install: true
+  binPath: /opt/cni/bin
+  confPath: /etc/cni/net.d
+  overwriteLoopback: false

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flowsdn-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flowsdn.labels" . | nindent 4 }}
+data:
+  agent.json: |
+    {{- include "flowsdn.config" . | nindent 4 }}

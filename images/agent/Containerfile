@@ -1,0 +1,18 @@
+# The flowsdn agent image for the standalone chart (#294, ADR-0019). Not used by
+# the stormcos golden. images/agent/build.sh stages the binaries in
+# images/agent/.stage and builds this with the repository root as context:
+#   /usr/bin/flowsdn-agent  GNU, --features kubernetes, Fedora OpenSSL (ADR-0016)
+#   /usr/bin/flowsdn-cni    static musl; `flowsdn-cni install` copies itself to the node
+FROM registry.fedoraproject.org/fedora-minimal:43
+RUN microdnf install -y --setopt=install_weak_deps=0 openssl-libs zlib ca-certificates \
+    && microdnf clean all
+COPY images/agent/.stage/flowsdn-agent images/agent/.stage/flowsdn-cni /usr/bin/
+COPY LICENSE NOTICE bpf-objects.lock /usr/share/doc/flowsdn/
+ARG VERSION
+ARG REVISION
+LABEL org.opencontainers.image.title="flowsdn-agent" \
+      org.opencontainers.image.source="https://github.com/glennswest/flowsdn" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}"
+ENTRYPOINT ["/usr/bin/flowsdn-agent"]

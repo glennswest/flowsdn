@@ -1,0 +1,7 @@
+flowsdn {{ .Chart.AppVersion }} is installed in {{ .Release.Namespace }}.
+
+  kubectl -n {{ .Release.Namespace }} rollout status daemonset/flowsdn
+  kubectl get flowsdn                 # the flowsdn.io custom resources
+
+The agent's read-only API is on each node at {{ .Values.agent.httpListen | default "the Unix socket /var/run/flowsdn/flowsdn.sock" }}.
+Limits and configuration: https://github.com/glennswest/flowsdn/blob/main/docs/helm.md

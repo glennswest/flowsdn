@@ -6,7 +6,8 @@
 #
 # For each target it builds the static agent (BPF objects embedded) and CNI
 # from this commit and writes OUT_DIR/flowsdn-<version>-<arch>.tar.gz, then
-# OUT_DIR/SHA256SUMS over every archive. These are for clusters that do not
+# OUT_DIR/SHA256SUMS over every archive, plus the Helm chart
+# (flowsdn-<version>.tgz) when helm is installed. These are for clusters that do not
 # run stormcos. They are not part of the stormcos flowsdn golden, which stormcos
 # composes from the binaries it builds itself, and nothing here uploads them:
 # publishing a GitHub Release is a separate, recorded step (spec 22 §3.9.4).
@@ -81,4 +82,9 @@ EOF
         -C "$tmp/release" -cf - "$name" | gzip -n -9 >"$out/$name.tar.gz"
     echo "release: $out/$name.tar.gz"
 done
-(cd "$out" && sha256sum flowsdn-*.tar.gz >SHA256SUMS && cat SHA256SUMS)
+# The Helm chart (install/kubernetes/flowsdn), when helm is available.
+if command -v helm >/dev/null; then
+    "$root/install/kubernetes/check.sh"
+    helm package "$root/install/kubernetes/flowsdn" --destination "$out"
+fi
+(cd "$out" && sha256sum $(ls flowsdn-*.tar.gz flowsdn-*.tgz 2>/dev/null) >SHA256SUMS && cat SHA256SUMS)

@@ -1,7 +1,7 @@
 //! The flowsdn.io CRD set (#325): vendored schemas, generated manifests,
 //! examples and accept/reject validation.
 use flowsdn_k8s::crd::{
-    MANIFEST_DIR, OwnedCrd, REFERENCE, manifest, owned_crds, to_yaml, yaml_documents, yaml_to_json,
+    CHART_CRD_DIR, MANIFEST_DIR, OwnedCrd, REFERENCE, manifest, owned_crds, to_yaml, yaml_documents, yaml_to_json,
 };
 use flowsdn_k8s::plan::{REGISTRATION_PLURALS, SHORT_NAMES};
 use flowsdn_k8s::schema::{cel, validate};
@@ -108,44 +108,37 @@ fn owned_set_is_the_registration_catalogue() {
     }
 }
 
+/// The CRDs ship twice from one generation: the stormcos manifests and the
+/// chart's `crds/` directory (Helm installs it before the templates).
 #[test]
 fn shipped_manifests_are_the_generated_ones() {
-    let dir = repo_dir().join(MANIFEST_DIR);
     let write = std::env::var_os("FLOWSDN_WRITE_CRDS").is_some();
-    if write {
-        std::fs::create_dir_all(&dir).expect("manifest directory");
-    }
-    let mut expected = BTreeSet::new();
-    for crd in crds() {
-        let text = manifest(&crd);
-        let path = dir.join(&crd.file);
+    for dir in [MANIFEST_DIR, CHART_CRD_DIR] {
+        let dir = repo_dir().join(dir);
         if write {
-            std::fs::write(&path, &text).expect("write manifest");
+            std::fs::create_dir_all(&dir).expect("manifest directory");
         }
-        let shipped = std::fs::read_to_string(&path).unwrap_or_default();
-        assert!(
-            shipped == text,
-            "{} differs from its generation; run FLOWSDN_WRITE_CRDS=1 cargo test -p flowsdn-k8s --test crds",
-            path.display()
-        );
-        expected.insert(crd.file);
+        let mut expected = BTreeSet::new();
+        for crd in crds() {
+            let text = manifest(&crd);
+            let path = dir.join(&crd.file);
+            if write {
+                std::fs::write(&path, &text).expect("write manifest");
+            }
+            let shipped = std::fs::read_to_string(&path).unwrap_or_default();
+            assert!(
+                shipped == text,
+                "{} differs from its generation; run FLOWSDN_WRITE_CRDS=1 cargo test -p flowsdn-k8s --test crds",
+                path.display()
+            );
+            expected.insert(crd.file);
+        }
+        let present: BTreeSet<String> = std::fs::read_dir(&dir)
+            .expect("manifest directory")
+            .map(|entry| entry.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(present, expected, "{} holds only generated CRDs", dir.display());
     }
-    let present: BTreeSet<String> = std::fs::read_dir(&dir)
-        .expect("manifest directory")
-        .map(|entry| {
-            entry
-                .expect("entry")
-                .file_name()
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect();
-    assert_eq!(
-        present,
-        expected,
-        "{} holds only generated CRDs",
-        dir.display()
-    );
 }
 
 #[test]
@@ -572,7 +565,7 @@ fn no_cilium_in_shipped_manifests() {
         }
     }
     let mut found = Vec::new();
-    for dir in ["deploy/stormcos", "install/kubernetes"] {
+    for dir in ["deploy", "install/kubernetes"] {
         walk(&repo_dir().join(dir), &mut found);
     }
     for crd in crds() {
