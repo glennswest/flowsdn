@@ -30,14 +30,16 @@ pub fn resolv_conf(text: &str) -> Option<(IpAddr, String)> {
                 nameserver = words.next().and_then(|w| w.parse().ok());
             }
             Some("search") => {
-                domain = domain.or_else(|| {
-                    words.find_map(|w| w.strip_prefix("svc.").map(str::to_owned))
-                });
+                domain = domain
+                    .or_else(|| words.find_map(|w| w.strip_prefix("svc.").map(str::to_owned)));
             }
             _ => {}
         }
     }
-    Some((nameserver?, domain.unwrap_or_else(|| "cluster.local".into())))
+    Some((
+        nameserver?,
+        domain.unwrap_or_else(|| "cluster.local".into()),
+    ))
 }
 
 /// A recursive query for `name` (A, or AAAA for `v6`) with transaction `id`.
@@ -189,11 +191,16 @@ pub fn probe(report: &mut Report, socket: &Path) {
             .map_err(|e| format!("connect {target}: {e}"))?;
         let peer = stream.peer_addr().map_err(|e| e.to_string())?;
         if peer != target {
-            return Err(format!("connected, but the peer shows {peer}, not {target}"));
+            return Err(format!(
+                "connected, but the peer shows {peer}, not {target}"
+            ));
         }
         Ok((
             (),
-            format!("TCP {target} connected in {} ms", start.elapsed().as_millis()),
+            format!(
+                "TCP {target} connected in {} ms",
+                start.elapsed().as_millis()
+            ),
         ))
     });
     report.check("node-service-programmed", || {
@@ -222,7 +229,13 @@ pub fn probe(report: &mut Report, socket: &Path) {
                 return Err(format!("{ip}:{port} is not a programmed frontend"));
             }
         }
-        Ok(((), format!("{} frontends; kube-dns and kubernetes programmed", rows.len())))
+        Ok((
+            (),
+            format!(
+                "{} frontends; kube-dns and kubernetes programmed",
+                rows.len()
+            ),
+        ))
     });
 }
 
@@ -248,7 +261,10 @@ mod tests {
     fn query_and_answers_round_trip_with_compression() {
         let q = query(7, "kubernetes.default.svc.cluster.local", false).expect("query");
         assert_eq!(q.get(..4), Some([0, 7, 1, 0].as_slice()));
-        assert_eq!(q.get(q.len().saturating_sub(4)..), Some([0, 1, 0, 1].as_slice()));
+        assert_eq!(
+            q.get(q.len().saturating_sub(4)..),
+            Some([0, 1, 0, 1].as_slice())
+        );
         assert!(query(1, "bad..name", false).is_err());
         // The reply: the question echoed, then an A and an AAAA answer whose
         // names are pointers to the question (0xc00c).
@@ -258,7 +274,12 @@ mod tests {
         }
         reply.extend_from_slice(&[0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 5, 0, 4, 10, 96, 0, 1]);
         reply.extend_from_slice(&[0xc0, 0x0c, 0, 28, 0, 1, 0, 0, 0, 5, 0, 16]);
-        reply.extend_from_slice(&"fd00::1".parse::<std::net::Ipv6Addr>().expect("v6").octets());
+        reply.extend_from_slice(
+            &"fd00::1"
+                .parse::<std::net::Ipv6Addr>()
+                .expect("v6")
+                .octets(),
+        );
         assert_eq!(
             answers(&reply, 7),
             Ok(vec![
