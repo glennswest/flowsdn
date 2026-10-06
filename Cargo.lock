@@ -568,8 +568,11 @@ dependencies = [
  "kube",
  "libc",
  "openssl",
+ "regex",
  "serde_json",
+ "sha2",
  "tokio",
+ "yaml-rust2",
 ]
 
 [[package]]

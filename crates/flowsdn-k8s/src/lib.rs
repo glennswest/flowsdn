@@ -3,8 +3,10 @@
 #![forbid(unsafe_code)]
 
 pub mod client;
+pub mod crd;
 pub mod patch;
 pub mod plan;
+pub mod schema;
 pub mod version;
 pub mod watch;
 

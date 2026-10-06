@@ -180,6 +180,41 @@ const RESOURCES: [ResourceIdentity; 22] = [
         "v2alpha1",
     ),
 ];
+/// flowsdn short names, keyed by the plural suffix (#325). Upstream short names
+/// (`cnp`, `cep`, ...) are never registered: they would collide with an
+/// installed Cilium (ADR-0017). Each is the upstream one with an `fs` prefix
+/// in place of Cilium's `c`/`cilium`.
+pub const SHORT_NAMES: [(&str, &str); 22] = [
+    ("networkpolicies", "fsnp"),
+    ("clusterwidenetworkpolicies", "fscnp"),
+    ("cidrgroups", "fscg"),
+    ("endpoints", "fsep"),
+    ("endpointslices", "fses"),
+    ("identities", "fsid"),
+    ("nodes", "fsn"),
+    ("nodeconfigs", "fsnc"),
+    ("localredirectpolicies", "fslrp"),
+    ("egressgatewaypolicies", "fsegp"),
+    ("envoyconfigs", "fsec"),
+    ("clusterwideenvoyconfigs", "fscec"),
+    ("loadbalancerippools", "fslbippool"),
+    ("l2announcementpolicies", "fsl2announcement"),
+    ("podippools", "fspip"),
+    ("bgpclusterconfigs", "fsbgpcluster"),
+    ("bgppeerconfigs", "fsbgppeer"),
+    ("bgpadvertisements", "fsbgpadvert"),
+    ("bgpnodeconfigs", "fsbgpnode"),
+    ("bgpnodeconfigoverrides", "fsbgpnodeoverride"),
+    ("gatewayclassconfigs", "fsgcc"),
+    ("datapathplugins", "fsdp"),
+];
+/// The short name registered for an owned or reference plural suffix.
+pub fn short_name(plural_suffix: &str) -> Option<&'static str> {
+    SHORT_NAMES
+        .iter()
+        .find(|(suffix, _)| *suffix == plural_suffix)
+        .map(|(_, short)| *short)
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ListScope {
     AllNamespaces,
@@ -368,7 +403,8 @@ fn project_registration(document: &Value, migration: bool) -> Result<Value, Erro
     }
     let owned_plural = format!("flowsdn{plural_suffix}");
     let owned_kind = format!("Flowsdn{kind}");
-    let projected_names = json!({"plural":owned_plural,"singular":format!("flowsdn{singular}"),"kind":owned_kind,"listKind":format!("Flowsdn{kind}List"),"categories":["flowsdn"]});
+    let short = short_name(plural_suffix).ok_or_else(|| fail("missing short name"))?;
+    let projected_names = json!({"plural":owned_plural,"singular":format!("flowsdn{singular}"),"kind":owned_kind,"listKind":format!("Flowsdn{kind}List"),"shortNames":[short],"categories":["flowsdn"]});
     let mut projected_spec = json!({"group":API_GROUP,"names":projected_names,"scope":scope,"versions":[projected_version],"preserveUnknownFields":false});
     if spec.contains_key("conversion") {
         projected_spec

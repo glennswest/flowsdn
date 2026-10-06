@@ -141,7 +141,7 @@ fn all_resources_migrate_to_owned_identity_and_project_idempotently() {
         assert_eq!(
             payload.pointer("/spec/names"),
             Some(
-                &json!({"kind":format!("Flowsdn{kind}"),"plural":owned_plural,"singular":format!("flowsdn{}",kind.to_lowercase()),"listKind":format!("Flowsdn{kind}List"),"categories":["flowsdn"]})
+                &json!({"kind":format!("Flowsdn{kind}"),"plural":owned_plural,"singular":format!("flowsdn{}",kind.to_lowercase()),"listKind":format!("Flowsdn{kind}List"),"shortNames":[flowsdn_k8s::plan::short_name(plural).expect("short name")],"categories":["flowsdn"]})
             )
         );
         assert_eq!(

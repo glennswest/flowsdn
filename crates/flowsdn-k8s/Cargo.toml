@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 serde_json.workspace = true
+yaml-rust2.workspace = true
+regex.workspace = true
 flowsdn-table = { path = "../flowsdn-table", version = "=0.14.0" }
 
 kube = { version = "=4.2.0", default-features = false, features = ["client", "openssl-tls"] }
@@ -20,6 +22,7 @@ libc.workspace = true
 tokio = { workspace = true, features = ["rt", "time", "fs", "io-util"] }
 
 [dev-dependencies]
+sha2 = "=0.10.9"
 openssl = "=0.10.81"
 
 [lints]
