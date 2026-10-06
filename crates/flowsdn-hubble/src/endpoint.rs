@@ -103,11 +103,7 @@ impl EndpointInfo {
             return None;
         }
         let pod = format!("{}/{}", self.namespace, self.pod_name);
-        let id = self
-            .container_id
-            .rsplit("://")
-            .next()
-            .unwrap_or_default();
+        let id = self.container_id.rsplit("://").next().unwrap_or_default();
         Some(if id.is_empty() {
             pod
         } else {

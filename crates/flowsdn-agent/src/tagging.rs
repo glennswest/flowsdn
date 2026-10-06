@@ -67,13 +67,15 @@ pub fn pod(id: u16, document: &Value, view: Option<&View>) -> Value {
         text(document, "K8sUID"),
     );
     let found = view.and_then(|view| view.local_pod(namespace, name, uid));
-    let mut info = found.map(|pod| pod.endpoint_info()).unwrap_or(EndpointInfo {
-        namespace: namespace.into(),
-        pod_name: name.into(),
-        pod_uid: uid.into(),
-        node: view.map(|v| v.local_node.clone()).unwrap_or_default(),
-        ..EndpointInfo::default()
-    });
+    let mut info = found
+        .map(|pod| pod.endpoint_info())
+        .unwrap_or(EndpointInfo {
+            namespace: namespace.into(),
+            pod_name: name.into(),
+            pod_uid: uid.into(),
+            node: view.map(|v| v.local_node.clone()).unwrap_or_default(),
+            ..EndpointInfo::default()
+        });
     info.id = id;
     info.container_id = text(document, "dockerID").into();
     let mut value = info.to_json();
@@ -110,7 +112,10 @@ mod tests {
         object.insert("IPv6".into(), json!(""));
         object.insert("CNIHostAddressing".into(), json!({}));
         let value = pod_networks(3, &v4, "");
-        assert_eq!(value.pointer("/default/ip_addresses"), Some(&json!(["10.5.0.7/32"])));
+        assert_eq!(
+            value.pointer("/default/ip_addresses"),
+            Some(&json!(["10.5.0.7/32"]))
+        );
         assert_eq!(value.pointer("/default/routes"), Some(&json!([])));
         assert_eq!(value.pointer("/default/node"), None);
     }
@@ -172,7 +177,10 @@ mod tests {
         }];
         assert!(view.annotation_patches().is_empty(), "pods not synced");
         view.pods_synced = true;
-        assert!(view.annotation_patches().is_empty(), "endpoints not published");
+        assert!(
+            view.annotation_patches().is_empty(),
+            "endpoints not published"
+        );
         view.endpoints_published = true;
         let patches = view.annotation_patches();
         assert_eq!(patches.len(), 1);

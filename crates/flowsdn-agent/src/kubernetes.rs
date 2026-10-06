@@ -143,7 +143,10 @@ impl PodInfo {
             .iter()
             .map(|(key, value)| format!("k8s:{key}={value}"))
             .collect();
-        labels.push(format!("k8s:io.kubernetes.pod.namespace={}", self.namespace));
+        labels.push(format!(
+            "k8s:io.kubernetes.pod.namespace={}",
+            self.namespace
+        ));
         EndpointInfo {
             namespace: self.namespace.clone(),
             pod_name: self.name.clone(),
@@ -185,10 +188,7 @@ pub struct AnnotationPatch {
 }
 impl AnnotationPatch {
     pub fn path(&self) -> String {
-        format!(
-            "/api/v1/namespaces/{}/pods/{}",
-            self.namespace, self.name
-        )
+        format!("/api/v1/namespaces/{}/pods/{}", self.namespace, self.name)
     }
     pub fn body(&self) -> Value {
         let mut metadata = json!({"annotations":{crate::tagging::POD_NETWORKS:self.value}});

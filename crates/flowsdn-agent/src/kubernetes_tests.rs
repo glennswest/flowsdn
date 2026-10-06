@@ -202,9 +202,11 @@ fn ip_list_has_node_identities_pod_labels_and_host_ips() {
     );
     assert_eq!(
         pod.get("metadata"),
-        Some(&json!({"source":"kube-apiserver","namespace":"ns","name":"web","uid":"uid-web",
+        Some(
+            &json!({"source":"kube-apiserver","namespace":"ns","name":"web","uid":"uid-web",
             "containers":[{"name":"app","container-id":"containerd://abc","init":false}],
-            "workloads":[{"name":"web","kind":"StatefulSet"}]}))
+            "workloads":[{"name":"web","kind":"StatefulSet"}]})
+        )
     );
     assert_eq!(find("f00d::5/128").get("hostIP"), None);
     assert_eq!(view.health().get("state"), Some(&json!("Warning")));

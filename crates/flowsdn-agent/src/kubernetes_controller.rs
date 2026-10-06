@@ -262,8 +262,7 @@ fn annotation_loop(view: &Shared, kubeconfig: Option<&Path>) {
             return;
         }
     };
-    let client = match runtime.block_on(JsonClient::load(kubeconfig, TransportLimits::default()))
-    {
+    let client = match runtime.block_on(JsonClient::load(kubeconfig, TransportLimits::default())) {
         Ok(client) => client,
         Err(error) => {
             lock(view)
@@ -281,7 +280,10 @@ fn annotation_loop(view: &Shared, kubeconfig: Option<&Path>) {
         let mut failures = Vec::new();
         for patch in patches {
             let key = (patch.namespace.clone(), patch.name.clone());
-            if tried.get(&key).is_some_and(|(value, _)| *value == patch.value) {
+            if tried
+                .get(&key)
+                .is_some_and(|(value, _)| *value == patch.value)
+            {
                 continue;
             }
             tried.insert(key, (patch.value.clone(), Instant::now()));
@@ -306,7 +308,8 @@ fn annotation_loop(view: &Shared, kubeconfig: Option<&Path>) {
             if failures.is_empty() {
                 view.errors.remove("annotations");
             } else {
-                view.errors.insert("annotations".into(), failures.join("; "));
+                view.errors
+                    .insert("annotations".into(), failures.join("; "));
             }
         }
     }
@@ -379,10 +382,7 @@ fn pod_rows(state: &WatchState) -> Vec<PodInfo> {
                         init: c.init,
                     })
                     .collect(),
-                pod_networks: pod
-                    .annotations
-                    .get(crate::tagging::POD_NETWORKS)
-                    .cloned(),
+                pod_networks: pod.annotations.get(crate::tagging::POD_NETWORKS).cloned(),
             }),
             _ => None,
         })

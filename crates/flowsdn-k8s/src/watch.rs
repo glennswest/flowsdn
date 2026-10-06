@@ -262,7 +262,10 @@ fn owner_references(value: &Value) -> Vec<OwnerReference> {
 }
 fn container_statuses(value: &Value) -> Vec<ContainerStatus> {
     let mut containers = Vec::new();
-    for (key, init) in [("containerStatuses", false), ("initContainerStatuses", true)] {
+    for (key, init) in [
+        ("containerStatuses", false),
+        ("initContainerStatuses", true),
+    ] {
         let Some(list) = value
             .pointer(&format!("/status/{key}"))
             .and_then(Value::as_array)

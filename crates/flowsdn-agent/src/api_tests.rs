@@ -247,7 +247,9 @@ fn endpoint_inventory_is_sorted_bounded_and_preserves_pod_identifiers() {
     );
     assert_eq!(
         tagged.pointer("/status/pod"),
-        Some(&json!({"ID":42,"namespace":"ns","pod_name":"pod","pod_uid":"uid","container_id":"c"}))
+        Some(
+            &json!({"ID":42,"namespace":"ns","pod_name":"pod","pod_uid":"uid","container_id":"c"})
+        )
     );
     assert_eq!(
         tagged.pointer("/status/pod-networks/default/ip_addresses"),
@@ -268,7 +270,10 @@ fn endpoint_inventory_is_sorted_bounded_and_preserves_pod_identifiers() {
     for invalid in ["0", "65536", "999999999999999999999", "not-found"] {
         assert!(read_endpoint(records.iter(), invalid).is_none());
     }
-    assert_eq!(endpoint_list(std::iter::empty(), None).expect("empty"), json!([]));
+    assert_eq!(
+        endpoint_list(std::iter::empty(), None).expect("empty"),
+        json!([])
+    );
     let large = crate::state::Record {
         id: 1,
         attachment: "x".into(),

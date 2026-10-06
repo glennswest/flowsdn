@@ -13,7 +13,10 @@ fn workload_follows_the_controller_and_collapses_deployment_replicasets() {
         })
     );
     // A bare ReplicaSet, or a hash that is not the name's suffix, stays itself.
-    assert_eq!(workload(rs, None).map(|w| w.kind), Some("ReplicaSet".into()));
+    assert_eq!(
+        workload(rs, None).map(|w| w.kind),
+        Some("ReplicaSet".into())
+    );
     assert_eq!(
         workload(rs, Some("ffff")).map(|w| w.name),
         Some("web-7d4b9c".into())
