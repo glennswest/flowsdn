@@ -369,6 +369,7 @@ dependencies = [
  "flowsdn-cni",
  "flowsdn-connector",
  "flowsdn-health",
+ "flowsdn-hubble",
  "flowsdn-ipam",
  "flowsdn-k8s",
  "flowsdn-lb",
@@ -542,6 +543,7 @@ name = "flowsdn-hubble"
 version = "0.14.0"
 dependencies = [
  "flowsdn-bpf-abi",
+ "serde_json",
 ]
 
 [[package]]

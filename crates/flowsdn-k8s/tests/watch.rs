@@ -1,4 +1,6 @@
-use flowsdn_k8s::watch::{Limits, PageResult, Resource, Scope, WatchState};
+use flowsdn_k8s::watch::{
+    ANNOTATION_MAX, ContainerStatus, Limits, OwnerReference, PageResult, Resource, Scope, WatchState,
+};
 use serde_json::{Value, json};
 
 fn run(future: impl std::future::Future<Output = ()>) {
@@ -425,4 +427,71 @@ fn endpoint_slices_parse_conditions_and_ports() {
         panic!("slice row expected");
     };
     assert!(parsed.endpoints.iter().all(|e| e.addresses.is_empty()));
+}
+
+#[test]
+fn pod_tagging_metadata_owners_containers_and_flowsdn_annotations() {
+    let mut value = pod("web-7d4b9c-x2", "uid", "rv");
+    let object = value.as_object_mut().expect("pod object");
+    let metadata = object
+        .get_mut("metadata")
+        .and_then(Value::as_object_mut)
+        .expect("metadata");
+    metadata.insert(
+        "ownerReferences".into(),
+        json!([{"kind":"ReplicaSet","name":"web-7d4b9c","controller":true},{"name":"no-kind"}]),
+    );
+    metadata.insert(
+        "annotations".into(),
+        json!({"flowsdn.io/pod-networks":"{}","other.io/x":"y","flowsdn.io/big":"z".repeat(ANNOTATION_MAX + 1)}),
+    );
+    object
+        .get_mut("status")
+        .and_then(Value::as_object_mut)
+        .expect("status")
+        .extend([
+            (
+                "containerStatuses".to_owned(),
+                json!([{"name":"app","containerID":"containerd://abc"},{"name":"side"},{"containerID":"x"}]),
+            ),
+            (
+                "initContainerStatuses".to_owned(),
+                json!([{"name":"init","containerID":"containerd://def"}]),
+            ),
+        ]);
+    let Resource::Pod(parsed) = Scope::Pods.parse(&value).expect("tagged pod") else {
+        panic!("pod")
+    };
+    assert_eq!(
+        parsed.owners,
+        vec![OwnerReference {
+            kind: "ReplicaSet".into(),
+            name: "web-7d4b9c".into(),
+            controller: true
+        }]
+    );
+    assert_eq!(
+        parsed.containers,
+        vec![
+            ContainerStatus {
+                name: "app".into(),
+                container_id: "containerd://abc".into(),
+                init: false
+            },
+            ContainerStatus {
+                name: "side".into(),
+                container_id: String::new(),
+                init: false
+            },
+            ContainerStatus {
+                name: "init".into(),
+                container_id: "containerd://def".into(),
+                init: true
+            },
+        ]
+    );
+    assert_eq!(
+        parsed.annotations.into_iter().collect::<Vec<_>>(),
+        vec![("flowsdn.io/pod-networks".to_owned(), "{}".to_owned())]
+    );
 }

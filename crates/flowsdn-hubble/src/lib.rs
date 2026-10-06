@@ -1,5 +1,6 @@
 //! Observer building blocks from specification 11. No server or perf reader.
 pub mod correlation;
+pub mod endpoint;
 pub mod filters;
 pub mod monitor;
 pub mod ring;

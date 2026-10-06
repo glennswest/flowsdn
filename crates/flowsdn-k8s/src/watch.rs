@@ -31,6 +31,29 @@ pub struct Pod {
     pub host_network: bool,
     pub pod_ips: Vec<IpAddr>,
     pub labels: BTreeMap<String, String>,
+    /// `metadata.ownerReferences` (the workload, #328).
+    pub owners: Vec<OwnerReference>,
+    /// `status.containerStatuses` then `status.initContainerStatuses`.
+    pub containers: Vec<ContainerStatus>,
+    /// Only the `flowsdn.io/` annotations (what the agent writes), each at most
+    /// [`ANNOTATION_MAX`] bytes; other annotations are not kept.
+    pub annotations: BTreeMap<String, String>,
+}
+/// The longest `flowsdn.io/` annotation value a Pod row keeps.
+pub const ANNOTATION_MAX: usize = 16 * 1024;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OwnerReference {
+    pub kind: String,
+    pub name: String,
+    pub controller: bool,
+}
+/// A container of the Pod: its name and the runtime's ID
+/// (`<runtime>://<id>`, empty until the container is created).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContainerStatus {
+    pub name: String,
+    pub container_id: String,
+    pub init: bool,
 }
 /// A Service port: `name` is empty for an unnamed port; `protocol` is the
 /// Kubernetes spelling (`TCP`, `UDP`, `SCTP`).
@@ -206,12 +229,78 @@ impl Scope {
                     host_network,
                     pod_ips: ips,
                     labels,
+                    owners: owner_references(value),
+                    containers: container_statuses(value),
+                    annotations: flowsdn_annotations(value),
                 }))
             }
             Self::Services => parse_service(value, metadata).map(Resource::Service),
             Self::EndpointSlices => parse_slice(value, metadata).map(Resource::EndpointSlice),
         }
     }
+}
+
+// Tagging metadata (#328) is informational: an odd entry is skipped rather
+// than failing the Pod, whose IPs the IP cache needs.
+fn owner_references(value: &Value) -> Vec<OwnerReference> {
+    let Some(owners) = value
+        .pointer("/metadata/ownerReferences")
+        .and_then(Value::as_array)
+    else {
+        return Vec::new();
+    };
+    owners
+        .iter()
+        .filter_map(|owner| {
+            Some(OwnerReference {
+                kind: owner.get("kind")?.as_str()?.to_owned(),
+                name: owner.get("name")?.as_str()?.to_owned(),
+                controller: owner.get("controller").and_then(Value::as_bool) == Some(true),
+            })
+        })
+        .collect()
+}
+fn container_statuses(value: &Value) -> Vec<ContainerStatus> {
+    let mut containers = Vec::new();
+    for (key, init) in [("containerStatuses", false), ("initContainerStatuses", true)] {
+        let Some(list) = value
+            .pointer(&format!("/status/{key}"))
+            .and_then(Value::as_array)
+        else {
+            continue;
+        };
+        for status in list {
+            let Some(name) = status.get("name").and_then(Value::as_str) else {
+                continue;
+            };
+            containers.push(ContainerStatus {
+                name: name.to_owned(),
+                container_id: status
+                    .get("containerID")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_owned(),
+                init,
+            });
+        }
+    }
+    containers
+}
+fn flowsdn_annotations(value: &Value) -> BTreeMap<String, String> {
+    let Some(annotations) = value
+        .pointer("/metadata/annotations")
+        .and_then(Value::as_object)
+    else {
+        return BTreeMap::new();
+    };
+    annotations
+        .iter()
+        .filter(|(key, _)| key.starts_with("flowsdn.io/"))
+        .filter_map(|(key, value)| {
+            let value = value.as_str().filter(|v| v.len() <= ANNOTATION_MAX)?;
+            Some((key.clone(), value.to_owned()))
+        })
+        .collect()
 }
 
 fn optional_text<'a>(value: &'a Value, key: &str, default: &'a str) -> Result<&'a str, Error> {
