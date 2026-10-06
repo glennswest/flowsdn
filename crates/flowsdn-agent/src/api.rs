@@ -2,7 +2,7 @@
 //! plus an optional read-only loopback TCP listener (`http-listen`, #297).
 //! With the `kubernetes` feature and configuration it adds Node/Pod discovery,
 //! pod CIDRs from the Node and direct node routes; no policy or identity allocator.
-use crate::{endpoints::Manager, events, state::Result};
+use crate::{endpoints::Manager, events, state::Result, tagging};
 use flowsdn_bpf_loader::kernel::{Egress, Object};
 use flowsdn_cni::queue::{Queue, ReplayRequest};
 use flowsdn_ipam::{HostScope, Ipam};
@@ -360,7 +360,45 @@ impl Api {
             }
         }
     }
+    /// Every request but a read may change the endpoints: publish them for
+    /// the annotation writer afterwards, whatever the outcome.
     fn handle(&mut self, request: Request) -> Result<(u16, Value)> {
+        let changes = request.method != "GET";
+        let result = self.route(request);
+        if changes {
+            self.publish();
+        }
+        result
+    }
+    /// The local endpoints and their `flowsdn.io/pod-networks` values (#328).
+    fn publish(&self) {
+        let Some(view) = &self.kubernetes else {
+            return;
+        };
+        let node = crate::kubernetes::lock(view).local_node.clone();
+        let text = |document: &Value, key: &str| {
+            document
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned()
+        };
+        let endpoints = self
+            .manager
+            .records()
+            .map(|record| crate::kubernetes::LocalEndpoint {
+                id: record.id,
+                namespace: text(&record.document, "K8sNamespace"),
+                name: text(&record.document, "K8sPodName"),
+                uid: text(&record.document, "K8sUID"),
+                value: tagging::pod_networks(record.id, &record.document, &node),
+            })
+            .collect();
+        let mut view = crate::kubernetes::lock(view);
+        view.endpoints = endpoints;
+        view.endpoints_published = true;
+    }
+    fn route(&mut self, request: Request) -> Result<(u16, Value)> {
         self.expire();
         let (path, query) = request
             .target
@@ -396,7 +434,10 @@ impl Api {
                     },
                 ));
             }
-            ("GET", "/v1/endpoint") => return Ok((200, endpoint_list(self.manager.records())?)),
+            ("GET", "/v1/endpoint") => {
+                let view = self.kubernetes.as_ref().map(crate::kubernetes::lock);
+                return Ok((200, endpoint_list(self.manager.records(), view.as_deref())?));
+            }
             ("GET", "/v1/ipam") => return Ok((200, ipam_summary(self.manager.ipam()))),
             ("POST", "/v1/ipam") => {
                 let result = self.allocate(&query, request.expiration);
@@ -507,7 +548,11 @@ impl Api {
                             status: 404,
                             message: "endpoint not found".into(),
                         })?;
-                    Ok((200, endpoint_response(record.id, &record.document)))
+                    let view = self.kubernetes.as_ref().map(crate::kubernetes::lock);
+                    Ok((
+                        200,
+                        endpoint_response(record.id, &record.document, view.as_deref()),
+                    ))
                 }
                 _ => fail(405, "method not supported"),
             };
@@ -698,7 +743,8 @@ impl Api {
         for ip in ips {
             self.leases.remove(&ip);
         }
-        Ok((201, endpoint_response(id, &document)))
+        let view = self.kubernetes.as_ref().map(crate::kubernetes::lock);
+        Ok((201, endpoint_response(id, &document, view.as_deref())))
     }
 }
 
@@ -749,13 +795,16 @@ fn read_endpoint<'a>(
         records.find(|record| record.attachment == id)
     }
 }
-fn endpoint_list<'a>(records: impl Iterator<Item = &'a crate::state::Record>) -> Result<Value> {
+fn endpoint_list<'a>(
+    records: impl Iterator<Item = &'a crate::state::Record>,
+    view: Option<&crate::kubernetes::View>,
+) -> Result<Value> {
     let mut records = records.collect::<Vec<_>>();
     records.sort_by_key(|r| r.id);
     let mut bytes = 2usize;
     let mut result = Vec::new();
     for record in records {
-        let value = endpoint_response(record.id, &record.document);
+        let value = endpoint_response(record.id, &record.document, view);
         bytes = bytes
             .saturating_add(serde_json::to_vec(&value)?.len())
             .saturating_add(usize::from(!result.is_empty()));
@@ -776,8 +825,16 @@ fn ipam_summary(ipam: &Ipam) -> Value {
     json!({"pools":pools})
 }
 
-fn endpoint_response(id: u16, document: &Value) -> Value {
-    json!({"id":id,"status":{"state":"ready","external-identifiers":{"k8s-pod-name":document.get("K8sPodName"),"k8s-namespace":document.get("K8sNamespace"),"k8s-uid":document.get("K8sUID"),"container-id":document.get("dockerID")},"networking":{"mac":document.get("LXCMAC"),"host-mac":document.get("NodeMAC"),
+/// An endpoint's API model. `pod` and `pod-networks` (#328) say which Pod
+/// and container it is and what the Pod's annotation holds; with a Pod view
+/// they include the node, labels, workload and containers.
+fn endpoint_response(id: u16, document: &Value, view: Option<&crate::kubernetes::View>) -> Value {
+    let text = |key: &str| document.get(key).and_then(Value::as_str).unwrap_or("");
+    let node = view.map(|v| v.local_node.as_str()).unwrap_or("");
+    json!({"id":id,"status":{"state":"ready","external-identifiers":{"k8s-pod-name":document.get("K8sPodName"),"k8s-namespace":document.get("K8sNamespace"),"k8s-uid":document.get("K8sUID"),"container-id":document.get("dockerID"),
+        "pod-name":format!("{}/{}",text("K8sNamespace"),text("K8sPodName")),"cni-attachment-id":format!("{}:{}",text("dockerID"),text("ContainerIfName"))},
+        "pod":tagging::pod(id,document,view),"pod-networks":tagging::pod_networks(id,document,node),
+        "networking":{"mac":document.get("LXCMAC"),"host-mac":document.get("NodeMAC"),
         "interface-name":document.get("IfName"),"interface-index":document.get("IfIndex"),"container-interface-name":document.get("ContainerIfName"),"netns-cookie":document.get("NetnsCookie").and_then(Value::as_u64).unwrap_or(0).to_string(),"host-addressing":document.get("CNIHostAddressing"),"route-mtu":document.get("CNIRouteMTU"),
         "addressing":[{"ipv4":document.get("IPv4"),"ipv6":document.get("IPv6"),"ipv4-pool-name":document.get("IPv4IPAMPool"),"ipv6-pool-name":document.get("IPv6IPAMPool")} ]}}})
 }
@@ -1200,6 +1257,7 @@ pub fn run(config_path: &Path) -> Result<()> {
         }
         Ok(())
     })?;
+    api.publish();
     let (listener, _socket) = bind(&api.config.socket)?;
     // Writers that waited for replay recheck a now-listening API under their
     // shared lock, so they cannot enqueue a deletion missed by this replay.

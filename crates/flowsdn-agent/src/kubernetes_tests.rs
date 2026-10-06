@@ -152,6 +152,17 @@ fn ip_list_has_node_identities_pod_labels_and_host_ips() {
             host_network: false,
             ips: vec![ip("10.173.0.5"), ip("f00d::5")],
             labels: [("app".to_owned(), "web".to_owned())].into_iter().collect(),
+            uid: "uid-web".into(),
+            workload: Some(Workload {
+                kind: "StatefulSet".into(),
+                name: "web".into(),
+            }),
+            containers: vec![Container {
+                name: "app".into(),
+                id: "containerd://abc".into(),
+                init: false,
+            }],
+            ..PodInfo::default()
         },
         PodInfo {
             namespace: "kube-system".into(),
@@ -159,7 +170,7 @@ fn ip_list_has_node_identities_pod_labels_and_host_ips() {
             node: "local".into(),
             host_network: true,
             ips: vec![ip("192.168.31.172")],
-            labels: BTreeMap::new(),
+            ..PodInfo::default()
         },
     ];
     let list = view.ip_list();
@@ -188,6 +199,12 @@ fn ip_list_has_node_identities_pod_labels_and_host_ips() {
             "k8s:app=web",
             "k8s:io.kubernetes.pod.namespace=ns"
         ]))
+    );
+    assert_eq!(
+        pod.get("metadata"),
+        Some(&json!({"source":"kube-apiserver","namespace":"ns","name":"web","uid":"uid-web",
+            "containers":[{"name":"app","container-id":"containerd://abc","init":false}],
+            "workloads":[{"name":"web","kind":"StatefulSet"}]}))
     );
     assert_eq!(find("f00d::5/128").get("hostIP"), None);
     assert_eq!(view.health().get("state"), Some(&json!("Warning")));

@@ -184,7 +184,7 @@ fn endpoint_id_limit_is_bounded_and_cookie_keeps_full_u64_precision() {
         fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
         assert_eq!(Config::read(&path).is_ok(), valid);
     }
-    let response = endpoint_response(1, &json!({"NetnsCookie":u64::MAX}));
+    let response = endpoint_response(1, &json!({"NetnsCookie":u64::MAX}), None);
     assert_eq!(
         response
             .pointer("/status/networking/netns-cookie")
@@ -223,7 +223,7 @@ fn endpoint_inventory_is_sorted_bounded_and_preserves_pod_identifiers() {
             document: json!({}),
         },
     ];
-    let list = endpoint_list(records.iter()).expect("list");
+    let list = endpoint_list(records.iter(), None).expect("list");
     assert_eq!(list.get(0).and_then(|v| v.get("id")), Some(&json!(2)));
     assert_eq!(
         list.get(1)
@@ -234,6 +234,28 @@ fn endpoint_inventory_is_sorted_bounded_and_preserves_pod_identifiers() {
         list.get(1)
             .and_then(|v| v.pointer("/status/external-identifiers/k8s-pod-name")),
         Some(&json!("pod"))
+    );
+    // #328: the Pod and container the endpoint is, and its annotation value.
+    let tagged = list.get(1).expect("tagged");
+    assert_eq!(
+        tagged.pointer("/status/external-identifiers/pod-name"),
+        Some(&json!("ns/pod"))
+    );
+    assert_eq!(
+        tagged.pointer("/status/external-identifiers/cni-attachment-id"),
+        Some(&json!("c:"))
+    );
+    assert_eq!(
+        tagged.pointer("/status/pod"),
+        Some(&json!({"ID":42,"namespace":"ns","pod_name":"pod","pod_uid":"uid","container_id":"c"}))
+    );
+    assert_eq!(
+        tagged.pointer("/status/pod-networks/default/ip_addresses"),
+        Some(&json!(["10.0.0.2/32"]))
+    );
+    assert_eq!(
+        tagged.pointer("/status/pod-networks/default/sandbox"),
+        Some(&json!("c"))
     );
     assert_eq!(
         read_endpoint(records.iter(), "42").map(|r| r.attachment.as_str()),
@@ -246,13 +268,13 @@ fn endpoint_inventory_is_sorted_bounded_and_preserves_pod_identifiers() {
     for invalid in ["0", "65536", "999999999999999999999", "not-found"] {
         assert!(read_endpoint(records.iter(), invalid).is_none());
     }
-    assert_eq!(endpoint_list(std::iter::empty()).expect("empty"), json!([]));
+    assert_eq!(endpoint_list(std::iter::empty(), None).expect("empty"), json!([]));
     let large = crate::state::Record {
         id: 1,
         attachment: "x".into(),
         document: json!({"K8sPodName":"x".repeat(BODY_LIMIT)}),
     };
-    let error = endpoint_list(std::iter::once(&large)).expect_err("bounded response");
+    let error = endpoint_list(std::iter::once(&large), None).expect_err("bounded response");
     assert_eq!(
         error.downcast_ref::<Failure>().expect("HTTP error").status,
         413

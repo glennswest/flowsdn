@@ -28,6 +28,8 @@ const LIST_PAGE: u32 = 500;
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 const RECONCILE_INTERVAL: Duration = Duration::from_secs(30);
 const ROUTES_FILE: &str = "direct-routes.json";
+const ANNOTATE_INTERVAL: Duration = Duration::from_secs(2);
+const ANNOTATE_RETRY: Duration = Duration::from_secs(30);
 
 pub struct Controller {
     runtime: tokio::runtime::Runtime,
@@ -147,6 +149,11 @@ impl Controller {
             },
             None => None,
         };
+        let annotate_view = Arc::clone(&view);
+        let kubeconfig = self.settings.kubeconfig.clone();
+        std::thread::Builder::new()
+            .name("flowsdn-annotate".into())
+            .spawn(move || annotation_loop(&annotate_view, kubeconfig.as_deref()))?;
         let watch_view = Arc::clone(&view);
         std::thread::Builder::new()
             .name("flowsdn-k8s".into())
@@ -238,6 +245,73 @@ impl Controller {
     }
 }
 
+/// The `flowsdn.io/pod-networks` writer (#328), with its own client: every
+/// few seconds, merge-patch each local Pod whose annotation differs from its
+/// endpoint (written at ADD, rewritten if removed or edited). A value already
+/// tried is not retried for a while; a Pod that is gone (404) is skipped.
+fn annotation_loop(view: &Shared, kubeconfig: Option<&Path>) {
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            lock(view)
+                .errors
+                .insert("annotations".into(), error.to_string());
+            return;
+        }
+    };
+    let client = match runtime.block_on(JsonClient::load(kubeconfig, TransportLimits::default()))
+    {
+        Ok(client) => client,
+        Err(error) => {
+            lock(view)
+                .errors
+                .insert("annotations".into(), error.to_string());
+            return;
+        }
+    };
+    let mut tried: BTreeMap<(String, String), (String, Instant)> = BTreeMap::new();
+    loop {
+        std::thread::sleep(ANNOTATE_INTERVAL);
+        let patches = lock(view).annotation_patches();
+        tried.retain(|_, (_, at)| at.elapsed() < ANNOTATE_RETRY);
+        let mut attempted = false;
+        let mut failures = Vec::new();
+        for patch in patches {
+            let key = (patch.namespace.clone(), patch.name.clone());
+            if tried.get(&key).is_some_and(|(value, _)| *value == patch.value) {
+                continue;
+            }
+            tried.insert(key, (patch.value.clone(), Instant::now()));
+            attempted = true;
+            let reply = runtime.block_on(client.send_json(
+                http::Method::PATCH,
+                &patch.path(),
+                Some(&patch.body()),
+            ));
+            let failure = match reply {
+                Ok((200..=299 | 404, _)) => continue,
+                Ok((status, body)) => format!(
+                    "HTTP {status} {}",
+                    body.get("message").and_then(Value::as_str).unwrap_or("")
+                ),
+                Err(error) => error.to_string(),
+            };
+            failures.push(format!("{}/{}: {failure}", patch.namespace, patch.name));
+        }
+        if attempted {
+            let mut view = lock(view);
+            if failures.is_empty() {
+                view.errors.remove("annotations");
+            } else {
+                view.errors.insert("annotations".into(), failures.join("; "));
+            }
+        }
+    }
+}
+
 /// Spec 10 §3.6 datapath init: forwarding on (pods on other nodes reach ours
 /// through this host) and `all.rp_filter` 0. Returns the keys that failed.
 fn apply_sysctls(root: &Path, ipv6: bool) -> Vec<String> {
@@ -289,6 +363,26 @@ fn pod_rows(state: &WatchState) -> Vec<PodInfo> {
                 host_network: pod.host_network,
                 ips: pod.pod_ips.clone(),
                 labels: pod.labels.clone(),
+                uid: pod.metadata.uid.clone(),
+                workload: flowsdn_hubble::endpoint::workload(
+                    pod.owners
+                        .iter()
+                        .map(|o| (o.kind.as_str(), o.name.as_str(), o.controller)),
+                    pod.labels.get("pod-template-hash").map(String::as_str),
+                ),
+                containers: pod
+                    .containers
+                    .iter()
+                    .map(|c| Container {
+                        name: c.name.clone(),
+                        id: c.container_id.clone(),
+                        init: c.init,
+                    })
+                    .collect(),
+                pod_networks: pod
+                    .annotations
+                    .get(crate::tagging::POD_NETWORKS)
+                    .cloned(),
             }),
             _ => None,
         })

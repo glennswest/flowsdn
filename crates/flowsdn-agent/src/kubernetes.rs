@@ -4,6 +4,7 @@
 //! feature (Fedora OpenSSL through flowsdn-k8s, ADR-0016).
 use crate::services::{Frontend, ServiceInfo, SliceInfo};
 use crate::state::Result;
+pub use flowsdn_hubble::endpoint::{EndpointInfo, Workload};
 use flowsdn_lb::socket::Address;
 use serde_json::{Value, json};
 use std::{
@@ -119,6 +120,93 @@ pub struct PodInfo {
     pub host_network: bool,
     pub ips: Vec<IpAddr>,
     pub labels: BTreeMap<String, String>,
+    pub uid: String,
+    /// The controlling workload (a Deployment for its ReplicaSets), #328.
+    pub workload: Option<Workload>,
+    pub containers: Vec<Container>,
+    /// The Pod's current `flowsdn.io/pod-networks` annotation.
+    pub pod_networks: Option<String>,
+}
+/// A container of a Pod: name and runtime ID (`<runtime>://<id>`, empty
+/// until created); `init` for init containers.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Container {
+    pub name: String,
+    pub id: String,
+    pub init: bool,
+}
+impl PodInfo {
+    /// What a flow names this Pod by (#328): Hubble's flow `Endpoint`.
+    pub fn endpoint_info(&self) -> EndpointInfo {
+        let mut labels: Vec<_> = self
+            .labels
+            .iter()
+            .map(|(key, value)| format!("k8s:{key}={value}"))
+            .collect();
+        labels.push(format!("k8s:io.kubernetes.pod.namespace={}", self.namespace));
+        EndpointInfo {
+            namespace: self.namespace.clone(),
+            pod_name: self.name.clone(),
+            pod_uid: self.uid.clone(),
+            node: self.node.clone(),
+            labels,
+            workloads: self.workload.iter().cloned().collect(),
+            ..EndpointInfo::default()
+        }
+    }
+    pub fn containers_json(&self) -> Value {
+        Value::Array(
+            self.containers
+                .iter()
+                .map(|c| json!({"name":c.name,"container-id":c.id,"init":c.init}))
+                .collect(),
+        )
+    }
+}
+
+/// A local endpoint's Pod and the `flowsdn.io/pod-networks` value flowsdn
+/// keeps on it, published by the API thread for the annotation writer.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct LocalEndpoint {
+    pub id: u16,
+    pub namespace: String,
+    pub name: String,
+    pub uid: String,
+    pub value: Value,
+}
+/// One annotation write: merge-patch the Pod's `flowsdn.io/pod-networks`
+/// to `value` (JSON text), with the UID as a precondition when known.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AnnotationPatch {
+    pub namespace: String,
+    pub name: String,
+    pub uid: String,
+    pub value: String,
+}
+impl AnnotationPatch {
+    pub fn path(&self) -> String {
+        format!(
+            "/api/v1/namespaces/{}/pods/{}",
+            self.namespace, self.name
+        )
+    }
+    pub fn body(&self) -> Value {
+        let mut metadata = json!({"annotations":{crate::tagging::POD_NETWORKS:self.value}});
+        if !self.uid.is_empty()
+            && let Some(object) = metadata.as_object_mut()
+        {
+            object.insert("uid".into(), json!(self.uid));
+        }
+        json!({ "metadata": metadata })
+    }
+}
+/// Pod names and namespaces are DNS names; anything else never reaches a URL.
+fn dns_name(text: &str) -> bool {
+    !text.is_empty()
+        && text.len() <= 253
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'.')
 }
 
 /// The node's allocation CIDR for one family: the first `spec.podCIDRs` entry of
@@ -245,6 +333,10 @@ pub struct View {
     /// hold for each one that is programmed.
     pub frontends: Vec<Frontend>,
     pub service_ids: BTreeMap<Address, u16>,
+    /// This node's endpoints and their Pods' annotation values (#328);
+    /// nothing is written before the API thread first publishes them.
+    pub endpoints: Vec<LocalEndpoint>,
+    pub endpoints_published: bool,
     /// The latest failure of each controller part (`nodes`, `pods`, `routes`).
     pub errors: BTreeMap<String, String>,
 }
@@ -259,7 +351,8 @@ impl View {
     /// reserved host/remote-node identities, and every Pod IP of a Pod that is
     /// not host-network. Pod entries carry no `identity` until cluster identity
     /// allocation exists; `labels` is a flowsdn extension with the Pod's
-    /// `k8s:` source labels (spec 03 §4.2), the identity input.
+    /// `k8s:` source labels (spec 03 §4.2), the identity input, and the Pod
+    /// metadata carries its UID, containers and workload (#328).
     pub fn ip_list(&self) -> Value {
         let mut rows = BTreeMap::new();
         for node in &self.nodes {
@@ -277,15 +370,17 @@ impl View {
             }
         }
         for pod in self.pods.iter().filter(|pod| !pod.host_network) {
-            let mut labels: Vec<_> = pod
-                .labels
-                .iter()
-                .map(|(key, value)| format!("k8s:{key}={value}"))
-                .collect();
-            labels.push(format!("k8s:io.kubernetes.pod.namespace={}", pod.namespace));
+            let labels = pod.endpoint_info().labels;
             for ip in &pod.ips {
-                let mut row = json!({"cidr":host_cidr(*ip),"labels":labels,
-                    "metadata":{"source":"kube-apiserver","namespace":pod.namespace,"name":pod.name}});
+                let mut metadata = json!({"source":"kube-apiserver","namespace":pod.namespace,
+                    "name":pod.name,"uid":pod.uid,"containers":pod.containers_json()});
+                if let (Some(workload), Some(object)) = (&pod.workload, metadata.as_object_mut()) {
+                    object.insert(
+                        "workloads".into(),
+                        json!([{"name":workload.name,"kind":workload.kind}]),
+                    );
+                }
+                let mut row = json!({"cidr":host_cidr(*ip),"labels":labels,"metadata":metadata});
                 if let (Some(host), Some(object)) =
                     (self.host_ip(&pod.node, ip.is_ipv6()), row.as_object_mut())
                 {
@@ -295,6 +390,57 @@ impl View {
             }
         }
         Value::Array(rows.into_values().collect())
+    }
+    /// The Pod an endpoint belongs to: same namespace and name, on this node,
+    /// and the same UID when both are known (a recreated Pod is another Pod).
+    pub fn local_pod(&self, namespace: &str, name: &str, uid: &str) -> Option<&PodInfo> {
+        self.pods.iter().find(|pod| {
+            pod.namespace == namespace
+                && pod.name == name
+                && pod.node == self.local_node
+                && (uid.is_empty() || pod.uid.is_empty() || pod.uid == uid)
+        })
+    }
+    /// The `flowsdn.io/pod-networks` writes that would bring every local
+    /// Pod up to date: none before the Pod list and the endpoints are known.
+    /// Values compare as JSON, so key order never causes a rewrite. With two
+    /// endpoints for one Pod (a sandbox being replaced), the newest ID wins.
+    pub fn annotation_patches(&self) -> Vec<AnnotationPatch> {
+        if !(self.pods_synced && self.endpoints_published) {
+            return Vec::new();
+        }
+        let mut newest: BTreeMap<(&str, &str), &LocalEndpoint> = BTreeMap::new();
+        for endpoint in &self.endpoints {
+            if !dns_name(&endpoint.namespace) || !dns_name(&endpoint.name) {
+                continue;
+            }
+            let entry = newest
+                .entry((&endpoint.namespace, &endpoint.name))
+                .or_insert(endpoint);
+            if endpoint.id > entry.id {
+                *entry = endpoint;
+            }
+        }
+        newest
+            .into_values()
+            .filter_map(|endpoint| {
+                let pod = self.local_pod(&endpoint.namespace, &endpoint.name, &endpoint.uid)?;
+                let current = pod
+                    .pod_networks
+                    .as_deref()
+                    .and_then(|text| serde_json::from_str::<Value>(text).ok());
+                (current.as_ref() != Some(&endpoint.value)).then(|| AnnotationPatch {
+                    namespace: endpoint.namespace.clone(),
+                    name: endpoint.name.clone(),
+                    uid: if endpoint.uid.is_empty() {
+                        pod.uid.clone()
+                    } else {
+                        endpoint.uid.clone()
+                    },
+                    value: endpoint.value.to_string(),
+                })
+            })
+            .collect()
     }
     /// `GET /v1/node/routes` (flowsdn): the direct routes and their state.
     pub fn route_list(&self) -> Value {

@@ -6,3 +6,4 @@ pub mod events;
 pub mod kubernetes;
 pub mod services;
 pub mod state;
+pub mod tagging;
