@@ -1,0 +1,69 @@
+# Generated from crates/flowsdn-k8s/crds/v2/ciliumcidrgroups.yaml (cilium/cilium 7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc, Apache-2.0,
+# Copyright Authors of Cilium), projected to flowsdn.io (ADR-0017, #325).
+# Do not edit: FLOWSDN_WRITE_CRDS=1 cargo test -p flowsdn-k8s --test crds
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    io.flowsdn.k8s.crd.schema.version: "1.33.11"
+  name: flowsdncidrgroups.flowsdn.io
+spec:
+  group: flowsdn.io
+  names:
+    categories:
+    - flowsdn
+    kind: FlowsdnCIDRGroup
+    listKind: FlowsdnCIDRGroupList
+    plural: flowsdncidrgroups
+    shortNames:
+    - fscg
+    singular: flowsdncidrgroup
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          CiliumCIDRGroup is a list of external CIDRs (i.e: CIDRs selecting peers
+          outside the clusters) that can be referenced as a single entity from
+          CiliumNetworkPolicies.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              externalCIDRs:
+                description: "ExternalCIDRs is a list of CIDRs selecting peers outside the clusters."
+                items:
+                  description: |-
+                    CIDR specifies a block of IP addresses.
+                    Example: 192.0.2.1/32
+                  format: cidr
+                  type: string
+                minItems: 0
+                type: array
+            required:
+            - externalCIDRs
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
