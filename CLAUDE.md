@@ -65,6 +65,20 @@ loopback port to default to; the API was Unix-socket only. Flows wait for Hubble
 - [x] Every acceptance row needs the live cluster (#291) and services/policy (#292); proposed after #292. Nothing checked.
 - [ ] When #291/#292 pass: pick the subsystem order (likely Hubble first for the console, #297), implement each with live acceptance.
 
+### flowsdn.io CRD set — #325 (P0), 2026-10-06
+
+Owner: "for flowsdn, we need a complete set of kubernetes crds and related." Design per spec 13 §3.1:
+vendor the 22 reference CRDs verbatim (pinned 7d68cfb394, Apache-2.0), project them to flowsdn.io
+with `migration_registration_payload`, add flowsdn short names, generate the shipped manifests;
+the YAML is the schema artifact, Rust types are checked against it. Per-group types/status
+controllers, operator registration and the live run are split into sub-issues.
+
+- [ ] Vendor `crates/flowsdn-k8s/crds/{v2,v2alpha1}` + SHA256SUMS + LICENSE-CILIUM + NOTICE; `tools/vendor-crds.sh`.
+- [ ] `flowsdn_k8s::crd`: owned CRDs from the vendored YAML (projection + short names), YAML emit; test that `deploy/stormcos/manifests-kubernetes/crds/` is the generated output.
+- [ ] Structural validator (types, required, enum, pattern, bounds, int-or-string, preserve-unknown, unknown-field strict); examples minimal + realistic per kind validate; reject cases.
+- [ ] RBAC for the agent/operator over flowsdn.io kinds (manifests-kubernetes); docs/crds.md (kinds, purpose, Cilium mapping); changelog.
+- [ ] sc-build; file sub-issues (policy, endpoint/identity/node, IPAM/LB, BGP, Envoy/Gateway, egress/redirect/plugins, registration+gate, live run); tell stormcos to apply crds/.
+
 ### Release hardening acceptance — #294 (P0), 2026-10-06
 
 - [x] Assessed each acceptance row against code at 8e70ce2 (comment 6007288302): no Helm chart, no bpf-objects.lock, no arm64 runtime, no matrix run; gate needs #291–#293 accepted first.
