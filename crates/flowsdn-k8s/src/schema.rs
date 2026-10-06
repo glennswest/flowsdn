@@ -68,7 +68,14 @@ fn at(path: &str, child: &str) -> String {
     format!("{path}.{child}")
 }
 
-fn check(schema: &Value, value: &Value, path: &str, strict: bool, root: bool, out: &mut Vec<String>) {
+fn check(
+    schema: &Value,
+    value: &Value,
+    path: &str,
+    strict: bool,
+    root: bool,
+    out: &mut Vec<String>,
+) {
     let shown = if path.is_empty() { "<root>" } else { path };
     if value.is_null() {
         // The API server prunes null for a non-nullable field (a required one
@@ -82,7 +89,10 @@ fn check(schema: &Value, value: &Value, path: &str, strict: bool, root: bool, ou
     if let Some(choices) = schema.get("enum").and_then(Value::as_array)
         && !choices.contains(value)
     {
-        out.push(format!("{shown}: {value} is not one of {}", Value::Array(choices.clone())));
+        out.push(format!(
+            "{shown}: {value} is not one of {}",
+            Value::Array(choices.clone())
+        ));
     }
     match value {
         Value::String(s) => check_string(schema, s, shown, out),
@@ -109,7 +119,10 @@ fn check(schema: &Value, value: &Value, path: &str, strict: bool, root: bool, ou
             _ => passing >= 1,
         };
         if !ok {
-            out.push(format!("{shown}: {keyword} matched {passing} of {} branches", branches.len()));
+            out.push(format!(
+                "{shown}: {keyword} matched {passing} of {} branches",
+                branches.len()
+            ));
         }
     }
     if let Some(not) = schema.get("not") {
@@ -139,7 +152,9 @@ fn check(schema: &Value, value: &Value, path: &str, strict: bool, root: bool, ou
                 out.push(format!("{shown}: {message} ({text})"));
             }
             Err(cel::Failure::Unsupported(why)) => {
-                out.push(format!("{shown}: CEL rule outside the supported subset ({why}): {text}"));
+                out.push(format!(
+                    "{shown}: CEL rule outside the supported subset ({why}): {text}"
+                ));
             }
         }
     }
@@ -199,7 +214,10 @@ fn check_string(schema: &Value, s: &str, shown: &str, out: &mut Vec<String>) {
         _ => true,
     };
     if !valid {
-        let format = schema.get("format").and_then(Value::as_str).unwrap_or_default();
+        let format = schema
+            .get("format")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         out.push(format!("{shown}: {s:?} is not a valid {format}"));
     }
 }
@@ -265,7 +283,11 @@ fn check_array(schema: &Value, items: &[Value], path: &str, strict: bool, out: &
         .unwrap_or_default();
     let identity = |item: &Value| -> Value {
         if list_type == Some("map") {
-            Value::Array(keys.iter().map(|k| item.get(*k).cloned().unwrap_or(Value::Null)).collect())
+            Value::Array(
+                keys.iter()
+                    .map(|k| item.get(*k).cloned().unwrap_or(Value::Null))
+                    .collect(),
+            )
         } else {
             item.clone()
         }
@@ -285,7 +307,14 @@ fn check_array(schema: &Value, items: &[Value], path: &str, strict: bool, out: &
     }
     if let Some(item_schema) = schema.get("items") {
         for (index, item) in items.iter().enumerate() {
-            check(item_schema, item, &format!("{path}[{index}]"), strict, false, out);
+            check(
+                item_schema,
+                item,
+                &format!("{path}[{index}]"),
+                strict,
+                false,
+                out,
+            );
         }
     }
 }
@@ -342,7 +371,9 @@ fn check_object(
             check(child_schema, child, &child_path, strict, false, out);
         } else if let Some(extra) = additional.filter(|a| a.is_object()) {
             check(extra, child, &child_path, strict, false, out);
-        } else if additional == Some(&Value::Bool(false)) || (strict && !preserve && additional.is_none()) {
+        } else if additional == Some(&Value::Bool(false))
+            || (strict && !preserve && additional.is_none())
+        {
             out.push(format!("{child_path}: unknown field"));
         }
     }
@@ -377,7 +408,10 @@ pub mod cel {
                 chars.next();
             } else if c.is_ascii_alphabetic() || c == '_' {
                 let mut ident = String::new();
-                while let Some(&c) = chars.peek().filter(|c| c.is_ascii_alphanumeric() || **c == '_') {
+                while let Some(&c) = chars
+                    .peek()
+                    .filter(|c| c.is_ascii_alphanumeric() || **c == '_')
+                {
                     ident.push(c);
                     chars.next();
                 }
@@ -457,15 +491,19 @@ pub mod cel {
         fn expect(&mut self, op: &str) -> Result<(), Failure> {
             match self.bump() {
                 Some(Token::Op(found)) if found == op => Ok(()),
-                other => Err(Failure::Unsupported(format!("expected {op}, found {other:?}"))),
+                other => Err(Failure::Unsupported(format!(
+                    "expected {op}, found {other:?}"
+                ))),
             }
         }
         fn eat(&mut self, op: &str) -> bool {
-            if self.peek() == Some(&Token::Op(match op {
-                "||" => "||",
-                "&&" => "&&",
-                _ => "!",
-            })) {
+            if self.peek()
+                == Some(&Token::Op(match op {
+                    "||" => "||",
+                    "&&" => "&&",
+                    _ => "!",
+                }))
+            {
                 self.position = self.position.saturating_add(1);
                 true
             } else {
@@ -477,7 +515,9 @@ pub mod cel {
             while self.eat("||") {
                 let right = self.and()?;
                 left = match (left, right) {
-                    (Ok(Value::Bool(true)), _) | (_, Ok(Value::Bool(true))) => Ok(Value::Bool(true)),
+                    (Ok(Value::Bool(true)), _) | (_, Ok(Value::Bool(true))) => {
+                        Ok(Value::Bool(true))
+                    }
                     (Ok(Value::Bool(false)), Ok(Value::Bool(false))) => Ok(Value::Bool(false)),
                     _ => Err(()),
                 };
@@ -489,7 +529,9 @@ pub mod cel {
             while self.eat("&&") {
                 let right = self.unary()?;
                 left = match (left, right) {
-                    (Ok(Value::Bool(false)), _) | (_, Ok(Value::Bool(false))) => Ok(Value::Bool(false)),
+                    (Ok(Value::Bool(false)), _) | (_, Ok(Value::Bool(false))) => {
+                        Ok(Value::Bool(false))
+                    }
                     (Ok(Value::Bool(true)), Ok(Value::Bool(true))) => Ok(Value::Bool(true)),
                     _ => Err(()),
                 };

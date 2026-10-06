@@ -17,28 +17,94 @@ pub const REFERENCE_COMMIT: &str = "7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc";
 
 /// Vendored reference documents: path under `crds/` and contents.
 pub const REFERENCE: [(&str, &str); 22] = [
-    ("v2/ciliumbgpadvertisements.yaml", include_str!("../crds/v2/ciliumbgpadvertisements.yaml")),
-    ("v2/ciliumbgpclusterconfigs.yaml", include_str!("../crds/v2/ciliumbgpclusterconfigs.yaml")),
-    ("v2/ciliumbgpnodeconfigoverrides.yaml", include_str!("../crds/v2/ciliumbgpnodeconfigoverrides.yaml")),
-    ("v2/ciliumbgpnodeconfigs.yaml", include_str!("../crds/v2/ciliumbgpnodeconfigs.yaml")),
-    ("v2/ciliumbgppeerconfigs.yaml", include_str!("../crds/v2/ciliumbgppeerconfigs.yaml")),
-    ("v2/ciliumcidrgroups.yaml", include_str!("../crds/v2/ciliumcidrgroups.yaml")),
-    ("v2/ciliumclusterwideenvoyconfigs.yaml", include_str!("../crds/v2/ciliumclusterwideenvoyconfigs.yaml")),
-    ("v2/ciliumclusterwidenetworkpolicies.yaml", include_str!("../crds/v2/ciliumclusterwidenetworkpolicies.yaml")),
-    ("v2/ciliumegressgatewaypolicies.yaml", include_str!("../crds/v2/ciliumegressgatewaypolicies.yaml")),
-    ("v2/ciliumendpoints.yaml", include_str!("../crds/v2/ciliumendpoints.yaml")),
-    ("v2/ciliumenvoyconfigs.yaml", include_str!("../crds/v2/ciliumenvoyconfigs.yaml")),
-    ("v2/ciliumidentities.yaml", include_str!("../crds/v2/ciliumidentities.yaml")),
-    ("v2/ciliumloadbalancerippools.yaml", include_str!("../crds/v2/ciliumloadbalancerippools.yaml")),
-    ("v2/ciliumlocalredirectpolicies.yaml", include_str!("../crds/v2/ciliumlocalredirectpolicies.yaml")),
-    ("v2/ciliumnetworkpolicies.yaml", include_str!("../crds/v2/ciliumnetworkpolicies.yaml")),
-    ("v2/ciliumnodeconfigs.yaml", include_str!("../crds/v2/ciliumnodeconfigs.yaml")),
-    ("v2/ciliumnodes.yaml", include_str!("../crds/v2/ciliumnodes.yaml")),
-    ("v2alpha1/ciliumdatapathplugins.yaml", include_str!("../crds/v2alpha1/ciliumdatapathplugins.yaml")),
-    ("v2alpha1/ciliumendpointslices.yaml", include_str!("../crds/v2alpha1/ciliumendpointslices.yaml")),
-    ("v2alpha1/ciliumgatewayclassconfigs.yaml", include_str!("../crds/v2alpha1/ciliumgatewayclassconfigs.yaml")),
-    ("v2alpha1/ciliuml2announcementpolicies.yaml", include_str!("../crds/v2alpha1/ciliuml2announcementpolicies.yaml")),
-    ("v2alpha1/ciliumpodippools.yaml", include_str!("../crds/v2alpha1/ciliumpodippools.yaml")),
+    (
+        "v2/ciliumbgpadvertisements.yaml",
+        include_str!("../crds/v2/ciliumbgpadvertisements.yaml"),
+    ),
+    (
+        "v2/ciliumbgpclusterconfigs.yaml",
+        include_str!("../crds/v2/ciliumbgpclusterconfigs.yaml"),
+    ),
+    (
+        "v2/ciliumbgpnodeconfigoverrides.yaml",
+        include_str!("../crds/v2/ciliumbgpnodeconfigoverrides.yaml"),
+    ),
+    (
+        "v2/ciliumbgpnodeconfigs.yaml",
+        include_str!("../crds/v2/ciliumbgpnodeconfigs.yaml"),
+    ),
+    (
+        "v2/ciliumbgppeerconfigs.yaml",
+        include_str!("../crds/v2/ciliumbgppeerconfigs.yaml"),
+    ),
+    (
+        "v2/ciliumcidrgroups.yaml",
+        include_str!("../crds/v2/ciliumcidrgroups.yaml"),
+    ),
+    (
+        "v2/ciliumclusterwideenvoyconfigs.yaml",
+        include_str!("../crds/v2/ciliumclusterwideenvoyconfigs.yaml"),
+    ),
+    (
+        "v2/ciliumclusterwidenetworkpolicies.yaml",
+        include_str!("../crds/v2/ciliumclusterwidenetworkpolicies.yaml"),
+    ),
+    (
+        "v2/ciliumegressgatewaypolicies.yaml",
+        include_str!("../crds/v2/ciliumegressgatewaypolicies.yaml"),
+    ),
+    (
+        "v2/ciliumendpoints.yaml",
+        include_str!("../crds/v2/ciliumendpoints.yaml"),
+    ),
+    (
+        "v2/ciliumenvoyconfigs.yaml",
+        include_str!("../crds/v2/ciliumenvoyconfigs.yaml"),
+    ),
+    (
+        "v2/ciliumidentities.yaml",
+        include_str!("../crds/v2/ciliumidentities.yaml"),
+    ),
+    (
+        "v2/ciliumloadbalancerippools.yaml",
+        include_str!("../crds/v2/ciliumloadbalancerippools.yaml"),
+    ),
+    (
+        "v2/ciliumlocalredirectpolicies.yaml",
+        include_str!("../crds/v2/ciliumlocalredirectpolicies.yaml"),
+    ),
+    (
+        "v2/ciliumnetworkpolicies.yaml",
+        include_str!("../crds/v2/ciliumnetworkpolicies.yaml"),
+    ),
+    (
+        "v2/ciliumnodeconfigs.yaml",
+        include_str!("../crds/v2/ciliumnodeconfigs.yaml"),
+    ),
+    (
+        "v2/ciliumnodes.yaml",
+        include_str!("../crds/v2/ciliumnodes.yaml"),
+    ),
+    (
+        "v2alpha1/ciliumdatapathplugins.yaml",
+        include_str!("../crds/v2alpha1/ciliumdatapathplugins.yaml"),
+    ),
+    (
+        "v2alpha1/ciliumendpointslices.yaml",
+        include_str!("../crds/v2alpha1/ciliumendpointslices.yaml"),
+    ),
+    (
+        "v2alpha1/ciliumgatewayclassconfigs.yaml",
+        include_str!("../crds/v2alpha1/ciliumgatewayclassconfigs.yaml"),
+    ),
+    (
+        "v2alpha1/ciliuml2announcementpolicies.yaml",
+        include_str!("../crds/v2alpha1/ciliuml2announcementpolicies.yaml"),
+    ),
+    (
+        "v2alpha1/ciliumpodippools.yaml",
+        include_str!("../crds/v2alpha1/ciliumpodippools.yaml"),
+    ),
 ];
 
 /// Where the generated manifests are shipped, relative to the repository root.
@@ -93,7 +159,10 @@ pub fn manifest(crd: &OwnedCrd) -> String {
 pub fn yaml_to_json(text: &str) -> Result<Value, Error> {
     let docs = yaml_rust2::YamlLoader::load_from_str(text).map_err(|e| Error(e.to_string()))?;
     let [doc] = docs.as_slice() else {
-        return Err(Error(format!("expected one YAML document, got {}", docs.len())));
+        return Err(Error(format!(
+            "expected one YAML document, got {}",
+            docs.len()
+        )));
     };
     yaml_value(doc)
 }
@@ -234,7 +303,8 @@ fn literal_header(s: &str) -> Option<&'static str> {
     if !s.contains('\n')
         || s.starts_with([' ', '\n'])
         || s.chars().any(|c| c != '\n' && c.is_control())
-        || s.split('\n').any(|line| !line.is_empty() && line.trim().is_empty())
+        || s.split('\n')
+            .any(|line| !line.is_empty() && line.trim().is_empty())
         || s.ends_with("\n\n")
     {
         return None;

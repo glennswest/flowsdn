@@ -1,6 +1,8 @@
 //! The flowsdn.io CRD set (#325): vendored schemas, generated manifests,
 //! examples and accept/reject validation.
-use flowsdn_k8s::crd::{MANIFEST_DIR, OwnedCrd, REFERENCE, manifest, owned_crds, to_yaml, yaml_to_json};
+use flowsdn_k8s::crd::{
+    MANIFEST_DIR, OwnedCrd, REFERENCE, manifest, owned_crds, to_yaml, yaml_to_json,
+};
 use flowsdn_k8s::plan::{REGISTRATION_PLURALS, SHORT_NAMES};
 use flowsdn_k8s::schema::{cel, validate};
 use serde_json::Value;
@@ -49,29 +51,60 @@ fn owned_set_is_the_registration_catalogue() {
     let crds = crds();
     let plurals: BTreeSet<String> = crds
         .iter()
-        .map(|crd| crd.document.pointer("/spec/names/plural").and_then(Value::as_str).expect("plural").to_owned())
+        .map(|crd| {
+            crd.document
+                .pointer("/spec/names/plural")
+                .and_then(Value::as_str)
+                .expect("plural")
+                .to_owned()
+        })
         .collect();
-    let catalogue: BTreeSet<String> = REGISTRATION_PLURALS.iter().map(|p| (*p).to_owned()).collect();
+    let catalogue: BTreeSet<String> = REGISTRATION_PLURALS
+        .iter()
+        .map(|p| (*p).to_owned())
+        .collect();
     assert_eq!(plurals, catalogue);
 
     // Short names are flowsdn's own and never an upstream alias (ADR-0017).
     let mut upstream = BTreeSet::new();
     for (_, text) in REFERENCE {
         let doc = yaml_to_json(text).expect("reference YAML");
-        for short in doc.pointer("/spec/names/shortNames").and_then(Value::as_array).into_iter().flatten() {
+        for short in doc
+            .pointer("/spec/names/shortNames")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             upstream.insert(short.as_str().expect("short name").to_owned());
         }
     }
     let ours: BTreeSet<&str> = SHORT_NAMES.iter().map(|(_, short)| *short).collect();
     assert_eq!(ours.len(), 22, "short names are unique");
     for short in &ours {
-        assert!(!upstream.contains(*short), "{short} collides with an upstream short name");
+        assert!(
+            !upstream.contains(*short),
+            "{short} collides with an upstream short name"
+        );
     }
     for crd in &crds {
         let names = crd.document.pointer("/spec/names").expect("names");
-        assert_eq!(names.get("categories"), Some(&serde_json::json!(["flowsdn"])));
-        assert_eq!(names.get("shortNames").and_then(Value::as_array).map(Vec::len), Some(1));
-        assert!(names.get("kind").and_then(Value::as_str).is_some_and(|k| k.starts_with("Flowsdn")));
+        assert_eq!(
+            names.get("categories"),
+            Some(&serde_json::json!(["flowsdn"]))
+        );
+        assert_eq!(
+            names
+                .get("shortNames")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(1)
+        );
+        assert!(
+            names
+                .get("kind")
+                .and_then(Value::as_str)
+                .is_some_and(|k| k.starts_with("Flowsdn"))
+        );
     }
 }
 
@@ -99,24 +132,67 @@ fn shipped_manifests_are_the_generated_ones() {
     }
     let present: BTreeSet<String> = std::fs::read_dir(&dir)
         .expect("manifest directory")
-        .map(|entry| entry.expect("entry").file_name().to_string_lossy().into_owned())
+        .map(|entry| {
+            entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
-    assert_eq!(present, expected, "{} holds only generated CRDs", dir.display());
+    assert_eq!(
+        present,
+        expected,
+        "{} holds only generated CRDs",
+        dir.display()
+    );
 }
 
 #[test]
 fn yaml_rendering_round_trips() {
     for crd in crds() {
         let text = to_yaml(&crd.document);
-        assert_eq!(yaml_to_json(&text).expect("rendered YAML parses"), crd.document, "{}", crd.file);
+        assert_eq!(
+            yaml_to_json(&text).expect("rendered YAML parses"),
+            crd.document,
+            "{}",
+            crd.file
+        );
     }
     for (source, text) in REFERENCE {
         let reference = yaml_to_json(text).expect("reference");
-        assert_eq!(yaml_to_json(&to_yaml(&reference)).expect("re-parse"), reference, "{source}");
+        assert_eq!(
+            yaml_to_json(&to_yaml(&reference)).expect("re-parse"),
+            reference,
+            "{source}"
+        );
     }
-    for tricky in ["", "yes", "No", "on", "null", "1", "1.5", "-x", "a: b", "# c", "line\n", "two\nlines", "\nlead", "trail\n\n", " x\ny", "tab\there", "x\n  \ny", "ünï\ncode"] {
+    for tricky in [
+        "",
+        "yes",
+        "No",
+        "on",
+        "null",
+        "1",
+        "1.5",
+        "-x",
+        "a: b",
+        "# c",
+        "line\n",
+        "two\nlines",
+        "\nlead",
+        "trail\n\n",
+        " x\ny",
+        "tab\there",
+        "x\n  \ny",
+        "ünï\ncode",
+    ] {
         let value = serde_json::json!({ "k": tricky, "l": [tricky, { "m": tricky }] });
-        assert_eq!(yaml_to_json(&to_yaml(&value)).expect("parse"), value, "{tricky:?}");
+        assert_eq!(
+            yaml_to_json(&to_yaml(&value)).expect("parse"),
+            value,
+            "{tricky:?}"
+        );
     }
 }
 
@@ -126,8 +202,18 @@ fn every_schema_rule_is_in_the_cel_subset() {
     fn rules(schema: &Value, out: &mut Vec<String>) {
         match schema {
             Value::Object(map) => {
-                for rule in map.get("x-kubernetes-validations").and_then(Value::as_array).into_iter().flatten() {
-                    out.push(rule.get("rule").and_then(Value::as_str).expect("rule").to_owned());
+                for rule in map
+                    .get("x-kubernetes-validations")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    out.push(
+                        rule.get("rule")
+                            .and_then(Value::as_str)
+                            .expect("rule")
+                            .to_owned(),
+                    );
                 }
                 map.values().for_each(|child| rules(child, out));
             }
@@ -142,7 +228,10 @@ fn every_schema_rule_is_in_the_cel_subset() {
     assert!(!all.is_empty());
     for rule in all.iter().filter(|rule| !rule.contains("oldSelf")) {
         let result = cel::evaluate(rule, &serde_json::json!({}));
-        assert!(!matches!(result, Err(cel::Failure::Unsupported(_))), "{rule}: {result:?}");
+        assert!(
+            !matches!(result, Err(cel::Failure::Unsupported(_))),
+            "{rule}: {result:?}"
+        );
     }
     let this = serde_json::json!({"a": "x", "n": 3, "m": 90});
     for (rule, expected) in [
@@ -158,10 +247,22 @@ fn every_schema_rule_is_in_the_cel_subset() {
     ] {
         assert_eq!(cel::evaluate(rule, &this), expected, "{rule}");
     }
-    assert_eq!(cel::evaluate("self == '' || isIP(self)", &serde_json::json!("10.0.0.1")), Ok(true));
-    assert_eq!(cel::evaluate("self == '' || isIP(self)", &serde_json::json!("10.0.0")), Ok(false));
-    assert_eq!(cel::evaluate("self == '' || isIP(self)", &serde_json::json!("")), Ok(true));
-    assert!(matches!(cel::evaluate("self.a.size() > 1", &this), Err(cel::Failure::Unsupported(_))));
+    assert_eq!(
+        cel::evaluate("self == '' || isIP(self)", &serde_json::json!("10.0.0.1")),
+        Ok(true)
+    );
+    assert_eq!(
+        cel::evaluate("self == '' || isIP(self)", &serde_json::json!("10.0.0")),
+        Ok(false)
+    );
+    assert_eq!(
+        cel::evaluate("self == '' || isIP(self)", &serde_json::json!("")),
+        Ok(true)
+    );
+    assert!(matches!(
+        cel::evaluate("self.a.size() > 1", &this),
+        Err(cel::Failure::Unsupported(_))
+    ));
 }
 
 fn example_files(dir: &Path) -> Vec<PathBuf> {
@@ -180,20 +281,50 @@ fn example_files(dir: &Path) -> Vec<PathBuf> {
 fn examples_are_admitted_and_reject_cases_refused() {
     let mut rejects = 0usize;
     for crd in crds() {
-        let plural = crd.document.pointer("/spec/names/plural").and_then(Value::as_str).expect("plural");
-        let kind = crd.document.pointer("/spec/names/kind").and_then(Value::as_str).expect("kind");
+        let plural = crd
+            .document
+            .pointer("/spec/names/plural")
+            .and_then(Value::as_str)
+            .expect("plural");
+        let kind = crd
+            .document
+            .pointer("/spec/names/kind")
+            .and_then(Value::as_str)
+            .expect("kind");
         let namespaced = crd.document.pointer("/spec/scope") == Some(&Value::from("Namespaced"));
         let dir = crate_dir().join("testdata/crs").join(plural);
         let files = example_files(&dir);
-        let names: BTreeSet<String> =
-            files.iter().map(|f| f.file_name().expect("name").to_string_lossy().into_owned()).collect();
-        assert!(names.contains("minimal.yaml") && names.contains("realistic.yaml"), "{plural}: {names:?}");
+        let names: BTreeSet<String> = files
+            .iter()
+            .map(|f| f.file_name().expect("name").to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            names.contains("minimal.yaml") && names.contains("realistic.yaml"),
+            "{plural}: {names:?}"
+        );
         for file in files {
             let text = std::fs::read_to_string(&file).expect("example");
             let object = yaml_to_json(&text).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
-            assert_eq!(object.get("apiVersion"), Some(&Value::from("flowsdn.io/v1alpha1")), "{}", file.display());
-            assert_eq!(object.get("kind"), Some(&Value::from(kind)), "{}", file.display());
-            assert!(object.pointer("/metadata/name").and_then(Value::as_str).is_some(), "{}", file.display());
+            assert_eq!(
+                object.get("apiVersion"),
+                Some(&Value::from("flowsdn.io/v1alpha1")),
+                "{}",
+                file.display()
+            );
+            assert_eq!(
+                object.get("kind"),
+                Some(&Value::from(kind)),
+                "{}",
+                file.display()
+            );
+            assert!(
+                object
+                    .pointer("/metadata/name")
+                    .and_then(Value::as_str)
+                    .is_some(),
+                "{}",
+                file.display()
+            );
             assert_eq!(
                 object.pointer("/metadata/namespace").is_some(),
                 namespaced,
@@ -208,7 +339,9 @@ fn examples_are_admitted_and_reject_cases_refused() {
                     .lines()
                     .next()
                     .and_then(|line| line.strip_prefix("# expect: "))
-                    .unwrap_or_else(|| panic!("{}: first line must be `# expect: ...`", file.display()));
+                    .unwrap_or_else(|| {
+                        panic!("{}: first line must be `# expect: ...`", file.display())
+                    });
                 assert!(
                     violations.iter().any(|v| v.contains(expect)),
                     "{}: expected a violation containing {expect:?}, got {violations:?}",
@@ -220,7 +353,10 @@ fn examples_are_admitted_and_reject_cases_refused() {
             }
         }
     }
-    assert!(rejects >= 22, "at least one reject case per kind, found {rejects}");
+    assert!(
+        rejects >= 22,
+        "at least one reject case per kind, found {rejects}"
+    );
 }
 
 /// The validator itself, on a schema with each keyword it implements.
@@ -252,27 +388,82 @@ fn validator_keywords() {
             }
         }
     });
-    let check = |spec: Value| validate(&schema, &serde_json::json!({"apiVersion": "v", "kind": "K", "metadata": {"name": "n", "anything": 1}, "spec": spec}));
-    assert_eq!(check(serde_json::json!({"cidr": "10.0.0.0/8", "port2": "http", "labels": {"a": "b"}, "free": {"z": [1]}, "one": {"x": "1"}, "timers": {}})), Vec::<String>::new());
+    let check = |spec: Value| {
+        validate(
+            &schema,
+            &serde_json::json!({"apiVersion": "v", "kind": "K", "metadata": {"name": "n", "anything": 1}, "spec": spec}),
+        )
+    };
+    assert_eq!(
+        check(
+            serde_json::json!({"cidr": "10.0.0.0/8", "port2": "http", "labels": {"a": "b"}, "free": {"z": [1]}, "one": {"x": "1"}, "timers": {}})
+        ),
+        Vec::<String>::new()
+    );
     let cases = [
         (serde_json::json!({}), ".spec.cidr: required"),
-        (serde_json::json!({"cidr": "10.0.0.0/33"}), "is not a valid cidr"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "mode": "c"}), "is not one of"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "name": "A"}), "does not match"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "name": "abcdef"}), "longer than 5"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "port": 0}), "below the minimum"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "port": "80"}), ".spec.port: expected integer"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "port2": true}), "expected integer or string"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "set": ["a", "a"]}), "duplicate entry"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "set": ["a", "b", "c"]}), "more than 2 items"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "labels": {"a": 1}}), ".spec.labels.a: expected string"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "typo": 1}), ".spec.typo: unknown field"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "one": {"x": "1", "y": "2"}}), "oneOf matched 2 of 2"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "one": {}}), "oneOf matched 0 of 2"),
-        (serde_json::json!({"cidr": "10.0.0.0/8", "timers": {"keep": 100}}), "keep exceeds hold"),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/33"}),
+            "is not a valid cidr",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "mode": "c"}),
+            "is not one of",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "name": "A"}),
+            "does not match",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "name": "abcdef"}),
+            "longer than 5",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "port": 0}),
+            "below the minimum",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "port": "80"}),
+            ".spec.port: expected integer",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "port2": true}),
+            "expected integer or string",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "set": ["a", "a"]}),
+            "duplicate entry",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "set": ["a", "b", "c"]}),
+            "more than 2 items",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "labels": {"a": 1}}),
+            ".spec.labels.a: expected string",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "typo": 1}),
+            ".spec.typo: unknown field",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "one": {"x": "1", "y": "2"}}),
+            "oneOf matched 2 of 2",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "one": {}}),
+            "oneOf matched 0 of 2",
+        ),
+        (
+            serde_json::json!({"cidr": "10.0.0.0/8", "timers": {"keep": 100}}),
+            "keep exceeds hold",
+        ),
     ];
     for (spec, expected) in cases {
         let violations = check(spec.clone());
-        assert!(violations.iter().any(|v| v.contains(expected)), "{spec}: expected {expected:?}, got {violations:?}");
+        assert!(
+            violations.iter().any(|v| v.contains(expected)),
+            "{spec}: expected {expected:?}, got {violations:?}"
+        );
     }
 }
