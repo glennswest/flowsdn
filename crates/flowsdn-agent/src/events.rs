@@ -82,7 +82,7 @@ pub use recorder::{event_body, rfc3339, start};
 
 #[cfg(feature = "kubernetes")]
 mod recorder {
-    use super::{Event, MESSAGE_MAX, Type};
+    use super::{Event, MESSAGE_MAX};
     use flowsdn_k8s::client::{JsonClient, TransportLimits};
     use serde_json::{Value, json};
     use std::{
@@ -429,6 +429,7 @@ mod recorder {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::events::Type;
 
         #[test]
         fn timestamps_are_rfc3339_utc() {
