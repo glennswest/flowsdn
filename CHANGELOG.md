@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-06
+- **chore:** Stage golden-flowsdn-7728d7c136fb (release request stormcos#310): agent Events, the `agent` healthz member, new printer columns (#298).
 - **feat:** Kubernetes Events from the agent (#298; `kubernetes` feature). Pods get `EndpointCreated`, `EndpointCreateFailed` and `IPAllocationFailed`. The Node gets `PodCIDRSelected`, `DirectRouteFailed`, `ServiceLBUnavailable` and `SysctlFailed`. Events are core/v1 with the object's UID, so `kubectl describe` finds them. Repeats are aggregated, the queue is bounded and recording never blocks. RBAC: `events` create/update in manifests-kubernetes and the chart.
 - **BREAKING:** `GET /v1/healthz` reports the agent under `agent` (was the reference project's name), as part of declaring the API stable (#298). Nothing in flowsdn read the old key.
 - **docs:** docs/agent-api.md gains a stability policy for `/v1` (additive only; breaking changes get `/v2` and a BREAKING entry). `api::ROUTES` lists the routes, and a test keeps the doc table equal to it.

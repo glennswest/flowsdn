@@ -74,7 +74,7 @@ Schemas and columns for the 22 CRDs shipped with #325.
 - [x] Stable API: agent-api.md stability section, `api::ROUTES` pinned to the doc table; healthz member `agent` (no Cilium).
 - [x] Printer columns for the 5 kinds the reference leaves bare; test every column path is in the schema.
 - [x] sc-build at 4eb41c2 (fmt, workspace + kubernetes Clippy, 47 agent+kubernetes tests) and 5623bcb (720 workspace tests, chart check); stormcos#318 for `sc net`; first hardware run's failures filed as #341.
-- [ ] Golden; close.
+- [x] Golden golden-flowsdn-7728d7c136fb (release request stormcos#310); closed.
 
 ### Build failure on HEAD~1 — #317 (2026-10-06)
 
