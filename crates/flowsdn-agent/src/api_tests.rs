@@ -292,10 +292,10 @@ fn locked_sha256(name: &str) -> Option<String> {
     for line in include_str!("../../../bpf-objects.lock").lines() {
         if let Some(value) = line.strip_prefix("name = ") {
             current = Some(value.trim_matches('"'));
-        } else if let Some(value) = line.strip_prefix("sha256 = ") {
-            if current == Some(name) {
-                return Some(value.trim_matches('"').to_owned());
-            }
+        } else if let Some(value) = line.strip_prefix("sha256 = ")
+            && current == Some(name)
+        {
+            return Some(value.trim_matches('"').to_owned());
         }
     }
     None
