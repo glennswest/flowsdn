@@ -1,7 +1,8 @@
 //! The flowsdn.io CRD set (#325): vendored schemas, generated manifests,
 //! examples and accept/reject validation.
 use flowsdn_k8s::crd::{
-    CHART_CRD_DIR, MANIFEST_DIR, OwnedCrd, REFERENCE, manifest, owned_crds, to_yaml, yaml_documents, yaml_to_json,
+    CHART_CRD_DIR, MANIFEST_DIR, OwnedCrd, REFERENCE, manifest, owned_crds, to_yaml,
+    yaml_documents, yaml_to_json,
 };
 use flowsdn_k8s::plan::{REGISTRATION_PLURALS, SHORT_NAMES};
 use flowsdn_k8s::schema::{cel, validate};
@@ -135,9 +136,20 @@ fn shipped_manifests_are_the_generated_ones() {
         }
         let present: BTreeSet<String> = std::fs::read_dir(&dir)
             .expect("manifest directory")
-            .map(|entry| entry.expect("entry").file_name().to_string_lossy().into_owned())
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
             .collect();
-        assert_eq!(present, expected, "{} holds only generated CRDs", dir.display());
+        assert_eq!(
+            present,
+            expected,
+            "{} holds only generated CRDs",
+            dir.display()
+        );
     }
 }
 
@@ -550,15 +562,19 @@ fn no_cilium_in_shipped_manifests() {
             let path = entry.expect("entry").path();
             // Manifests and chart sources; prose (README.md) may describe
             // the other stormcos edition.
-            let manifest = path
-                .extension()
-                .is_some_and(|e| ["yaml", "yml", "tpl", "json", "txt"].contains(&e.to_str().unwrap_or_default()));
+            let manifest = path.extension().is_some_and(|e| {
+                ["yaml", "yml", "tpl", "json", "txt"].contains(&e.to_str().unwrap_or_default())
+            });
             if path.is_dir() {
                 walk(&path, found);
             } else if manifest && let Ok(text) = std::fs::read_to_string(&path) {
                 for (number, line) in text.lines().enumerate() {
                     if line.to_ascii_lowercase().contains("cilium") {
-                        found.push(format!("{}:{}: {line}", path.display(), number.saturating_add(1)));
+                        found.push(format!(
+                            "{}:{}: {line}",
+                            path.display(),
+                            number.saturating_add(1)
+                        ));
                     }
                 }
             }
@@ -569,8 +585,16 @@ fn no_cilium_in_shipped_manifests() {
         walk(&repo_dir().join(dir), &mut found);
     }
     for crd in crds() {
-        assert!(!manifest(&crd).to_ascii_lowercase().contains("cilium"), "{}", crd.file);
+        assert!(
+            !manifest(&crd).to_ascii_lowercase().contains("cilium"),
+            "{}",
+            crd.file
+        );
     }
     let shown: Vec<&String> = found.iter().take(20).collect();
-    assert!(found.is_empty(), "{} lines name Cilium: {shown:#?}", found.len());
+    assert!(
+        found.is_empty(),
+        "{} lines name Cilium: {shown:#?}",
+        found.len()
+    );
 }

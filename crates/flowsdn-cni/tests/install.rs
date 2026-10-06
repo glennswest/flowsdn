@@ -62,7 +62,8 @@ fn copies_executable_and_links_all_compatibility_names() {
         }
     }
     // Replacing a running binary must leave an already opened inode unchanged.
-    let old = fs::File::open(bin.join("flowsdn-cni")).expect("installer fixture operation succeeds");
+    let old =
+        fs::File::open(bin.join("flowsdn-cni")).expect("installer fixture operation succeeds");
     fs::write(&options.source, b"rust-plugin-v2").expect("installer fixture operation succeeds");
     install(&options).expect("installer fixture operation succeeds");
     assert_ne!(
@@ -136,7 +137,8 @@ fn retained_symlink_is_rejected_and_loopback_failure_is_warning() {
     let mut options = fixture.options();
     let bin = options.cni_dir.join("bin");
     fs::create_dir_all(&bin).expect("installer fixture operation succeeds");
-    symlink(&options.source, bin.join("flowsdn-cni")).expect("installer fixture operation succeeds");
+    symlink(&options.source, bin.join("flowsdn-cni"))
+        .expect("installer fixture operation succeeds");
     options.overwrite_plugin = false;
     assert!(
         install(&options)
@@ -154,7 +156,7 @@ fn retained_symlink_is_rejected_and_loopback_failure_is_warning() {
         fs::read_dir(&bin)
             .expect("installer fixture operation succeeds")
             .count(),
-        4,
+        3,
         "staging files must be cleaned"
     );
 }

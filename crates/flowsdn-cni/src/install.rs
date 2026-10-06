@@ -65,9 +65,8 @@ pub fn install(options: &InstallOptions) -> io::Result<InstallReport> {
             "retained flowsdn-cni must be a regular file",
         ));
     }
-    for name in ["flowsdn"] {
-        link_atomic(&plugin, &bin.join(name))?;
-    }
+    // The golden's path for the same executable.
+    link_atomic(&plugin, &bin.join("flowsdn"))?;
     let loopback = bin.join("loopback");
     // Loopback installation is best effort, including inability to inspect it.
     let loopback_result = (|| {
