@@ -65,11 +65,14 @@ loopback port to default to; the API was Unix-socket only. Flows wait for Hubble
 - [x] Every acceptance row needs the live cluster (#291) and services/policy (#292); proposed after #292. Nothing checked.
 - [ ] When #291/#292 pass: pick the subsystem order (likely Hubble first for the console, #297), implement each with live acceptance.
 
-### Release hardening acceptance — #294 (P0), 2026-10-05
+### Release hardening acceptance — #294 (P0), 2026-10-06
 
 - [x] Assessed each acceptance row against code at 8e70ce2 (comment 6007288302): no Helm chart, no bpf-objects.lock, no arm64 runtime, no matrix run; gate needs #291–#293 accepted first.
-- [x] Owner question (comment 6007288611): the stormcos golden path replaces Helm/GitHub Releases/CI lanes (recommended), or also ship a standalone chart + release artifacts (cilium-* or flowsdn-* names)? `wait-owner` set.
-- [ ] After the answer: amend spec 22/ADR-0013 to the chosen scope, then implement what doesn't depend on M1–M3 (bpf-objects.lock per #245, upgrade/rollback checks).
+- [x] Owner answer (2026-10-05): option 2 — also a standalone install (Helm chart + GitHub Release binaries/checksums), but none of it in the stormcos golden ("dead weight"). The cilium-* vs flowsdn-* object-name sub-question was not answered.
+- [ ] ADR-0019 + spec 22 amendment: scope per the answer; standalone artifacts are built outside the golden.
+- [ ] bpf-objects.lock (#245): `tools/bpf-objects-lock.sh write|check`, test/build.sh checks it, agent unit test checks embedded objects against it.
+- [ ] Release artifacts: `deploy/release/build.sh` → per-arch tarball + SHA256SUMS (agent, CNI, BPF objects, lock, license), never published automatically. sc-build.
+- [ ] Ask the chart object-name question (wait-owner); the chart waits for it. M4 stays open on #291–#293 regardless.
 
 ### Presentation — #302 (P1), 2026-10-05
 
