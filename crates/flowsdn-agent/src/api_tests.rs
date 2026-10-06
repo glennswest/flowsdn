@@ -431,7 +431,10 @@ fn requests_are_read_and_answered_over_loopback_tcp() {
     });
     let (mut server, _) = listener.accept().expect("accept");
     let request = read_request(&mut server).expect("request");
-    assert_eq!((request.method.as_str(), request.target.as_str()), ("GET", "/v1/ipam"));
+    assert_eq!(
+        (request.method.as_str(), request.target.as_str()),
+        ("GET", "/v1/ipam")
+    );
     write_response(&mut server, 200, b"{}".to_vec()).expect("response");
     drop(server);
     let reply = client.join().expect("client");
