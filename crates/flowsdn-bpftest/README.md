@@ -80,3 +80,15 @@ connected UDP with the reply source and `getpeername` reverse translated; EPERM
 for a frontend without backends; an untouched non-frontend address; a backend
 move; both of two backends chosen over 64 connects; and frontend removal down
 to empty maps. It restores its cgroup membership on exit.
+
+`socket-live` and `socket-lb-live` use the cgroup v2 hierarchy at
+`/sys/fs/cgroup`. Where a container has none there (stormcos's privileged test
+pods, #341), they mount cgroup2 at that path in a private mount namespace of
+their own process, which shows their own cgroup namespace and vanishes when
+they exit; the host's mounts and cgroup root are never used.
+
+When `flowsdn-endpoint-test`'s BPF_PROG_TEST_RUN packet checks fail, the error
+names the case and frame size (for example `case ipv4-short (30 bytes): test
+run refused: errno 22`). `skb-ctx-matrix` ends a failing run with one line
+naming the kernel, the zero-ctx baseline result and the unusable relied-upon
+fields, since the test suite reports only a fixture log's last line.

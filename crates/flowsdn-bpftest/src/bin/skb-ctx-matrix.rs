@@ -382,11 +382,13 @@ fn main() -> Result<()> {
         .map(|s| s.trim().to_owned())
         .unwrap_or_default();
     probe.clear()?;
-    let baseline = probe.run(observe_fd, &[0u8; CTX]);
+    let baseline = probe
+        .run(observe_fd, &[0u8; CTX])
+        .map_err(errno_name);
     println!(
         "{}",
         json!({"field": "baseline", "zero_ctx_256_bytes": baseline.is_ok(),
-               "error": baseline.err().map(errno_name)})
+               "error": baseline.as_ref().err()})
     );
     let mut summary = serde_json::Map::new();
     let mut unusable = Vec::new();
@@ -430,9 +432,15 @@ fn main() -> Result<()> {
     if ok {
         Ok(())
     } else {
-        Err(
-            format!("ctx_in fields the corpus relies on are unusable on {kernel}: {unusable:?}")
-                .into(),
+        // One short line last: the runner reports only a log's last line.
+        let baseline = match &baseline {
+            Ok(_) => "ok".to_owned(),
+            Err(error) => error.clone(),
+        };
+        Err(format!(
+            "on {kernel}: zero-ctx baseline {baseline}; relied-upon fields unusable: {}",
+            unusable.join(",")
         )
+        .into())
     }
 }

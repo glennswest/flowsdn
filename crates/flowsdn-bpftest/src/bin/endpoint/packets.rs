@@ -59,17 +59,33 @@ fn ipv6() -> Result<Vec<u8>> {
     put(&mut packet, 54, &[0x9c, 0x40, 0x9c, 0x41, 0, 8, 0, 1])?;
     Ok(packet)
 }
-fn run(program: &SchedClassifier, packet: &[u8], verdict: u32) -> Result<Vec<u8>> {
+/// Run one case; an error names the case and its size, since a test-run
+/// refusal (errno) alone does not say which of the 16 the kernel rejected.
+fn run(program: &SchedClassifier, case: &str, packet: &[u8], verdict: u32) -> Result<Vec<u8>> {
     let mut output = vec![0; 2048];
-    let result = program.test_run(TestRunOptions {
-        data_in: Some(packet),
-        data_out: Some(&mut output),
-        repeat: 1,
-        ..Default::default()
-    })?;
+    let result = program
+        .test_run(TestRunOptions {
+            data_in: Some(packet),
+            data_out: Some(&mut output),
+            repeat: 1,
+            ..Default::default()
+        })
+        .map_err(|e| {
+            let errno = match &e {
+                aya::programs::ProgramError::SyscallError(s) => s
+                    .io_error
+                    .raw_os_error()
+                    .map_or_else(|| s.io_error.to_string(), |n| format!("errno {n}")),
+                other => other.to_string(),
+            };
+            format!("case {case} ({} bytes): test run refused: {errno}", packet.len())
+        })?;
     ensure(
         result.return_value == verdict,
-        &format!("packet verdict {}, expected {verdict}", result.return_value),
+        &format!(
+            "case {case}: packet verdict {}, expected {verdict}",
+            result.return_value
+        ),
     )?;
     let size = usize::try_from(result.data_size_out)?;
     ensure(size <= output.len(), "output buffer overflow")?;
@@ -79,7 +95,9 @@ fn run(program: &SchedClassifier, packet: &[u8], verdict: u32) -> Result<Vec<u8>
 pub fn verify(program: &SchedClassifier) -> Result<()> {
     for v6 in [false, true] {
         let input = if v6 { ipv6()? } else { ipv4()? };
-        let out = run(program, &input, 7)?; // TC_ACT_REDIRECT
+        let family = if v6 { "ipv6" } else { "ipv4" };
+        let case = |name: &str| format!("{family}-{name}");
+        let out = run(program, &case("redirect"), &input, 7)?; // TC_ACT_REDIRECT
         ensure(out.len() == input.len(), "redirect changed frame length")?;
         ensure(
             out.get(..12) == Some([2, 0, 0, 0, 1, 2, 2, 0, 0, 0, 0, 2].as_slice()),
@@ -103,30 +121,30 @@ pub fn verify(program: &SchedClassifier) -> Result<()> {
         for expired in [0, 1] {
             let mut bad = input.clone();
             put(&mut bad, hop, &[expired])?;
-            run(program, &bad, 2)?;
+            run(program, &case(&format!("hop-{expired}")), &bad, 2)?;
         }
         let mut short = input.clone();
         short.truncate(30);
-        run(program, &short, 2)?;
+        run(program, &case("short"), &short, 2)?;
         let mut wrong_version = input.clone();
         put(&mut wrong_version, 14, &[0x75])?;
-        run(program, &wrong_version, 2)?;
+        run(program, &case("wrong-version"), &wrong_version, 2)?;
         let mut absent = input.clone();
         put(&mut absent, if v6 { 53 } else { 33 }, &[99])?;
-        run(program, &absent, 2)?;
+        run(program, &case("unknown-destination"), &absent, 2)?;
     }
     let mut short_ihl = ipv4()?;
     put(&mut short_ihl, 14, &[0x44])?;
-    run(program, &short_ihl, 2)?;
+    run(program, "ipv4-short-ihl", &short_ihl, 2)?;
     let mut short_total = ipv4()?;
     put(&mut short_total, 16, &[0, 19])?;
-    run(program, &short_total, 2)?;
+    run(program, "ipv4-short-total-length", &short_total, 2)?;
     let mut jumbo = ipv6()?;
     put(&mut jumbo, 18, &[0, 0])?;
-    run(program, &jumbo, 2)?;
+    run(program, "ipv6-zero-payload-length", &jumbo, 2)?;
     let mut unknown_l2 = ipv4()?;
     put(&mut unknown_l2, 12, &[0x81, 0])?;
-    run(program, &unknown_l2, 2)?;
+    run(program, "vlan-ethertype", &unknown_l2, 2)?;
     println!(
         "PASS: 16 kernel packet cases for MAC/hop/checksum handling and fail-closed rejection"
     );

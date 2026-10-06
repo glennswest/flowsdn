@@ -6,6 +6,41 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+const ROOT: &str = "/sys/fs/cgroup";
+
+/// A container may have no cgroup v2 at /sys/fs/cgroup (stormcos's privileged
+/// test pods, #341). Mount one in a private mount namespace of this process
+/// only: it shows this process's cgroup namespace, so `/proc/self/cgroup`
+/// paths resolve under it, and it disappears when the process exits. The
+/// host's mounts and cgroup root are never touched.
+fn mount_private_cgroup2() -> Result<()> {
+    use nix::{
+        mount::{MsFlags, mount},
+        sched::{CloneFlags, unshare},
+    };
+    unshare(CloneFlags::CLONE_NEWNS).map_err(|e| format!("private mount namespace: {e}"))?;
+    mount(
+        None::<&str>,
+        "/",
+        None::<&str>,
+        MsFlags::MS_REC | MsFlags::MS_PRIVATE,
+        None::<&str>,
+    )
+    .map_err(|e| format!("make mounts private: {e}"))?;
+    mount(
+        Some("cgroup2"),
+        ROOT,
+        Some("cgroup2"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NODEV | MsFlags::MS_NOEXEC,
+        None::<&str>,
+    )
+    .map_err(|e| format!("cgroup v2 mount at {ROOT}: {e}"))?;
+    if !Path::new(ROOT).join("cgroup.controllers").is_file() {
+        return Err("cgroup v2 required: mounted, but no cgroup.controllers".into());
+    }
+    Ok(())
+}
+
 pub struct Cgroup {
     original: PathBuf,
     pub temporary: PathBuf,
@@ -28,9 +63,9 @@ impl Cgroup {
         {
             return Err("unsafe cgroup membership path".into());
         }
-        let original = Path::new("/sys/fs/cgroup").join(path.trim_start_matches('/'));
-        if !Path::new("/sys/fs/cgroup/cgroup.controllers").is_file() {
-            return Err("cgroup v2 mount required".into());
+        let original = Path::new(ROOT).join(path.trim_start_matches('/'));
+        if !Path::new(ROOT).join("cgroup.controllers").is_file() {
+            mount_private_cgroup2()?;
         }
         // Make a child of our own current cgroup, never relocate another task.
         let temporary = original.join(format!(
