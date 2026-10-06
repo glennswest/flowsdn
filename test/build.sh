@@ -7,7 +7,7 @@
 # on the build box, then runs `podman build -f test/Containerfile` with the repo
 # root as context. It builds, from this commit:
 #   - the BPF objects, with tools/build-bpf.sh (pinned nightly and bpf-linker),
-#     and checks the agent's embedded local-delivery and socket-lb are this commit's,
+#     and checks them and the agent's embedded copies against bpf-objects.lock,
 #   - the agent, CNI, kernel fixtures and /test (static musl),
 #   - flowsdn-perf, the perf suite (GNU, Fedora OpenSSL),
 # and stages them in test/.stage. It does not build the image itself.
@@ -22,23 +22,10 @@ stage="$root/test/.stage"
 rm -rf "$stage"
 mkdir -p "$stage/opt/flowsdn/bin" "$stage/opt/flowsdn/fixtures" "$stage/opt/flowsdn/bpf"
 "$root/tools/build-bpf.sh" "$stage/opt/flowsdn/bpf"
-# The agent embeds local-delivery and socket-lb; a copy older than this commit's BPF source
-# would ship a datapath nobody built from it. Compared without debug info, BTF
-# and symbols: cargo's metadata hash for path dependencies follows the checkout
-# path and renames codegen units there, while the code, relocations, maps,
-# .rodata.config and license must match exactly.
-code() {
-    objcopy -I elf64-little --strip-all --remove-section=.BTF --remove-section=.BTF.ext "$1" "$2"
-}
-for o in local-delivery socket-lb; do
-    code "$stage/opt/flowsdn/bpf/$o" "$tmp/$o.built"
-    code "$root/crates/flowsdn-agent/bpf/$o" "$tmp/$o.embedded"
-    if ! cmp -s "$tmp/$o.built" "$tmp/$o.embedded"; then
-        echo "test/build.sh: crates/flowsdn-agent/bpf/$o is stale;" \
-            "run tools/build-bpf.sh and commit the new $o" >&2
-        exit 1
-    fi
-done
+# bpf-objects.lock pins every object's code (#245), and the agent embeds
+# local-delivery and socket-lb; a lock or embedded copy that is not this
+# commit's build would ship a datapath nobody built from it.
+"$root/tools/bpf-objects-lock.sh" check "$stage/opt/flowsdn/bpf"
 
 fixtures=(flowsdn-bpftest flowsdn-endpoint-test agent-runtime cni-runtime loader-features
     native-routing packet-ingress socket-live socket-lb-live uplink-ingress skb-ctx-matrix)

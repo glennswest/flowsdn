@@ -33,4 +33,5 @@ flowsdn-lb = { path = "../flowsdn-lb", version = "=0.14.0" }
 flowsdn-connector = { path = "../flowsdn-connector", version = "=0.14.0" }
 
 [dev-dependencies]
+sha2 = "=0.10.9"
 openssl = "=0.10.81"

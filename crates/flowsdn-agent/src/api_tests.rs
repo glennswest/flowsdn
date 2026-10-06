@@ -286,6 +286,37 @@ fn ipam_inventory_counts_are_lossless_decimal_strings_and_disabled_families_abse
     );
 }
 
+/// The `sha256` bpf-objects.lock records for `name` (#245).
+fn locked_sha256(name: &str) -> Option<String> {
+    let mut current = None;
+    for line in include_str!("../../../bpf-objects.lock").lines() {
+        if let Some(value) = line.strip_prefix("name = ") {
+            current = Some(value.trim_matches('"'));
+        } else if let Some(value) = line.strip_prefix("sha256 = ") {
+            if current == Some(name) {
+                return Some(value.trim_matches('"').to_owned());
+            }
+        }
+    }
+    None
+}
+
+#[test]
+fn embedded_objects_match_bpf_objects_lock() {
+    use sha2::{Digest, Sha256};
+    for (name, bytes) in [
+        ("local-delivery", EMBEDDED_OBJECT),
+        ("socket-lb", include_bytes!("../bpf/socket-lb").as_slice()),
+    ] {
+        assert_eq!(
+            Some(format!("{:x}", Sha256::digest(bytes))),
+            locked_sha256(name),
+            "crates/flowsdn-agent/bpf/{name} differs from bpf-objects.lock; \
+             run tools/bpf-objects-lock.sh write and commit the lock"
+        );
+    }
+}
+
 #[test]
 fn egress_mode_and_embedded_object_default() {
     let temp = Temp::new();
