@@ -1,6 +1,6 @@
 # ADR-0019: Milestone 4 release scope — golden plus standalone artifacts
 
-Date: 2026-10-06. Status: accepted (scope); chart object names open.
+Date: 2026-10-06. Status: accepted.
 Owner direction: [#294](https://github.com/glennswest/flowsdn/issues/294)
 (answer to the release-scope question, 2026-10-05: "2, just make sure they're
 not in the actual stormcos golden, they're just dead weight").
@@ -36,22 +36,41 @@ Publishing either is an explicit, recorded step after validation (spec 22
   given set of binaries; cross-machine binary reproducibility has not been
   measured.
 
-## Open: chart object names
+## Names: flowsdn's only
 
-The owner's answer selected option 2 but did not choose between the two naming
-options asked with it, and the existing records disagree:
+Owner decision on #294 (2026-10-06, accepting the recommendations): the chart's
+objects are `flowsdn` (DaemonSet, ServiceAccount, ClusterRoles), `flowsdn-config`
+and, later, `flowsdn-operator`; people moving over get a values migration note
+([docs/helm.md](../helm.md)), and `sc net` (#298) is the status tool rather than
+`cilium-cli`. And: **no Cilium in flowsdn, period** — no cilium-* object names,
+labels, config keys or compatibility shims in the chart or manifests.
 
-- ADR-0013 #237 / spec 22 §2 and §12.2: keep `cilium`, `cilium-config`,
-  `cilium-operator` object names and selectors so `cilium-cli`, dashboards and
-  existing values files work against a flowsdn install (drop-in replacement).
-- ADR-0017 (#299): flowsdn's own resources use flowsdn identity, the resolved
-  ConfigMap default is `flowsdn-config`, the taint `node.flowsdn.io/agent-not-ready`,
-  and new independently designed artifacts use flowsdn names; cilium-named
-  objects would collide with an installed Cilium.
+This supersedes ADR-0013 #237 (keep cilium object names) and spec 22 §2/§3.5–3.7
+(a Cilium-compatible chart: reference object names, the reference values surface,
+`flowsdn.io/cilium-compat`, `helm-diff` against the reference chart). It also ends
+the manifest-level compatibility retained by ADR-0017:
 
-The chart is not written until this is answered on #294; the answer decides
-the chart's object names, selectors, ConfigMap name and whether the values
-surface tracks the reference's (spec 22 §3.6).
+- The CNI installs `flowsdn-cni` (and the golden's `flowsdn` link) and the
+  conflist's plugin type is `flowsdn-cni`; there is no `cilium-cni` alias.
+  `OVERWRITE_CILIUM` is `OVERWRITE_PLUGIN`.
+- The agent socket and CNI delete queue live in `/var/run/flowsdn`
+  (`flowsdn.sock`, `deleteQueue`); `CILIUM_SOCK` is `FLOWSDN_SOCK`.
+- The shipped CRDs carry flowsdn names in every string (descriptions, enum
+  values, printer columns): `FlowsdnInternalIP`, `io.flowsdn.k8s.policy.*`.
+- A test (`no_cilium_in_shipped_manifests`) and `install/kubernetes/check.sh`
+  refuse "cilium" in any manifest or chart file or rendering.
+
+Names inside the code that the manifests do not show (BPF map/pin names,
+interface names, the configuration catalogue) are a separate change, tracked
+on #339, as the directive reaches them too.
+
+## What the chart is
+
+`install/kubernetes/flowsdn`: flowsdn's own values (docs/helm.md), the 22 CRDs in
+`crds/`, RBAC, the `flowsdn-config` ConfigMap and the Kubernetes-mode agent
+DaemonSet with the CNI install init container. `image.repository` is required: no
+image is published, and `images/agent/build.sh` builds one. `deploy/release/build.sh`
+packages it beside the archives in `SHA256SUMS`.
 
 ## Not changed
 

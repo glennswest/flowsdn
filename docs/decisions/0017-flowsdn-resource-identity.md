@@ -40,6 +40,11 @@ obligation; flowsdn does not register those versions into the upstream group.
 
 ## Node-visible names
 
+**Amended by ADR-0019 (#294):** the owner ruled out Cilium names in flowsdn. The CNI
+alias rows and runtime paths below are replaced: the CNI is `flowsdn-cni`
+(conflist type `flowsdn-cni`, no `cilium-cni`), and the socket and queue live
+in `/var/run/flowsdn`. Interface and BPF names are being renamed separately (#339).
+
 | Surface | Decision and reason |
 |---|---|
 | Agent/CNI executable identity | Keep `flowsdn-agent` and `flowsdn-cni`. Do not ship renamed `cilium-dbg` or `cilium-cli` executables. Future flowsdn CLI entry points use flowsdn names. |

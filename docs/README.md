@@ -11,6 +11,7 @@ points, rather than treating specifications as a list of implemented features.
 | Executable configuration, defaults and ports | [Runtime reference](runtime.md) |
 | HTTP methods, bounded reads and health meaning | [Standalone agent API](agent-api.md) |
 | The 22 flowsdn.io custom resources, examples, Cilium kind mapping | [CRD reference](crds.md) |
+| Standalone Helm chart, values, coming from another CNI | [Helm chart](helm.md) |
 | Edition manifests, host resources, CNI install | [stormcos integration](../deploy/stormcos/README.md) |
 | Implemented libraries versus integrated runtime | [Implementation status](implementation-status.md) |
 | Remaining networking acceptance | [Milestones](milestones.md), issues #291–#294 |

@@ -130,7 +130,7 @@ to stormcos's built-in stormblock driver, not to flowsdn.
   OpenSSL ([ADR-0016](docs/decisions/0016-fedora-openssl.md)); owned CRDs use
   `flowsdn.io/v1alpha1` ([ADR-0017](docs/decisions/0017-flowsdn-resource-identity.md), #299).
 - Policy: the simulator is the map-state oracle ([ADR-0018](docs/decisions/0018-policy-simulator-oracle.md), #103).
-- Release scope: the stormcos golden, plus standalone archives and a chart kept out of it ([ADR-0019](docs/decisions/0019-release-scope.md), #294).
+- Release scope: the stormcos golden, plus standalone archives and a Helm chart kept out of it, flowsdn names only ([ADR-0019](docs/decisions/0019-release-scope.md), [chart](docs/helm.md), #294).
 - Deployment: stormcos edition manifests and the reproducible
   `tools/build-bpf.sh` object build (#296).
 - Tests: the `short`/`medium`/`long` [test container](test/README.md) (#303) and

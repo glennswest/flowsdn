@@ -56,8 +56,12 @@ Nothing from the standalone path goes into the golden. `bpf-objects.lock`
 BTF and symbols stripped, path-independent) to §4's fields, and `sha256` is
 recorded for embedded objects only. `deploy/release/build.sh` builds the
 archives and `SHA256SUMS` (§3.9.4). The chart's object names (§2, §12.2) are
-open on #294: ADR-0013 #237 keeps cilium names, ADR-0017 gives new artifacts
-flowsdn names. §3.5–3.7 are not implemented until that is answered.
+decided on #294: flowsdn names only and no Cilium in the chart or manifests
+(ADR-0019). The chart (`install/kubernetes/flowsdn`, [docs/helm.md](../helm.md)) has
+flowsdn's own values; §2's Cilium compatibility contract, the reference values surface
+of §3.6 (`mapping.toml`, `helm-diff`, `flowsdn.io/cilium-compat`) and §3.7's in-place
+Cilium adoption are superseded. §3.5's shape survives where it applies: the agent
+DaemonSet with a CNI install init container, CRDs before templates.
 
 ## 1. Scope
 
