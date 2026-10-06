@@ -386,7 +386,10 @@ fn http_listen_is_loopback_only() {
         ("127.0.0.1", false),
         ("localhost:9878", false),
     ] {
-        config["http-listen"] = json!(value);
+        config
+            .as_object_mut()
+            .expect("object")
+            .insert("http-listen".into(), json!(value));
         fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
         assert_eq!(Config::read(&path).is_ok(), valid, "{value}");
     }
