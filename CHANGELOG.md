@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-06
+- **chore:** test-fixture credentials marked `not a secret` (inline, or `.github/secret_scanning.yml` for files that cannot hold a comment) — owner
 - **test:** Live ClusterIP checks in every suite's node probe on a flowsdn node (#292): kube-dns resolves `kubernetes.default` to `KUBERNETES_SERVICE_HOST` with the reply from the ClusterIP, TCP to the `kubernetes` Service shows the ClusterIP as peer, and the agent's `GET /v1/service` has both frontends realized.
 - **fix:** Test fixtures on stormcos test pods (#303, #341): `socket-live` and `socket-lb-live` mount their own cgroup2 at /sys/fs/cgroup in a private mount namespace when the container has none ("cgroup v2 mount required" on C2NR0Q2). `flowsdn-endpoint-test` names the packet case and size when the kernel refuses a test run; `skb-ctx-matrix` ends a failure with one summary line (kernel, baseline, unusable fields), since the suite reports a fixture's last line only.
 - **feat:** Pod and container tagging (#328). In Kubernetes mode the agent writes each local Pod's `flowsdn.io/pod-networks` annotation (OVN-Kubernetes `pod-networks` shape under `default`: addresses, MAC, gateways, routes, interface, host interface, endpoint ID, sandbox, node), merge-patched with the Pod UID as precondition within about 2 s of the endpoint's creation and rewritten if removed or edited; failures show in healthz. RBAC: `pods` patch (manifests-kubernetes, chart).

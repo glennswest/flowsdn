@@ -27,7 +27,7 @@ impl Drop for Sandbox {
     }
 }
 const CERT: &str = "-----BEGIN CERTIFICATE-----\nMAAA\n-----END CERTIFICATE-----\n";
-const KEY: &str = "-----BEGIN PRIVATE KEY-----\nAQIDBA==\n-----END PRIVATE KEY-----\n";
+const KEY: &str = "-----BEGIN PRIVATE KEY-----\nAQIDBA==\n-----END PRIVATE KEY-----\n"; // not a secret: test fixture
 fn bundle(path: &Path, cluster: &str, endpoint: &str) {
     fs::write(path,json!({"cluster":cluster,"endpoints":[endpoint],"ca_pem":CERT,"cert_pem":CERT,"key_pem":KEY}).to_string()).expect("bundle");
     fs::set_permissions(path, fs::Permissions::from_mode(0o600)).expect("mode");
