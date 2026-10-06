@@ -160,6 +160,14 @@ With the `kubernetes` feature and section the agent:
   Recording never blocks or fails a request: a full queue (256) drops events. Needs
   `events` create/update (the manifests and chart grant it);
 
+- tags each local Pod with its network (#328): the `flowsdn.io/pod-networks`
+  annotation (OVN-style: addresses, MAC, gateways, routes, interface, host
+  interface, endpoint ID, sandbox, node; [API](agent-api.md#pod-network-annotation-328)),
+  merge-patched within about 2 s of the endpoint's creation and rewritten if it
+  is removed or edited. Needs `pods` patch (the manifests and chart grant it).
+  The Pod view also gives each endpoint and `GET /v1/ip` row its UID, workload
+  (Deployment for its ReplicaSets) and containers;
+
 - loads credentials (explicit kubeconfig, else in-cluster) and, when a pool is
   `auto`, blocks until its Node yields a pool for every such family;
 - after restore, sets `net.ipv4.conf.all.rp_filter=0`, `net.ipv4.ip_forward=1`,
@@ -182,8 +190,10 @@ With the `kubernetes` feature and section the agent:
 - serves `GET /v1/ip`, `GET /v1/node/routes` and `GET /v1/service`
   ([API](agent-api.md)).
 
-Not yet: a cluster identity allocator (pod IP cache entries carry labels but no
-numeric identity), BPF ipcache maps, tunnel routing, masquerade, NodePort and
+Not yet: a cluster identity allocator (pod IP cache entries and the
+pod-networks annotation carry no numeric identity), a flow/drop observer (the
+`flowsdn-hubble` `endpoint` module names flow peers `ns/pod (container)` once
+one exists, #293), BPF ipcache maps, tunnel routing, masquerade, NodePort and
 LoadBalancer Services, and policy. Unit tests and a loopback-HTTPS controller test cover the
 watch and route logic; two-node pod traffic has not been demonstrated
 (pvetest1 + pvetest2, stormcentral#360).

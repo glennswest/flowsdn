@@ -86,7 +86,7 @@ on recognized endpoint detail/IPAM address routes return HTTP 405.
 | `GET /v1/ipam` | Read the configured default-pool family summaries below. |
 | `POST /v1/ipam` | Allocate pending addresses; requires owner and supports family/default-pool selection. |
 | `DELETE /v1/ipam/{address}?pool=default` | Release an unused allocation; endpoint-owned addresses return 409. |
-| `GET /v1/ip` | Kubernetes mode: the IP cache view (reference `IPListEntry`). Each node InternalIP as `/32`/`/128` with identity 1 (this node) or 6 (remote node); each IP of a non-host-network Pod with `hostIP` (its node's InternalIP of the family), `metadata{source,namespace,name}` and the flowsdn `labels` extension (`k8s:<key>=<value>` plus `k8s:io.kubernetes.pod.namespace`). Pod entries have no `identity` until cluster identity allocation exists. No `cidr` query filter. 404 when Kubernetes mode is off. |
+| `GET /v1/ip` | Kubernetes mode: the IP cache view (reference `IPListEntry`). Each node InternalIP as `/32`/`/128` with identity 1 (this node) or 6 (remote node); each IP of a non-host-network Pod with `hostIP` (its node's InternalIP of the family), `metadata{source,namespace,name}` (plus flowsdn's `uid`, `containers` and, with a controller owner, `workloads`, #328) and the flowsdn `labels` extension (`k8s:<key>=<value>` plus `k8s:io.kubernetes.pod.namespace`). Pod entries have no `identity` until cluster identity allocation exists. No `cidr` query filter. 404 when Kubernetes mode is off. |
 | `GET /v1/service` | Kubernetes mode with `service-lb` (reference `Service` model, ClusterIP subset): one row per frontend, `spec{id, frontend-address{ip,port,protocol,scope}, backend-addresses[{ip,port,protocol,state}], flags{type: ClusterIP, name, namespace, port-name, service-type}}`. `id` is the service ID (`rev_nat_index`) the socket-LB maps hold, 0 until programmed; `status.realized` repeats `spec` once it is. Empty until both the Service and EndpointSlice lists are complete. 404 when Kubernetes mode is off. |
 | `GET /v1/node/routes` | Kubernetes mode (flowsdn): the direct node routes, `{destination, gateway, node, state}` with state `installed`, `skipped: …` or `error: …`. Empty before the first Node list or with `auto-direct-node-routes: false`. 404 when Kubernetes mode is off. |
 
@@ -109,8 +109,22 @@ Each list entry has the same shape as endpoint detail, including:
       "k8s-pod-name": "example-pod",
       "k8s-namespace": "default",
       "k8s-uid": "pod-uid",
-      "container-id": "sandbox-id"
+      "container-id": "sandbox-id",
+      "pod-name": "default/example-pod",
+      "cni-attachment-id": "sandbox-id:eth0"
     },
+    "pod": {
+      "ID": 42,
+      "namespace": "default",
+      "pod_name": "example-pod",
+      "pod_uid": "pod-uid",
+      "container_id": "sandbox-id",
+      "node_name": "node-a",
+      "labels": ["k8s:app=web", "k8s:io.kubernetes.pod.namespace=default"],
+      "workloads": [{"name": "web", "kind": "Deployment"}],
+      "containers": [{"name": "app", "container-id": "containerd://…", "init": false}]
+    },
+    "pod-networks": {"default": {"…": "the flowsdn.io/pod-networks value, below"}},
     "networking": {
       "interface-name": "lxc-example",
       "interface-index": 12,
@@ -121,6 +135,41 @@ Each list entry has the same shape as endpoint detail, including:
   }
 }
 ```
+
+`external-identifiers` and the endpoint's own facts in `pod` (`ID`,
+`namespace`, `pod_name`, `pod_uid`, `container_id`) are retained
+CNI-supplied information. `container_id` is the sandbox (`CNI_CONTAINERID`): the
+CNI sees one network namespace per Pod, not its containers. In Kubernetes mode
+`pod` is joined with the Pod view when the Pod is on this node with the same
+UID: `node_name`, `labels`, `workloads` (the controller owner; a ReplicaSet
+named `<deployment>-<pod-template-hash>` reports its Deployment) and
+`containers` (status container names and runtime IDs, init containers
+flagged). `pod` is the Hubble flow `Endpoint` JSON shape plus flowsdn's
+`pod_uid`, `container_id`, `node_name` and `containers`; empty fields are left
+out and there is no `identity` until cluster identities are allocated (#328).
+
+## Pod network annotation (#328)
+
+`pod-networks` is the value the agent keeps in the Pod's
+`flowsdn.io/pod-networks` annotation in Kubernetes mode (OVN-Kubernetes's
+`k8s.ovn.org/pod-networks` shape, keyed by network; flowsdn attaches one,
+`default`). It describes what the CNI configured inside the Pod:
+
+```json
+{"default": {
+  "role": "primary", "interface": "eth0", "mac_address": "02:…",
+  "ip_addresses": ["10.5.0.7/32", "f00d::a05:0:0:7/128"],
+  "gateway_ips": ["10.5.0.1", "f00d::a05:0:0:1"],
+  "routes": [{"dest": "10.5.0.1/32"}, {"dest": "0.0.0.0/0", "nextHop": "10.5.0.1"},
+             {"dest": "f00d::a05:0:0:1/128"}, {"dest": "::/0", "nextHop": "f00d::a05:0:0:1"}],
+  "host_interface": "lxc…", "endpoint_id": 7, "sandbox": "…", "node": "node-a"}}
+```
+
+`node` is absent outside Kubernetes mode. `identity` will be added when
+identities are allocated. The agent merge-patches the annotation (with the Pod
+UID as precondition) within about two seconds of the endpoint's creation and
+rewrites it when it is removed or edited; a failing write is retried after 30 s
+and reported in `GET /v1/healthz` under `kubernetes` (`annotations: …`).
 
 Pod metadata is retained CNI-supplied information, not a fresh Kubernetes
 lookup. Missing legacy metadata is JSON null. Existing networking fields also
