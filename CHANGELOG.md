@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-05
+- **docs:** #294 milestone 4 assessed against code; packaging/release scope (stormcos golden path vs Helm/GitHub Releases) raised as an owner decision.
 - **feat:** `perf-scale` suite (#321; owner: "100 unit (containers), and see how far we go"). Server pods in steps of 100 over the ready nodes behind one Service; each step checks pod IPs, endpoints, ClusterIP connects and pod RR, and records agent CPU/RSS. It stops at the first failing step or at allocatable capacity, then reports `scale-max` and drains. Declared night-only (`budget_secs = 14400`).
 - **docs:** Presentation: two flowsdn vs Cilium slides. What ships (language, executables, sizes: flowsdn 2 executables, about 13 MB; Cilium 18 executables, 607.5 MB). Scale and memory: Cilium's published scalability figures with sources; flowsdn's code limits, and that its own numbers come from `perf`/`perf-scale`.
 - **docs:** `docs/presentation.md` (#302): an 11-slide Marp deck covering purpose, place in stormcos (from stormcentral's relationships), how it works, what works today (from the code) and what is planned, interfaces, shipping and operation, tests, and status. Linked from README and docs/README.

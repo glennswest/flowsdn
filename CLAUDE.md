@@ -50,6 +50,12 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Release hardening acceptance — #294 (P0), 2026-10-05
+
+- [x] Assessed each acceptance row against code at 8e70ce2 (comment 6007288302): no Helm chart, no bpf-objects.lock, no arm64 runtime, no matrix run; gate needs #291–#293 accepted first.
+- [x] Owner question (comment 6007288611): the stormcos golden path replaces Helm/GitHub Releases/CI lanes (recommended), or also ship a standalone chart + release artifacts (cilium-* or flowsdn-* names)? `wait-owner` set.
+- [ ] After the answer: amend spec 22/ADR-0013 to the chosen scope, then implement what doesn't depend on M1–M3 (bpf-objects.lock per #245, upgrade/rollback checks).
+
 ### Presentation — #302 (P1), 2026-10-05
 
 - [x] `docs/presentation.md`: Marp deck, 11 slides, every claim checked against code/docs (specs count, CNI CHECK, routes, config keys, milestones, golden). Linked from README and docs/README; changelog.
