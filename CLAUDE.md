@@ -57,16 +57,18 @@ Owner: tag pods/containers OVN-style. The agent already persists pod ns/name/UID
 No identity is allocated yet (#291), so `identity` is absent until it is. Pod names stay out of BPF
 maps (endpoint ID -> metadata in the agent, as the reference does).
 
-- [ ] flowsdn-k8s Pod: ownerReferences, containerStatuses (name, ID), `flowsdn.io/*` annotations.
-- [ ] flowsdn-hubble `endpoint`: Workload (ReplicaSet+pod-template-hash -> Deployment), EndpointInfo
-      with the Hubble flow `Endpoint` JSON, `describe` (`ns/pod (container) → ns/pod:port`).
-- [ ] Agent: `flowsdn.io/pod-networks` value per endpoint (OVN shape: ip_addresses, mac, gateways,
-      routes, interface, host interface, node, endpoint ID, sandbox); annotation thread (kubernetes
-      feature) patches local Pods and keeps it current; RBAC pods patch (manifests + chart).
-- [ ] `GET /v1/endpoint`: `pod-networks`, and `pod` (workload, containers, labels, node) from the view;
-      `GET /v1/ip` rows carry uid/workload/containers.
-- [ ] Docs (agent-api, runtime, deploy README), changelog; sc-build; comment #332 (FlowsdnEndpoint
-      same facts), #293 (flows use `endpoint`), stormconsole#83/stormcos#318 (fields).
+- [x] flowsdn-k8s Pod: ownerReferences, containerStatuses (name, ID), `flowsdn.io/*` annotations (56d09f0).
+- [x] flowsdn-hubble `endpoint`: Workload, EndpointInfo (Hubble `Endpoint` JSON), `describe` (56d09f0).
+- [x] Agent `tagging.rs` (pod-networks value, endpoint `pod`), View.annotation_patches, `flowsdn-annotate`
+      thread, API publishes endpoints after every non-GET and at startup; RBAC pods patch (f1d9327).
+- [x] Docs (agent-api, runtime, deploy README), changelog (c42f971). rustfmt via sc-build (#342),
+      no-indexing test fix (#343) at 2038efa.
+- [ ] PAUSED 2026-10-06 for P0s (#303, #292). Next: sc-build at 2038efa or later:
+      `cargo fmt --all && git diff && workspace + kubernetes Clippy -D warnings && agent --features
+      kubernetes tests && workspace tests && install/kubernetes/flowsdn/check.sh` (last run got no slot
+      in 30 min and was stopped). Apply any fmt diff, then close #342/#343.
+- [ ] Then: comment #332 (FlowsdnEndpoint same facts), #293 (flows use `endpoint`), stormconsole#83 /
+      stormcos#318 (new fields); stage golden; close #328 (live annotation check needs a flowsdn node).
 
 ### Console plugin support — #297 (P1), 2026-10-05
 
