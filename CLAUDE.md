@@ -88,7 +88,12 @@ controllers, operator registration and the live run are split into sub-issues.
 - [x] bpf-objects.lock (#245): `tools/bpf-objects-lock.sh write|check`; test/build.sh checks it; agent unit test checks embedded bytes. Lock values from sc-build at 561d6b1.
 - [x] `deploy/release/build.sh` → flowsdn-<ver>-{amd64,arm64}.tar.gz + SHA256SUMS (static agent/CNI, lock, LICENSE, NOTICE). sc-build at 9bf69e8: fmt, agent Clippy -D warnings, agent tests (lock test ok), test/build.sh lock check, both archives static. Not published.
 - [x] Chart object-name question posted on #294; `wait-owner` set (2026-10-06). Recommended flowsdn-* (ADR-0017).
-- [ ] After the answer: the chart at install/kubernetes/flowsdn (helm is on the build box: render + lint through sc-build), chart tgz in the release output. M4 stays open on #291–#293 regardless.
+- [x] Owner (2026-10-06): flowsdn-* names (master's recommendation: values migration note, `sc net` instead of cilium-cli) and "no Cilium in flowsdn, period": no cilium-* object names, labels, config keys or compatibility shims in the chart or manifests.
+- [ ] ADR-0019/spec 22/ADR-0013 #237/ADR-0017 amended to the decision.
+- [ ] CNI: socket /var/run/flowsdn/flowsdn.sock (FLOWSDN_SOCK), queue /var/run/flowsdn/deleteQueue, install `flowsdn-cni` (+ `flowsdn`, loopback), conflist type flowsdn-cni; no cilium-cni alias. Manifests/paths follow.
+- [ ] CRD manifests: Cilium-free text/enums/printer columns (projection scrub for the shipped set); examples follow; test: no "cilium" in deploy/ manifests or the chart.
+- [ ] Chart install/kubernetes/flowsdn (flowsdn values, CRDs in crds/, agent DaemonSet, RBAC, ConfigMap; image.repository required), helm lint/template check, packaged by deploy/release/build.sh; agent image Containerfile; values migration note.
+- [ ] sc-build; issue for code-wide Cilium removal (BPF/pin/interface names, catalogue); golden for the CNI change; M4 stays open on #291–#293.
 
 ### Presentation — #302 (P1), 2026-10-05
 
