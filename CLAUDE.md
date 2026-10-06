@@ -73,11 +73,12 @@ with `migration_registration_payload`, add flowsdn short names, generate the shi
 the YAML is the schema artifact, Rust types are checked against it. Per-group types/status
 controllers, operator registration and the live run are split into sub-issues.
 
-- [ ] Vendor `crates/flowsdn-k8s/crds/{v2,v2alpha1}` + SHA256SUMS + LICENSE-CILIUM + NOTICE; `tools/vendor-crds.sh`.
-- [ ] `flowsdn_k8s::crd`: owned CRDs from the vendored YAML (projection + short names), YAML emit; test that `deploy/stormcos/manifests-kubernetes/crds/` is the generated output.
-- [ ] Structural validator (types, required, enum, pattern, bounds, int-or-string, preserve-unknown, unknown-field strict); examples minimal + realistic per kind validate; reject cases.
-- [ ] RBAC for the agent/operator over flowsdn.io kinds (manifests-kubernetes); docs/crds.md (kinds, purpose, Cilium mapping); changelog.
-- [ ] sc-build; file sub-issues (policy, endpoint/identity/node, IPAM/LB, BGP, Envoy/Gateway, egress/redirect/plugins, registration+gate, live run); tell stormcos to apply crds/.
+- [x] Vendored `crates/flowsdn-k8s/crds/{v2,v2alpha1}` + SHA256SUMS + LICENSE-CILIUM + NOTICE; `tools/vendor-crds.sh`.
+- [x] `flowsdn_k8s::crd` generates `deploy/stormcos/manifests-kubernetes/crds/` (projection + `fs*` short names); test checks shipped == generated.
+- [x] `flowsdn_k8s::schema` validator + CEL subset; 88 examples (minimal/realistic/reject × 22) pass.
+- [x] RBAC (agent flowsdn-crds, operator 63-flowsdn-operator-rbac.yaml) with a test; docs/crds.md; spec 13 amendment; changelog.
+- [x] sc-build at 2f6fab1: fmt, workspace + kubernetes Clippy -D warnings, 717 tests (0 failed, 1 ignored).
+- [x] Follow-ups: #331 policy, #332 endpoint/identity/node, #333 pools/L2, #334 BGP, #335 Envoy/Gateway, #336 egress/LRP/plugin, #337 registration + gate, #338 live run; stormcos#303 applies crds/; #298 commented.
 
 ### Release hardening acceptance — #294 (P0), 2026-10-06
 
