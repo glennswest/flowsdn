@@ -50,6 +50,12 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Advanced networking acceptance — #293 (P0), 2026-10-05
+
+- [x] Assessed against code at f13b757 (comment 6007305400): IPAM modes/operator, encryption, egress gateway, BGP, Hubble, L7/Envoy, Gateway, ClusterMesh are primitives only; no agent wiring or operator executable.
+- [x] Every acceptance row needs the live cluster (#291) and services/policy (#292); proposed after #292. Nothing checked.
+- [ ] When #291/#292 pass: pick the subsystem order (likely Hubble first for the console, #297), implement each with live acceptance.
+
 ### Release hardening acceptance — #294 (P0), 2026-10-05
 
 - [x] Assessed each acceptance row against code at 8e70ce2 (comment 6007288302): no Helm chart, no bpf-objects.lock, no arm64 runtime, no matrix run; gate needs #291–#293 accepted first.
