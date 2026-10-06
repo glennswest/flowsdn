@@ -10,6 +10,7 @@ points, rather than treating specifications as a list of implemented features.
 | A short deck: purpose, place in stormcos, what works, interfaces, shipping, status | [Presentation](presentation.md) (Marp; `npx @marp-team/marp-cli docs/presentation.md`) |
 | Executable configuration, defaults and ports | [Runtime reference](runtime.md) |
 | HTTP methods, bounded reads and health meaning | [Standalone agent API](agent-api.md) |
+| The 22 flowsdn.io custom resources, examples, Cilium kind mapping | [CRD reference](crds.md) |
 | Edition manifests, host resources, CNI install | [stormcos integration](../deploy/stormcos/README.md) |
 | Implemented libraries versus integrated runtime | [Implementation status](implementation-status.md) |
 | Remaining networking acceptance | [Milestones](milestones.md), issues #291–#294 |

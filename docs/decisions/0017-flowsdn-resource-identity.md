@@ -9,7 +9,7 @@ flowsdn-owned custom resources use `flowsdn.io/v1alpha1`, `Flowsdn*` kinds,
 `FlowsdnNode` has plural `flowsdnnodes` and CRD name
 `flowsdnnodes.flowsdn.io`. Registration has one served/storage version,
 `v1alpha1`. This is an initial flowsdn API, not a claim to upstream's API maturity.
-The owned list kind is `<FlowsdnKind>List`. Upstream short names are omitted; they would collide with an installed Cilium.
+The owned list kind is `<FlowsdnKind>List`. Upstream short names are omitted; they would collide with an installed Cilium. Each kind instead registers one flowsdn short name, the upstream one with `fs` in place of Cilium's `c`/`cilium` (`fsnp`, `fsep`, ...; `plan::SHORT_NAMES`, #325).
 The schema-version label is `io.flowsdn.k8s.crd.schema.version`.
 
 The normal registration planner accepts flowsdn identity only. An explicit

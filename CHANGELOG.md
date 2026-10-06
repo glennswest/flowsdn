@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### 2026-10-06
+- **feat:** The flowsdn.io CRD set (#325). The 22 reference CRDs are vendored byte for byte (`crates/flowsdn-k8s/crds/`, Cilium v1.20.1 `7d68cfb394`, Apache-2.0, NOTICE; `tools/vendor-crds.sh`, SHA256SUMS). `flowsdn_k8s::crd` projects them to `flowsdn.io/v1alpha1` and generates `deploy/stormcos/manifests-kubernetes/crds/`, keeping the reference validation, CEL rules, status subresources and printer columns. Each kind gets one flowsdn short name (`fsnp`, `fsep`, `fslbippool`, ...; upstream short names are still not registered).
+- **feat:** `flowsdn_k8s::schema::validate`: offline admission check of an object against a CRD schema (defaults, types, required/unknown fields, enums, patterns, cidr/ipv4/ipv6/date-time/int32 formats, bounds, list-type keys, oneOf/anyOf/allOf/not, and the CEL subset the schemas use).
+- **test:** Minimal, realistic and reject examples for all 22 kinds (`crates/flowsdn-k8s/testdata/crs/`); tests for vendor integrity, generated manifests, YAML round trip, the CEL subset and RBAC against the CRD set.
+- **feat:** RBAC: the agent's `flowsdn-crds` ClusterRole (spec 13 §4.7, without `flowsdnendpoints/status`, which has no subresource) and the operator's ServiceAccount and ClusterRole (spec 12 §4.8, CRD update limited to the 22 names) in `manifests-kubernetes`.
+- **docs:** `docs/crds.md` (every kind, what it is for, who writes it, the Cilium kind mapping); spec 13 amendment; ADR-0017 short names; README, crate and deploy READMEs, implementation status.
 - **feat:** `bpf-objects.lock` (#294, ADR-0013 #245): every BPF object's path-independent code hash and the exact bytes the agent embeds. `tools/bpf-objects-lock.sh write|check DIR`; `test/build.sh` runs the check (replacing its embedded-object compare), and an agent unit test checks the embedded `local-delivery`/`socket-lb` bytes against the lock.
 - **feat:** `deploy/release/build.sh` (#294): standalone release archives `flowsdn-<version>-<amd64|arm64>.tar.gz` (static agent with embedded BPF, CNI, lock, LICENSE, NOTICE, README, REVISION) and `SHA256SUMS`. Not in the stormcos golden; uploads nothing.
 - **docs:** ADR-0019 records the owner's release scope (golden plus a standalone install kept out of it); spec 22 amendment, ADR-0013 #237 note, build-and-test. The chart's object names are an open owner question on #294.

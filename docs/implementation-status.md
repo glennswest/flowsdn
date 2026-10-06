@@ -24,7 +24,11 @@ pinning or subsystem libraries are absent are **not current status**.
   (`image: flowsdn`) with a CNI-install init container. Not yet checked live on
   a stormcos node; applying it is stormcos#261.
 - `flowsdn-k8s` has a bounded Node/Pod watch client over Fedora system OpenSSL
-  and `flowsdn.io/v1alpha1` CRD registration plans. The agent's `kubernetes`
+  and `flowsdn.io/v1alpha1` CRD registration plans. `flowsdn_k8s::crd` generates
+  the 22 shipped CRD manifests from the vendored reference schemas and
+  `flowsdn_k8s::schema` validates objects offline (CEL subset included); every
+  kind has admitted and rejected examples ([CRD reference](crds.md), #325). No
+  controller, operator registration or CRD readiness gate exists yet. The agent's `kubernetes`
   feature (GNU target, #291) wires the watches in: `auto` pools from the Node
   (spec 07 §3.4), direct node routes (spec 10 §3.2.3, persisted ownership,
   conflict and reachability checks), forwarding sysctls and the `GET /v1/ip`

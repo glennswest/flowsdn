@@ -32,6 +32,17 @@ does not read Node podCIDRs or route to other nodes. Kubernetes mode, below,
 lifts that. Without a pin root, an agent restart briefly pauses pod traffic
 while it reinstalls endpoints from state.
 
+## flowsdn.io custom resources (#325)
+
+[`manifests-kubernetes/crds/`](manifests-kubernetes/crds/) holds the 22
+`flowsdn.io/v1alpha1` CRDs ([reference](../../docs/crds.md)). Apply them before
+any flowsdn custom resource; they are generated, so don't edit them. Until a
+flowsdn operator registers CRDs, stormcos applies them with the other
+manifests. `63-flowsdn-operator-rbac.yaml` creates the operator's
+ServiceAccount and ClusterRole ahead of that operator; the agent's
+`flowsdn-crds` ClusterRole is in `60-flowsdn-rbac.yaml`. Nothing consumes the
+resources yet, so applying them changes no traffic.
+
 ## Kubernetes mode: more than one node (#291)
 
 [`manifests-kubernetes/`](manifests-kubernetes/) replaces `manifests/` once

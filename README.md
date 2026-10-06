@@ -67,12 +67,14 @@ the package version alone does not distinguish these unreleased commits.
   [configuration library](crates/flowsdn-config/README.md) is a compatibility
   catalogue, **not** the executable's accepted CLI or active feature set.
 
-flowsdn-owned CRD plans use `flowsdn.io/v1alpha1`, `Flowsdn*` kinds and the
-`flowsdn` category. An explicit migration projection reads upstream CRD schemas
-and emits flowsdn registration payloads; it is not a live Cilium policy reader
-or an instance migration service. The standalone daemon does not register or
-reconcile CRDs, and flowsdn must not adopt or garbage-collect existing
-`cilium.io` objects.
+flowsdn ships 22 custom resources in `flowsdn.io/v1alpha1` ([CRD reference](docs/crds.md),
+#325): `Flowsdn*` kinds, `fs*` short names and the `flowsdn` category, with the
+reference schemas (validation, status subresources, printer columns) projected
+from vendored Cilium v1.20.1 CRDs. The manifests are generated into
+`deploy/stormcos/manifests-kubernetes/crds/`, with examples and offline
+accept/reject validation for every kind. No controller reads or writes them
+yet: the daemon does not register or reconcile CRDs, and flowsdn must not adopt
+or garbage-collect existing `cilium.io` objects.
 
 Compatibility concerns data shape: the agent serves only the Unix-socket REST
 subset documented above, while Hubble observer/relay remain planned. Existing

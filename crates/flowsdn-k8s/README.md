@@ -6,7 +6,8 @@ namespace and endpoint-mode plans, and guarded node JSON-patch construction.
 
 Owned CRDs use `flowsdn.io/v1alpha1`, `Flowsdn` kinds, `flowsdn`-prefixed
 plural/singular names, matching list kinds, and the sole category `flowsdn`.
-No upstream short names are registered. `registration_payload` accepts owned
+No upstream short names are registered; each kind gets one flowsdn short name
+(`plan::SHORT_NAMES`, `fsnp`, `fsep`, ...). `registration_payload` accepts owned
 documents; explicit `migration_registration_payload` accepts verified reference
 `cilium.io` documents and projects their storage schema into a new owned CRD.
 Both functions emit only the owned API identity and one served storage version,
@@ -26,8 +27,20 @@ been hash-verified. Callers must verify input schemas separately.
 Node fallback patches test UID and resourceVersion before any mutation. Callers
 must probe capabilities, send to nodes/status, and reread/rebuild after conflicts.
 
+## The CRD set (#325)
+
+`crds/` vendors the 22 reference CRDs byte for byte (`tools/vendor-crds.sh`,
+`SHA256SUMS`, `LICENSE-CILIUM`). `crd::owned_crds` projects them and
+`crd::manifest` renders `deploy/stormcos/manifests-kubernetes/crds/`; regenerate
+with `FLOWSDN_WRITE_CRDS=1 cargo test -p flowsdn-k8s --test crds`, and the test
+fails without it if a shipped file is stale. `schema::validate` admits or
+rejects an object offline as the API server would on create (defaults, types,
+required/unknown fields, enums, patterns, formats, bounds, list keys, `oneOf`
+etc. and a CEL subset). `testdata/crs/<plural>/` holds minimal, realistic and
+reject examples for every kind; see [docs/crds.md](../../docs/crds.md).
+
 This crate does not implement probes, running informers, controllers,
-vendored CRD schemas, schema hash validation, resource types, CEL admission or
+resource types, CEL beyond the subset the schemas use, or
 storage migration. Tests use synthetic documents and local patch application;
 they do not establish Kubernetes conformance or performance. JSON is baseline;
 protobuf remains an open measurement question.

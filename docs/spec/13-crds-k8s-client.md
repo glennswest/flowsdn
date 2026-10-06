@@ -48,6 +48,22 @@ resource references use flowsdn identity. Descriptions and other compatibility
 fields retain their input values. Current runtime availability is recorded separately:
 CRD projection is a library and the standalone daemon has no CRD controller.
 
+## CRD set amendment — #325, 2026-10-06
+
+The 22 reference documents are vendored per §3.1 (`crates/flowsdn-k8s/crds/`,
+`tools/vendor-crds.sh`, `SHA256SUMS`, T-CRD-1). The shipped CRDs are the
+migration projection of them (`flowsdn_k8s::crd`), written to
+`deploy/stormcos/manifests-kubernetes/crds/` and checked against generation.
+**DEVIATION:** each owned CRD registers one flowsdn short name
+(`plan::SHORT_NAMES`, e.g. `fsnp`) in place of the upstream ones; T-CRD-6's
+"`shortNames` absent" now reads "exactly the flowsdn short name". Golden CRs
+(T-CRD-4's inputs) live at `crates/flowsdn-k8s/testdata/crs/<plural>/` with
+minimal, realistic and reject cases, validated offline by
+`flowsdn_k8s::schema` (structural checks plus the CEL subset the schemas use).
+The Rust types, T-CRD-3/4/5/7, registration (§3.2) and the readiness gate are
+not implemented yet; they are the per-group follow-ups of #325. §4.7 no longer
+grants `flowsdnendpoints/status`: the endpoint CRD has no status subresource.
+
 ## 1. Scope
 
 In scope:
