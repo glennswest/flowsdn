@@ -144,6 +144,10 @@ mod tests {
         }
     }
 
+    fn first<T>(items: &mut [T]) -> &mut T {
+        items.first_mut().expect("one item")
+    }
+
     #[test]
     fn pod_joins_the_endpoint_with_the_pod_view() {
         assert_eq!(
@@ -160,7 +164,7 @@ mod tests {
         );
         // A recreated Pod (another UID) is not this endpoint's Pod.
         let mut other = view();
-        other.pods[0].uid = "uid-2".into();
+        first(&mut other.pods).uid = "uid-2".into();
         assert_eq!(pod(7, &document(), Some(&other)).get("workloads"), None);
     }
 
@@ -184,36 +188,36 @@ mod tests {
         view.endpoints_published = true;
         let patches = view.annotation_patches();
         assert_eq!(patches.len(), 1);
-        assert_eq!(patches[0].path(), "/api/v1/namespaces/ns/pods/web-1");
+        assert_eq!(patches.first().expect("patch").path(), "/api/v1/namespaces/ns/pods/web-1");
         assert_eq!(
-            patches[0].body(),
+            patches.first().expect("patch").body(),
             json!({"metadata":{"uid":"uid-1","annotations":{POD_NETWORKS:value.to_string()}}})
         );
         // Current (in any key order): nothing to write.
         let mut reordered = Map::new();
-        reordered.insert("default".into(), value["default"].clone());
-        view.pods[0].pod_networks = Some(Value::Object(reordered).to_string());
+        reordered.insert("default".into(), value.get("default").cloned().expect("default"));
+        first(&mut view.pods).pod_networks = Some(Value::Object(reordered).to_string());
         assert!(view.annotation_patches().is_empty());
         // Removed or edited by someone else: written back.
-        view.pods[0].pod_networks = Some("{\"default\":{}}".into());
+        first(&mut view.pods).pod_networks = Some("{\"default\":{}}".into());
         assert_eq!(view.annotation_patches().len(), 1);
         // A Pod on another node, another UID, or a name that is no DNS name: never.
-        view.pods[0].node = "n2".into();
+        first(&mut view.pods).node = "n2".into();
         assert!(view.annotation_patches().is_empty());
-        view.pods[0].node = "n1".into();
-        view.pods[0].uid = "uid-2".into();
+        first(&mut view.pods).node = "n1".into();
+        first(&mut view.pods).uid = "uid-2".into();
         assert!(view.annotation_patches().is_empty());
-        view.pods[0].uid = "uid-1".into();
-        view.endpoints[0].name = "Web/../x".into();
+        first(&mut view.pods).uid = "uid-1".into();
+        first(&mut view.endpoints).name = "Web/../x".into();
         assert!(view.annotation_patches().is_empty());
         // Two endpoints for one Pod: the newest ID's value.
-        view.endpoints[0].name = "web-1".into();
-        let mut newer = view.endpoints[0].clone();
+        first(&mut view.endpoints).name = "web-1".into();
+        let mut newer = first(&mut view.endpoints).clone();
         newer.id = 9;
         newer.value = pod_networks(9, &document(), "n1");
         view.endpoints.push(newer);
         let patches = view.annotation_patches();
         assert_eq!(patches.len(), 1);
-        assert!(patches[0].value.contains("\"endpoint_id\":9"));
+        assert!(patches.first().expect("patch").value.contains("\"endpoint_id\":9"));
     }
 }
