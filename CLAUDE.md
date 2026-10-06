@@ -72,7 +72,8 @@ loopback port to default to; the API was Unix-socket only. Flows wait for Hubble
 - [x] ADR-0019 + spec 22 amendment, ADR-0013 #237 note, build-and-test, README, changelog.
 - [x] bpf-objects.lock (#245): `tools/bpf-objects-lock.sh write|check`; test/build.sh checks it; agent unit test checks embedded bytes. Lock values from sc-build at 561d6b1.
 - [x] `deploy/release/build.sh` → flowsdn-<ver>-{amd64,arm64}.tar.gz + SHA256SUMS (static agent/CNI, lock, LICENSE, NOTICE). sc-build at 9bf69e8: fmt, agent Clippy -D warnings, agent tests (lock test ok), test/build.sh lock check, both archives static. Not published.
-- [ ] Ask the chart object-name question (wait-owner); the chart waits for it. M4 stays open on #291–#293 regardless.
+- [x] Chart object-name question posted on #294; `wait-owner` set (2026-10-06). Recommended flowsdn-* (ADR-0017).
+- [ ] After the answer: the chart at install/kubernetes/flowsdn (helm is on the build box: render + lint through sc-build), chart tgz in the release output. M4 stays open on #291–#293 regardless.
 
 ### Presentation — #302 (P1), 2026-10-05
 
