@@ -5,8 +5,8 @@
 # carries /flowsdn-agent and /opt/cni/bin/flowsdn, both static. Nothing is
 # pulled. A golden has no image config, so every container names its command.
 #
-# install-cni copies the plugin into the node's /opt/cni/bin (as cilium-cni,
-# flowsdn-cni, flowsdn and, if absent, loopback) and writes
+# install-cni copies the plugin into the node's /opt/cni/bin (as flowsdn-cni,
+# flowsdn and, if absent, loopback) and writes
 # /etc/cni/net.d/00-flowsdn.conflist. Pods created before the agent answers
 # fail CNI ADD and are retried by the kubelet.
 #
@@ -55,13 +55,13 @@ spec:
             privileged: true
           volumeMounts:
             - { name: config, mountPath: /etc/flowsdn, readOnly: true }
-            - { name: run, mountPath: /var/run/cilium }
+            - { name: run, mountPath: /var/run/flowsdn }
             - { name: state, mountPath: /var/lib/flowsdn }
       volumes:
         - name: config
           configMap: { name: flowsdn-config }
         - name: run
-          hostPath: { path: /var/run/cilium, type: DirectoryOrCreate }
+          hostPath: { path: /var/run/flowsdn, type: DirectoryOrCreate }
         - name: state
           hostPath: { path: /var/lib/flowsdn, type: DirectoryOrCreate }
         - name: cni-path

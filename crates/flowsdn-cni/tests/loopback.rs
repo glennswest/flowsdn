@@ -125,7 +125,7 @@ fn plugin(command: &str, conf: &Value) -> std::process::Output {
         .env("CNI_NETNS", "/proc/self/ns/net")
         .env("CNI_IFNAME", "ignored0")
         .env("CNI_PATH", "/unused")
-        .env("CILIUM_SOCK", "/no-agent-loopback-test")
+        .env("FLOWSDN_SOCK", "/no-agent-loopback-test")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

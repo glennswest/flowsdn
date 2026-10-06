@@ -70,7 +70,7 @@ flowsdn $version ($arch), source revision $revision.
 
 flowsdn-agent   the endpoint agent; its BPF objects (bpf-objects.lock) are embedded
 flowsdn-cni     the CNI plugin; 'flowsdn-cni install' copies it into /opt/cni/bin
-                (as cilium-cni, flowsdn-cni, flowsdn and loopback) and writes
+                (as flowsdn-cni, flowsdn and loopback) and writes
                 /etc/cni/net.d/00-flowsdn.conflist
 
 Configuration and limits: https://github.com/glennswest/flowsdn/blob/$revision/docs/runtime.md

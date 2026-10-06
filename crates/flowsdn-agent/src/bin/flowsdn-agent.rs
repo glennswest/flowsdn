@@ -11,9 +11,9 @@ Options:
   -V, --version  Print the package version and exit
 
 CNI installation reads HOST_PREFIX (default /host), CNI_DIR (default
-$HOST_PREFIX/opt/cni), OVERWRITE_CILIUM (default true), and
-OVERWRITE_LOOPBACK (default false). It installs cilium-cni, flowsdn-cni,
-flowsdn and loopback from the supplied Rust CNI executable.
+$HOST_PREFIX/opt/cni), OVERWRITE_PLUGIN (default true), and
+OVERWRITE_LOOPBACK (default false). It installs flowsdn-cni, flowsdn
+and loopback from the supplied Rust CNI executable.
 
 The API listens on the Unix socket configured by socket-path.
 GET /v1/healthz reports initial API availability after state restoration.

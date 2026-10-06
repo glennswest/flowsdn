@@ -2,7 +2,7 @@
 # the agent does not read Node podCIDRs yet (#291), so two nodes would hand out
 # the same addresses and have no routes to each other's pods.
 #
-# - IPv4 only, as the cilium edition runs. 10.244.0.0/24 stays clear of the
+# - IPv4 only, like the other stormcos editions. 10.244.0.0/24 stays clear of the
 #   Service range (10.96.0.0/12) and the node networks.
 # - egress: stack. Traffic to anything but a local pod goes to the node's own
 #   stack, so pods reach the node (the apiserver) and, with forwarding and
@@ -22,9 +22,9 @@ metadata:
 data:
   agent.json: |
     {
-      "socket-path": "/var/run/cilium/cilium.sock",
+      "socket-path": "/var/run/flowsdn/flowsdn.sock",
       "http-listen": "127.0.0.1:9878",
-      "delete-queue": "/var/run/cilium/deleteQueue",
+      "delete-queue": "/var/run/flowsdn/deleteQueue",
       "state-dir": "/var/lib/flowsdn",
       "egress": "stack",
       "ipv4-pool": "10.244.0.0/24",

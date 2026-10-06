@@ -43,7 +43,7 @@ spec:
               mountPath: /sys/fs/bpf
               mountPropagation: HostToContainer
             - name: runtime
-              mountPath: /var/run/cilium
+              mountPath: /var/run/flowsdn
             - name: state
               mountPath: /var/lib/flowsdn
       volumes:
@@ -56,7 +56,7 @@ spec:
             type: Directory
         - name: runtime
           hostPath:
-            path: /var/run/cilium
+            path: /var/run/flowsdn
             type: DirectoryOrCreate
         - name: state
           hostPath:

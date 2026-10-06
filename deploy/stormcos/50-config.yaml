@@ -9,10 +9,10 @@ metadata:
 data:
   agent.json: |
     {
-      "socket-path": "/var/run/cilium/cilium.sock",
+      "socket-path": "/var/run/flowsdn/flowsdn.sock",
       "state-dir": "/var/lib/flowsdn",
       "bpf-pin-root": "/sys/fs/bpf/flowsdn/endpoint-runtime",
-      "delete-queue": "/var/run/cilium/deleteQueue",
+      "delete-queue": "/var/run/flowsdn/deleteQueue",
       "ipv4-pool": "10.244.1.0/24",
       "ipv4-gateway": "10.244.1.254",
       "ipv6-pool": "fd00:10:244:1::/64",

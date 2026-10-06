@@ -437,7 +437,7 @@ impl Lab {
                     endpoint.id
                 ),
             )
-            .env("CILIUM_SOCK", self.socket())
+            .env("FLOWSDN_SOCK", self.socket())
             .env("FLOWSDN_DELETE_QUEUE", self.queue())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

@@ -1,8 +1,7 @@
 //! The node's own flowsdn, read-only through the host mounts the suite
 //! declares (`/opt/cni/bin`, `/run`). flowsdn is a flavor: a node without its
-//! CNI does not run it, and that is a skip, never a pass. A Cilium node has a
-//! `cilium.sock` too, so the agent is only probed where flowsdn's CNI is
-//! installed.
+//! CNI does not run it, and that is a skip, never a pass. The agent is only
+//! probed where flowsdn's CNI is installed.
 use crate::{env::Env, report::Report};
 use flowsdn_api_client::Client;
 use std::time::{Duration, Instant};
@@ -27,7 +26,7 @@ pub fn probe(report: &mut Report, env: &Env) {
         return;
     }
     report.pass("node-cni", start.elapsed(), "/opt/cni/bin/flowsdn present");
-    let Some(socket) = ["/run/cilium/cilium.sock", "/var/run/cilium/cilium.sock"]
+    let Some(socket) = ["/run/flowsdn/flowsdn.sock", "/var/run/flowsdn/flowsdn.sock"]
         .iter()
         .map(|p| env.host(p))
         .find(|p| p.exists())
@@ -35,7 +34,7 @@ pub fn probe(report: &mut Report, env: &Env) {
         report.fail(
             "node-agent",
             start.elapsed(),
-            "flowsdn CNI installed but no agent socket at /run/cilium/cilium.sock",
+            "flowsdn CNI installed but no agent socket at /run/flowsdn/flowsdn.sock",
         );
         return;
     };

@@ -226,7 +226,7 @@ fn cni_outcome(
                 "CNI_ARGS",
                 format!("K8S_POD_NAMESPACE=fixture;K8S_POD_NAME=pod{}", endpoint.id),
             )
-            .env("CILIUM_SOCK", temp.0.join("agent.sock"))
+            .env("FLOWSDN_SOCK", temp.0.join("agent.sock"))
             .env("FLOWSDN_DELETE_QUEUE", temp.0.join("deleteQueue"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

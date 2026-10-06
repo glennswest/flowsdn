@@ -13,7 +13,7 @@ use std::{
 pub struct InstallOptions {
     pub source: PathBuf,
     pub cni_dir: PathBuf,
-    pub overwrite_cilium: bool,
+    pub overwrite_plugin: bool,
     pub overwrite_loopback: bool,
 }
 
@@ -30,8 +30,8 @@ impl InstallOptions {
                 .get(&OsString::from("CNI_DIR"))
                 .map(PathBuf::from)
                 .unwrap_or_else(|| host.join("opt/cni")),
-            overwrite_cilium: env
-                .get(&OsString::from("OVERWRITE_CILIUM"))
+            overwrite_plugin: env
+                .get(&OsString::from("OVERWRITE_PLUGIN"))
                 .is_none_or(|v| v != "false"),
             overwrite_loopback: env
                 .get(&OsString::from("OVERWRITE_LOOPBACK"))
@@ -53,19 +53,19 @@ pub struct InstallReport {
 pub fn install(options: &InstallOptions) -> io::Result<InstallReport> {
     let bin = options.cni_dir.join("bin");
     fs::create_dir_all(&bin)?;
-    let plugin = bin.join("cilium-cni");
+    let plugin = bin.join("flowsdn-cni");
     let existing = exists(&plugin)?;
     let mut report = InstallReport::default();
-    if options.overwrite_cilium || !existing {
+    if options.overwrite_plugin || !existing {
         copy_atomic(&options.source, &plugin)?;
         report.plugin_replaced = true;
     } else if !fs::symlink_metadata(&plugin)?.file_type().is_file() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "retained cilium-cni must be a regular file",
+            "retained flowsdn-cni must be a regular file",
         ));
     }
-    for name in ["flowsdn-cni", "flowsdn"] {
+    for name in ["flowsdn"] {
         link_atomic(&plugin, &bin.join(name))?;
     }
     let loopback = bin.join("loopback");
@@ -153,15 +153,15 @@ fn link_atomic(source: &Path, destination: &Path) -> io::Result<()> {
 }
 
 /// The network configuration the kubelet loads: the first file in the conf
-/// dir by name. `00-` so a leftover `05-cilium.conflist` from another edition
-/// cannot win. The plugin keeps its compatibility type (ADR-0012 #123).
+/// dir by name. `00-` so a leftover conflist from another CNI (`05-...`)
+/// cannot win. The plugin type is flowsdn's own executable name (#294).
 pub const CONFLIST_NAME: &str = "00-flowsdn.conflist";
 
 pub fn conflist() -> String {
     serde_json::json!({
         "cniVersion": "1.1.0",
         "name": "flowsdn",
-        "plugins": [{"type": "cilium-cni"}],
+        "plugins": [{"type": "flowsdn-cni"}],
     })
     .to_string()
 }
@@ -233,7 +233,7 @@ mod node_install_tests {
         .into();
         let (report, conf) = install_node(source, &env).expect("install");
         assert!(report.plugin_replaced);
-        for name in ["cilium-cni", "flowsdn-cni", "flowsdn", "loopback"] {
+        for name in ["flowsdn-cni", "flowsdn", "loopback"] {
             let path = root.join("host/opt/cni/bin").join(name);
             assert_eq!(fs::read(&path).expect("installed"), b"#!plugin", "{name}");
         }
@@ -244,7 +244,7 @@ mod node_install_tests {
             written
                 .pointer("/plugins/0/type")
                 .and_then(serde_json::Value::as_str),
-            Some("cilium-cni")
+            Some("flowsdn-cni")
         );
         // Rewriting is atomic and idempotent; no temporary files remain.
         install_node(root.join("plugin"), &env).expect("reinstall");

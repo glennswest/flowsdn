@@ -584,9 +584,9 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
         return Err(error("chaining and delegated IPAM are not implemented"));
     }
     let socket = PathBuf::from(
-        env.get("CILIUM_SOCK")
+        env.get("FLOWSDN_SOCK")
             .map(String::as_str)
-            .unwrap_or("/var/run/cilium/cilium.sock"),
+            .unwrap_or("/var/run/flowsdn/flowsdn.sock"),
     );
     match command {
         "ADD" => {
@@ -648,7 +648,7 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
             let queue = env
                 .get("FLOWSDN_DELETE_QUEUE")
                 .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("/var/run/cilium/deleteQueue"));
+                .unwrap_or_else(|| PathBuf::from("/var/run/flowsdn/deleteQueue"));
             let mut backend = Deleter {
                 client: Client::new(socket, Duration::from_millis(1500)),
                 queue,
