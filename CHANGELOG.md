@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-06
+- **chore:** Stage golden-flowsdn-eda35249a55e at b02c59f (release request stormcos#310): the loopback read-only API for the console plugin (#297), flowsdn-only CNI names and paths, and the flowsdn.io CRD manifests (#294, #325).
 - **BREAKING:** No Cilium names in flowsdn's CNI and manifests (owner, #294). The CNI installs `flowsdn-cni` (plus the golden's `flowsdn` link) and writes conflist type `flowsdn-cni`; the `cilium-cni` alias is gone. The agent socket and delete queue default to `/var/run/flowsdn/flowsdn.sock` and `/var/run/flowsdn/deleteQueue`; `CILIUM_SOCK` is `FLOWSDN_SOCK` and `OVERWRITE_CILIUM` is `OVERWRITE_PLUGIN`. The stormcos manifests follow. Ship the golden and manifests together, since an old manifest's socket path does not match the new CNI default.
 - **feat:** Shipped CRDs carry flowsdn names in every string (`FlowsdnInternalIP`, `io.flowsdn.k8s.policy.*`, descriptions). The test `no_cilium_in_shipped_manifests` refuses "cilium" in any manifest or chart file.
 - **feat:** Helm chart `install/kubernetes/flowsdn` (#294, ADR-0019), with flowsdn names and values only: CRDs in `crds/` (same generation as the stormcos copies), ServiceAccount/ClusterRoles `flowsdn` and `flowsdn-crds`, ConfigMap `flowsdn-config`, and DaemonSet `flowsdn` with the CNI install init container. `image.repository` is required. `install/kubernetes/check.sh` runs `helm lint --strict`, renders (22 CRDs), checks the version match and guards, and refuses Cilium names. `deploy/release/build.sh` packages the chart into `SHA256SUMS`.

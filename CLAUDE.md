@@ -57,7 +57,7 @@ loopback port to default to; the API was Unix-socket only. Flows wait for Hubble
 
 - [x] Agent `http-listen` (loopback only, refused otherwise): read-only TCP listener, GET routes and the statedb query; mutations 403 (no auth on TCP; they stay on the 0600 socket). Tests.
 - [x] Edition manifests set `http-listen: 127.0.0.1:9878`; docs (agent-api, runtime, deploy README), changelog.
-- [ ] sc-build; golden via `component stage flowsdn`; tell stormconsole#83 the port and routes; `shipped`.
+- [x] sc-build at b02c59f: the three listener tests pass with and without `kubernetes` (full suite 718 passed at b6bcf1d). In golden-flowsdn-eda35249a55e (stormcos#310). stormconsole#83 told port, routes and the /var/run/flowsdn socket move. `shipped`; flows wait for Hubble (#293).
 
 ### Advanced networking acceptance — #293 (P0), 2026-10-05
 
