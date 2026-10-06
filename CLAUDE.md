@@ -50,6 +50,15 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Console plugin support — #297 (P1), 2026-10-05
+
+The plugin is stormconsole's (stormconsole#83). flowsdn's part: the console (host network) needs a
+loopback port to default to; the API was Unix-socket only. Flows wait for Hubble (#296 §3, #293).
+
+- [ ] Agent `http-listen` (loopback only, refused otherwise): read-only TCP listener, GET routes and the statedb query; mutations 403 (no auth on TCP; they stay on the 0600 socket). Tests.
+- [ ] Edition manifests set `http-listen: 127.0.0.1:9878`; docs (agent-api, runtime, deploy README), changelog.
+- [ ] sc-build; golden via `component stage flowsdn`; tell stormconsole#83 the port and routes; `shipped`.
+
 ### Advanced networking acceptance — #293 (P0), 2026-10-05
 
 - [x] Assessed against code at f13b757 (comment 6007305400): IPAM modes/operator, encryption, egress gateway, BGP, Hubble, L7/Envoy, Gateway, ClusterMesh are primitives only; no agent wiring or operator executable.
