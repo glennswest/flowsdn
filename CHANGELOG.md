@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### 2026-10-06
+- **feat:** `bpf-objects.lock` (#294, ADR-0013 #245): every BPF object's path-independent code hash and the exact bytes the agent embeds. `tools/bpf-objects-lock.sh write|check DIR`; `test/build.sh` runs the check (replacing its embedded-object compare), and an agent unit test checks the embedded `local-delivery`/`socket-lb` bytes against the lock.
+- **feat:** `deploy/release/build.sh` (#294): standalone release archives `flowsdn-<version>-<amd64|arm64>.tar.gz` (static agent with embedded BPF, CNI, lock, LICENSE, NOTICE, README, REVISION) and `SHA256SUMS`. Not in the stormcos golden; uploads nothing.
+- **docs:** ADR-0019 records the owner's release scope (golden plus a standalone install kept out of it); spec 22 amendment, ADR-0013 #237 note, build-and-test. The chart's object names are an open owner question on #294.
+
 ### 2026-10-05
 - **feat:** Agent `http-listen` (#297): an optional read-only HTTP listener on a loopback `IP:port` (non-loopback refused). `GET` routes and the statedb query answer as on the Unix socket; every other method returns 403, since TCP has no authentication. The stormcos edition manifests set `127.0.0.1:9878` so the stormconsole flowsdn plugin (stormconsole#83) can read endpoints, IPAM, health and config without mounting the socket.
 - **docs:** #293 milestone 3 assessed against code (primitives only); proposed after #292.

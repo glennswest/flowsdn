@@ -45,6 +45,20 @@ claim that the release has shipped. GitHub Releases remain the transfer path
 for distributable artifacts when explicitly published. A tag, push or successful
 build does not automatically publish release assets, images or charts.
 
+## Release scope amendment — issue #294 (2026-10-06)
+
+The owner chose both delivery paths ([ADR-0019](../decisions/0019-release-scope.md)):
+the stormcos golden stays primary, and a standalone install (Helm chart,
+GitHub Release archives with checksums) is built for non-stormcos clusters.
+Nothing from the standalone path goes into the golden. `bpf-objects.lock`
+(§3.8.4) is committed and checked by `tools/bpf-objects-lock.sh check` from
+`test/build.sh`; its format adds `code-sha256` (the object with debug info,
+BTF and symbols stripped, path-independent) to §4's fields, and `sha256` is
+recorded for embedded objects only. `deploy/release/build.sh` builds the
+archives and `SHA256SUMS` (§3.9.4). The chart's object names (§2, §12.2) are
+open on #294: ADR-0013 #237 keeps cilium names, ADR-0017 gives new artifacts
+flowsdn names. §3.5–3.7 are not implemented until that is answered.
+
 ## 1. Scope
 
 In scope: the set of binaries flowsdn ships and how each is targeted, sized and

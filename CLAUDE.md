@@ -69,9 +69,9 @@ loopback port to default to; the API was Unix-socket only. Flows wait for Hubble
 
 - [x] Assessed each acceptance row against code at 8e70ce2 (comment 6007288302): no Helm chart, no bpf-objects.lock, no arm64 runtime, no matrix run; gate needs #291–#293 accepted first.
 - [x] Owner answer (2026-10-05): option 2 — also a standalone install (Helm chart + GitHub Release binaries/checksums), but none of it in the stormcos golden ("dead weight"). The cilium-* vs flowsdn-* object-name sub-question was not answered.
-- [ ] ADR-0019 + spec 22 amendment: scope per the answer; standalone artifacts are built outside the golden.
-- [ ] bpf-objects.lock (#245): `tools/bpf-objects-lock.sh write|check`, test/build.sh checks it, agent unit test checks embedded objects against it.
-- [ ] Release artifacts: `deploy/release/build.sh` → per-arch tarball + SHA256SUMS (agent, CNI, BPF objects, lock, license), never published automatically. sc-build.
+- [x] ADR-0019 + spec 22 amendment, ADR-0013 #237 note, build-and-test, README, changelog.
+- [x] bpf-objects.lock (#245): `tools/bpf-objects-lock.sh write|check`; test/build.sh checks it; agent unit test checks embedded bytes. Lock values from sc-build at 561d6b1.
+- [x] `deploy/release/build.sh` → flowsdn-<ver>-{amd64,arm64}.tar.gz + SHA256SUMS (static agent/CNI, lock, LICENSE, NOTICE). sc-build at 9bf69e8: fmt, agent Clippy -D warnings, agent tests (lock test ok), test/build.sh lock check, both archives static. Not published.
 - [ ] Ask the chart object-name question (wait-owner); the chart waits for it. M4 stays open on #291–#293 regardless.
 
 ### Presentation — #302 (P1), 2026-10-05

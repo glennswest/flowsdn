@@ -70,6 +70,21 @@ GitHub remains the source-transfer and results path. Distributable artifacts
 may be explicitly published through GitHub Releases after validation; pushing
 a commit or tag does not trigger an Actions build, image push, tarball upload or
 release attachment. Record only artifacts actually produced and published.
+
+Standalone release archives (ADR-0019, for clusters without stormcos) are
+built with `deploy/release/build.sh OUT_DIR [TARGET...]`, for example
+`sc-build 'deploy/release/build.sh "$TMPDIR/release"'`: static musl
+`flowsdn-agent` and `flowsdn-cni` for amd64 and arm64 in
+`flowsdn-<version>-<arch>.tar.gz`, plus `SHA256SUMS`. They are not part of the
+flowsdn golden, and the script uploads nothing; sc-build deletes them with its
+drive, so publication needs its own recorded step.
+
+`bpf-objects.lock` pins the BPF objects (#245). `test/build.sh` runs
+`tools/bpf-objects-lock.sh check` on the objects it builds and fails on a stale
+lock or embedded copy. After changing `crates/flowsdn-bpf`, rebuild through
+sc-build (`tools/build-bpf.sh "$TMPDIR/bpf" && tools/bpf-objects-lock.sh write
+"$TMPDIR/bpf" && cat bpf-objects.lock`) and commit the new embedded objects and
+lock; the agent's unit tests check the embedded bytes against it.
 Documentation-only changes do not claim a new networking release.
 
 ## Older specifications and evidence
