@@ -1,0 +1,11 @@
+# expect: .spec.telemetry.accessLogs[0].format: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnGatewayClassConfig
+metadata:
+  name: no-log-format
+  namespace: default
+spec:
+  telemetry:
+    accessLogs:
+      - targets:
+          - HTTP

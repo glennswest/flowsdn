@@ -1,0 +1,18 @@
+# Answers ARP/NDP for public LoadBalancer and external IPs from worker nodes on their eth interfaces.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnL2AnnouncementPolicy
+metadata:
+  name: public-ingress-l2
+spec:
+  serviceSelector:
+    matchLabels:
+      tier: public-ingress
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+  interfaces:
+    - ^eth[0-9]+
+    - ^ens[0-9]+
+  externalIPs: true
+  loadBalancerIPs: true

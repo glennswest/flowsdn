@@ -1,0 +1,7 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnEnvoyConfig
+metadata:
+  name: minimal
+  namespace: default
+spec:
+  resources: []

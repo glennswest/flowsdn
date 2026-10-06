@@ -1,0 +1,4 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnL2AnnouncementPolicy
+metadata:
+  name: minimal

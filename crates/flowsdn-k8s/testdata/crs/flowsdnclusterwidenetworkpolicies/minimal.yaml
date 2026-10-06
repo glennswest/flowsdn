@@ -1,0 +1,8 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnClusterwideNetworkPolicy
+metadata:
+  name: default-deny-egress
+spec:
+  endpointSelector: {}
+  egress:
+    - {}

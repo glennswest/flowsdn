@@ -1,0 +1,10 @@
+# Registers version 1.4.2 of a packet-telemetry datapath plugin that endpoints load when it is available.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnDatapathPlugin
+metadata:
+  name: packet-telemetry
+  labels:
+    app.kubernetes.io/name: packet-telemetry
+spec:
+  attachmentPolicy: BestEffort
+  version: "1.4.2"

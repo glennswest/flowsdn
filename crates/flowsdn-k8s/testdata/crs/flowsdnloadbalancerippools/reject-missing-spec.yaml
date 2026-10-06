@@ -1,0 +1,5 @@
+# expect: .spec: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnLoadBalancerIPPool
+metadata:
+  name: no-spec

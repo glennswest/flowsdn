@@ -1,0 +1,5 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNode
+metadata:
+  name: pvetest1
+spec: {}

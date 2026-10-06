@@ -1,0 +1,5 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnIdentity
+metadata:
+  name: "48213"
+security-labels: {}

@@ -1,0 +1,8 @@
+# expect: is not a valid cidr
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnLoadBalancerIPPool
+metadata:
+  name: bad-cidr
+spec:
+  blocks:
+    - cidr: 192.0.2.0/33

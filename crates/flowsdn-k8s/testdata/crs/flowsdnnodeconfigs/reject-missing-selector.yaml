@@ -1,0 +1,9 @@
+# expect: .spec.nodeSelector: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNodeConfig
+metadata:
+  name: no-selector
+  namespace: kube-system
+spec:
+  defaults:
+    debug: "true"

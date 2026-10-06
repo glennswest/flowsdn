@@ -1,0 +1,9 @@
+# expect: .status.networking.addressing: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnEndpoint
+metadata:
+  name: web-7d4b9c8f6d-x2kqp
+  namespace: default
+status:
+  networking:
+    node: 192.168.8.21

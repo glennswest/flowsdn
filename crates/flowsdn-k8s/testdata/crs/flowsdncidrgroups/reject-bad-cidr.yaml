@@ -1,0 +1,9 @@
+# expect: is not a valid cidr
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnCIDRGroup
+metadata:
+  name: bad-cidr
+spec:
+  externalCIDRs:
+    - 10.0.0.0/8
+    - 300.1.2.0/24

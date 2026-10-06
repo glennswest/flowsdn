@@ -1,0 +1,6 @@
+# expect: spec or specs must be provided
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNetworkPolicy
+metadata:
+  name: empty-policy
+  namespace: default

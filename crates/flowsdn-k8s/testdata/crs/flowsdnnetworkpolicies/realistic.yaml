@@ -1,0 +1,72 @@
+# Lets the frontend reach the web tier on 8080/TCP with an HTTP filter, and lets web pods resolve DNS through kube-dns and call one external CIDR.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNetworkPolicy
+metadata:
+  name: web-tier
+  namespace: prod
+  labels:
+    app.kubernetes.io/part-of: shop
+spec:
+  description: Web tier ingress from frontend; egress to DNS and the payments gateway.
+  endpointSelector:
+    matchLabels:
+      app: web
+    matchExpressions:
+      - key: tier
+        operator: In
+        values:
+          - backend
+          - api
+  enableDefaultDeny:
+    ingress: true
+    egress: true
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: frontend
+            k8s:io.kubernetes.pod.namespace: prod
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+          rules:
+            http:
+              - method: GET
+                path: /api/.*
+              - method: POST
+                path: /api/orders
+                headers:
+                  - "X-Request-Source: frontend"
+    - fromEntities:
+        - health
+        - host
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*.shop.example.com"
+              - matchName: payments.example.net
+    - toFQDNs:
+        - matchName: payments.example.net
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toCIDRSet:
+        - cidr: 203.0.113.0/24
+          except:
+            - 203.0.113.128/25
+      toPorts:
+        - ports:
+            - port: "8443"
+              endPort: 8450
+              protocol: TCP

@@ -1,0 +1,8 @@
+# expect: keepAliveTimeSeconds can not be larger than holdTimeSeconds
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPPeerConfig
+metadata:
+  name: reject-keepalive
+spec:
+  timers:
+    keepAliveTimeSeconds: 100

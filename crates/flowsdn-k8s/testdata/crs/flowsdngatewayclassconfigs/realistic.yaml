@@ -1,0 +1,43 @@
+# Configures Gateways of a class as NodePort-free LoadBalancer Services with JSON and text Envoy access logs.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnGatewayClassConfig
+metadata:
+  name: public-gateways
+  namespace: gateway-system
+spec:
+  envoy:
+    serverHeaderTransformation: PASS_THROUGH
+  httpOptions:
+    grpcWebTranslation:
+      enabled: false
+  service:
+    type: LoadBalancer
+    externalTrafficPolicy: Local
+    allocateLoadBalancerNodePorts: false
+    ipFamilyPolicy: PreferDualStack
+    ipFamilies:
+      - IPv4
+      - IPv6
+    loadBalancerClass: io.flowsdn/l2-announcer
+    loadBalancerSourceRanges:
+      - 203.0.113.0/24
+      - 2001:db8:200::/48
+    loadBalancerSourceRangesPolicy: Allow
+    trafficDistribution: PreferClose
+  telemetry:
+    accessLogs:
+      - format: JSON
+        targets:
+          - HTTP
+          - TCP
+        json:
+          start_time: "%START_TIME%"
+          method: "%REQUEST_HEADER(:METHOD)%"
+          path: "%REQUEST_HEADER(X-ENVOY-ORIGINAL-PATH?:PATH)%"
+          response_code: "%RESPONSE_CODE%"
+          duration: "%DURATION%"
+          upstream_host: "%UPSTREAM_HOST%"
+      - format: Text
+        targets:
+          - HTTP
+        text: '[%START_TIME%] "%REQUEST_HEADER(:METHOD)% %REQUEST_HEADER(:PATH)%" %RESPONSE_CODE% %DURATION%'

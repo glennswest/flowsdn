@@ -1,0 +1,9 @@
+# expect: is not a valid cidr
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNode
+metadata:
+  name: pvetest2
+spec:
+  ipam:
+    podCIDRs:
+      - 10.22.0.0

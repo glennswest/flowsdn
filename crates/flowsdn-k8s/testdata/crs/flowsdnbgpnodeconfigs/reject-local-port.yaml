@@ -1,0 +1,9 @@
+# expect: is above the maximum
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPNodeConfig
+metadata:
+  name: worker-1
+spec:
+  bgpInstances:
+    - name: instance-65001
+      localPort: 70000

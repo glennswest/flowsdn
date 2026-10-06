@@ -1,0 +1,42 @@
+# Host firewall for worker nodes: allows SSH from the admin network, kubelet from the cluster, and ICMP echo, denying other ingress to the nodes.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnClusterwideNetworkPolicy
+metadata:
+  name: worker-host-firewall
+spec:
+  description: Host policy for worker nodes.
+  nodeSelector:
+    matchLabels:
+      node-role.kubernetes.io/worker: ""
+    matchExpressions:
+      - key: node.kubernetes.io/exclude-host-policy
+        operator: DoesNotExist
+  ingress:
+    - fromCIDRSet:
+        - cidr: 192.168.8.0/24
+        - cidrGroupRef: admin-networks
+      toPorts:
+        - ports:
+            - port: "22"
+              protocol: TCP
+    - fromEntities:
+        - cluster
+        - remote-node
+        - health
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+            - port: "4240"
+              protocol: TCP
+    - fromEntities:
+        - world
+      icmps:
+        - fields:
+            - type: 8
+              family: IPv4
+            - type: EchoRequest
+              family: IPv6
+  ingressDeny:
+    - fromCIDR:
+        - 198.51.100.0/24

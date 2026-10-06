@@ -1,0 +1,35 @@
+# Redirects traffic for the kube-dns Service to a node-local DNS cache pod on the same node.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnLocalRedirectPolicy
+metadata:
+  name: nodelocaldns
+  namespace: kube-system
+spec:
+  redirectFrontend:
+    serviceMatcher:
+      serviceName: kube-dns
+      namespace: kube-system
+      toPorts:
+        - port: "53"
+          name: dns
+          protocol: UDP
+        - port: "53"
+          name: dns-tcp
+          protocol: TCP
+  redirectBackend:
+    localEndpointSelector:
+      matchLabels:
+        k8s-app: node-local-dns
+      matchExpressions:
+        - key: app.kubernetes.io/component
+          operator: In
+          values:
+            - dns-cache
+    toPorts:
+      - port: "53"
+        name: dns
+        protocol: UDP
+      - port: "53"
+        name: dns-tcp
+        protocol: TCP
+  skipRedirectFromBackend: true

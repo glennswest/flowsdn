@@ -1,0 +1,9 @@
+# expect: unknown field
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnClusterwideEnvoyConfig
+metadata:
+  name: unknown-field
+spec:
+  listeners:
+    - shop-frontend-listener
+  resources: []

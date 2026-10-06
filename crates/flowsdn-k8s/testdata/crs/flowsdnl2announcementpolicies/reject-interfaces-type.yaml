@@ -1,0 +1,8 @@
+# expect: expected array
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnL2AnnouncementPolicy
+metadata:
+  name: interfaces-not-list
+spec:
+  interfaces: eth0
+  loadBalancerIPs: true

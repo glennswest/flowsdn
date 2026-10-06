@@ -1,0 +1,8 @@
+# expect: is not one of
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnDatapathPlugin
+metadata:
+  name: bad-policy
+spec:
+  attachmentPolicy: Sometimes
+  version: "1.0.0"

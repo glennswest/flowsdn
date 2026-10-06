@@ -1,0 +1,7 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPAdvertisement
+metadata:
+  name: minimal
+spec:
+  advertisements:
+    - advertisementType: PodCIDR

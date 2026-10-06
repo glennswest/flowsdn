@@ -1,0 +1,12 @@
+# expect: expected integer
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnEnvoyConfig
+metadata:
+  name: string-port
+  namespace: default
+spec:
+  services:
+    - name: frontend
+      ports:
+        - "http"
+  resources: []

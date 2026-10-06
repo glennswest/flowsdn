@@ -1,0 +1,62 @@
+# The node config the operator writes for worker-1 from the rack-a cluster config, with the agent's reported session status.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPNodeConfig
+metadata:
+  name: worker-1
+spec:
+  bgpInstances:
+    - name: instance-65001
+      localASN: 65001
+      routerID: 192.0.2.11
+      localPort: 179
+      peers:
+        - name: tor-a
+          peerASN: 65000
+          peerAddress: 10.0.0.1
+          localAddress: 10.0.0.11
+          peerConfigRef:
+            name: tor-peer
+        - name: tor-b
+          peerASN: 65000
+          peerAddress: 10.0.0.2
+          localAddress: 10.0.0.11
+          peerConfigRef:
+            name: tor-peer
+status:
+  bgpInstances:
+    - name: instance-65001
+      localASN: 65001
+      peers:
+        - name: tor-a
+          peerAddress: 10.0.0.1
+          peerASN: 65000
+          peeringState: established
+          establishedTime: "2026-10-06T08:15:00Z"
+          timers:
+            appliedHoldTimeSeconds: 9
+            appliedKeepaliveSeconds: 3
+          routeCount:
+            - afi: ipv4
+              safi: unicast
+              advertised: 2
+              received: 1
+        - name: tor-b
+          peerAddress: 10.0.0.2
+          peerASN: 65000
+          peeringState: established
+          establishedTime: "2026-10-06T08:15:02Z"
+          timers:
+            appliedHoldTimeSeconds: 9
+            appliedKeepaliveSeconds: 3
+          routeCount:
+            - afi: ipv4
+              safi: unicast
+              advertised: 2
+              received: 1
+  conditions:
+    - type: flowsdn.io/MissingPeerConfigs
+      status: "False"
+      reason: AllPeerConfigsFound
+      message: All referenced peer configs exist
+      lastTransitionTime: "2026-10-06T08:14:58Z"
+      observedGeneration: 1

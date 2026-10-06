@@ -1,0 +1,7 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnDatapathPlugin
+metadata:
+  name: minimal
+spec:
+  attachmentPolicy: Always
+  version: "1"

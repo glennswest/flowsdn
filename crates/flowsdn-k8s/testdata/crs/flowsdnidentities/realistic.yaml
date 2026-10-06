@@ -1,0 +1,15 @@
+# The cluster-scoped security identity 48213 the flowsdn operator allocated for web pods in namespace prod, keyed by its label set.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnIdentity
+metadata:
+  name: "48213"
+  labels:
+    app: web
+    io.kubernetes.pod.namespace: prod
+    io.cilium.k8s.policy.serviceaccount: web
+security-labels:
+  k8s:app: web
+  k8s:io.cilium.k8s.namespace.labels.kubernetes.io/metadata.name: prod
+  k8s:io.cilium.k8s.policy.cluster: default
+  k8s:io.cilium.k8s.policy.serviceaccount: web
+  k8s:io.kubernetes.pod.namespace: prod

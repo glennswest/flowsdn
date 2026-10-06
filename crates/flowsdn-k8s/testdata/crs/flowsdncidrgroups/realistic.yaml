@@ -1,0 +1,14 @@
+# Names the corporate admin networks (IPv4 and IPv6) so policies can reference them with cidrGroupRef: admin-networks.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnCIDRGroup
+metadata:
+  name: admin-networks
+  labels:
+    team: platform
+    purpose: admin-access
+spec:
+  externalCIDRs:
+    - 192.168.8.0/24
+    - 10.20.0.0/16
+    - 203.0.113.17/32
+    - 2001:db8:100::/48

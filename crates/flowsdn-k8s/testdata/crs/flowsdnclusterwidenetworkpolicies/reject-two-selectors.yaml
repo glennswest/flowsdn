@@ -1,0 +1,15 @@
+# expect: oneOf matched
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnClusterwideNetworkPolicy
+metadata:
+  name: both-selectors
+spec:
+  endpointSelector:
+    matchLabels:
+      app: web
+  nodeSelector:
+    matchLabels:
+      kubernetes.io/os: linux
+  ingress:
+    - fromEntities:
+        - cluster

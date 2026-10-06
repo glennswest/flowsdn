@@ -1,0 +1,17 @@
+# Pins worker-1's router ID and listen port and sources its ToR sessions from the node's fabric address.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPNodeConfigOverride
+metadata:
+  name: worker-1
+spec:
+  bgpInstances:
+    - name: instance-65001
+      routerID: 192.0.2.11
+      localASN: 65011
+      localPort: 1790
+      peers:
+        - name: tor-a
+          localAddress: 10.0.0.11
+        - name: tor-b
+          localAddress: 10.0.0.11
+          localPort: 1790

@@ -1,0 +1,8 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNodeConfig
+metadata:
+  name: no-overrides
+  namespace: kube-system
+spec:
+  defaults: {}
+  nodeSelector: {}

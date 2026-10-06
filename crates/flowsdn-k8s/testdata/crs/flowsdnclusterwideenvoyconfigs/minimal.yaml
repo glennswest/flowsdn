@@ -1,0 +1,6 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnClusterwideEnvoyConfig
+metadata:
+  name: minimal
+spec:
+  resources: []

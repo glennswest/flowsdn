@@ -1,0 +1,10 @@
+# expect: is not a valid cidr
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnClusterwideNetworkPolicy
+metadata:
+  name: bad-cidr
+spec:
+  endpointSelector: {}
+  egress:
+    - toCIDR:
+        - 10.0.0.0/33

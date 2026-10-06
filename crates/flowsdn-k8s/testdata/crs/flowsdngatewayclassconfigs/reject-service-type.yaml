@@ -1,0 +1,9 @@
+# expect: is not one of
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnGatewayClassConfig
+metadata:
+  name: cluster-ip-gateway
+  namespace: default
+spec:
+  service:
+    type: ClusterIP

@@ -1,0 +1,37 @@
+# An operator-written slice batching the two web pods in namespace prod that share security identity 48213.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnEndpointSlice
+metadata:
+  name: ces-x7k2m9qpl-4tfh8
+  labels:
+    flowsdn.io/identity: "48213"
+namespace: prod
+endpoints:
+  - id: 48213
+    name: web-7d4b9c8f6d-x2kqp
+    pod-uid: 0f6c2a9e-3b1d-4c55-9a51-6f0e2d7c8b14
+    service-account: web
+    encryption:
+      key: 0
+    networking:
+      node: 192.168.8.21
+      addressing:
+        - ipv4: 10.21.0.47
+          ipv6: fd00:10:21::2f
+    named-ports:
+      - name: http
+        port: 8080
+        protocol: TCP
+  - id: 48213
+    name: web-7d4b9c8f6d-q9vzt
+    pod-uid: 7a2e4c6b-9d1f-4b3a-8e5c-2f4a6b8c0d1e
+    service-account: web
+    networking:
+      node: 192.168.8.22
+      addressing:
+        - ipv4: 10.22.0.19
+          ipv6: fd00:10:22::13
+    named-ports:
+      - name: http
+        port: 8080
+        protocol: TCP

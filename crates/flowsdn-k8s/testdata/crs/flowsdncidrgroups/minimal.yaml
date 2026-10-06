@@ -1,0 +1,6 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnCIDRGroup
+metadata:
+  name: empty-group
+spec:
+  externalCIDRs: []

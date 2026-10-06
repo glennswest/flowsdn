@@ -1,0 +1,11 @@
+# expect: is not one of
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnL2AnnouncementPolicy
+metadata:
+  name: bad-operator
+spec:
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Absent
+  loadBalancerIPs: true

@@ -1,0 +1,17 @@
+# expect: egressIP must be a valid IP address
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnEgressGatewayPolicy
+metadata:
+  name: bad-egress-ip
+spec:
+  selectors:
+    - podSelector:
+        matchLabels:
+          app: payments-api
+  destinationCIDRs:
+    - 0.0.0.0/0
+  egressGateway:
+    nodeSelector:
+      matchLabels:
+        egress-node: "true"
+    egressIP: not-an-ip

@@ -1,0 +1,5 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnEndpointSlice
+metadata:
+  name: ces-empty
+endpoints: []

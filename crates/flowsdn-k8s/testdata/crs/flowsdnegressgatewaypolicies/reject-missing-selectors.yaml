@@ -1,0 +1,12 @@
+# expect: .spec.selectors: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnEgressGatewayPolicy
+metadata:
+  name: no-selectors
+spec:
+  destinationCIDRs:
+    - 0.0.0.0/0
+  egressGateway:
+    nodeSelector:
+      matchLabels:
+        egress-node: "true"

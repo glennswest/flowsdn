@@ -1,0 +1,23 @@
+# expect: oneOf matched
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnLocalRedirectPolicy
+metadata:
+  name: both-matchers
+  namespace: default
+spec:
+  redirectFrontend:
+    addressMatcher:
+      ip: 169.254.169.254
+      toPorts:
+        - port: "80"
+          protocol: TCP
+    serviceMatcher:
+      serviceName: metadata
+      namespace: default
+  redirectBackend:
+    localEndpointSelector:
+      matchLabels:
+        app: metadata-proxy
+    toPorts:
+      - port: "8080"
+        protocol: TCP

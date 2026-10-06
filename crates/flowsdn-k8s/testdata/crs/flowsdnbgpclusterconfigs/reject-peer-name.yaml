@@ -1,0 +1,12 @@
+# expect: .spec.bgpInstances[0].peers[0].name: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPClusterConfig
+metadata:
+  name: reject-peer-name
+spec:
+  bgpInstances:
+    - name: instance-65001
+      localASN: 65001
+      peers:
+        - peerASN: 65000
+          peerAddress: 10.0.0.1

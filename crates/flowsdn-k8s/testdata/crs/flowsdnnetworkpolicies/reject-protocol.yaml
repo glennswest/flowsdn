@@ -1,0 +1,15 @@
+# expect: is not one of
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNetworkPolicy
+metadata:
+  name: bad-protocol
+  namespace: default
+spec:
+  endpointSelector:
+    matchLabels:
+      app: web
+  ingress:
+    - toPorts:
+        - ports:
+            - port: "80"
+              protocol: HTTP

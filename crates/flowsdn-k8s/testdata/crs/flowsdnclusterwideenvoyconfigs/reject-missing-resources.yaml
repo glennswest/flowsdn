@@ -1,0 +1,11 @@
+# expect: .spec.resources: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnClusterwideEnvoyConfig
+metadata:
+  name: no-resources
+spec:
+  services:
+    - name: frontend
+      namespace: shop
+      ports:
+        - 80

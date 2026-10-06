@@ -1,0 +1,18 @@
+# Overrides agent configuration on the arm64 edge nodes: stack egress, a lower MTU and debug logging.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNodeConfig
+metadata:
+  name: edge-arm64
+  namespace: kube-system
+spec:
+  nodeSelector:
+    matchLabels:
+      kubernetes.io/arch: arm64
+    matchExpressions:
+      - key: node-role.kubernetes.io/edge
+        operator: Exists
+  defaults:
+    egress: stack
+    mtu: "1400"
+    debug: "true"
+    enable-ipv6: "true"

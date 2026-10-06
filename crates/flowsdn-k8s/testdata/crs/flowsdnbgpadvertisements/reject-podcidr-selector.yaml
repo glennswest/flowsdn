@@ -1,0 +1,11 @@
+# expect: selector field is not allowed for the 'PodCIDR' advertisementType
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPAdvertisement
+metadata:
+  name: reject-podcidr-selector
+spec:
+  advertisements:
+    - advertisementType: PodCIDR
+      selector:
+        matchLabels:
+          app: web

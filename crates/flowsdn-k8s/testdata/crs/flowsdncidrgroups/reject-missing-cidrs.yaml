@@ -1,0 +1,6 @@
+# expect: .spec.externalCIDRs: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnCIDRGroup
+metadata:
+  name: no-cidrs
+spec: {}

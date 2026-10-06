@@ -1,0 +1,6 @@
+# expect: .endpoints: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnEndpointSlice
+metadata:
+  name: ces-no-endpoints
+namespace: prod

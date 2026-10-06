@@ -1,0 +1,12 @@
+# expect: expected integer
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnEndpointSlice
+metadata:
+  name: ces-string-id
+namespace: prod
+endpoints:
+  - id: "48213"
+    name: web-7d4b9c8f6d-x2kqp
+    networking:
+      addressing:
+        - ipv4: 10.21.0.47

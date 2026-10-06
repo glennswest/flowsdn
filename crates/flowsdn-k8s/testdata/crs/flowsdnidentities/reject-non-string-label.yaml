@@ -1,0 +1,8 @@
+# expect: expected string
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnIdentity
+metadata:
+  name: "48215"
+security-labels:
+  k8s:app: web
+  k8s:replicas: 3

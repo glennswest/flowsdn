@@ -1,0 +1,9 @@
+# expect: is above the maximum
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPClusterConfig
+metadata:
+  name: reject-asn
+spec:
+  bgpInstances:
+    - name: instance-big
+      localASN: 4294967296

@@ -1,0 +1,5 @@
+# expect: .security-labels: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnIdentity
+metadata:
+  name: "48214"

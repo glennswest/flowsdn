@@ -1,0 +1,26 @@
+# Peers every rack-a worker with its two top-of-rack switches over eBGP, sharing one peer config.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPClusterConfig
+metadata:
+  name: rack-a
+spec:
+  nodeSelector:
+    matchLabels:
+      topology.kubernetes.io/zone: rack-a
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+  bgpInstances:
+    - name: instance-65001
+      localASN: 65001
+      peers:
+        - name: tor-a
+          peerASN: 65000
+          peerAddress: 10.0.0.1
+          peerConfigRef:
+            name: tor-peer
+        - name: tor-b
+          peerASN: 65000
+          peerAddress: 10.0.0.2
+          peerConfigRef:
+            name: tor-peer

@@ -1,0 +1,27 @@
+# Allocates dual-stack pod addresses in per-node blocks for pods in namespaces labelled for the analytics team.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnPodIPPool
+metadata:
+  name: analytics
+spec:
+  ipv4:
+    cidrs:
+      - 10.20.0.0/16
+      - 10.21.0.0/16
+    maskSize: 24
+  ipv6:
+    cidrs:
+      - fd00:20::/104
+    maskSize: 120
+  allowFirstIP: false
+  allowLastIP: false
+  namespaceSelector:
+    matchLabels:
+      team: analytics
+  podSelector:
+    matchExpressions:
+      - key: workload-class
+        operator: In
+        values:
+          - batch
+          - streaming

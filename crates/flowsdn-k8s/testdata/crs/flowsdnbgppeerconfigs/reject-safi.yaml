@@ -1,0 +1,9 @@
+# expect: is not one of
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPPeerConfig
+metadata:
+  name: reject-safi
+spec:
+  families:
+    - afi: ipv4
+      safi: anycast

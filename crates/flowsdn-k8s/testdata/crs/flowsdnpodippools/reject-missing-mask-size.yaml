@@ -1,0 +1,9 @@
+# expect: .spec.ipv4.maskSize: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnPodIPPool
+metadata:
+  name: no-mask-size
+spec:
+  ipv4:
+    cidrs:
+      - 10.20.0.0/16

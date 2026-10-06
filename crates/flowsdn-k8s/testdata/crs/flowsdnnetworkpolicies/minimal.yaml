@@ -1,0 +1,9 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: default
+spec:
+  endpointSelector: {}
+  ingress:
+    - {}

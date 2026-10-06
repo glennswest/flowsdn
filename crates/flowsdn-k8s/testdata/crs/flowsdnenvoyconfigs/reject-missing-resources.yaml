@@ -1,0 +1,12 @@
+# expect: .spec.resources: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnEnvoyConfig
+metadata:
+  name: no-resources
+  namespace: default
+spec:
+  services:
+    - name: frontend
+      namespace: shop
+      ports:
+        - 80

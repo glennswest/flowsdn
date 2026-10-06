@@ -1,0 +1,8 @@
+# expect: service field is required for the 'Service' advertisementType
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPAdvertisement
+metadata:
+  name: reject-service-missing
+spec:
+  advertisements:
+    - advertisementType: Service

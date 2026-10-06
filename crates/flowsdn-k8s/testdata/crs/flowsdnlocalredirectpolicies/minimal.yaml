@@ -1,0 +1,5 @@
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnLocalRedirectPolicy
+metadata:
+  name: minimal
+  namespace: default

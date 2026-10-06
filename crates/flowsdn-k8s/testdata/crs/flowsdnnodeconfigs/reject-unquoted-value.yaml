@@ -1,0 +1,12 @@
+# expect: expected string
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNodeConfig
+metadata:
+  name: unquoted-mtu
+  namespace: kube-system
+spec:
+  nodeSelector:
+    matchLabels:
+      kubernetes.io/arch: arm64
+  defaults:
+    mtu: 1400

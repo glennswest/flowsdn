@@ -1,0 +1,52 @@
+# The node object the flowsdn agent on pvetest1 maintains: its addresses, health/ingress IPs, boot ID and the pod CIDRs it allocates from.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNode
+metadata:
+  name: pvetest1
+  labels:
+    kubernetes.io/hostname: pvetest1
+    kubernetes.io/os: linux
+  ownerReferences:
+    - apiVersion: v1
+      kind: Node
+      name: pvetest1
+      uid: 9c3e5a7b-1d2f-4e6a-8b0c-3d5e7f9a1b2c
+spec:
+  addresses:
+    - type: InternalIP
+      ip: 192.168.8.21
+    - type: InternalIP
+      ip: fd00:8::21
+    - type: CiliumInternalIP
+      ip: 10.21.0.1
+  bootid: 4f6a2c1e-8b3d-4e5f-9a7c-1b2d3e4f5a6b
+  encryption:
+    key: 0
+  health:
+    ipv4: 10.21.0.12
+    ipv6: fd00:10:21::c
+  ingress:
+    ipv4: 10.21.0.200
+  ipam:
+    podCIDRs:
+      - 10.21.0.0/16
+      - fd00:10:21::/64
+    pools:
+      requested:
+        - pool: default
+          needed:
+            ipv4-addrs: 16
+            ipv6-addrs: 16
+      allocated:
+        - pool: default
+          cidrs:
+            - 10.21.0.0/24
+            - fd00:10:21::/112
+status:
+  ipam:
+    pod-cidrs:
+      10.21.0.0/16:
+        status: in-use
+      fd00:10:21::/64:
+        status: in-use
+    operator-status: {}

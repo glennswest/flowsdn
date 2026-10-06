@@ -1,0 +1,11 @@
+# expect: unknown field
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPNodeConfigOverride
+metadata:
+  name: worker-1
+spec:
+  bgpInstances:
+    - name: instance-65001
+      peers:
+        - name: tor-a
+          peerAddress: 10.0.0.1

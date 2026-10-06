@@ -1,0 +1,32 @@
+# Advertises each node's PodCIDR and the LoadBalancer IPs of announced Services, with communities and local preference.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPAdvertisement
+metadata:
+  name: pods-and-lb
+  labels:
+    advertise: bgp
+spec:
+  advertisements:
+    - advertisementType: PodCIDR
+      attributes:
+        communities:
+          standard:
+            - "65001:100"
+          wellKnown:
+            - no-export
+    - advertisementType: Service
+      service:
+        addresses:
+          - LoadBalancerIP
+        aggregationLengthIPv4: 28
+      selector:
+        matchExpressions:
+          - key: bgp.flowsdn.io/announce
+            operator: In
+            values:
+              - "true"
+      attributes:
+        communities:
+          large:
+            - "65001:200:1"
+        localPreference: 200

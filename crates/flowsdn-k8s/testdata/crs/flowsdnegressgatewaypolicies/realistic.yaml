@@ -1,0 +1,30 @@
+# Sends internet-bound traffic from payments pods out through a dedicated egress node with a fixed source IP.
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnEgressGatewayPolicy
+metadata:
+  name: payments-egress
+spec:
+  selectors:
+    - podSelector:
+        matchLabels:
+          app: payments-api
+          io.kubernetes.pod.namespace: payments
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: payments-batch
+      podSelector:
+        matchExpressions:
+          - key: tier
+            operator: In
+            values:
+              - worker
+  destinationCIDRs:
+    - 0.0.0.0/0
+  excludedCIDRs:
+    - 10.0.0.0/8
+    - 192.168.0.0/16
+  egressGateway:
+    nodeSelector:
+      matchLabels:
+        egress-node: "true"
+    egressIP: 192.0.2.10

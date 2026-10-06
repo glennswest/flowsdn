@@ -1,0 +1,11 @@
+# expect: .pool: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnNode
+metadata:
+  name: pvetest2
+spec:
+  ipam:
+    pools:
+      allocated:
+        - cidrs:
+            - 10.22.0.0/24

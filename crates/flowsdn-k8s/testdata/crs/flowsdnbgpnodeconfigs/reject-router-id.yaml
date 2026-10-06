@@ -1,0 +1,9 @@
+# expect: is not a valid ipv4
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnBGPNodeConfig
+metadata:
+  name: worker-1
+spec:
+  bgpInstances:
+    - name: instance-65001
+      routerID: 192.0.2.300

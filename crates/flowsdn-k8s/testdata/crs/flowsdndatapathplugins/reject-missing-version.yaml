@@ -1,0 +1,7 @@
+# expect: .spec.version: required
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnDatapathPlugin
+metadata:
+  name: no-version
+spec:
+  attachmentPolicy: Always
