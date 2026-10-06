@@ -288,7 +288,7 @@ probe reports skip unless the node carries the flowsdn CNI.
 - [x] sc-build at f5a97b9: workspace fmt/Clippy/build/tests, test/build.sh and podman build pass; the image run unprivileged reports exit 2 as designed.
 - [x] 2026-10-06: medium run 6ac1a6d42c at 53a346a on C2NR0Q2 (stormcos 11.88): short + 8 fixtures pass, node probes skip (cilium flavor); 4 fail (#341).
 - [x] #341 fixes at b862b4a: socket fixtures mount a private cgroup2; endpoint test names the refused packet case; skb-ctx-matrix one-line summary. sc-build at 9a7f46b: fmt, workspace + kubernetes Clippy, 777 tests (0 failed, 1 ignored), chart check, test/build.sh.
-- [ ] Medium run cd1396f7e0 at 9a7f46b on C2NR0Q2 queued (2026-10-06 21:10 UTC, ~12 runs ahead). Then fix the kernel findings (endpoint test-run EINVAL case, skb-ctx fields), close #341 and #303.
+- [ ] Medium run cd1396f7e0 at 9a7f46b on C2NR0Q2 queued (2026-10-06 21:10 UTC; 39 runs queued there, build-box stalls). #303 proposed after stormcentral#472; status on #303/#341. When it finishes: `stormcentral test show cd1396f7e0` (rerun if it was dropped). Then fix the kernel findings (endpoint test-run EINVAL case, skb-ctx fields), close #341 and #303.
 - [ ] Run short/medium through `stormcentral test run flowsdn` on a test machine. pvetest1 push failed 507 (registry full, stormcentral#376); pvetest2 (flowsdn flavor; its 11.79 install failed) also 507s, run 39d1523f0c; C2NR0Q2 is off overnight. Proposed after stormcentral#376. Rerun `stormcentral test run flowsdn short|medium --tag <machine>` when a registry has space.
 
 ### Aya feature verification — #3, 2026-10-03
