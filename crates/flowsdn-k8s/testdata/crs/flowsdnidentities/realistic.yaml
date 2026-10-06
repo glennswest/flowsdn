@@ -6,10 +6,10 @@ metadata:
   labels:
     app: web
     io.kubernetes.pod.namespace: prod
-    io.cilium.k8s.policy.serviceaccount: web
+    io.flowsdn.k8s.policy.serviceaccount: web
 security-labels:
   k8s:app: web
-  k8s:io.cilium.k8s.namespace.labels.kubernetes.io/metadata.name: prod
-  k8s:io.cilium.k8s.policy.cluster: default
-  k8s:io.cilium.k8s.policy.serviceaccount: web
+  k8s:io.flowsdn.k8s.namespace.labels.kubernetes.io/metadata.name: prod
+  k8s:io.flowsdn.k8s.policy.cluster: default
+  k8s:io.flowsdn.k8s.policy.serviceaccount: web
   k8s:io.kubernetes.pod.namespace: prod

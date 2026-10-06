@@ -544,3 +544,40 @@ fn rbac_matches_the_crd_set() {
         "operator CRD update resourceNames"
     );
 }
+
+/// The owner's rule (#294): no Cilium in flowsdn's manifests or chart: object
+/// names, labels, config keys, paths, CNI types or text.
+#[test]
+fn no_cilium_in_shipped_manifests() {
+    fn walk(dir: &Path, found: &mut Vec<String>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries {
+            let path = entry.expect("entry").path();
+            // Manifests and chart sources; prose (README.md) may describe
+            // the other stormcos edition.
+            let manifest = path
+                .extension()
+                .is_some_and(|e| ["yaml", "yml", "tpl", "json", "txt"].contains(&e.to_str().unwrap_or_default()));
+            if path.is_dir() {
+                walk(&path, found);
+            } else if manifest && let Ok(text) = std::fs::read_to_string(&path) {
+                for (number, line) in text.lines().enumerate() {
+                    if line.to_ascii_lowercase().contains("cilium") {
+                        found.push(format!("{}:{}: {line}", path.display(), number.saturating_add(1)));
+                    }
+                }
+            }
+        }
+    }
+    let mut found = Vec::new();
+    for dir in ["deploy/stormcos", "install/kubernetes"] {
+        walk(&repo_dir().join(dir), &mut found);
+    }
+    for crd in crds() {
+        assert!(!manifest(&crd).to_ascii_lowercase().contains("cilium"), "{}", crd.file);
+    }
+    let shown: Vec<&String> = found.iter().take(20).collect();
+    assert!(found.is_empty(), "{} lines name Cilium: {shown:#?}", found.len());
+}

@@ -20,7 +20,7 @@ status:
     id: 48213
     labels:
       - k8s:app=web
-      - k8s:io.cilium.k8s.policy.serviceaccount=web
+      - k8s:io.flowsdn.k8s.policy.serviceaccount=web
       - k8s:io.kubernetes.pod.namespace=prod
   networking:
     node: 192.168.8.21
@@ -62,7 +62,7 @@ status:
       enforcing: false
       state: non-enforcing
   controllers:
-    - name: sync-to-k8s-ciliumendpoint (1832)
+    - name: sync-to-k8s-flowsdnendpoint (1832)
       uuid: 6b1f2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
       configuration:
         error-retry: true

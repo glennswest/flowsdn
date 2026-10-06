@@ -17,7 +17,7 @@ spec:
       ip: 192.168.8.21
     - type: InternalIP
       ip: fd00:8::21
-    - type: CiliumInternalIP
+    - type: FlowsdnInternalIP
       ip: 10.21.0.1
   bootid: 4f6a2c1e-8b3d-4e5f-9a7c-1b2d3e4f5a6b
   encryption:
