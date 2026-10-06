@@ -29,6 +29,15 @@ Every suite starts with a read-only **node probe**. `node-cni` checks for
 `/v1/config` and `/v1/endpoint` on the node agent's socket. A node without the
 flowsdn CNI is not the flowsdn flavor, and both checks report skip.
 
+On a flowsdn node with a healthy agent, the probe then checks ClusterIP
+Services from the test pod's own network (#292), before the suite isolates
+itself: `node-service-dns` queries kube-dns at the pod's nameserver (its
+ClusterIP) for `kubernetes.default.svc.<domain>` and expects
+`KUBERNETES_SERVICE_HOST`, with the reply from the ClusterIP:53;
+`node-service-kubernetes` connects TCP to that Service and expects the
+ClusterIP as the peer; `node-service-programmed` expects both frontends in the
+agent's `GET /v1/service` with `status.realized`.
+
 Left out of `medium`: `socket-context`, because the kernel's test-run of
 connect hooks is unsupported (errno 524 on 6.17), and `socket-live` covers those
 programs instead. The load-only kfunc probe is also left out, because running it

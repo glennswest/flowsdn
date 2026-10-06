@@ -13,6 +13,7 @@ mod lab;
 mod node;
 mod preflight;
 mod report;
+mod services;
 mod short;
 mod waves;
 

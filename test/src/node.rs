@@ -1,7 +1,8 @@
 //! The node's own flowsdn, read-only through the host mounts the suite
 //! declares (`/opt/cni/bin`, `/run`). flowsdn is a flavor: a node without its
 //! CNI does not run it, and that is a skip, never a pass. The agent is only
-//! probed where flowsdn's CNI is installed.
+//! probed where flowsdn's CNI is installed, and then its ClusterIP Services
+//! (`services`, #292) from this pod's network.
 use crate::{env::Env, report::Report};
 use flowsdn_api_client::Client;
 use std::time::{Duration, Instant};
@@ -38,7 +39,7 @@ pub fn probe(report: &mut Report, env: &Env) {
         );
         return;
     };
-    report.check("node-agent", || {
+    let healthy = report.check("node-agent", || {
         let client = Client::new(&socket, Duration::from_secs(2));
         let health = client
             .request(flowsdn_api_client::Method::Get, "/v1/healthz", None)
@@ -63,4 +64,7 @@ pub fn probe(report: &mut Report, env: &Env) {
             .ok_or_else(|| format!("GET /v1/endpoint returned {}", endpoints.status))?;
         Ok(((), format!("agent healthy; {count} endpoints")))
     });
+    if healthy.is_some() {
+        crate::services::probe(report, &socket);
+    }
 }
