@@ -382,9 +382,7 @@ fn main() -> Result<()> {
         .map(|s| s.trim().to_owned())
         .unwrap_or_default();
     probe.clear()?;
-    let baseline = probe
-        .run(observe_fd, &[0u8; CTX])
-        .map_err(errno_name);
+    let baseline = probe.run(observe_fd, &[0u8; CTX]).map_err(errno_name);
     println!(
         "{}",
         json!({"field": "baseline", "zero_ctx_256_bytes": baseline.is_ok(),

@@ -78,7 +78,10 @@ fn run(program: &SchedClassifier, case: &str, packet: &[u8], verdict: u32) -> Re
                     .map_or_else(|| s.io_error.to_string(), |n| format!("errno {n}")),
                 other => other.to_string(),
             };
-            format!("case {case} ({} bytes): test run refused: {errno}", packet.len())
+            format!(
+                "case {case} ({} bytes): test run refused: {errno}",
+                packet.len()
+            )
         })?;
     ensure(
         result.return_value == verdict,

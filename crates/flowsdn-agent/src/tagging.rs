@@ -188,14 +188,20 @@ mod tests {
         view.endpoints_published = true;
         let patches = view.annotation_patches();
         assert_eq!(patches.len(), 1);
-        assert_eq!(patches.first().expect("patch").path(), "/api/v1/namespaces/ns/pods/web-1");
+        assert_eq!(
+            patches.first().expect("patch").path(),
+            "/api/v1/namespaces/ns/pods/web-1"
+        );
         assert_eq!(
             patches.first().expect("patch").body(),
             json!({"metadata":{"uid":"uid-1","annotations":{POD_NETWORKS:value.to_string()}}})
         );
         // Current (in any key order): nothing to write.
         let mut reordered = Map::new();
-        reordered.insert("default".into(), value.get("default").cloned().expect("default"));
+        reordered.insert(
+            "default".into(),
+            value.get("default").cloned().expect("default"),
+        );
         first(&mut view.pods).pod_networks = Some(Value::Object(reordered).to_string());
         assert!(view.annotation_patches().is_empty());
         // Removed or edited by someone else: written back.
@@ -218,6 +224,12 @@ mod tests {
         view.endpoints.push(newer);
         let patches = view.annotation_patches();
         assert_eq!(patches.len(), 1);
-        assert!(patches.first().expect("patch").value.contains("\"endpoint_id\":9"));
+        assert!(
+            patches
+                .first()
+                .expect("patch")
+                .value
+                .contains("\"endpoint_id\":9")
+        );
     }
 }

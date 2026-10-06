@@ -126,19 +126,20 @@ pub fn describe(
     destination: IpAddr,
     port: u16,
 ) -> String {
-    let side = |address: IpAddr| {
+    // Only the destination carries the port, so only it needs IPv6 brackets.
+    let side = |address: IpAddr, bracket: bool| {
         resolver
             .endpoint(address)
             .and_then(|e| e.name())
             .unwrap_or_else(|| match address {
-                IpAddr::V6(_) if port != 0 => format!("[{address}]"),
+                IpAddr::V6(_) if bracket => format!("[{address}]"),
                 _ => address.to_string(),
             })
     };
-    let destination = side(destination);
+    let source = side(source, false);
     if port == 0 {
-        format!("{} → {destination}", side(source))
+        format!("{source} → {}", side(destination, false))
     } else {
-        format!("{} → {destination}:{port}", side(source))
+        format!("{source} → {}:{port}", side(destination, true))
     }
 }
