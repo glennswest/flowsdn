@@ -50,6 +50,24 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Pod and container tagging — #328 (P1), 2026-10-06
+
+Owner: tag pods/containers OVN-style. The agent already persists pod ns/name/UID and the sandbox
+(CNI_CONTAINERID) per endpoint; nothing is written back, and no flow producer exists (Hubble, #293).
+No identity is allocated yet (#291), so `identity` is absent until it is. Pod names stay out of BPF
+maps (endpoint ID -> metadata in the agent, as the reference does).
+
+- [ ] flowsdn-k8s Pod: ownerReferences, containerStatuses (name, ID), `flowsdn.io/*` annotations.
+- [ ] flowsdn-hubble `endpoint`: Workload (ReplicaSet+pod-template-hash -> Deployment), EndpointInfo
+      with the Hubble flow `Endpoint` JSON, `describe` (`ns/pod (container) → ns/pod:port`).
+- [ ] Agent: `flowsdn.io/pod-networks` value per endpoint (OVN shape: ip_addresses, mac, gateways,
+      routes, interface, host interface, node, endpoint ID, sandbox); annotation thread (kubernetes
+      feature) patches local Pods and keeps it current; RBAC pods patch (manifests + chart).
+- [ ] `GET /v1/endpoint`: `pod-networks`, and `pod` (workload, containers, labels, node) from the view;
+      `GET /v1/ip` rows carry uid/workload/containers.
+- [ ] Docs (agent-api, runtime, deploy README), changelog; sc-build; comment #332 (FlowsdnEndpoint
+      same facts), #293 (flows use `endpoint`), stormconsole#83/stormcos#318 (fields).
+
 ### Console plugin support — #297 (P1), 2026-10-05
 
 The plugin is stormconsole's (stormconsole#83). flowsdn's part: the console (host network) needs a
