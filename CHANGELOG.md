@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### 2026-10-06
+- **feat:** Kubernetes Events from the agent (#298; `kubernetes` feature). Pods get `EndpointCreated`, `EndpointCreateFailed` and `IPAllocationFailed`. The Node gets `PodCIDRSelected`, `DirectRouteFailed`, `ServiceLBUnavailable` and `SysctlFailed`. Events are core/v1 with the object's UID, so `kubectl describe` finds them. Repeats are aggregated, the queue is bounded and recording never blocks. RBAC: `events` create/update in manifests-kubernetes and the chart.
+- **BREAKING:** `GET /v1/healthz` reports the agent under `agent` (was the reference project's name), as part of declaring the API stable (#298). Nothing in flowsdn read the old key.
+- **docs:** docs/agent-api.md gains a stability policy for `/v1` (additive only; breaking changes get `/v2` and a BREAKING entry). `api::ROUTES` lists the routes, and a test keeps the doc table equal to it.
+- **feat:** Printer columns for the five CRD kinds the reference left bare: CIDRGroup, DatapathPlugin, EndpointSlice, NodeConfig, PodIPPool (#298). A test checks every column path against its schema.
 - **docs:** build-and-test: the sc-build checkout is depth 1 with no fetch access, so history comparisons (`HEAD~1`) run in the session checkout before pushing, and the LVM thin-pool warning at the top of a job is not the failure (#317).
 - **chore:** Stage golden-flowsdn-eda35249a55e at b02c59f (release request stormcos#310): the loopback read-only API for the console plugin (#297), flowsdn-only CNI names and paths, and the flowsdn.io CRD manifests (#294, #325).
 - **BREAKING:** No Cilium names in flowsdn's CNI and manifests (owner, #294). The CNI installs `flowsdn-cni` (plus the golden's `flowsdn` link) and writes conflist type `flowsdn-cni`; the `cilium-cni` alias is gone. The agent socket and delete queue default to `/var/run/flowsdn/flowsdn.sock` and `/var/run/flowsdn/deleteQueue`; `CILIUM_SOCK` is `FLOWSDN_SOCK` and `OVERWRITE_CILIUM` is `OVERWRITE_PLUGIN`. The stormcos manifests follow. Ship the golden and manifests together, since an old manifest's socket path does not match the new CNI default.

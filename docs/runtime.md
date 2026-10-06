@@ -150,6 +150,16 @@ link removes the routes.
 
 With the `kubernetes` feature and section the agent:
 
+- writes Kubernetes Events (core/v1, `source.component: flowsdn-agent`, #298) so
+  `kubectl describe` / `sc describe` shows what it did. On the Pod:
+  `EndpointCreated` (Normal: endpoint ID and addresses), `EndpointCreateFailed`
+  and `IPAllocationFailed` (Warning: the reason). On its Node: `PodCIDRSelected`
+  (Normal), `DirectRouteFailed`, `ServiceLBUnavailable` and `SysctlFailed`
+  (Warning). Repeats of one object, reason and message are one Event with a
+  growing `count`, rewritten at most once a minute and forgotten after an hour.
+  Recording never blocks or fails a request: a full queue (256) drops events. Needs
+  `events` create/update (the manifests and chart grant it);
+
 - loads credentials (explicit kubeconfig, else in-cluster) and, when a pool is
   `auto`, blocks until its Node yields a pool for every such family;
 - after restore, sets `net.ipv4.conf.all.rp_filter=0`, `net.ipv4.ip_forward=1`,

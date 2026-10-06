@@ -22,7 +22,17 @@ spec:
   preserveUnknownFields: false
   scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: ".spec.ipv4.cidrs"
+      name: IPv4
+      type: string
+    - jsonPath: ".spec.ipv6.cidrs"
+      name: IPv6
+      type: string
+    - jsonPath: ".metadata.creationTimestamp"
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: |-

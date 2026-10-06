@@ -612,7 +612,10 @@ fn every_kind_has_printer_columns_on_schema_fields() {
             .unwrap_or_else(|| panic!("{} has no printer columns", crd.file));
         assert!(!columns.is_empty(), "{}", crd.file);
         for column in columns {
-            let path = column.get("jsonPath").and_then(Value::as_str).expect("jsonPath");
+            let path = column
+                .get("jsonPath")
+                .and_then(Value::as_str)
+                .expect("jsonPath");
             if path.starts_with(".metadata") || path.contains('?') {
                 continue;
             }
@@ -624,7 +627,9 @@ fn every_kind_has_printer_columns_on_schema_fields() {
                 }
                 node = node
                     .pointer(&format!("/properties/{field}"))
-                    .unwrap_or_else(|| panic!("{}: column path {path} is not in the schema", crd.file));
+                    .unwrap_or_else(|| {
+                        panic!("{}: column path {path} is not in the schema", crd.file)
+                    });
                 if step.contains("[") {
                     node = node.get("items").expect("items");
                 }

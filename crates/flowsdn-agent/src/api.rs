@@ -376,8 +376,7 @@ impl Api {
                 ));
             }
             ("GET", "/v1/healthz") => {
-                let mut status =
-                    json!({"agent":{"state":"Ok","msg":"initial endpoint API ready"}});
+                let mut status = json!({"agent":{"state":"Ok","msg":"initial endpoint API ready"}});
                 if let (Some(view), Some(object)) = (&self.kubernetes, status.as_object_mut()) {
                     object.insert("kubernetes".into(), crate::kubernetes::lock(view).health());
                 }

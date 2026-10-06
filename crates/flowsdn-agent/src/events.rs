@@ -39,7 +39,14 @@ pub struct Event {
 pub const MESSAGE_MAX: usize = 1024;
 
 /// Record an Event on a Pod. `uid` may be empty; it is then looked up.
-pub fn pod(namespace: &str, name: &str, uid: &str, kind: Type, reason: &'static str, message: String) {
+pub fn pod(
+    namespace: &str,
+    name: &str,
+    uid: &str,
+    kind: Type,
+    reason: &'static str,
+    message: String,
+) {
     if namespace.is_empty() || name.is_empty() {
         return;
     }
@@ -69,9 +76,9 @@ pub fn node(kind: Type, reason: &'static str, message: String) {
 fn record(_event: Event) {}
 
 #[cfg(feature = "kubernetes")]
-pub use recorder::{event_body, rfc3339, start};
-#[cfg(feature = "kubernetes")]
 use recorder::record;
+#[cfg(feature = "kubernetes")]
+pub use recorder::{event_body, rfc3339, start};
 
 #[cfg(feature = "kubernetes")]
 mod recorder {
@@ -217,7 +224,11 @@ mod recorder {
             let Some(involved) = self.involved(&event) else {
                 return;
             };
-            let object = if event.name.is_empty() { self.node.clone() } else { event.name.clone() };
+            let object = if event.name.is_empty() {
+                self.node.clone()
+            } else {
+                event.name.clone()
+            };
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             key.hash(&mut hasher);
             now.duration_since(SystemTime::UNIX_EPOCH)
@@ -226,7 +237,11 @@ mod recorder {
                 .hash(&mut hasher);
             let entry = Entry {
                 name: format!("{object}.{:016x}", hasher.finish()),
-                namespace: if event.namespace.is_empty() { "default".into() } else { event.namespace.clone() },
+                namespace: if event.namespace.is_empty() {
+                    "default".into()
+                } else {
+                    event.namespace.clone()
+                },
                 involved,
                 event,
                 count: 1,
@@ -254,7 +269,8 @@ mod recorder {
                 match self.pod_uids.get(&key) {
                     Some(uid) => uid.clone(),
                     None => {
-                        let path = format!("/api/v1/namespaces/{}/pods/{}", event.namespace, event.name);
+                        let path =
+                            format!("/api/v1/namespaces/{}/pods/{}", event.namespace, event.name);
                         let uid = self.uid(&path)?;
                         if self.pod_uids.len() >= ENTRIES {
                             self.pod_uids.clear();
@@ -266,11 +282,16 @@ mod recorder {
             } else {
                 event.uid.clone()
             };
-            Some(json!({"apiVersion":"v1","kind":"Pod","namespace":event.namespace,"name":event.name,"uid":uid}))
+            Some(
+                json!({"apiVersion":"v1","kind":"Pod","namespace":event.namespace,"name":event.name,"uid":uid}),
+            )
         }
 
         fn uid(&self, path: &str) -> Option<String> {
-            match self.runtime.block_on(self.client.send_json(http::Method::GET, path, None)) {
+            match self
+                .runtime
+                .block_on(self.client.send_json(http::Method::GET, path, None))
+            {
                 Ok((200, object)) => object
                     .pointer("/metadata/uid")
                     .and_then(Value::as_str)
@@ -287,15 +308,20 @@ mod recorder {
         }
 
         fn flush(&mut self) {
-            self.entries.retain(|_, entry| entry.seen.elapsed() < FORGET);
+            self.entries
+                .retain(|_, entry| entry.seen.elapsed() < FORGET);
             let due: Vec<Key> = self
                 .entries
                 .iter()
-                .filter(|(_, entry)| entry.dirty && entry.written.is_none_or(|at| at.elapsed() >= REWRITE))
+                .filter(|(_, entry)| {
+                    entry.dirty && entry.written.is_none_or(|at| at.elapsed() >= REWRITE)
+                })
                 .map(|(key, _)| key.clone())
                 .collect();
             for key in due {
-                let Some(entry) = self.entries.get(&key) else { continue };
+                let Some(entry) = self.entries.get(&key) else {
+                    continue;
+                };
                 let body = event_body(
                     &entry.name,
                     &entry.namespace,
@@ -312,11 +338,16 @@ mod recorder {
                 } else {
                     (http::Method::POST, collection)
                 };
-                let result = self.runtime.block_on(self.client.send_json(method, &path, Some(&body)));
+                let result =
+                    self.runtime
+                        .block_on(self.client.send_json(method, &path, Some(&body)));
                 let ok = match result {
                     Ok((200..=299, _)) => true,
                     Ok((status, response)) => {
-                        let message = response.get("message").and_then(Value::as_str).unwrap_or("");
+                        let message = response
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
                         eprintln!("events: {path}: HTTP {status} {message}");
                         false
                     }
@@ -423,9 +454,15 @@ mod recorder {
             assert_eq!(body.pointer("/involvedObject/uid"), Some(&json!("u1")));
             assert_eq!(body.get("type"), Some(&json!("Warning")));
             assert_eq!(body.get("count"), Some(&json!(3)));
-            assert_eq!(body.pointer("/source/component"), Some(&json!("flowsdn-agent")));
+            assert_eq!(
+                body.pointer("/source/component"),
+                Some(&json!("flowsdn-agent"))
+            );
             assert_eq!(body.pointer("/metadata/namespace"), Some(&json!("prod")));
-            assert_eq!(body.get("lastTimestamp"), Some(&json!("2026-10-06T16:04:53Z")));
+            assert_eq!(
+                body.get("lastTimestamp"),
+                Some(&json!("2026-10-06T16:04:53Z"))
+            );
         }
     }
 }

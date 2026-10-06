@@ -66,7 +66,10 @@ enforces it. Each of these is tracked per group in the issues linked from #325.
 
 Printer columns are the reference's: for example, `kubectl get fsep` shows security
 identity, enforcement, state and addresses, and `kubectl get fslbippool` shows disabled,
-conflicting and available IPs. Kinds the reference gives no columns print name and age.
+conflicting and available IPs. For the five kinds the reference leaves bare, flowsdn adds
+its own (#298): `fscg` CIDRs, `fsdp` attachment and version, `fses` namespace and
+identities, `fsnc` selector, `fspip` IPv4/IPv6 CIDRs, each with Age. A test checks every
+column's JSONPath against the schema.
 
 ## Moving over from Cilium
 

@@ -153,8 +153,14 @@ pub fn owned_crds() -> Result<Vec<OwnedCrd>, Error> {
 /// `kubectl get` / `sc get` show more than a name. Each column is
 /// `(name, type, jsonPath)`; `Age` is appended, as the API server only adds
 /// it when a CRD defines no columns at all.
-pub const EXTRA_COLUMNS: [(&str, &[(&str, &str, &str)]); 5] = [
-    ("flowsdncidrgroups", &[("CIDRs", "string", ".spec.externalCIDRs")]),
+/// A printer column: name, type, JSONPath.
+pub type Column = (&'static str, &'static str, &'static str);
+
+pub const EXTRA_COLUMNS: [(&str, &[Column]); 5] = [
+    (
+        "flowsdncidrgroups",
+        &[("CIDRs", "string", ".spec.externalCIDRs")],
+    ),
     (
         "flowsdndatapathplugins",
         &[
@@ -169,7 +175,10 @@ pub const EXTRA_COLUMNS: [(&str, &[(&str, &str, &str)]); 5] = [
             ("Identities", "string", ".endpoints[*].id"),
         ],
     ),
-    ("flowsdnnodeconfigs", &[("Selector", "string", ".spec.nodeSelector.matchLabels")]),
+    (
+        "flowsdnnodeconfigs",
+        &[("Selector", "string", ".spec.nodeSelector.matchLabels")],
+    ),
     (
         "flowsdnpodippools",
         &[
@@ -201,7 +210,9 @@ fn add_printer_columns(document: &mut Value) {
         .iter()
         .map(|(name, kind, path)| serde_json::json!({"name":name,"type":kind,"jsonPath":path}))
         .collect();
-    list.push(serde_json::json!({"name":"Age","type":"date","jsonPath":".metadata.creationTimestamp"}));
+    list.push(
+        serde_json::json!({"name":"Age","type":"date","jsonPath":".metadata.creationTimestamp"}),
+    );
     version.insert("additionalPrinterColumns".into(), Value::Array(list));
 }
 

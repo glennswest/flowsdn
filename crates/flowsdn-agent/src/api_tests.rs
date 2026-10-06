@@ -491,5 +491,9 @@ fn documented_routes_are_the_served_routes() {
         .filter_map(|line| line.split('|').nth(1))
         .map(str::trim)
         .collect();
-    assert_eq!(documented, ROUTES.to_vec(), "docs/agent-api.md and api::ROUTES differ");
+    assert_eq!(
+        documented,
+        ROUTES.to_vec(),
+        "docs/agent-api.md and api::ROUTES differ"
+    );
 }

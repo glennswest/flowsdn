@@ -4,6 +4,7 @@
 //! routes (spec 10 §3.2.3, §5.2); and a services thread that owns the
 //! socket-LB maps (spec 05 §3.4, §3.8).
 use super::*;
+use crate::events::Type::Warning;
 use crate::services::{self, ServiceInfo, SliceInfo};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_connector::Connector;
@@ -11,7 +12,6 @@ use flowsdn_k8s::{
     client::{JsonClient, Query, TransportLimits, WATCH_ENDED},
     watch::{Limits, PageResult, Resource, Scope, WatchState},
 };
-use crate::events::Type::Warning;
 use flowsdn_lb::socket;
 use futures::FutureExt;
 use std::{
