@@ -155,6 +155,15 @@ pub fn manifest(crd: &OwnedCrd) -> String {
     out
 }
 
+/// Parse every document in a YAML stream into JSON.
+pub fn yaml_documents(text: &str) -> Result<Vec<Value>, Error> {
+    yaml_rust2::YamlLoader::load_from_str(text)
+        .map_err(|e| Error(e.to_string()))?
+        .iter()
+        .map(yaml_value)
+        .collect()
+}
+
 /// Parse one YAML document (a leading `---` is allowed) into JSON.
 pub fn yaml_to_json(text: &str) -> Result<Value, Error> {
     let docs = yaml_rust2::YamlLoader::load_from_str(text).map_err(|e| Error(e.to_string()))?;

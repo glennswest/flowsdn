@@ -35,3 +35,69 @@ subjects:
   - kind: ServiceAccount
     name: flowsdn
     namespace: kube-system
+---
+# The agent's flowsdn.io access (spec 13 §4.7, #325): read every kind it
+# watches, write its own FlowsdnEndpoints, FlowsdnIdentities and FlowsdnNode,
+# and the status of the kinds it reports on. CRDs are read only: the operator
+# registers them. These are the contract for the per-kind controllers; the
+# current agent uses none of them yet.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flowsdn-crds
+  labels: { app.kubernetes.io/part-of: flowsdn }
+rules:
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [get, list, watch]
+  - apiGroups: [flowsdn.io]
+    resources:
+      - flowsdnloadbalancerippools
+      - flowsdnbgpnodeconfigs
+      - flowsdnbgpadvertisements
+      - flowsdnbgppeerconfigs
+      - flowsdnclusterwideenvoyconfigs
+      - flowsdnclusterwidenetworkpolicies
+      - flowsdnegressgatewaypolicies
+      - flowsdnendpoints
+      - flowsdnendpointslices
+      - flowsdnenvoyconfigs
+      - flowsdnidentities
+      - flowsdnlocalredirectpolicies
+      - flowsdnnetworkpolicies
+      - flowsdnnodes
+      - flowsdnnodeconfigs
+      - flowsdncidrgroups
+      - flowsdnl2announcementpolicies
+      - flowsdnpodippools
+      - flowsdndatapathplugins
+    verbs: [list, watch]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnidentities, flowsdnendpoints, flowsdnnodes]
+    verbs: [create]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnidentities]
+    verbs: [update]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnendpoints]
+    verbs: [delete, get]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnnodes, flowsdnnodes/status]
+    verbs: [get, update]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnendpoints, flowsdnendpoints/status, flowsdnl2announcementpolicies/status, flowsdnbgpnodeconfigs/status]
+    verbs: [patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flowsdn-crds
+  labels: { app.kubernetes.io/part-of: flowsdn }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: flowsdn-crds
+subjects:
+  - kind: ServiceAccount
+    name: flowsdn
+    namespace: kube-system

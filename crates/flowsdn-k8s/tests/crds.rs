@@ -1,7 +1,7 @@
 //! The flowsdn.io CRD set (#325): vendored schemas, generated manifests,
 //! examples and accept/reject validation.
 use flowsdn_k8s::crd::{
-    MANIFEST_DIR, OwnedCrd, REFERENCE, manifest, owned_crds, to_yaml, yaml_to_json,
+    MANIFEST_DIR, OwnedCrd, REFERENCE, manifest, owned_crds, to_yaml, yaml_documents, yaml_to_json,
 };
 use flowsdn_k8s::plan::{REGISTRATION_PLURALS, SHORT_NAMES};
 use flowsdn_k8s::schema::{cel, validate};
@@ -466,4 +466,60 @@ fn validator_keywords() {
             "{spec}: expected {expected:?}, got {violations:?}"
         );
     }
+}
+
+/// The agent and operator ClusterRoles name only flowsdn.io kinds that exist,
+/// `/status` only where the CRD has the subresource, and the operator may
+/// update exactly the 22 flowsdn.io CRDs.
+#[test]
+fn rbac_matches_the_crd_set() {
+    let crds = crds();
+    let mut allowed = BTreeSet::new();
+    let mut crd_names = BTreeSet::new();
+    for crd in &crds {
+        let plural = crd
+            .document
+            .pointer("/spec/names/plural")
+            .and_then(Value::as_str)
+            .expect("plural");
+        allowed.insert(plural.to_owned());
+        if crd.document.pointer("/spec/versions/0/subresources/status").is_some() {
+            allowed.insert(format!("{plural}/status"));
+        }
+        crd_names.insert(format!("{plural}.flowsdn.io"));
+    }
+    let dir = repo_dir().join("deploy/stormcos/manifests-kubernetes");
+    let mut operator_update = None;
+    for file in ["60-flowsdn-rbac.yaml", "63-flowsdn-operator-rbac.yaml"] {
+        let text = std::fs::read_to_string(dir.join(file)).expect("RBAC manifest");
+        for doc in yaml_documents(&text).expect("RBAC YAML") {
+            if doc.get("kind") != Some(&Value::from("ClusterRole")) {
+                continue;
+            }
+            for rule in doc.get("rules").and_then(Value::as_array).expect("rules") {
+                let strings = |key: &str| -> Vec<String> {
+                    rule.get(key)
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .map(|v| v.as_str().expect("string").to_owned())
+                        .collect()
+                };
+                if strings("apiGroups").contains(&"flowsdn.io".to_owned()) {
+                    for resource in strings("resources") {
+                        assert!(allowed.contains(&resource), "{file}: {resource} is not a flowsdn.io CRD resource");
+                    }
+                }
+                if strings("resources") == ["customresourcedefinitions"] && strings("verbs") == ["update"] {
+                    operator_update = Some(strings("resourceNames").into_iter().collect::<BTreeSet<_>>());
+                }
+                if strings("resources") == ["customresourcedefinitions"] && file.starts_with("60-") {
+                    for verb in strings("verbs") {
+                        assert!(["get", "list", "watch"].contains(&verb.as_str()), "the agent never writes CRDs");
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(operator_update, Some(crd_names), "operator CRD update resourceNames");
 }

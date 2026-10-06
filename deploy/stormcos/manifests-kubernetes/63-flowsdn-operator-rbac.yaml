@@ -1,0 +1,128 @@
+# The flowsdn operator's identity (spec 12 §4.8, #325): CRD registration with
+# update limited to the 22 flowsdn.io CRDs by name, leader election, and the
+# flowsdn.io kinds it reconciles. Feature-conditional rules (Ingress, Gateway
+# API, MCS-API, secret sync, unmanaged-pod restart) are left out until those
+# controllers exist. No operator Deployment ships yet; until it does, stormcos
+# applies crds/ itself (the --skip-crd-creation path).
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flowsdn-operator
+  namespace: kube-system
+  labels: { app.kubernetes.io/name: flowsdn-operator, app.kubernetes.io/part-of: flowsdn }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flowsdn-operator
+  labels: { app.kubernetes.io/part-of: flowsdn }
+rules:
+  - apiGroups: [""]
+    resources: [pods, namespaces, serviceaccounts]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [list, watch, patch]
+  - apiGroups: [""]
+    resources: [nodes/status]
+    verbs: [patch]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [create, get, update]
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [create, get, list, watch]
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    resourceNames:
+      - flowsdnnetworkpolicies.flowsdn.io
+      - flowsdnclusterwidenetworkpolicies.flowsdn.io
+      - flowsdncidrgroups.flowsdn.io
+      - flowsdnendpoints.flowsdn.io
+      - flowsdnendpointslices.flowsdn.io
+      - flowsdnidentities.flowsdn.io
+      - flowsdnnodes.flowsdn.io
+      - flowsdnnodeconfigs.flowsdn.io
+      - flowsdnlocalredirectpolicies.flowsdn.io
+      - flowsdnegressgatewaypolicies.flowsdn.io
+      - flowsdnenvoyconfigs.flowsdn.io
+      - flowsdnclusterwideenvoyconfigs.flowsdn.io
+      - flowsdnloadbalancerippools.flowsdn.io
+      - flowsdnl2announcementpolicies.flowsdn.io
+      - flowsdnpodippools.flowsdn.io
+      - flowsdnbgpclusterconfigs.flowsdn.io
+      - flowsdnbgppeerconfigs.flowsdn.io
+      - flowsdnbgpadvertisements.flowsdn.io
+      - flowsdnbgpnodeconfigs.flowsdn.io
+      - flowsdnbgpnodeconfigoverrides.flowsdn.io
+      - flowsdngatewayclassconfigs.flowsdn.io
+      - flowsdndatapathplugins.flowsdn.io
+    verbs: [update]
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions/status]
+    resourceNames:
+      - flowsdnbgpclusterconfigs.flowsdn.io
+      - flowsdnbgppeerconfigs.flowsdn.io
+      - flowsdnbgpadvertisements.flowsdn.io
+      - flowsdnbgpnodeconfigs.flowsdn.io
+      - flowsdnbgpnodeconfigoverrides.flowsdn.io
+    verbs: [update]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnnetworkpolicies, flowsdnclusterwidenetworkpolicies]
+    verbs: [create, update, deletecollection, patch, get, list, watch]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnnetworkpolicies/status, flowsdnclusterwidenetworkpolicies/status]
+    verbs: [patch, update]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnendpoints, flowsdnidentities]
+    verbs: [delete, list, watch]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnidentities]
+    verbs: [update]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnnodes]
+    verbs: [create, update, get, list, watch]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnnodes/status]
+    verbs: [update]
+  - apiGroups: [flowsdn.io]
+    resources:
+      - flowsdnendpointslices
+      - flowsdnenvoyconfigs
+      - flowsdncidrgroups
+      - flowsdnbgpclusterconfigs
+      - flowsdnbgppeerconfigs
+      - flowsdnbgpadvertisements
+      - flowsdnbgpnodeconfigs
+      - flowsdnbgpnodeconfigoverrides
+    verbs: [create, update, get, list, watch, delete, patch]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnendpointslices]
+    verbs: [deletecollection]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnbgpclusterconfigs/status, flowsdnbgppeerconfigs/status]
+    verbs: [update]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnloadbalancerippools, flowsdnpodippools, flowsdndatapathplugins, flowsdngatewayclassconfigs, flowsdnnodeconfigs]
+    verbs: [get, list, watch]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnpodippools]
+    verbs: [create]
+  - apiGroups: [flowsdn.io]
+    resources: [flowsdnloadbalancerippools/status]
+    verbs: [patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flowsdn-operator
+  labels: { app.kubernetes.io/part-of: flowsdn }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: flowsdn-operator
+subjects:
+  - kind: ServiceAccount
+    name: flowsdn-operator
+    namespace: kube-system
