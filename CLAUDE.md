@@ -171,7 +171,8 @@ contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots
 - [x] Manifests (RBAC, host cgroup at /run/flowsdn/cgroupv2), docs, changelog; `socket-lb-live` fixture in medium suite.
 - [x] sc-build at c6c96c7: fmt, workspace + kubernetes Clippy -D warnings, 697 tests (0 failed, 1 ignored) + 40 agent kubernetes tests, GNU kubernetes release build, test/build.sh.
 - [x] Golden golden-flowsdn-a7ee3f63195b at c6c96c7 (release request stormcos#255; carries the GNU kubernetes agent, stormcos#171). Status comment on #292 (5999829276).
-- [ ] 2026-10-06: live ClusterIP checks in the test suite's node probe (node-service-dns/-kubernetes/-programmed, test/src/services.rs). sc-build, then `stormcentral test run flowsdn short --tag pvetest2` (flowsdn flavor, 11.88-flowsdn) — the kube-dns/kubernetes acceptance on a flowsdn node.
+- [x] 2026-10-06: live ClusterIP checks in the test suite's node probe (node-service-dns/-kubernetes/-programmed, test/src/services.rs); sc-build at 1375983 (Clippy, 6 tests).
+- [ ] Run 6c0b6820bd (short, pvetest2, 11.88-flowsdn) queued behind the build-slot backlog (stormcentral#472); #292 proposed after it. `stormcentral test show 6c0b6820bd`: the node-service-* lines are the kube-dns/kubernetes acceptance; fix what fails, then comment stormcos#265.
 - [ ] fixture-socket-lb-live on a kernel: run dbfc4e45b1 (C2NR0Q2) failed on push, registry full (stormcentral#376). Rerun `stormcentral test run flowsdn medium --tag <machine>`; live kube-dns check on a flowsdn node after release. Not implemented (stays open on #292): NodePort/LB/externalIPs, affinity, Maglev, DSR, NAT46/64, tc-level LB, socket termination, policy.
 
 ### Kubernetes-connected agent — #291 (P0), 2026-10-05
