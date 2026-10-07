@@ -328,10 +328,9 @@ mod enforcement {
         .expect("import");
         let (lowered, unsupported) = lower(&blocks).expect("lower");
         assert_eq!(unsupported.len(), 1);
-        assert!(lowered.is_empty());
-        // Nothing lowered is allowed through, and the subject is still default-deny
-        // only through other entries: with none here, the caller must not
-        // enforce this policy as allow-all (it reports the unsupported peer).
+        // The subject stays default-deny: an unsupported peer allows nothing,
+        // never everything.
+        assert!(!allowed(simulator::evaluate(&lowered, &client, &web, false, 6, 80).expect("evaluate")));
         let all_ports = network_policy(
             &policy(json!({"podSelector":{},"ingress":[{"ports":[{"protocol":"UDP"}]}]})),
             None,

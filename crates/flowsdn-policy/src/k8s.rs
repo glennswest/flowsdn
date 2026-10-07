@@ -478,8 +478,10 @@ pub struct Unsupported {
 /// Lower entries to the simulator's (one per entry x peer x port), for
 /// direct evaluation and compilation over endpoint identities. A default-deny
 /// marker becomes an entry whose peers select nothing. `ipBlock` peers need
-/// CIDR identities, which do not exist yet: they are returned as unsupported
-/// and allow nothing, so a policy is never made more permissive than written.
+/// CIDR identities, which do not exist yet: each is returned as unsupported
+/// and lowered to a peer set that selects nothing, which keeps the subject
+/// default-deny and allows nothing, so a policy is never made more permissive
+/// than written.
 pub fn lower(
     entries: &[Entry],
 ) -> std::result::Result<(Vec<crate::simulator::Entry>, Vec<Unsupported>), crate::Error> {
@@ -501,11 +503,16 @@ pub fn lower(
                         Peer::Selector(selector) => {
                             peers.push(Selector::Kubernetes(selector.clone()));
                         }
-                        Peer::Cidr { .. } => unsupported.push(Unsupported {
-                            labels: entry.labels.clone(),
-                            peer: peer.clone(),
-                            why: "ipBlock peers need CIDR identities",
-                        }),
+                        // Kept as a peer set that selects nothing, so the
+                        // subject stays default-deny for this direction.
+                        Peer::Cidr { .. } => {
+                            peers.push(Selector::None);
+                            unsupported.push(Unsupported {
+                                labels: entry.labels.clone(),
+                                peer: peer.clone(),
+                                why: "ipBlock peers need CIDR identities",
+                            });
+                        }
                     }
                 }
             }
