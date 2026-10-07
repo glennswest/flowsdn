@@ -90,7 +90,8 @@ fn slot(count: u16) -> Option<u16> {
 #[inline(always)]
 fn now() -> u64 {
     // SAFETY: no arguments; returns the monotonic clock.
-    unsafe { bpf_ktime_get_ns() } / 1_000_000_000
+    let nanoseconds = unsafe { bpf_ktime_get_ns() };
+    nanoseconds / 1_000_000_000
 }
 /// The client of a socket for affinity: its network namespace.
 #[inline(always)]
