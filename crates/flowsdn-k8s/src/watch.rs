@@ -62,6 +62,8 @@ pub struct ServicePort {
     pub name: String,
     pub protocol: String,
     pub port: u16,
+    /// `nodePort` of a NodePort or LoadBalancer Service.
+    pub node_port: Option<u16>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Service {
@@ -72,6 +74,14 @@ pub struct Service {
     /// and values that are not addresses.
     pub cluster_ips: Vec<IpAddr>,
     pub ports: Vec<ServicePort>,
+    /// `spec.externalIPs` that are addresses.
+    pub external_ips: Vec<IpAddr>,
+    /// `status.loadBalancer.ingress[].ip`.
+    pub load_balancer_ips: Vec<IpAddr>,
+    /// `spec.internalTrafficPolicy` is `Local` (default `Cluster`).
+    pub internal_local: bool,
+    /// `spec.externalTrafficPolicy` is `Local` (default `Cluster`).
+    pub external_local: bool,
 }
 /// An EndpointSlice port; `port` is absent for "all ports".
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -347,13 +357,36 @@ fn parse_service(value: &Value, metadata: Metadata) -> Result<Service, Error> {
             name: optional_text(port, "name", "")?.into(),
             protocol: optional_text(port, "protocol", "TCP")?.into(),
             port: port_number(port.get("port").unwrap_or(&Value::Null))?,
+            node_port: match port.get("nodePort") {
+                None | Some(Value::Null) => None,
+                Some(v) => Some(port_number(v)?),
+            },
         });
     }
+    // Like cluster IPs: an odd value is skipped, not a failed list.
+    let addresses = |list: Option<&Value>, key: Option<&str>| -> Vec<IpAddr> {
+        list.and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| match key {
+                        Some(key) => item.get(key).and_then(Value::as_str),
+                        None => item.as_str(),
+                    })
+                    .filter_map(|ip| ip.parse().ok())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
     Ok(Service {
         metadata,
         service_type: optional_text(spec, "type", "ClusterIP")?.into(),
         cluster_ips,
         ports,
+        external_ips: addresses(spec.get("externalIPs"), None),
+        load_balancer_ips: addresses(value.pointer("/status/loadBalancer/ingress"), Some("ip")),
+        internal_local: optional_text(spec, "internalTrafficPolicy", "Cluster")? == "Local",
+        external_local: optional_text(spec, "externalTrafficPolicy", "Cluster")? == "Local",
     })
 }
 fn parse_slice(value: &Value, metadata: Metadata) -> Result<EndpointSlice, Error> {

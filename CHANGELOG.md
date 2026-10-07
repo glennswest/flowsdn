@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-07
+- **feat:** Socket LB frontends beyond ClusterIP (#292): `spec.externalIPs`, LoadBalancer `status.loadBalancer.ingress[].ip`, and NodePort on every node's InternalIP (refreshed when node addresses change), for pods and node processes. `internalTrafficPolicy: Local` limits a cluster IP to this node's endpoints; `externalTrafficPolicy: Local` limits a node address's NodePort to that node's endpoints. `GET /v1/service` `flags.type` names the frontend kind. Traffic from outside the cluster (tc-level NodePort) is still not handled.
 - **BREAKING:** No reference-project names in what flowsdn ships (#330, ADR-0020). BPF maps and pins are `flowsdn_lxc` and `flowsdn_lb{4,6}_{services,backends,reverse_sk}` (layouts unchanged); embedded `local-delivery`/`socket-lb` objects and bpf-objects.lock rebuilt. The persisted endpoint key is `EndpointUID`. No pin migration: stormcos releases reboot nodes, and bpffs pins do not survive a reboot.
 - **feat:** `tools/check-no-cilium.sh` refuses the name (any case, binaries as bytes) in shipped files; `test/build.sh` (golden agent, CNI, embedded objects), `deploy/release/build.sh` and `images/agent/build.sh` run it. NOTICE/LICENSE attribution is exempt.
 - **docs:** ADR-0020 (supersedes the compatibility-name parts of ADR-0001, ADR-0013, ADR-0017); `docs/migration-from-cilium.md` (one-time conversion, no runtime support); README, docs index, crds.md, runtime.md, agent-api.md.

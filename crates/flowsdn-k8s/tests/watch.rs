@@ -496,3 +496,33 @@ fn pod_tagging_metadata_owners_containers_and_flowsdn_annotations() {
         vec![("flowsdn.io/pod-networks".to_owned(), "{}".to_owned())]
     );
 }
+
+#[test]
+fn services_parse_node_ports_external_and_load_balancer_addresses() {
+    let lb = json!({"metadata":{"name":"web","namespace":"ns","uid":"u","resourceVersion":"1"},
+        "spec":{"type":"LoadBalancer","clusterIP":"10.96.5.5","externalIPs":["192.0.2.10","not-an-ip"],
+            "internalTrafficPolicy":"Local","externalTrafficPolicy":"Local",
+            "ports":[{"name":"http","port":80,"nodePort":30080},{"name":"other","port":81}]},
+        "status":{"loadBalancer":{"ingress":[{"ip":"198.51.100.7"},{"hostname":"lb.example"}]}}});
+    let Resource::Service(parsed) = Scope::Services.parse(&lb).expect("service") else {
+        panic!("service row expected");
+    };
+    let ip = |s: &str| s.parse::<std::net::IpAddr>().expect("ip");
+    assert_eq!(parsed.external_ips, vec![ip("192.0.2.10")]);
+    assert_eq!(parsed.load_balancer_ips, vec![ip("198.51.100.7")]);
+    assert!(parsed.internal_local && parsed.external_local);
+    assert_eq!(
+        parsed.ports.iter().map(|p| p.node_port).collect::<Vec<_>>(),
+        vec![Some(30080), None]
+    );
+    let plain = json!({"metadata":{"name":"a","namespace":"ns","uid":"u","resourceVersion":"1"},
+        "spec":{"clusterIP":"10.96.5.6","ports":[{"port":80}]}});
+    let Resource::Service(parsed) = Scope::Services.parse(&plain).expect("service") else {
+        panic!("service row expected");
+    };
+    assert!(parsed.external_ips.is_empty() && parsed.load_balancer_ips.is_empty());
+    assert!(!parsed.internal_local && !parsed.external_local);
+    let bad = json!({"metadata":{"name":"b","namespace":"ns","uid":"u","resourceVersion":"1"},
+        "spec":{"clusterIP":"10.96.5.7","ports":[{"port":80,"nodePort":0}]}});
+    assert!(Scope::Services.parse(&bad).is_err());
+}

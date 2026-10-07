@@ -166,15 +166,28 @@ impl Controller {
                 } = self;
                 let local = settings.node_name;
                 let node_view = Arc::clone(&watch_view);
+                let node_lb = lb.clone();
                 let mut sent: Option<Vec<DesiredRoute>> = None;
+                let mut addresses: Option<Vec<(String, Vec<IpAddr>)>> = None;
                 let nodes =
                     watch_forever(&client, Scope::Nodes, "nodes", &watch_view, move |state| {
                         let nodes = node_rows(state);
                         let desired = desired_routes(&local, &nodes);
-                        {
+                        // NodePort frontends follow the nodes' InternalIPs.
+                        let current: Vec<_> = nodes
+                            .iter()
+                            .map(|n| (n.name.clone(), n.internal_ips.clone()))
+                            .collect();
+                        let moved = addresses.as_ref() != Some(&current);
+                        addresses = Some(current);
+                        let frontends = {
                             let mut view = lock(&node_view);
                             view.nodes = nodes;
                             view.nodes_synced = true;
+                            if moved { view.refresh_frontends() } else { None }
+                        };
+                        if let (Some(sender), Some(frontends)) = (&node_lb, frontends) {
+                            let _ = sender.send(frontends);
                         }
                         // Heartbeats modify Nodes constantly; reconcile on change only
                         // (the route thread also repairs every 30 s).
@@ -405,8 +418,13 @@ fn service_rows(state: &WatchState) -> Vec<ServiceInfo> {
                         name: p.name.clone(),
                         protocol: p.protocol.clone(),
                         port: p.port,
+                        node_port: p.node_port,
                     })
                     .collect(),
+                external_ips: service.external_ips.clone(),
+                load_balancer_ips: service.load_balancer_ips.clone(),
+                internal_local: service.internal_local,
+                external_local: service.external_local,
             }),
             _ => None,
         })
@@ -430,6 +448,7 @@ fn slice_rows(state: &WatchState) -> Vec<SliceInfo> {
                         ready: e.ready,
                         serving: e.serving,
                         terminating: e.terminating,
+                        node_name: e.node_name.clone(),
                     })
                     .collect(),
                 ports: slice

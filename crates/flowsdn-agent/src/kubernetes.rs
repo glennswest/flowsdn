@@ -460,7 +460,20 @@ impl View {
         if !(self.services_synced && self.slices_synced) {
             return None;
         }
-        self.frontends = crate::services::frontends(&self.services, &self.slices);
+        let nodes: Vec<_> = self
+            .nodes
+            .iter()
+            .map(|n| crate::services::NodeAddresses {
+                name: n.name.clone(),
+                ips: n.internal_ips.clone(),
+            })
+            .collect();
+        self.frontends = crate::services::frontends(
+            &self.services,
+            &self.slices,
+            &self.local_node,
+            &nodes,
+        );
         Some(self.frontends.iter().map(|f| f.service.clone()).collect())
     }
     /// `GET /v1/service`.

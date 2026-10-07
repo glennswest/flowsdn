@@ -37,8 +37,10 @@ pinning or subsystem libraries are absent are **not current status**.
   `socket-lb` cgroup programs (TCP/UDP, IPv4/IPv6/IPv4-mapped, UDP reverse
   translation) over the Cilium-layout LB maps, programmed by a stateless
   planner (`flowsdn_lb::socket`) in spec 05 §3.4 write order; `GET
-  /v1/service`. NodePort/LoadBalancer, affinity, Maglev, socket termination,
-  tc-level LB and policy are not implemented. Verified by unit tests and a
+  /v1/service`. External IPs, LoadBalancer IPs and NodePorts (on every node
+  address) work for in-cluster clients, with both traffic policies; external
+  NodePort/LB traffic (tc-level LB), affinity, Maglev, socket termination and
+  policy are not implemented. Verified by unit tests and a
   controller test against a loopback HTTPS API server; the `socket-lb-live`
   kernel fixture is in the medium suite but has not run on a test machine; not yet on a cluster (two-node
   acceptance on pvetest1 + pvetest2, stormcentral#360; the golden's GNU

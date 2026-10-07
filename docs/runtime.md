@@ -194,7 +194,7 @@ Not yet: a cluster identity allocator (pod IP cache entries and the
 pod-networks annotation carry no numeric identity), a flow/drop observer (the
 `flowsdn-hubble` `endpoint` module names flow peers `ns/pod (container)` once
 one exists, #293), BPF ipcache maps, tunnel routing, masquerade, NodePort and
-LoadBalancer Services, and policy. Unit tests and a loopback-HTTPS controller test cover the
+LoadBalancer traffic from outside the cluster, and policy. Unit tests and a loopback-HTTPS controller test cover the
 watch and route logic; two-node pod traffic has not been demonstrated
 (pvetest1 + pvetest2, stormcentral#360).
 
@@ -220,8 +220,19 @@ below it, whatever its network namespace, so pods and the host are covered.
 - A frontend whose backend count is 0 fails `connect`/`sendmsg` with EPERM.
   Other destinations are untouched.
 
-The frontends: every cluster IP (`spec.clusterIPs`, headless skipped) x every
-TCP/UDP port of every Service; backends are the addresses of the Service's
+The frontends, for every TCP/UDP port of every Service: each cluster IP
+(`spec.clusterIPs`, headless skipped) and each `spec.externalIPs` address on
+the port; for type LoadBalancer each `status.loadBalancer.ingress[].ip` on
+the port; for types NodePort and LoadBalancer every node's InternalIP on the
+`nodePort` (recomputed when node addresses change). These cover clients
+inside the cluster, pods and node processes, whichever node's address they
+use; traffic arriving from outside the cluster needs tc-level NodePort, which
+is not implemented. `GET /v1/service` gives each frontend's `flags.type`
+(`ClusterIP`, `ExternalIPs`, `LoadBalancer`, `NodePort`).
+`internalTrafficPolicy: Local` limits a cluster IP to endpoints on this node;
+`externalTrafficPolicy: Local` limits a NodePort on a node's address to that
+node's endpoints (an empty set fails `connect`, as Kubernetes drops such
+traffic). Backends are the addresses of the Service's
 EndpointSlices of the same family on the slice port with the same name and
 protocol, `ready` endpoints first, serving-terminating ones only when none is
 ready. A services thread owns the maps. Once both lists are complete, on each
@@ -236,8 +247,8 @@ With `bpf-pin-root` the maps and links are pinned under `<pin root>/socket-lb`.
 A restarted agent reuses the maps (a pinned map with another layout refuses
 startup), attaches its programs, then releases the old links. Without a pin
 root the links detach when the agent exits. Not implemented: NodePort and
-LoadBalancer/externalIPs frontends, session affinity, Maglev, topology
-hints, `internalTrafficPolicy: Local`, skip-LB for local redirect policy,
+LoadBalancer traffic from outside the cluster (tc-level), session affinity,
+Maglev, topology hints, skip-LB for local redirect policy,
 socket termination when a backend goes away (an existing connection stays
 on its backend), SCTP, and tc-level LB for traffic that arrives from outside
 the node. `socket-lb-live` (medium test suite) checks the programs on a
