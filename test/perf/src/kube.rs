@@ -53,7 +53,7 @@ impl Kube {
             .map_err(|e| e.to_string())?;
         let client = runtime
             .block_on(JsonClient::load(None, TransportLimits::default()))
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("{e} ({})", in_cluster_inputs()))?;
         Ok(Self {
             runtime,
             client,
@@ -316,4 +316,42 @@ mod tests {
         assert_eq!(ready_endpoints(&slices), 2);
         assert_eq!(ready_endpoints(&json!({})), 0);
     }
+}
+
+/// What in-cluster configuration needs and this pod has, for a failure
+/// report: the service variables, the service-account files, and whether
+/// `/var/run` leads to `/run` (#321, stormpump#102).
+pub fn in_cluster_inputs() -> String {
+    const ACCOUNT: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
+    let variable = |name: &str| match std::env::var(name) {
+        Ok(value) => format!("{name}={value}"),
+        Err(_) => format!("{name} unset"),
+    };
+    let files: Vec<String> = ["token", "ca.crt", "namespace"]
+        .iter()
+        .map(|f| {
+            let present = std::path::Path::new(ACCOUNT).join(f).is_file();
+            format!("{f}:{}", if present { "yes" } else { "no" })
+        })
+        .collect();
+    let var_run = match std::fs::read_link("/var/run") {
+        Ok(target) => format!("/var/run -> {}", target.display()),
+        Err(_) => "/var/run is a directory".into(),
+    };
+    let secrets = std::fs::read_dir("/run/secrets").map_or_else(
+        |e| format!("/run/secrets: {e}"),
+        |list| {
+            let names: Vec<String> = list
+                .filter_map(|e| e.ok())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect();
+            format!("/run/secrets: [{}]", names.join(","))
+        },
+    );
+    format!(
+        "{}, {}, {ACCOUNT} {}, {var_run}, {secrets}",
+        variable("KUBERNETES_SERVICE_HOST"),
+        variable("KUBERNETES_SERVICE_PORT"),
+        files.join(" ")
+    )
 }
