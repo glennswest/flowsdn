@@ -215,7 +215,11 @@ impl LabelSelector {
             parts.push((r.key.clone(), text));
         }
         parts.sort();
-        parts.into_iter().map(|(_, t)| t).collect::<Vec<_>>().join(",")
+        parts
+            .into_iter()
+            .map(|(_, t)| t)
+            .collect::<Vec<_>>()
+            .join(",")
     }
 }
 
@@ -224,7 +228,10 @@ impl LabelSelector {
 pub enum Peer {
     Selector(LabelSelector),
     /// `ipBlock`: the CIDR minus the excepted ones (spec 06 §3.2.4).
-    Cidr { cidr: String, except: Vec<String> },
+    Cidr {
+        cidr: String,
+        except: Vec<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -379,7 +386,10 @@ pub fn network_policy(object: &Value, cluster: Option<&str>) -> Result<Vec<Entry
         ns => ns,
     };
     let name = metadata
-        .pointer(&format!("/annotations/{}", NAME_ANNOTATION.replace('/', "~1")))
+        .pointer(&format!(
+            "/annotations/{}",
+            NAME_ANNOTATION.replace('/', "~1")
+        ))
         .and_then(Value::as_str)
         .unwrap_or(text("name"));
     let spec = object

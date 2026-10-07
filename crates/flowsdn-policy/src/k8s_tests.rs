@@ -41,8 +41,10 @@ fn deny_all_ingress_is_a_marker_that_allows_nothing() {
 fn egress_only_policy_types_ignore_ingress_and_mark_egress() {
     // TestParseNetworkPolicyNoIngress: Egress only, nothing allowed out.
     let entries = network_policy(
-        &policy(json!({"podSelector":{"matchLabels":{"app":"web"}},"policyTypes":["Egress"],
-            "ingress":[{}]})),
+        &policy(
+            json!({"podSelector":{"matchLabels":{"app":"web"}},"policyTypes":["Egress"],
+            "ingress":[{}]}),
+        ),
         None,
     )
     .expect("parse");
@@ -159,10 +161,12 @@ fn peers_ports_and_selectors() {
 
 #[test]
 fn selectors_match_like_kubernetes() {
-    let parsed = LabelSelector::parse(Some(&json!({"matchLabels":{"app":"web"},"matchExpressions":[
+    let parsed = LabelSelector::parse(Some(
+        &json!({"matchLabels":{"app":"web"},"matchExpressions":[
         {"key":"tier","operator":"NotIn","values":["db"]},
         {"key":"zone","operator":"Exists"},
-        {"key":"debug","operator":"DoesNotExist"}]})))
+        {"key":"debug","operator":"DoesNotExist"}]}),
+    ))
     .expect("selector");
     assert!(parsed.matches(&labels(&[("app", "web"), ("zone", "a")])));
     assert!(parsed.matches(&labels(&[("app", "web"), ("zone", "a"), ("tier", "fe")])));
@@ -197,7 +201,10 @@ fn name_annotation_default_namespace_and_rejections() {
             .labels
             .contains(&"k8s:io.flowsdn.k8s.policy.name=renamed".to_owned())
     );
-    assert_eq!(first.subject.key(), "k8s:io.kubernetes.pod.namespace=default");
+    assert_eq!(
+        first.subject.key(),
+        "k8s:io.kubernetes.pod.namespace=default"
+    );
     for bad in [
         json!({"podSelector":{},"ingress":[{"ports":[{"protocol":"ICMP"}]}]}),
         json!({"podSelector":{},"ingress":[{"ports":[{"port":70000}]}]}),
