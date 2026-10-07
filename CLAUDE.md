@@ -152,7 +152,7 @@ Kubernetes API, and measures with Rust clients. JSON lines per metric with `flav
 - [x] `/test perf` dispatch; requires.toml `[perf]`; Containerfile/build.sh; docs (test/README metric table), changelog.
 - [x] sc-build at e397e16: fmt, Clippy, 705 tests, test/build.sh, podman build; `/test perf` execs flowsdn-perf in the image. Status on #321; format on stormcentral#412.
 - [x] `perf-scale` ramp (steps of 100 pods until a step fails; owner request) at 5dc4de3: Clippy clean, tests pass, test/build.sh.
-- [ ] 2026-10-07: perf at a207bfc queued on pvetest1 (cilium, 11.88) as 47a8caf4ba and pvetest2 (flowsdn, 11.88-flowsdn) as e7c0bf65d8. Compare, post the table on #321, then perf-scale at night on each.
+- [ ] 2026-10-07: perf at a207bfc queued on pvetest1 (cilium, 11.88) as 47a8caf4ba and pvetest2 (flowsdn, 11.88-flowsdn) as e7c0bf65d8. Compare, post the table on #321, then perf-scale at night on each. Waiting on the build backlog; #321 proposed after stormcentral#472.
 - [ ] Runs on both flavors (perf by day, perf-scale at night on a pve VM): 8c822b3547 (C2NR0Q2) 507 on push (stormcentral#376); f0107a4784/f68f31432b no pvetest VMs until install. Proposed after stormcentral#376.
 
 ### ClusterIP service datapath — #292 (P0), 2026-10-05
@@ -173,7 +173,7 @@ contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots
 - [x] sc-build at c6c96c7: fmt, workspace + kubernetes Clippy -D warnings, 697 tests (0 failed, 1 ignored) + 40 agent kubernetes tests, GNU kubernetes release build, test/build.sh.
 - [x] Golden golden-flowsdn-a7ee3f63195b at c6c96c7 (release request stormcos#255; carries the GNU kubernetes agent, stormcos#171). Status comment on #292 (5999829276).
 - [x] 2026-10-06: live ClusterIP checks in the test suite's node probe (node-service-dns/-kubernetes/-programmed, test/src/services.rs); sc-build at 1375983 (Clippy, 6 tests).
-- [ ] Run 6c0b6820bd (short, pvetest2, 11.88-flowsdn) queued behind the build-slot backlog (stormcentral#472); #292 proposed after it. `stormcentral test show 6c0b6820bd`: the node-service-* lines are the kube-dns/kubernetes acceptance; fix what fails, then comment stormcos#265.
+- [ ] Run ad78ba9a43 (short, pvetest2, 11.88-flowsdn; 6c0b6820bd was lost to a stormcentral restart) queued behind the build-slot backlog (stormcentral#472); #292 proposed after it. `stormcentral test show 6c0b6820bd`: the node-service-* lines are the kube-dns/kubernetes acceptance; fix what fails, then comment stormcos#265.
 - [ ] fixture-socket-lb-live on a kernel: run dbfc4e45b1 (C2NR0Q2) failed on push, registry full (stormcentral#376). Rerun `stormcentral test run flowsdn medium --tag <machine>`; live kube-dns check on a flowsdn node after release. Not implemented (stays open on #292): NodePort/LB/externalIPs, affinity, Maglev, DSR, NAT46/64, tc-level LB, socket termination, policy.
 
 ### Kubernetes-connected agent — #291 (P0), 2026-10-05
