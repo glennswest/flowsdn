@@ -385,6 +385,11 @@ run) or is advisory, and whether `tc_index` and `ingress_ifindex` are settable,
 differ across the kernel rows; §9.1 pins this down with a harness self-test on
 every row before the corpus is trusted. The rows are the kernels stormcos ships
 (owner, #256; §10.2).
+**Measured (#256, 2026-10-07):** on the stormcos release kernel
+`7.2.8-200.fc44.x86_64` (pvetest2, test run a0cd56f37c) every relied-upon field
+is usable; `ifindex` requires a real device in the netns, `ingress_ifindex` is
+settable, and `tc_index` is refused in `ctx_in` (EINVAL), so a case that needs a
+non-zero `tc_index` moves to the netns tier. The per-field table is in §9.1.
 Where a field turns out not to be settable, the affected cases move to the
 netns tier (§3.7). Like the reference, flowsdn sends a 256-byte `ctx_in`
 buffer (larger than `sizeof(struct __sk_buff)`, zero-padded) so that kernels
@@ -1084,16 +1089,33 @@ tests, at the tiers of §10.3.
 - [ ] `BPF_PROG_TEST_RUN` round-trip: a trivial `#[classifier]` that returns
       `TC_ACT_OK` and copies `data_in` to `data_out` unchanged — asserts the
       syscall plumbing, buffer sizing and verdict decoding.
-- [ ] `ctx_in`/`ctx_out` field matrix (**probe implemented, #256**:
+- [x] `ctx_in`/`ctx_out` field matrix (**#256**:
       `crates/flowsdn-bpf/src/bin/skb-ctx.rs` and
       `crates/flowsdn-bpftest/src/bin/skb-ctx-matrix.rs`, run as
-      `fixture-skb-ctx-matrix` in the test container's `medium` suite; not yet
-      run on any kernel): for each of `mark`, `priority`,
+      `fixture-skb-ctx-matrix` in the test container's `medium` suite;
+      passed on `7.2.8-200.fc44.x86_64`, table below): for each of `mark`, `priority`,
       `cb[0..5]`, `ifindex`, `tstamp`, `wire_len`, `gso_segs`, `gso_size`,
       `hwtstamp`, `tc_index`, `ingress_ifindex`: set it, read it back in the
       program, mutate it, read it back in `ctx_out`. Records a per-kernel
       capability table and **resolves the §3.3(d) to-verify list**. A field the
       matrix says is unusable moves its dependent cases to the netns tier.
+
+      | Field | `7.2.8-200.fc44.x86_64` |
+      |---|---|
+      | `mark`, `priority` | in + out |
+      | `cb[0..5]` | in + out |
+      | `tstamp` | in + out |
+      | `ifindex` | in; requires a real device in the netns |
+      | `ingress_ifindex` | in |
+      | `wire_len`, `gso_segs`, `gso_size`, `hwtstamp` | in |
+      | `tc_index` | rejected in `ctx_in` (EINVAL) |
+
+      "in": the program read the value set in `ctx_in`; "out": a value the
+      program wrote came back in `ctx_out`. Zero-ctx baseline accepted.
+      Measured by `stormcentral test run flowsdn medium` (run a0cd56f37c,
+      pvetest2, 2026-10-07, flowsdn@fa69858). Writing `cb` needs one store
+      per word at its fixed offset: an array copy is refused by the verifier
+      as a modified ctx pointer.
 - [ ] XDP `ctx_in` matrix: same for `xdp_md`'s `ingress_ifindex`,
       `rx_queue_index`, `data_meta`; establishes whether a real device is
       required.
@@ -1188,7 +1210,8 @@ way (§3.9).
 ### 10.2 Kernel matrix
 
 **Decision (owner, 2026-10-05, #256):** the rows that gate the harness are the
-kernels stormcos ships: Fedora `7.2.5-100.fc43` today. They run in the test
+kernels stormcos ships: Fedora `7.2.5-100.fc43` when decided,
+`7.2.8-200.fc44` in 11.88 (§9.1 has its measured `ctx_in` table). They run in the test
 container's `medium` suite on the stormcos test machines
 (`stormcentral test run flowsdn medium`). The table below is the original
 reference-derived plan. It is kept for reference and is not a gate; a kernel
