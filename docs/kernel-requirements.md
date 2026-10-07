@@ -289,7 +289,7 @@ otherwise. Netkit mode additionally requires ≥ 6.8; `BPF_FIB_LOOKUP_SRC` and
 `_MARK` are used when present and silently not used otherwise (feature test at
 start; the object is built with the flags and the loader patches a `.rodata`
 boolean). Distributions that satisfy this today: Debian 13 (6.12), Ubuntu 24.04
-(6.8) and later, Fedora/CoreOS current, RHEL 10 family (6.12), Talos ≥ 1.8
+(6.8) and later, Fedora current, RHEL 10 family (6.12), Talos ≥ 1.8
 (6.6+), Flatcar current (6.6+), Bottlerocket current (6.12), GKE COS current
 (6.6), Amazon Linux 2023 (6.12). Not satisfied: RHEL 8 (4.18), RHEL 9 (5.14),
 Ubuntu 22.04 GA kernel (5.15; HWE 6.8 is fine), Debian 12 (6.1), Amazon Linux
