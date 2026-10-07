@@ -534,7 +534,10 @@ fn services_parse_node_ports_external_and_load_balancer_addresses() {
             _ => panic!("service row expected"),
         }
     };
-    assert_eq!(sticky(json!({"clientIP":{"timeoutSeconds":600}})), Some(600));
+    assert_eq!(
+        sticky(json!({"clientIP":{"timeoutSeconds":600}})),
+        Some(600)
+    );
     assert_eq!(sticky(Value::Null), Some(10800));
     let bad = json!({"metadata":{"name":"b","namespace":"ns","uid":"u","resourceVersion":"1"},
         "spec":{"clusterIP":"10.96.5.7","ports":[{"port":80,"nodePort":0}]}});

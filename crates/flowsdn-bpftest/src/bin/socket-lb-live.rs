@@ -243,11 +243,7 @@ fn main() -> Result<()> {
     program(&mut lb, &services)?;
     let client = TcpStream::connect_timeout(&sa("192.0.2.10:80")?, TIMEOUT)?;
     if client.peer_addr()? != sa(other)? {
-        return Err(format!(
-            "affinity kept a removed backend: {:?}",
-            client.peer_addr()
-        )
-        .into());
+        return Err(format!("affinity kept a removed backend: {:?}", client.peer_addr()).into());
     }
     if other == "127.0.0.1:18080" {
         tcp4.accept()?;

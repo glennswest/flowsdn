@@ -205,7 +205,10 @@ fn session_affinity_sets_the_master_and_tracks_matches() {
             .collect()
     };
     let mut maps = Maps::default();
-    let want = sync(&mut maps, &sticky(&["10.172.0.5", "10.172.0.6"], Some(10800)));
+    let want = sync(
+        &mut maps,
+        &sticky(&["10.172.0.5", "10.172.0.6"], Some(10800)),
+    );
     let master = |maps: &Maps| {
         LbService::from_bytes(
             *maps
@@ -226,7 +229,8 @@ fn session_affinity_sets_the_master_and_tracks_matches() {
     let ids: BTreeSet<u16> = want.ids.values().copied().collect();
     for key in &maps.affinity_match {
         let matched = LbAffinityMatch::from_bytes(*key);
-        assert!(ids.contains(&matched.rev_nat_id));
+        let rev = matched.rev_nat_id;
+        assert!(ids.contains(&rev));
     }
     // A backend leaves: its matches go before it does (checked in sync).
     sync(&mut maps, &sticky(&["10.172.0.6"], Some(10800)));
