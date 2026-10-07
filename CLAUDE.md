@@ -50,6 +50,22 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### No Cilium in what ships — #330 (P1), 2026-10-07
+
+Owner: "no cilium in flowsdn period." Chart/manifests/CRDs already Cilium-free with a test (#294, #325).
+What ships = golden (static agent + embedded BPF objects + CNI), GNU Kubernetes agent, release archives,
+image, manifests, chart. Remaining shipped names: BPF map/pin names (`cilium_lxc`, `cilium_lb{4,6}_*`),
+the persisted `CiliumEndpointUID` key. bpffs pins don't survive the reboot a stormcos release does, so
+renamed maps need no legacy-pin migration. Library-only names (config catalogue, clustermesh prefixes,
+identity labels, packaging, proxy probe) stay #339's.
+
+- [ ] BPF: `flowsdn_lxc`, `flowsdn_lb{4,6}_{services,backends,reverse_sk}`; loader, fixtures, docs.
+- [ ] State key `EndpointUID`; health comment.
+- [ ] `tools/check-no-cilium.sh FILE...` (binaries, objects, text); run by test/build.sh, release
+      build.sh, images/agent/build.sh. Rebuild embedded objects + bpf-objects.lock through sc-build.
+- [ ] ADR-0020 supersedes ADR-0013's compatibility names; docs/migration-from-cilium.md (one-time
+      conversion); changelog. sc-build; close #330 (and note what remains on #339).
+
 ### Pod and container tagging — #328 (P1), 2026-10-06
 
 Owner: tag pods/containers OVN-style. The agent already persists pod ns/name/UID and the sandbox
