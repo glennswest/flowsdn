@@ -1559,7 +1559,7 @@ pair per `datapath-mode`; `flock` on the run dir filesystem; raw ICMP
 sockets (`CAP_NET_RAW`) or `IPPROTO_ICMP` datagram sockets where
 `net.ipv4.ping_group_range` permits (preferred: no capability needed);
 `CAP_NET_ADMIN` for links/routes; unix sockets with `SO_PEERCRED` not
-required. Arch-neutral; within the 6.6 LTS minimum / 6.12 stormcos line of
+required. Arch-neutral; within the 6.6 LTS minimum / the stormcos release kernel line (Fedora 7.2.x, #309) of
 `docs/kernel-requirements.md`.
 
 ## 11. Rust design notes

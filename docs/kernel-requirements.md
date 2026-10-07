@@ -25,9 +25,11 @@ never compare **version strings** (section 4.7).
 > line this document was written against. It ships Fedora kernels, fetched by
 > `KERNEL=<n-v-r>`: `7.2.5-100.fc43` in every current initramfs golden
 > (6.17.1-300.fc43 on 11.29–11.30); the Rocky pin in stormcos `kernel/README.md`
-> is stale. So the `e2e-stormcos` row below tests a kernel no stormcos release
-> runs, and "6.12 (stormcos)" is not the shipped line. The 6.6 general minimum
-> (TCX) is unaffected. Which kernel rows to verify was settled on #256: see §5.3.
+> is stale. The 6.6 general minimum (TCX) is unaffected. **Resolved
+> 2026-10-07:** the supported line is the stormcos release kernel
+> (`7.2.8-200.fc44` in 11.88), verified by the test container (#256, §5.3); the
+> tables below and specs 09/18/19/22 say so, and the Rocky 6.12 material is
+> kept as history.
 
 > **Socket termination (2026-10-05, #3).** The owner chose netlink
 > `SOCK_DIAG` `SOCK_DESTROY` for socket termination (milestone 3). The

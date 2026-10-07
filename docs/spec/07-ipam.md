@@ -1592,7 +1592,8 @@ above is likewise never a pull-request gate.
   it, refusing to run otherwise.
 - x86-64 and arm64 identical; Graviton instances are nitro, so prefix
   delegation applies. Minimum kernel per `docs/kernel-requirements.md` (6.6
-  general, 6.12 stormcos); nothing here needs more.
+  general; supported line: the stormcos release kernel, Fedora 7.2.x, #309);
+  nothing here needs more.
 
 ## 11. Rust design notes
 

@@ -117,8 +117,9 @@ this assessment.
 
 ## Decisions that need reconciliation
 
-- #54: kernel-requirements.md says general minimum 6.6 and stormcos 6.12;
-  the datapath issue recommends general minimum 6.1. Reconcile the normative
+- #54: kernel-requirements.md says general minimum 6.6 (the supported line is
+  now the stormcos release kernel, Fedora 7.2.x, #309); the datapath issue
+  recommends general minimum 6.1. Reconcile the normative
   texts before implementing loader fallbacks.
 - #53: start with the proposed single object per hook only after defining the
   verifier measurement gate; proposed fallback split dimensions differ by spec.
