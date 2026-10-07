@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 flowsdn-identity = { path = "../flowsdn-identity", version = "=0.14.0" }
 flowsdn-bpf-abi = { path = "../flowsdn-bpf-abi", version = "=0.14.0" }
+serde_json.workspace = true
 
 [lints]
 workspace = true

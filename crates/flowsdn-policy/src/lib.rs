@@ -1,8 +1,10 @@
-//! Policy building blocks from spec 06. This library is not a Kubernetes
-//! importer, BPF map writer, or a complete selector/authentication/L7 compiler.
+//! Policy building blocks from spec 06: the Kubernetes NetworkPolicy importer
+//! (`k8s`) and the compiler stages. Not a BPF map writer or a complete
+//! selector/authentication/L7 compiler.
 use std::fmt;
 
 pub mod cidr;
+pub mod k8s;
 pub mod kernel_map;
 pub mod mapstate;
 pub mod named_ports;
