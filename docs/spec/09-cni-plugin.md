@@ -1186,8 +1186,9 @@ E2E (kind / real cluster, `conformance-*` equivalents):
   `net/ipv4/tcp_mtu_probing`, `net/ipv4/tcp_mtu_probe_floor` (5.11+).
 - **Filesystem**: `flock(2)` on the queue lockfile; `rename(2)` atomicity
   within one filesystem for the conflist and binary install.
-- Minimum kernel: as `docs/kernel-requirements.md` (6.6 general, 6.12
-  stormcos); nothing here needs more, netkit aside (6.7 / 6.13).
+- Minimum kernel: as `docs/kernel-requirements.md` (6.6 general; the
+  supported line is the stormcos release kernel, Fedora 7.2.x, #309); nothing
+  here needs more, netkit aside (6.7 / 6.13).
 - x86-64 and arm64: no architecture-specific code; `IFNAMSIZ` 16 on both.
 
 ## 11. Rust design notes

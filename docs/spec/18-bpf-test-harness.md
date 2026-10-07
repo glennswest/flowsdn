@@ -1222,7 +1222,7 @@ The original plan ran the harness on every row of `docs/kernel-requirements.md` 
 | Row | Kernel | x86-64 | arm64 | BPF unit tests |
 |---|---|---|---|---|
 | Minimum | 6.6 LTS | LVH `6.6` | upstream 6.6.y VM | PR gate (x86), nightly (arm64) |
-| Supported line | 6.12 (Rocky 10 `el10` and upstream 6.12.y) | Rocky 10 VM + LVH `6.12` | Rocky 10 `aarch64` VM, 4 KiB and 64 KiB pages | PR gate (both) |
+| Supported line | 6.12 (Rocky 10 `el10` and upstream 6.12.y); superseded by the stormcos release kernel, §10.2 (#309) | Rocky 10 VM + LVH `6.12` | Rocky 10 `aarch64` VM, 4 KiB and 64 KiB pages | PR gate (both) |
 | Next | 6.18 LTS | LVH `6.18` | upstream 6.18.y VM | nightly |
 | Canary | latest / bpf-next | LVH latest | — | — |
 | Not run | 4.18, 5.15, 6.1 | — | — | — |

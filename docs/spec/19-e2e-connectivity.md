@@ -1532,9 +1532,11 @@ bounds scheduling to one privileged VM and two build jobs. Rotate nightly
 rows when the allocated executor cannot finish the complete matrix in one night;
 all supported rows remain mandatory before release.
 
-Additionally, the **stormcos row**: a Rocky 10 VM running the exact
-`kernel-6.12.0-2xx.el10` stormcos pins, with `kind` inside it. This is the only
-row that tests the kernel flowsdn actually ships on, and it is a PR gate.
+Additionally, the **stormcos row**: the stormcos release kernel (Fedora
+`7.2.8-200.fc44` in 11.88) on the stormcos test machines, through flowsdn's
+test container (`stormcentral test run flowsdn short|medium`). It is the only
+row that tests the kernel flowsdn actually ships on. (Amended 2026-10-07, #309:
+it was a Rocky 10 `el10` VM, a kernel no stormcos release runs.)
 
 **arm64 placement.** Managed Jobs must declare their requirements rather than
 assume a particular machine. Distinguish three forms of evidence:
@@ -1563,7 +1565,7 @@ The orchestrator records evidence for each required row and associated revision.
 | Job | Config × kernel × arch | When | Budget |
 |---|---|---|---|
 | `e2e-smoke` | `vxlan-kpr`, 6.12 (LVH), x86-64, 3-node kind | **PR** | 12 min |
-| `e2e-stormcos` | `vxlan-kpr`, Rocky 10 `6.12.0-el10`, x86-64 | **PR** | 15 min |
+| `e2e-stormcos` | the stormcos release kernel (Fedora 7.2.x) on a stormcos test machine, through the test container (#309) | **every release** | 15 min |
 | `e2e-core` | `native-kpr-dsr`, `geneve-dsr`, `hostfw` on 6.12 x86-64 | **PR** (3 parallel) | 20 min each |
 | `e2e-encryption` | `wireguard`, `ipsec` on 6.12 x86-64 | **PR** (2 parallel) | 25 min each |
 | `e2e-ipv6` | `ipv6only`, `dualstack` on 6.12 x86-64 | **PR** (2 parallel) | 20 min each |

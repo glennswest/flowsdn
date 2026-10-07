@@ -1201,7 +1201,8 @@ triggers; record actual execution through the current validation path.
 | Kernel | x86-64 image | arm64 image | Verifier | BPF unit | Privileged userspace | e2e |
 |---|---|---|---|---|---|---|
 | 6.6 (minimum) | LVH `6.6` | upstream 6.6.y QEMU `virt` | PR | PR | nightly | nightly |
-| 6.12 (supported line) | LVH `6.12` + a Rocky 10 `el10` VM | Rocky 10 `aarch64` VM / physical arm64 node | PR (both) | PR (both) | PR (both) | **PR** (x86, Rocky kernel); nightly arm64 |
+| Supported line: the stormcos release kernel (Fedora `7.2.8-200.fc44` in 11.88; #309) | the stormcos test machines, through the test container | — (no arm64 test machine yet) | medium suite | medium suite | short/medium | the suites' live node checks |
+| (historical) 6.12 | LVH `6.12` + a Rocky 10 `el10` VM | Rocky 10 `aarch64` VM | — | — | — | — (no stormcos release runs it) |
 | 6.18 (next) | LVH `6.18` | upstream 6.18.y | PR (x86), nightly (arm64) | nightly | nightly | nightly |
 | latest / bpf-next | when published | — | nightly, non-blocking | — | — | — |
 | 4.18 (rhel8), 5.15, 6.1 | — | — | not run — below the floor | | | |

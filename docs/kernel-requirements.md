@@ -42,8 +42,8 @@ never compare **version strings** (section 4.7).
 
 | Question | Decision | Section |
 |---|---|---|
-| Supported kernel line, x86-64 | **6.12** — the Rocky Linux 10 `kernel-6.12.0-2xx.el10` line stormcos already pins (RHEL kABI, consumed as-is, no custom config) | 2.4 |
-| Supported kernel line, arm64 | **6.12** — Rocky 10 `aarch64` build of the same line where the hardware boots a stock RHEL 10 kernel; otherwise upstream `6.12.y` LTS with the config fragment in 2.6 | 2.4 |
+| Supported kernel line, x86-64 | **the kernel stormcos ships: Fedora `7.2.8-200.fc44` in release 11.88 (`7.2.5-100.fc43` earlier)** (owner, #256; #309). It is verified through flowsdn's test container on the stormcos test machines, `ifindex`/ctx matrix and fixtures included (spec 18 §9.1) | 2.4 |
+| Supported kernel line, arm64 | The same Fedora release kernel's `aarch64` build when stormcos ships arm64; no arm64 test machine runs flowsdn yet | 2.4 |
 | Documented minimum for general use | **6.6 LTS** (tcx present, `bpf_loop`, XDP frags, IPv4 BIG TCP, `bpf_sock_destroy`, arm64 tail-call/subprog parity). Anything older is refused at startup | 2.5 |
 | Features that need more than 6.6 | netkit pod devices (6.7 device, 6.8 required as in the reference), `BPF_FIB_LOOKUP_SRC` (6.7), `BPF_FIB_LOOKUP_MARK` (6.10), netkit scrub attributes (6.13, backported to 6.12.y) — disabled or degraded below those | 1, 2.5 |
 | 5.10 / 5.15 / RHEL 8 (4.18) | **Not supported.** Requires the legacy clsact attach path, an older verifier with weaker state pruning, `CAP_SYS_ADMIN` on RHEL 8, and no `bpf_loop`; incompatible with an aya-ebpf budget (ADR-0002) | 2.2, 3 |
@@ -222,10 +222,19 @@ as much as for complexity.
 | **6.6 LTS** | tcx, IPv4 BIG TCP, `BPF_FIB_LOOKUP_SKIP_NEIGH`, `_TBID`, `bpf_sock_destroy` (6.5), ISA v4 | **General minimum.** Everything in section 1 works except netkit, `FIB_LOOKUP_SRC`/`_MARK`. |
 | 6.7 / 6.8 | netkit device and link (6.7), netkit fixes the reference requires (6.8), `BPF_FIB_LOOKUP_SRC` | Enables the netkit datapath mode. |
 | 6.10 | `BPF_FIB_LOOKUP_MARK` | Egress-gateway/ip-rule interplay in FIB lookups. |
-| **6.12 LTS** | Everything above; netkit scrub attrs via backport; what Rocky 10 / RHEL 10 ship for the life of RHEL 10 | **Supported line (stormcos).** |
+| 6.12 LTS | Everything above; netkit scrub attrs via backport; what Rocky 10 / RHEL 10 ship for the life of RHEL 10 | Reference-derived; no stormcos release runs it (#309). |
+| **7.2 (Fedora)** | Everything above | **Supported line: the stormcos release kernel** (`7.2.8-200.fc44` in 11.88), measured by the test container (#256, #309). |
 | 6.18 LTS | Reference's "latest" CI row; nothing flowsdn needs | Next line candidate when stormcos moves; canary in CI. |
 
 ### 2.4 Recommendation (a): the stormcos kernel
+
+> **Superseded (2026-10-07, #309; owner's decision on #256).** stormcos ships
+> Fedora kernels fetched by `KERNEL=<n-v-r>`: `7.2.8-200.fc44` in release
+> 11.88. That release kernel is flowsdn's supported line, and the medium suite
+> on the stormcos test machines verifies it (spec 18 §9.1 records its `ctx_in`
+> matrix). The Rocky 10 text below is the original recommendation, kept as
+> history. Its advice to probe features rather than parse `uname -r` still
+> applies.
 
 **x86-64: Rocky Linux 10 `kernel-6.12.0-2xx.el10` — already pinned by stormcos
 (`stormcos/kernel/README.md`, validated pin `6.12.0-211.34.1.el10_2` on
@@ -717,7 +726,8 @@ Start from the reference's LVH set (`quay.io/lvh-images/kind:{5.15,6.1,6.6,
 | Row | Kernel | x86-64 image | arm64 image | Verifier (load every object variant, everything-on rodata, record complexity) | BPF unit tests (`BPF_PROG_RUN` packet fixtures) | Privileged userspace tests (netlink, maps, tcx/netkit/XDP attach) | e2e (kind + cilium-cli connectivity test) |
 |---|---|---|---|---|---|---|---|
 | Minimum | **6.6 LTS** | LVH `6.6` | Debian/Ubuntu arm64 cloud image with a 6.6.y kernel, or QEMU `virt` with an upstream 6.6.y build | PR gate | PR gate (x86), nightly (arm64) | nightly | nightly (x86) |
-| Supported line | **6.12** (Rocky 10 `el10` kernel **and** upstream 6.12.y) | Rocky 10 VM (the stormcos kernel exactly) + LVH `6.12` | Rocky 10 `aarch64` VM (4 K and `kernel-64k`) or the Rose node | PR gate (both) | PR gate (both) | PR gate (both) | PR gate (x86, Rocky kernel); nightly arm64 on the Rose cluster |
+| Supported line | **The stormcos release kernel** (Fedora `7.2.8-200.fc44` in 11.88) | the stormcos test machines (pve VMs, the Dell, blades) through `stormcentral test run flowsdn medium` | — (no arm64 test machine yet) | medium suite | medium suite | short/medium suites | the live node checks in the suites (`node-*`) |
+| (historical) 6.12 | Rocky 10 `el10` and upstream 6.12.y | Rocky 10 VM + LVH `6.12` | Rocky 10 `aarch64` VM | — | — | — | — (no stormcos release runs it, #309) |
 | Next | **6.18 LTS** | LVH `6.18` | upstream 6.18.y arm64 VM | PR gate (x86), nightly (arm64) | nightly | nightly | nightly (x86) |
 | Canary | latest stable / bpf-next | LVH latest when published, else own build | — | nightly, non-blocking | — | — | — |
 | Not run | rhel8.10 (4.18), 5.15, 6.1 | — | — | — | — | — | — |
