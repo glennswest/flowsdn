@@ -772,8 +772,19 @@ Notes.
   symbols in §2.6. `VETH=m` requires module packaging; thirteen other options
   are built in instead of modular. The [full comparison](validation/rocky-kernel-config-2026-09-22.md)
   records the exact image/kernel, and stormcos’s kernel README records the result.
-- arm64 NIC driver of the MikroTik RDS-class boards (`al_eth` or successor):
-  confirm no `ndo_bpf` → XDP disabled by default on that hardware.
+- **Resolved #40 (2026-10-07): no `ndo_bpf` on the MikroTik RDS-class NICs.**
+  The RDS2216/CCR2116 1G management port uses the Annapurna Alpine `al_eth`
+  driver, which is out of tree. Its 6.12 community port
+  (`bcyangkmluohmars/linux-alpine-v2`, `modules/al_eth/al_eth_main.c`) sets
+  open/stop/xmit/stats/ioctl/MTU/MAC/rx-mode/flow-steer/features and no
+  `ndo_bpf` or `ndo_xdp_xmit`; its TODO lists XDP as unimplemented. The
+  10–40G data ports sit behind a Marvell Prestera switch (mainline
+  `drivers/net/ethernet/marvell/prestera`, whose `net_device_ops` also have no
+  `ndo_bpf`; full use needs Marvell's CPSS or MikroTik's modules). So native XDP
+  is unavailable on that hardware: `loadBalancer.acceleration` stays
+  `disabled` there (generic XDP only, slower than tcx). flowsdn's datapath is
+  tc/TCX, which every netdev supports, so nothing else is affected. No RDS
+  board runs flowsdn yet.
 - Measure, not estimate: first Rust `bpf_host` NodePort build's `insns
   processed` on 6.6 versus the reference's C on the same kernel, to replace
   the 1.5–3× expectation in 3.3 with a number.
