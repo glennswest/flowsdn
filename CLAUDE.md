@@ -59,12 +59,12 @@ the persisted `CiliumEndpointUID` key. bpffs pins don't survive the reboot a sto
 renamed maps need no legacy-pin migration. Library-only names (config catalogue, clustermesh prefixes,
 identity labels, packaging, proxy probe) stay #339's.
 
-- [ ] BPF: `flowsdn_lxc`, `flowsdn_lb{4,6}_{services,backends,reverse_sk}`; loader, fixtures, docs.
-- [ ] State key `EndpointUID`; health comment.
-- [ ] `tools/check-no-cilium.sh FILE...` (binaries, objects, text); run by test/build.sh, release
-      build.sh, images/agent/build.sh. Rebuild embedded objects + bpf-objects.lock through sc-build.
-- [ ] ADR-0020 supersedes ADR-0013's compatibility names; docs/migration-from-cilium.md (one-time
-      conversion); changelog. sc-build; close #330 (and note what remains on #339).
+- [x] BPF `flowsdn_lxc`, `flowsdn_lb{4,6}_{services,backends,reverse_sk}`; loader, fixtures, docs (5628875).
+- [x] State key `EndpointUID`; health comment; embedded objects + lock rebuilt via sc-build (a6ec683).
+- [x] `tools/check-no-cilium.sh` in test/build.sh, release build.sh, images/agent/build.sh; ADR-0020;
+      docs/migration-from-cilium.md; changelog. sc-build at a6ec683: fmt, Clippy x2, 779 tests, chart,
+      test/build.sh, both release archives, image: every check clean.
+- [ ] Stage the golden (`stormcentral component stage flowsdn`); close #330; library names stay #339.
 
 ### Pod and container tagging — #328 (P1), 2026-10-06
 
