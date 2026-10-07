@@ -61,7 +61,10 @@ fn ipv6() -> Result<Vec<u8>> {
 }
 /// The kernel's answer to one test run: the verdict and output frame, or
 /// the errno it refused the run with.
-fn attempt(program: &SchedClassifier, packet: &[u8]) -> Result<std::result::Result<(u32, Vec<u8>), String>> {
+fn attempt(
+    program: &SchedClassifier,
+    packet: &[u8],
+) -> Result<std::result::Result<(u32, Vec<u8>), String>> {
     let mut output = vec![0; 2048];
     match program.test_run(TestRunOptions {
         data_in: Some(packet),
