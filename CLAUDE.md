@@ -260,6 +260,10 @@ cannot deliver routed packets to an IPv4 pod).
 - [x] #292 stays open (milestone 2 not delivered); status comment; proposed after #291.
 - [ ] Live check on a flowsdn node once stormcos ships kube-proxy: a pod resolves kubernetes.default via 10.96.0.10 and reaches 10.96.0.1:443.
 
+### Comment mining — 2026-10-07 (since 2026-10-06)
+
+- [x] Read 66 comments on the 46 issues updated since 2026-10-06. Filed #354 (P3: docs name golden a7ee3f63195b as latest; pre-4b40a980ad16 goldens' socket LB can't attach on 7.2). Closed #352 (owner answered on #266/#281) and #349 (fixed in ab652c4). Added: #338 (stormcentral#376 closed; waits on stormcos#303), #292 (stormcentral#107/#517 closed, builds may work), #321 (stormpump#102 fixed in golden-stormpump-236d2ed1dadd, stormcos#309). No fixes.
+
 ### Comment mining — 2026-10-04 (since 2026-10-04)
 
 - [x] Read the 24 comments on 33 issues updated since 2026-10-04. Everything was already filed (stormcos#266, #261; stormcentral#249, #376, #383, #384; stormconsole#83; flowsdn#314). Added the #383 decision to stormcentral#360 and the #256 row recommendation to #309. No fixes. stormcentral#383 settled the two-node pair: pvetest1 + pvetest2, both installed with the flowsdn flavor through #360. That makes the "Owner input needed before two-node acceptance" line under #291 stale.

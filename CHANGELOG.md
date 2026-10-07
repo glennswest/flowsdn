@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-07
+- **docs:** Comment mining since 2026-10-06: filed #354 (stale latest-golden docs), closed #352 and #349, additions on #338, #292 and #321 (CLAUDE.md).
 - **docs:** Spec 14: #266 (the uncompiled upstream `encrypt_host_wireguard_tunnel` file) is closed with flowsdn's own handling (`upstream_dead = true` in CASES.toml, the ten decision vectors in `flowsdn-bpf-abi/tests/encryption.rs`); nothing is reported upstream (owner). The packet-case ports stay deferred in PORTED.toml under the M3 encryption acceptance (#293).
 - **docs:** Spec 21 §12 decision 2 and the #281 defect record: the HTTPS-redirect matcher fix (d95e957, `crates/flowsdn-gateway/tests/https_redirect.rs`) is the resolution; by the owner's decision nothing is reported upstream (#281 closed).
 - **docs:** kernel-requirements §6: confirmed no `ndo_bpf` on the MikroTik RDS-class NICs (#40). The Alpine `al_eth` port's and mainline `prestera`'s `net_device_ops` were checked, so XDP acceleration stays disabled there; the TCX datapath is unaffected.
