@@ -64,7 +64,7 @@ identity labels, packaging, proxy probe) stay #339's.
 - [x] `tools/check-no-cilium.sh` in test/build.sh, release build.sh, images/agent/build.sh; ADR-0020;
       docs/migration-from-cilium.md; changelog. sc-build at a6ec683: fmt, Clippy x2, 779 tests, chart,
       test/build.sh, both release archives, image: every check clean.
-- [ ] Stage the golden (`stormcentral component stage flowsdn`); close #330; library names stay #339.
+- [x] Golden golden-flowsdn-7c9c52699a50 (flowsdn@a4afafc, stormcos#310); `shipped`; library names stay #339.
 
 ### Pod and container tagging — #328 (P1), 2026-10-06
 
