@@ -60,7 +60,15 @@ pub fn ctx_observe(ctx: TcContext) -> i32 {
         record(15, u64::from((*skb).len));
         (*skb).mark = WRITE_MARK;
         (*skb).priority = WRITE_PRIORITY;
-        (*skb).cb = WRITE_CB;
+        // One 4-byte store per word at its fixed offset: an array copy
+        // compiles to stores through a pointer moved to `cb`, which the
+        // verifier refuses ("dereference of modified ctx ptr", 7.2, #256).
+        let [cb0, cb1, cb2, cb3, cb4] = WRITE_CB;
+        core::ptr::write_volatile(&raw mut (*skb).cb[0], cb0);
+        core::ptr::write_volatile(&raw mut (*skb).cb[1], cb1);
+        core::ptr::write_volatile(&raw mut (*skb).cb[2], cb2);
+        core::ptr::write_volatile(&raw mut (*skb).cb[3], cb3);
+        core::ptr::write_volatile(&raw mut (*skb).cb[4], cb4);
     }
     TC_ACT_OK
 }
