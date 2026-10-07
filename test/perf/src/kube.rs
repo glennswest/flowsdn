@@ -291,33 +291,6 @@ pub fn ready_endpoints(slices: &Value) -> usize {
         .sum()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ready_nodes_and_endpoints() {
-        let list = json!({"items":[
-            {"metadata":{"name":"a"},"status":{"allocatable":{"pods":"250"},
-                "conditions":[{"type":"Ready","status":"True"}]}},
-            {"metadata":{"name":"b"},"spec":{"unschedulable":true},
-                "status":{"conditions":[{"type":"Ready","status":"True"}]}},
-            {"metadata":{"name":"c"},"status":{"conditions":[{"type":"Ready","status":"False"}]}},
-            {"metadata":{"name":"d"},"status":{"conditions":[{"type":"Ready","status":"True"}]}}
-        ]});
-        assert_eq!(
-            ready_nodes(&list),
-            vec![("a".to_owned(), 250), ("d".to_owned(), 110)]
-        );
-        let slices = json!({"items":[
-            {"endpoints":[{"addresses":["10.0.0.1"]},{"addresses":["10.0.0.2"],"conditions":{"ready":false}}]},
-            {"endpoints":[{"addresses":["10.0.0.3"],"conditions":{"ready":true}}]}
-        ]});
-        assert_eq!(ready_endpoints(&slices), 2);
-        assert_eq!(ready_endpoints(&json!({})), 0);
-    }
-}
-
 /// What in-cluster configuration needs and this pod has, for a failure
 /// report: the service variables, the service-account files, and whether
 /// `/var/run` leads to `/run` (#321, stormpump#102).
@@ -355,3 +328,32 @@ pub fn in_cluster_inputs() -> String {
         files.join(" ")
     )
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ready_nodes_and_endpoints() {
+        let list = json!({"items":[
+            {"metadata":{"name":"a"},"status":{"allocatable":{"pods":"250"},
+                "conditions":[{"type":"Ready","status":"True"}]}},
+            {"metadata":{"name":"b"},"spec":{"unschedulable":true},
+                "status":{"conditions":[{"type":"Ready","status":"True"}]}},
+            {"metadata":{"name":"c"},"status":{"conditions":[{"type":"Ready","status":"False"}]}},
+            {"metadata":{"name":"d"},"status":{"conditions":[{"type":"Ready","status":"True"}]}}
+        ]});
+        assert_eq!(
+            ready_nodes(&list),
+            vec![("a".to_owned(), 250), ("d".to_owned(), 110)]
+        );
+        let slices = json!({"items":[
+            {"endpoints":[{"addresses":["10.0.0.1"]},{"addresses":["10.0.0.2"],"conditions":{"ready":false}}]},
+            {"endpoints":[{"addresses":["10.0.0.3"],"conditions":{"ready":true}}]}
+        ]});
+        assert_eq!(ready_endpoints(&slices), 2);
+        assert_eq!(ready_endpoints(&json!({})), 0);
+    }
+}
+
