@@ -80,6 +80,24 @@ fn fixtures(env: &Env) -> Vec<(&'static str, PathBuf, Vec<PathBuf>)> {
     ]
 }
 
+/// The cause of a failure in one line: the last three lines that say
+/// something (a multi-line error, such as a verifier log printed as `Error:
+/// ProgramError { ... }`, ends in bare braces), joined, and at most 400
+/// characters from the end, since the runner keeps a line's tail (#341).
+pub fn failure_summary(output: &str) -> String {
+    let mut lines: Vec<&str> = output
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && l.chars().any(char::is_alphanumeric))
+        .rev()
+        .take(3)
+        .collect();
+    lines.reverse();
+    let joined = lines.join(" | ");
+    let skip = joined.chars().count().saturating_sub(400);
+    joined.chars().skip(skip).collect()
+}
+
 pub fn run(report: &mut Report, env: &Env) {
     for (test, binary, args) in fixtures(env) {
         if let Some(absent) = std::iter::once(&binary).chain(&args).find(|p| !p.is_file()) {
@@ -123,8 +141,26 @@ pub fn run(report: &mut Report, env: &Env) {
             if status.success() {
                 Ok(((), format!("{passes} PASS lines; last: {last}")))
             } else {
-                Err(format!("{status}: {last}"))
+                Err(format!("{status}: {}", failure_summary(&output)))
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::failure_summary;
+
+    #[test]
+    fn failure_summary_skips_braces_and_keeps_the_tail() {
+        let log = "PASS one\nError: LoadError {\n    verifier_log: \"0: R1=ctx\n5: invalid bpf_context access off=76 size=4\n\",\n}\n  }\n";
+        assert_eq!(
+            failure_summary(log),
+            "verifier_log: \"0: R1=ctx | 5: invalid bpf_context access off=76 size=4 | \","
+        );
+        assert_eq!(failure_summary("only line"), "only line");
+        assert_eq!(failure_summary(""), "");
+        let long = "x".repeat(1000);
+        assert_eq!(failure_summary(&long).len(), 400);
     }
 }

@@ -204,7 +204,7 @@ Spec 05 §3.8. The agent embeds the `socket-lb` BPF object: eight
 `cgroup_sock_addr` programs (`connect4/6`, `sendmsg4/6`, `recvmsg4/6`,
 `getpeername4/6`) over `flowsdn_lb{4,6}_services`, `flowsdn_lb{4,6}_backends`
 and `flowsdn_lb{4,6}_reverse_sk` (spec 01 layouts; flowsdn's names, #330). At startup it loads them
-and attaches them with `BPF_F_ALLOW_MULTI` to `kubernetes.cgroup-root`
+and attaches them as bpf_links (which coexist with other cgroup programs) to `kubernetes.cgroup-root`
 (default `/sys/fs/cgroup`; the manifests mount the host's root at
 `/run/flowsdn/cgroupv2`). A cgroup program sees every socket of every process
 below it, whatever its network namespace, so pods and the host are covered.

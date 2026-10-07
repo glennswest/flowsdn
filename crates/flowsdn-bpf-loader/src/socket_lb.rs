@@ -145,10 +145,13 @@ impl SocketLb {
         })
     }
 
-    /// Attach every program to the cgroup v2 directory `cgroup`, alongside
-    /// other programs there (`BPF_F_ALLOW_MULTI`). Pinned links of an earlier
-    /// owner are released only after the new ones are attached; while both
-    /// run, the second sees an already translated address and leaves it.
+    /// Attach every program to the cgroup v2 directory `cgroup` as a
+    /// bpf_link. Cgroup links always coexist with other programs there, so
+    /// no attach flag is passed: `BPF_F_ALLOW_MULTI` is a flag of the legacy
+    /// attach, and link creation refuses it with EINVAL (seen on 7.2, #292).
+    /// Pinned links of an earlier owner are released only after the new ones
+    /// are attached; while both run, the second sees an already translated
+    /// address and leaves it.
     pub fn attach(&mut self, cgroup: &Path) -> KernelResult<()> {
         if !self.links.is_empty() {
             return Err("socket-lb is already attached".into());
@@ -163,7 +166,7 @@ impl SocketLb {
                 .program_mut(name)
                 .ok_or_else(|| format!("socket-lb object has no program {name}"))?
                 .try_into()?;
-            let id = program.attach(&directory, CgroupAttachMode::AllowMultiple)?;
+            let id = program.attach(&directory, CgroupAttachMode::Single)?;
             let link: FdLink = program.take_link(id)?.try_into()?;
             let link = match &self.pin_root {
                 Some(root) => {
