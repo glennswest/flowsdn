@@ -1,5 +1,5 @@
 //! Subject/peer/port frontend and independent direct-flow simulator. Selectors
-//! here are equality conjunctions, not a complete Kubernetes selector parser.
+//! are equality conjunctions or Kubernetes label selectors (`crate::k8s`).
 use crate::{
     Error,
     mapstate::MapState,
@@ -12,6 +12,9 @@ pub enum Selector {
     None,
     Any,
     Labels(BTreeMap<String, String>),
+    /// A Kubernetes label selector (`crate::k8s`), over the endpoint's labels
+    /// as the selector spells them (`k8s:app`, ...).
+    Kubernetes(crate::k8s::LabelSelector),
 }
 impl Selector {
     pub fn matches(&self, endpoint: &Endpoint) -> bool {
@@ -21,6 +24,7 @@ impl Selector {
             Self::Labels(labels) => labels
                 .iter()
                 .all(|(k, v)| endpoint.labels.get(k) == Some(v)),
+            Self::Kubernetes(selector) => selector.matches(&endpoint.labels),
         }
     }
 }

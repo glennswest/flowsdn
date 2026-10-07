@@ -467,6 +467,91 @@ pub fn network_policy(object: &Value, cluster: Option<&str>) -> Result<Vec<Entry
     Ok(entries)
 }
 
+/// A peer the lowering cannot express yet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Unsupported {
+    pub labels: Vec<String>,
+    pub peer: Peer,
+    pub why: &'static str,
+}
+
+/// Lower entries to the simulator's (one per entry x peer x port), for
+/// direct evaluation and compilation over endpoint identities. A default-deny
+/// marker becomes an entry whose peers select nothing. `ipBlock` peers need
+/// CIDR identities, which do not exist yet: they are returned as unsupported
+/// and allow nothing, so a policy is never made more permissive than written.
+pub fn lower(
+    entries: &[Entry],
+) -> std::result::Result<(Vec<crate::simulator::Entry>, Vec<Unsupported>), crate::Error> {
+    use crate::{
+        oracle::{Peer as OraclePeer, Rule},
+        ports::PortRange,
+        simulator::{Entry as SimEntry, Port, Selector},
+    };
+    let mut out = Vec::new();
+    let mut unsupported = Vec::new();
+    for entry in entries {
+        let mut peers = Vec::new();
+        match &entry.l3 {
+            None => peers.push(Selector::Any),
+            Some(list) if list.is_empty() => peers.push(Selector::None),
+            Some(list) => {
+                for peer in list {
+                    match peer {
+                        Peer::Selector(selector) => {
+                            peers.push(Selector::Kubernetes(selector.clone()));
+                        }
+                        Peer::Cidr { .. } => unsupported.push(Unsupported {
+                            labels: entry.labels.clone(),
+                            peer: peer.clone(),
+                            why: "ipBlock peers need CIDR identities",
+                        }),
+                    }
+                }
+            }
+        }
+        // (protocol, port); None for every protocol and port.
+        let mut ports: Vec<(u8, Port)> = Vec::new();
+        match &entry.l4 {
+            None => ports.push((0, Port::Numeric(PortRange::any()))),
+            Some(list) => {
+                for rule in list {
+                    let protocol = rule.protocol.number();
+                    let port = match rule.port.parse::<u16>() {
+                        Ok(0) if rule.end_port.is_none() => Port::Numeric(PortRange::any()),
+                        Ok(number) => Port::Numeric(PortRange::from_api(number, rule.end_port)?),
+                        Err(_) => Port::Named(rule.port.clone()),
+                    };
+                    ports.push((protocol, port));
+                }
+            }
+        }
+        for selector in &peers {
+            for (protocol, port) in &ports {
+                out.push(SimEntry {
+                    subject: Selector::Kubernetes(entry.subject.clone()),
+                    peers: selector.clone(),
+                    default_deny: entry.default_deny,
+                    rule: Rule {
+                        tier: entry.tier,
+                        priority: entry.priority,
+                        verdict: entry.verdict,
+                        egress: !entry.ingress,
+                        peer: OraclePeer::Any,
+                        protocol: *protocol,
+                        ports: PortRange::any(),
+                        authentication: None,
+                        proxy_port: 0,
+                        listener_priority: 0,
+                    },
+                    port: port.clone(),
+                });
+            }
+        }
+    }
+    Ok((out, unsupported))
+}
+
 #[cfg(test)]
 #[path = "k8s_tests.rs"]
 mod tests;
