@@ -332,7 +332,7 @@ pub struct View {
     /// The frontends derived from both lists, and the service ID the maps
     /// hold for each one that is programmed.
     pub frontends: Vec<Frontend>,
-    pub service_ids: BTreeMap<Address, u16>,
+    pub service_ids: BTreeMap<(Address, u8), u16>,
     /// This node's endpoints and their Pods' annotation values (#328);
     /// nothing is written before the API thread first publishes them.
     pub endpoints: Vec<LocalEndpoint>,

@@ -40,6 +40,7 @@ fn service(frontend: &str, proto: u8, backends: &[&str]) -> Result<Service> {
             .map(|b| address(b, proto))
             .collect::<Result<_>>()?,
         affinity: None,
+        scope: socket::SCOPE_CLUSTER,
     })
 }
 /// Plan from the kernel's maps and apply, as the agent's services thread does.

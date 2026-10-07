@@ -103,7 +103,7 @@ fn kube_dns_and_kubernetes_services() {
     assert!(first.get("status").is_none());
     let ids = out
         .iter()
-        .map(|f| (f.service.frontend, 7))
+        .map(|f| ((f.service.frontend, f.service.scope), 7))
         .collect::<BTreeMap<_, _>>();
     let list = service_list(&out, &ids);
     let row = list
@@ -240,8 +240,21 @@ fn node_ports_external_and_load_balancer_addresses_and_traffic_policies() {
         "n1",
         &nodes,
     );
-    // ClusterIP, external IP, LB IP, and a NodePort on each node address.
-    assert_eq!(out.len(), 6);
+    // ClusterIP, external IP, LB IP, and a NodePort on each node address;
+    // all but the cluster IP also get a node-local copy for the uplink.
+    assert_eq!(out.len(), 11);
+    let local = |address: &str, port: u16| {
+        out.iter()
+            .find(|f| {
+                f.service.scope == SCOPE_NODE_LOCAL
+                    && f.service.frontend.ip == ip(address)
+                    && f.service.frontend.port == port
+            })
+            .map(|f| f.service.backends.iter().map(|b| b.ip).collect::<Vec<_>>())
+    };
+    assert_eq!(local("192.168.0.2", 30080), Some(vec![ip("10.1.0.5")]), "n1's own backend");
+    assert_eq!(local("198.51.100.7", 80), Some(vec![ip("10.1.0.5")]));
+    assert_eq!(local("10.96.5.5", 80), None, "cluster IPs have no uplink copy");
     assert_eq!(find(&out, "10.96.5.5", 80), ("ClusterIP", both.clone()));
     assert_eq!(find(&out, "192.0.2.10", 80), ("ExternalIPs", both.clone()));
     assert_eq!(
@@ -268,7 +281,7 @@ fn node_ports_external_and_load_balancer_addresses_and_traffic_policies() {
         ..web
     };
     let out = frontends(&[plain], &[slice], "n1", &nodes);
-    assert_eq!(out.len(), 2, "cluster IP and external IP only");
+    assert_eq!(out.len(), 3, "cluster IP, external IP and its node-local copy");
     let row = service_list(&out, &BTreeMap::new());
     assert_eq!(
         row.pointer("/1/spec/flags/type"),

@@ -10,7 +10,7 @@
 //! node's endpoints, and `externalTrafficPolicy: Local` limits a NodePort on a
 //! node's address to that node's endpoints, as for a packet arriving there.
 //! Pure data; the `kubernetes` controller feeds and applies it.
-use flowsdn_lb::socket::{Address, PROTO_TCP, PROTO_UDP, Service};
+use flowsdn_lb::socket::{Address, PROTO_TCP, PROTO_UDP, SCOPE_CLUSTER, SCOPE_NODE_LOCAL, Service};
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -152,7 +152,7 @@ pub fn frontends(
             .or_default()
             .push(slice);
     }
-    let mut out = BTreeMap::new();
+    let mut out: BTreeMap<(Address, u8), Frontend> = BTreeMap::new();
     for service in services {
         let slices = by_service
             .get(&(service.namespace.as_str(), service.name.as_str()))
@@ -192,19 +192,31 @@ pub fn frontends(
                     port: frontend_port,
                     proto,
                 };
-                // An address can front one Service port; the first one wins.
-                out.entry(frontend).or_insert_with(|| Frontend {
-                    namespace: service.namespace.clone(),
-                    name: service.name.clone(),
-                    port_name: port.name.clone(),
-                    service_type: service.service_type.clone(),
-                    kind,
-                    service: Service {
-                        frontend,
-                        backends: backends(port, proto, ip.is_ipv6(), slices, only),
-                        affinity: service.affinity,
-                    },
-                });
+                // Packets from outside the cluster reach a NodePort, external
+                // or LoadBalancer address on this node's uplink, and are only
+                // sent to this node's backends (no SNAT yet).
+                let scopes: &[u8] = if kind == "ClusterIP" {
+                    &[SCOPE_CLUSTER]
+                } else {
+                    &[SCOPE_CLUSTER, SCOPE_NODE_LOCAL]
+                };
+                for &scope in scopes {
+                    let only = if scope == SCOPE_NODE_LOCAL { Some(local) } else { only };
+                    // An address can front one Service port; the first one wins.
+                    out.entry((frontend, scope)).or_insert_with(|| Frontend {
+                        namespace: service.namespace.clone(),
+                        name: service.name.clone(),
+                        port_name: port.name.clone(),
+                        service_type: service.service_type.clone(),
+                        kind,
+                        service: Service {
+                            frontend,
+                            backends: backends(port, proto, ip.is_ipv6(), slices, only),
+                            affinity: service.affinity,
+                            scope,
+                        },
+                    });
+                }
             }
         }
     }
@@ -225,14 +237,20 @@ fn address_json(address: &Address) -> Value {
 /// `GET /v1/service` (reference `Service` model, ClusterIP subset): `id` is
 /// the programmed service ID (`rev_nat_index`), 0 until the maps hold it;
 /// `status.realized` is present once they do.
-pub fn service_list(frontends: &[Frontend], ids: &BTreeMap<Address, u16>) -> Value {
+pub fn service_list(frontends: &[Frontend], ids: &BTreeMap<(Address, u8), u16>) -> Value {
     Value::Array(
         frontends
             .iter()
             .map(|f| {
                 let mut front = address_json(&f.service.frontend);
                 if let Some(object) = front.as_object_mut() {
-                    object.insert("scope".into(), json!("external"));
+                    // `node-local`: the uplink copy with this node's backends.
+                    let scope = if f.service.scope == SCOPE_NODE_LOCAL {
+                        "node-local"
+                    } else {
+                        "external"
+                    };
+                    object.insert("scope".into(), json!(scope));
                 }
                 let backends: Vec<_> = f
                     .service
@@ -246,7 +264,10 @@ pub fn service_list(frontends: &[Frontend], ids: &BTreeMap<Address, u16>) -> Val
                         row
                     })
                     .collect();
-                let id = ids.get(&f.service.frontend).copied().unwrap_or(0);
+                let id = ids
+                    .get(&(f.service.frontend, f.service.scope))
+                    .copied()
+                    .unwrap_or(0);
                 let mut flags = json!({"type":f.kind,"name":f.name,"namespace":f.namespace,
                     "port-name":f.port_name,"service-type":f.service_type});
                 if let (Some(seconds), Some(object)) = (f.service.affinity, flags.as_object_mut()) {

@@ -15,6 +15,7 @@ fn dns(backends: &[&str]) -> Vec<Service> {
             frontend: front(proto),
             backends: backends.iter().map(|ip| addr(ip, 53, proto)).collect(),
             affinity: None,
+            scope: SCOPE_CLUSTER,
         })
         .collect()
 }
@@ -26,13 +27,19 @@ fn sync(current: &mut Maps, services: &[Service]) -> Desired {
     let mut step = current.clone();
     for op in &ops {
         apply(&mut step, std::slice::from_ref(op));
-        for frontend in step
+        for (frontend, scope) in step
             .services4
             .keys()
-            .map(|k| frontend4(*k).0)
-            .chain(step.services6.keys().map(|k| frontend6(*k).0))
+            .map(|k| {
+                let (f, scope, _) = frontend4(*k);
+                (f, scope)
+            })
+            .chain(step.services6.keys().map(|k| {
+                let (f, scope, _) = frontend6(*k);
+                (f, scope)
+            }))
         {
-            if let Some(result) = resolve(&step, frontend) {
+            if let Some(result) = resolve_scope(&step, frontend, scope) {
                 result.expect("intermediate state resolves");
             }
         }
@@ -74,7 +81,7 @@ fn cluster_ip_resolves_to_each_backend() {
     let master = LbService::from_bytes(
         *maps
             .services4
-            .get(&key4(udp, 0).expect("key"))
+            .get(&key4(udp, 0, 0).expect("key"))
             .expect("master"),
     );
     assert_eq!(master.count, 2);
@@ -139,11 +146,13 @@ fn dual_stack_and_mixed_backends() {
                 addr("fd00::1", 6443, PROTO_TCP),
             ],
             affinity: None,
+            scope: SCOPE_CLUSTER,
         },
         Service {
             frontend: addr("fd00:10:96::1", 443, PROTO_TCP),
             backends: vec![addr("fd00::1", 6443, PROTO_TCP)],
             affinity: None,
+            scope: SCOPE_CLUSTER,
         },
     ];
     sync(&mut maps, &services);
@@ -171,7 +180,7 @@ fn foreign_stale_entries_are_pruned() {
     // interrupted earlier agent could leave them.
     let udp = addr("10.96.0.10", 53, PROTO_UDP);
     maps.services4.insert(
-        key4(udp, 7).expect("key"),
+        key4(udp, 0, 7).expect("key"),
         LbService {
             union_raw: 99,
             rev_nat_index: 3,
@@ -185,7 +194,7 @@ fn foreign_stale_entries_are_pruned() {
     );
     sync(&mut maps, &dns(&["10.172.0.5"]));
     assert!(!maps.backends4.contains_key(&99));
-    assert!(!maps.services4.contains_key(&key4(udp, 7).expect("key")));
+    assert!(!maps.services4.contains_key(&key4(udp, 0, 7).expect("key")));
 }
 
 #[test]
@@ -213,7 +222,7 @@ fn session_affinity_sets_the_master_and_tracks_matches() {
         LbService::from_bytes(
             *maps
                 .services4
-                .get(&key4(addr("10.96.0.10", 53, PROTO_UDP), 0).expect("key"))
+                .get(&key4(addr("10.96.0.10", 53, PROTO_UDP), 0, 0).expect("key"))
                 .expect("master"),
         )
     };
@@ -242,4 +251,45 @@ fn session_affinity_sets_the_master_and_tracks_matches() {
     assert_eq!(master(&maps).union_raw, 0);
     // A timeout beyond 24 bits is refused, not truncated.
     assert!(desired(&maps, &sticky(&["10.172.0.6"], Some(1 << 24))).is_err());
+}
+
+#[test]
+fn node_local_scope_is_a_separate_service_with_its_own_id() {
+    let mut maps = Maps::default();
+    let front = addr("192.168.0.1", 30080, PROTO_TCP);
+    let cluster = Service {
+        frontend: front,
+        backends: vec![
+            addr("10.1.0.5", 8080, PROTO_TCP),
+            addr("10.2.0.5", 8080, PROTO_TCP),
+        ],
+        affinity: None,
+        scope: SCOPE_CLUSTER,
+    };
+    let local = Service {
+        backends: vec![addr("10.1.0.5", 8080, PROTO_TCP)],
+        scope: SCOPE_NODE_LOCAL,
+        ..cluster.clone()
+    };
+    let want = sync(&mut maps, &[cluster.clone(), local.clone()]);
+    assert_eq!(
+        resolve_scope(&maps, front, SCOPE_CLUSTER).map(|r| r.expect("resolves").len()),
+        Some(2)
+    );
+    assert_eq!(
+        resolve_scope(&maps, front, SCOPE_NODE_LOCAL).map(|r| r.expect("resolves")),
+        Some(vec![addr("10.1.0.5", 8080, PROTO_TCP)])
+    );
+    // Both scopes share the backend; each scope is its own service ID.
+    assert_eq!(maps.backends4.len(), 2);
+    assert_eq!(want.ids.len(), 2);
+    assert_ne!(
+        want.ids.get(&(front, SCOPE_CLUSTER)),
+        want.ids.get(&(front, SCOPE_NODE_LOCAL))
+    );
+    // The same frontend and scope twice is refused; IDs survive a re-plan.
+    assert!(desired(&maps, &[cluster.clone(), cluster.clone()]).is_err());
+    let again = desired(&maps, &[cluster, local]).expect("desired");
+    assert_eq!(again.ids, want.ids);
+    assert!(plan(&maps, &again.maps).is_empty());
 }

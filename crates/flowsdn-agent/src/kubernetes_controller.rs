@@ -521,7 +521,7 @@ fn service_loop(receiver: &mpsc::Receiver<Vec<socket::Service>>, view: &Shared, 
 fn program(
     lb: &mut SocketLb,
     services: &[socket::Service],
-) -> std::result::Result<BTreeMap<socket::Address, u16>, String> {
+) -> std::result::Result<BTreeMap<(socket::Address, u8), u16>, String> {
     let current = lb.dump().map_err(|e| format!("read LB maps: {e}"))?;
     let want = socket::desired(&current, services)?;
     let ops = socket::plan(&current, &want.maps);
