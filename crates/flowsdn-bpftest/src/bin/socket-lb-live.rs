@@ -192,7 +192,8 @@ fn l4_sum(proto: u8, src: [u8; 4], dst: [u8; 4], l4: &[u8]) -> u32 {
     sum(l4, sum(&pseudo, 0))
 }
 /// (src, dst, sport, dport, IPv4 checksum ok, L4 checksum ok or zero UDP).
-fn parse4(f: &[u8]) -> Result<([u8; 4], [u8; 4], u16, u16, bool, bool)> {
+type Parsed4 = ([u8; 4], [u8; 4], u16, u16, bool, bool);
+fn parse4(f: &[u8]) -> Result<Parsed4> {
     let ip = f.get(14..34).ok_or("short frame")?;
     let l4 = f.get(34..).ok_or("short frame")?;
     let src: [u8; 4] = ip.get(12..16).ok_or("ip")?.try_into()?;
