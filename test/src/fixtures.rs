@@ -156,7 +156,7 @@ mod tests {
         let log = "PASS one\nError: LoadError {\n    verifier_log: \"0: R1=ctx\n5: invalid bpf_context access off=76 size=4\n\",\n}\n  }\n";
         assert_eq!(
             failure_summary(log),
-            "verifier_log: \"0: R1=ctx | 5: invalid bpf_context access off=76 size=4 | \","
+            "Error: LoadError { | verifier_log: \"0: R1=ctx | 5: invalid bpf_context access off=76 size=4"
         );
         assert_eq!(failure_summary("only line"), "only line");
         assert_eq!(failure_summary(""), "");
