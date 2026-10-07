@@ -700,8 +700,9 @@ exercise the JIT output and the drivers.
 ### 5.3 Test matrix recommendation
 
 > **Decision (owner, 2026-10-05, #256).** The kernel rows that gate flowsdn
-> are **the kernels stormcos ships**: today's release kernel is Fedora
-> `7.2.5-100.fc43`, later the one stormcos#246/#254 settle on. They run
+> are **the kernels stormcos ships**: Fedora `7.2.5-100.fc43` when this was
+> decided, `7.2.8-200.fc44` in release 11.88, where the medium suite passed
+> including the `__sk_buff` `ctx_in` matrix (spec 18 §9.1, 2026-10-07). They run
 > through flowsdn's test container (`test/`, `stormcentral test run flowsdn
 > <suite>`) on the stormcos test machines. flowsdn exists to be stormcos's
 > network, and stormcos ships only Fedora kernels. The 6.6/6.12/6.18, Rocky and
