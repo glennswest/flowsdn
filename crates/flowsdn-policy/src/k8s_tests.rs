@@ -237,7 +237,12 @@ mod enforcement {
     use crate::oracle::Decision;
     use crate::simulator::{self, Endpoint};
 
-    fn pod(identity: u32, namespace: &str, pairs: &[(&str, &str)], ns_labels: &[(&str, &str)]) -> Endpoint {
+    fn pod(
+        identity: u32,
+        namespace: &str,
+        pairs: &[(&str, &str)],
+        ns_labels: &[(&str, &str)],
+    ) -> Endpoint {
         let mut labels: BTreeMap<String, String> = pairs
             .iter()
             .map(|(k, v)| (format!("k8s:{k}"), (*v).to_owned()))
@@ -264,7 +269,13 @@ mod enforcement {
         let other = pod(12, "shop", &[("role", "other")], &[]);
         let monitor = pod(20, "ops", &[("app", "monitor")], &[("team", "ops")]);
         let stranger = pod(21, "dev", &[("role", "client")], &[("team", "dev")]);
-        let endpoints = [web.clone(), client.clone(), other.clone(), monitor.clone(), stranger.clone()];
+        let endpoints = [
+            web.clone(),
+            client.clone(),
+            other.clone(),
+            monitor.clone(),
+            stranger.clone(),
+        ];
         let entries = network_policy(
             &policy(json!({
                 "podSelector":{"matchLabels":{"app":"web"}},
@@ -280,7 +291,9 @@ mod enforcement {
         let (lowered, unsupported) = lower(&entries).expect("lower");
         assert!(unsupported.is_empty());
         let ingress = |from: &Endpoint, protocol: u8, port: u16| {
-            allowed(simulator::evaluate(&lowered, from, &web, false, protocol, port).expect("evaluate"))
+            allowed(
+                simulator::evaluate(&lowered, from, &web, false, protocol, port).expect("evaluate"),
+            )
         };
         assert!(ingress(&client, 6, 80));
         assert!(ingress(&client, 6, 8080), "named port http");
@@ -291,15 +304,21 @@ mod enforcement {
         assert!(ingress(&monitor, 6, 9000), "the ops namespace, any port");
         assert!(ingress(&monitor, 17, 53));
         // Not the subject, or the other direction: no policy, allowed.
-        assert!(allowed(simulator::evaluate(&lowered, &other, &client, false, 6, 80).expect("evaluate")));
-        assert!(allowed(simulator::evaluate(&lowered, &web, &other, true, 6, 80).expect("evaluate")));
+        assert!(allowed(
+            simulator::evaluate(&lowered, &other, &client, false, 6, 80).expect("evaluate")
+        ));
+        assert!(allowed(
+            simulator::evaluate(&lowered, &web, &other, true, 6, 80).expect("evaluate")
+        ));
         // The compiled map for web's ingress agrees with direct evaluation.
         let compiled = simulator::compile(&lowered, &web, &endpoints, false).expect("compile");
         for peer in &endpoints {
             for protocol in [6u8, 17] {
                 for port in [53u16, 79, 80, 81, 8080, 9000] {
-                    let direct =
-                        allowed(simulator::evaluate(&lowered, peer, &web, false, protocol, port).expect("evaluate"));
+                    let direct = allowed(
+                        simulator::evaluate(&lowered, peer, &web, false, protocol, port)
+                            .expect("evaluate"),
+                    );
                     let mapped = allowed(compiled.lookup(crate::oracle::Packet {
                         identity: peer.identity,
                         egress: false,
@@ -318,11 +337,17 @@ mod enforcement {
         let client = pod(11, "shop", &[("role", "client")], &[]);
         let deny = network_policy(&policy(json!({"podSelector":{}})), None).expect("import");
         let (lowered, _) = lower(&deny).expect("lower");
-        assert!(!allowed(simulator::evaluate(&lowered, &client, &web, false, 6, 80).expect("evaluate")));
+        assert!(!allowed(
+            simulator::evaluate(&lowered, &client, &web, false, 6, 80).expect("evaluate")
+        ));
         // Egress is not covered by an Ingress-only policy.
-        assert!(allowed(simulator::evaluate(&lowered, &web, &client, true, 6, 80).expect("evaluate")));
+        assert!(allowed(
+            simulator::evaluate(&lowered, &web, &client, true, 6, 80).expect("evaluate")
+        ));
         let blocks = network_policy(
-            &policy(json!({"podSelector":{},"ingress":[{"from":[{"ipBlock":{"cidr":"10.0.0.0/8"}}]}]})),
+            &policy(
+                json!({"podSelector":{},"ingress":[{"from":[{"ipBlock":{"cidr":"10.0.0.0/8"}}]}]}),
+            ),
             None,
         )
         .expect("import");
@@ -330,14 +355,20 @@ mod enforcement {
         assert_eq!(unsupported.len(), 1);
         // The subject stays default-deny: an unsupported peer allows nothing,
         // never everything.
-        assert!(!allowed(simulator::evaluate(&lowered, &client, &web, false, 6, 80).expect("evaluate")));
+        assert!(!allowed(
+            simulator::evaluate(&lowered, &client, &web, false, 6, 80).expect("evaluate")
+        ));
         let all_ports = network_policy(
             &policy(json!({"podSelector":{},"ingress":[{"ports":[{"protocol":"UDP"}]}]})),
             None,
         )
         .expect("import");
         let (lowered, _) = lower(&all_ports).expect("lower");
-        assert!(allowed(simulator::evaluate(&lowered, &client, &web, false, 17, 5353).expect("evaluate")));
-        assert!(!allowed(simulator::evaluate(&lowered, &client, &web, false, 6, 80).expect("evaluate")));
+        assert!(allowed(
+            simulator::evaluate(&lowered, &client, &web, false, 17, 5353).expect("evaluate")
+        ));
+        assert!(!allowed(
+            simulator::evaluate(&lowered, &client, &web, false, 6, 80).expect("evaluate")
+        ));
     }
 }
