@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-07
+- **docs:** Spec 14: #266 (the uncompiled upstream `encrypt_host_wireguard_tunnel` file) is closed with flowsdn's own handling (`upstream_dead = true` in CASES.toml, the ten decision vectors in `flowsdn-bpf-abi/tests/encryption.rs`); nothing is reported upstream (owner). The packet-case ports stay deferred in PORTED.toml under the M3 encryption acceptance (#293).
 - **docs:** Spec 21 §12 decision 2 and the #281 defect record: the HTTPS-redirect matcher fix (d95e957, `crates/flowsdn-gateway/tests/https_redirect.rs`) is the resolution; by the owner's decision nothing is reported upstream (#281 closed).
 - **docs:** kernel-requirements §6: confirmed no `ndo_bpf` on the MikroTik RDS-class NICs (#40). The Alpine `al_eth` port's and mainline `prestera`'s `net_device_ops` were checked, so XDP acceleration stays disabled there; the TCX datapath is unaffected.
 - **docs:** Spec 20 §2.7's fastetcd checklist re-scored against fastetcd v1.18.0 (#307): F6, F7, F10, F14, F19 and F21 are fixed upstream (versions named), F17 is partial (per-member cluster id, fastetcd#38), and only F11 remains (filed as fastetcd#129). F18 changes meaning at fastetcd 2.0.0: the manifest must add `--auto-compaction-mode=revision` then (§6.6). Mitigations stay until a conformance run against the pinned version (§12 decisions 2 and 5 unchanged); §3.8.5, §5.4.4 and §3.7.4 notes updated.

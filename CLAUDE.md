@@ -50,6 +50,13 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Uncompiled upstream WireGuard-tunnel cases — #266, 2026-10-07
+
+Owner: report nothing upstream; close with flowsdn's handling (upstream_dead, ten decision vectors).
+
+- [x] Spec 14 retargets the deferred packet-case ports to #293; changelog.
+- [x] Verified by the full workspace sc-build at 481bacb (flowsdn-bpf-abi encryption tests); #266 closed.
+
 ### HTTPS-redirect matcher — #281, 2026-10-07
 
 Owner: report nothing upstream, ever; close with the local fix (d95e957).

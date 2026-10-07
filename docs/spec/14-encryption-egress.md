@@ -483,8 +483,10 @@ vectors vary the destination key, source scope, proxy bypass, node encryption,
 neighbor-advertisement exemption, invalid packet and already-encrypted mark.
 These tests are **not completed packet-case ports**: the Rust `to_netdev`
 encryption hook, packet parser/mark recovery, ipcache LPM adapter, redirect
-execution and packet/map assertions are still missing. #266 remains open
-until those adapters exercise the ten cases; neither a decision result nor a
+execution and packet/map assertions are still missing. #266 is closed with
+this handling (owner, 2026-10-07: nothing is reported upstream); the packet-case
+ports stay `deferred` in `tests/bpf/PORTED.toml` and belong to the M3
+encryption acceptance (#293). Neither a decision result nor a
 redirect verdict proves encrypted WireGuard traffic on the wire.
 
 Ingress, `from_wireguard` (tc ingress on `cilium_wg0`, attached
