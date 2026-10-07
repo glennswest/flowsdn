@@ -152,6 +152,7 @@ Kubernetes API, and measures with Rust clients. JSON lines per metric with `flav
 - [x] `/test perf` dispatch; requires.toml `[perf]`; Containerfile/build.sh; docs (test/README metric table), changelog.
 - [x] sc-build at e397e16: fmt, Clippy, 705 tests, test/build.sh, podman build; `/test perf` execs flowsdn-perf in the image. Status on #321; format on stormcentral#412.
 - [x] `perf-scale` ramp (steps of 100 pods until a step fails; owner request) at 5dc4de3: Clippy clean, tests pass, test/build.sh.
+- [ ] 2026-10-07: perf at a207bfc queued on pvetest1 (cilium, 11.88) as 47a8caf4ba and pvetest2 (flowsdn, 11.88-flowsdn) as e7c0bf65d8. Compare, post the table on #321, then perf-scale at night on each.
 - [ ] Runs on both flavors (perf by day, perf-scale at night on a pve VM): 8c822b3547 (C2NR0Q2) 507 on push (stormcentral#376); f0107a4784/f68f31432b no pvetest VMs until install. Proposed after stormcentral#376.
 
 ### ClusterIP service datapath — #292 (P0), 2026-10-05
