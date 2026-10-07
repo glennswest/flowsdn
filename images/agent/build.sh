@@ -23,6 +23,7 @@ rm -rf "$stage"
 mkdir -p "$stage"
 cp "$target_dir/x86_64-unknown-linux-gnu/release/flowsdn-agent" "$stage/"
 cp "$target_dir/x86_64-unknown-linux-musl/release/flowsdn-cni" "$stage/"
+"$root/tools/check-no-cilium.sh" "$stage"
 image="localhost/flowsdn-agent:$version"
 podman build -f "$root/images/agent/Containerfile" --build-arg "VERSION=$version" \
     --build-arg "REVISION=$revision" -t "$image" "$root"

@@ -47,5 +47,9 @@ for f in "$stage/test" "$stage"/opt/flowsdn/bin/flowsdn-{agent,cni} "$stage"/opt
         exit 1
     fi
 done
+# What ships in the golden (#330): the agent, the CNI and the objects the
+# agent embeds. Test-only fixtures and objects are not shipped.
+"$root/tools/check-no-cilium.sh" "$stage"/opt/flowsdn/bin/flowsdn-{agent,cni} \
+    "$stage"/opt/flowsdn/bpf/{local-delivery,socket-lb}
 du -sh "$stage"
 echo "staged $stage"

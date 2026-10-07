@@ -3,7 +3,7 @@
 //! `recvmsg`/`getpeername` rewrite a UDP backend back to its frontend. The
 //! translation happens before routing, for the host and every pod netns, so
 //! no packet DNAT or conntrack entry is needed. IPv4-mapped IPv6 addresses
-//! use the IPv4 maps. Maps use the Cilium layouts (spec 01 §4.3); the agent
+//! use the IPv4 maps. Map layouts follow spec 01 §4.3; the agent
 //! owns their contents. Session affinity, Maglev, NodePort surrogates,
 //! skip-LB and socket termination are not implemented here.
 #![no_std]
@@ -33,22 +33,22 @@ const REJECT: i32 = 0;
 /// The third word of an IPv4-mapped IPv6 address (`::ffff:a.b.c.d`).
 const MAPPED: u32 = u32::from_ne_bytes([0, 0, 0xff, 0xff]);
 
-#[map(name = "cilium_lb4_services_v2")]
+#[map(name = "flowsdn_lb4_services")]
 static LB4_SERVICES: HashMap<Lb4Key, LbService> =
     HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
-#[map(name = "cilium_lb4_backends_v3")]
+#[map(name = "flowsdn_lb4_backends")]
 static LB4_BACKENDS: HashMap<u32, Lb4Backend> =
     HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
-#[map(name = "cilium_lb4_reverse_sk")]
+#[map(name = "flowsdn_lb4_reverse_sk")]
 static LB4_REVERSE_SK: LruHashMap<Ipv4RevnatTuple, Ipv4RevnatEntry> =
     LruHashMap::with_max_entries(65536, 0);
-#[map(name = "cilium_lb6_services_v2")]
+#[map(name = "flowsdn_lb6_services")]
 static LB6_SERVICES: HashMap<Lb6Key, LbService> =
     HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
-#[map(name = "cilium_lb6_backends_v3")]
+#[map(name = "flowsdn_lb6_backends")]
 static LB6_BACKENDS: HashMap<u32, Lb6Backend> =
     HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
-#[map(name = "cilium_lb6_reverse_sk")]
+#[map(name = "flowsdn_lb6_reverse_sk")]
 static LB6_REVERSE_SK: LruHashMap<Ipv6RevnatTuple, Ipv6RevnatEntry> =
     LruHashMap::with_max_entries(65536, 0);
 

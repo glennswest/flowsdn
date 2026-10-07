@@ -174,7 +174,7 @@ pub struct Metrics {
     pub levels: BTreeMap<Level, u64>,
     pub degraded_modules: BTreeMap<String, u64>,
 }
-/// Snapshot values for cilium_hive_status and cilium_hive_degraded_status;
+/// Snapshot values for the health status and degraded-module gauges;
 /// no metrics registry/exporter is installed by this crate.
 pub fn metrics(snapshot: &Snapshot<HealthStatus>) -> Metrics {
     let mut metrics = Metrics::default();

@@ -215,8 +215,10 @@ Releasing an excluded address removes its allocation but does not remove the
 exclusion. Summaries inspect sparse allocation/exclusion metadata; they never
 scan the IPv6 address space or materialize exclusions merely to count them.
 
-## Compatibility field identity
+## Persisted endpoint fields
 
-The persisted `CiliumEndpointUID` JSON field retains its compatibility spelling.
-It is not a CRD kind, API group or permission to adopt upstream objects. Owned
+The persisted endpoint document's `EndpointUID` field (the UID of the
+endpoint's FlowsdnEndpoint, empty while none is owned) was spelled with the
+reference project's name before #330; documents written earlier keep the old
+key as a retained unknown field. It is not permission to adopt upstream objects. Owned
 Kubernetes resources follow [ADR-0017](decisions/0017-flowsdn-resource-identity.md).

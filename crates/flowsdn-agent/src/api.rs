@@ -738,7 +738,7 @@ impl Api {
             "SecLabel":null,"Options":{},"DNSHistory":null,"DNSZombies":null,
             "K8sPodName":pod,"K8sNamespace":namespace,"K8sUID":optional(body,"k8s-uid")?,
             "DatapathConfiguration":{"require-arp-passthrough":false,"require-egress-prog":false,"external-ipam":false,"require-routing":null,"install-endpoint-route":false,"disable-sip-verification":false},
-            "CiliumEndpointUID":"","Properties":{},"NetnsCookie":cookie,"RTInfo":0,"CNIHostAddressing":self.config.addressing(),"CNIRouteMTU":self.config.route_mtu});
+            "EndpointUID":"","Properties":{},"NetnsCookie":cookie,"RTInfo":0,"CNIHostAddressing":self.config.addressing(),"CNIRouteMTU":self.config.route_mtu});
         let id = self.manager.create(document.clone())?;
         for ip in ips {
             self.leases.remove(&ip);

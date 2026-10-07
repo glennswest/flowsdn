@@ -92,7 +92,7 @@ impl LocalDelivery {
         Self::from_bpf(loader(egress).load(&object.read()?)?, None)
     }
     fn from_bpf(mut bpf: Ebpf, pin_root: Option<PathBuf>) -> KernelResult<Self> {
-        let map = bpf.take_map("cilium_lxc").ok_or("missing endpoint map")?;
+        let map = bpf.take_map("flowsdn_lxc").ok_or("missing endpoint map")?;
         let map_id = match &map {
             Map::HashMap(data) => data.info()?.id(),
             _ => return Err("unexpected endpoint map type".into()),
@@ -145,7 +145,7 @@ impl LocalDelivery {
         if fs::symlink_metadata(root)?.file_type().is_symlink() {
             return Err("pin root cannot be a symlink".into());
         }
-        let map_path = root.join("cilium_lxc");
+        let map_path = root.join("flowsdn_lxc");
         match fs::symlink_metadata(&map_path) {
             Ok(meta) => {
                 if meta.file_type().is_symlink() {
@@ -167,7 +167,7 @@ impl LocalDelivery {
             Err(e) => return Err(e.into()),
         }
         let bpf = loader(egress)
-            .map_pin_path("cilium_lxc", &map_path)
+            .map_pin_path("flowsdn_lxc", &map_path)
             .load(&object.read()?)?;
         Self::from_bpf(bpf, Some(root.to_owned()))
     }

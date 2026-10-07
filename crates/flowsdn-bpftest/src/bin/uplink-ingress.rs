@@ -116,7 +116,7 @@ fn main() -> Result<()> {
         .ok_or("usage: uplink-ingress LOCAL_DELIVERY_OBJECT")?;
     let mut bpf = EbpfLoader::new().load_file(path)?;
     let mut endpoints: HashMap<MapData, [u8; 20], [u8; 48]> =
-        HashMap::try_from(bpf.take_map("cilium_lxc").ok_or("endpoint map")?)?;
+        HashMap::try_from(bpf.take_map("flowsdn_lxc").ok_or("endpoint map")?)?;
     let endpoint = EndpointInfo {
         ifindex: 1,
         mac: 0x020100000002,

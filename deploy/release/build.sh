@@ -77,6 +77,7 @@ flowsdn-cni     the CNI plugin; 'flowsdn-cni install' copies it into /opt/cni/bi
 Configuration and limits: https://github.com/glennswest/flowsdn/blob/$revision/docs/runtime.md
 EOF
     printf '%s\n' "$revision" >"$stage/REVISION"
+    "$root/tools/check-no-cilium.sh" "$stage"
     find "$stage" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
     tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$SOURCE_DATE_EPOCH" \
         -C "$tmp/release" -cf - "$name" | gzip -n -9 >"$out/$name.tar.gz"

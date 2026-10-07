@@ -33,12 +33,12 @@ pub const PROGRAMS: [&str; 8] = [
 /// (map name, type, key size, value size, max entries, flags) — spec 01 §2.2
 /// names and §4.3 layouts; flowsdn sizes the reverse maps at 64Ki.
 const MAPS: [(&str, MapType, u32, u32, u32, u32); 6] = [
-    ("cilium_lb4_services_v2", MapType::Hash, 12, 12, 65536, 1),
-    ("cilium_lb4_backends_v3", MapType::Hash, 4, 12, 65536, 1),
-    ("cilium_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
-    ("cilium_lb6_services_v2", MapType::Hash, 24, 12, 65536, 1),
-    ("cilium_lb6_backends_v3", MapType::Hash, 4, 24, 65536, 1),
-    ("cilium_lb6_reverse_sk", MapType::LruHash, 32, 20, 65536, 0),
+    ("flowsdn_lb4_services", MapType::Hash, 12, 12, 65536, 1),
+    ("flowsdn_lb4_backends", MapType::Hash, 4, 12, 65536, 1),
+    ("flowsdn_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
+    ("flowsdn_lb6_services", MapType::Hash, 24, 12, 65536, 1),
+    ("flowsdn_lb6_backends", MapType::Hash, 4, 24, 65536, 1),
+    ("flowsdn_lb6_reverse_sk", MapType::LruHash, 32, 20, 65536, 0),
 ];
 
 pub struct SocketLb {
@@ -115,10 +115,10 @@ impl SocketLb {
             }
         }
         let mut bpf = loader.load(&object.read()?)?;
-        let services4 = take(&mut bpf, "cilium_lb4_services_v2")?;
-        let backends4 = take(&mut bpf, "cilium_lb4_backends_v3")?;
-        let services6 = take(&mut bpf, "cilium_lb6_services_v2")?;
-        let backends6 = take(&mut bpf, "cilium_lb6_backends_v3")?;
+        let services4 = take(&mut bpf, "flowsdn_lb4_services")?;
+        let backends4 = take(&mut bpf, "flowsdn_lb4_backends")?;
+        let services6 = take(&mut bpf, "flowsdn_lb6_services")?;
+        let backends6 = take(&mut bpf, "flowsdn_lb6_backends")?;
         for name in PROGRAMS {
             let program: &mut CgroupSockAddr = bpf
                 .program_mut(name)

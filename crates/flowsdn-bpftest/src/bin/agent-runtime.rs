@@ -430,7 +430,7 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         exchange(&mut first, &mut second, v6, true)?;
         exchange(&mut second, &mut first, v6, true)?;
     }
-    let map_id = aya::maps::MapInfo::from_pin(pin_root.join("cilium_lxc"))?.id();
+    let map_id = aya::maps::MapInfo::from_pin(pin_root.join("flowsdn_lxc"))?.id();
     drop(agent);
     for v6 in [false, true] {
         exchange(&mut first, &mut second, v6, true)?;
@@ -472,7 +472,7 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     )?;
     let agent = start_agent(&agent_binary, &temp)?;
     ensure(
-        aya::maps::MapInfo::from_pin(pin_root.join("cilium_lxc"))?.id() == map_id,
+        aya::maps::MapInfo::from_pin(pin_root.join("flowsdn_lxc"))?.id() == map_id,
         "restart replaced endpoint map",
     )?;
     for (endpoint, check) in [&first, &second].into_iter().zip(&previous) {
@@ -496,7 +496,7 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     for pin in &pins {
         fs::remove_file(pin)?;
     }
-    fs::remove_file(pin_root.join("cilium_lxc"))?;
+    fs::remove_file(pin_root.join("flowsdn_lxc"))?;
     let detached = Instant::now();
     loop {
         let mut all_detached = true;
@@ -610,7 +610,7 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     println!(
         "PASS: offline CNI deletion survives process restart, does not resurrect stale links, drains durable queue and tears down remaining endpoint"
     );
-    fs::remove_file(pin_root.join("cilium_lxc"))?;
+    fs::remove_file(pin_root.join("flowsdn_lxc"))?;
     let remaining_bpf_entries = fs::read_dir(&pin_root)?
         .map(|e| e.map(|e| e.file_name()))
         .collect::<std::io::Result<std::collections::BTreeSet<_>>>()?;

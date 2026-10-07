@@ -202,8 +202,8 @@ watch and route logic; two-node pod traffic has not been demonstrated
 
 Spec 05 §3.8. The agent embeds the `socket-lb` BPF object: eight
 `cgroup_sock_addr` programs (`connect4/6`, `sendmsg4/6`, `recvmsg4/6`,
-`getpeername4/6`) over `cilium_lb{4,6}_services_v2`, `cilium_lb{4,6}_backends_v3`
-and `cilium_lb{4,6}_reverse_sk` (spec 01 layouts). At startup it loads them
+`getpeername4/6`) over `flowsdn_lb{4,6}_services`, `flowsdn_lb{4,6}_backends`
+and `flowsdn_lb{4,6}_reverse_sk` (spec 01 layouts; flowsdn's names, #330). At startup it loads them
 and attaches them with `BPF_F_ALLOW_MULTI` to `kubernetes.cgroup-root`
 (default `/sys/fs/cgroup`; the manifests mount the host's root at
 `/run/flowsdn/cgroupv2`). A cgroup program sees every socket of every process

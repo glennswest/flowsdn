@@ -1,6 +1,6 @@
 //! Socket-LB map planning (spec 05 §3.4, spec 01 §4.3): desired ClusterIP
 //! frontends and their backends become the contents of
-//! `cilium_lb{4,6}_services_v2` and `_backends_v3`, and the difference from the
+//! `flowsdn_lb{4,6}_services` and `_backends_v3`, and the difference from the
 //! kernel's current contents becomes an ordered list of map writes.
 //!
 //! Stateless by design: service IDs (`rev_nat_index`) and backend IDs are

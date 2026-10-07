@@ -14,8 +14,8 @@ use aya_ebpf::{
 use flowsdn_bpf::local_delivery::{deliver, destination, destination_candidate};
 use flowsdn_bpf_abi::endpoint::{EndpointInfo, EndpointKey};
 
-#[map(name = "cilium_lxc")]
-static CILIUM_LXC: HashMap<EndpointKey, EndpointInfo> =
+#[map(name = "flowsdn_lxc")]
+static FLOWSDN_LXC: HashMap<EndpointKey, EndpointInfo> =
     HashMap::with_max_entries(1024, BPF_F_NO_PREALLOC);
 
 /// Nonzero: every frame from an endpoint goes to the host stack (routing,
@@ -42,7 +42,7 @@ pub fn local_delivery(ctx: TcContext) -> i32 {
     // SAFETY: NO_PREALLOC prevents deleted entries being reused in place;
     // lookup storage is RCU protected for this invocation. Copy immediately,
     // retain no reference across helpers, and never write through the pointer.
-    let Some(endpoint) = (unsafe { CILIUM_LXC.get(key).copied() }) else {
+    let Some(endpoint) = (unsafe { FLOWSDN_LXC.get(key).copied() }) else {
         return flowsdn_bpf::native_routing::route(&ctx);
     };
     deliver(&ctx, endpoint)
@@ -58,7 +58,7 @@ pub fn uplink_ingress(ctx: TcContext) -> i32 {
         return TC_ACT_OK;
     };
     // SAFETY: same NO_PREALLOC map/RCU copy discipline as local_delivery.
-    let Some(endpoint) = (unsafe { CILIUM_LXC.get(candidate).copied() }) else {
+    let Some(endpoint) = (unsafe { FLOWSDN_LXC.get(candidate).copied() }) else {
         return TC_ACT_OK;
     };
     // Lookup precedes full parsing so invalid version/length at a known local
