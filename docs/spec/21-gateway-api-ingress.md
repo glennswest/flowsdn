@@ -2182,7 +2182,7 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
    to exercise the shared translator. This follows ADR-0001 boundary compatibility; a
    green Gateway API report does not itself authorize dropping Ingress.
 
-2. **#281 implementation and golden audit complete; external coordination pending.**
+2. **Resolved — #281.** Fixed locally (d95e957); nothing is reported upstream (owner, 2026-10-07).
    Do not reproduce the header/query argument-order bug. Distinct header/query
    types flow through `force_https` into the executable `envoy_route` JSON
    projection. Header-only, query-only and same-name/different-value regressions
@@ -2286,6 +2286,7 @@ header-value and query token prefix query-value; enable force HTTPS. The
 reference redirects only when those inputs are exchanged at request time.
 The corrected flowsdn projection instead places each list in its corresponding
 Envoy matcher field, as asserted by `tests/https_redirect.rs`. Existing
-host_rules YAML has neither input, so it cannot detect this defect. Public
-reporting and upstream acceptance are unperformed; this record makes no claim
+host_rules YAML has neither input, so it cannot detect this defect. By the
+owner's decision (2026-10-07) flowsdn reports nothing upstream; #281 is closed
+with this local fix. This record makes no claim
 about later Cilium revisions or a running Envoy interoperability test.

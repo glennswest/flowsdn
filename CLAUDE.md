@@ -50,6 +50,13 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### HTTPS-redirect matcher — #281, 2026-10-07
+
+Owner: report nothing upstream, ever; close with the local fix (d95e957).
+
+- [x] Fix on main (crates/flowsdn-gateway/src/matcher.rs, tests/https_redirect.rs); spec 21 §12 + defect record, changelog.
+- [x] sc-build `cargo test -p flowsdn-gateway`; #281 closed.
+
 ### No Cilium in what ships — #330 (P1), 2026-10-07
 
 Owner: "no cilium in flowsdn period." Chart/manifests/CRDs already Cilium-free with a test (#294, #325).
