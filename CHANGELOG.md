@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-07
+- **fix:** The test image carries the mount points its pod volumes need (`/run/secrets/kubernetes.io/serviceaccount`, `/results`, `/host`), staged by test/build.sh: stormpump mounts a volume only where the directory exists (stormpump#102), so `flowsdn-perf` had no service-account token and failed `perf-setup` on pvetest2 (run 61ec952d2c) (#321).
 - **fix:** The test suite's node probe looks for the agent socket at the manifests' hostPath, `/var/run/flowsdn/flowsdn.sock`, and declares `/var/run` read-only (on stormcos `/var/run` is not `/run`; run a0eab44703 on pvetest2 reported no socket, so the ClusterIP checks never ran) (#292, #303).
 - **fix:** The socket LB attached its cgroup programs with `BPF_F_ALLOW_MULTI`, which link creation refuses (EINVAL on 7.2, found by `fixture-socket-lb-live` on pvetest2, run a6d91042ac): on a node the agent's ClusterIP translation could not attach. Links are created without the flag; cgroup links coexist with other programs anyway (#292).
 - **test:** `flowsdn-endpoint-test` accepts a kernel that refuses a frame shorter than its IP header before the program runs (7.2 returns EINVAL for that test run) as well as a drop. A failing fixture's detail is now its last three meaningful lines (bare braces of a multi-line error skipped), so a verifier log's cause reaches the result (#303, #341).

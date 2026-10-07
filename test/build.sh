@@ -21,6 +21,11 @@ source "$HOME/.cargo/env" 2>/dev/null || true
 stage="$root/test/.stage"
 rm -rf "$stage"
 mkdir -p "$stage/opt/flowsdn/bin" "$stage/opt/flowsdn/fixtures" "$stage/opt/flowsdn/bpf"
+# Mount points for the pod's volumes (see test/Containerfile, stormpump#102).
+for dir in serviceaccount results host; do
+    mkdir -p "$stage/mounts/$dir"
+    : >"$stage/mounts/$dir/.keep"
+done
 "$root/tools/build-bpf.sh" "$stage/opt/flowsdn/bpf"
 # bpf-objects.lock pins every object's code (#245), and the agent embeds
 # local-delivery and socket-lb; a lock or embedded copy that is not this

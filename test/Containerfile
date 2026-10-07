@@ -9,6 +9,13 @@
 # setup call `ip` and `nft`, and flowsdn-perf (#321) links Fedora OpenSSL.
 FROM registry.fedoraproject.org/fedora-minimal:43
 RUN microdnf -y install --setopt=install_weak_deps=0 iproute nftables openssl-libs ca-certificates && microdnf clean all
+# Mount points the pod's volumes need: stormpump mounts a volume only where its
+# directory already exists (stormpump#102): the service-account token for
+# flowsdn-perf's in-cluster config, the runner's results and the host paths.
+# Only `microdnf install` may be RUN, so test/build.sh stages them.
+COPY test/.stage/mounts/serviceaccount /run/secrets/kubernetes.io/serviceaccount
+COPY test/.stage/mounts/results /results
+COPY test/.stage/mounts/host /host
 LABEL storm.io/test-of="flowsdn"
 COPY test/.stage/opt/flowsdn /opt/flowsdn
 COPY test/.stage/test /test
