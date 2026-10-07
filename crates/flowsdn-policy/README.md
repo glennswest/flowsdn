@@ -2,6 +2,14 @@
 
 Policy-library building blocks from spec 06:
 
+- `k8s`: Kubernetes `networking.k8s.io/v1` NetworkPolicy to policy entries
+  (§3.3, IR §4.1) with flowsdn's label keys (`io.flowsdn.k8s.*`, ADR-0020):
+  full label selectors (`matchLabels`, `matchExpressions`, matching and the
+  §4.2 key string), namespace selectors rewritten to
+  `io.flowsdn.k8s.namespace.labels.<key>`, same-cluster peers, `ipBlock`
+  peers with excepts, ports (named, `endPort`, all-ports `"0"`), and
+  `policyTypes`. A direction with no rules gets a default-deny marker whose
+  peer list is empty, so it can never be read as the wildcard;
 - atomic replacement of one resolved subject's resource rules, rejecting
   Pass/authentication combinations before changing contents or revision;
 - CIDR base/exception prefix planning with allocation-before-publication and
@@ -19,7 +27,7 @@ It refuses authentication inputs rather than reporting an unverified verdict.
 CIDR planning currently requires a base prefix. Selectors containing only
 exception requirements still require an importer planning path; the normative
 contract includes allocating those prefixes before policy publication.
-There is no Kubernetes importer, label-selector compiler, complete optimized
+The importer stops at entries: there is no selector cache over identities, complete optimized
 mapstate builder, BPF map writer, policy REST handler, or controller here. Kernel
 publication and its atomicity remain the caller's responsibility. Full policy
 scope and the required fuzz comparison against the eventual optimized builder
