@@ -184,7 +184,11 @@ impl Controller {
                             let mut view = lock(&node_view);
                             view.nodes = nodes;
                             view.nodes_synced = true;
-                            if moved { view.refresh_frontends() } else { None }
+                            if moved {
+                                view.refresh_frontends()
+                            } else {
+                                None
+                            }
                         };
                         if let (Some(sender), Some(frontends)) = (&node_lb, frontends) {
                             let _ = sender.send(frontends);

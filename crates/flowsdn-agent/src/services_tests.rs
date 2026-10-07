@@ -234,12 +234,20 @@ fn node_ports_external_and_load_balancer_addresses_and_traffic_policies() {
         (f.kind, backends)
     };
     let both = vec!["10.1.0.5:8080".to_owned(), "10.2.0.5:8080".to_owned()];
-    let out = frontends(&[web.clone()], &[slice.clone()], "n1", &nodes);
+    let out = frontends(
+        std::slice::from_ref(&web),
+        std::slice::from_ref(&slice),
+        "n1",
+        &nodes,
+    );
     // ClusterIP, external IP, LB IP, and a NodePort on each node address.
     assert_eq!(out.len(), 6);
     assert_eq!(find(&out, "10.96.5.5", 80), ("ClusterIP", both.clone()));
     assert_eq!(find(&out, "192.0.2.10", 80), ("ExternalIPs", both.clone()));
-    assert_eq!(find(&out, "198.51.100.7", 80), ("LoadBalancer", both.clone()));
+    assert_eq!(
+        find(&out, "198.51.100.7", 80),
+        ("LoadBalancer", both.clone())
+    );
     assert_eq!(find(&out, "192.168.0.2", 30080), ("NodePort", both.clone()));
     // An IPv6 node address has no IPv4 backends.
     assert_eq!(find(&out, "fd00::2", 30080), ("NodePort", vec![]));
@@ -250,7 +258,7 @@ fn node_ports_external_and_load_balancer_addresses_and_traffic_policies() {
         external_local: true,
         ..web.clone()
     };
-    let out = frontends(&[local], &[slice.clone()], "n1", &nodes);
+    let out = frontends(&[local], std::slice::from_ref(&slice), "n1", &nodes);
     assert_eq!(find(&out, "10.96.5.5", 80).1, vec!["10.1.0.5:8080"]);
     assert_eq!(find(&out, "192.168.0.2", 30080).1, vec!["10.2.0.5:8080"]);
     assert_eq!(find(&out, "192.0.2.10", 80).1, both);
