@@ -246,6 +246,7 @@ the program, write some back, read ctx_out; record a per-kernel table on 6.6/6.1
 - [x] Added to the test container's medium suite; stormcentral's runner built the image (run ca5226ff48) but the push hit 507 (stormcentral#376).
 - [x] Owner decision (2026-10-05, option 1): the rows are the kernels stormcos ships (7.2.5-100.fc43 today); spec 18 §3.3(d)/§9.1/§10.2 and kernel-requirements §5.3 updated.
 - [ ] Run `stormcentral test run flowsdn medium` on a test machine; close #256 when fixture-skb-ctx-matrix passes and record the per-field table in spec 18.
+  2026-10-07: first hardware run failed (6ac1a6d42c, detail lost; summary line added b862b4a). Medium 4cd55c046c at c66d495 queued on pvetest1 (also serves #303/#341); proposed after stormcentral#472.
   2026-10-05: C2NR0Q2 run 5763251dcb hit 507 on push (registry full, stormcentral#376); pvetest1/2 refused (installing 11.80). Proposed after stormcentral#376.
 
 ### stormcos flowsdn edition pod network — #296 (P0), 2026-10-03
@@ -291,7 +292,7 @@ probe reports skip unless the node carries the flowsdn CNI.
 - [x] sc-build at f5a97b9: workspace fmt/Clippy/build/tests, test/build.sh and podman build pass; the image run unprivileged reports exit 2 as designed.
 - [x] 2026-10-06: medium run 6ac1a6d42c at 53a346a on C2NR0Q2 (stormcos 11.88): short + 8 fixtures pass, node probes skip (cilium flavor); 4 fail (#341).
 - [x] #341 fixes at b862b4a: socket fixtures mount a private cgroup2; endpoint test names the refused packet case; skb-ctx-matrix one-line summary. sc-build at 9a7f46b: fmt, workspace + kubernetes Clippy, 777 tests (0 failed, 1 ignored), chart check, test/build.sh.
-- [ ] Medium run cd1396f7e0 at 9a7f46b on C2NR0Q2 queued (2026-10-06 21:10 UTC; 39 runs queued there, build-box stalls). #303 proposed after stormcentral#472; status on #303/#341. When it finishes: `stormcentral test show cd1396f7e0` (rerun if it was dropped). Then fix the kernel findings (endpoint test-run EINVAL case, skb-ctx fields), close #341 and #303.
+- [ ] Medium now 4cd55c046c on pvetest1 (cd1396f7e0 on C2NR0Q2 errored: apiserver down, machine fenced). Was: medium run cd1396f7e0 at 9a7f46b on C2NR0Q2 queued (2026-10-06 21:10 UTC; 39 runs queued there, build-box stalls). #303 proposed after stormcentral#472; status on #303/#341. When it finishes: `stormcentral test show cd1396f7e0` (rerun if it was dropped). Then fix the kernel findings (endpoint test-run EINVAL case, skb-ctx fields), close #341 and #303.
 - [ ] Run short/medium through `stormcentral test run flowsdn` on a test machine. pvetest1 push failed 507 (registry full, stormcentral#376); pvetest2 (flowsdn flavor; its 11.79 install failed) also 507s, run 39d1523f0c; C2NR0Q2 is off overnight. Proposed after stormcentral#376. Rerun `stormcentral test run flowsdn short|medium --tag <machine>` when a registry has space.
 
 ### Aya feature verification — #3, 2026-10-03
