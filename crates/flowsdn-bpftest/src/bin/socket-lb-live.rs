@@ -7,8 +7,8 @@
 //! without backends, backend churn and frontend removal; and the NodePort
 //! uplink programs (#292) by BPF_PROG_TEST_RUN: destination rewrite to a
 //! node-local backend and the reply's source rewrite, checksums checked.
-use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use aya::programs::{TestRun, TestRunOptions};
+use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_lb::socket::{self, Address, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
 use nix::sched::{CloneFlags, unshare};
 use std::{
@@ -147,7 +147,14 @@ fn sum(bytes: &[u8], mut acc: u32) -> u32 {
 }
 /// An Ethernet + IPv4 + TCP/UDP frame with correct checksums (UDP: zero
 /// checksum when `udp_zero`).
-fn frame4(proto: u8, src: [u8; 4], dst: [u8; 4], sport: u16, dport: u16, udp_zero: bool) -> Vec<u8> {
+fn frame4(
+    proto: u8,
+    src: [u8; 4],
+    dst: [u8; 4],
+    sport: u16,
+    dport: u16,
+    udp_zero: bool,
+) -> Vec<u8> {
     let l4_len: u16 = if proto == 6 { 20 } else { 8 };
     let mut f = vec![0u8; 14];
     f.splice(12..14, [0x08, 0x00]);
@@ -169,7 +176,7 @@ fn frame4(proto: u8, src: [u8; 4], dst: [u8; 4], sport: u16, dport: u16, udp_zer
     }
     if !(proto == 17 && udp_zero) {
         let check = !(l4_sum(proto, src, dst, &l4) as u16);
-        let at = if proto == 6 { 16 } else { 6 };
+        let at: usize = if proto == 6 { 16 } else { 6 };
         l4.splice(at..at.saturating_add(2), check.to_be_bytes());
     }
     f.extend(ip);
@@ -192,7 +199,9 @@ fn parse4(f: &[u8]) -> Result<([u8; 4], [u8; 4], u16, u16, bool, bool)> {
     let dst: [u8; 4] = ip.get(16..20).ok_or("ip")?.try_into()?;
     let proto = *ip.get(9).ok_or("ip")?;
     let port = |at: usize| -> Result<u16> {
-        Ok(u16::from_be_bytes(l4.get(at..at.saturating_add(2)).ok_or("l4")?.try_into()?))
+        Ok(u16::from_be_bytes(
+            l4.get(at..at.saturating_add(2)).ok_or("l4")?.try_into()?,
+        ))
     };
     let udp_zero = proto == 17 && port(6)? == 0;
     let l4_ok = udp_zero || l4_sum(proto, src, dst, l4) == 0xffff;
@@ -207,7 +216,11 @@ fn run(lb: &mut SocketLb, program: &str, frame: &[u8]) -> Result<Vec<u8>> {
         ..Default::default()
     })?;
     if result.return_value != 0 {
-        return Err(format!("{program}: verdict {}, expected TC_ACT_OK", result.return_value).into());
+        return Err(format!(
+            "{program}: verdict {}, expected TC_ACT_OK",
+            result.return_value
+        )
+        .into());
     }
     out.truncate(usize::try_from(result.data_size_out)?);
     Ok(out)
@@ -249,9 +262,18 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     // Not a node-local frontend (the cluster-scope ClusterIP, another port),
     // and a reply of a flow never seen: untouched.
     for (program, frame) in [
-        ("nodeport_ingress", frame4(6, client, [192, 0, 2, 10], 40000, 80, false)),
-        ("nodeport_ingress", frame4(6, client, front, 40000, 30081, false)),
-        ("nodeport_egress", frame4(6, backend, client, 8080, 41000, false)),
+        (
+            "nodeport_ingress",
+            frame4(6, client, [192, 0, 2, 10], 40000, 80, false),
+        ),
+        (
+            "nodeport_ingress",
+            frame4(6, client, front, 40000, 30081, false),
+        ),
+        (
+            "nodeport_egress",
+            frame4(6, backend, client, 8080, 41000, false),
+        ),
     ] {
         if run(lb, program, &frame)? != frame {
             return Err(format!("{program} changed a frame it does not own").into());

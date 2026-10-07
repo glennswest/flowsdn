@@ -252,9 +252,17 @@ fn node_ports_external_and_load_balancer_addresses_and_traffic_policies() {
             })
             .map(|f| f.service.backends.iter().map(|b| b.ip).collect::<Vec<_>>())
     };
-    assert_eq!(local("192.168.0.2", 30080), Some(vec![ip("10.1.0.5")]), "n1's own backend");
+    assert_eq!(
+        local("192.168.0.2", 30080),
+        Some(vec![ip("10.1.0.5")]),
+        "n1's own backend"
+    );
     assert_eq!(local("198.51.100.7", 80), Some(vec![ip("10.1.0.5")]));
-    assert_eq!(local("10.96.5.5", 80), None, "cluster IPs have no uplink copy");
+    assert_eq!(
+        local("10.96.5.5", 80),
+        None,
+        "cluster IPs have no uplink copy"
+    );
     assert_eq!(find(&out, "10.96.5.5", 80), ("ClusterIP", both.clone()));
     assert_eq!(find(&out, "192.0.2.10", 80), ("ExternalIPs", both.clone()));
     assert_eq!(
@@ -281,7 +289,11 @@ fn node_ports_external_and_load_balancer_addresses_and_traffic_policies() {
         ..web
     };
     let out = frontends(&[plain], &[slice], "n1", &nodes);
-    assert_eq!(out.len(), 3, "cluster IP, external IP and its node-local copy");
+    assert_eq!(
+        out.len(),
+        3,
+        "cluster IP, external IP and its node-local copy"
+    );
     let row = service_list(&out, &BTreeMap::new());
     assert_eq!(
         row.pointer("/1/spec/flags/type"),

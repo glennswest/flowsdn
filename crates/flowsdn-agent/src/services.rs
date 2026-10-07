@@ -201,7 +201,11 @@ pub fn frontends(
                     &[SCOPE_CLUSTER, SCOPE_NODE_LOCAL]
                 };
                 for &scope in scopes {
-                    let only = if scope == SCOPE_NODE_LOCAL { Some(local) } else { only };
+                    let only = if scope == SCOPE_NODE_LOCAL {
+                        Some(local)
+                    } else {
+                        only
+                    };
                     // An address can front one Service port; the first one wins.
                     out.entry((frontend, scope)).or_insert_with(|| Frontend {
                         namespace: service.namespace.clone(),
