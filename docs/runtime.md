@@ -193,8 +193,8 @@ With the `kubernetes` feature and section the agent:
 Not yet: a cluster identity allocator (pod IP cache entries and the
 pod-networks annotation carry no numeric identity), a flow/drop observer (the
 `flowsdn-hubble` `endpoint` module names flow peers `ns/pod (container)` once
-one exists, #293), BPF ipcache maps, tunnel routing, masquerade, NodePort and
-LoadBalancer traffic from outside the cluster, and policy. Unit tests and a loopback-HTTPS controller test cover the
+one exists, #293), BPF ipcache maps, tunnel routing, masquerade, external NodePort/LB traffic to
+another node's backends, and policy enforcement. Unit tests and a loopback-HTTPS controller test cover the
 watch and route logic; two-node pod traffic has not been demonstrated
 (pvetest1 + pvetest2, stormcentral#360).
 
@@ -234,8 +234,18 @@ the port; for type LoadBalancer each `status.loadBalancer.ingress[].ip` on
 the port; for types NodePort and LoadBalancer every node's InternalIP on the
 `nodePort` (recomputed when node addresses change). These cover clients
 inside the cluster, pods and node processes, whichever node's address they
-use; traffic arriving from outside the cluster needs tc-level NodePort, which
-is not implemented. `GET /v1/service` gives each frontend's `flags.type`
+use. Traffic arriving from outside the cluster (#292, IPv4, `kubernetes.node-port`,
+default on): the agent also writes a node-local copy (key scope 1) of every
+NodePort, external and LoadBalancer frontend with only this node's backends,
+and attaches the `nodeport_ingress`/`nodeport_egress` tc programs (TCX) to
+every interface holding this node's InternalIP. A packet to such a frontend
+gets its destination rewritten to a local backend (IPv4 and TCP/UDP checksums
+fixed) and is routed to the pod by the host stack; the reply's source is
+rewritten back on the way out. Both directions are kept per flow in the LRU
+`flowsdn_nodeport4` map, so a connection keeps its backend. There is no SNAT
+yet, so a node forwards only to its own backends: a client must reach a node
+that runs one (as with `externalTrafficPolicy: Local`); IPv6 is not handled
+yet. Other packets pass untouched. `GET /v1/service` gives each frontend's `flags.type`
 (`ClusterIP`, `ExternalIPs`, `LoadBalancer`, `NodePort`).
 `internalTrafficPolicy: Local` limits a cluster IP to endpoints on this node;
 `externalTrafficPolicy: Local` limits a NodePort on a node's address to that
@@ -254,8 +264,9 @@ kernel state on the next pass and reported in health (`services`).
 With `bpf-pin-root` the maps and links are pinned under `<pin root>/socket-lb`.
 A restarted agent reuses the maps (a pinned map with another layout refuses
 startup), attaches its programs, then releases the old links. Without a pin
-root the links detach when the agent exits. Not implemented: NodePort and
-LoadBalancer traffic from outside the cluster (tc-level), Maglev, topology hints, skip-LB for local redirect policy,
+root the links detach when the agent exits. Not implemented: forwarding
+external NodePort/LB traffic to another node's backends (SNAT), IPv6 for it,
+Maglev, topology hints, skip-LB for local redirect policy,
 socket termination when a backend goes away (an existing connection stays
 on its backend), SCTP, and tc-level LB for traffic that arrives from outside
 the node. `socket-lb-live` (medium test suite) checks the programs on a
