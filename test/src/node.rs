@@ -7,6 +7,34 @@ use crate::{env::Env, report::Report};
 use flowsdn_api_client::Client;
 use std::time::{Duration, Instant};
 
+/// Sockets one directory below the host's run directories, `flowsdn/`
+/// first; the first that answers `GET /v1/healthz` with 200.
+fn find_agent(env: &Env) -> Option<std::path::PathBuf> {
+    use std::os::unix::fs::FileTypeExt;
+    let mut sockets = Vec::new();
+    for dir in ["/var/run", "/run"] {
+        let Ok(list) = std::fs::read_dir(env.host(dir)) else {
+            continue;
+        };
+        for entry in list.filter_map(|e| e.ok()) {
+            let Ok(inner) = std::fs::read_dir(entry.path()) else {
+                continue;
+            };
+            for file in inner.filter_map(|e| e.ok()) {
+                if file.file_type().is_ok_and(|t| t.is_socket()) {
+                    sockets.push(file.path());
+                }
+            }
+        }
+    }
+    sockets.sort_by_key(|p| !p.to_string_lossy().contains("/flowsdn/"));
+    sockets.into_iter().find(|socket| {
+        Client::new(socket, Duration::from_secs(2))
+            .request(flowsdn_api_client::Method::Get, "/v1/healthz", None)
+            .is_ok_and(|reply| reply.status == 200)
+    })
+}
+
 /// What the pod sees of the host's run directories, for a missing socket:
 /// whether each mount is there, and the entries of its flowsdn directory.
 fn seen(env: &Env) -> String {
@@ -58,18 +86,16 @@ pub fn probe(report: &mut Report, env: &Env) {
         return;
     }
     report.pass("node-cni", start.elapsed(), "/opt/cni/bin/flowsdn present");
-    // The manifests' hostPath is /var/run/flowsdn; /run is where a host
-    // with /var/run -> /run shows it.
-    let Some(socket) = ["/var/run/flowsdn/flowsdn.sock", "/run/flowsdn/flowsdn.sock"]
-        .iter()
-        .map(|p| env.host(p))
-        .find(|p| p.exists())
-    else {
+    // The agent's socket is wherever the node's release put it (the current
+    // manifests use /var/run/flowsdn; earlier releases another directory):
+    // the first socket under the host's run directories that answers
+    // GET /v1/healthz is the agent.
+    let Some(socket) = find_agent(env) else {
         report.fail(
             "node-agent",
             start.elapsed(),
             &format!(
-                "flowsdn CNI installed but no agent socket at /var/run/flowsdn/flowsdn.sock or /run/flowsdn/flowsdn.sock; seen: {}",
+                "flowsdn CNI installed but no socket under /var/run/*/ or /run/*/ answers GET /v1/healthz; seen: {}",
                 seen(env)
             ),
         );
@@ -98,7 +124,10 @@ pub fn probe(report: &mut Report, env: &Env) {
             .and_then(|v| v.as_array())
             .map(Vec::len)
             .ok_or_else(|| format!("GET /v1/endpoint returned {}", endpoints.status))?;
-        Ok(((), format!("agent healthy; {count} endpoints")))
+        Ok((
+            (),
+            format!("agent healthy at {}; {count} endpoints", socket.display()),
+        ))
     });
     if healthy.is_some() {
         crate::services::probe(report, &socket);
