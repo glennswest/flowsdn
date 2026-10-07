@@ -27,7 +27,9 @@ pub fn probe(report: &mut Report, env: &Env) {
         return;
     }
     report.pass("node-cni", start.elapsed(), "/opt/cni/bin/flowsdn present");
-    let Some(socket) = ["/run/flowsdn/flowsdn.sock", "/var/run/flowsdn/flowsdn.sock"]
+    // The manifests' hostPath is /var/run/flowsdn; /run is where a host
+    // with /var/run -> /run shows it.
+    let Some(socket) = ["/var/run/flowsdn/flowsdn.sock", "/run/flowsdn/flowsdn.sock"]
         .iter()
         .map(|p| env.host(p))
         .find(|p| p.exists())
@@ -35,7 +37,7 @@ pub fn probe(report: &mut Report, env: &Env) {
         report.fail(
             "node-agent",
             start.elapsed(),
-            "flowsdn CNI installed but no agent socket at /run/flowsdn/flowsdn.sock",
+            "flowsdn CNI installed but no agent socket at /var/run/flowsdn/flowsdn.sock or /run/flowsdn/flowsdn.sock",
         );
         return;
     };

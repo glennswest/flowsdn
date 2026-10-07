@@ -26,7 +26,7 @@ in the cluster.
 
 Every suite starts with a read-only **node probe**. `node-cni` checks for
 `/opt/cni/bin/flowsdn`, and `node-agent` sends GETs to `/v1/healthz`,
-`/v1/config` and `/v1/endpoint` on the node agent's socket. A node without the
+`/v1/config` and `/v1/endpoint` on the node agent's socket (`/var/run/flowsdn/flowsdn.sock` on the host, the manifests' hostPath; `/var/run` is declared read-only). A node without the
 flowsdn CNI is not the flowsdn flavor, and both checks report skip.
 
 On a flowsdn node with a healthy agent, the probe then checks ClusterIP

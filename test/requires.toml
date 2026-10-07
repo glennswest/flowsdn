@@ -8,8 +8,9 @@
 # created.
 #
 # The read-only host paths are for the node probe: /opt/cni/bin shows whether
-# the node carries flowsdn's CNI (the flowsdn flavor; otherwise skip), and /run
-# holds the node agent's socket (/run/cilium/cilium.sock), probed with GETs only.
+# the node carries flowsdn's CNI (the flowsdn flavor; otherwise skip), and
+# /var/run holds the node agent's socket (/var/run/flowsdn/flowsdn.sock, the
+# manifests' hostPath; on stormcos /var/run is not /run), probed with GETs only.
 #
 # requires: kernel >= 6.6 (TCX) with BTF. The test checks and reports skip
 # where the machine lacks them. No hardware, NIC or core count is assumed;
@@ -17,15 +18,15 @@
 # it).
 [short]
 privileged = true
-host_paths_read_only = ["/opt/cni/bin", "/run"]
+host_paths_read_only = ["/opt/cni/bin", "/run", "/var/run"]
 
 [medium]
 privileged = true
-host_paths_read_only = ["/opt/cni/bin", "/run"]
+host_paths_read_only = ["/opt/cni/bin", "/run", "/var/run"]
 
 [long]
 privileged = true
-host_paths_read_only = ["/opt/cni/bin", "/run"]
+host_paths_read_only = ["/opt/cni/bin", "/run", "/var/run"]
 
 # The network performance suite (#321): the same measurements on any CNI
 # flavor, so a Cilium and a flowsdn run on the same machines compare. It runs
