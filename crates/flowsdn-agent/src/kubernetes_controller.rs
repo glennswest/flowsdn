@@ -429,6 +429,7 @@ fn service_rows(state: &WatchState) -> Vec<ServiceInfo> {
                 load_balancer_ips: service.load_balancer_ips.clone(),
                 internal_local: service.internal_local,
                 external_local: service.external_local,
+                affinity: service.affinity,
             }),
             _ => None,
         })

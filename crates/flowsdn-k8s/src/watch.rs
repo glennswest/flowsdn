@@ -82,6 +82,9 @@ pub struct Service {
     pub internal_local: bool,
     /// `spec.externalTrafficPolicy` is `Local` (default `Cluster`).
     pub external_local: bool,
+    /// `spec.sessionAffinity: ClientIP`: the timeout in seconds
+    /// (`sessionAffinityConfig.clientIP.timeoutSeconds`, default 10800).
+    pub affinity: Option<u32>,
 }
 /// An EndpointSlice port; `port` is absent for "all ports".
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -387,6 +390,13 @@ fn parse_service(value: &Value, metadata: Metadata) -> Result<Service, Error> {
         load_balancer_ips: addresses(value.pointer("/status/loadBalancer/ingress"), Some("ip")),
         internal_local: optional_text(spec, "internalTrafficPolicy", "Cluster")? == "Local",
         external_local: optional_text(spec, "externalTrafficPolicy", "Cluster")? == "Local",
+        affinity: (optional_text(spec, "sessionAffinity", "None")? == "ClientIP").then(|| {
+            spec.pointer("/sessionAffinityConfig/clientIP/timeoutSeconds")
+                .and_then(Value::as_u64)
+                .and_then(|t| u32::try_from(t).ok())
+                .filter(|t| *t > 0)
+                .unwrap_or(10800)
+        }),
     })
 }
 fn parse_slice(value: &Value, metadata: Metadata) -> Result<EndpointSlice, Error> {

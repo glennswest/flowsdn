@@ -35,6 +35,8 @@ pub struct ServiceInfo {
     pub load_balancer_ips: Vec<IpAddr>,
     pub internal_local: bool,
     pub external_local: bool,
+    /// ClientIP session affinity timeout in seconds.
+    pub affinity: Option<u32>,
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Endpoint {
@@ -200,6 +202,7 @@ pub fn frontends(
                     service: Service {
                         frontend,
                         backends: backends(port, proto, ip.is_ipv6(), slices, only),
+                        affinity: service.affinity,
                     },
                 });
             }
@@ -244,9 +247,13 @@ pub fn service_list(frontends: &[Frontend], ids: &BTreeMap<Address, u16>) -> Val
                     })
                     .collect();
                 let id = ids.get(&f.service.frontend).copied().unwrap_or(0);
+                let mut flags = json!({"type":f.kind,"name":f.name,"namespace":f.namespace,
+                    "port-name":f.port_name,"service-type":f.service_type});
+                if let (Some(seconds), Some(object)) = (f.service.affinity, flags.as_object_mut()) {
+                    object.insert("session-affinity-timeout".into(), json!(seconds));
+                }
                 let spec = json!({"id":id,"frontend-address":front,"backend-addresses":backends,
-                    "flags":{"type":f.kind,"name":f.name,"namespace":f.namespace,
-                        "port-name":f.port_name,"service-type":f.service_type}});
+                    "flags":flags});
                 let mut row = json!({"spec":spec});
                 if id != 0
                     && let Some(object) = row.as_object_mut()

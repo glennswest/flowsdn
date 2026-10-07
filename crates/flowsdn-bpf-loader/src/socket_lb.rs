@@ -1,7 +1,7 @@
 //! Live ownership of the socket-LB object (spec 05 §3.8): its eight cgroup
 //! sock_addr programs attached to one cgroup v2 directory (normally the host
-//! root, so every pod and host process is covered), and its service, backend
-//! and reverse-socket maps. With a pin root the maps and links are pinned,
+//! root, so every pod and host process is covered), and its service, backend,
+//! reverse-socket and session-affinity maps. With a pin root the maps and links are pinned,
 //! so translation and UDP reverse entries survive an agent restart; the new
 //! owner attaches before it releases the old links.
 use super::{KernelResult, Object};
@@ -31,14 +31,19 @@ pub const PROGRAMS: [&str; 8] = [
     "sock6_getpeername",
 ];
 /// (map name, type, key size, value size, max entries, flags) — spec 01 §2.2
-/// names and §4.3 layouts; flowsdn sizes the reverse maps at 64Ki.
-const MAPS: [(&str, MapType, u32, u32, u32, u32); 6] = [
+/// names and §4.3 layouts; flowsdn sizes the reverse and affinity maps at
+/// 64Ki. The affinity maps are the programs' own; the agent writes the
+/// match map.
+const MAPS: [(&str, MapType, u32, u32, u32, u32); 9] = [
     ("flowsdn_lb4_services", MapType::Hash, 12, 12, 65536, 1),
     ("flowsdn_lb4_backends", MapType::Hash, 4, 12, 65536, 1),
     ("flowsdn_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
     ("flowsdn_lb6_services", MapType::Hash, 24, 12, 65536, 1),
     ("flowsdn_lb6_backends", MapType::Hash, 4, 24, 65536, 1),
     ("flowsdn_lb6_reverse_sk", MapType::LruHash, 32, 20, 65536, 0),
+    ("flowsdn_lb4_affinity", MapType::LruHash, 16, 16, 65536, 0),
+    ("flowsdn_lb6_affinity", MapType::LruHash, 24, 16, 65536, 0),
+    ("flowsdn_lb_affinity_match", MapType::Hash, 8, 1, 65536, 1),
 ];
 
 pub struct SocketLb {
@@ -47,6 +52,7 @@ pub struct SocketLb {
     backends4: HashMap<MapData, u32, [u8; 12]>,
     services6: HashMap<MapData, [u8; 24], [u8; 12]>,
     backends6: HashMap<MapData, u32, [u8; 24]>,
+    affinity_match: HashMap<MapData, [u8; 8], u8>,
     pin_root: Option<PathBuf>,
     /// Owned links; unpinned ones detach when this owner drops.
     links: Vec<FdLink>,
@@ -119,6 +125,7 @@ impl SocketLb {
         let backends4 = take(&mut bpf, "flowsdn_lb4_backends")?;
         let services6 = take(&mut bpf, "flowsdn_lb6_services")?;
         let backends6 = take(&mut bpf, "flowsdn_lb6_backends")?;
+        let affinity_match = take(&mut bpf, "flowsdn_lb_affinity_match")?;
         for name in PROGRAMS {
             let program: &mut CgroupSockAddr = bpf
                 .program_mut(name)
@@ -132,6 +139,7 @@ impl SocketLb {
             backends4,
             services6,
             backends6,
+            affinity_match,
             pin_root: pin_root.map(Path::to_owned),
             links: Vec::new(),
         })
@@ -216,6 +224,9 @@ impl SocketLb {
             let (key, value) = row?;
             maps.backends6.insert(key, value);
         }
+        for key in self.affinity_match.keys() {
+            maps.affinity_match.insert(key?);
+        }
         Ok(maps)
     }
 
@@ -232,6 +243,8 @@ impl SocketLb {
                 Op::DeleteService6(key) => absent(self.services6.remove(&key))?,
                 Op::DeleteBackend4(id) => absent(self.backends4.remove(&id))?,
                 Op::DeleteBackend6(id) => absent(self.backends6.remove(&id))?,
+                Op::AffinityMatch(key) => self.affinity_match.insert(key, 0, 0)?,
+                Op::DeleteAffinityMatch(key) => absent(self.affinity_match.remove(&key))?,
             }
         }
         Ok(())

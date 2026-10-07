@@ -39,6 +39,7 @@ fn service(frontend: &str, proto: u8, backends: &[&str]) -> Result<Service> {
             .iter()
             .map(|b| address(b, proto))
             .collect::<Result<_>>()?,
+        affinity: None,
     })
 }
 /// Plan from the kernel's maps and apply, as the agent's services thread does.
@@ -211,6 +212,52 @@ fn main() -> Result<()> {
         return Err(format!("backend selection not spread: {one}/{two} of 64").into());
     }
     println!("PASS two backends both selected ({one}/{two} of 64 connects)");
+
+    // ClientIP affinity: this process's network namespace sticks to one
+    // backend; when that backend leaves, new connects move to the other.
+    if let Some(first) = services.first_mut() {
+        first.affinity = Some(60);
+    }
+    program(&mut lb, &services)?;
+    let mut chosen = None;
+    for _ in 0..32 {
+        let client = TcpStream::connect_timeout(&sa("192.0.2.10:80")?, TIMEOUT)?;
+        let peer = client.peer_addr()?;
+        match peer.ip() {
+            IpAddr::V4(ip) if ip.octets() == [127, 0, 0, 1] => tcp4.accept()?,
+            _ => tcp4b.accept()?,
+        };
+        if *chosen.get_or_insert(peer) != peer {
+            return Err(format!("affinity broken: {peer} after {chosen:?}").into());
+        }
+    }
+    let sticky = chosen.ok_or("no affinity connect")?;
+    let other = if sticky.ip() == sa("127.0.0.1:0")?.ip() {
+        "127.0.0.2:18080"
+    } else {
+        "127.0.0.1:18080"
+    };
+    if let Some(first) = services.first_mut() {
+        first.backends = vec![address(other, PROTO_TCP)?];
+    }
+    program(&mut lb, &services)?;
+    let client = TcpStream::connect_timeout(&sa("192.0.2.10:80")?, TIMEOUT)?;
+    if client.peer_addr()? != sa(other)? {
+        return Err(format!(
+            "affinity kept a removed backend: {:?}",
+            client.peer_addr()
+        )
+        .into());
+    }
+    if other == "127.0.0.1:18080" {
+        tcp4.accept()?;
+    } else {
+        tcp4b.accept()?;
+    }
+    println!("PASS ClientIP affinity: 32 connects on {sticky}; after it left, {other}");
+    if let Some(first) = services.first_mut() {
+        first.affinity = None;
+    }
 
     // Removal: the frontend is no longer translated (no route in this netns).
     services.retain(|s| s.frontend.port != 80 || s.frontend.ip.is_ipv6());

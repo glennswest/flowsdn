@@ -14,6 +14,7 @@ fn dns(backends: &[&str]) -> Vec<Service> {
         .map(|proto| Service {
             frontend: front(proto),
             backends: backends.iter().map(|ip| addr(ip, 53, proto)).collect(),
+            affinity: None,
         })
         .collect()
 }
@@ -34,6 +35,15 @@ fn sync(current: &mut Maps, services: &[Service]) -> Desired {
             if let Some(result) = resolve(&step, frontend) {
                 result.expect("intermediate state resolves");
             }
+        }
+        // A remembered affinity is only honoured through a match entry, so
+        // a match must never name a backend ID that is gone.
+        for key in &step.affinity_match {
+            let id = flowsdn_bpf_abi::affinity::LbAffinityMatch::from_bytes(*key).backend_id;
+            assert!(
+                step.backends4.contains_key(&id) || step.backends6.contains_key(&id),
+                "affinity match for a deleted backend {id}"
+            );
         }
     }
     apply(current, &ops);
@@ -128,10 +138,12 @@ fn dual_stack_and_mixed_backends() {
                 addr("192.168.31.172", 6443, PROTO_TCP),
                 addr("fd00::1", 6443, PROTO_TCP),
             ],
+            affinity: None,
         },
         Service {
             frontend: addr("fd00:10:96::1", 443, PROTO_TCP),
             backends: vec![addr("fd00::1", 6443, PROTO_TCP)],
+            affinity: None,
         },
     ];
     sync(&mut maps, &services);
@@ -182,4 +194,48 @@ fn ids_allocate_upwards_around_holes() {
     assert_eq!(ids.allocate(), Some(3));
     assert_eq!(ids.allocate(), Some(5));
     assert_eq!(ids.allocate(), None);
+}
+
+#[test]
+fn session_affinity_sets_the_master_and_tracks_matches() {
+    let sticky = |backends: &[&str], affinity: Option<u32>| -> Vec<Service> {
+        dns(backends)
+            .into_iter()
+            .map(|s| Service { affinity, ..s })
+            .collect()
+    };
+    let mut maps = Maps::default();
+    let want = sync(&mut maps, &sticky(&["10.172.0.5", "10.172.0.6"], Some(10800)));
+    let master = |maps: &Maps| {
+        LbService::from_bytes(
+            *maps
+                .services4
+                .get(&key4(addr("10.96.0.10", 53, PROTO_UDP), 0).expect("key"))
+                .expect("master"),
+        )
+    };
+    let m = master(&maps);
+    assert_eq!(
+        m.service_flags(),
+        service_flags::ROUTABLE | service_flags::SESSION_AFFINITY
+    );
+    assert_eq!(m.affinity_seconds(), 10800);
+    assert_eq!(m.algorithm_code(), Algorithm::Random as u8);
+    // One match per (backend, service): 2 backends x 2 frontends.
+    assert_eq!(maps.affinity_match.len(), 4);
+    let ids: BTreeSet<u16> = want.ids.values().copied().collect();
+    for key in &maps.affinity_match {
+        let matched = LbAffinityMatch::from_bytes(*key);
+        assert!(ids.contains(&matched.rev_nat_id));
+    }
+    // A backend leaves: its matches go before it does (checked in sync).
+    sync(&mut maps, &sticky(&["10.172.0.6"], Some(10800)));
+    assert_eq!(maps.affinity_match.len(), 2);
+    // Affinity off: matches go, the master is plain again.
+    sync(&mut maps, &sticky(&["10.172.0.6"], None));
+    assert!(maps.affinity_match.is_empty());
+    assert_eq!(master(&maps).service_flags(), service_flags::ROUTABLE);
+    assert_eq!(master(&maps).union_raw, 0);
+    // A timeout beyond 24 bits is refused, not truncated.
+    assert!(desired(&maps, &sticky(&["10.172.0.6"], Some(1 << 24))).is_err());
 }

@@ -511,6 +511,7 @@ fn services_parse_node_ports_external_and_load_balancer_addresses() {
     assert_eq!(parsed.external_ips, vec![ip("192.0.2.10")]);
     assert_eq!(parsed.load_balancer_ips, vec![ip("198.51.100.7")]);
     assert!(parsed.internal_local && parsed.external_local);
+    assert_eq!(parsed.affinity, None);
     assert_eq!(
         parsed.ports.iter().map(|p| p.node_port).collect::<Vec<_>>(),
         vec![Some(30080), None]
@@ -522,6 +523,19 @@ fn services_parse_node_ports_external_and_load_balancer_addresses() {
     };
     assert!(parsed.external_ips.is_empty() && parsed.load_balancer_ips.is_empty());
     assert!(!parsed.internal_local && !parsed.external_local);
+    let sticky = |config: Value| {
+        let mut value = plain.clone();
+        if let Some(spec) = value.get_mut("spec").and_then(Value::as_object_mut) {
+            spec.insert("sessionAffinity".into(), json!("ClientIP"));
+            spec.insert("sessionAffinityConfig".into(), config);
+        }
+        match Scope::Services.parse(&value).expect("service") {
+            Resource::Service(service) => service.affinity,
+            _ => panic!("service row expected"),
+        }
+    };
+    assert_eq!(sticky(json!({"clientIP":{"timeoutSeconds":600}})), Some(600));
+    assert_eq!(sticky(Value::Null), Some(10800));
     let bad = json!({"metadata":{"name":"b","namespace":"ns","uid":"u","resourceVersion":"1"},
         "spec":{"clusterIP":"10.96.5.7","ports":[{"port":80,"nodePort":0}]}});
     assert!(Scope::Services.parse(&bad).is_err());

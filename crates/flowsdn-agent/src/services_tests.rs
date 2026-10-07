@@ -275,3 +275,24 @@ fn node_ports_external_and_load_balancer_addresses_and_traffic_policies() {
         Some(&json!("ExternalIPs"))
     );
 }
+
+#[test]
+fn client_ip_affinity_reaches_every_frontend_and_the_api() {
+    let sticky = ServiceInfo {
+        affinity: Some(600),
+        ..kube_dns()
+    };
+    let out = frontends(&[sticky], &[], "n1", &[]);
+    assert!(out.iter().all(|f| f.service.affinity == Some(600)));
+    let rows = service_list(&out, &BTreeMap::new());
+    assert_eq!(
+        rows.pointer("/0/spec/flags/session-affinity-timeout"),
+        Some(&json!(600))
+    );
+    let plain = frontends(&[kube_dns()], &[], "n1", &[]);
+    assert!(plain.iter().all(|f| f.service.affinity.is_none()));
+    assert_eq!(
+        service_list(&plain, &BTreeMap::new()).pointer("/0/spec/flags/session-affinity-timeout"),
+        None
+    );
+}

@@ -4,24 +4,29 @@
 //! translation happens before routing, for the host and every pod netns, so
 //! no packet DNAT or conntrack entry is needed. IPv4-mapped IPv6 addresses
 //! use the IPv4 maps. Map layouts follow spec 01 §4.3; the agent
-//! owns their contents. Session affinity, Maglev, NodePort surrogates,
-//! skip-LB and socket termination are not implemented here.
+//! owns their contents. A frontend with the session-affinity flag keeps each
+//! client (its network namespace cookie, as the reference's socket LB does)
+//! on the backend it last got, while that is within the master's timeout and
+//! the agent's affinity-match map still pairs the backend with the service.
+//! Maglev, NodePort surrogates, skip-LB and socket termination are not
+//! implemented here.
 #![no_std]
 #![no_main]
 
 use aya_ebpf::{
     EbpfContext,
     bindings::{BPF_F_NO_PREALLOC, bpf_sock_addr},
-    helpers::{bpf_get_prandom_u32, bpf_get_socket_cookie},
+    helpers::{bpf_get_netns_cookie, bpf_get_prandom_u32, bpf_get_socket_cookie, bpf_ktime_get_ns},
     macros::{cgroup_sock_addr, map},
     maps::{HashMap, LruHashMap},
     programs::SockAddrContext,
 };
 use flowsdn_bpf_abi::{
     Be16, Be32,
+    affinity::{LbAffinityMatch, LbAffinityVal, Lb4AffinityKey, Lb6AffinityKey, NETNS_COOKIE},
     lb::{
         Ipv4RevnatEntry, Ipv4RevnatTuple, Ipv6RevnatEntry, Ipv6RevnatTuple, Lb4Backend, Lb4Key,
-        Lb6Backend, Lb6Key, LbService,
+        Lb6Backend, Lb6Key, LbService, service_flags,
     },
 };
 
@@ -52,6 +57,16 @@ static LB6_BACKENDS: HashMap<u32, Lb6Backend> =
 static LB6_REVERSE_SK: LruHashMap<Ipv6RevnatTuple, Ipv6RevnatEntry> =
     LruHashMap::with_max_entries(65536, 0);
 
+#[map(name = "flowsdn_lb4_affinity")]
+static LB4_AFFINITY: LruHashMap<Lb4AffinityKey, LbAffinityVal> =
+    LruHashMap::with_max_entries(65536, 0);
+#[map(name = "flowsdn_lb6_affinity")]
+static LB6_AFFINITY: LruHashMap<Lb6AffinityKey, LbAffinityVal> =
+    LruHashMap::with_max_entries(65536, 0);
+#[map(name = "flowsdn_lb_affinity_match")]
+static LB_AFFINITY_MATCH: HashMap<LbAffinityMatch, u8> =
+    HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
+
 /// Outcome of a frontend lookup.
 enum Lookup<B> {
     /// Not a service frontend: leave the address alone.
@@ -71,8 +86,39 @@ fn slot(count: u16) -> Option<u16> {
     u16::try_from(index).ok()?.checked_add(1)
 }
 
+/// Monotonic seconds, the unit of the affinity timeout.
 #[inline(always)]
-fn lookup4(address: [u8; 4], port: [u8; 2], proto: u8) -> Lookup<Lb4Backend> {
+fn now() -> u64 {
+    // SAFETY: no arguments; returns the monotonic clock.
+    unsafe { bpf_ktime_get_ns() } / 1_000_000_000
+}
+/// The client of a socket for affinity: its network namespace.
+#[inline(always)]
+fn netns(ctx: &SockAddrContext) -> u64 {
+    // SAFETY: the kernel-supplied sock_addr context of this invocation.
+    unsafe { bpf_get_netns_cookie(ctx.as_ptr()) }
+}
+/// The remembered backend, if it is within the timeout and the agent still
+/// pairs it with service `rev`.
+#[inline(always)]
+fn affine(remembered: Option<LbAffinityVal>, rev: u16, timeout: u32, now: u64) -> Option<u32> {
+    let value = remembered?;
+    let (last_used, backend_id) = (value.last_used, value.backend_id);
+    if now.saturating_sub(last_used) > u64::from(timeout) {
+        return None;
+    }
+    let pair = LbAffinityMatch {
+        backend_id,
+        rev_nat_id: rev,
+        pad: 0,
+    };
+    // SAFETY: presence check only; the value is never read.
+    unsafe { LB_AFFINITY_MATCH.get(&pair) }?;
+    Some(backend_id)
+}
+
+#[inline(always)]
+fn lookup4(ctx: &SockAddrContext, address: [u8; 4], port: [u8; 2], proto: u8) -> Lookup<Lb4Backend> {
     let mut key = Lb4Key {
         address: Be32(address),
         dport: Be16(port),
@@ -86,23 +132,54 @@ fn lookup4(address: [u8; 4], port: [u8; 2], proto: u8) -> Lookup<Lb4Backend> {
     let Some(service) = (unsafe { LB4_SERVICES.get(&key).copied() }) else {
         return Lookup::None;
     };
-    let Some(index) = slot(service.count) else {
+    let rev = service.rev_nat_index;
+    let sticky = service.service_flags() & service_flags::SESSION_AFFINITY != 0;
+    let affinity = Lb4AffinityKey {
+        client_id: netns(ctx).to_ne_bytes(),
+        rev_nat_id: rev,
+        flags: NETNS_COOKIE,
+        pad1: 0,
+        pad2: 0,
+    };
+    let time = now();
+    let remembered = if sticky {
+        // SAFETY: LRU value copied at once, never written through.
+        affine(unsafe { LB4_AFFINITY.get(&affinity).copied() }, rev, service.affinity_seconds(), time)
+    } else {
+        None
+    };
+    let id = match remembered {
+        Some(id) => id,
+        None => {
+            let Some(index) = slot(service.count) else {
+                return Lookup::Reject;
+            };
+            key.backend_slot = index;
+            // SAFETY: as above.
+            let Some(entry) = (unsafe { LB4_SERVICES.get(&key).copied() }) else {
+                return Lookup::Reject;
+            };
+            entry.backend_id()
+        }
+    };
+    // SAFETY: as above.
+    let Some(backend) = (unsafe { LB4_BACKENDS.get(&id).copied() }) else {
         return Lookup::Reject;
     };
-    key.backend_slot = index;
-    // SAFETY: as above.
-    let Some(entry) = (unsafe { LB4_SERVICES.get(&key).copied() }) else {
-        return Lookup::Reject;
-    };
-    // SAFETY: as above.
-    match unsafe { LB4_BACKENDS.get(&entry.backend_id()).copied() } {
-        Some(backend) => Lookup::Backend(backend, service.rev_nat_index),
-        None => Lookup::Reject,
+    if sticky {
+        let value = LbAffinityVal {
+            last_used: time,
+            backend_id: id,
+            pad: 0,
+        };
+        // A full LRU evicts an old client; failing only forgets this one.
+        let _ = LB4_AFFINITY.insert(&affinity, &value, 0);
     }
+    Lookup::Backend(backend, rev)
 }
 
 #[inline(always)]
-fn lookup6(address: [u8; 16], port: [u8; 2], proto: u8) -> Lookup<Lb6Backend> {
+fn lookup6(ctx: &SockAddrContext, address: [u8; 16], port: [u8; 2], proto: u8) -> Lookup<Lb6Backend> {
     let mut key = Lb6Key {
         address,
         dport: Be16(port),
@@ -115,19 +192,51 @@ fn lookup6(address: [u8; 16], port: [u8; 2], proto: u8) -> Lookup<Lb6Backend> {
     let Some(service) = (unsafe { LB6_SERVICES.get(&key).copied() }) else {
         return Lookup::None;
     };
-    let Some(index) = slot(service.count) else {
+    let rev = service.rev_nat_index;
+    let sticky = service.service_flags() & service_flags::SESSION_AFFINITY != 0;
+    let [c0, c1, c2, c3, c4, c5, c6, c7] = netns(ctx).to_ne_bytes();
+    let affinity = Lb6AffinityKey {
+        client_id: [c0, c1, c2, c3, c4, c5, c6, c7, 0, 0, 0, 0, 0, 0, 0, 0],
+        rev_nat_id: rev,
+        flags: NETNS_COOKIE,
+        pad1: 0,
+        pad2: 0,
+    };
+    let time = now();
+    let remembered = if sticky {
+        // SAFETY: LRU value copied at once, never written through.
+        affine(unsafe { LB6_AFFINITY.get(&affinity).copied() }, rev, service.affinity_seconds(), time)
+    } else {
+        None
+    };
+    let id = match remembered {
+        Some(id) => id,
+        None => {
+            let Some(index) = slot(service.count) else {
+                return Lookup::Reject;
+            };
+            key.backend_slot = index;
+            // SAFETY: see lookup4.
+            let Some(entry) = (unsafe { LB6_SERVICES.get(&key).copied() }) else {
+                return Lookup::Reject;
+            };
+            entry.backend_id()
+        }
+    };
+    // SAFETY: see lookup4.
+    let Some(backend) = (unsafe { LB6_BACKENDS.get(&id).copied() }) else {
         return Lookup::Reject;
     };
-    key.backend_slot = index;
-    // SAFETY: see lookup4.
-    let Some(entry) = (unsafe { LB6_SERVICES.get(&key).copied() }) else {
-        return Lookup::Reject;
-    };
-    // SAFETY: see lookup4.
-    match unsafe { LB6_BACKENDS.get(&entry.backend_id()).copied() } {
-        Some(backend) => Lookup::Backend(backend, service.rev_nat_index),
-        None => Lookup::Reject,
+    if sticky {
+        let value = LbAffinityVal {
+            last_used: time,
+            backend_id: id,
+            pad: 0,
+        };
+        // See lookup4.
+        let _ = LB6_AFFINITY.insert(&affinity, &value, 0);
     }
+    Lookup::Backend(backend, rev)
 }
 
 /// TCP and UDP only; the kernel resolves protocol 0 to the socket's real one.
@@ -225,7 +334,7 @@ fn forward4(ctx: &SockAddrContext) -> i32 {
     };
     let address = raw.user_ip4.to_ne_bytes();
     let port = port_bytes(raw);
-    match lookup4(address, port, proto) {
+    match lookup4(ctx, address, port, proto) {
         Lookup::None => ALLOW,
         Lookup::Reject => REJECT,
         Lookup::Backend(backend, rev) => {
@@ -250,7 +359,7 @@ fn forward6(ctx: &SockAddrContext) -> i32 {
     let words = raw.user_ip6;
     let port = port_bytes(raw);
     if let Some(address) = mapped(words) {
-        return match lookup4(address, port, proto) {
+        return match lookup4(ctx, address, port, proto) {
             Lookup::None => ALLOW,
             Lookup::Reject => REJECT,
             Lookup::Backend(backend, rev) => {
@@ -264,7 +373,7 @@ fn forward6(ctx: &SockAddrContext) -> i32 {
         };
     }
     let address = ip6_bytes(words);
-    match lookup6(address, port, proto) {
+    match lookup6(ctx, address, port, proto) {
         Lookup::None => ALLOW,
         Lookup::Reject => REJECT,
         Lookup::Backend(backend, rev) => {

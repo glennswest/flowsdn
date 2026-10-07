@@ -1,6 +1,6 @@
-//! Socket-LB map planning (spec 05 §3.4, spec 01 §4.3): desired ClusterIP
+//! Socket-LB map planning (spec 05 §3.4, spec 01 §4.3): desired service
 //! frontends and their backends become the contents of
-//! `flowsdn_lb{4,6}_services` and `_backends_v3`, and the difference from the
+//! `flowsdn_lb{4,6}_services`, `_backends` and `flowsdn_lb_affinity_match`, and the difference from the
 //! kernel's current contents becomes an ordered list of map writes.
 //!
 //! Stateless by design: service IDs (`rev_nat_index`) and backend IDs are
@@ -8,7 +8,8 @@
 //! failed write is retried by planning again from what the kernel holds.
 use flowsdn_bpf_abi::{
     Be16, Be32, MapBytes,
-    lb::{Lb4Backend, Lb4Key, Lb6Backend, Lb6Key, LbService, service_flags},
+    affinity::LbAffinityMatch,
+    lb::{Algorithm, Lb4Backend, Lb4Key, Lb6Backend, Lb6Key, LbService, service_flags},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -45,6 +46,9 @@ impl std::fmt::Display for Address {
 pub struct Service {
     pub frontend: Address,
     pub backends: Vec<Address>,
+    /// ClientIP session affinity with this timeout in seconds
+    /// (`sessionAffinityConfig.clientIP.timeoutSeconds`, at most 2^24-1).
+    pub affinity: Option<u32>,
 }
 
 /// The four maps' contents as raw map bytes, keyed as the kernel keys them.
@@ -54,6 +58,9 @@ pub struct Maps {
     pub backends4: BTreeMap<u32, [u8; 12]>,
     pub services6: BTreeMap<[u8; 24], [u8; 12]>,
     pub backends6: BTreeMap<u32, [u8; 24]>,
+    /// `flowsdn_lb_affinity_match` keys: (backend ID, service ID) pairs a
+    /// remembered affinity may still use.
+    pub affinity_match: BTreeSet<[u8; 8]>,
 }
 
 /// One map write. [`plan`] orders them so a concurrent lookup never reads a
@@ -68,6 +75,8 @@ pub enum Op {
     DeleteService6([u8; 24]),
     DeleteBackend4(u32),
     DeleteBackend6(u32),
+    AffinityMatch([u8; 8]),
+    DeleteAffinityMatch([u8; 8]),
 }
 
 /// What [`desired`] chose: the map contents, and the service ID of each frontend.
@@ -262,7 +271,15 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
             rev_nat_index: id,
             ..LbService::default()
         };
-        master.set_service_flags(service_flags::ROUTABLE);
+        match service.affinity {
+            Some(seconds) => {
+                master.set_service_flags(service_flags::ROUTABLE | service_flags::SESSION_AFFINITY);
+                master
+                    .set_affinity(Algorithm::Random, seconds)
+                    .map_err(|_| format!("{frontend}: affinity timeout {seconds} s too long"))?;
+            }
+            None => master.set_service_flags(service_flags::ROUTABLE),
+        }
         let mut slots = vec![(0u16, master)];
         for (index, backend) in backends.into_iter().enumerate() {
             let backend_id = match backend_ids.get(&backend) {
@@ -282,6 +299,16 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
                     let value = backend_bytes6(backend).ok_or("backend family")?;
                     out.maps.backends6.insert(backend_id, value);
                 }
+            }
+            if service.affinity.is_some() {
+                out.maps.affinity_match.insert(
+                    LbAffinityMatch {
+                        backend_id,
+                        rev_nat_id: id,
+                        pad: 0,
+                    }
+                    .to_bytes(),
+                );
             }
             let slot = u16::try_from(index)
                 .ok()
@@ -313,8 +340,10 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
 }
 
 /// The writes that turn `current` into `desired`, in the order spec 05 §3.4
-/// requires: backends, then slots, then masters (the publish point); then
-/// stale masters, stale slots and stale backends.
+/// requires: backends, affinity matches, then slots, then masters (the
+/// publish point); then stale masters, stale slots, stale affinity matches
+/// (so a remembered affinity never reaches a dead backend ID) and stale
+/// backends.
 pub fn plan(current: &Maps, desired: &Maps) -> Vec<Op> {
     let mut ops = Vec::new();
     let changed4 = |key: &u32, value: &[u8; 12]| current.backends4.get(key) != Some(value);
@@ -328,6 +357,9 @@ pub fn plan(current: &Maps, desired: &Maps) -> Vec<Op> {
         if changed6(id, value) {
             ops.push(Op::Backend6(*id, *value));
         }
+    }
+    for key in desired.affinity_match.difference(&current.affinity_match) {
+        ops.push(Op::AffinityMatch(*key));
     }
     for master in [false, true] {
         for (key, value) in &desired.services4 {
@@ -356,6 +388,9 @@ pub fn plan(current: &Maps, desired: &Maps) -> Vec<Op> {
                 ops.push(Op::DeleteService6(*key));
             }
         }
+    }
+    for key in current.affinity_match.difference(&desired.affinity_match) {
+        ops.push(Op::DeleteAffinityMatch(*key));
     }
     for id in current.backends4.keys() {
         if !desired.backends4.contains_key(id) {
@@ -398,6 +433,12 @@ pub fn apply(maps: &mut Maps, ops: &[Op]) {
             }
             Op::DeleteBackend6(id) => {
                 maps.backends6.remove(&id);
+            }
+            Op::AffinityMatch(key) => {
+                maps.affinity_match.insert(key);
+            }
+            Op::DeleteAffinityMatch(key) => {
+                maps.affinity_match.remove(&key);
             }
         }
     }
