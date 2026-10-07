@@ -202,6 +202,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         skip_unreachable: false,
         service_lb: true,
         cgroup_root: PathBuf::from("/sys/fs/cgroup"),
+        node_port: false,
     };
     let controller = Controller::connect(settings, &dir).expect("connect");
     let (pool4, pool6) = controller.wait_for_pools(true, true).expect("pools");

@@ -38,6 +38,10 @@ pub struct Settings {
     /// The cgroup v2 directory the socket-lb programs attach to; the host's
     /// root covers every pod and host process.
     pub cgroup_root: PathBuf,
+    /// NodePort, external and LoadBalancer addresses from outside the
+    /// cluster (#292), default on with `service-lb`: tc programs on the
+    /// interfaces holding this node's InternalIPs.
+    pub node_port: bool,
 }
 /// Where a DaemonSet mounts the host's cgroup v2 root.
 pub const DEFAULT_CGROUP_ROOT: &str = "/sys/fs/cgroup";
@@ -101,6 +105,7 @@ impl Settings {
             auto_direct_node_routes: flag("auto-direct-node-routes", true)?,
             skip_unreachable: flag("direct-routing-skip-unreachable", false)?,
             service_lb: flag("service-lb", true)?,
+            node_port: flag("node-port", true)?,
             cgroup_root,
         }))
     }

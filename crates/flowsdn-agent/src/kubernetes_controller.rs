@@ -128,11 +128,12 @@ impl Controller {
                 Ok(lb) => {
                     let (sender, receiver) = mpsc::channel();
                     let lb_view = Arc::clone(&view);
+                    let node_port = self.settings.node_port;
                     std::thread::Builder::new()
                         .name("flowsdn-services".into())
                         .spawn(move || {
                             let mut lb = lb;
-                            service_loop(&receiver, &lb_view, &mut lb);
+                            service_loop(&receiver, &lb_view, &mut lb, node_port);
                         })?;
                     Some(sender)
                 }
@@ -488,7 +489,12 @@ fn load_socket_lb(
 /// Own the socket-LB maps: on every new frontend set (after both lists are
 /// complete) and every 30 s, plan from what the kernel holds and apply.
 /// Nothing is pruned before the first complete lists.
-fn service_loop(receiver: &mpsc::Receiver<Vec<socket::Service>>, view: &Shared, lb: &mut SocketLb) {
+fn service_loop(
+    receiver: &mpsc::Receiver<Vec<socket::Service>>,
+    view: &Shared,
+    lb: &mut SocketLb,
+    node_port: bool,
+) {
     let mut desired: Option<Vec<socket::Service>> = None;
     loop {
         match receiver.recv_timeout(RECONCILE_INTERVAL) {
@@ -516,7 +522,75 @@ fn service_loop(receiver: &mpsc::Receiver<Vec<socket::Service>>, view: &Shared, 
                 }
             }
         }
+        if node_port {
+            let addresses = {
+                let view = lock(view);
+                view.nodes
+                    .iter()
+                    .find(|n| n.name == view.local_node)
+                    .map(|n| n.internal_ips.clone())
+                    .unwrap_or_default()
+            };
+            let result = attach_uplinks(lb, &addresses);
+            let mut view = lock(view);
+            match result {
+                Ok(()) => {
+                    view.errors.remove("node-port");
+                }
+                Err(error) => {
+                    view.errors.insert("node-port".into(), error);
+                }
+            }
+        }
     }
+}
+
+/// The interfaces holding any of `addresses`, by name (`/sys/class/net`).
+fn interfaces_with(addresses: &[IpAddr]) -> std::result::Result<BTreeSet<String>, String> {
+    let connector = Connector::open().map_err(|e| format!("netlink: {e}"))?;
+    let mut out = BTreeSet::new();
+    for entry in fs::read_dir("/sys/class/net").map_err(|e| format!("/sys/class/net: {e}"))? {
+        let Ok(entry) = entry else { continue };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some(index) = fs::read_to_string(entry.path().join("ifindex"))
+            .ok()
+            .and_then(|i| i.trim().parse::<u32>().ok())
+        else {
+            continue;
+        };
+        if connector
+            .addresses(index)
+            .is_ok_and(|held| held.iter().any(|ip| addresses.contains(ip)))
+        {
+            out.insert(name);
+        }
+    }
+    Ok(out)
+}
+
+/// NodePort from outside the cluster (#292): the NodePort programs on every
+/// interface that holds one of this node's InternalIPs, and on no other.
+fn attach_uplinks(lb: &mut SocketLb, addresses: &[IpAddr]) -> std::result::Result<(), String> {
+    if addresses.is_empty() {
+        return Ok(());
+    }
+    let want = interfaces_with(addresses)?;
+    let stale: Vec<String> = lb
+        .uplinks()
+        .filter(|name| !want.contains(*name))
+        .map(str::to_owned)
+        .collect();
+    for name in stale {
+        lb.detach_uplink(&name);
+    }
+    for name in &want {
+        lb.attach_uplink(name)
+            .map_err(|e| format!("attach NodePort programs to {name}: {e}"))?;
+    }
+    if want.is_empty() {
+        return Err("no interface holds this node's InternalIP".into());
+    }
+    Ok(())
 }
 fn program(
     lb: &mut SocketLb,

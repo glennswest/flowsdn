@@ -15,11 +15,11 @@
 
 use aya_ebpf::{
     EbpfContext,
-    bindings::{BPF_F_NO_PREALLOC, bpf_sock_addr},
+    bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, bpf_sock_addr},
     helpers::{bpf_get_netns_cookie, bpf_get_prandom_u32, bpf_get_socket_cookie, bpf_ktime_get_ns},
-    macros::{cgroup_sock_addr, map},
+    macros::{cgroup_sock_addr, classifier, map},
     maps::{HashMap, LruHashMap},
-    programs::SockAddrContext,
+    programs::{SockAddrContext, TcContext},
 };
 use flowsdn_bpf_abi::{
     Be16, Be32,
@@ -480,6 +480,223 @@ pub fn sock6_recvmsg(ctx: SockAddrContext) -> i32 {
 #[cgroup_sock_addr(getpeername6)]
 pub fn sock6_getpeername(ctx: SockAddrContext) -> i32 {
     reverse6(&ctx)
+}
+
+// ---------------------------------------------------------------------------
+// NodePort, external and LoadBalancer addresses from outside the cluster
+// (#292), IPv4: tc programs on the node's uplink. A packet to a frontend of
+// the node-local scope (scope 1, this node's backends only) is sent to a
+// backend by rewriting its destination; the host stack then routes it to the
+// pod. The reply's source is rewritten back on the uplink's egress. Both
+// directions are remembered per flow in an LRU map, so one connection keeps
+// its backend. There is no SNAT, which is why only local backends are used.
+// Neither program ever drops a packet: anything it does not handle passes.
+
+/// One direction of a translated flow: `a:ap -> b:bp`. Direction 0 is the
+/// client to the frontend (the value is the backend), 1 the backend to the
+/// client (the value is the frontend).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Nodeport4Key {
+    a: [u8; 4],
+    b: [u8; 4],
+    ap: [u8; 2],
+    bp: [u8; 2],
+    proto: u8,
+    direction: u8,
+    pad: [u8; 2],
+}
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Nodeport4Value {
+    address: [u8; 4],
+    port: [u8; 2],
+    pad: [u8; 2],
+}
+#[map(name = "flowsdn_nodeport4")]
+static NODEPORT4: LruHashMap<Nodeport4Key, Nodeport4Value> =
+    LruHashMap::with_max_entries(65536, 0);
+
+const ETH_P_IPV4: [u8; 2] = [0x08, 0x00];
+const BPF_F_PSEUDO_HDR: u64 = 1 << 4;
+const BPF_F_MARK_MANGLED_0: u64 = 1 << 5;
+
+/// The IPv4 TCP/UDP 5-tuple of a frame: (L4 offset, proto, src, dst,
+/// sport, dport). Fragments other than the first carry no ports: skipped.
+#[inline(always)]
+fn tuple4(ctx: &TcContext) -> Option<(usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8; 2])> {
+    if ctx.load::<[u8; 2]>(12).ok()? != ETH_P_IPV4 {
+        return None;
+    }
+    let version_ihl = ctx.load::<u8>(14).ok()?;
+    if version_ihl >> 4 != 4 || version_ihl & 15 < 5 {
+        return None;
+    }
+    let fragment = u16::from_be_bytes(ctx.load::<[u8; 2]>(20).ok()?);
+    if fragment & 0x1fff != 0 {
+        return None;
+    }
+    let proto = ctx.load::<u8>(23).ok()?;
+    if proto != 6 && proto != 17 {
+        return None;
+    }
+    let l4 = usize::from(version_ihl & 15).checked_mul(4)?.checked_add(14)?;
+    let [s0, s1, d0, d1] = ctx.load::<[u8; 4]>(l4).ok()?;
+    Some((
+        l4,
+        proto,
+        ctx.load::<[u8; 4]>(26).ok()?,
+        ctx.load::<[u8; 4]>(30).ok()?,
+        [s0, s1],
+        [d0, d1],
+    ))
+}
+
+/// Rewrite the address at `ip_offset` (26 source, 30 destination) and the
+/// port at `port_offset`, keeping the IPv4 and TCP/UDP checksums right. A
+/// UDP checksum of zero (none) stays zero.
+#[inline(always)]
+fn rewrite4(
+    ctx: &TcContext,
+    l4: usize,
+    proto: u8,
+    ip_offset: usize,
+    port_offset: usize,
+    old: ([u8; 4], [u8; 2]),
+    new: ([u8; 4], [u8; 2]),
+) -> Option<()> {
+    let (old_ip, new_ip) = (u32::from_ne_bytes(old.0), u32::from_ne_bytes(new.0));
+    let (old_port, new_port) = (u16::from_ne_bytes(old.1), u16::from_ne_bytes(new.1));
+    let (checksum, mangled) = if proto == 6 {
+        (l4.checked_add(16)?, 0)
+    } else {
+        (l4.checked_add(6)?, BPF_F_MARK_MANGLED_0)
+    };
+    let udp_without_checksum = proto == 17 && ctx.load::<u16>(checksum).ok()? == 0;
+    if !udp_without_checksum {
+        ctx.l4_csum_replace(
+            checksum,
+            u64::from(old_ip),
+            u64::from(new_ip),
+            BPF_F_PSEUDO_HDR | mangled | 4,
+        )
+        .ok()?;
+        ctx.l4_csum_replace(
+            checksum,
+            u64::from(old_port),
+            u64::from(new_port),
+            mangled | 2,
+        )
+        .ok()?;
+    }
+    ctx.l3_csum_replace(24, u64::from(old_ip), u64::from(new_ip), 4)
+        .ok()?;
+    ctx.store(ip_offset, &new.0, 0).ok()?;
+    ctx.store(port_offset, &new.1, 0).ok()?;
+    Some(())
+}
+
+#[inline(always)]
+fn nodeport4_in(ctx: &TcContext) -> Option<()> {
+    let (l4, proto, client, front, client_port, front_port) = tuple4(ctx)?;
+    let forward = Nodeport4Key {
+        a: client,
+        b: front,
+        ap: client_port,
+        bp: front_port,
+        proto,
+        direction: 0,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let backend = match unsafe { NODEPORT4.get(&forward).copied() } {
+        Some(known) => (known.address, known.port),
+        None => {
+            let mut key = Lb4Key {
+                address: Be32(front),
+                dport: Be16(front_port),
+                backend_slot: 0,
+                proto,
+                scope: 1,
+                pad: [0; 2],
+            };
+            // SAFETY: see lookup4.
+            let service = unsafe { LB4_SERVICES.get(&key).copied() }?;
+            key.backend_slot = slot(service.count)?;
+            // SAFETY: see lookup4.
+            let entry = unsafe { LB4_SERVICES.get(&key).copied() }?;
+            // SAFETY: see lookup4.
+            let chosen = unsafe { LB4_BACKENDS.get(&entry.backend_id()).copied() }?;
+            let value = Nodeport4Value {
+                address: chosen.address.0,
+                port: chosen.port.0,
+                pad: [0; 2],
+            };
+            let reverse = Nodeport4Key {
+                a: chosen.address.0,
+                b: client,
+                ap: chosen.port.0,
+                bp: client_port,
+                proto,
+                direction: 1,
+                pad: [0; 2],
+            };
+            let front_value = Nodeport4Value {
+                address: front,
+                port: front_port,
+                pad: [0; 2],
+            };
+            // Reverse first: a reply must never find a flow it cannot undo.
+            NODEPORT4.insert(&reverse, &front_value, 0).ok()?;
+            NODEPORT4.insert(&forward, &value, 0).ok()?;
+            (chosen.address.0, chosen.port.0)
+        }
+    };
+    rewrite4(
+        ctx,
+        l4,
+        proto,
+        30,
+        l4.checked_add(2)?,
+        (front, front_port),
+        backend,
+    )
+}
+
+#[inline(always)]
+fn nodeport4_out(ctx: &TcContext) -> Option<()> {
+    let (l4, proto, backend, client, backend_port, client_port) = tuple4(ctx)?;
+    let reverse = Nodeport4Key {
+        a: backend,
+        b: client,
+        ap: backend_port,
+        bp: client_port,
+        proto,
+        direction: 1,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let front = unsafe { NODEPORT4.get(&reverse).copied() }?;
+    rewrite4(
+        ctx,
+        l4,
+        proto,
+        26,
+        l4,
+        (backend, backend_port),
+        (front.address, front.port),
+    )
+}
+
+#[classifier]
+pub fn nodeport_ingress(ctx: TcContext) -> i32 {
+    let _ = nodeport4_in(&ctx);
+    TC_ACT_OK
+}
+#[classifier]
+pub fn nodeport_egress(ctx: TcContext) -> i32 {
+    let _ = nodeport4_out(&ctx);
+    TC_ACT_OK
 }
 
 // SAFETY: unique immutable ELF license declaration, required by the loader.

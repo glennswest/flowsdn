@@ -9,8 +9,9 @@ use aya::{
     Ebpf, EbpfLoader,
     maps::{HashMap, Map, MapData, MapError, MapInfo, MapType},
     programs::{
-        CgroupAttachMode, CgroupSockAddr,
+        CgroupAttachMode, CgroupSockAddr, LinkOrder, SchedClassifier, TcAttachType,
         links::{FdLink, PinnedLink},
+        tc::{SchedClassifierLink, TcAttachOptions},
     },
 };
 use flowsdn_lb::socket::{Maps, Op};
@@ -34,7 +35,7 @@ pub const PROGRAMS: [&str; 8] = [
 /// names and §4.3 layouts; flowsdn sizes the reverse and affinity maps at
 /// 64Ki. The affinity maps are the programs' own; the agent writes the
 /// match map.
-const MAPS: [(&str, MapType, u32, u32, u32, u32); 9] = [
+const MAPS: [(&str, MapType, u32, u32, u32, u32); 10] = [
     ("flowsdn_lb4_services", MapType::Hash, 12, 12, 65536, 1),
     ("flowsdn_lb4_backends", MapType::Hash, 4, 12, 65536, 1),
     ("flowsdn_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
@@ -44,6 +45,7 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 9] = [
     ("flowsdn_lb4_affinity", MapType::LruHash, 16, 16, 65536, 0),
     ("flowsdn_lb6_affinity", MapType::LruHash, 24, 16, 65536, 0),
     ("flowsdn_lb_affinity_match", MapType::Hash, 8, 1, 65536, 1),
+    ("flowsdn_nodeport4", MapType::LruHash, 16, 8, 65536, 0),
 ];
 
 pub struct SocketLb {
@@ -56,6 +58,8 @@ pub struct SocketLb {
     pin_root: Option<PathBuf>,
     /// Owned links; unpinned ones detach when this owner drops.
     links: Vec<FdLink>,
+    /// The NodePort programs' TCX links on uplinks (#292), by interface.
+    uplinks: std::collections::BTreeMap<String, Vec<SchedClassifierLink>>,
 }
 
 fn take<K: aya::Pod, V: aya::Pod>(
@@ -142,6 +146,7 @@ impl SocketLb {
             affinity_match,
             pin_root: pin_root.map(Path::to_owned),
             links: Vec::new(),
+            uplinks: std::collections::BTreeMap::new(),
         })
     }
 
@@ -191,6 +196,63 @@ impl SocketLb {
             self.links.push(link);
         }
         Ok(())
+    }
+
+    /// Attach the NodePort programs (#292) to `interface`, the node's uplink:
+    /// `nodeport_ingress` on its TCX ingress and `nodeport_egress` on its
+    /// egress. Packets from outside the cluster to a node-local frontend go
+    /// to one of this node's backends; replies are shown as from the
+    /// frontend. The links detach when this owner drops or [`Self::detach_uplink`].
+    pub fn attach_uplink(&mut self, interface: &str) -> KernelResult<()> {
+        if interface.is_empty() || interface.len() >= 16 || interface.contains(['\0', '/']) {
+            return Err("invalid network interface name".into());
+        }
+        if self.uplinks.contains_key(interface) {
+            return Ok(());
+        }
+        let mut links = Vec::new();
+        for (name, direction) in [
+            ("nodeport_ingress", TcAttachType::Ingress),
+            ("nodeport_egress", TcAttachType::Egress),
+        ] {
+            let program: &mut SchedClassifier = self
+                .bpf
+                .program_mut(name)
+                .ok_or_else(|| format!("socket-lb object has no program {name}"))?
+                .try_into()?;
+            if program.fd().is_err() {
+                program.load()?;
+            }
+            let id = program.attach_with_options(
+                interface,
+                direction,
+                TcAttachOptions::TcxOrder(LinkOrder::default()),
+            )?;
+            links.push(program.take_link(id)?);
+        }
+        self.uplinks.insert(interface.to_owned(), links);
+        Ok(())
+    }
+    /// A tc program of the object (`nodeport_ingress`, `nodeport_egress`),
+    /// loaded, for BPF_PROG_TEST_RUN by the kernel fixtures.
+    pub fn classifier(&mut self, name: &str) -> KernelResult<&mut SchedClassifier> {
+        let program: &mut SchedClassifier = self
+            .bpf
+            .program_mut(name)
+            .ok_or_else(|| format!("socket-lb object has no program {name}"))?
+            .try_into()?;
+        if program.fd().is_err() {
+            program.load()?;
+        }
+        Ok(program)
+    }
+    /// Detach the NodePort programs from `interface`.
+    pub fn detach_uplink(&mut self, interface: &str) {
+        self.uplinks.remove(interface);
+    }
+    /// The interfaces the NodePort programs are attached to.
+    pub fn uplinks(&self) -> impl Iterator<Item = &str> {
+        self.uplinks.keys().map(String::as_str)
     }
 
     /// Detach and unpin every link this owner holds or finds pinned.
