@@ -329,7 +329,6 @@ pub fn in_cluster_inputs() -> String {
     )
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -356,4 +355,3 @@ mod tests {
         assert_eq!(ready_endpoints(&json!({})), 0);
     }
 }
-
