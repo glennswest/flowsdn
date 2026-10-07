@@ -7,6 +7,37 @@ use crate::{env::Env, report::Report};
 use flowsdn_api_client::Client;
 use std::time::{Duration, Instant};
 
+/// What the pod sees of the host's run directories, for a missing socket:
+/// whether each mount is there, and the entries of its flowsdn directory.
+fn seen(env: &Env) -> String {
+    ["/var/run", "/run"]
+        .iter()
+        .map(|dir| {
+            let root = env.host(dir);
+            let entries = |path: &std::path::Path| -> String {
+                std::fs::read_dir(path).map_or_else(
+                    |e| e.to_string(),
+                    |list| {
+                        let mut names: Vec<String> = list
+                            .filter_map(|e| e.ok())
+                            .map(|e| e.file_name().to_string_lossy().into_owned())
+                            .collect();
+                        names.sort();
+                        names.truncate(12);
+                        names.join(",")
+                    },
+                )
+            };
+            format!(
+                "{dir}: [{}] flowsdn: [{}]",
+                entries(&root),
+                entries(&root.join("flowsdn"))
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 pub fn probe(report: &mut Report, env: &Env) {
     let cni_dir = env.host("/opt/cni/bin");
     if !cni_dir.is_dir() {
@@ -37,7 +68,10 @@ pub fn probe(report: &mut Report, env: &Env) {
         report.fail(
             "node-agent",
             start.elapsed(),
-            "flowsdn CNI installed but no agent socket at /var/run/flowsdn/flowsdn.sock or /run/flowsdn/flowsdn.sock",
+            &format!(
+                "flowsdn CNI installed but no agent socket at /var/run/flowsdn/flowsdn.sock or /run/flowsdn/flowsdn.sock; seen: {}",
+                seen(env)
+            ),
         );
         return;
     };

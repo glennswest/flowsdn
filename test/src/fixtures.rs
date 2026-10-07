@@ -82,13 +82,26 @@ fn fixtures(env: &Env) -> Vec<(&'static str, PathBuf, Vec<PathBuf>)> {
 
 /// The cause of a failure in one line: the last three lines that say
 /// something (a multi-line error, such as a verifier log printed as `Error:
-/// ProgramError { ... }`, ends in bare braces), joined, and at most 400
-/// characters from the end, since the runner keeps a line's tail (#341).
+/// ProgramError { ... }`, ends in bare braces and statistics, both skipped),
+/// joined, and at most 400 characters from the end, since the runner keeps a
+/// line's tail (#341).
 pub fn failure_summary(output: &str) -> String {
     let mut lines: Vec<&str> = output
         .lines()
         .map(str::trim)
         .filter(|l| !l.is_empty() && l.chars().any(char::is_alphanumeric))
+        // A verifier log ends in statistics; the rejection is above them.
+        .filter(|l| {
+            ![
+                "processed ",
+                "insns processed",
+                "stack depth",
+                "verification time",
+                "max_states_per_insn",
+            ]
+            .iter()
+            .any(|stat| l.starts_with(stat))
+        })
         .rev()
         .take(3)
         .collect();
@@ -153,7 +166,7 @@ mod tests {
 
     #[test]
     fn failure_summary_skips_braces_and_keeps_the_tail() {
-        let log = "PASS one\nError: LoadError {\n    verifier_log: \"0: R1=ctx\n5: invalid bpf_context access off=76 size=4\n\",\n}\n  }\n";
+        let log = "PASS one\nError: LoadError {\n    verifier_log: \"0: R1=ctx\n5: invalid bpf_context access off=76 size=4\nprocessed 6 insns (limit 1000000) max_states_per_insn 0\nstack depth 8 max 0\n\",\n}\n  }\n";
         assert_eq!(
             failure_summary(log),
             "Error: LoadError { | verifier_log: \"0: R1=ctx | 5: invalid bpf_context access off=76 size=4"
