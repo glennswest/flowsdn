@@ -193,33 +193,36 @@ row is a requirement on the backend, with the flowsdn feature that breaks if it
 is unmet. It is written so fastetcd can be verified — or extended — against it
 mechanically, and so any other etcd-compatible store can be swapped in.
 
-Status column: **OK** = fastetcd 1.2.0 satisfies it; **GAP** = it does not, and
-either fastetcd must be extended or flowsdn must avoid the dependency (the
-"flowsdn action" column says which).
+Status column: **OK** = fastetcd satisfies it (the version that fixed it is
+named); **GAP** = it does not, and either fastetcd must be extended or flowsdn
+must avoid the dependency (the "flowsdn action" column says which). Re-scored
+2026-10-07 against fastetcd **v1.18.0** (#307); the original scoring was
+against 1.2.0. A conformance run (§9.6) against the pinned version is still the
+evidence a row needs before flowsdn relaxes a mitigation (§12 decision 2).
 
-| # | Requirement | Why | fastetcd 1.2.0 | flowsdn action |
+| # | Requirement | Why | fastetcd (re-scored v1.18.0) | flowsdn action |
 |---|---|---|---|---|
 | F1 | `Range` with `range_end` = key-prefix successor, `limit`, and a returned `more` flag and `count` | paginated initial list (`etcd.limit`, default 256) before every watch | OK | use as is |
 | F2 | `Range` with an explicit `revision` returning a consistent historical snapshot, and `OutOfRange`/compacted error when that revision is gone | the list→watch handoff reads at revision `R` then watches from `R+1`; without it the handoff races | OK | use as is |
 | F3 | Ascending-by-key ordering of `Range` results | continuation uses "last key seen + `\x00`" as the next `key`; a non-ascending order silently loses keys | OK (always ascending) — but `sort_order`/`sort_target` are **ignored, not rejected** | flowsdn MUST NOT set `sort_order`/`sort_target` and MUST NOT rely on any order other than ascending. A conformance test asserts ascending order. |
 | F4 | `KeyValue` carries `create_revision`, `mod_revision`, `version` and `lease` | `version == 0` compare for create-only; `mod_revision` for allocator stale detection (§5.6); `lease` for lease bookkeeping | OK | use as is |
 | F5 | `Txn` compare targets `VERSION` and `CREATE`, results `EQUAL`, with `RequestPut` / `RequestRange` / `RequestDeleteRange` in `success` and `failure` | create-only writes and every `*IfLocked` operation | OK | use as is |
-| F6 | `Txn` response ops are tagged with the operation that produced them | a client that matches on `ResponseOp` variants mis-reads a single-key `DeleteRange` as a `Put` in fastetcd | **GAP** (`crates/server/src/kv.rs` infers the variant) | flowsdn's `Txn` wrapper MUST decide success/failure from `TxnResponse.succeeded` and MUST NOT inspect the response-op variants. Fastetcd issue to file. |
-| F7 | `Txn` is subject to the same authorization as `Put`/`Range` | otherwise RBAC is bypassable | **GAP** (no `authorize()` on `Txn`) | flowsdn does not use etcd Auth (F19); no impact, but the gap is recorded and filed. |
+| F6 | `Txn` response ops are tagged with the operation that produced them | a client that matches on `ResponseOp` variants mis-reads a single-key `DeleteRange` as a `Put` in fastetcd | OK from **v1.2.3** (fastetcd#18; was a GAP: the variant was inferred) | flowsdn's `Txn` wrapper still decides success/failure from `TxnResponse.succeeded` and does not inspect response-op variants (cheap, and correct against any store). |
+| F7 | `Txn` is subject to the same authorization as `Put`/`Range` | otherwise RBAC is bypassable | OK from **v1.2.2** (fastetcd#22) | flowsdn does not use etcd Auth (F19); no impact. |
 | F8 | `Watch` with `key`+`range_end` (prefix), `start_revision`, and `prev_kv` not required | all imports | OK | use as is |
 | F9 | `Watch` cancels with `canceled = true` and `compact_revision` set when `start_revision` precedes the compaction floor | the relist-on-compaction state machine (§5.4) is the only thing standing between a compaction and permanently stale caches | OK, with an off-by-one at the boundary (`start_revision < compact_rev` vs etcd's `<=`) | flowsdn treats *any* watch cancellation with a non-zero `compact_revision`, and any watch error, as "relist from scratch"; the boundary difference is therefore unobservable. Conformance test C9 pins it. |
-| F10 | A watch never silently skips a revision in its range | every import cache would drift with no error and no self-heal | **GAP** — fastetcd logs `RecvError::Lagged(n)` and continues, dropping events | **Blocking for production.** fastetcd MUST cancel the watch (any cancel reason) instead of dropping. Until then flowsdn MUST run the periodic full resync of §5.4.4 with a bounded interval (`kvstore-resync-interval`, default 5 m) rather than the reference's watch-only model. Filed as the highest-priority fastetcd change. |
-| F11 | `WithRequireLeader` (`hasleader` gRPC metadata): a watch on a member that has lost quorum is cancelled rather than going silent | a partitioned reader would serve stale remote state indefinitely | **GAP** — not implemented | flowsdn sets the metadata anyway (harmless), and does not rely on it: liveness is detected by the heartbeat watcher (§3.5.1) and the status checker (§3.2.5), which are mandatory in flowsdn (they are optional in the reference for remote clients). |
+| F10 | A watch never silently skips a revision in its range | every import cache would drift with no error and no self-heal | OK from **v1.2.1** (fastetcd#16): a lagging watcher is resynced from history or cancelled with `compact_revision`, never skipped | No longer blocking. flowsdn keeps the periodic full resync of §5.4.4 (`kvstore-resync-interval`, default 5 m) until a pinned-server conformance run proves lag always cancels (§12 decision 2 does not switch on a version string or a reported fix); `0` stays available with its warning. |
+| F11 | `WithRequireLeader` (`hasleader` gRPC metadata): a watch on a member that has lost quorum is cancelled rather than going silent | a partitioned reader would serve stale remote state indefinitely | **GAP** — not implemented (filed as fastetcd#129) | flowsdn sets the metadata anyway (harmless), and does not rely on it: liveness is detected by the heartbeat watcher (§3.5.1) and the status checker (§3.2.5), which are mandatory in flowsdn (they are optional in the reference for remote clients). |
 | F12 | `LeaseGrant` with a client-visible TTL; `LeaseKeepAlive` as a bidirectional stream; `LeaseRevoke` | every non-master key in the schema is leased so a dead writer's state expires | OK | use as is |
 | F13 | Keys attached to a lease are deleted, with normal `DELETE` watch events, when the lease expires or is revoked | remote readers learn that a peer died | OK | use as is |
-| F14 | `Put` against a non-existent lease id fails | detects a lease that expired between grant and use | **GAP** — fastetcd accepts it and records a dangling lease id | flowsdn MUST NOT rely on the error. The lease manager (§3.3.1) instead re-grants on any keep-alive stream failure and re-writes every key of the lost lease (this is required against etcd too, because the same race exists there). |
+| F14 | `Put` against a non-existent lease id fails | detects a lease that expired between grant and use | OK from **v1.5.2** (fastetcd#19) | flowsdn still does not rely on the error. The lease manager (§3.3.1) instead re-grants on any keep-alive stream failure and re-writes every key of the lost lease (this is required against etcd too, because the same race exists there). |
 | F15 | `LeaseTimeToLive` returning the remaining TTL | diagnostics only | OK | optional |
 | F16 | `Maintenance.Status` returning `version`, `member_id`/`leader` | the human-readable status string, and leader-known-ness in the quorum probe | OK | use as is |
-| F17 | `ResponseHeader.cluster_id` stable per store instance and **distinct per deployed cluster** | the cluster-ID interceptor pin (§3.7.4) detects "the endpoint now points at a different store" and forces a full drain+reconnect | **GAP** — fastetcd defaults `cluster_id` to `1` for every deployment and does not derive it from `--initial-cluster-token` | Deploying flowsdn's apiserver MUST pass a distinct `--cluster-id` per meshed cluster. §6.6 makes this a hard requirement of the deployment manifest, derived from the cluster name (FNV-1a-64 of `cluster-name`, masked to 63 bits, never 0). Without it the pin is inert and a mis-pointed endpoint is not detected. |
-| F18 | Server-side automatic compaction, so history does not grow without bound | a mesh writes continuously | OK, but **revision mode only**; etcd's `--auto-compaction-mode=periodic` (`"1h"`) is unsupported and a duration string fails to parse | §6.6 configures `--auto-compaction-retention` as a **revision count**, not a duration. This is a documented operational difference from the reference's `--auto-compaction-retention=1` (which means one hour). |
-| F19 | Users, roles, key-range read permissions, `AuthEnable`, and mapping a client certificate CN to a user (`--client-cert-auth`) | the reference's per-remote-cluster etcd users and their ACL ranges (§3.8.5) | **GAP** — RBAC primitives exist, but CN→user mapping does not exist at all, and the Auth service is reachable without the auth interceptor | **DEVIATION (§3.8.5).** flowsdn does not use etcd Auth. Read scoping is enforced by the flowsdn apiserver front (mTLS identity → allowed prefix set) instead. The `users.yaml` file and the `clustermesh-remote-users` ConfigMap are accepted and ignored, with a startup warning. |
+| F17 | `ResponseHeader.cluster_id` stable per store instance and **distinct per deployed cluster** | the cluster-ID interceptor pin (§3.7.4) detects "the endpoint now points at a different store" and forces a full drain+reconnect | Partly, from **v1.3.0** (fastetcd#17): persisted and derived from `--initial-cluster-token` when unset. Still chosen per member, not replicated, so members can disagree (fastetcd#38, open) | Deploying flowsdn's apiserver MUST still pass a distinct `--cluster-id` per meshed cluster, the same on every member. §6.6 makes this a hard requirement of the deployment manifest, derived from the cluster name (FNV-1a-64 of `cluster-name`, masked to 63 bits, never 0). Without it the pin is inert and a mis-pointed endpoint is not detected. |
+| F18 | Server-side automatic compaction, so history does not grow without bound | a mesh writes continuously | OK, revision mode only through v1.x. From **2.0.0** (owner's choice on fastetcd#68: etcd parity; implementation fastetcd#21) `--auto-compaction-mode` defaults to `periodic`, so a bare `--auto-compaction-retention` number means **hours** | §6.6 configures `--auto-compaction-retention` as a **revision count**. Against fastetcd ≥ 2.0.0 the manifest MUST also pass `--auto-compaction-mode=revision` (the flag is refused before 2.0.0, so it lands with that version). Documented operational difference from the reference's `--auto-compaction-retention=1` (one hour). |
+| F19 | Users, roles, key-range read permissions, `AuthEnable`, and mapping a client certificate CN to a user (`--client-cert-auth`) | the reference's per-remote-cluster etcd users and their ACL ranges (§3.8.5) | OK from **v1.16.1**: CN→user mapping (v1.6.0, fastetcd#20), admin RPCs root-only (fastetcd#31), auth replicated through Raft (fastetcd#32), Watch (fastetcd#33) and lease RPCs (v1.16.1, fastetcd#47) authorized. Tokens never expire (fastetcd#46), which does not affect mTLS CN users | **DEVIATION (§3.8.5), kept by §12 decision 5.** flowsdn does not use etcd Auth; the decision never depended on the store's gaps. Read scoping is enforced by the flowsdn apiserver front (mTLS identity → allowed prefix set) instead. The `users.yaml` file and the `clustermesh-remote-users` ConfigMap are accepted and ignored, with a startup warning. |
 | F20 | Server TLS with mandatory client-certificate verification against a CA | the only authentication in the flowsdn model | OK (`--cert-file`, `--key-file`, `--trusted-ca-file`, `--client-cert-auth`) | use as is; §3.8.6 |
-| F21 | Separate server and peer TLS identities | defence in depth for the raft port | **GAP** — one identity is shared; `--peer-*-file` flags are parsed and discarded | accepted with the shipped peer-port NetworkPolicy; tracked in fastetcd#23. Port 2380 remains cluster-internally reachable in HA; see §12 decision 8. |
+| F21 | Separate server and peer TLS identities | defence in depth for the raft port | OK from **v1.4.1** (fastetcd#23): separate peer identity and CA, member-to-member mTLS; a cross-pod deployment of it is not yet verified | use the peer flags; the shipped peer-port NetworkPolicy stays as defence in depth. Port 2380 remains cluster-internally reachable in HA; see §12 decision 8. |
 | F22 | A `Range` of a prefix that returns nothing must be distinguishable from an error | "cluster config missing" is a normal, expected state on a peer that has not started yet | OK | use as is |
 | F23 | Revisions are globally monotonic across the whole keyspace | watch-from-revision and the list→watch handoff | OK (`Revision { main, sub }`) | use as is |
 | F24 | Bounded request/response size, or at least a documented limit | `ClusterEndpointSlice` values can approach the 16 MiB decode cap | fastetcd does not enforce `--max-request-bytes`; gRPC transport limits apply | flowsdn caps a single value at 4 MiB on write and rejects larger ones with a named error rather than relying on the store. |
@@ -229,9 +232,12 @@ either fastetcd must be extended or flowsdn must avoid the dependency (the
 **Conformance suite.** §9.6 defines `flowsdn-kvstore-conformance`, a binary
 that runs every row above against a live store and prints a pass/fail table.
 It is the acceptance gate for a fastetcd release and for any alternative
-backend. Rows F6, F7, F10, F11, F14, F17, F19, F21 are the currently failing
-ones; F10 and F17 are blocking, the rest are accepted with the stated
-mitigation.
+backend. Against fastetcd v1.18.0 only F11 is still a gap (fastetcd#129,
+mitigated); F17 is partial (per-member `cluster_id`, fastetcd#38), which the
+mandatory `--cluster-id` covers. None is blocking. F18 changes meaning at
+fastetcd 2.0.0 (see the row). Until a conformance run against the pinned
+version confirms these rows, flowsdn keeps its mitigations (F10's resync, F6's
+`succeeded`-only check, F14's re-grant).
 
 ## 3. Behavior
 
@@ -751,8 +757,9 @@ clusters' state under one name. A fresh pin is created on every reconnect, so a
 deliberate rebuild recovers after one connection cycle.
 
 **fastetcd note (§2.7 F17).** The pin is only as good as the store's cluster
-id. fastetcd defaults it to `1` for every deployment, so §6.6 makes a distinct
-`--cluster-id` mandatory in the flowsdn apiserver manifest.
+id. fastetcd derives it from `--initial-cluster-token` since v1.3.0, but each
+member chooses its own (fastetcd#38), so §6.6 keeps a distinct `--cluster-id`
+mandatory in the flowsdn apiserver manifest, the same on every member.
 
 #### 3.7.5 Cluster config retrieval
 
@@ -1008,10 +1015,13 @@ granted as a prefix *without* a trailing slash, so `cilium/.heartbeat` →
 the `root` role), `migration` (default: shared `remote` user plus per-cluster
 users) and `cluster` (per-cluster users only).
 
-**DEVIATION (§2.7 F19).** fastetcd has no CN→user mapping, so etcd Auth cannot
-authenticate anyone in this deployment model; enabling it would either lock the
-apiserver out or leave every client unauthenticated. flowsdn therefore does not
-use etcd Auth at all. Instead:
+**DEVIATION (§2.7 F19).** When this was written, fastetcd had no CN→user
+mapping, so etcd Auth could not authenticate anyone in this deployment model.
+fastetcd has since closed those gaps (CN mapping from v1.6.0, every RPC
+authorized by v1.16.1; #307), so the reference's per-cluster etcd users are now
+possible on fastetcd. §12 decision 5 keeps this front anyway: it never depended
+on the store's auth, it rejects every mutation on the public frontend, and it
+needs no etcd Auth bootstrap. flowsdn does not use etcd Auth. Instead:
 
 1. Authentication is mTLS: the store requires a client certificate signed by
    the cluster's CA. This is unchanged from the reference.
@@ -1449,8 +1459,9 @@ revision); the relist is correct and the cost is bounded by the prefix size.
 
 #### 5.4.4 Periodic resync (**DEVIATION**, fastetcd F10)
 
-Because fastetcd can currently drop watch events silently under load without
-cancelling the watch (§2.7 F10), flowsdn adds a periodic relist every
+Because fastetcd could drop watch events silently under load without
+cancelling the watch (§2.7 F10; fixed in v1.2.1, #307), flowsdn adds a periodic
+relist every
 `kvstore-resync-interval` (default 5 m, `0` disables). It runs the same relist
 path, so it converges the same way, and its cost is one paginated list per
 prefix per interval. A future change to `0` requires the explicit evidence gate in §12 decision 2;
@@ -1611,15 +1622,16 @@ What changes operationally:
 | Auth bootstrap | init container + `AuthEnable` | none; mTLS + apiserver-side prefix scoping (§3.8.5) |
 | `users.yaml` / `clustermesh-remote-users` | reconciled into etcd users | accepted and ignored |
 | Data directory | `emptyDir`, optionally `Memory` | unchanged; still ephemeral by design |
-| Compaction | `--auto-compaction-retention=1` (one **hour**) | `--auto-compaction-retention=<revisions>`; fastetcd supports revision mode only (§2.7 F18). Set it to `max(100 × expected agent count, 10000)` |
+| Compaction | `--auto-compaction-retention=1` (one **hour**) | `--auto-compaction-retention=<revisions>`, set to `max(100 × expected agent count, 10000)`, plus `--auto-compaction-mode=revision` against fastetcd ≥ 2.0.0, whose default mode is `periodic` (hours) (§2.7 F18) |
 | Store cluster id | derived by etcd | **MUST** be set explicitly: `--cluster-id=<FNV-1a-64(cluster-name) masked to 63 bits, never 0>` (§2.7 F17) |
 | Backup | `etcdctl snapshot` | `fastetcd backup` / `restore`; the gRPC `Snapshot` RPC is never used |
 | Metrics | etcd's `/metrics` on 9963 | fastetcd's `--listen-metrics-url`, same port |
-| Peer TLS | separate peer identity | shared identity (§2.7 F21); TCP 2380 restricted to same-namespace store members by shipped NetworkPolicy |
+| Peer TLS | separate peer identity | separate peer identity and CA (`--peer-*`, fastetcd ≥ v1.4.1, §2.7 F21); TCP 2380 also restricted to same-namespace store members by the shipped NetworkPolicy |
 
 Required fastetcd flags in the manifest: `--cert-file`, `--key-file`,
 `--trusted-ca-file`, `--client-cert-auth`, `--listen-client-urls`,
-`--cluster-id`, `--auto-compaction-retention`, `--data-dir`.
+`--cluster-id`, `--auto-compaction-retention`, `--data-dir`, the `--peer-*`
+TLS flags in HA, and `--auto-compaction-mode=revision` from fastetcd 2.0.0.
 
 The store remains a **cache, not a database**: everything in it is derived from
 Kubernetes and is rewritten on restart. Losing it costs a resync, not data.
@@ -1638,7 +1650,7 @@ required for correctness.
 | Peer changes its cluster ID | config differs from the reserved ID | drain nodes → services → ipcache → identities → observers, release the old ID, reserve the new, then re-import. Logged as an expected connectivity disruption |
 | Identity observed outside the peer's range, or missing the cluster-name label | per-event validator | the event is skipped with a warning; delete events skip the label check so stale identities are always removable |
 | **Compaction during a watch** | watch cancelled with a compaction revision, or any watch error | mark the whole local cache, relist, emit synthetic deletes for what vanished (§5.4) |
-| Watch drops events without an error (fastetcd F10) | not detectable | the periodic relist of §5.4.4 converges within `kvstore-resync-interval` |
+| Watch drops events without an error (fastetcd F10, fixed in v1.2.1; any other store) | not detectable | the periodic relist of §5.4.4 converges within `kvstore-resync-interval` |
 | **Key lease expiry** | the keepalive stream ends | every key bound to the lease is reported to its observer; a `SyncStore` re-enqueues them, including its synced canary (without re-running readiness callbacks); a `SharedStore` re-creates its owned keys. Peers see deletes followed by re-creates |
 | **Lock lease expiry** while a lock is held | the guard's compare fails | the guarded operation fails with `LockLeaseExpired` and is retried from the top, re-acquiring the lock. GC's lock is 25 s, so a crashed holder blocks nothing longer than that |
 | Local lock leaked in-process | held > 30 s | force-released by the local GC timer with an error log naming the path |
