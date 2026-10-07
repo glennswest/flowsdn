@@ -79,12 +79,10 @@ maps (endpoint ID -> metadata in the agent, as the reference does).
       thread, API publishes endpoints after every non-GET and at startup; RBAC pods patch (f1d9327).
 - [x] Docs (agent-api, runtime, deploy README), changelog (c42f971). rustfmt via sc-build (#342),
       no-indexing test fix (#343) at 2038efa.
-- [ ] PAUSED 2026-10-06 for P0s (#303, #292). Next: sc-build at 2038efa or later:
-      `cargo fmt --all && git diff && workspace + kubernetes Clippy -D warnings && agent --features
-      kubernetes tests && workspace tests && install/kubernetes/flowsdn/check.sh` (last run got no slot
-      in 30 min and was stopped). Apply any fmt diff, then close #342/#343.
-- [ ] Then: comment #332 (FlowsdnEndpoint same facts), #293 (flows use `endpoint`), stormconsole#83 /
-      stormcos#318 (new fields); stage golden; close #328 (live annotation check needs a flowsdn node).
+- [x] Verified by sc-build (2038efa onward; last full run 481bacb: fmt, Clippy x2, 795 tests incl. the
+      tagging, k8s Pod, hubble endpoint and agent API tests). In golden-flowsdn-4b40a980ad16 (5e97790, stormcos#310).
+- [x] Told #332, #293, stormconsole#83, stormcos#318 the fields. `shipped`; flows name pods once the
+      observer (#293) uses flowsdn_hubble::endpoint; identity once #291 allocates.
 
 ### Console plugin support — #297 (P1), 2026-10-05
 
