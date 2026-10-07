@@ -78,8 +78,9 @@ child of its own cgroup, and programs frontends with the agent's planner
 checks TCP connect over IPv4, IPv6 and IPv4-mapped IPv6; unconnected and
 connected UDP with the reply source and `getpeername` reverse translated; EPERM
 for a frontend without backends; an untouched non-frontend address; a backend
-move; both of two backends chosen over 64 connects; and frontend removal down
-to empty maps. It restores its cgroup membership on exit.
+move; both of two backends chosen over 64 connects; ClientIP affinity (32
+connects on one backend, then a move when that backend leaves); and frontend
+removal down to empty maps. It restores its cgroup membership on exit.
 
 `socket-live` and `socket-lb-live` use the cgroup v2 hierarchy at
 `/sys/fs/cgroup`. Where a container has none there (stormcos's privileged test

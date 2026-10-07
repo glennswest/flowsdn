@@ -219,6 +219,14 @@ below it, whatever its network namespace, so pods and the host are covered.
   frontend, so resolvers that check the reply source accept it.
 - A frontend whose backend count is 0 fails `connect`/`sendmsg` with EPERM.
   Other destinations are untouched.
+- `sessionAffinity: ClientIP` (#292): each client, identified by its network
+  namespace (a pod; all host processes are one client), keeps getting the
+  backend it last got while that is within
+  `sessionAffinityConfig.clientIP.timeoutSeconds` (default 10800) of its last
+  use. The program remembers it in the LRU `flowsdn_lb{4,6}_affinity` maps;
+  the agent keeps `flowsdn_lb_affinity_match` pairing each current backend
+  with its service, and removes a pair before the backend, so a client never
+  sticks to a backend that has left.
 
 The frontends, for every TCP/UDP port of every Service: each cluster IP
 (`spec.clusterIPs`, headless skipped) and each `spec.externalIPs` address on
@@ -247,8 +255,7 @@ With `bpf-pin-root` the maps and links are pinned under `<pin root>/socket-lb`.
 A restarted agent reuses the maps (a pinned map with another layout refuses
 startup), attaches its programs, then releases the old links. Without a pin
 root the links detach when the agent exits. Not implemented: NodePort and
-LoadBalancer traffic from outside the cluster (tc-level), session affinity,
-Maglev, topology hints, skip-LB for local redirect policy,
+LoadBalancer traffic from outside the cluster (tc-level), Maglev, topology hints, skip-LB for local redirect policy,
 socket termination when a backend goes away (an existing connection stays
 on its backend), SCTP, and tc-level LB for traffic that arrives from outside
 the node. `socket-lb-live` (medium test suite) checks the programs on a

@@ -78,8 +78,8 @@ musl agent refuses its configuration. The differences:
   (10.96.0.10:53) and the `kubernetes` Service (10.96.0.1:443 -> the
   apiserver). External IPs, LoadBalancer ingress IPs and NodePorts on any
   node's InternalIP are translated the same way for pods and node
-  processes; traffic from outside the cluster to a NodePort or LB IP and
-  session affinity are not handled. A ClusterIP:port with no ready backend fails `connect`
+  processes, with ClientIP session affinity per pod; traffic from outside
+  the cluster to a NodePort or LB IP is not handled. A ClusterIP:port with no ready backend fails `connect`
   with EPERM. Without a pin root the programs detach when the agent exits,
   and ClusterIPs stop working until it is back.
 - Pod tagging (#328): the agent writes each local Pod's
