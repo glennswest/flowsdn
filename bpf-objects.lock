@@ -36,7 +36,7 @@ code-sha256 = "e14392f2eaaa1933181b67b39480c219f40a1a9ad2910d203262cd2856d0c6a2"
 name = "skb-ctx"
 variant = "default"
 features = []
-code-sha256 = "73129d673032c29ab1935b756be388e380f1613d4d6a75ce0a1e6e6a4e0f53fc"
+code-sha256 = "ff869ec94c3d0934788c2d51656e3eaaff20d8d3f733b6b229b5252821998f48"
 
 [[object]]
 name = "socket-lb"

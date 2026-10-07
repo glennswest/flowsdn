@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### 2026-10-07
+- **fix:** `skb-ctx` (#256) writes `cb[0..5]` as five 4-byte stores at fixed offsets: the array copy compiled to stores through a pointer moved to `cb`, which 7.2's verifier refuses ("dereference of modified ctx ptr R7 off=48"); bpf-objects.lock updated.
+- **test:** The node probe finds the agent socket by asking `GET /v1/healthz` of each socket one directory below the host's `/var/run` and `/run` (`flowsdn/` first): 11.88-flowsdn still runs the build from before the socket rename. A node-agent failure lists what the pod sees there; `perf-setup` failures list the in-cluster inputs the pod has (#292, #303, #321).
 - **fix:** The test image carries the mount points its pod volumes need (`/run/secrets/kubernetes.io/serviceaccount`, `/results`, `/host`), staged by test/build.sh: stormpump mounts a volume only where the directory exists (stormpump#102), so `flowsdn-perf` had no service-account token and failed `perf-setup` on pvetest2 (run 61ec952d2c) (#321).
 - **fix:** The test suite's node probe looks for the agent socket at the manifests' hostPath, `/var/run/flowsdn/flowsdn.sock`, and declares `/var/run` read-only (on stormcos `/var/run` is not `/run`; run a0eab44703 on pvetest2 reported no socket, so the ClusterIP checks never ran) (#292, #303).
 - **fix:** The socket LB attached its cgroup programs with `BPF_F_ALLOW_MULTI`, which link creation refuses (EINVAL on 7.2, found by `fixture-socket-lb-live` on pvetest2, run a6d91042ac): on a node the agent's ClusterIP translation could not attach. Links are created without the flag; cgroup links coexist with other programs anyway (#292).
