@@ -55,7 +55,7 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 Owner: report nothing upstream, ever; close with the local fix (d95e957).
 
 - [x] Fix on main (crates/flowsdn-gateway/src/matcher.rs, tests/https_redirect.rs); spec 21 §12 + defect record, changelog.
-- [x] sc-build `cargo test -p flowsdn-gateway`; #281 closed.
+- [x] Verified by the full workspace sc-build at 481bacb (795 tests incl. tests/https_redirect.rs; gateway crate and lock unchanged since); #281 closed.
 
 ### No Cilium in what ships — #330 (P1), 2026-10-07
 
