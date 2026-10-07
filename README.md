@@ -131,6 +131,7 @@ to stormcos's built-in stormblock driver, not to flowsdn.
   `flowsdn.io/v1alpha1` ([ADR-0017](docs/decisions/0017-flowsdn-resource-identity.md), #299).
 - Policy: the simulator is the map-state oracle ([ADR-0018](docs/decisions/0018-policy-simulator-oracle.md), #103).
 - Release scope: the stormcos golden, plus standalone archives and a Helm chart kept out of it, flowsdn names only ([ADR-0019](docs/decisions/0019-release-scope.md), [chart](docs/helm.md), #294).
+- No reference-project names in anything shipped, checked on every build by `tools/check-no-cilium.sh`; moving from Cilium is a one-time conversion ([ADR-0020](docs/decisions/0020-no-reference-names-shipped.md), [migration](docs/migration-from-cilium.md), #330).
 - Deployment: stormcos edition manifests and the reproducible
   `tools/build-bpf.sh` object build (#296).
 - Tests: the `short`/`medium`/`long` [test container](test/README.md) (#303) and

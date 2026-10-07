@@ -107,4 +107,4 @@ are the flowsdn ones. A `FlowsdnNetworkPolicy` converted from a `CiliumNetworkPo
 selectors, label keys (`k8s:io.kubernetes.pod.namespace`, ...) and rules unchanged.
 flowsdn never reads, adopts or deletes `cilium.io` objects (ADR-0017). Cilium-written
 objects (endpoints, identities, nodes, endpoint slices) are not migrated; the flowsdn agent
-writes its own. Migrating policies is a manual `apiVersion`/`kind` edit today.
+writes its own. Migrating policies is a manual `apiVersion`/`kind` edit; see [migration-from-cilium.md](migration-from-cilium.md).

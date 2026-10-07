@@ -1,5 +1,7 @@
 # ADR-0013: Integration contracts resolved from the issue backlog
 
+> Compatibility *names* in this ADR are superseded by [ADR-0020](0020-no-reference-names-shipped.md) (#330): nothing flowsdn ships carries the reference project's name.
+
 Date: 2026-09-21. Status: accepted for the design decisions listed below.
 
 ## Context and boundary

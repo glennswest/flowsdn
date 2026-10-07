@@ -1,5 +1,7 @@
 # ADR-0001: Scope is the full Cilium feature set, compatible at the boundaries
 
+> Amended by [ADR-0020](0020-no-reference-names-shipped.md) (#330): compatibility means formats, not names; nothing shipped carries the reference project's name.
+
 Date: 2026-09-07. Status: accepted.
 
 ## Subsequent owner direction (2026-09-27 documentation audit)

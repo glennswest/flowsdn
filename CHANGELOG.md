@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### 2026-10-07
+- **BREAKING:** No reference-project names in what flowsdn ships (#330, ADR-0020). BPF maps and pins are `flowsdn_lxc` and `flowsdn_lb{4,6}_{services,backends,reverse_sk}` (layouts unchanged); embedded `local-delivery`/`socket-lb` objects and bpf-objects.lock rebuilt. The persisted endpoint key is `EndpointUID`. No pin migration: stormcos releases reboot nodes, and bpffs pins do not survive a reboot.
+- **feat:** `tools/check-no-cilium.sh` refuses the name (any case, binaries as bytes) in shipped files; `test/build.sh` (golden agent, CNI, embedded objects), `deploy/release/build.sh` and `images/agent/build.sh` run it. NOTICE/LICENSE attribution is exempt.
+- **docs:** ADR-0020 (supersedes the compatibility-name parts of ADR-0001, ADR-0013, ADR-0017); `docs/migration-from-cilium.md` (one-time conversion, no runtime support); README, docs index, crds.md, runtime.md, agent-api.md.
+
 ### 2026-10-06
 - **chore:** test-fixture credentials marked `not a secret` (inline, or `.github/secret_scanning.yml` for files that cannot hold a comment) — owner
 - **test:** Live ClusterIP checks in every suite's node probe on a flowsdn node (#292): kube-dns resolves `kubernetes.default` to `KUBERNETES_SERVICE_HOST` with the reply from the ClusterIP, TCP to the `kubernetes` Service shows the ClusterIP as peer, and the agent's `GET /v1/service` has both frontends realized.

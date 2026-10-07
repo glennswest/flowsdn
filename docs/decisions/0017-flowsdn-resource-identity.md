@@ -1,5 +1,7 @@
 # ADR-0017: flowsdn resource identity and compatibility names
 
+> Amended by [ADR-0020](0020-no-reference-names-shipped.md) (#330): compatibility means formats, not names; nothing shipped carries the reference project's name.
+
 Date: 2026-09-27. Status: accepted. Owner direction: [#299](https://github.com/glennswest/flowsdn/issues/299).
 
 ## Kubernetes ownership

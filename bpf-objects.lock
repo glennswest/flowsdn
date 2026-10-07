@@ -18,7 +18,7 @@ variant = "default"
 features = []
 code-sha256 = "1fd97b623eef145e171ca4e2d6928c25339c03d45b185deb59a3a685c49121c5"
 embedded = "crates/flowsdn-agent/bpf/local-delivery"
-sha256 = "cc22678a9c796a582a200500d07897c0ac2d08c7fd799b1e775e65e4a4e368a5"
+sha256 = "5cd58e05ed91d1b5c9bd5862770f1bea2ed8691a896766e9e2fcfe3e5cefb288"
 
 [[object]]
 name = "loader-features"
@@ -44,4 +44,4 @@ variant = "default"
 features = []
 code-sha256 = "474b1afd31d3fd5b433c680dbc8be109d0a14cfe98bc04aa870ec3c1dc5310ef"
 embedded = "crates/flowsdn-agent/bpf/socket-lb"
-sha256 = "62a680ff9b8577877c43ed3025fe858adb678b9f70b84287c6e0c4e6316a985f"
+sha256 = "5eb4c5000442532e93f8911520558f15fd861308a682078d6c24e52d42582325"
