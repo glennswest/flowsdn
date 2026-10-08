@@ -218,7 +218,10 @@ contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots
         uplink -> remote), SNATs to the FIB source address (BPF_FIB_LOOKUP_SRC, 6.7+) on a port 61000-65535,
         TTL-1, redirects (fib MACs, or redirect_neigh); the reply is reverse-NATed at uplink ingress and redirected
         to the client. Map `flowsdn_nodeport4_nat` (16-byte values) replaces `flowsdn_nodeport4`. socket-lb-live
-        test-runs it with ctx ifindex = a dummy uplink. Then docs, changelog, embedded object + lock, medium.
+        test-runs it with ctx ifindex = a dummy uplink. Done: a793819 (code), 3db1750 (docs), 92fe61b (fmt),
+        85cab87 (object + lock). sc-build at 85cab87: fmt, workspace + kubernetes Clippy -D warnings, 795 tests
+        (0 failed, 1 ignored), test/build.sh (lock, no-cilium). Medium on pvetest2 queued (fixture under 7.2).
+        sc-build can't hand files back from build VMs: the object came back as base64 in the build log.
 - [ ] ClusterIP acceptance on pvetest2: ad78ba9a43 errored (pvetest2's VM gone; master's 11.88-flowsdn install 5b46948417 queued). Requeued after reinstall as fc93b9bdde (short; errored 60 min waiting for a build slot, filed stormcentral#504) then c1b47e866d at 8d2f677; perf a075717758. Golden golden-flowsdn-17ccc00a7b9f carries affinity. Golden golden-flowsdn-6e707dca7687 carries the frontend kinds behind the build-slot backlog (stormcentral#472); #292 proposed after it. `stormcentral test show 6c0b6820bd`: the node-service-* lines are the kube-dns/kubernetes acceptance; fix what fails, then comment stormcos#265.
 - [x] 2026-10-07 (b381f6e, cd99e1c; sc-build 782 tests, Clippy x2): Service types for in-cluster clients through the socket LB: externalIPs, LoadBalancer ingress IPs, NodePort on every node InternalIP; internalTrafficPolicy Local for ClusterIPs (backends on this node); `flags.type` per frontend; frontends refresh on Node changes. External clients need tc NodePort (still open).
 - [ ] fixture-socket-lb-live on a kernel: run dbfc4e45b1 (C2NR0Q2) failed on push, registry full (stormcentral#376). Rerun `stormcentral test run flowsdn medium --tag <machine>`; live kube-dns check on a flowsdn node after release. Not implemented (stays open on #292): NodePort/LB/externalIPs, affinity, Maglev, DSR, NAT46/64, tc-level LB, socket termination, policy.
