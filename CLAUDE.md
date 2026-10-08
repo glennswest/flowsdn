@@ -32,7 +32,7 @@ establish two-node pod networking. Docs were last refreshed from code on
 The stormcos flowsdn edition carries the static musl agent (BPF object
 embedded) and CNI in the `flowsdn` golden; `deploy/stormcos/manifests/` runs it
 as `image: flowsdn` with a CNI-install init container (stormcos#261 applies
-them). Latest golden: golden-flowsdn-4a0daa7c4bfc at f445c3d (external NodePort, #292). Source pushes do not update nodes until a new golden is composed into
+them). Latest golden: golden-flowsdn-cc0835c8a1db at 347581a (NodePort SNAT, #292). Source pushes do not update nodes until a new golden is composed into
 a release. Authority:
 [stormcos/docs/goldens.md](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 After validated implementation work, flowsdn uses the special-component
@@ -213,14 +213,16 @@ contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots
   - [x] sc-build at d926c61: 743 tests (0 failed, 1 ignored); fmt, workspace + kubernetes Clippy -D warnings. Golden golden-flowsdn-4a0daa7c4bfc (flowsdn@f445c3d, stormcos#310) carries the external NodePort programs.
   - [ ] Short on pvetest2 once a release carries 4a0daa7c4bfc (node-service-* = kube-dns/kubernetes acceptance, stormcos#265).
   - [x] (done: medium 562800fc6d passed, golden 4a0daa7c4bfc) (sc-build at 481bacb: 795 tests, Clippy x2, test/build.sh) Hardware check of the NodePort programs: medium 9171dc0361 errored (dev.g8.lo shut down for good, owner 2026-10-07: builds move to build VMs, stormcentral#107; no sc-build or test-image build until then); 3348be6265 queued on pvetest1 (master installing 11.91 there). Then stage the golden. fixture `socket-lb-live`: test_run DNAT and reverse with checksum checks; docs; changelog; embedded object + lock via sc-build; medium on pvetest2.
-  - [ ] 2026-10-08: SNAT to other nodes' backends (IPv4, externalTrafficPolicy Cluster): scope-1 frontends carry
+  - [x] 2026-10-08: SNAT to other nodes' backends (IPv4, externalTrafficPolicy Cluster): scope-1 frontends carry
         every backend unless eTP Local; `nodeport_ingress` decides local vs remote by FIB (output device = arrival
         uplink -> remote), SNATs to the FIB source address (BPF_FIB_LOOKUP_SRC, 6.7+) on a port 61000-65535,
         TTL-1, redirects (fib MACs, or redirect_neigh); the reply is reverse-NATed at uplink ingress and redirected
         to the client. Map `flowsdn_nodeport4_nat` (16-byte values) replaces `flowsdn_nodeport4`. socket-lb-live
         test-runs it with ctx ifindex = a dummy uplink. Done: a793819 (code), 3db1750 (docs), 92fe61b (fmt),
         85cab87 (object + lock). sc-build at 85cab87: fmt, workspace + kubernetes Clippy -D warnings, 795 tests
-        (0 failed, 1 ignored), test/build.sh (lock, no-cilium). Medium on pvetest2 queued (fixture under 7.2).
+        (0 failed, 1 ignored), test/build.sh (lock, no-cilium). Medium 5c35ef74e4 on pvetest2: 20 pass incl.
+        fixture-socket-lb-live with SNAT (node-service-dns/-programmed = old node flowsdn). Golden
+        golden-flowsdn-cc0835c8a1db (flowsdn@347581a, stormcos#310). Two-node live check waits for #291's pair.
         sc-build can't hand files back from build VMs: the object came back as base64 in the build log.
 - [ ] ClusterIP acceptance on pvetest2: ad78ba9a43 errored (pvetest2's VM gone; master's 11.88-flowsdn install 5b46948417 queued). Requeued after reinstall as fc93b9bdde (short; errored 60 min waiting for a build slot, filed stormcentral#504) then c1b47e866d at 8d2f677; perf a075717758. Golden golden-flowsdn-17ccc00a7b9f carries affinity. Golden golden-flowsdn-6e707dca7687 carries the frontend kinds behind the build-slot backlog (stormcentral#472); #292 proposed after it. `stormcentral test show 6c0b6820bd`: the node-service-* lines are the kube-dns/kubernetes acceptance; fix what fails, then comment stormcos#265.
 - [x] 2026-10-07 (b381f6e, cd99e1c; sc-build 782 tests, Clippy x2): Service types for in-cluster clients through the socket LB: externalIPs, LoadBalancer ingress IPs, NodePort on every node InternalIP; internalTrafficPolicy Local for ClusterIPs (backends on this node); `flags.type` per frontend; frontends refresh on Node changes. External clients need tc NodePort (still open).
