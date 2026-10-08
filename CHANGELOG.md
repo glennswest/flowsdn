@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-10-08
+- **feat:** External NodePort/LoadBalancer/externalIP traffic reaches backends on other nodes (#292, IPv4): `nodeport_ingress` asks the FIB where the chosen backend is; one reached back out of the arrival uplink is source-NATed to the node's address toward it (`BPF_FIB_LOOKUP_SRC`, Linux 6.7+) on a port in 61000-65535, TTL decremented, and redirected to the next hop (`bpf_redirect`, or `bpf_redirect_neigh` when unresolved); its reply is reverse-NATed on the uplink's ingress and redirected to the client. The node-local (scope 1) frontends now carry every backend unless `externalTrafficPolicy: Local`. The per-flow map is `flowsdn_nodeport4_nat` (16-byte values; replaces `flowsdn_nodeport4`). `socket-lb-live` test-runs the SNAT path as arriving on a dummy uplink (`ctx_in` ifindex); the raw `BPF_PROG_TEST_RUN` with a context moved to `testrun/syscall.rs`, shared with `skb-ctx-matrix`.
+
 ### 2026-10-07
 - **chore:** Golden golden-flowsdn-4a0daa7c4bfc (flowsdn@f445c3d, release request stormcos#310): external NodePort/LB/externalIP uplink programs, verified on pvetest2 by medium run 562800fc6d (#292).
 - **fix:** `tools/build-bpf.sh` always adds `rust-src` to the pinned nightly: the build VMs already carry that nightly without it, so the install was skipped and the BPF build failed ("library/Cargo.lock does not exist"; medium run 0fd46bb762) (#292).

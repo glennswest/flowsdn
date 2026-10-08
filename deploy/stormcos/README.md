@@ -79,8 +79,9 @@ musl agent refuses its configuration. The differences:
   apiserver). External IPs, LoadBalancer ingress IPs and NodePorts on any
   node's InternalIP are translated the same way for pods and node
   processes, with ClientIP session affinity per pod. From outside the
-  cluster (`node-port`, IPv4), a NodePort or LB IP on a node reaches that
-  node's own backends; another node's backends need SNAT, not done yet. A ClusterIP:port with no ready backend fails `connect`
+  cluster (`node-port`, IPv4), a NodePort or LB IP on a node reaches every
+  backend: other nodes' through SNAT to the node's address (ports
+  61000-65535), or only that node's with `externalTrafficPolicy: Local`. A ClusterIP:port with no ready backend fails `connect`
   with EPERM. Without a pin root the programs detach when the agent exits,
   and ClusterIPs stop working until it is back.
 - Pod tagging (#328): the agent writes each local Pod's

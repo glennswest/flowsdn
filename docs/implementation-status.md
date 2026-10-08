@@ -39,9 +39,9 @@ pinning or subsystem libraries are absent are **not current status**.
   planner (`flowsdn_lb::socket`) in spec 05 §3.4 write order; `GET
   /v1/service`. External IPs, LoadBalancer IPs and NodePorts (on every node
   address) work for in-cluster clients, with both traffic policies and
-  ClientIP session affinity; from outside the cluster (IPv4) to this node's
-  own backends through the uplink tc programs; external
-  NodePort/LB traffic to another node's backends (SNAT), Maglev, socket termination and
+  ClientIP session affinity; from outside the cluster (IPv4) through the
+  uplink tc programs, to this node's backends and (SNAT, FIB redirect) other
+  nodes'. External IPv6, Maglev, DSR, socket termination and
   policy are not implemented. Verified by unit tests and a
   controller test against a loopback HTTPS API server; the `socket-lb-live`
   kernel fixture is in the medium suite but has not run on a test machine; not yet on a cluster (two-node

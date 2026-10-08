@@ -236,16 +236,27 @@ the port; for types NodePort and LoadBalancer every node's InternalIP on the
 inside the cluster, pods and node processes, whichever node's address they
 use. Traffic arriving from outside the cluster (#292, IPv4, `kubernetes.node-port`,
 default on): the agent also writes a node-local copy (key scope 1) of every
-NodePort, external and LoadBalancer frontend with only this node's backends,
-and attaches the `nodeport_ingress`/`nodeport_egress` tc programs (TCX) to
-every interface holding this node's InternalIP. A packet to such a frontend
-gets its destination rewritten to a local backend (IPv4 and TCP/UDP checksums
-fixed) and is routed to the pod by the host stack; the reply's source is
-rewritten back on the way out. Both directions are kept per flow in the LRU
-`flowsdn_nodeport4` map, so a connection keeps its backend. There is no SNAT
-yet, so a node forwards only to its own backends: a client must reach a node
-that runs one (as with `externalTrafficPolicy: Local`); IPv6 is not handled
-yet. Other packets pass untouched. `GET /v1/service` gives each frontend's `flags.type`
+NodePort, external and LoadBalancer frontend, with every backend (only this
+node's with `externalTrafficPolicy: Local`), and attaches the
+`nodeport_ingress`/`nodeport_egress` tc programs (TCX) to every interface
+holding this node's InternalIP. For a packet to such a frontend the program
+picks a backend and asks the FIB where it is. On this node (a pod's device,
+or a node address): the destination is rewritten (IPv4 and TCP/UDP checksums
+fixed), the host stack routes it to the pod, and the reply's source is
+rewritten back on the way out. Back out of the uplink it came in on (a pod
+on another node): the source is also rewritten to this node's address toward
+that backend (the FIB's source, `BPF_FIB_LOOKUP_SRC`, Linux 6.7 or later) on
+a port in 61000-65535 (outside the kernel's default ephemeral range), TTL is
+decremented, and the packet is redirected out of the uplink to the FIB's next
+hop (`bpf_redirect_neigh` when the neighbour is not resolved yet). The other
+node's reply to that port is reverse-NATed on the uplink's ingress and
+redirected to the client. The other node must not masquerade that reply; it
+is the reply of a connection its conntrack saw arrive, which masquerade rules
+leave alone. Every direction is kept per flow in the LRU
+`flowsdn_nodeport4_nat` map (64Ki entries), so a connection keeps its backend
+and NAT port. A packet the FIB cannot route, with TTL 1, or for which no NAT
+port is free within eight tries passes untranslated. IPv6 is not handled yet.
+Other packets pass untouched. `GET /v1/service` gives each frontend's `flags.type`
 (`ClusterIP`, `ExternalIPs`, `LoadBalancer`, `NodePort`).
 `internalTrafficPolicy: Local` limits a cluster IP to endpoints on this node;
 `externalTrafficPolicy: Local` limits a NodePort on a node's address to that
