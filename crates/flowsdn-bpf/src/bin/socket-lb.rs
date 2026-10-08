@@ -283,41 +283,15 @@ fn port_value(port: [u8; 2]) -> u32 {
 }
 #[inline(always)]
 fn ip6_bytes(words: [u32; 4]) -> [u8; 16] {
-    let [a, b, c, d] = words;
-    let [a0, a1, a2, a3] = a.to_ne_bytes();
-    let [b0, b1, b2, b3] = b.to_ne_bytes();
-    let [c0, c1, c2, c3] = c.to_ne_bytes();
-    let [d0, d1, d2, d3] = d.to_ne_bytes();
-    [
-        a0, a1, a2, a3, b0, b1, b2, b3, c0, c1, c2, c3, d0, d1, d2, d3,
-    ]
+    // SAFETY: same size, and every bit pattern is valid for both types. A
+    // byte-wise conversion needs 16 values live at once: BPF's ten registers
+    // spill them onto the 512-byte stack.
+    unsafe { core::mem::transmute::<[u32; 4], [u8; 16]>(words) }
 }
 #[inline(always)]
 fn ip6_words(bytes: [u8; 16]) -> [u32; 4] {
-    let [
-        a0,
-        a1,
-        a2,
-        a3,
-        b0,
-        b1,
-        b2,
-        b3,
-        c0,
-        c1,
-        c2,
-        c3,
-        d0,
-        d1,
-        d2,
-        d3,
-    ] = bytes;
-    [
-        u32::from_ne_bytes([a0, a1, a2, a3]),
-        u32::from_ne_bytes([b0, b1, b2, b3]),
-        u32::from_ne_bytes([c0, c1, c2, c3]),
-        u32::from_ne_bytes([d0, d1, d2, d3]),
-    ]
+    // SAFETY: as in ip6_bytes.
+    unsafe { core::mem::transmute::<[u8; 16], [u32; 4]>(bytes) }
 }
 /// The IPv4 address inside `::ffff:a.b.c.d`, if it is one.
 #[inline(always)]
@@ -1086,15 +1060,15 @@ fn rewrite6(
     if !udp_without_checksum {
         let [o0, o1, o2, o3] = ip6_words(old.0);
         let [n0, n1, n2, n3] = ip6_words(new.0);
-        for (from, to) in [(o0, n0), (o1, n1), (o2, n2), (o3, n3)] {
-            ctx.l4_csum_replace(
-                checksum,
-                u64::from(from),
-                u64::from(to),
-                BPF_F_PSEUDO_HDR | mangled | 4,
-            )
+        let flags = BPF_F_PSEUDO_HDR | mangled | 4;
+        ctx.l4_csum_replace(checksum, u64::from(o0), u64::from(n0), flags)
             .ok()?;
-        }
+        ctx.l4_csum_replace(checksum, u64::from(o1), u64::from(n1), flags)
+            .ok()?;
+        ctx.l4_csum_replace(checksum, u64::from(o2), u64::from(n2), flags)
+            .ok()?;
+        ctx.l4_csum_replace(checksum, u64::from(o3), u64::from(n3), flags)
+            .ok()?;
         ctx.l4_csum_replace(
             checksum,
             u64::from(u16::from_ne_bytes(old.1)),
