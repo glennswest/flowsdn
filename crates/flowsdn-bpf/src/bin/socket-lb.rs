@@ -9,8 +9,8 @@
 //! on the backend it last got, while that is within the master's timeout and
 //! the agent's affinity-match map still pairs the backend with the service.
 //! The `nodeport_*` tc programs serve NodePort, external and LoadBalancer
-//! addresses to clients outside the cluster (IPv4, with SNAT to backends on
-//! other nodes). Maglev, DSR, skip-LB and socket termination are not
+//! addresses to clients outside the cluster (IPv4 and IPv6, with SNAT to
+//! backends on other nodes). Maglev, DSR, skip-LB and socket termination are not
 //! implemented here.
 #![no_std]
 #![no_main]
@@ -524,7 +524,7 @@ pub fn sock6_getpeername(ctx: SockAddrContext) -> i32 {
 
 // ---------------------------------------------------------------------------
 // NodePort, external and LoadBalancer addresses from outside the cluster
-// (#292), IPv4: tc programs on the node's uplink. A packet to a frontend of
+// (#292), IPv4 (IPv6 below): tc programs on the node's uplink. A packet to a frontend of
 // the node-local scope (scope 1: this node's backends, or every backend
 // unless externalTrafficPolicy is Local) is sent to a backend.
 //
@@ -997,13 +997,418 @@ fn nodeport4_out(ctx: &TcContext) -> Option<()> {
     )
 }
 
+// IPv6: the same flows, keyed and translated the same way. There is no
+// IPv6 header checksum; the TCP/UDP checksum covers the addresses through the
+// pseudo-header, so each 32-bit word of a rewritten address is replaced in
+// it. Only TCP/UDP directly after the fixed header is handled: a packet with
+// extension headers (a fragment among them) passes untouched.
+
+/// One direction of a translated IPv6 flow (see [`Nodeport4Key`]).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Nodeport6Key {
+    a: [u8; 16],
+    b: [u8; 16],
+    ap: [u8; 2],
+    bp: [u8; 2],
+    proto: u8,
+    direction: u8,
+    pad: [u8; 2],
+}
+/// See [`Nodeport4Value`].
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Nodeport6Value {
+    address: [u8; 16],
+    port: [u8; 2],
+    flags: u8,
+    pad: u8,
+    other: [u8; 16],
+    other_port: [u8; 2],
+    pad2: [u8; 2],
+}
+#[map(name = "flowsdn_nodeport6_nat")]
+static NODEPORT6: LruHashMap<Nodeport6Key, Nodeport6Value> = LruHashMap::with_max_entries(65536, 0);
+
+const ETH_P_IPV6: [u8; 2] = [0x86, 0xdd];
+/// Offsets in the frame: next header, hop limit, source, destination, then
+/// the L4 source port, destination port and UDP/TCP checksum.
+const IP6_NEXT: usize = 20;
+const IP6_HOPS: usize = 21;
+const IP6_SRC: usize = 22;
+const IP6_DST: usize = 38;
+const IP6_SPORT: usize = 54;
+const IP6_DPORT: usize = 56;
+const IP6_UDP_CHECK: usize = 60;
+const IP6_TCP_CHECK: usize = 70;
+
+/// The IPv6 TCP/UDP 5-tuple of a frame: (proto, src, dst, sport, dport).
+#[inline(always)]
+fn tuple6(ctx: &TcContext) -> Option<(u8, [u8; 16], [u8; 16], [u8; 2], [u8; 2])> {
+    if ctx.load::<[u8; 2]>(12).ok()? != ETH_P_IPV6 {
+        return None;
+    }
+    if ctx.load::<u8>(14).ok()? >> 4 != 6 {
+        return None;
+    }
+    let proto = ctx.load::<u8>(IP6_NEXT).ok()?;
+    if proto != 6 && proto != 17 {
+        return None;
+    }
+    let [s0, s1, d0, d1] = ctx.load::<[u8; 4]>(IP6_SPORT).ok()?;
+    Some((
+        proto,
+        ctx.load::<[u8; 16]>(IP6_SRC).ok()?,
+        ctx.load::<[u8; 16]>(IP6_DST).ok()?,
+        [s0, s1],
+        [d0, d1],
+    ))
+}
+
+/// Rewrite the address at `ip_offset` ([`IP6_SRC`] or [`IP6_DST`]) and the
+/// port at `port_offset`, keeping the TCP/UDP checksum right. A UDP checksum
+/// of zero (none) stays zero.
+#[inline(always)]
+fn rewrite6(
+    ctx: &TcContext,
+    proto: u8,
+    ip_offset: usize,
+    port_offset: usize,
+    old: ([u8; 16], [u8; 2]),
+    new: ([u8; 16], [u8; 2]),
+) -> Option<()> {
+    let (checksum, mangled) = if proto == 6 {
+        (IP6_TCP_CHECK, 0)
+    } else {
+        (IP6_UDP_CHECK, BPF_F_MARK_MANGLED_0)
+    };
+    let udp_without_checksum = proto == 17 && ctx.load::<u16>(checksum).ok()? == 0;
+    if !udp_without_checksum {
+        let [o0, o1, o2, o3] = ip6_words(old.0);
+        let [n0, n1, n2, n3] = ip6_words(new.0);
+        for (from, to) in [(o0, n0), (o1, n1), (o2, n2), (o3, n3)] {
+            ctx.l4_csum_replace(
+                checksum,
+                u64::from(from),
+                u64::from(to),
+                BPF_F_PSEUDO_HDR | mangled | 4,
+            )
+            .ok()?;
+        }
+        ctx.l4_csum_replace(
+            checksum,
+            u64::from(u16::from_ne_bytes(old.1)),
+            u64::from(u16::from_ne_bytes(new.1)),
+            mangled | 2,
+        )
+        .ok()?;
+    }
+    ctx.store(ip_offset, &new.0, 0).ok()?;
+    ctx.store(port_offset, &new.1, 0).ok()?;
+    Some(())
+}
+
+/// [`fib4`] for IPv6.
+#[inline(always)]
+fn fib6(
+    ctx: &TcContext,
+    proto: u8,
+    src: [u8; 16],
+    dst: [u8; 16],
+    flags: u32,
+) -> (i64, bpf_fib_lookup) {
+    // SAFETY: as in fib4.
+    let mut fib: bpf_fib_lookup = unsafe { core::mem::zeroed() };
+    fib.family = 10; // AF_INET6
+    fib.l4_protocol = proto;
+    fib.ifindex = uplink(ctx);
+    fib.__bindgen_anon_3.ipv6_src = ip6_words(src);
+    fib.__bindgen_anon_4.ipv6_dst = ip6_words(dst);
+    // SAFETY: as in fib4.
+    let result = unsafe {
+        fib_lookup(
+            ctx.as_ptr(),
+            core::ptr::from_mut(&mut fib),
+            core::mem::size_of::<bpf_fib_lookup>() as i32,
+            flags,
+        )
+    };
+    (result, fib)
+}
+
+/// [`redirect`] for IPv6: the hop limit is decremented (no header checksum).
+#[inline(always)]
+fn redirect6(ctx: &TcContext, result: i64, fib: &bpf_fib_lookup) -> Option<i32> {
+    let hops = ctx.load::<u8>(IP6_HOPS).ok()?.checked_sub(1)?;
+    ctx.store(IP6_HOPS, &hops, 0).ok()?;
+    if result == FIB_SUCCESS {
+        ctx.store(0, &fib.dmac, 0).ok()?;
+        ctx.store(6, &fib.smac, 0).ok()?;
+        // SAFETY: plain helper call with scalar arguments.
+        Some(unsafe { bpf_redirect(fib.ifindex, 0) } as i32)
+    } else {
+        // SAFETY: as in redirect.
+        Some(unsafe { bpf_redirect_neigh(fib.ifindex, core::ptr::null_mut(), 0, 0) } as i32)
+    }
+}
+
+/// A hop limit that forwarding may still decrement.
+#[inline(always)]
+fn hops_ok(ctx: &TcContext) -> Option<()> {
+    (ctx.load::<u8>(IP6_HOPS).ok()? > 1).then_some(())
+}
+
+/// [`claim_port`] for IPv6.
+#[inline(always)]
+fn claim_port6(
+    backend: ([u8; 16], [u8; 2]),
+    nat: [u8; 16],
+    proto: u8,
+    reply: &Nodeport6Value,
+) -> Option<[u8; 2]> {
+    // SAFETY: no arguments; returns a pseudo-random scalar.
+    let start = unsafe { bpf_get_prandom_u32() };
+    for i in 0..NAT_TRIES {
+        let offset = start.wrapping_add(i).checked_rem(NAT_PORTS)?;
+        let port = u16::try_from(NAT_PORT_MIN.checked_add(offset)?)
+            .ok()?
+            .to_be_bytes();
+        let key = Nodeport6Key {
+            a: backend.0,
+            b: nat,
+            ap: backend.1,
+            bp: port,
+            proto,
+            direction: SNAT_REPLY,
+            pad: [0; 2],
+        };
+        if NODEPORT6.insert(&key, reply, BPF_NOEXIST).is_ok() {
+            return Some(port);
+        }
+    }
+    None
+}
+
+/// [`snat_reply4`] for IPv6.
+#[inline(always)]
+fn snat_reply6(
+    ctx: &TcContext,
+    tuple: (u8, [u8; 16], [u8; 16], [u8; 2], [u8; 2]),
+    flow: Nodeport6Value,
+) -> Option<i32> {
+    let (proto, backend, nat, backend_port, nat_port) = tuple;
+    hops_ok(ctx)?;
+    let (result, fib) = fib6(ctx, proto, flow.address, flow.other, 0);
+    if !forwarded(result) {
+        return None;
+    }
+    rewrite6(
+        ctx,
+        proto,
+        IP6_SRC,
+        IP6_SPORT,
+        (backend, backend_port),
+        (flow.address, flow.port),
+    )?;
+    rewrite6(
+        ctx,
+        proto,
+        IP6_DST,
+        IP6_DPORT,
+        (nat, nat_port),
+        (flow.other, flow.other_port),
+    )?;
+    redirect6(ctx, result, &fib)
+}
+
+/// [`snat_forward4`] for IPv6.
+#[inline(always)]
+fn snat_forward6(
+    ctx: &TcContext,
+    tuple: (u8, [u8; 16], [u8; 16], [u8; 2], [u8; 2]),
+    flow: Nodeport6Value,
+    route: Option<(i64, bpf_fib_lookup)>,
+) -> Option<i32> {
+    let (proto, client, front, client_port, front_port) = tuple;
+    hops_ok(ctx)?;
+    let (result, fib) = match route {
+        Some(route) => route,
+        None => fib6(ctx, proto, flow.other, flow.address, 0),
+    };
+    if !forwarded(result) {
+        return None;
+    }
+    rewrite6(
+        ctx,
+        proto,
+        IP6_DST,
+        IP6_DPORT,
+        (front, front_port),
+        (flow.address, flow.port),
+    )?;
+    rewrite6(
+        ctx,
+        proto,
+        IP6_SRC,
+        IP6_SPORT,
+        (client, client_port),
+        (flow.other, flow.other_port),
+    )?;
+    redirect6(ctx, result, &fib)
+}
+
+/// [`nodeport4_in`] for IPv6.
+#[inline(always)]
+fn nodeport6_in(ctx: &TcContext) -> Option<i32> {
+    let tuple = tuple6(ctx)?;
+    let (proto, client, front, client_port, front_port) = tuple;
+    let mut key = Nodeport6Key {
+        a: client,
+        b: front,
+        ap: client_port,
+        bp: front_port,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    if let Some(flow) = unsafe { NODEPORT6.get(&key).copied() } {
+        return snat_reply6(ctx, tuple, flow);
+    }
+    key.direction = FORWARD;
+    let mut route = None;
+    // SAFETY: LRU value copied at once, never written through.
+    let flow = match unsafe { NODEPORT6.get(&key).copied() } {
+        Some(known) => known,
+        None => {
+            let mut service_key = Lb6Key {
+                address: front,
+                dport: Be16(front_port),
+                backend_slot: 0,
+                proto,
+                scope: 1,
+                pad: [0; 2],
+            };
+            // SAFETY: see lookup6.
+            let service = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
+            service_key.backend_slot = slot(service.count)?;
+            // SAFETY: see lookup6.
+            let entry = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
+            // SAFETY: see lookup6.
+            let chosen = unsafe { LB6_BACKENDS.get(&entry.backend_id()).copied() }?;
+            let backend = (chosen.address, chosen.port.0);
+            let (result, fib) = fib6(ctx, proto, client, backend.0, 0);
+            let mut flow = Nodeport6Value {
+                address: backend.0,
+                port: backend.1,
+                flags: 0,
+                pad: 0,
+                other: [0; 16],
+                other_port: [0; 2],
+                pad2: [0; 2],
+            };
+            if forwarded(result) && fib.ifindex == uplink(ctx) {
+                // Another node's backend: SNAT to this node's address there.
+                hops_ok(ctx)?;
+                let (result, fib) = fib6(ctx, proto, [0; 16], backend.0, BPF_FIB_LOOKUP_SRC);
+                if !forwarded(result) {
+                    return None;
+                }
+                // SAFETY: the active member after an IPv6 lookup.
+                let nat = ip6_bytes(unsafe { fib.__bindgen_anon_3.ipv6_src });
+                let reply = Nodeport6Value {
+                    address: front,
+                    port: front_port,
+                    flags: 0,
+                    pad: 0,
+                    other: client,
+                    other_port: client_port,
+                    pad2: [0; 2],
+                };
+                // The reply entry first: a reply must never find a flow it
+                // cannot undo.
+                flow.other_port = claim_port6(backend, nat, proto, &reply)?;
+                flow.other = nat;
+                flow.flags = FLOW_SNAT;
+                route = Some((result, fib));
+            } else {
+                let reverse = Nodeport6Key {
+                    a: backend.0,
+                    b: client,
+                    ap: backend.1,
+                    bp: client_port,
+                    proto,
+                    direction: REPLY,
+                    pad: [0; 2],
+                };
+                let front_value = Nodeport6Value {
+                    address: front,
+                    port: front_port,
+                    flags: 0,
+                    pad: 0,
+                    other: [0; 16],
+                    other_port: [0; 2],
+                    pad2: [0; 2],
+                };
+                NODEPORT6.insert(&reverse, &front_value, 0).ok()?;
+            }
+            NODEPORT6.insert(&key, &flow, 0).ok()?;
+            flow
+        }
+    };
+    if flow.flags & FLOW_SNAT != 0 {
+        return snat_forward6(ctx, tuple, flow, route);
+    }
+    rewrite6(
+        ctx,
+        proto,
+        IP6_DST,
+        IP6_DPORT,
+        (front, front_port),
+        (flow.address, flow.port),
+    )?;
+    Some(TC_ACT_OK)
+}
+
+/// [`nodeport4_out`] for IPv6.
+#[inline(always)]
+fn nodeport6_out(ctx: &TcContext) -> Option<()> {
+    let (proto, backend, client, backend_port, client_port) = tuple6(ctx)?;
+    let reverse = Nodeport6Key {
+        a: backend,
+        b: client,
+        ap: backend_port,
+        bp: client_port,
+        proto,
+        direction: REPLY,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let front = unsafe { NODEPORT6.get(&reverse).copied() }?;
+    rewrite6(
+        ctx,
+        proto,
+        IP6_SRC,
+        IP6_SPORT,
+        (backend, backend_port),
+        (front.address, front.port),
+    )
+}
+
 #[classifier]
 pub fn nodeport_ingress(ctx: TcContext) -> i32 {
-    nodeport4_in(&ctx).unwrap_or(TC_ACT_OK)
+    match ctx.load::<[u8; 2]>(12) {
+        Ok(ETH_P_IPV6) => nodeport6_in(&ctx),
+        _ => nodeport4_in(&ctx),
+    }
+    .unwrap_or(TC_ACT_OK)
 }
 #[classifier]
 pub fn nodeport_egress(ctx: TcContext) -> i32 {
-    let _ = nodeport4_out(&ctx);
+    let _ = match ctx.load::<[u8; 2]>(12) {
+        Ok(ETH_P_IPV6) => nodeport6_out(&ctx),
+        _ => nodeport4_out(&ctx),
+    };
     TC_ACT_OK
 }
 

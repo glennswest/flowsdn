@@ -8,7 +8,7 @@
 //! uplink programs (#292) by BPF_PROG_TEST_RUN: destination rewrite to a
 //! node-local backend and the reply's source rewrite, checksums checked; and
 //! SNAT to a backend on another node with the FIB redirect, run as arriving
-//! on a dummy uplink in this netns.
+//! on a dummy uplink in this netns; IPv4 and IPv6.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_lb::socket::{self, Address, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
@@ -180,7 +180,7 @@ fn frame4(
         l4.extend_from_slice(&[0, 0]);
     }
     if !(proto == 17 && udp_zero) {
-        let check = !(l4_sum(proto, src, dst, &l4) as u16);
+        let check = !(l4_sum(proto, &src, &dst, &l4) as u16);
         let at: usize = if proto == 6 { 16 } else { 6 };
         l4.splice(at..at.saturating_add(2), check.to_be_bytes());
     }
@@ -188,10 +188,12 @@ fn frame4(
     f.extend(l4);
     f
 }
-fn l4_sum(proto: u8, src: [u8; 4], dst: [u8; 4], l4: &[u8]) -> u32 {
+/// The TCP/UDP checksum sum with the pseudo-header (IPv4 or IPv6: for both,
+/// addresses, protocol and length sum the same way).
+fn l4_sum(proto: u8, src: &[u8], dst: &[u8], l4: &[u8]) -> u32 {
     let mut pseudo = Vec::new();
-    pseudo.extend_from_slice(&src);
-    pseudo.extend_from_slice(&dst);
+    pseudo.extend_from_slice(src);
+    pseudo.extend_from_slice(dst);
     pseudo.extend_from_slice(&[0, proto]);
     pseudo.extend_from_slice(&u16::try_from(l4.len()).unwrap_or(0).to_be_bytes());
     sum(l4, sum(&pseudo, 0))
@@ -210,8 +212,64 @@ fn parse4(f: &[u8]) -> Result<Parsed4> {
         ))
     };
     let udp_zero = proto == 17 && port(6)? == 0;
-    let l4_ok = udp_zero || l4_sum(proto, src, dst, l4) == 0xffff;
+    let l4_ok = udp_zero || l4_sum(proto, &src, &dst, l4) == 0xffff;
     Ok((src, dst, port(0)?, port(2)?, sum(ip, 0) == 0xffff, l4_ok))
+}
+
+/// [`frame4`] for IPv6 (hop limit 64, no extension headers).
+fn frame6(
+    proto: u8,
+    src: [u8; 16],
+    dst: [u8; 16],
+    sport: u16,
+    dport: u16,
+    udp_zero: bool,
+) -> Vec<u8> {
+    let l4_len: u16 = if proto == 6 { 20 } else { 8 };
+    let mut f = vec![0u8; 14];
+    f.splice(12..14, [0x86, 0xdd]);
+    f.extend_from_slice(&[0x60, 0, 0, 0]);
+    f.extend_from_slice(&l4_len.to_be_bytes());
+    f.extend_from_slice(&[proto, 64]);
+    f.extend_from_slice(&src);
+    f.extend_from_slice(&dst);
+    let mut l4 = Vec::new();
+    l4.extend_from_slice(&sport.to_be_bytes());
+    l4.extend_from_slice(&dport.to_be_bytes());
+    if proto == 6 {
+        l4.extend_from_slice(&[0, 0, 0, 1, 0, 0, 0, 0, 0x50, 0x02, 0xff, 0xff, 0, 0, 0, 0]);
+    } else {
+        l4.extend_from_slice(&l4_len.to_be_bytes());
+        l4.extend_from_slice(&[0, 0]);
+    }
+    if !(proto == 17 && udp_zero) {
+        let check = !(l4_sum(proto, &src, &dst, &l4) as u16);
+        let at: usize = if proto == 6 { 16 } else { 6 };
+        l4.splice(at..at.saturating_add(2), check.to_be_bytes());
+    }
+    f.extend(l4);
+    f
+}
+/// (src, dst, sport, dport, hop limit, L4 checksum ok or zero UDP).
+type Parsed6 = ([u8; 16], [u8; 16], u16, u16, u8, bool);
+fn parse6(f: &[u8]) -> Result<Parsed6> {
+    let ip = f.get(14..54).ok_or("short frame")?;
+    let l4 = f.get(54..).ok_or("short frame")?;
+    let src: [u8; 16] = ip.get(8..24).ok_or("ip")?.try_into()?;
+    let dst: [u8; 16] = ip.get(24..40).ok_or("ip")?.try_into()?;
+    let proto = *ip.get(6).ok_or("ip")?;
+    let hops = *ip.get(7).ok_or("ip")?;
+    let port = |at: usize| -> Result<u16> {
+        Ok(u16::from_be_bytes(
+            l4.get(at..at.saturating_add(2)).ok_or("l4")?.try_into()?,
+        ))
+    };
+    let udp_zero = proto == 17 && port(6)? == 0;
+    let l4_ok = udp_zero || l4_sum(proto, &src, &dst, l4) == 0xffff;
+    Ok((src, dst, port(0)?, port(2)?, hops, l4_ok))
+}
+fn ip6(text: &str) -> Result<[u8; 16]> {
+    Ok(text.parse::<std::net::Ipv6Addr>()?.octets())
 }
 
 const UPLINK_MAC: &str = "02:00:00:00:00:20";
@@ -371,8 +429,69 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     println!(
         "PASS NodePort uplink: TCP, UDP and checksum-less UDP to 192.0.2.20:30080 rewritten to the node-local backend and replies back to the frontend, checksums valid; other frames untouched"
     );
+    nodeport6(lb, services)?;
     snat(lb, services)?;
     services.retain(|s| s.scope != SCOPE_NODE_LOCAL);
+    Ok(())
+}
+
+/// [`nodeport`] for IPv6: [2001:db8:2::20]:30080 to the node-local backend
+/// [fd00:9::5]:8080 and back.
+fn nodeport6(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
+    let (front, client, backend) = (
+        ip6("2001:db8:2::20")?,
+        ip6("2001:db8:3::9")?,
+        ip6("fd00:9::5")?,
+    );
+    for proto in [PROTO_TCP, PROTO_UDP] {
+        services.push(Service {
+            frontend: address("[2001:db8:2::20]:30080", proto)?,
+            backends: vec![address("[fd00:9::5]:8080", proto)?],
+            affinity: None,
+            scope: SCOPE_NODE_LOCAL,
+        });
+    }
+    program(lb, services)?;
+    for (proto, udp_zero) in [(6u8, false), (17, false), (17, true)] {
+        let sport = if udp_zero { 40001 } else { 40000 };
+        let request = frame6(proto, client, front, sport, 30080, udp_zero);
+        let (src, dst, s, d, hops, l4_ok) = parse6(&run(lb, "nodeport_ingress", &request)?)?;
+        if (src, dst, s, d, hops) != (client, backend, sport, 8080, 64) || !l4_ok {
+            return Err(format!(
+                "nodeport_ingress IPv6 proto {proto}: {src:?}:{s} -> {dst:?}:{d}, hops {hops}, checksum {l4_ok}"
+            )
+            .into());
+        }
+        let reply = frame6(proto, backend, client, 8080, sport, udp_zero);
+        let (src, dst, s, d, _, l4_ok) = parse6(&run(lb, "nodeport_egress", &reply)?)?;
+        if (src, dst, s, d) != (front, client, 30080, sport) || !l4_ok {
+            return Err(format!(
+                "nodeport_egress IPv6 proto {proto}: {src:?}:{s} -> {dst:?}:{d}, checksum {l4_ok}"
+            )
+            .into());
+        }
+    }
+    for (program, frame) in [
+        (
+            "nodeport_ingress",
+            frame6(6, client, ip6("2001:db8::10")?, 40000, 80, false),
+        ),
+        (
+            "nodeport_ingress",
+            frame6(6, client, front, 40000, 30081, false),
+        ),
+        (
+            "nodeport_egress",
+            frame6(6, backend, client, 8080, 41000, false),
+        ),
+    ] {
+        if run(lb, program, &frame)? != frame {
+            return Err(format!("{program} changed an IPv6 frame it does not own").into());
+        }
+    }
+    println!(
+        "PASS NodePort uplink IPv6: TCP, UDP and checksum-less UDP to [2001:db8:2::20]:30080 rewritten to the node-local backend and replies back to the frontend, checksums valid; other frames untouched"
+    );
     Ok(())
 }
 
@@ -452,6 +571,128 @@ fn snat(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     }
     println!(
         "PASS NodePort SNAT: TCP, UDP and checksum-less UDP to 192.0.2.20:30090 with a backend on another node source-NATed to 192.0.2.20 on a port in 61000-65535 (kept per flow), TTL 63, redirected to the resolved next hop's MAC; replies reverse-NATed and redirected toward the client; stray replies and TTL 1 untouched"
+    );
+    snat6(lb, services, up0, &uplink_mac)
+}
+
+/// [`snat`] for IPv6: up0 also holds 2001:db8:2::20/64; another node's pod
+/// CIDR fd00:9:1::/64 is via 2001:db8:2::30 (resolved), the default route
+/// via 2001:db8:2::1 (unresolved).
+fn snat6(
+    lb: &mut SocketLb,
+    services: &mut Vec<Service>,
+    up0: u32,
+    uplink_mac: &[u8],
+) -> Result<()> {
+    ip(&[
+        "-6",
+        "addr",
+        "add",
+        "2001:db8:2::20/64",
+        "dev",
+        "up0",
+        "nodad",
+    ])?;
+    ip(&[
+        "-6",
+        "route",
+        "add",
+        "fd00:9:1::/64",
+        "via",
+        "2001:db8:2::30",
+        "dev",
+        "up0",
+    ])?;
+    ip(&[
+        "-6",
+        "neigh",
+        "replace",
+        "2001:db8:2::30",
+        "lladdr",
+        "02:00:00:00:00:30",
+        "dev",
+        "up0",
+        "nud",
+        "permanent",
+    ])?;
+    ip(&[
+        "-6",
+        "route",
+        "add",
+        "default",
+        "via",
+        "2001:db8:2::1",
+        "dev",
+        "up0",
+    ])?;
+    std::fs::write("/proc/sys/net/ipv6/conf/all/forwarding", "1")?;
+    let (front, client, remote) = (
+        ip6("2001:db8:2::20")?,
+        ip6("2001:db8:3::9")?,
+        ip6("fd00:9:1::5")?,
+    );
+    for proto in [PROTO_TCP, PROTO_UDP] {
+        services.push(Service {
+            frontend: address("[2001:db8:2::20]:30090", proto)?,
+            backends: vec![address("[fd00:9:1::5]:8080", proto)?],
+            affinity: None,
+            scope: SCOPE_NODE_LOCAL,
+        });
+    }
+    program(lb, services)?;
+    for (proto, udp_zero) in [(6u8, false), (17, false), (17, true)] {
+        let sport = if udp_zero { 40003 } else { 40002 };
+        let request = frame6(proto, client, front, sport, 30090, udp_zero);
+        let mut nat_port = None;
+        // The second packet of the flow must reuse the first one's NAT port.
+        for _ in 0..2 {
+            let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+            let (src, dst, s, d, hops, l4_ok) = parse6(&out)?;
+            let macs = (out.get(0..6), out.get(6..12));
+            if src != front
+                || (dst, d) != (remote, 8080)
+                || !(61000..=65535).contains(&s)
+                || nat_port.is_some_and(|p| p != s)
+                || !l4_ok
+                || hops != 63
+                || macs != (Some(&GATEWAY_MAC[..]), Some(uplink_mac))
+            {
+                return Err(format!(
+                    "SNAT IPv6 forward proto {proto}: {src:?}:{s} -> {dst:?}:{d}, hops {hops}, macs {macs:?}, checksum {l4_ok}"
+                )
+                .into());
+            }
+            nat_port = Some(s);
+        }
+        let nat_port = nat_port.ok_or("no NAT port")?;
+        let reply = frame6(proto, remote, front, 8080, nat_port, udp_zero);
+        // The client's next hop (2001:db8:2::1) is unresolved: redirect_neigh.
+        let out = run_on(lb, "nodeport_ingress", &reply, up0, TC_ACT_REDIRECT)?;
+        let (src, dst, s, d, hops, l4_ok) = parse6(&out)?;
+        if (src, dst, s, d, hops) != (front, client, 30090, sport, 63) || !l4_ok {
+            return Err(format!(
+                "SNAT IPv6 reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}, hops {hops}, checksum {l4_ok}"
+            )
+            .into());
+        }
+    }
+    // A reply to a NAT port no flow holds, and a hop limit that forwarding
+    // would expire: untouched, left to the stack.
+    let stray = frame6(6, remote, front, 8081, 61000, false);
+    let stray = run_on(lb, "nodeport_ingress", &stray, up0, TC_ACT_OK)? == stray;
+    let mut expiring = frame6(6, client, front, 40100, 30090, false);
+    if let Some(hops) = expiring.get_mut(21) {
+        *hops = 1;
+    }
+    let expiring_kept = run_on(lb, "nodeport_ingress", &expiring, up0, TC_ACT_OK)? == expiring;
+    if !stray || !expiring_kept {
+        return Err(format!(
+            "SNAT IPv6 changed a frame it does not own (stray reply {stray}, hop limit 1 {expiring_kept})"
+        )
+        .into());
+    }
+    println!(
+        "PASS NodePort SNAT IPv6: TCP, UDP and checksum-less UDP to [2001:db8:2::20]:30090 with a backend on another node source-NATed to 2001:db8:2::20 on a port in 61000-65535 (kept per flow), hop limit 63, redirected to the resolved next hop's MAC; replies reverse-NATed and redirected toward the client; stray replies and hop limit 1 untouched"
     );
     Ok(())
 }

@@ -35,7 +35,7 @@ pub const PROGRAMS: [&str; 8] = [
 /// names and §4.3 layouts; flowsdn sizes the reverse and affinity maps at
 /// 64Ki. The affinity maps are the programs' own; the agent writes the
 /// match map.
-const MAPS: [(&str, MapType, u32, u32, u32, u32); 10] = [
+const MAPS: [(&str, MapType, u32, u32, u32, u32); 11] = [
     ("flowsdn_lb4_services", MapType::Hash, 12, 12, 65536, 1),
     ("flowsdn_lb4_backends", MapType::Hash, 4, 12, 65536, 1),
     ("flowsdn_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
@@ -46,6 +46,7 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 10] = [
     ("flowsdn_lb6_affinity", MapType::LruHash, 24, 16, 65536, 0),
     ("flowsdn_lb_affinity_match", MapType::Hash, 8, 1, 65536, 1),
     ("flowsdn_nodeport4_nat", MapType::LruHash, 16, 16, 65536, 0),
+    ("flowsdn_nodeport6_nat", MapType::LruHash, 40, 40, 65536, 0),
 ];
 
 pub struct SocketLb {
