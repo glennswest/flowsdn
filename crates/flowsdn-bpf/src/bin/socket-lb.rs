@@ -8,15 +8,20 @@
 //! client (its network namespace cookie, as the reference's socket LB does)
 //! on the backend it last got, while that is within the master's timeout and
 //! the agent's affinity-match map still pairs the backend with the service.
-//! Maglev, NodePort surrogates, skip-LB and socket termination are not
+//! The `nodeport_*` tc programs serve NodePort, external and LoadBalancer
+//! addresses to clients outside the cluster (IPv4, with SNAT to backends on
+//! other nodes). Maglev, DSR, skip-LB and socket termination are not
 //! implemented here.
 #![no_std]
 #![no_main]
 
 use aya_ebpf::{
     EbpfContext,
-    bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, bpf_sock_addr},
-    helpers::{bpf_get_netns_cookie, bpf_get_prandom_u32, bpf_get_socket_cookie, bpf_ktime_get_ns},
+    bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, bpf_fib_lookup, bpf_sock_addr},
+    helpers::{
+        bpf_fib_lookup as fib_lookup, bpf_get_netns_cookie, bpf_get_prandom_u32,
+        bpf_get_socket_cookie, bpf_ktime_get_ns, bpf_redirect, bpf_redirect_neigh,
+    },
     macros::{cgroup_sock_addr, classifier, map},
     maps::{HashMap, LruHashMap},
     programs::{SockAddrContext, TcContext},
@@ -485,16 +490,27 @@ pub fn sock6_getpeername(ctx: SockAddrContext) -> i32 {
 // ---------------------------------------------------------------------------
 // NodePort, external and LoadBalancer addresses from outside the cluster
 // (#292), IPv4: tc programs on the node's uplink. A packet to a frontend of
-// the node-local scope (scope 1, this node's backends only) is sent to a
-// backend by rewriting its destination; the host stack then routes it to the
-// pod. The reply's source is rewritten back on the uplink's egress. Both
-// directions are remembered per flow in an LRU map, so one connection keeps
-// its backend. There is no SNAT, which is why only local backends are used.
-// Neither program ever drops a packet: anything it does not handle passes.
+// the node-local scope (scope 1: this node's backends, or every backend
+// unless externalTrafficPolicy is Local) is sent to a backend.
+//
+// The FIB decides where the backend is. Reached through another device (a
+// pod's veth) or on this node: the destination is rewritten and the host
+// stack routes it to the pod; the reply's source is rewritten back on the
+// uplink's egress. Reached back out of the uplink it arrived on (a pod on
+// another node): the packet is also source-NATed to this node's address
+// toward that backend (the FIB's source, `BPF_FIB_LOOKUP_SRC`, Linux 6.7) on
+// a port in 61000-65535, outside the kernel's default ephemeral range, and
+// redirected straight back out (the stack would drop a packet from its own
+// address as martian). The other node's reply to that port is reverse-NATed
+// on this uplink's ingress and redirected to the client. The remote node
+// must not masquerade it: it is the reply of a connection its conntrack saw
+// arrive, which iptables/nftables masquerade leaves alone.
+//
+// Every direction of a flow is remembered in one LRU map, so a connection
+// keeps its backend and NAT port. Neither program ever drops a packet:
+// anything it does not handle passes untouched.
 
-/// One direction of a translated flow: `a:ap -> b:bp`. Direction 0 is the
-/// client to the frontend (the value is the backend), 1 the backend to the
-/// client (the value is the frontend).
+/// One direction of a translated flow: `a:ap -> b:bp`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Nodeport4Key {
@@ -506,20 +522,43 @@ pub struct Nodeport4Key {
     direction: u8,
     pad: [u8; 2],
 }
+/// Client to frontend; the value is the backend (and with [`FLOW_SNAT`]
+/// the NAT address and port in `other`).
+const FORWARD: u8 = 0;
+/// Local backend to client, at the uplink's egress; the value is the frontend.
+const REPLY: u8 = 1;
+/// Remote backend to the NAT address and port, at the uplink's ingress; the
+/// value is the frontend, and the client in `other`.
+const SNAT_REPLY: u8 = 2;
+/// A forward flow to a backend on another node.
+const FLOW_SNAT: u8 = 1;
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Nodeport4Value {
     address: [u8; 4],
     port: [u8; 2],
-    pad: [u8; 2],
+    flags: u8,
+    pad: u8,
+    other: [u8; 4],
+    other_port: [u8; 2],
+    pad2: [u8; 2],
 }
-#[map(name = "flowsdn_nodeport4")]
+#[map(name = "flowsdn_nodeport4_nat")]
 static NODEPORT4: LruHashMap<Nodeport4Key, Nodeport4Value> =
     LruHashMap::with_max_entries(65536, 0);
 
 const ETH_P_IPV4: [u8; 2] = [0x08, 0x00];
 const BPF_F_PSEUDO_HDR: u64 = 1 << 4;
 const BPF_F_MARK_MANGLED_0: u64 = 1 << 5;
+const BPF_NOEXIST: u64 = 1;
+const BPF_FIB_LOOKUP_SRC: u32 = 1 << 4;
+const FIB_SUCCESS: i64 = 0;
+const FIB_NO_NEIGH: i64 = 7;
+const NAT_PORT_MIN: u32 = 61000;
+const NAT_PORTS: u32 = 65536 - NAT_PORT_MIN;
+/// NAT ports tried for a new flow before it is left untranslated.
+const NAT_TRIES: u32 = 8;
 
 /// The IPv4 TCP/UDP 5-tuple of a frame: (L4 offset, proto, src, dst,
 /// sport, dport). Fragments other than the first carry no ports: skipped.
@@ -596,23 +635,212 @@ fn rewrite4(
     Some(())
 }
 
+/// The device the program runs on: the uplink the packet arrived on.
 #[inline(always)]
-fn nodeport4_in(ctx: &TcContext) -> Option<()> {
-    let (l4, proto, client, front, client_port, front_port) = tuple4(ctx)?;
-    let forward = Nodeport4Key {
+fn uplink(ctx: &TcContext) -> u32 {
+    // SAFETY: a kernel-created TC context points at a live __sk_buff for the
+    // duration of this program; ifindex is an allowed scalar context access.
+    unsafe { (*ctx.skb.skb).ifindex }
+}
+
+/// An ingress FIB lookup from `src` to `dst` as if the packet arrived on
+/// the uplink: (result, parameters with the output device, MACs and, with
+/// [`BPF_FIB_LOOKUP_SRC`], the source address). Negative results are errors
+/// (an unknown flag on a kernel before 6.7).
+#[inline(always)]
+fn fib4(ctx: &TcContext, proto: u8, src: [u8; 4], dst: [u8; 4], flags: u32) -> (i64, bpf_fib_lookup) {
+    // SAFETY: the generated C struct contains only integers, integer arrays
+    // and unions of those types; all-zero is a valid value of each, and the
+    // inactive union bytes are initialized before the helper reads them.
+    let mut fib: bpf_fib_lookup = unsafe { core::mem::zeroed() };
+    fib.family = 2; // AF_INET
+    fib.l4_protocol = proto;
+    fib.ifindex = uplink(ctx);
+    fib.__bindgen_anon_3.ipv4_src = u32::from_ne_bytes(src);
+    fib.__bindgen_anon_4.ipv4_dst = u32::from_ne_bytes(dst);
+    // SAFETY: `fib` is a live, aligned stack value of the helper's ABI type
+    // and its real size; the helper does not keep the pointer.
+    let result = unsafe {
+        fib_lookup(
+            ctx.as_ptr(),
+            core::ptr::from_mut(&mut fib),
+            core::mem::size_of::<bpf_fib_lookup>() as i32,
+            flags,
+        )
+    };
+    (result, fib)
+}
+
+/// Whether the FIB sends the packet out of a device (with or without a
+/// resolved neighbour).
+#[inline(always)]
+fn forwarded(result: i64) -> bool {
+    result == FIB_SUCCESS || result == FIB_NO_NEIGH
+}
+
+/// Send the (already translated) frame out of the FIB's device: with its
+/// MACs when the neighbour is resolved, else through the neighbour
+/// subsystem. TTL is decremented, as forwarding would.
+#[inline(always)]
+fn redirect(ctx: &TcContext, result: i64, fib: &bpf_fib_lookup) -> Option<i32> {
+    let [ttl, proto] = ctx.load::<[u8; 2]>(22).ok()?;
+    let lower = [ttl.checked_sub(1)?, proto];
+    ctx.l3_csum_replace(
+        24,
+        u64::from(u16::from_ne_bytes([ttl, proto])),
+        u64::from(u16::from_ne_bytes(lower)),
+        2,
+    )
+    .ok()?;
+    ctx.store(22, &lower, 0).ok()?;
+    if result == FIB_SUCCESS {
+        ctx.store(0, &fib.dmac, 0).ok()?;
+        ctx.store(6, &fib.smac, 0).ok()?;
+        // SAFETY: plain helper call with scalar arguments.
+        Some(unsafe { bpf_redirect(fib.ifindex, 0) } as i32)
+    } else {
+        // SAFETY: no nexthop parameters (NULL, length 0): the kernel routes
+        // the translated destination itself.
+        Some(unsafe { bpf_redirect_neigh(fib.ifindex, core::ptr::null_mut(), 0, 0) } as i32)
+    }
+}
+
+/// TTL that forwarding may still decrement.
+#[inline(always)]
+fn ttl_ok(ctx: &TcContext) -> Option<()> {
+    (ctx.load::<u8>(22).ok()? > 1).then_some(())
+}
+
+/// A free NAT port toward `backend` from `nat`, claimed for `reply`
+/// (keyed backend -> nat:port, so ports are per backend and protocol).
+#[inline(always)]
+fn claim_port(
+    backend: ([u8; 4], [u8; 2]),
+    nat: [u8; 4],
+    proto: u8,
+    reply: &Nodeport4Value,
+) -> Option<[u8; 2]> {
+    // SAFETY: no arguments; returns a pseudo-random scalar.
+    let start = unsafe { bpf_get_prandom_u32() };
+    for i in 0..NAT_TRIES {
+        let offset = start.wrapping_add(i).checked_rem(NAT_PORTS)?;
+        let port = u16::try_from(NAT_PORT_MIN.checked_add(offset)?)
+            .ok()?
+            .to_be_bytes();
+        let key = Nodeport4Key {
+            a: backend.0,
+            b: nat,
+            ap: backend.1,
+            bp: port,
+            proto,
+            direction: SNAT_REPLY,
+            pad: [0; 2],
+        };
+        if NODEPORT4.insert(&key, reply, BPF_NOEXIST).is_ok() {
+            return Some(port);
+        }
+    }
+    None
+}
+
+/// A remote backend's reply to a NAT port: back to the client, from the
+/// frontend.
+#[inline(always)]
+fn snat_reply4(
+    ctx: &TcContext,
+    tuple: (usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8; 2]),
+    flow: Nodeport4Value,
+) -> Option<i32> {
+    let (l4, proto, backend, nat, backend_port, nat_port) = tuple;
+    ttl_ok(ctx)?;
+    let (result, fib) = fib4(ctx, proto, flow.address, flow.other, 0);
+    if !forwarded(result) {
+        return None;
+    }
+    rewrite4(
+        ctx,
+        l4,
+        proto,
+        26,
+        l4,
+        (backend, backend_port),
+        (flow.address, flow.port),
+    )?;
+    rewrite4(
+        ctx,
+        l4,
+        proto,
+        30,
+        l4.checked_add(2)?,
+        (nat, nat_port),
+        (flow.other, flow.other_port),
+    )?;
+    redirect(ctx, result, &fib)
+}
+
+/// The client's packet to a remote backend: destination to the backend,
+/// source to the NAT address and port, out of the uplink.
+#[inline(always)]
+fn snat_forward4(
+    ctx: &TcContext,
+    tuple: (usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8; 2]),
+    flow: Nodeport4Value,
+    route: Option<(i64, bpf_fib_lookup)>,
+) -> Option<i32> {
+    let (l4, proto, client, front, client_port, front_port) = tuple;
+    ttl_ok(ctx)?;
+    let (result, fib) = match route {
+        Some(route) => route,
+        None => fib4(ctx, proto, flow.other, flow.address, 0),
+    };
+    if !forwarded(result) {
+        return None;
+    }
+    rewrite4(
+        ctx,
+        l4,
+        proto,
+        30,
+        l4.checked_add(2)?,
+        (front, front_port),
+        (flow.address, flow.port),
+    )?;
+    rewrite4(
+        ctx,
+        l4,
+        proto,
+        26,
+        l4,
+        (client, client_port),
+        (flow.other, flow.other_port),
+    )?;
+    redirect(ctx, result, &fib)
+}
+
+#[inline(always)]
+fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
+    let tuple = tuple4(ctx)?;
+    let (l4, proto, client, front, client_port, front_port) = tuple;
+    let mut key = Nodeport4Key {
         a: client,
         b: front,
         ap: client_port,
         bp: front_port,
         proto,
-        direction: 0,
+        direction: SNAT_REPLY,
         pad: [0; 2],
     };
     // SAFETY: LRU value copied at once, never written through.
-    let backend = match unsafe { NODEPORT4.get(&forward).copied() } {
-        Some(known) => (known.address, known.port),
+    if let Some(flow) = unsafe { NODEPORT4.get(&key).copied() } {
+        return snat_reply4(ctx, tuple, flow);
+    }
+    key.direction = FORWARD;
+    let mut route = None;
+    // SAFETY: LRU value copied at once, never written through.
+    let flow = match unsafe { NODEPORT4.get(&key).copied() } {
+        Some(known) => known,
         None => {
-            let mut key = Lb4Key {
+            let mut service_key = Lb4Key {
                 address: Be32(front),
                 dport: Be16(front_port),
                 backend_slot: 0,
@@ -621,37 +849,75 @@ fn nodeport4_in(ctx: &TcContext) -> Option<()> {
                 pad: [0; 2],
             };
             // SAFETY: see lookup4.
-            let service = unsafe { LB4_SERVICES.get(&key).copied() }?;
-            key.backend_slot = slot(service.count)?;
+            let service = unsafe { LB4_SERVICES.get(&service_key).copied() }?;
+            service_key.backend_slot = slot(service.count)?;
             // SAFETY: see lookup4.
-            let entry = unsafe { LB4_SERVICES.get(&key).copied() }?;
+            let entry = unsafe { LB4_SERVICES.get(&service_key).copied() }?;
             // SAFETY: see lookup4.
             let chosen = unsafe { LB4_BACKENDS.get(&entry.backend_id()).copied() }?;
-            let value = Nodeport4Value {
-                address: chosen.address.0,
-                port: chosen.port.0,
-                pad: [0; 2],
+            let backend = (chosen.address.0, chosen.port.0);
+            let (result, fib) = fib4(ctx, proto, client, backend.0, 0);
+            let mut flow = Nodeport4Value {
+                address: backend.0,
+                port: backend.1,
+                flags: 0,
+                pad: 0,
+                other: [0; 4],
+                other_port: [0; 2],
+                pad2: [0; 2],
             };
-            let reverse = Nodeport4Key {
-                a: chosen.address.0,
-                b: client,
-                ap: chosen.port.0,
-                bp: client_port,
-                proto,
-                direction: 1,
-                pad: [0; 2],
-            };
-            let front_value = Nodeport4Value {
-                address: front,
-                port: front_port,
-                pad: [0; 2],
-            };
-            // Reverse first: a reply must never find a flow it cannot undo.
-            NODEPORT4.insert(&reverse, &front_value, 0).ok()?;
-            NODEPORT4.insert(&forward, &value, 0).ok()?;
-            (chosen.address.0, chosen.port.0)
+            if forwarded(result) && fib.ifindex == uplink(ctx) {
+                // Another node's backend: SNAT to this node's address there.
+                ttl_ok(ctx)?;
+                let (result, fib) = fib4(ctx, proto, [0; 4], backend.0, BPF_FIB_LOOKUP_SRC);
+                if !forwarded(result) {
+                    return None;
+                }
+                // SAFETY: the active member after an IPv4 lookup.
+                let nat = unsafe { fib.__bindgen_anon_3.ipv4_src }.to_ne_bytes();
+                let reply = Nodeport4Value {
+                    address: front,
+                    port: front_port,
+                    flags: 0,
+                    pad: 0,
+                    other: client,
+                    other_port: client_port,
+                    pad2: [0; 2],
+                };
+                // The reply entry first: a reply must never find a flow it
+                // cannot undo.
+                flow.other_port = claim_port(backend, nat, proto, &reply)?;
+                flow.other = nat;
+                flow.flags = FLOW_SNAT;
+                route = Some((result, fib));
+            } else {
+                let reverse = Nodeport4Key {
+                    a: backend.0,
+                    b: client,
+                    ap: backend.1,
+                    bp: client_port,
+                    proto,
+                    direction: REPLY,
+                    pad: [0; 2],
+                };
+                let front_value = Nodeport4Value {
+                    address: front,
+                    port: front_port,
+                    flags: 0,
+                    pad: 0,
+                    other: [0; 4],
+                    other_port: [0; 2],
+                    pad2: [0; 2],
+                };
+                NODEPORT4.insert(&reverse, &front_value, 0).ok()?;
+            }
+            NODEPORT4.insert(&key, &flow, 0).ok()?;
+            flow
         }
     };
+    if flow.flags & FLOW_SNAT != 0 {
+        return snat_forward4(ctx, tuple, flow, route);
+    }
     rewrite4(
         ctx,
         l4,
@@ -659,8 +925,9 @@ fn nodeport4_in(ctx: &TcContext) -> Option<()> {
         30,
         l4.checked_add(2)?,
         (front, front_port),
-        backend,
-    )
+        (flow.address, flow.port),
+    )?;
+    Some(TC_ACT_OK)
 }
 
 #[inline(always)]
@@ -672,7 +939,7 @@ fn nodeport4_out(ctx: &TcContext) -> Option<()> {
         ap: backend_port,
         bp: client_port,
         proto,
-        direction: 1,
+        direction: REPLY,
         pad: [0; 2],
     };
     // SAFETY: LRU value copied at once, never written through.
@@ -690,8 +957,7 @@ fn nodeport4_out(ctx: &TcContext) -> Option<()> {
 
 #[classifier]
 pub fn nodeport_ingress(ctx: TcContext) -> i32 {
-    let _ = nodeport4_in(&ctx);
-    TC_ACT_OK
+    nodeport4_in(&ctx).unwrap_or(TC_ACT_OK)
 }
 #[classifier]
 pub fn nodeport_egress(ctx: TcContext) -> i32 {

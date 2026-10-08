@@ -9,6 +9,10 @@
 //! (KEP-1669). `internalTrafficPolicy: Local` limits a cluster IP to this
 //! node's endpoints, and `externalTrafficPolicy: Local` limits a NodePort on a
 //! node's address to that node's endpoints, as for a packet arriving there.
+//! Each NodePort, external and LoadBalancer frontend also has a node-local
+//! copy (scope 1) for packets from outside the cluster arriving on this
+//! node's uplink: every backend (the uplink programs SNAT to other nodes'),
+//! or this node's only with `externalTrafficPolicy: Local`.
 //! Pure data; the `kubernetes` controller feeds and applies it.
 use flowsdn_lb::socket::{Address, PROTO_TCP, PROTO_UDP, SCOPE_CLUSTER, SCOPE_NODE_LOCAL, Service};
 use serde_json::{Value, json};
@@ -193,8 +197,9 @@ pub fn frontends(
                     proto,
                 };
                 // Packets from outside the cluster reach a NodePort, external
-                // or LoadBalancer address on this node's uplink, and are only
-                // sent to this node's backends (no SNAT yet).
+                // or LoadBalancer address on this node's uplink (scope 1): every
+                // backend, other nodes' through SNAT, or with
+                // `externalTrafficPolicy: Local` this node's only.
                 let scopes: &[u8] = if kind == "ClusterIP" {
                     &[SCOPE_CLUSTER]
                 } else {
@@ -202,7 +207,7 @@ pub fn frontends(
                 };
                 for &scope in scopes {
                     let only = if scope == SCOPE_NODE_LOCAL {
-                        Some(local)
+                        service.external_local.then_some(local)
                     } else {
                         only
                     };

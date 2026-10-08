@@ -45,7 +45,7 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 10] = [
     ("flowsdn_lb4_affinity", MapType::LruHash, 16, 16, 65536, 0),
     ("flowsdn_lb6_affinity", MapType::LruHash, 24, 16, 65536, 0),
     ("flowsdn_lb_affinity_match", MapType::Hash, 8, 1, 65536, 1),
-    ("flowsdn_nodeport4", MapType::LruHash, 16, 8, 65536, 0),
+    ("flowsdn_nodeport4_nat", MapType::LruHash, 16, 16, 65536, 0),
 ];
 
 pub struct SocketLb {
@@ -201,8 +201,8 @@ impl SocketLb {
     /// Attach the NodePort programs (#292) to `interface`, the node's uplink:
     /// `nodeport_ingress` on its TCX ingress and `nodeport_egress` on its
     /// egress. Packets from outside the cluster to a node-local frontend go
-    /// to one of this node's backends; replies are shown as from the
-    /// frontend. The links detach when this owner drops or [`Self::detach_uplink`].
+    /// to one of its backends, source-NATed to this node when the backend is
+    /// on another node; replies are shown as from the frontend. The links detach when this owner drops or [`Self::detach_uplink`].
     pub fn attach_uplink(&mut self, interface: &str) -> KernelResult<()> {
         if interface.is_empty() || interface.len() >= 16 || interface.contains(['\0', '/']) {
             return Err("invalid network interface name".into());

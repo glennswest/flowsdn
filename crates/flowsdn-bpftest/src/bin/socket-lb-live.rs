@@ -6,7 +6,9 @@
 //! translation (recvmsg, getpeername), IPv6, IPv4-mapped IPv6, a frontend
 //! without backends, backend churn and frontend removal; and the NodePort
 //! uplink programs (#292) by BPF_PROG_TEST_RUN: destination rewrite to a
-//! node-local backend and the reply's source rewrite, checksums checked.
+//! node-local backend and the reply's source rewrite, checksums checked; and
+//! SNAT to a backend on another node with the FIB redirect, run as arriving
+//! on a dummy uplink in this netns.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_lb::socket::{self, Address, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
@@ -15,12 +17,15 @@ use std::{
     error::Error,
     io::{ErrorKind, Read, Write},
     net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket},
+    os::fd::{AsFd, AsRawFd},
     process::Command,
     time::Duration,
 };
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 #[path = "cgroup/temporary.rs"]
 mod cgroup;
+#[path = "testrun/syscall.rs"]
+mod syscall;
 
 const TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -208,6 +213,72 @@ fn parse4(f: &[u8]) -> Result<Parsed4> {
     let l4_ok = udp_zero || l4_sum(proto, src, dst, l4) == 0xffff;
     Ok((src, dst, port(0)?, port(2)?, sum(ip, 0) == 0xffff, l4_ok))
 }
+
+const UPLINK_MAC: &str = "02:00:00:00:00:20";
+const GATEWAY_MAC: [u8; 6] = [2, 0, 0, 0, 0, 0x30];
+const TC_ACT_OK: u32 = 0;
+const TC_ACT_REDIRECT: u32 = 7;
+
+fn ip(args: &[&str]) -> Result<()> {
+    if Command::new("ip").args(args).status()?.success() {
+        Ok(())
+    } else {
+        Err(format!("ip {} failed", args.join(" ")).into())
+    }
+}
+/// A device's index in this netns (sysfs still shows the original one).
+fn ifindex(name: &str) -> Result<u32> {
+    let out = Command::new("ip").args(["-o", "link", "show", name]).output()?;
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .split(':')
+        .next()
+        .ok_or("ip link output")?
+        .trim()
+        .parse()?)
+}
+/// This netns as a node: uplink `up0` (192.0.2.20/24, the node address and
+/// NodePort frontend; default route via 192.0.2.1, neighbour unresolved),
+/// another node's pod CIDR 10.9.1.0/24 via 192.0.2.30 (resolved), and a
+/// local pod device `pod0` for 10.9.0.0/24. Forwarding on.
+fn node() -> Result<u32> {
+    ip(&["link", "add", "up0", "address", UPLINK_MAC, "type", "dummy"])?;
+    ip(&["link", "set", "up0", "up"])?;
+    ip(&["addr", "add", "192.0.2.20/24", "dev", "up0"])?;
+    ip(&["link", "add", "pod0", "type", "dummy"])?;
+    ip(&["link", "set", "pod0", "up"])?;
+    ip(&["route", "add", "10.9.0.0/24", "dev", "pod0"])?;
+    ip(&["route", "add", "10.9.1.0/24", "via", "192.0.2.30", "dev", "up0"])?;
+    ip(&[
+        "neigh", "replace", "192.0.2.30", "lladdr", "02:00:00:00:00:30", "dev", "up0", "nud",
+        "permanent",
+    ])?;
+    ip(&["route", "add", "default", "via", "192.0.2.1", "dev", "up0"])?;
+    std::fs::write("/proc/sys/net/ipv4/conf/all/forwarding", "1")?;
+    ifindex("up0")
+}
+/// Test-run `program` on `frame` as if it arrived on device `ifindex`;
+/// the verdict must be `verdict`.
+fn run_on(
+    lb: &mut SocketLb,
+    program: &str,
+    frame: &[u8],
+    ifindex: u32,
+    verdict: u32,
+) -> Result<Vec<u8>> {
+    let fd = lb.classifier(program)?.fd()?.as_fd().as_raw_fd();
+    let mut ctx = [0u8; 256];
+    ctx.get_mut(40..44)
+        .ok_or("ctx")?
+        .copy_from_slice(&ifindex.to_ne_bytes());
+    let mut out = vec![0u8; 512];
+    let mut ctx_out = [0u8; 256];
+    let (got, size) = syscall::run(fd, frame, &mut out, &ctx, &mut ctx_out)?;
+    if got != verdict {
+        return Err(format!("{program}: verdict {got}, expected {verdict}").into());
+    }
+    out.truncate(size);
+    Ok(out)
+}
 fn run(lb: &mut SocketLb, program: &str, frame: &[u8]) -> Result<Vec<u8>> {
     let mut out = vec![0u8; 512];
     let result = lb.classifier(program)?.test_run(TestRunOptions {
@@ -216,7 +287,7 @@ fn run(lb: &mut SocketLb, program: &str, frame: &[u8]) -> Result<Vec<u8>> {
         repeat: 1,
         ..Default::default()
     })?;
-    if result.return_value != 0 {
+    if result.return_value != TC_ACT_OK {
         return Err(format!(
             "{program}: verdict {}, expected TC_ACT_OK",
             result.return_value
@@ -283,7 +354,88 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     println!(
         "PASS NodePort uplink: TCP, UDP and checksum-less UDP to 192.0.2.20:30080 rewritten to the node-local backend and replies back to the frontend, checksums valid; other frames untouched"
     );
+    snat(lb, services)?;
     services.retain(|s| s.scope != SCOPE_NODE_LOCAL);
+    Ok(())
+}
+
+/// NodePort to a backend on another node (#292): SNAT to the node address,
+/// redirected out of the uplink to the resolved next hop; the other node's
+/// reply to the NAT port is reverse-NATed and redirected to the client.
+fn snat(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
+    let up0 = node()?;
+    let uplink_mac: Vec<u8> = UPLINK_MAC
+        .split(':')
+        .map(|b| u8::from_str_radix(b, 16))
+        .collect::<std::result::Result<_, _>>()?;
+    let (front, client, remote) = ([192, 0, 2, 20], [198, 51, 100, 9], [10, 9, 1, 5]);
+    for proto in [PROTO_TCP, PROTO_UDP] {
+        services.push(Service {
+            frontend: address("192.0.2.20:30090", proto)?,
+            backends: vec![address("10.9.1.5:8080", proto)?],
+            affinity: None,
+            scope: SCOPE_NODE_LOCAL,
+        });
+    }
+    program(lb, services)?;
+    for (proto, udp_zero) in [(6u8, false), (17, false), (17, true)] {
+        let sport = if udp_zero { 40003 } else { 40002 };
+        let request = frame4(proto, client, front, sport, 30090, udp_zero);
+        let mut nat_port = None;
+        // The second packet of the flow must reuse the first one's NAT port.
+        for _ in 0..2 {
+            let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+            let (src, dst, s, d, ip_ok, l4_ok) = parse4(&out)?;
+            let ttl = out.get(22).copied();
+            let macs = (out.get(0..6), out.get(6..12));
+            if src != front
+                || (dst, d) != (remote, 8080)
+                || !(61000..=65535).contains(&s)
+                || nat_port.is_some_and(|p| p != s)
+                || !ip_ok
+                || !l4_ok
+                || ttl != Some(63)
+                || macs != (Some(&GATEWAY_MAC[..]), Some(&uplink_mac[..]))
+            {
+                return Err(format!(
+                    "SNAT forward proto {proto}: {src:?}:{s} -> {dst:?}:{d}, ttl {ttl:?}, macs {macs:?}, checksums ip {ip_ok} l4 {l4_ok}"
+                )
+                .into());
+            }
+            nat_port = Some(s);
+        }
+        let nat_port = nat_port.ok_or("no NAT port")?;
+        let reply = frame4(proto, remote, front, 8080, nat_port, udp_zero);
+        // The client's next hop (192.0.2.1) is unresolved: redirect_neigh.
+        let out = run_on(lb, "nodeport_ingress", &reply, up0, TC_ACT_REDIRECT)?;
+        let (src, dst, s, d, ip_ok, l4_ok) = parse4(&out)?;
+        let ttl = out.get(22).copied();
+        if (src, dst, s, d) != (front, client, 30090, sport) || !ip_ok || !l4_ok || ttl != Some(63)
+        {
+            return Err(format!(
+                "SNAT reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}, ttl {ttl:?}, checksums ip {ip_ok} l4 {l4_ok}"
+            )
+            .into());
+        }
+    }
+    // A reply to a NAT port no flow holds, and a TTL that forwarding would
+    // expire: untouched, left to the stack.
+    let stray = frame4(6, remote, front, 8081, 61000, false);
+    let stray = run_on(lb, "nodeport_ingress", &stray, up0, TC_ACT_OK)? == stray;
+    let mut expiring = frame4(6, client, front, 40100, 30090, false);
+    if let Some(ttl) = expiring.get_mut(22) {
+        *ttl = 1;
+    }
+    let expiring_kept = run_on(lb, "nodeport_ingress", &expiring, up0, TC_ACT_OK)? == expiring;
+    if !stray || !expiring_kept {
+        return Err(format!(
+            "SNAT changed a frame it does not own (stray reply {stray}, TTL 1 {expiring_kept})"
+        )
+        .into());
+    }
+    println!(
+        "PASS NodePort SNAT: TCP, UDP and checksum-less UDP to 192.0.2.20:30090 with a backend on another node source-NATed to 192.0.2.20 on a port in 61000-65535 (kept per flow), TTL 63, redirected to the resolved next hop's MAC; replies reverse-NATed and redirected toward the client; stray replies and TTL 1 untouched"
+    );
     Ok(())
 }
 

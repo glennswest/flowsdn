@@ -252,12 +252,12 @@ fn node_ports_external_and_load_balancer_addresses_and_traffic_policies() {
             })
             .map(|f| f.service.backends.iter().map(|b| b.ip).collect::<Vec<_>>())
     };
-    assert_eq!(
-        local("192.168.0.2", 30080),
-        Some(vec![ip("10.1.0.5")]),
-        "n1's own backend"
-    );
-    assert_eq!(local("198.51.100.7", 80), Some(vec![ip("10.1.0.5")]));
+    // externalTrafficPolicy Cluster: the uplink copy has every backend
+    // (other nodes' are reached through SNAT).
+    let every = Some(vec![ip("10.1.0.5"), ip("10.2.0.5")]);
+    assert_eq!(local("192.168.0.2", 30080), every);
+    assert_eq!(local("198.51.100.7", 80), every);
+    assert_eq!(local("192.0.2.10", 80), every);
     assert_eq!(
         local("10.96.5.5", 80),
         None,
@@ -280,6 +280,18 @@ fn node_ports_external_and_load_balancer_addresses_and_traffic_policies() {
         ..web.clone()
     };
     let out = frontends(&[local], std::slice::from_ref(&slice), "n1", &nodes);
+    // externalTrafficPolicy Local: the uplink copy has this node's only.
+    for (address, port) in [("192.168.0.2", 30080), ("198.51.100.7", 80), ("192.0.2.10", 80)] {
+        let uplink = out
+            .iter()
+            .find(|f| {
+                f.service.scope == SCOPE_NODE_LOCAL
+                    && f.service.frontend.ip == ip(address)
+                    && f.service.frontend.port == port
+            })
+            .map(|f| f.service.backends.iter().map(|b| b.ip).collect::<Vec<_>>());
+        assert_eq!(uplink, Some(vec![ip("10.1.0.5")]), "{address}:{port}");
+    }
     assert_eq!(find(&out, "10.96.5.5", 80).1, vec!["10.1.0.5:8080"]);
     assert_eq!(find(&out, "192.168.0.2", 30080).1, vec!["10.2.0.5:8080"]);
     assert_eq!(find(&out, "192.0.2.10", 80).1, both);
