@@ -228,6 +228,13 @@ contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots
         frontends): `nodeport6_in/out` in socket-lb mirroring IPv4 (no IP checksum; L4 pseudo-header csum,
         hop limit, FIB v6 with BPF_FIB_LOOKUP_SRC, SNAT ports 61000-65535), map `flowsdn_nodeport6_nat`;
         loader map table; socket-lb-live v6 local + SNAT steps; docs, changelog; object + lock via sc-build.
+  - [x] Code 7b788ee, docs af375ea. 512-byte stack: per-family paths are BPF subprograms (286da84), the v6 FIB
+        params live in per-CPU `flowsdn_nodeport6_fib`, v6 path split (68a8ddc), ip6_words/bytes by transmute
+        (byte destructuring spilled, 0fad164). Object + lock 53bffc7. sc-build at 53bffc7: fmt, Clippy x2
+        -D warnings, 743 tests (0 failed, 1 ignored), test/build.sh (lock, no-cilium).
+  - [ ] Medium on pvetest2 (socket-lb-live IPv6 steps under the 7.2 verifier): 87e7e01b34 and 22950509a8 errored,
+        test-image build still goes to retired dev.g8.lo (stormcentral#526, commented). Rerun
+        `stormcentral test run flowsdn medium --tag pvetest2` when #526 is fixed; then stage the golden.
 - [ ] ClusterIP acceptance on pvetest2: ad78ba9a43 errored (pvetest2's VM gone; master's 11.88-flowsdn install 5b46948417 queued). Requeued after reinstall as fc93b9bdde (short; errored 60 min waiting for a build slot, filed stormcentral#504) then c1b47e866d at 8d2f677; perf a075717758. Golden golden-flowsdn-17ccc00a7b9f carries affinity. Golden golden-flowsdn-6e707dca7687 carries the frontend kinds behind the build-slot backlog (stormcentral#472); #292 proposed after it. `stormcentral test show 6c0b6820bd`: the node-service-* lines are the kube-dns/kubernetes acceptance; fix what fails, then comment stormcos#265.
 - [x] 2026-10-07 (b381f6e, cd99e1c; sc-build 782 tests, Clippy x2): Service types for in-cluster clients through the socket LB: externalIPs, LoadBalancer ingress IPs, NodePort on every node InternalIP; internalTrafficPolicy Local for ClusterIPs (backends on this node); `flags.type` per frontend; frontends refresh on Node changes. External clients need tc NodePort (still open).
 - [ ] fixture-socket-lb-live on a kernel: run dbfc4e45b1 (C2NR0Q2) failed on push, registry full (stormcentral#376). Rerun `stormcentral test run flowsdn medium --tag <machine>`; live kube-dns check on a flowsdn node after release. Not implemented (stays open on #292): NodePort/LB/externalIPs, affinity, Maglev, DSR, NAT46/64, tc-level LB, socket termination, policy.
