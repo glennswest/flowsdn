@@ -193,8 +193,7 @@ With the `kubernetes` feature and section the agent:
 Not yet: a cluster identity allocator (pod IP cache entries and the
 pod-networks annotation carry no numeric identity), a flow/drop observer (the
 `flowsdn-hubble` `endpoint` module names flow peers `ns/pod (container)` once
-one exists, #293), BPF ipcache maps, tunnel routing, masquerade, external NodePort/LB traffic to
-another node's backends, and policy enforcement. Unit tests and a loopback-HTTPS controller test cover the
+one exists, #293), BPF ipcache maps, tunnel routing, masquerade, and policy enforcement. Unit tests and a loopback-HTTPS controller test cover the
 watch and route logic; two-node pod traffic has not been demonstrated
 (pvetest1 + pvetest2, stormcentral#360).
 
@@ -234,28 +233,31 @@ the port; for type LoadBalancer each `status.loadBalancer.ingress[].ip` on
 the port; for types NodePort and LoadBalancer every node's InternalIP on the
 `nodePort` (recomputed when node addresses change). These cover clients
 inside the cluster, pods and node processes, whichever node's address they
-use. Traffic arriving from outside the cluster (#292, IPv4, `kubernetes.node-port`,
+use. Traffic arriving from outside the cluster (#292, IPv4 and IPv6, `kubernetes.node-port`,
 default on): the agent also writes a node-local copy (key scope 1) of every
 NodePort, external and LoadBalancer frontend, with every backend (only this
 node's with `externalTrafficPolicy: Local`), and attaches the
 `nodeport_ingress`/`nodeport_egress` tc programs (TCX) to every interface
 holding this node's InternalIP. For a packet to such a frontend the program
 picks a backend and asks the FIB where it is. On this node (a pod's device,
-or a node address): the destination is rewritten (IPv4 and TCP/UDP checksums
-fixed), the host stack routes it to the pod, and the reply's source is
+or a node address): the destination is rewritten (IPv4 header and TCP/UDP
+checksums fixed; IPv6 has no header checksum, the TCP/UDP one covers the
+addresses), the host stack routes it to the pod, and the reply's source is
 rewritten back on the way out. Back out of the uplink it came in on (a pod
 on another node): the source is also rewritten to this node's address toward
 that backend (the FIB's source, `BPF_FIB_LOOKUP_SRC`, Linux 6.7 or later) on
-a port in 61000-65535 (outside the kernel's default ephemeral range), TTL is
-decremented, and the packet is redirected out of the uplink to the FIB's next
+a port in 61000-65535 (outside the kernel's default ephemeral range), TTL
+(IPv6: hop limit) is decremented, and the packet is redirected out of the uplink to the FIB's next
 hop (`bpf_redirect_neigh` when the neighbour is not resolved yet). The other
 node's reply to that port is reverse-NATed on the uplink's ingress and
 redirected to the client. The other node must not masquerade that reply; it
 is the reply of a connection its conntrack saw arrive, which masquerade rules
 leave alone. Every direction is kept per flow in the LRU
-`flowsdn_nodeport4_nat` map (64Ki entries), so a connection keeps its backend
-and NAT port. A packet the FIB cannot route, with TTL 1, or for which no NAT
-port is free within eight tries passes untranslated. IPv6 is not handled yet.
+`flowsdn_nodeport4_nat` / `flowsdn_nodeport6_nat` maps (64Ki entries each), so
+a connection keeps its backend and NAT port. A packet the FIB cannot route,
+with TTL 1, or for which no NAT port is free within eight tries passes
+untranslated, and so does an IPv6 packet with extension headers before its
+TCP/UDP header (fragments among them).
 Other packets pass untouched. `GET /v1/service` gives each frontend's `flags.type`
 (`ClusterIP`, `ExternalIPs`, `LoadBalancer`, `NodePort`).
 `internalTrafficPolicy: Local` limits a cluster IP to endpoints on this node;
@@ -275,9 +277,7 @@ kernel state on the next pass and reported in health (`services`).
 With `bpf-pin-root` the maps and links are pinned under `<pin root>/socket-lb`.
 A restarted agent reuses the maps (a pinned map with another layout refuses
 startup), attaches its programs, then releases the old links. Without a pin
-root the links detach when the agent exits. Not implemented: forwarding
-external NodePort/LB traffic to another node's backends (SNAT), IPv6 for it,
-Maglev, topology hints, skip-LB for local redirect policy,
+root the links detach when the agent exits. Not implemented: Maglev, DSR, topology hints, skip-LB for local redirect policy,
 socket termination when a backend goes away (an existing connection stays
 on its backend), SCTP, and tc-level LB for traffic that arrives from outside
 the node. `socket-lb-live` (medium test suite) checks the programs on a
