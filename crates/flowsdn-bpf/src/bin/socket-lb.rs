@@ -17,7 +17,7 @@
 
 use aya_ebpf::{
     EbpfContext,
-    bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, bpf_fib_lookup, bpf_sock_addr},
+    bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, __sk_buff, bpf_fib_lookup, bpf_sock_addr},
     helpers::{
         bpf_fib_lookup as fib_lookup, bpf_get_netns_cookie, bpf_get_prandom_u32,
         bpf_get_socket_cookie, bpf_ktime_get_ns, bpf_redirect, bpf_redirect_neigh,
@@ -1227,14 +1227,12 @@ fn snat_forward6(
     ctx: &TcContext,
     tuple: (u8, [u8; 16], [u8; 16], [u8; 2], [u8; 2]),
     flow: Nodeport6Value,
-    route: Option<(i64, bpf_fib_lookup)>,
 ) -> Option<i32> {
     let (proto, client, front, client_port, front_port) = tuple;
     hops_ok(ctx)?;
-    let (result, fib) = match route {
-        Some(route) => route,
-        None => fib6(ctx, proto, flow.other, flow.address, 0),
-    };
+    // Looked up again rather than kept from the first packet's lookup: a
+    // second 64-byte lookup result would not fit the stack.
+    let (result, fib) = fib6(ctx, proto, flow.other, flow.address, 0);
     if !forwarded(result) {
         return None;
     }
@@ -1276,7 +1274,6 @@ fn nodeport6_in(ctx: &TcContext) -> Option<i32> {
         return snat_reply6(ctx, tuple, flow);
     }
     key.direction = FORWARD;
-    let mut route = None;
     // SAFETY: LRU value copied at once, never written through.
     let flow = match unsafe { NODEPORT6.get(&key).copied() } {
         Some(known) => known,
@@ -1310,12 +1307,12 @@ fn nodeport6_in(ctx: &TcContext) -> Option<i32> {
             if forwarded(result) && fib.ifindex == uplink(ctx) {
                 // Another node's backend: SNAT to this node's address there.
                 hops_ok(ctx)?;
-                let (result, fib) = fib6(ctx, proto, [0; 16], backend.0, BPF_FIB_LOOKUP_SRC);
+                let (result, source) = fib6(ctx, proto, [0; 16], backend.0, BPF_FIB_LOOKUP_SRC);
                 if !forwarded(result) {
                     return None;
                 }
                 // SAFETY: the active member after an IPv6 lookup.
-                let nat = ip6_bytes(unsafe { fib.__bindgen_anon_3.ipv6_src });
+                let nat = ip6_bytes(unsafe { source.__bindgen_anon_3.ipv6_src });
                 let reply = Nodeport6Value {
                     address: front,
                     port: front_port,
@@ -1330,7 +1327,6 @@ fn nodeport6_in(ctx: &TcContext) -> Option<i32> {
                 flow.other_port = claim_port6(backend, nat, proto, &reply)?;
                 flow.other = nat;
                 flow.flags = FLOW_SNAT;
-                route = Some((result, fib));
             } else {
                 let reverse = Nodeport6Key {
                     a: backend.0,
@@ -1357,7 +1353,7 @@ fn nodeport6_in(ctx: &TcContext) -> Option<i32> {
         }
     };
     if flow.flags & FLOW_SNAT != 0 {
-        return snat_forward6(ctx, tuple, flow, route);
+        return snat_forward6(ctx, tuple, flow);
     }
     rewrite6(
         ctx,
@@ -1395,21 +1391,40 @@ fn nodeport6_out(ctx: &TcContext) -> Option<()> {
     )
 }
 
+// Each family's path is its own BPF function (a BPF-to-BPF call), so each
+// gets its own stack frame: inlined together they exceed the 512-byte stack.
+#[inline(never)]
+fn ingress4(skb: *mut __sk_buff) -> i32 {
+    nodeport4_in(&TcContext::new(skb)).unwrap_or(TC_ACT_OK)
+}
+#[inline(never)]
+fn ingress6(skb: *mut __sk_buff) -> i32 {
+    nodeport6_in(&TcContext::new(skb)).unwrap_or(TC_ACT_OK)
+}
+#[inline(never)]
+fn egress4(skb: *mut __sk_buff) -> i32 {
+    let _ = nodeport4_out(&TcContext::new(skb));
+    TC_ACT_OK
+}
+#[inline(never)]
+fn egress6(skb: *mut __sk_buff) -> i32 {
+    let _ = nodeport6_out(&TcContext::new(skb));
+    TC_ACT_OK
+}
+
 #[classifier]
 pub fn nodeport_ingress(ctx: TcContext) -> i32 {
     match ctx.load::<[u8; 2]>(12) {
-        Ok(ETH_P_IPV6) => nodeport6_in(&ctx),
-        _ => nodeport4_in(&ctx),
+        Ok(ETH_P_IPV6) => ingress6(ctx.skb.skb),
+        _ => ingress4(ctx.skb.skb),
     }
-    .unwrap_or(TC_ACT_OK)
 }
 #[classifier]
 pub fn nodeport_egress(ctx: TcContext) -> i32 {
-    let _ = match ctx.load::<[u8; 2]>(12) {
-        Ok(ETH_P_IPV6) => nodeport6_out(&ctx),
-        _ => nodeport4_out(&ctx),
-    };
-    TC_ACT_OK
+    match ctx.load::<[u8; 2]>(12) {
+        Ok(ETH_P_IPV6) => egress6(ctx.skb.skb),
+        _ => egress4(ctx.skb.skb),
+    }
 }
 
 // SAFETY: unique immutable ELF license declaration, required by the loader.
