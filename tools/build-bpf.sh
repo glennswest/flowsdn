@@ -22,6 +22,10 @@ nightly=$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$root/crates/flowsdn-bpf/rust-to
 if ! rustup toolchain list | grep -q "^$nightly"; then
     rustup toolchain install "$nightly" --profile minimal --component rust-src
 fi
+# A toolchain installed by someone else (a build VM image, a rust-toolchain.toml
+# auto-install) may lack rust-src, which -Z build-std needs. Adding it is a no-op
+# when present.
+rustup component add rust-src --toolchain "$nightly"
 
 if ! command -v bpf-linker >/dev/null; then
     version=0.11.1

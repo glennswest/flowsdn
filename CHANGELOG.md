@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-07
+- **fix:** `tools/build-bpf.sh` always adds `rust-src` to the pinned nightly: the build VMs already carry that nightly without it, so the install was skipped and the BPF build failed ("library/Cargo.lock does not exist"; medium run 0fd46bb762) (#292).
 - **docs:** removed references to the CoreOS trademark (owner); the Ignition interface name `opt/com.coreos/config` stays where Ignition requires it
 - **fix:** Config catalogue provenance for `bpf-node-map-max` (spec 14) and `kvstore`, `clustermesh-service-v2`, `identity-allocation-mode` (spec 20) points at the declarations' current lines again; the spec 14 (#266) and spec 20 (#307) doc edits had moved them, failing `resolved_provenance_points_to_the_actual_owning_declaration` (#355).
 - **docs:** Comment mining since 2026-10-06: filed #354 (stale latest-golden docs), closed #352 and #349, additions on #338, #292 and #321 (CLAUDE.md).
