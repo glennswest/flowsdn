@@ -228,7 +228,9 @@ fn ip(args: &[&str]) -> Result<()> {
 }
 /// A device's index in this netns (sysfs still shows the original one).
 fn ifindex(name: &str) -> Result<u32> {
-    let out = Command::new("ip").args(["-o", "link", "show", name]).output()?;
+    let out = Command::new("ip")
+        .args(["-o", "link", "show", name])
+        .output()?;
     Ok(String::from_utf8_lossy(&out.stdout)
         .split(':')
         .next()
@@ -247,9 +249,24 @@ fn node() -> Result<u32> {
     ip(&["link", "add", "pod0", "type", "dummy"])?;
     ip(&["link", "set", "pod0", "up"])?;
     ip(&["route", "add", "10.9.0.0/24", "dev", "pod0"])?;
-    ip(&["route", "add", "10.9.1.0/24", "via", "192.0.2.30", "dev", "up0"])?;
     ip(&[
-        "neigh", "replace", "192.0.2.30", "lladdr", "02:00:00:00:00:30", "dev", "up0", "nud",
+        "route",
+        "add",
+        "10.9.1.0/24",
+        "via",
+        "192.0.2.30",
+        "dev",
+        "up0",
+    ])?;
+    ip(&[
+        "neigh",
+        "replace",
+        "192.0.2.30",
+        "lladdr",
+        "02:00:00:00:00:30",
+        "dev",
+        "up0",
+        "nud",
         "permanent",
     ])?;
     ip(&["route", "add", "default", "via", "192.0.2.1", "dev", "up0"])?;

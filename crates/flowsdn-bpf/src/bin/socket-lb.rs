@@ -28,7 +28,7 @@ use aya_ebpf::{
 };
 use flowsdn_bpf_abi::{
     Be16, Be32,
-    affinity::{LbAffinityMatch, LbAffinityVal, Lb4AffinityKey, Lb6AffinityKey, NETNS_COOKIE},
+    affinity::{Lb4AffinityKey, Lb6AffinityKey, LbAffinityMatch, LbAffinityVal, NETNS_COOKIE},
     lb::{
         Ipv4RevnatEntry, Ipv4RevnatTuple, Ipv6RevnatEntry, Ipv6RevnatTuple, Lb4Backend, Lb4Key,
         Lb6Backend, Lb6Key, LbService, service_flags,
@@ -47,8 +47,7 @@ const MAPPED: u32 = u32::from_ne_bytes([0, 0, 0xff, 0xff]);
 static LB4_SERVICES: HashMap<Lb4Key, LbService> =
     HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
 #[map(name = "flowsdn_lb4_backends")]
-static LB4_BACKENDS: HashMap<u32, Lb4Backend> =
-    HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
+static LB4_BACKENDS: HashMap<u32, Lb4Backend> = HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
 #[map(name = "flowsdn_lb4_reverse_sk")]
 static LB4_REVERSE_SK: LruHashMap<Ipv4RevnatTuple, Ipv4RevnatEntry> =
     LruHashMap::with_max_entries(65536, 0);
@@ -56,8 +55,7 @@ static LB4_REVERSE_SK: LruHashMap<Ipv4RevnatTuple, Ipv4RevnatEntry> =
 static LB6_SERVICES: HashMap<Lb6Key, LbService> =
     HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
 #[map(name = "flowsdn_lb6_backends")]
-static LB6_BACKENDS: HashMap<u32, Lb6Backend> =
-    HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
+static LB6_BACKENDS: HashMap<u32, Lb6Backend> = HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
 #[map(name = "flowsdn_lb6_reverse_sk")]
 static LB6_REVERSE_SK: LruHashMap<Ipv6RevnatTuple, Ipv6RevnatEntry> =
     LruHashMap::with_max_entries(65536, 0);
@@ -124,7 +122,12 @@ fn affine(remembered: Option<LbAffinityVal>, rev: u16, timeout: u32, now: u64) -
 }
 
 #[inline(always)]
-fn lookup4(ctx: &SockAddrContext, address: [u8; 4], port: [u8; 2], proto: u8) -> Lookup<Lb4Backend> {
+fn lookup4(
+    ctx: &SockAddrContext,
+    address: [u8; 4],
+    port: [u8; 2],
+    proto: u8,
+) -> Lookup<Lb4Backend> {
     let mut key = Lb4Key {
         address: Be32(address),
         dport: Be16(port),
@@ -150,7 +153,12 @@ fn lookup4(ctx: &SockAddrContext, address: [u8; 4], port: [u8; 2], proto: u8) ->
     let time = now();
     let remembered = if sticky {
         // SAFETY: LRU value copied at once, never written through.
-        affine(unsafe { LB4_AFFINITY.get(&affinity).copied() }, rev, service.affinity_seconds(), time)
+        affine(
+            unsafe { LB4_AFFINITY.get(&affinity).copied() },
+            rev,
+            service.affinity_seconds(),
+            time,
+        )
     } else {
         None
     };
@@ -185,7 +193,12 @@ fn lookup4(ctx: &SockAddrContext, address: [u8; 4], port: [u8; 2], proto: u8) ->
 }
 
 #[inline(always)]
-fn lookup6(ctx: &SockAddrContext, address: [u8; 16], port: [u8; 2], proto: u8) -> Lookup<Lb6Backend> {
+fn lookup6(
+    ctx: &SockAddrContext,
+    address: [u8; 16],
+    port: [u8; 2],
+    proto: u8,
+) -> Lookup<Lb6Backend> {
     let mut key = Lb6Key {
         address,
         dport: Be16(port),
@@ -211,7 +224,12 @@ fn lookup6(ctx: &SockAddrContext, address: [u8; 16], port: [u8; 2], proto: u8) -
     let time = now();
     let remembered = if sticky {
         // SAFETY: LRU value copied at once, never written through.
-        affine(unsafe { LB6_AFFINITY.get(&affinity).copied() }, rev, service.affinity_seconds(), time)
+        affine(
+            unsafe { LB6_AFFINITY.get(&affinity).copied() },
+            rev,
+            service.affinity_seconds(),
+            time,
+        )
     } else {
         None
     };
@@ -276,7 +294,24 @@ fn ip6_bytes(words: [u32; 4]) -> [u8; 16] {
 }
 #[inline(always)]
 fn ip6_words(bytes: [u8; 16]) -> [u32; 4] {
-    let [a0, a1, a2, a3, b0, b1, b2, b3, c0, c1, c2, c3, d0, d1, d2, d3] = bytes;
+    let [
+        a0,
+        a1,
+        a2,
+        a3,
+        b0,
+        b1,
+        b2,
+        b3,
+        c0,
+        c1,
+        c2,
+        c3,
+        d0,
+        d1,
+        d2,
+        d3,
+    ] = bytes;
     [
         u32::from_ne_bytes([a0, a1, a2, a3]),
         u32::from_ne_bytes([b0, b1, b2, b3]),
@@ -545,8 +580,7 @@ pub struct Nodeport4Value {
     pad2: [u8; 2],
 }
 #[map(name = "flowsdn_nodeport4_nat")]
-static NODEPORT4: LruHashMap<Nodeport4Key, Nodeport4Value> =
-    LruHashMap::with_max_entries(65536, 0);
+static NODEPORT4: LruHashMap<Nodeport4Key, Nodeport4Value> = LruHashMap::with_max_entries(65536, 0);
 
 const ETH_P_IPV4: [u8; 2] = [0x08, 0x00];
 const BPF_F_PSEUDO_HDR: u64 = 1 << 4;
@@ -579,7 +613,9 @@ fn tuple4(ctx: &TcContext) -> Option<(usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8;
     if proto != 6 && proto != 17 {
         return None;
     }
-    let l4 = usize::from(version_ihl & 15).checked_mul(4)?.checked_add(14)?;
+    let l4 = usize::from(version_ihl & 15)
+        .checked_mul(4)?
+        .checked_add(14)?;
     let [s0, s1, d0, d1] = ctx.load::<[u8; 4]>(l4).ok()?;
     Some((
         l4,
@@ -648,7 +684,13 @@ fn uplink(ctx: &TcContext) -> u32 {
 /// [`BPF_FIB_LOOKUP_SRC`], the source address). Negative results are errors
 /// (an unknown flag on a kernel before 6.7).
 #[inline(always)]
-fn fib4(ctx: &TcContext, proto: u8, src: [u8; 4], dst: [u8; 4], flags: u32) -> (i64, bpf_fib_lookup) {
+fn fib4(
+    ctx: &TcContext,
+    proto: u8,
+    src: [u8; 4],
+    dst: [u8; 4],
+    flags: u32,
+) -> (i64, bpf_fib_lookup) {
     // SAFETY: the generated C struct contains only integers, integer arrays
     // and unions of those types; all-zero is a valid value of each, and the
     // inactive union bytes are initialized before the helper reads them.

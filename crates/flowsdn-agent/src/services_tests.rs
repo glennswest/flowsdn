@@ -281,7 +281,11 @@ fn node_ports_external_and_load_balancer_addresses_and_traffic_policies() {
     };
     let out = frontends(&[local], std::slice::from_ref(&slice), "n1", &nodes);
     // externalTrafficPolicy Local: the uplink copy has this node's only.
-    for (address, port) in [("192.168.0.2", 30080), ("198.51.100.7", 80), ("192.0.2.10", 80)] {
+    for (address, port) in [
+        ("192.168.0.2", 30080),
+        ("198.51.100.7", 80),
+        ("192.0.2.10", 80),
+    ] {
         let uplink = out
             .iter()
             .find(|f| {
