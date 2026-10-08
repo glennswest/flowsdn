@@ -23,7 +23,7 @@ use aya_ebpf::{
         bpf_get_socket_cookie, bpf_ktime_get_ns, bpf_redirect, bpf_redirect_neigh,
     },
     macros::{cgroup_sock_addr, classifier, map},
-    maps::{HashMap, LruHashMap},
+    maps::{HashMap, LruHashMap, PerCpuArray},
     programs::{SockAddrContext, TcContext},
 };
 use flowsdn_bpf_abi::{
@@ -1108,7 +1108,15 @@ fn rewrite6(
     Some(())
 }
 
-/// [`fib4`] for IPv6.
+/// The IPv6 FIB lookup's parameters: per CPU rather than on the stack, which
+/// the IPv6 path cannot spare 64 bytes of. A tc program runs to completion on
+/// its CPU, so one slot serves every lookup of an invocation; each result is
+/// read before the next lookup.
+#[map(name = "flowsdn_nodeport6_fib")]
+static FIB6: PerCpuArray<bpf_fib_lookup> = PerCpuArray::with_max_entries(1, 0);
+
+/// [`fib4`] for IPv6, in the [`FIB6`] slot: (result, the slot). `None` only
+/// if the slot is missing.
 #[inline(always)]
 fn fib6(
     ctx: &TcContext,
@@ -1116,39 +1124,48 @@ fn fib6(
     src: [u8; 16],
     dst: [u8; 16],
     flags: u32,
-) -> (i64, bpf_fib_lookup) {
-    // SAFETY: as in fib4.
-    let mut fib: bpf_fib_lookup = unsafe { core::mem::zeroed() };
-    fib.family = 10; // AF_INET6
-    fib.l4_protocol = proto;
-    fib.ifindex = uplink(ctx);
-    fib.__bindgen_anon_3.ipv6_src = ip6_words(src);
-    fib.__bindgen_anon_4.ipv6_dst = ip6_words(dst);
-    // SAFETY: as in fib4.
+) -> Option<(i64, *const bpf_fib_lookup)> {
+    let fib = FIB6.get_ptr_mut(0)?;
+    // SAFETY: the map value of this CPU, valid for the whole invocation and
+    // used by nothing else meanwhile; all-zero is a valid bpf_fib_lookup (see
+    // fib4). No reference to it outlives this function.
+    unsafe {
+        core::ptr::write_bytes(fib, 0, 1);
+        (*fib).family = 10; // AF_INET6
+        (*fib).l4_protocol = proto;
+        (*fib).ifindex = uplink(ctx);
+        (*fib).__bindgen_anon_3.ipv6_src = ip6_words(src);
+        (*fib).__bindgen_anon_4.ipv6_dst = ip6_words(dst);
+    }
+    // SAFETY: `fib` is the helper's ABI type at its real size in map memory;
+    // the helper does not keep the pointer.
     let result = unsafe {
         fib_lookup(
             ctx.as_ptr(),
-            core::ptr::from_mut(&mut fib),
+            fib,
             core::mem::size_of::<bpf_fib_lookup>() as i32,
             flags,
         )
     };
-    (result, fib)
+    Some((result, fib))
 }
 
 /// [`redirect`] for IPv6: the hop limit is decremented (no header checksum).
+/// `fib` is the [`FIB6`] slot of the lookup that routed the packet.
 #[inline(always)]
-fn redirect6(ctx: &TcContext, result: i64, fib: &bpf_fib_lookup) -> Option<i32> {
+fn redirect6(ctx: &TcContext, result: i64, fib: *const bpf_fib_lookup) -> Option<i32> {
     let hops = ctx.load::<u8>(IP6_HOPS).ok()?.checked_sub(1)?;
     ctx.store(IP6_HOPS, &hops, 0).ok()?;
+    // SAFETY: the per-CPU slot fib6 just filled; plain field reads.
+    let (ifindex, dmac, smac) = unsafe { ((*fib).ifindex, (*fib).dmac, (*fib).smac) };
     if result == FIB_SUCCESS {
-        ctx.store(0, &fib.dmac, 0).ok()?;
-        ctx.store(6, &fib.smac, 0).ok()?;
+        ctx.store(0, &dmac, 0).ok()?;
+        ctx.store(6, &smac, 0).ok()?;
         // SAFETY: plain helper call with scalar arguments.
-        Some(unsafe { bpf_redirect(fib.ifindex, 0) } as i32)
+        Some(unsafe { bpf_redirect(ifindex, 0) } as i32)
     } else {
         // SAFETY: as in redirect.
-        Some(unsafe { bpf_redirect_neigh(fib.ifindex, core::ptr::null_mut(), 0, 0) } as i32)
+        Some(unsafe { bpf_redirect_neigh(ifindex, core::ptr::null_mut(), 0, 0) } as i32)
     }
 }
 
@@ -1189,16 +1206,24 @@ fn claim_port6(
     None
 }
 
+/// An IPv6 frame's TCP/UDP 5-tuple: (proto, src, dst, sport, dport).
+type Tuple6 = (u8, [u8; 16], [u8; 16], [u8; 2], [u8; 2]);
+
+// The IPv6 path is split into BPF functions (BPF-to-BPF calls), each with
+// its own stack frame: inlined into one, its keys, values and addresses
+// exceed the 512-byte frame.
+
 /// [`snat_reply4`] for IPv6.
+#[inline(never)]
+fn snat_reply6(skb: *mut __sk_buff, tuple: &Tuple6, flow: &Nodeport6Value) -> i32 {
+    let ctx = TcContext::new(skb);
+    snat_reply6_in(&ctx, tuple, flow).unwrap_or(TC_ACT_OK)
+}
 #[inline(always)]
-fn snat_reply6(
-    ctx: &TcContext,
-    tuple: (u8, [u8; 16], [u8; 16], [u8; 2], [u8; 2]),
-    flow: Nodeport6Value,
-) -> Option<i32> {
-    let (proto, backend, nat, backend_port, nat_port) = tuple;
+fn snat_reply6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Option<i32> {
+    let (proto, backend, nat, backend_port, nat_port) = *tuple;
     hops_ok(ctx)?;
-    let (result, fib) = fib6(ctx, proto, flow.address, flow.other, 0);
+    let (result, fib) = fib6(ctx, proto, flow.address, flow.other, 0)?;
     if !forwarded(result) {
         return None;
     }
@@ -1218,21 +1243,21 @@ fn snat_reply6(
         (nat, nat_port),
         (flow.other, flow.other_port),
     )?;
-    redirect6(ctx, result, &fib)
+    redirect6(ctx, result, fib)
 }
 
-/// [`snat_forward4`] for IPv6.
+/// [`snat_forward4`] for IPv6. The route is looked up again rather than kept
+/// from a new flow's lookup.
+#[inline(never)]
+fn snat_forward6(skb: *mut __sk_buff, tuple: &Tuple6, flow: &Nodeport6Value) -> i32 {
+    let ctx = TcContext::new(skb);
+    snat_forward6_in(&ctx, tuple, flow).unwrap_or(TC_ACT_OK)
+}
 #[inline(always)]
-fn snat_forward6(
-    ctx: &TcContext,
-    tuple: (u8, [u8; 16], [u8; 16], [u8; 2], [u8; 2]),
-    flow: Nodeport6Value,
-) -> Option<i32> {
-    let (proto, client, front, client_port, front_port) = tuple;
+fn snat_forward6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Option<i32> {
+    let (proto, client, front, client_port, front_port) = *tuple;
     hops_ok(ctx)?;
-    // Looked up again rather than kept from the first packet's lookup: a
-    // second 64-byte lookup result would not fit the stack.
-    let (result, fib) = fib6(ctx, proto, flow.other, flow.address, 0);
+    let (result, fib) = fib6(ctx, proto, flow.other, flow.address, 0)?;
     if !forwarded(result) {
         return None;
     }
@@ -1252,7 +1277,94 @@ fn snat_forward6(
         (client, client_port),
         (flow.other, flow.other_port),
     )?;
-    redirect6(ctx, result, &fib)
+    redirect6(ctx, result, fib)
+}
+
+/// A new IPv6 flow to a node-local frontend: pick a backend and, for one on
+/// another node, a NAT port; record both directions in [`NODEPORT6`] and
+/// return the forward entry (address 0 when the frame is not ours).
+#[inline(never)]
+fn new_flow6(skb: *mut __sk_buff, tuple: &Tuple6, out: &mut Nodeport6Value) -> i32 {
+    let ctx = TcContext::new(skb);
+    match new_flow6_in(&ctx, tuple, out) {
+        Some(()) => 1,
+        None => 0,
+    }
+}
+#[inline(always)]
+fn new_flow6_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> Option<()> {
+    let (proto, client, front, client_port, front_port) = *tuple;
+    let mut service_key = Lb6Key {
+        address: front,
+        dport: Be16(front_port),
+        backend_slot: 0,
+        proto,
+        scope: 1,
+        pad: [0; 2],
+    };
+    // SAFETY: see lookup6.
+    let service = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
+    service_key.backend_slot = slot(service.count)?;
+    // SAFETY: see lookup6.
+    let entry = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
+    // SAFETY: see lookup6.
+    let chosen = unsafe { LB6_BACKENDS.get(&entry.backend_id()).copied() }?;
+    let backend = (chosen.address, chosen.port.0);
+    flow.address = backend.0;
+    flow.port = backend.1;
+    flow.flags = 0;
+    let (result, fib) = fib6(ctx, proto, client, backend.0, 0)?;
+    // SAFETY: the per-CPU slot fib6 just filled; a plain field read.
+    let out_device = unsafe { (*fib).ifindex };
+    let key = Nodeport6Key {
+        a: client,
+        b: front,
+        ap: client_port,
+        bp: front_port,
+        proto,
+        direction: FORWARD,
+        pad: [0; 2],
+    };
+    let mut other = Nodeport6Value {
+        address: front,
+        port: front_port,
+        flags: 0,
+        pad: 0,
+        other: [0; 16],
+        other_port: [0; 2],
+        pad2: [0; 2],
+    };
+    if forwarded(result) && out_device == uplink(ctx) {
+        // Another node's backend: SNAT to this node's address there.
+        hops_ok(ctx)?;
+        let (result, source) = fib6(ctx, proto, [0; 16], backend.0, BPF_FIB_LOOKUP_SRC)?;
+        if !forwarded(result) {
+            return None;
+        }
+        // SAFETY: the per-CPU slot just filled; the active member after an
+        // IPv6 lookup.
+        let nat = ip6_bytes(unsafe { (*source).__bindgen_anon_3.ipv6_src });
+        other.other = client;
+        other.other_port = client_port;
+        // The reply entry first: a reply must never find a flow it cannot
+        // undo.
+        flow.other_port = claim_port6(backend, nat, proto, &other)?;
+        flow.other = nat;
+        flow.flags = FLOW_SNAT;
+    } else {
+        let reverse = Nodeport6Key {
+            a: backend.0,
+            b: client,
+            ap: backend.1,
+            bp: client_port,
+            proto,
+            direction: REPLY,
+            pad: [0; 2],
+        };
+        NODEPORT6.insert(&reverse, &other, 0).ok()?;
+    }
+    NODEPORT6.insert(&key, flow, 0).ok()?;
+    Some(())
 }
 
 /// [`nodeport4_in`] for IPv6.
@@ -1271,89 +1383,30 @@ fn nodeport6_in(ctx: &TcContext) -> Option<i32> {
     };
     // SAFETY: LRU value copied at once, never written through.
     if let Some(flow) = unsafe { NODEPORT6.get(&key).copied() } {
-        return snat_reply6(ctx, tuple, flow);
+        return Some(snat_reply6(ctx.skb.skb, &tuple, &flow));
     }
     key.direction = FORWARD;
     // SAFETY: LRU value copied at once, never written through.
     let flow = match unsafe { NODEPORT6.get(&key).copied() } {
         Some(known) => known,
         None => {
-            let mut service_key = Lb6Key {
-                address: front,
-                dport: Be16(front_port),
-                backend_slot: 0,
-                proto,
-                scope: 1,
-                pad: [0; 2],
-            };
-            // SAFETY: see lookup6.
-            let service = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
-            service_key.backend_slot = slot(service.count)?;
-            // SAFETY: see lookup6.
-            let entry = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
-            // SAFETY: see lookup6.
-            let chosen = unsafe { LB6_BACKENDS.get(&entry.backend_id()).copied() }?;
-            let backend = (chosen.address, chosen.port.0);
-            let (result, fib) = fib6(ctx, proto, client, backend.0, 0);
             let mut flow = Nodeport6Value {
-                address: backend.0,
-                port: backend.1,
+                address: [0; 16],
+                port: [0; 2],
                 flags: 0,
                 pad: 0,
                 other: [0; 16],
                 other_port: [0; 2],
                 pad2: [0; 2],
             };
-            if forwarded(result) && fib.ifindex == uplink(ctx) {
-                // Another node's backend: SNAT to this node's address there.
-                hops_ok(ctx)?;
-                let (result, source) = fib6(ctx, proto, [0; 16], backend.0, BPF_FIB_LOOKUP_SRC);
-                if !forwarded(result) {
-                    return None;
-                }
-                // SAFETY: the active member after an IPv6 lookup.
-                let nat = ip6_bytes(unsafe { source.__bindgen_anon_3.ipv6_src });
-                let reply = Nodeport6Value {
-                    address: front,
-                    port: front_port,
-                    flags: 0,
-                    pad: 0,
-                    other: client,
-                    other_port: client_port,
-                    pad2: [0; 2],
-                };
-                // The reply entry first: a reply must never find a flow it
-                // cannot undo.
-                flow.other_port = claim_port6(backend, nat, proto, &reply)?;
-                flow.other = nat;
-                flow.flags = FLOW_SNAT;
-            } else {
-                let reverse = Nodeport6Key {
-                    a: backend.0,
-                    b: client,
-                    ap: backend.1,
-                    bp: client_port,
-                    proto,
-                    direction: REPLY,
-                    pad: [0; 2],
-                };
-                let front_value = Nodeport6Value {
-                    address: front,
-                    port: front_port,
-                    flags: 0,
-                    pad: 0,
-                    other: [0; 16],
-                    other_port: [0; 2],
-                    pad2: [0; 2],
-                };
-                NODEPORT6.insert(&reverse, &front_value, 0).ok()?;
+            if new_flow6(ctx.skb.skb, &tuple, &mut flow) == 0 {
+                return None;
             }
-            NODEPORT6.insert(&key, &flow, 0).ok()?;
             flow
         }
     };
     if flow.flags & FLOW_SNAT != 0 {
-        return snat_forward6(ctx, tuple, flow);
+        return Some(snat_forward6(ctx.skb.skb, &tuple, &flow));
     }
     rewrite6(
         ctx,
