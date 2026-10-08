@@ -285,6 +285,10 @@ cannot deliver routed packets to an IPv4 pod).
 - [x] #292 stays open (milestone 2 not delivered); status comment; proposed after #291.
 - [ ] Live check on a flowsdn node once stormcos ships kube-proxy: a pod resolves kubernetes.default via 10.96.0.10 and reaches 10.96.0.1:443.
 
+### Comment mining — 2026-10-08 (since 2026-10-07)
+
+- [x] Read the comments on the 30 issues updated since 2026-10-07. Filed #357 (P2: long run db2ce13b29 errored, #303 closed waiting for it) and #358 (P3: catalogue provenance by line number, #355). Closed #356 (fixed at 53bffc7). Added: #354 (golden cc0835c8a1db), #292 and #321 (stormcos#310/#309 shipped in 11.95), stormcentral#512 (pvetest2 seal failure), stormcentral#543 (BPF object via base64 log). No fixes.
+
 ### Comment mining — 2026-10-07 (since 2026-10-06)
 
 - [x] Read 66 comments on the 46 issues updated since 2026-10-06. Filed #354 (P3: docs name golden a7ee3f63195b as latest; pre-4b40a980ad16 goldens' socket LB can't attach on 7.2). Closed #352 (owner answered on #266/#281) and #349 (fixed in ab652c4). Added: #338 (stormcentral#376 closed; waits on stormcos#303), #292 (stormcentral#107/#517 closed, builds may work), #321 (stormpump#102 fixed in golden-stormpump-236d2ed1dadd, stormcos#309). No fixes.
