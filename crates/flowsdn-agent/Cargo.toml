@@ -23,6 +23,7 @@ futures = { version = "=0.3.31", optional = true }
 http = { version = "=1.3.1", optional = true }
 flowsdn-health = { path = "../flowsdn-health", version = "=0.14.0" }
 flowsdn-hubble = { path = "../flowsdn-hubble", version = "=0.14.0" }
+flowsdn-identity = { path = "../flowsdn-identity", version = "=0.14.0", features = ["filter"] }
 serde_json.workspace = true
 nix = { version = "=0.30.1", default-features = false, features = ["fs", "socket"] }
 httparse = "=1.10.1"

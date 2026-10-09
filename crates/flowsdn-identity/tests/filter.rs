@@ -131,7 +131,7 @@ fn default_includes_are_exceptions_not_a_whitelist() {
         "app",
         "team",
         "io.kubernetes.pod.namespace",
-        "io.cilium.k8s.namespace.labels.team",
+        "io.flowsdn.k8s.namespace.labels.team",
         "app.kubernetes.io/name",
     ] {
         assert!(filter.retains(&label("k8s", key)), "{key}");

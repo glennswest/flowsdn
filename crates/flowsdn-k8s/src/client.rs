@@ -1,4 +1,4 @@
-//! Bounded JSON Node/Pod transport, and single JSON requests (`send_json`).
+//! Bounded JSON ListWatch transport, and single JSON requests (`send_json`).
 //! Callers own relist, backoff and publication.
 //! TLS/authentication use kube; no informer or runtime controller is implied.
 use crate::{Error, watch::Scope};
@@ -75,6 +75,8 @@ pub fn request_uri(scope: &Scope, query: &Query<'_>) -> Result<String, Error> {
         Scope::LocalPods { .. } | Scope::Pods => "/api/v1/pods",
         Scope::Services => "/api/v1/services",
         Scope::EndpointSlices => "/apis/discovery.k8s.io/v1/endpointslices",
+        Scope::Namespaces => "/api/v1/namespaces",
+        Scope::Identities => IDENTITIES_PATH,
     };
     let mut params = Vec::new();
     if let Some(selector) = scope.field_selector() {
@@ -118,6 +120,9 @@ fn encode(value: &str) -> String {
     }
     output
 }
+
+/// The FlowsdnIdentity collection; an object is `<path>/<id>`.
+pub const IDENTITIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnidentities";
 
 pub struct JsonClient {
     client: Client,

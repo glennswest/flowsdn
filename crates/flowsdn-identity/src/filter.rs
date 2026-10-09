@@ -81,10 +81,10 @@ fn re2_ascii_classes(pattern: &str) -> Result<String, FilterError> {
 pub const DEFAULT_ENTRIES: [&str; 21] = [
     "reserved:.*",
     r"io\.kubernetes\.pod\.namespace",
-    r"io\.cilium\.k8s\.namespace\.labels",
+    r"io\.flowsdn\.k8s\.namespace\.labels",
     r"app\.kubernetes\.io",
-    r"io\.cilium\.k8s\.policy\.cluster",
-    r"io\.cilium\.k8s\.policy\.serviceaccount",
+    r"io\.flowsdn\.k8s\.policy\.cluster",
+    r"io\.flowsdn\.k8s\.policy\.serviceaccount",
     r"!io\.kubernetes",
     r"!kubernetes\.io",
     r"!statefulset\.kubernetes\.io/pod-name",

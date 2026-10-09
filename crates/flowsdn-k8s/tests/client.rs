@@ -24,6 +24,18 @@ fn service_and_endpoint_slice_paths() {
 }
 
 #[test]
+fn namespace_and_identity_paths() {
+    assert_eq!(
+        request_uri(&Scope::Namespaces, &Query::default()).expect("URI"),
+        "/api/v1/namespaces"
+    );
+    assert_eq!(
+        request_uri(&Scope::Identities, &Query::default()).expect("URI"),
+        "/apis/flowsdn.io/v1alpha1/flowsdnidentities"
+    );
+}
+
+#[test]
 fn request_paths_and_opaque_values_are_encoded() {
     assert_eq!(
         request_uri(&Scope::Nodes, &Query::default()).expect("URI"),

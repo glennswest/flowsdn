@@ -15,8 +15,8 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
-/// The reserved identities an IP cache entry can carry before cluster identity
-/// allocation exists (spec 03 §4.4): this node and other nodes.
+/// The reserved identities of node addresses (spec 03 §4.4): this node and
+/// other nodes.
 pub const IDENTITY_HOST: u32 = 1;
 pub const IDENTITY_REMOTE_NODE: u32 = 6;
 /// `ipv6-cluster-alloc-cidr` default `f00d::/64` (spec 07 §3.4).
@@ -42,6 +42,12 @@ pub struct Settings {
     /// cluster (#292), default on with `service-lb`: tc programs on the
     /// interfaces holding this node's InternalIPs.
     pub node_port: bool,
+    /// Cluster identity allocation (spec 03 §3.3, #291), default on: watch
+    /// Namespaces and FlowsdnIdentity objects and hold an identity for each
+    /// local Pod's labels.
+    pub identity_allocation: bool,
+    /// `io.flowsdn.k8s.policy.cluster` on every Pod identity; `default`.
+    pub cluster_name: String,
 }
 /// Where a DaemonSet mounts the host's cgroup v2 root.
 pub const DEFAULT_CGROUP_ROOT: &str = "/sys/fs/cgroup";
@@ -99,6 +105,20 @@ impl Settings {
         if !cgroup_root.is_absolute() {
             return Err("kubernetes.cgroup-root must be an absolute path".into());
         }
+        // spec 03 §4.5: ^([a-z0-9][-a-z0-9]*)?[a-z0-9]$, at most 32 bytes.
+        let mut cluster_name = text("cluster-name")?;
+        if cluster_name.is_empty() {
+            cluster_name = "default".into();
+        }
+        if cluster_name.len() > 32
+            || cluster_name.starts_with('-')
+            || cluster_name.ends_with('-')
+            || !cluster_name
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        {
+            return Err("kubernetes.cluster-name must be a DNS label of at most 32 bytes".into());
+        }
         Ok(Some(Self {
             node_name,
             kubeconfig: (!kubeconfig.is_empty()).then(|| PathBuf::from(kubeconfig)),
@@ -106,6 +126,8 @@ impl Settings {
             skip_unreachable: flag("direct-routing-skip-unreachable", false)?,
             service_lb: flag("service-lb", true)?,
             node_port: flag("node-port", true)?,
+            identity_allocation: flag("identity-allocation", true)?,
+            cluster_name,
             cgroup_root,
         }))
     }
@@ -125,6 +147,8 @@ pub struct PodInfo {
     pub host_network: bool,
     pub ips: Vec<IpAddr>,
     pub labels: BTreeMap<String, String>,
+    /// `spec.serviceAccountName` (part of the identity labels).
+    pub service_account: String,
     pub uid: String,
     /// The controlling workload (a Deployment for its ReplicaSets), #328.
     pub workload: Option<Workload>,
@@ -342,6 +366,21 @@ pub struct View {
     /// nothing is written before the API thread first publishes them.
     pub endpoints: Vec<LocalEndpoint>,
     pub endpoints_published: bool,
+    /// Cluster identities (spec 03 §3.3): allocation is on.
+    pub identity: bool,
+    pub cluster_name: String,
+    /// Namespace name -> its labels (part of Pod identities).
+    pub namespaces: BTreeMap<String, BTreeMap<String, String>>,
+    pub namespaces_synced: bool,
+    pub identity_objects: Vec<crate::identity::Object>,
+    pub identities_synced: bool,
+    /// (namespace, name) -> the Pod's identity: the one this node holds for a
+    /// local Pod, else the oldest object with its labels (or well-known).
+    pub pod_identities: BTreeMap<(String, String), u32>,
+    /// Identity -> its labels: every FlowsdnIdentity plus well-known ones in use.
+    pub identities: BTreeMap<u32, Vec<String>>,
+    /// Local label sets still without an identity.
+    pub identities_waiting: usize,
     /// The latest failure of each controller part (`nodes`, `pods`, `routes`).
     pub errors: BTreeMap<String, String>,
 }
@@ -352,12 +391,55 @@ impl View {
             .find(|n| n.name == node)
             .and_then(|n| n.internal_ips.iter().find(|ip| ip.is_ipv6() == v6).copied())
     }
+    /// The identity labels of every Pod that is not host-network, with
+    /// whether it is on this node; none before the Pod and Namespace lists
+    /// are complete (a missing Namespace would change the labels).
+    pub fn pod_label_sets(
+        &self,
+        filter: &flowsdn_identity::filter::LabelFilter,
+    ) -> Vec<((String, String), bool, flowsdn_identity::labels::Labels)> {
+        if !(self.pods_synced && self.namespaces_synced) {
+            return Vec::new();
+        }
+        self.pods
+            .iter()
+            .filter(|pod| !pod.host_network)
+            .map(|pod| {
+                let labels = crate::identity::pod_labels(
+                    &pod.namespace,
+                    &pod.labels,
+                    self.namespaces.get(&pod.namespace),
+                    &pod.service_account,
+                    &self.cluster_name,
+                    filter,
+                );
+                (
+                    (pod.namespace.clone(), pod.name.clone()),
+                    pod.node == self.local_node,
+                    labels,
+                )
+            })
+            .collect()
+    }
+    pub fn pod_identity(&self, namespace: &str, name: &str) -> Option<u32> {
+        self.pod_identities
+            .get(&(namespace.to_owned(), name.to_owned()))
+            .copied()
+    }
+    /// `GET /v1/identity` (reference `Identity` list): id and labels.
+    pub fn identity_list(&self) -> Value {
+        Value::Array(
+            self.identities
+                .iter()
+                .map(|(id, labels)| json!({"id":id,"labels":labels}))
+                .collect(),
+        )
+    }
     /// `GET /v1/ip` (reference `IPListEntry`): node InternalIPs with the
     /// reserved host/remote-node identities, and every Pod IP of a Pod that is
-    /// not host-network. Pod entries carry no `identity` until cluster identity
-    /// allocation exists; `labels` is a flowsdn extension with the Pod's
-    /// `k8s:` source labels (spec 03 §4.2), the identity input, and the Pod
-    /// metadata carries its UID, containers and workload (#328).
+    /// not host-network, with its identity once it has one. `labels` is a
+    /// flowsdn extension with the Pod's `k8s:` source labels (spec 03 §4.2),
+    /// and the Pod metadata carries its UID, containers and workload (#328).
     pub fn ip_list(&self) -> Value {
         let mut rows = BTreeMap::new();
         for node in &self.nodes {
@@ -386,10 +468,13 @@ impl View {
                     );
                 }
                 let mut row = json!({"cidr":host_cidr(*ip),"labels":labels,"metadata":metadata});
-                if let (Some(host), Some(object)) =
-                    (self.host_ip(&pod.node, ip.is_ipv6()), row.as_object_mut())
-                {
-                    object.insert("hostIP".into(), json!(host.to_string()));
+                if let Some(object) = row.as_object_mut() {
+                    if let Some(host) = self.host_ip(&pod.node, ip.is_ipv6()) {
+                        object.insert("hostIP".into(), json!(host.to_string()));
+                    }
+                    if let Some(identity) = self.pod_identity(&pod.namespace, &pod.name) {
+                        object.insert("identity".into(), json!(identity));
+                    }
                 }
                 rows.entry(*ip).or_insert(row);
             }
@@ -490,23 +575,34 @@ impl View {
             .collect();
         let synced = self.nodes_synced
             && self.pods_synced
-            && (!self.service_lb || (self.services_synced && self.slices_synced));
+            && (!self.service_lb || (self.services_synced && self.slices_synced))
+            && (!self.identity || (self.namespaces_synced && self.identities_synced));
         let (state, msg) = match (errors.is_empty(), synced) {
             (false, _) => ("Warning", errors.join("; ")),
             (true, false) => ("Warning", "waiting for the initial Kubernetes lists".into()),
             (true, true) => (
                 "Ok",
                 format!(
-                    "{} nodes, {} pods, {} service frontends ({} programmed)",
+                    "{} nodes, {} pods, {} service frontends ({} programmed){}",
                     self.nodes.len(),
                     self.pods.len(),
                     self.frontends.len(),
-                    self.service_ids.len()
+                    self.service_ids.len(),
+                    if self.identity {
+                        format!(
+                            ", {} identities ({} local label sets waiting)",
+                            self.identities.len(),
+                            self.identities_waiting
+                        )
+                    } else {
+                        String::new()
+                    }
                 ),
             ),
         };
         json!({"state":state,"msg":msg,"node-name":self.local_node,
-            "auto-direct-node-routes":self.direct_routes,"service-lb":self.service_lb})
+            "auto-direct-node-routes":self.direct_routes,"service-lb":self.service_lb,
+            "identity-allocation":self.identity})
     }
 }
 

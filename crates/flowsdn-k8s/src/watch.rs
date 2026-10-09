@@ -31,6 +31,8 @@ pub struct Pod {
     pub host_network: bool,
     pub pod_ips: Vec<IpAddr>,
     pub labels: BTreeMap<String, String>,
+    /// `spec.serviceAccountName`; empty when absent.
+    pub service_account: String,
     /// `metadata.ownerReferences` (the workload, #328).
     pub owners: Vec<OwnerReference>,
     /// `status.containerStatuses` then `status.initContainerStatuses`.
@@ -113,12 +115,34 @@ pub struct EndpointSlice {
     pub endpoints: Vec<Endpoint>,
     pub ports: Vec<EndpointPort>,
 }
+/// A Namespace's labels: they are part of its Pods' identities (spec 03 §3.1).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Namespace {
+    pub metadata: Metadata,
+    pub labels: BTreeMap<String, String>,
+}
+/// The `io.flowsdn.heartbeat` annotation the operator's identity GC sets on
+/// an identity it thinks is unused; an agent that holds it removes it.
+pub const HEARTBEAT_ANNOTATION: &str = "io.flowsdn.heartbeat";
+/// A `flowsdn.io/v1alpha1` FlowsdnIdentity (spec 03 §4.3): the name is the
+/// numeric identity, `security-labels` maps `<source>:<key>` to the value.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Identity {
+    pub metadata: Metadata,
+    pub id: u32,
+    pub security_labels: BTreeMap<String, String>,
+    /// `metadata.creationTimestamp` (RFC 3339, so text order is time order).
+    pub created: String,
+    pub heartbeat: bool,
+}
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Resource {
     Node(Node),
     Pod(Pod),
     Service(Service),
     EndpointSlice(EndpointSlice),
+    Namespace(Namespace),
+    Identity(Identity),
 }
 impl Resource {
     pub fn metadata(&self) -> &Metadata {
@@ -127,6 +151,8 @@ impl Resource {
             Self::Pod(p) => &p.metadata,
             Self::Service(s) => &s.metadata,
             Self::EndpointSlice(e) => &e.metadata,
+            Self::Namespace(n) => &n.metadata,
+            Self::Identity(i) => &i.metadata,
         }
     }
 }
@@ -148,6 +174,10 @@ pub enum Scope {
     Services,
     /// Every `discovery.k8s.io/v1` EndpointSlice (socket LB backends).
     EndpointSlices,
+    /// Every Namespace (its labels are part of Pod identities).
+    Namespaces,
+    /// Every `flowsdn.io/v1alpha1` FlowsdnIdentity (identity allocation).
+    Identities,
 }
 impl Scope {
     pub fn field_selector(&self) -> Option<String> {
@@ -157,7 +187,7 @@ impl Scope {
         }
     }
     pub fn namespaced(&self) -> bool {
-        !matches!(self, Self::Nodes)
+        !matches!(self, Self::Nodes | Self::Namespaces | Self::Identities)
     }
     pub fn parse(&self, value: &Value) -> Result<Resource, Error> {
         let namespaced = self.namespaced();
@@ -167,6 +197,8 @@ impl Scope {
                 Self::LocalPods { .. } | Self::Pods => "Pod",
                 Self::Services => "Service",
                 Self::EndpointSlices => "EndpointSlice",
+                Self::Namespaces => "Namespace",
+                Self::Identities => "FlowsdnIdentity",
             };
             if text(kind)? != expected {
                 return Err(error("unexpected resource kind"));
@@ -230,18 +262,13 @@ impl Scope {
                         ips.push(parse_ip(ip)?);
                     }
                 }
-                let mut labels = BTreeMap::new();
-                if let Some(raw) = value.pointer("/metadata/labels").filter(|v| !v.is_null()) {
-                    for (key, val) in raw.as_object().ok_or_else(|| error("invalid labels"))? {
-                        labels.insert(key.clone(), text(val)?.to_owned());
-                    }
-                }
                 Ok(Resource::Pod(Pod {
+                    service_account: optional_text(spec, "serviceAccountName", "")?.into(),
+                    labels: labels(value)?,
                     metadata,
                     node_name: actual.into(),
                     host_network,
                     pod_ips: ips,
-                    labels,
                     owners: owner_references(value),
                     containers: container_statuses(value),
                     annotations: flowsdn_annotations(value),
@@ -249,8 +276,56 @@ impl Scope {
             }
             Self::Services => parse_service(value, metadata).map(Resource::Service),
             Self::EndpointSlices => parse_slice(value, metadata).map(Resource::EndpointSlice),
+            Self::Namespaces => Ok(Resource::Namespace(Namespace {
+                labels: labels(value)?,
+                metadata,
+            })),
+            Self::Identities => parse_identity(value, metadata).map(Resource::Identity),
         }
     }
+}
+
+fn labels(value: &Value) -> Result<BTreeMap<String, String>, Error> {
+    let mut labels = BTreeMap::new();
+    if let Some(raw) = value.pointer("/metadata/labels").filter(|v| !v.is_null()) {
+        for (key, val) in raw.as_object().ok_or_else(|| error("invalid labels"))? {
+            labels.insert(key.clone(), text(val)?.to_owned());
+        }
+    }
+    Ok(labels)
+}
+/// The name must be a decimal identity without leading zeros (the allocator
+/// writes it so; anything else is not an identity and fails the object).
+fn parse_identity(value: &Value, metadata: Metadata) -> Result<Identity, Error> {
+    let name = &metadata.name;
+    let id: u32 = name
+        .parse()
+        .ok()
+        .filter(|id| *id != 0 && id.to_string() == *name)
+        .ok_or_else(|| error("FlowsdnIdentity name is not a numeric identity"))?;
+    let mut security_labels = BTreeMap::new();
+    let raw = value
+        .get("security-labels")
+        .and_then(Value::as_object)
+        .ok_or_else(|| error("missing security-labels"))?;
+    for (key, val) in raw {
+        security_labels.insert(key.clone(), text(val)?.to_owned());
+    }
+    let created = match value.pointer("/metadata/creationTimestamp") {
+        None | Some(Value::Null) => "",
+        Some(v) => text(v)?,
+    };
+    let heartbeat = value
+        .pointer("/metadata/annotations")
+        .and_then(Value::as_object)
+        .is_some_and(|a| a.contains_key(HEARTBEAT_ANNOTATION));
+    Ok(Identity {
+        metadata,
+        id,
+        security_labels,
+        created: created.into(),
+        heartbeat,
+    })
 }
 
 // Tagging metadata (#328) is informational: an odd entry is skipped rather

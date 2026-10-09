@@ -64,6 +64,116 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
 }
 
 #[test]
+fn identity_settings_default_on_with_the_default_cluster() {
+    let parsed = Settings::parse(Some(&json!({"node-name":"n1"})), &env(&[]))
+        .expect("defaults")
+        .expect("enabled");
+    assert!(parsed.identity_allocation);
+    assert_eq!(parsed.cluster_name, "default");
+    let parsed = Settings::parse(
+        Some(&json!({"node-name":"n1","identity-allocation":false,"cluster-name":"lab-2"})),
+        &env(&[]),
+    )
+    .expect("explicit")
+    .expect("enabled");
+    assert!(!parsed.identity_allocation);
+    assert_eq!(parsed.cluster_name, "lab-2");
+    for bad in ["-a", "a-", "Upper", "a.b", "abcdefghijabcdefghijabcdefghijabc"] {
+        assert!(
+            Settings::parse(Some(&json!({"node-name":"n1","cluster-name":bad})), &env(&[])).is_err(),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn pod_identities_reach_the_ip_list_and_identity_list() {
+    let filter = flowsdn_identity::filter::LabelFilter::identity(&[]).expect("filter");
+    let mut view = View {
+        local_node: "local".into(),
+        identity: true,
+        cluster_name: "default".into(),
+        pods: vec![
+            PodInfo {
+                namespace: "ns".into(),
+                name: "web".into(),
+                node: "local".into(),
+                ips: vec![ip("10.172.0.5")],
+                labels: [("app".to_owned(), "web".to_owned())].into_iter().collect(),
+                service_account: "default".into(),
+                ..PodInfo::default()
+            },
+            PodInfo {
+                namespace: "ns".into(),
+                name: "db".into(),
+                node: "peer".into(),
+                ips: vec![ip("10.173.0.9")],
+                ..PodInfo::default()
+            },
+            PodInfo {
+                namespace: "kube-system".into(),
+                name: "flowsdn".into(),
+                node: "local".into(),
+                host_network: true,
+                ..PodInfo::default()
+            },
+        ],
+        ..View::default()
+    };
+    view.pods_synced = true;
+    assert!(view.pod_label_sets(&filter).is_empty(), "namespaces not listed");
+    view.namespaces_synced = true;
+    view.namespaces.insert(
+        "ns".into(),
+        [("team".to_owned(), "a".to_owned())].into_iter().collect(),
+    );
+    let sets = view.pod_label_sets(&filter);
+    assert_eq!(sets.len(), 2, "host-network Pods have no identity");
+    let (key, local, labels) = sets.first().expect("web");
+    assert_eq!(key, &("ns".to_owned(), "web".to_owned()));
+    assert!(*local);
+    assert_eq!(
+        crate::identity::label_strings(labels),
+        [
+            "k8s:app=web",
+            "k8s:io.flowsdn.k8s.namespace.labels.team=a",
+            "k8s:io.flowsdn.k8s.policy.cluster=default",
+            "k8s:io.flowsdn.k8s.policy.serviceaccount=default",
+            "k8s:io.kubernetes.pod.namespace=ns",
+        ]
+    );
+    assert!(!sets.get(1).expect("db").1);
+
+    view.pod_identities
+        .insert(("ns".into(), "web".into()), 300);
+    view.identities
+        .insert(300, crate::identity::label_strings(labels));
+    let list = view.ip_list();
+    let row = list
+        .as_array()
+        .and_then(|rows| rows.iter().find(|r| r.get("cidr") == Some(&json!("10.172.0.5/32"))))
+        .expect("web row");
+    assert_eq!(row.get("identity"), Some(&json!(300)));
+    let identities = view.identity_list();
+    assert_eq!(identities.pointer("/0/id"), Some(&json!(300)));
+    assert_eq!(
+        identities.pointer("/0/labels/0"),
+        Some(&json!("k8s:app=web"))
+    );
+    view.nodes_synced = true;
+    assert_eq!(view.health().get("state"), Some(&json!("Warning")));
+    view.identities_synced = true;
+    assert_eq!(view.health().get("state"), Some(&json!("Ok")));
+    assert_eq!(
+        view.health().get("msg"),
+        Some(&json!(
+            "0 nodes, 3 pods, 0 service frontends (0 programmed), 1 identities (0 local label sets waiting)"
+        ))
+    );
+    assert_eq!(view.health().get("identity-allocation"), Some(&json!(true)));
+}
+
+#[test]
 fn alloc_cidr_prefers_pod_cidrs_then_derives_the_reference_default() {
     let explicit = node("a", &[("fd02::", 64), ("10.2.0.0", 24)], &["192.0.2.2"]);
     assert_eq!(alloc_cidr(&explicit, false), Some((ip("10.2.0.0"), 24)));

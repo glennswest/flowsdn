@@ -1,7 +1,8 @@
 //! Initial Unix API for primary host-scope CNI and persisted endpoint ownership,
 //! plus an optional read-only loopback TCP listener (`http-listen`, #297).
 //! With the `kubernetes` feature and configuration it adds Node/Pod discovery,
-//! pod CIDRs from the Node and direct node routes; no policy or identity allocator.
+//! pod CIDRs from the Node, direct node routes, the socket LB and cluster
+//! identities (spec 03 §3.3); no policy enforcement.
 use crate::{endpoints::Manager, events, state::Result, tagging};
 use flowsdn_bpf_loader::kernel::{Egress, Object};
 use flowsdn_cni::queue::{Queue, ReplayRequest};
@@ -319,7 +320,7 @@ struct Lease {
 /// Every route the agent serves, as the first column of docs/agent-api.md's
 /// "Supported methods" table; a test keeps the two equal (#298: the API is a
 /// supported boundary for `sc net` and the console plugin).
-pub const ROUTES: [&str; 16] = [
+pub const ROUTES: [&str; 17] = [
     "`GET /v1/config`",
     "`GET /v1/healthz`",
     "`GET /v1/health/modules`",
@@ -334,6 +335,7 @@ pub const ROUTES: [&str; 16] = [
     "`POST /v1/ipam`",
     "`DELETE /v1/ipam/{address}?pool=default`",
     "`GET /v1/ip`",
+    "`GET /v1/identity`",
     "`GET /v1/service`",
     "`GET /v1/node/routes`",
 ];
@@ -420,7 +422,7 @@ impl Api {
                 }
                 return Ok((200, status));
             }
-            ("GET", "/v1/ip" | "/v1/node/routes" | "/v1/service") => {
+            ("GET", "/v1/ip" | "/v1/identity" | "/v1/node/routes" | "/v1/service") => {
                 let Some(view) = &self.kubernetes else {
                     return fail(404, "kubernetes node discovery is not enabled");
                 };
@@ -429,6 +431,7 @@ impl Api {
                     200,
                     match path {
                         "/v1/ip" => view.ip_list(),
+                        "/v1/identity" => view.identity_list(),
                         "/v1/service" => view.service_list(),
                         _ => view.route_list(),
                     },
@@ -827,10 +830,33 @@ fn ipam_summary(ipam: &Ipam) -> Value {
 
 /// An endpoint's API model. `pod` and `pod-networks` (#328) say which Pod
 /// and container it is and what the Pod's annotation holds; with a Pod view
-/// they include the node, labels, workload and containers.
+/// they include the node, labels, workload and containers, and `identity`
+/// once the Pod has one (spec 03 §3.3).
 fn endpoint_response(id: u16, document: &Value, view: Option<&crate::kubernetes::View>) -> Value {
     let text = |key: &str| document.get(key).and_then(Value::as_str).unwrap_or("");
     let node = view.map(|v| v.local_node.as_str()).unwrap_or("");
+    let mut response = endpoint_model(id, document, view, node);
+    let (namespace, name) = (text("K8sNamespace"), text("K8sPodName"));
+    let identity = view
+        .filter(|v| v.local_pod(namespace, name, text("K8sUID")).is_some())
+        .and_then(|v| v.pod_identity(namespace, name));
+    if let (Some(identity), Some(view), Some(status)) = (
+        identity,
+        view,
+        response.get_mut("status").and_then(Value::as_object_mut),
+    ) {
+        let labels = view.identities.get(&identity).cloned().unwrap_or_default();
+        status.insert("identity".into(), json!({"id":identity,"labels":labels}));
+    }
+    response
+}
+fn endpoint_model(
+    id: u16,
+    document: &Value,
+    view: Option<&crate::kubernetes::View>,
+    node: &str,
+) -> Value {
+    let text = |key: &str| document.get(key).and_then(Value::as_str).unwrap_or("");
     json!({"id":id,"status":{"state":"ready","external-identifiers":{"k8s-pod-name":document.get("K8sPodName"),"k8s-namespace":document.get("K8sNamespace"),"k8s-uid":document.get("K8sUID"),"container-id":document.get("dockerID"),
         "pod-name":format!("{}/{}",text("K8sNamespace"),text("K8sPodName")),"cni-attachment-id":format!("{}:{}",text("dockerID"),text("ContainerIfName"))},
         "pod":tagging::pod(id,document,view),"pod-networks":tagging::pod_networks(id,document,node),
@@ -1264,7 +1290,7 @@ pub fn run(config_path: &Path) -> Result<()> {
     drop(replay);
     let health = health_api::ModuleHealth::new(enabled)?;
     eprintln!(
-        "initial endpoint API listening; Kubernetes node discovery {}; identity and policy controllers are not enabled",
+        "initial endpoint API listening; Kubernetes node discovery {}; policy enforcement is not enabled",
         if enabled { "enabled" } else { "not enabled" }
     );
     let http = match api.config.http {

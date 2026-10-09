@@ -17,8 +17,8 @@ fn text<'a>(document: &'a Value, key: &str) -> &'a str {
 /// `{"default":{…}}` for endpoint `id`: what the CNI configured inside the
 /// Pod (host-scope addresses, a host route to each gateway and a default
 /// route through it, the Pod's MAC and interface), the host side, the
-/// sandbox and `node` when known. `identity` is added once identities are
-/// allocated; there is none today.
+/// sandbox and `node` when known. The identity is not part of it (it can
+/// change while the network does not); the endpoint model and `pod` carry it.
 pub fn pod_networks(id: u16, document: &Value, node: &str) -> Value {
     let mut addresses = Vec::new();
     let mut gateways = Vec::new();
@@ -77,6 +77,9 @@ pub fn pod(id: u16, document: &Value, view: Option<&View>) -> Value {
             ..EndpointInfo::default()
         });
     info.id = id;
+    info.identity = found
+        .and(view)
+        .and_then(|view| view.pod_identity(namespace, name));
     info.container_id = text(document, "dockerID").into();
     let mut value = info.to_json();
     if let (Some(pod), Some(object)) = (found, value.as_object_mut()) {
@@ -162,10 +165,18 @@ mod tests {
             pod(7, &document(), None),
             json!({"ID":7,"namespace":"ns","pod_name":"web-1","pod_uid":"uid-1","container_id":"sandbox1"})
         );
+        // With an identity (spec 03 §3.3) the flow endpoint carries it.
+        let mut with = view();
+        with.pod_identities.insert(("ns".into(), "web-1".into()), 300);
+        assert_eq!(
+            pod(7, &document(), Some(&with)).get("identity"),
+            Some(&json!(300))
+        );
         // A recreated Pod (another UID) is not this endpoint's Pod.
-        let mut other = view();
+        let mut other = with;
         first(&mut other.pods).uid = "uid-2".into();
         assert_eq!(pod(7, &document(), Some(&other)).get("workloads"), None);
+        assert_eq!(pod(7, &document(), Some(&other)).get("identity"), None);
     }
 
     #[test]

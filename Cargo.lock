@@ -370,6 +370,7 @@ dependencies = [
  "flowsdn-connector",
  "flowsdn-health",
  "flowsdn-hubble",
+ "flowsdn-identity",
  "flowsdn-ipam",
  "flowsdn-k8s",
  "flowsdn-lb",

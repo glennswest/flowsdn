@@ -1,15 +1,18 @@
 //! The Kubernetes controller thread: Node, cluster Pod, Service and
 //! EndpointSlice ListWatch through flowsdn-k8s (relist with backoff),
 //! publishing into the shared view; a route thread that owns the direct node
-//! routes (spec 10 §3.2.3, §5.2); and a services thread that owns the
-//! socket-LB maps (spec 05 §3.4, §3.8).
+//! routes (spec 10 §3.2.3, §5.2); a services thread that owns the
+//! socket-LB maps (spec 05 §3.4, §3.8); and an identities thread that holds
+//! a FlowsdnIdentity for each local Pod's labels (spec 03 §3.3), fed by
+//! Namespace and FlowsdnIdentity watches.
 use super::*;
 use crate::events::Type::Warning;
+use crate::identity::{self, Allocator, Outcome};
 use crate::services::{self, ServiceInfo, SliceInfo};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_connector::Connector;
 use flowsdn_k8s::{
-    client::{JsonClient, Query, TransportLimits, WATCH_ENDED},
+    client::{IDENTITIES_PATH, JsonClient, Query, TransportLimits, WATCH_ENDED},
     watch::{Limits, PageResult, Resource, Scope, WatchState},
 };
 use flowsdn_lb::socket;
@@ -30,6 +33,7 @@ const RECONCILE_INTERVAL: Duration = Duration::from_secs(30);
 const ROUTES_FILE: &str = "direct-routes.json";
 const ANNOTATE_INTERVAL: Duration = Duration::from_secs(2);
 const ANNOTATE_RETRY: Duration = Duration::from_secs(30);
+const IDENTITY_INTERVAL: Duration = Duration::from_secs(1);
 
 pub struct Controller {
     runtime: tokio::runtime::Runtime,
@@ -102,6 +106,8 @@ impl Controller {
             local_node: self.settings.node_name.clone(),
             direct_routes: self.settings.auto_direct_node_routes,
             service_lb: self.settings.service_lb,
+            identity: self.settings.identity_allocation,
+            cluster_name: self.settings.cluster_name.clone(),
             ..View::default()
         }));
         let failed = apply_sysctls(Path::new("/proc/sys"), ipv6);
@@ -150,6 +156,13 @@ impl Controller {
             },
             None => None,
         };
+        if self.settings.identity_allocation {
+            let identity_view = Arc::clone(&view);
+            let kubeconfig = self.settings.kubeconfig.clone();
+            std::thread::Builder::new()
+                .name("flowsdn-identity".into())
+                .spawn(move || identity_loop(&identity_view, kubeconfig.as_deref()))?;
+        }
         let annotate_view = Arc::clone(&view);
         let kubeconfig = self.settings.kubeconfig.clone();
         std::thread::Builder::new()
@@ -211,6 +224,40 @@ impl Controller {
                     view.pods_synced = true;
                 });
                 let mut parts = vec![nodes.boxed_local(), pods.boxed_local()];
+                if settings.identity_allocation {
+                    let ns_view = Arc::clone(&watch_view);
+                    parts.push(
+                        watch_forever(
+                            &client,
+                            Scope::Namespaces,
+                            "namespaces",
+                            &watch_view,
+                            move |state| {
+                                let rows = namespace_rows(state);
+                                let mut view = lock(&ns_view);
+                                view.namespaces = rows;
+                                view.namespaces_synced = true;
+                            },
+                        )
+                        .boxed_local(),
+                    );
+                    let id_view = Arc::clone(&watch_view);
+                    parts.push(
+                        watch_forever(
+                            &client,
+                            Scope::Identities,
+                            "identities-watch",
+                            &watch_view,
+                            move |state| {
+                                let rows = identity_rows(state);
+                                let mut view = lock(&id_view);
+                                view.identity_objects = rows;
+                                view.identities_synced = true;
+                            },
+                        )
+                        .boxed_local(),
+                    );
+                }
                 if settings.service_lb {
                     let (svc_view, svc_lb) = (Arc::clone(&watch_view), lb.clone());
                     parts.push(
@@ -260,6 +307,119 @@ impl Controller {
                 runtime.block_on(futures::future::join_all(parts));
             })?;
         Ok(view)
+    }
+}
+
+/// The identities thread (spec 03 §3.3), with its own client: once the Pod,
+/// Namespace and FlowsdnIdentity lists are complete, every second reconcile
+/// the local Pods' label sets against the identity list, send the creates
+/// and heartbeat removals, and publish each Pod's identity for the API.
+/// Remote Pods get the oldest object with their labels (what their node
+/// converges on) or a well-known identity.
+fn identity_loop(view: &Shared, kubeconfig: Option<&Path>) {
+    let started = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string())
+        .and_then(|runtime| {
+            let client = runtime
+                .block_on(JsonClient::load(kubeconfig, TransportLimits::default()))
+                .map_err(|e| e.to_string())?;
+            let filter = flowsdn_identity::filter::LabelFilter::identity(&[])
+                .map_err(|e| e.to_string())?;
+            Ok((runtime, client, filter))
+        });
+    let (runtime, client, filter) = match started {
+        Ok(parts) => parts,
+        Err(error) => {
+            lock(view).errors.insert("identities".into(), error);
+            return;
+        }
+    };
+    let mut allocator = Allocator::default();
+    loop {
+        std::thread::sleep(IDENTITY_INTERVAL);
+        let (sets, objects, cluster) = {
+            let view = lock(view);
+            if !view.identities_synced {
+                continue;
+            }
+            let sets = view.pod_label_sets(&filter);
+            if sets.is_empty() && !(view.pods_synced && view.namespaces_synced) {
+                continue;
+            }
+            (sets, view.identity_objects.clone(), view.cluster_name.clone())
+        };
+        let desired: BTreeMap<String, flowsdn_identity::labels::Labels> = sets
+            .iter()
+            .filter(|(_, local, _)| *local)
+            .map(|(_, _, labels)| (labels.canonical_key(), labels.clone()))
+            .collect();
+        let start = (uuid::Uuid::new_v4().as_u128() & 0xFFFF_FFFF) as u32;
+        let actions = allocator.reconcile(&desired, &objects, &cluster, start);
+        let mut failures = Vec::new();
+        for action in actions {
+            let (method, key) = match &action {
+                identity::Action::Create { labels, .. } => {
+                    (http::Method::POST, Some(labels.canonical_key()))
+                }
+                identity::Action::Acquire { .. } => (http::Method::PUT, None),
+            };
+            let reply = runtime.block_on(client.send_json(
+                method,
+                &action.path(IDENTITIES_PATH),
+                Some(&action.body()),
+            ));
+            let outcome = match &reply {
+                Ok((200..=299, _)) => Outcome::Done,
+                Ok((409, _)) => Outcome::Conflict,
+                Ok((status, body)) => {
+                    failures.push(format!(
+                        "{} {}: HTTP {status} {}",
+                        action.id(),
+                        if key.is_some() { "create" } else { "update" },
+                        body.get("message").and_then(Value::as_str).unwrap_or("")
+                    ));
+                    Outcome::Failed
+                }
+                Err(error) => {
+                    failures.push(format!("{}: {error}", action.id()));
+                    Outcome::Failed
+                }
+            };
+            if let Some(key) = key {
+                allocator.created(&key, action.id(), outcome);
+            }
+        }
+        let by_key = identity::oldest(&objects);
+        let mut pods = BTreeMap::new();
+        let mut identities: BTreeMap<u32, Vec<String>> = objects
+            .iter()
+            .filter_map(|o| Some((o.id, identity::label_strings(o.labels.as_ref()?))))
+            .collect();
+        for (pod, local, labels) in &sets {
+            let key = labels.canonical_key();
+            let id = if *local { allocator.get(&key) } else { None }
+                .or_else(|| identity::well_known(labels, &cluster))
+                .or_else(|| by_key.get(&key).map(|o| o.id));
+            if let Some(id) = id {
+                pods.insert(pod.clone(), id);
+                identities
+                    .entry(id)
+                    .or_insert_with(|| identity::label_strings(labels));
+            }
+        }
+        let waiting = allocator.waiting(&desired);
+        let mut view = lock(view);
+        view.pod_identities = pods;
+        view.identities = identities;
+        view.identities_waiting = waiting;
+        if failures.is_empty() {
+            view.errors.remove("identities");
+        } else {
+            view.errors
+                .insert("identities".into(), failures.join("; "));
+        }
     }
 }
 
@@ -384,6 +544,7 @@ fn pod_rows(state: &WatchState) -> Vec<PodInfo> {
                 host_network: pod.host_network,
                 ips: pod.pod_ips.clone(),
                 labels: pod.labels.clone(),
+                service_account: pod.service_account.clone(),
                 uid: pod.metadata.uid.clone(),
                 workload: flowsdn_hubble::endpoint::workload(
                     pod.owners
@@ -402,6 +563,32 @@ fn pod_rows(state: &WatchState) -> Vec<PodInfo> {
                     .collect(),
                 pod_networks: pod.annotations.get(crate::tagging::POD_NETWORKS).cloned(),
             }),
+            _ => None,
+        })
+        .collect()
+}
+fn namespace_rows(state: &WatchState) -> BTreeMap<String, BTreeMap<String, String>> {
+    state
+        .snapshot()
+        .all()
+        .filter_map(|(row, _)| match &*row {
+            Resource::Namespace(ns) => Some((ns.metadata.name.clone(), ns.labels.clone())),
+            _ => None,
+        })
+        .collect()
+}
+fn identity_rows(state: &WatchState) -> Vec<identity::Object> {
+    state
+        .snapshot()
+        .all()
+        .filter_map(|(row, _)| match &*row {
+            Resource::Identity(i) => Some(identity::Object::new(
+                i.id,
+                &i.security_labels,
+                &i.created,
+                i.heartbeat,
+                &i.metadata.resource_version,
+            )),
             _ => None,
         })
         .collect()

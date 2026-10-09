@@ -543,3 +543,50 @@ fn services_parse_node_ports_external_and_load_balancer_addresses() {
         "spec":{"clusterIP":"10.96.5.7","ports":[{"port":80,"nodePort":0}]}});
     assert!(Scope::Services.parse(&bad).is_err());
 }
+
+#[test]
+fn namespaces_identities_and_service_accounts_parse() {
+    let namespace = json!({"kind":"Namespace","metadata":{"name":"web","uid":"u","resourceVersion":"1",
+        "labels":{"kubernetes.io/metadata.name":"web","team":"a"}}});
+    let Resource::Namespace(parsed) = Scope::Namespaces.parse(&namespace).expect("namespace") else {
+        panic!("namespace")
+    };
+    assert_eq!(parsed.metadata.namespace, "");
+    assert_eq!(parsed.labels.get("team").map(String::as_str), Some("a"));
+
+    let identity = json!({"apiVersion":"flowsdn.io/v1alpha1","kind":"FlowsdnIdentity",
+        "metadata":{"name":"1000","uid":"u","resourceVersion":"2","creationTimestamp":"2026-10-09T10:00:00Z",
+            "annotations":{"io.flowsdn.heartbeat":"2026-10-09T11:00:00Z"}},
+        "security-labels":{"k8s:app":"web","k8s:io.kubernetes.pod.namespace":"web"}});
+    let Resource::Identity(parsed) = Scope::Identities.parse(&identity).expect("identity") else {
+        panic!("identity")
+    };
+    assert_eq!(parsed.id, 1000);
+    assert!(parsed.heartbeat);
+    assert_eq!(parsed.created, "2026-10-09T10:00:00Z");
+    assert_eq!(parsed.security_labels.len(), 2);
+    for name in ["0", "01000", "web", "4294967296"] {
+        let mut bad = identity.clone();
+        *bad.pointer_mut("/metadata/name").expect("name") = json!(name);
+        assert!(Scope::Identities.parse(&bad).is_err(), "{name}");
+    }
+    let mut bad = identity.clone();
+    bad.as_object_mut().expect("object").remove("security-labels");
+    assert!(Scope::Identities.parse(&bad).is_err());
+
+    let mut value = pod("p", "uid", "1");
+    *value.pointer_mut("/spec").expect("spec") =
+        json!({"nodeName":"node-a","serviceAccountName":"builder"});
+    let Resource::Pod(parsed) = Scope::Pods.parse(&value).expect("pod") else {
+        panic!("pod")
+    };
+    assert_eq!(parsed.service_account, "builder");
+    assert_eq!(pod_service_account(&pod("p", "uid", "1")), "");
+}
+
+fn pod_service_account(value: &Value) -> String {
+    match Scope::Pods.parse(value).expect("pod") {
+        Resource::Pod(pod) => pod.service_account,
+        _ => panic!("pod"),
+    }
+}
