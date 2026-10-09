@@ -156,10 +156,14 @@ fn link_atomic(source: &Path, destination: &Path) -> io::Result<()> {
 /// cannot win. The plugin type is flowsdn's own executable name (#294).
 pub const CONFLIST_NAME: &str = "00-flowsdn.conflist";
 
+/// The conflist's network name: what a Multus `network-status` entry for
+/// flowsdn's interface is named (#371).
+pub const NETWORK_NAME: &str = "flowsdn";
+
 pub fn conflist() -> String {
     serde_json::json!({
         "cniVersion": "1.1.0",
-        "name": "flowsdn",
+        "name": NETWORK_NAME,
         "plugins": [{"type": "flowsdn-cni"}],
     })
     .to_string()

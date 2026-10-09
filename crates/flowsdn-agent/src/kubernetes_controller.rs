@@ -426,10 +426,11 @@ fn identity_loop(view: &Shared, kubeconfig: Option<&Path>) {
     }
 }
 
-/// The `flowsdn.io/pod-networks` writer (#328), with its own client: every
-/// few seconds, merge-patch each local Pod whose annotation differs from its
-/// endpoint (written at ADD, rewritten if removed or edited). A value already
-/// tried is not retried for a while; a Pod that is gone (404) is skipped.
+/// The `flowsdn.io/pod-networks` (#328) and `network-status` (#371) writer,
+/// with its own client: every few seconds, merge-patch each local Pod whose
+/// annotations differ from its endpoint (written at ADD, rewritten if removed
+/// or edited). A value already tried is not retried for a while, except after
+/// a failed precondition (409); a Pod that is gone (404) is skipped.
 fn annotation_loop(view: &Shared, kubeconfig: Option<&Path>) {
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -461,13 +462,11 @@ fn annotation_loop(view: &Shared, kubeconfig: Option<&Path>) {
         let mut failures = Vec::new();
         for patch in patches {
             let key = (patch.namespace.clone(), patch.name.clone());
-            if tried
-                .get(&key)
-                .is_some_and(|(value, _)| *value == patch.value)
-            {
+            let value = patch.annotations_text();
+            if tried.get(&key).is_some_and(|(tried, _)| *tried == value) {
                 continue;
             }
-            tried.insert(key, (patch.value.clone(), Instant::now()));
+            tried.insert(key, (value, Instant::now()));
             attempted = true;
             let reply = runtime.block_on(client.send_json(
                 http::Method::PATCH,
@@ -476,6 +475,12 @@ fn annotation_loop(view: &Shared, kubeconfig: Option<&Path>) {
             ));
             let failure = match reply {
                 Ok((200..=299 | 404, _)) => continue,
+                // A precondition (UID or resourceVersion) failed: another
+                // writer got there first; retry on the next tick's view.
+                Ok((409, _)) => {
+                    tried.remove(&(patch.namespace.clone(), patch.name.clone()));
+                    continue;
+                }
                 Ok((status, body)) => format!(
                     "HTTP {status} {}",
                     body.get("message").and_then(Value::as_str).unwrap_or("")
@@ -565,6 +570,12 @@ fn pod_rows(state: &WatchState) -> Vec<PodInfo> {
                     })
                     .collect(),
                 pod_networks: pod.annotations.get(crate::tagging::POD_NETWORKS).cloned(),
+                network_status: pod.annotations.get(crate::tagging::NETWORK_STATUS).cloned(),
+                network_status_oversized: pod
+                    .oversized
+                    .iter()
+                    .any(|key| key == crate::tagging::NETWORK_STATUS),
+                resource_version: pod.metadata.resource_version.clone(),
             }),
             _ => None,
         })

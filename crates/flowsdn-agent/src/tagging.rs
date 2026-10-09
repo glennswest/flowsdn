@@ -1,12 +1,15 @@
 //! Pod and container tagging (#328): the `flowsdn.io/pod-networks` value the
 //! agent writes onto each local Pod (the shape of OVN-Kubernetes's
 //! `k8s.ovn.org/pod-networks`, keyed by network name), built from the
-//! persisted endpoint, and the endpoint's Pod identity for the API.
+//! persisted endpoint, the Multus/NPWG `network-status` entry for the same
+//! interface (#371), and the endpoint's Pod identity for the API.
 use crate::kubernetes::{EndpointInfo, View};
 use serde_json::{Map, Value, json};
 use std::net::IpAddr;
 
 pub const POD_NETWORKS: &str = "flowsdn.io/pod-networks";
+/// The Kubernetes Network Plumbing WG annotation Multus writes (stormcos#249).
+pub const NETWORK_STATUS: &str = "k8s.v1.cni.cncf.io/network-status";
 /// The one network flowsdn attaches today: the primary pod network.
 pub const DEFAULT_NETWORK: &str = "default";
 
@@ -55,6 +58,65 @@ pub fn pod_networks(id: u16, document: &Value, node: &str) -> Value {
         network.insert("node".into(), json!(node));
     }
     json!({ DEFAULT_NETWORK: network })
+}
+
+/// The NPWG `network-status` entry for flowsdn's interface, from the
+/// `pod-networks` value (so the two annotations always agree): the conflist's
+/// network name, the interface, its addresses without prefix, its MAC, and
+/// `default` (flowsdn attaches only the primary network today).
+pub fn network_status_entry(pod_networks: &Value) -> Value {
+    let network = pod_networks.get(DEFAULT_NETWORK);
+    let field = |key: &str| network.and_then(|n| n.get(key));
+    let ips: Vec<&str> = field("ip_addresses")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(|cidr| cidr.split_once('/').map_or(cidr, |(ip, _)| ip))
+        .collect();
+    let mut entry = Map::new();
+    entry.insert("name".into(), json!(flowsdn_cni::install::NETWORK_NAME));
+    entry.insert(
+        "interface".into(),
+        field("interface").cloned().unwrap_or(json!("")),
+    );
+    entry.insert("ips".into(), json!(ips));
+    if let Some(mac) = field("mac_address")
+        .and_then(Value::as_str)
+        .filter(|m| !m.is_empty())
+    {
+        entry.insert("mac".into(), json!(mac));
+    }
+    entry.insert(
+        "default".into(),
+        json!(field("role").and_then(Value::as_str) == Some("primary")),
+    );
+    Value::Object(entry)
+}
+
+/// The Pod's `network-status` with flowsdn's `entry` in it: every other
+/// plugin's entry kept as it is (Multus writes the secondary attachments),
+/// flowsdn's earlier entry (same name or same interface) replaced, and the
+/// default network's entry first, as Multus orders it. A current value that
+/// is not a JSON array is not anyone's list and is replaced.
+pub fn network_status(current: Option<&Value>, entry: &Value) -> Value {
+    let interface = entry.get("interface");
+    let ours = |other: &Value| {
+        other.get("name") == entry.get("name")
+            || (interface.and_then(Value::as_str).is_some_and(|i| !i.is_empty()) && other.get("interface") == interface)
+    };
+    let others = current
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|other| !ours(other))
+        .cloned();
+    let list: Vec<Value> = if entry.get("default") == Some(&json!(true)) {
+        std::iter::once(entry.clone()).chain(others).collect()
+    } else {
+        others.chain(std::iter::once(entry.clone())).collect()
+    };
+    Value::Array(list)
 }
 
 /// The endpoint's Pod as a flow names it (#328): Hubble's flow `Endpoint`
@@ -121,6 +183,50 @@ mod tests {
         );
         assert_eq!(value.pointer("/default/routes"), Some(&json!([])));
         assert_eq!(value.pointer("/default/node"), None);
+    }
+
+    #[test]
+    fn network_status_entry_agrees_with_pod_networks() {
+        let value = pod_networks(7, &document(), "n1");
+        assert_eq!(
+            network_status_entry(&value),
+            json!({"name":"flowsdn","interface":"eth0","ips":["10.5.0.7","f00d::a05:0:0:7"],
+                "mac":"02:00:00:00:00:07","default":true})
+        );
+        let mut bare = document();
+        let object = bare.as_object_mut().expect("object");
+        object.insert("LXCMAC".into(), json!(""));
+        object.insert("IPv6".into(), json!(""));
+        assert_eq!(
+            network_status_entry(&pod_networks(7, &bare, "")),
+            json!({"name":"flowsdn","interface":"eth0","ips":["10.5.0.7"],"default":true})
+        );
+    }
+
+    #[test]
+    fn network_status_merges_into_other_plugins_entries() {
+        let entry = network_status_entry(&pod_networks(7, &document(), "n1"));
+        assert_eq!(network_status(None, &entry), json!([entry]));
+        assert_eq!(network_status(Some(&json!({"not":"a list"})), &entry), json!([entry]));
+        let secondary = json!({"name":"ns/vlan10","interface":"net1","ips":["192.0.2.5"],"mac":"02:aa:00:00:00:01"});
+        // Multus's own entry for flowsdn (same name, its own extra keys) and an
+        // old one on the same interface are replaced; the default goes first.
+        let multus = json!({"name":"flowsdn","interface":"eth0","ips":["10.5.0.6"],"default":true,"dns":{}});
+        let stale = json!({"name":"old","interface":"eth0","ips":["10.9.0.1"]});
+        assert_eq!(
+            network_status(Some(&json!([secondary, multus, stale])), &entry),
+            json!([entry, secondary])
+        );
+        // A non-default entry goes after the others.
+        let mut extra = entry.clone();
+        extra
+            .as_object_mut()
+            .expect("entry")
+            .insert("default".into(), json!(false));
+        assert_eq!(
+            network_status(Some(&json!([secondary])), &extra),
+            json!([secondary, extra])
+        );
     }
 
     fn view() -> View {
@@ -204,9 +310,12 @@ mod tests {
             patches.first().expect("patch").path(),
             "/api/v1/namespaces/ns/pods/web-1"
         );
+        let status = network_status(None, &network_status_entry(&value));
+        first(&mut view.pods).resource_version = "41".into();
         assert_eq!(
-            patches.first().expect("patch").body(),
-            json!({"metadata":{"uid":"uid-1","annotations":{POD_NETWORKS:value.to_string()}}})
+            view.annotation_patches().first().expect("patch").body(),
+            json!({"metadata":{"uid":"uid-1","resourceVersion":"41","annotations":{
+                POD_NETWORKS:value.to_string(),NETWORK_STATUS:status.to_string()}}})
         );
         // Current (in any key order): nothing to write.
         let mut reordered = Map::new();
@@ -215,8 +324,43 @@ mod tests {
             value.get("default").cloned().expect("default"),
         );
         first(&mut view.pods).pod_networks = Some(Value::Object(reordered).to_string());
+        first(&mut view.pods).network_status = Some(status.to_string());
         assert!(view.annotation_patches().is_empty());
-        // Removed or edited by someone else: written back.
+        // Removed or edited by someone else: written back, only that one;
+        // pod-networks alone needs no resourceVersion precondition.
+        first(&mut view.pods).pod_networks = Some("{\"default\":{}}".into());
+        let patches = view.annotation_patches();
+        assert_eq!(
+            patches.first().expect("patch").body(),
+            json!({"metadata":{"uid":"uid-1","annotations":{POD_NETWORKS:value.to_string()}}})
+        );
+        first(&mut view.pods).pod_networks = Some(value.to_string());
+        // Multus added a secondary attachment: flowsdn's entry is current.
+        let secondary = json!({"name":"ns/vlan10","interface":"net1","ips":["192.0.2.5"],"default":false});
+        first(&mut view.pods).network_status =
+            Some(json!([status.get(0).cloned().expect("entry"), secondary]).to_string());
+        assert!(view.annotation_patches().is_empty());
+        // flowsdn's entry removed beside it: written back, the secondary kept.
+        first(&mut view.pods).network_status = Some(json!([secondary]).to_string());
+        let patches = view.annotation_patches();
+        let written: Value = serde_json::from_str(
+            patches
+                .first()
+                .and_then(|p| p.network_status.as_deref())
+                .expect("network-status"),
+        )
+        .expect("json");
+        assert_eq!(
+            written,
+            json!([status.get(0).cloned().expect("entry"), secondary])
+        );
+        assert_eq!(patches.first().expect("patch").pod_networks, None);
+        // Too large to have been kept: never merged into.
+        first(&mut view.pods).network_status = None;
+        first(&mut view.pods).network_status_oversized = true;
+        assert!(view.annotation_patches().is_empty());
+        first(&mut view.pods).network_status_oversized = false;
+        first(&mut view.pods).network_status = Some(status.to_string());
         first(&mut view.pods).pod_networks = Some("{\"default\":{}}".into());
         assert_eq!(view.annotation_patches().len(), 1);
         // A Pod on another node, another UID, or a name that is no DNS name: never.
@@ -239,8 +383,8 @@ mod tests {
         assert!(
             patches
                 .first()
-                .expect("patch")
-                .value
+                .and_then(|p| p.pod_networks.as_deref())
+                .expect("pod-networks")
                 .contains("\"endpoint_id\":9")
         );
     }

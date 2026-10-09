@@ -6,7 +6,7 @@ use crate::services::{Frontend, ServiceInfo, SliceInfo};
 use crate::state::Result;
 pub use flowsdn_hubble::endpoint::{EndpointInfo, Workload};
 use flowsdn_lb::socket::Address;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::OsString,
@@ -155,6 +155,11 @@ pub struct PodInfo {
     pub containers: Vec<Container>,
     /// The Pod's current `flowsdn.io/pod-networks` annotation.
     pub pod_networks: Option<String>,
+    /// The Pod's current `k8s.v1.cni.cncf.io/network-status` (#371), and
+    /// whether it is present but too large to have been kept.
+    pub network_status: Option<String>,
+    pub network_status_oversized: bool,
+    pub resource_version: String,
 }
 /// A container of a Pod: name and runtime ID (`<runtime>://<id>`, empty
 /// until created); `init` for init containers.
@@ -207,24 +212,45 @@ pub struct LocalEndpoint {
     pub value: Value,
 }
 /// One annotation write: merge-patch the Pod's `flowsdn.io/pod-networks`
-/// to `value` (JSON text), with the UID as a precondition when known.
+/// and/or `network-status` (JSON text, None = already current), with the UID
+/// as a precondition when known, and the resourceVersion when network-status
+/// is written (it is merged with other plugins' entries, so a concurrent
+/// write by one of them must fail the patch rather than be lost).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AnnotationPatch {
     pub namespace: String,
     pub name: String,
     pub uid: String,
-    pub value: String,
+    pub resource_version: String,
+    pub pod_networks: Option<String>,
+    pub network_status: Option<String>,
 }
 impl AnnotationPatch {
     pub fn path(&self) -> String {
         format!("/api/v1/namespaces/{}/pods/{}", self.namespace, self.name)
     }
+    fn annotations(&self) -> Map<String, Value> {
+        let mut annotations = Map::new();
+        if let Some(value) = &self.pod_networks {
+            annotations.insert(crate::tagging::POD_NETWORKS.into(), json!(value));
+        }
+        if let Some(value) = &self.network_status {
+            annotations.insert(crate::tagging::NETWORK_STATUS.into(), json!(value));
+        }
+        annotations
+    }
+    /// The annotations this patch writes, as text (what a retry compares).
+    pub fn annotations_text(&self) -> String {
+        Value::Object(self.annotations()).to_string()
+    }
     pub fn body(&self) -> Value {
-        let mut metadata = json!({"annotations":{crate::tagging::POD_NETWORKS:self.value}});
-        if !self.uid.is_empty()
-            && let Some(object) = metadata.as_object_mut()
-        {
-            object.insert("uid".into(), json!(self.uid));
+        let mut metadata = Map::new();
+        metadata.insert("annotations".into(), Value::Object(self.annotations()));
+        if !self.uid.is_empty() {
+            metadata.insert("uid".into(), json!(self.uid));
+        }
+        if self.network_status.is_some() && !self.resource_version.is_empty() {
+            metadata.insert("resourceVersion".into(), json!(self.resource_version));
         }
         json!({ "metadata": metadata })
     }
@@ -491,10 +517,12 @@ impl View {
                 && (uid.is_empty() || pod.uid.is_empty() || pod.uid == uid)
         })
     }
-    /// The `flowsdn.io/pod-networks` writes that would bring every local
-    /// Pod up to date: none before the Pod list and the endpoints are known.
-    /// Values compare as JSON, so key order never causes a rewrite. With two
-    /// endpoints for one Pod (a sandbox being replaced), the newest ID wins.
+    /// The `flowsdn.io/pod-networks` and `network-status` writes that would
+    /// bring every local Pod up to date: none before the Pod list and the
+    /// endpoints are known. Values compare as JSON, so key order never causes
+    /// a rewrite. With two endpoints for one Pod (a sandbox being replaced),
+    /// the newest ID wins. A network-status too large to have been kept is
+    /// left alone (merging into what was not seen would drop entries).
     pub fn annotation_patches(&self) -> Vec<AnnotationPatch> {
         if !(self.pods_synced && self.endpoints_published) {
             return Vec::new();
@@ -511,15 +539,25 @@ impl View {
                 *entry = endpoint;
             }
         }
+        let parse = |text: Option<&str>| text.and_then(|t| serde_json::from_str::<Value>(t).ok());
         newest
             .into_values()
             .filter_map(|endpoint| {
                 let pod = self.local_pod(&endpoint.namespace, &endpoint.name, &endpoint.uid)?;
-                let current = pod
-                    .pod_networks
-                    .as_deref()
-                    .and_then(|text| serde_json::from_str::<Value>(text).ok());
-                (current.as_ref() != Some(&endpoint.value)).then(|| AnnotationPatch {
+                let pod_networks = (parse(pod.pod_networks.as_deref()).as_ref()
+                    != Some(&endpoint.value))
+                .then(|| endpoint.value.to_string());
+                let network_status = if pod.network_status_oversized {
+                    None
+                } else {
+                    let current = parse(pod.network_status.as_deref());
+                    let wanted = crate::tagging::network_status(
+                        current.as_ref(),
+                        &crate::tagging::network_status_entry(&endpoint.value),
+                    );
+                    (current.as_ref() != Some(&wanted)).then(|| wanted.to_string())
+                };
+                (pod_networks.is_some() || network_status.is_some()).then(|| AnnotationPatch {
                     namespace: endpoint.namespace.clone(),
                     name: endpoint.name.clone(),
                     uid: if endpoint.uid.is_empty() {
@@ -527,7 +565,9 @@ impl View {
                     } else {
                         endpoint.uid.clone()
                     },
-                    value: endpoint.value.to_string(),
+                    resource_version: pod.resource_version.clone(),
+                    pod_networks,
+                    network_status,
                 })
             })
             .collect()

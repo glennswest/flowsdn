@@ -37,10 +37,17 @@ pub struct Pod {
     pub owners: Vec<OwnerReference>,
     /// `status.containerStatuses` then `status.initContainerStatuses`.
     pub containers: Vec<ContainerStatus>,
-    /// Only the `flowsdn.io/` annotations (what the agent writes), each at most
-    /// [`ANNOTATION_MAX`] bytes; other annotations are not kept.
+    /// Only the annotations the agent writes (`flowsdn.io/` and
+    /// [`NETWORK_STATUS`]), each at most [`ANNOTATION_MAX`] bytes; other
+    /// annotations are not kept.
     pub annotations: BTreeMap<String, String>,
+    /// Those annotations present but over [`ANNOTATION_MAX`] (not kept): a
+    /// writer that merges into one must not take it for absent.
+    pub oversized: Vec<String>,
 }
+/// The Multus/NPWG network-status annotation (#371): written by every
+/// network plugin of a Pod, so flowsdn keeps it to merge its own entry.
+pub const NETWORK_STATUS: &str = "k8s.v1.cni.cncf.io/network-status";
 /// The longest `flowsdn.io/` annotation value a Pod row keeps.
 pub const ANNOTATION_MAX: usize = 16 * 1024;
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -272,6 +279,7 @@ impl Scope {
                     owners: owner_references(value),
                     containers: container_statuses(value),
                     annotations: flowsdn_annotations(value),
+                    oversized: oversized_annotations(value),
                 }))
             }
             Self::Services => parse_service(value, metadata).map(Resource::Service),
@@ -377,6 +385,9 @@ fn container_statuses(value: &Value) -> Vec<ContainerStatus> {
     }
     containers
 }
+fn kept_annotation(key: &str) -> bool {
+    key.starts_with("flowsdn.io/") || key == NETWORK_STATUS
+}
 fn flowsdn_annotations(value: &Value) -> BTreeMap<String, String> {
     let Some(annotations) = value
         .pointer("/metadata/annotations")
@@ -386,11 +397,26 @@ fn flowsdn_annotations(value: &Value) -> BTreeMap<String, String> {
     };
     annotations
         .iter()
-        .filter(|(key, _)| key.starts_with("flowsdn.io/"))
+        .filter(|(key, _)| kept_annotation(key))
         .filter_map(|(key, value)| {
             let value = value.as_str().filter(|v| v.len() <= ANNOTATION_MAX)?;
             Some((key.clone(), value.to_owned()))
         })
+        .collect()
+}
+fn oversized_annotations(value: &Value) -> Vec<String> {
+    let Some(annotations) = value
+        .pointer("/metadata/annotations")
+        .and_then(Value::as_object)
+    else {
+        return Vec::new();
+    };
+    annotations
+        .iter()
+        .filter(|(key, value)| {
+            kept_annotation(key) && value.as_str().is_none_or(|v| v.len() > ANNOTATION_MAX)
+        })
+        .map(|(key, _)| key.clone())
         .collect()
 }
 

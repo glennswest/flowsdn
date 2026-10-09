@@ -1,5 +1,5 @@
 use flowsdn_k8s::watch::{
-    ANNOTATION_MAX, ContainerStatus, Limits, OwnerReference, PageResult, Resource, Scope,
+    ANNOTATION_MAX, ContainerStatus, NETWORK_STATUS, Limits, OwnerReference, PageResult, Resource, Scope,
     WatchState,
 };
 use serde_json::{Value, json};
@@ -444,7 +444,8 @@ fn pod_tagging_metadata_owners_containers_and_flowsdn_annotations() {
     );
     metadata.insert(
         "annotations".into(),
-        json!({"flowsdn.io/pod-networks":"{}","other.io/x":"y","flowsdn.io/big":"z".repeat(ANNOTATION_MAX + 1)}),
+        json!({"flowsdn.io/pod-networks":"{}","other.io/x":"y","flowsdn.io/big":"z".repeat(ANNOTATION_MAX + 1),
+            "k8s.v1.cni.cncf.io/network-status":"[]","other.io/big":"z".repeat(ANNOTATION_MAX + 1)}),
     );
     object
         .get_mut("status")
@@ -493,8 +494,12 @@ fn pod_tagging_metadata_owners_containers_and_flowsdn_annotations() {
     );
     assert_eq!(
         parsed.annotations.into_iter().collect::<Vec<_>>(),
-        vec![("flowsdn.io/pod-networks".to_owned(), "{}".to_owned())]
+        vec![
+            ("flowsdn.io/pod-networks".to_owned(), "{}".to_owned()),
+            (NETWORK_STATUS.to_owned(), "[]".to_owned())
+        ]
     );
+    assert_eq!(parsed.oversized, vec!["flowsdn.io/big".to_owned()]);
 }
 
 #[test]
