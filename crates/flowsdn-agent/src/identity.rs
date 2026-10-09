@@ -370,9 +370,7 @@ fn acquire(object: &Object, labels: &Labels) -> Action {
 pub fn free(used: &BTreeSet<u32>, start: u32) -> Option<u32> {
     let span = MAX_ID.saturating_sub(MIN_ID).saturating_add(1);
     (0..span)
-        .filter_map(|offset| {
-            MIN_ID.checked_add(start.wrapping_add(offset).checked_rem(span)?)
-        })
+        .filter_map(|offset| MIN_ID.checked_add(start.wrapping_add(offset).checked_rem(span)?))
         .find(|id| !used.contains(id))
 }
 

@@ -298,8 +298,8 @@ fn labels(value: &Value) -> Result<BTreeMap<String, String>, Error> {
 /// writes it so; anything else is not an identity and fails the object).
 fn parse_identity(value: &Value, metadata: Metadata) -> Result<Identity, Error> {
     let name = &metadata.name;
-    let id: u32 = name
-        .parse()
+    let id = name
+        .parse::<u32>()
         .ok()
         .filter(|id| *id != 0 && id.to_string() == *name)
         .ok_or_else(|| error("FlowsdnIdentity name is not a numeric identity"))?;
