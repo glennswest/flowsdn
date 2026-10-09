@@ -1316,7 +1316,7 @@ fn snat_reply6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Opt
 /// A forward flow on the [`INGRESS6`] slot: [`snat_forward4`] for IPv6 to
 /// another node's backend, else the destination rewrite to a local one.
 #[inline(never)]
-fn forward6(skb: *mut __sk_buff) -> i32 {
+fn nodeport_forward6(skb: *mut __sk_buff) -> i32 {
     let ctx = TcContext::new(skb);
     let Some(state) = INGRESS6.get_ptr_mut(0) else {
         return TC_ACT_OK;
@@ -1513,8 +1513,8 @@ pub fn nodeport_ingress(ctx: TcContext) -> i32 {
     match ctx.load::<[u8; 2]>(12) {
         Ok(ETH_P_IPV6) => match ingress6(skb) {
             STEP_REPLY => snat_reply6(skb),
-            STEP_NEW if new_flow6(skb) != 0 => forward6(skb),
-            STEP_FORWARD => forward6(skb),
+            STEP_NEW if new_flow6(skb) != 0 => nodeport_forward6(skb),
+            STEP_FORWARD => nodeport_forward6(skb),
             _ => TC_ACT_OK,
         },
         _ => ingress4(skb),

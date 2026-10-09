@@ -62,7 +62,7 @@ Medium ef8e24151d on 7.2: "combined stack size of 3 calls is 768". Measured from
 (BPF r10 offsets per function): nodeport_ingress 2 B -> ingress6 376 B -> snat_reply6 368 / new_flow6 264 /
 snat_forward6 248 (ingress4 432 B, no BPF callee but memcpy). Fix: flatten the v6 chain. `ingress6` only
 classifies (tuple, flow lookup) into a per-CPU `flowsdn_nodeport6_scratch` slot and returns a step; the
-classifier calls the leaf (`snat_reply6`, `new_flow6`, `forward6`), so the deepest chain is main + one function.
+classifier calls the leaf (`snat_reply6`, `new_flow6`, `nodeport_forward6`), so the deepest chain is main + one function.
 
 - [ ] Code; object + lock via sc-build; Clippy/tests; docs (runtime, kernel-requirements, ADR-0020), changelog.
 - [ ] Medium on pvetest2 (fixture-socket-lb-live v4+v6 local and SNAT steps); then `component stage flowsdn`.
