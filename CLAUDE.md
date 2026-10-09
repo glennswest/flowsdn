@@ -329,6 +329,10 @@ cannot deliver routed packets to an IPv4 pod).
 
 - [x] README, docs/, deploy READMEs, crate READMEs, release archive README and CLAUDE.md checked against code through eed1aca; 4a1b564. Closed #353, #354. Filed #359 (P2: startup checks kernel-requirements promises are absent). Docs only; no build, version or golden change.
 
+### Comment mining — 2026-10-09 (since 2026-10-08)
+
+- [x] Read the 30 comments on the 46 issues updated since 2026-10-08. Filed #368 (P1: node-service probe takes KUBERNETES_SERVICE_HOST as the ClusterIP; pvetest2 runs current flowsdn and kube-dns is programmed), #369 (P1: nodeport_ingress stack 768 > 512, blocks staging), #370 (P2: no verifier load before stage). Added: stormcentral#150 (three more wrong titles), stormcentral#526 (runs complete again), stormcos#303 (identity allocation needs crds/), #296 (rustkube has no node IPAM). #296's §2 decision is already needs-owner. No fixes.
+
 ### Comment mining — 2026-10-08 (since 2026-10-07)
 
 - [x] Read the comments on the 30 issues updated since 2026-10-07. Filed #357 (P2: long run db2ce13b29 errored, #303 closed waiting for it) and #358 (P3: catalogue provenance by line number, #355). Closed #356 (fixed at 53bffc7). Added: #354 (golden cc0835c8a1db), #292 and #321 (stormcos#310/#309 shipped in 11.95), stormcentral#512 (pvetest2 seal failure), stormcentral#543 (BPF object via base64 log). No fixes.
