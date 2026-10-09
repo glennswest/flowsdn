@@ -245,6 +245,21 @@ contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots
 - [x] 2026-10-07 (b381f6e, cd99e1c; sc-build 782 tests, Clippy x2): Service types for in-cluster clients through the socket LB: externalIPs, LoadBalancer ingress IPs, NodePort on every node InternalIP; internalTrafficPolicy Local for ClusterIPs (backends on this node); `flags.type` per frontend; frontends refresh on Node changes. External clients need tc NodePort (still open).
 - [ ] fixture-socket-lb-live on a kernel: run dbfc4e45b1 (C2NR0Q2) failed on push, registry full (stormcentral#376). Rerun `stormcentral test run flowsdn medium --tag <machine>`; live kube-dns check on a flowsdn node after release. Not implemented (stays open on #292): NodePort/LB/externalIPs, affinity, Maglev, DSR, NAT46/64, tc-level LB, socket termination, policy.
 
+### Cluster identity allocation — #291 (P0), 2026-10-09
+
+Two-node acceptance waits: owner (stormcentral#360, 2026-10-08) made multi-node day-2, P2; test runs also
+wait on stormcentral#526. Implementable now: spec 03 §3.3 CRD-mode allocator over `flowsdn.io/v1alpha1`
+FlowsdnIdentity (RBAC create/update already shipped; CRDs applied by stormcos#303). Overlaps #332's
+identity line; GC stays the operator's (#332).
+
+- [ ] flowsdn-k8s: Namespace and FlowsdnIdentity scopes; Pod `serviceAccountName`.
+- [ ] flowsdn-identity filter defaults with flowsdn keys (`io.flowsdn.k8s.*`, ADR-0020/#339).
+- [ ] Agent `identity.rs`: pod labels (spec 03 §3.1), canonical key, reconcile (oldest object, create on a
+      free id 256..65535, 409 retry, heartbeat removal, recreate when deleted while held); tests.
+- [ ] Controller identities thread; `/v1/ip` identity, endpoint `status.identity` + `pod.identity`,
+      `GET /v1/identity`; `kubernetes.identity-allocation`, `kubernetes.cluster-name`.
+- [ ] Docs (agent-api, runtime, implementation-status, milestones, deploy README), changelog; sc-build.
+
 ### Kubernetes-connected agent — #291 (P0), 2026-10-05
 
 Master (stormcos#171): flowsdn builds the Kubernetes-connected agent (flowsdn-k8s, glibc, system
