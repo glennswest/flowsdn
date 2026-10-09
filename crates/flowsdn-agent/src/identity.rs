@@ -92,14 +92,17 @@ pub fn well_known(labels: &Labels, cluster: &str) -> Option<u32> {
         set.canonical_key()
     };
     const EKS: &str = "eks.amazonaws.com/component";
+    // Each without and (8 higher) with the namespace metadata label.
     [
-        (102, "kube-dns", None),
-        (103, "kube-dns", Some("kube-dns")),
-        (104, "coredns", None),
-        (106, "coredns", Some("coredns")),
+        (102, 110, "kube-dns", None),
+        (103, 111, "kube-dns", Some("kube-dns")),
+        (104, 112, "coredns", None),
+        (106, 114, "coredns", Some("coredns")),
     ]
     .into_iter()
-    .flat_map(|(id, account, eks)| [(id, account, eks, false), (id + 8, account, eks, true)])
+    .flat_map(|(id, with_ns, account, eks)| {
+        [(id, account, eks, false), (with_ns, account, eks, true)]
+    })
     .find_map(|(id, account, eks, metadata)| {
         let extra: Vec<(&str, &str)> = eks.map(|c| (EKS, c)).into_iter().collect();
         (dns(account, &extra, metadata) == key).then_some(id)
@@ -365,9 +368,11 @@ fn acquire(object: &Object, labels: &Labels) -> Action {
 /// The first number from `start` (wrapped into the range) that no object
 /// and no held identity uses; None when the range is full.
 pub fn free(used: &BTreeSet<u32>, start: u32) -> Option<u32> {
-    let span = MAX_ID - MIN_ID + 1;
+    let span = MAX_ID.saturating_sub(MIN_ID).saturating_add(1);
     (0..span)
-        .map(|offset| MIN_ID + (start.wrapping_add(offset) % span))
+        .filter_map(|offset| {
+            MIN_ID.checked_add(start.wrapping_add(offset).checked_rem(span)?)
+        })
         .find(|id| !used.contains(id))
 }
 

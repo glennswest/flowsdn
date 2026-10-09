@@ -282,11 +282,10 @@ fn released_sets_are_dropped_and_their_numbers_not_reused_while_objects_exist() 
     let used: BTreeSet<u32> = (MIN_ID..=MAX_ID).collect();
     assert_eq!(free(&used, 7), None);
     let used: BTreeSet<u32> = [MAX_ID].into_iter().collect();
-    assert_eq!(free(&used, MAX_ID - MIN_ID), Some(MIN_ID));
-    assert_eq!(
-        free(&BTreeSet::new(), u32::MAX),
-        Some(MIN_ID + (u32::MAX % (MAX_ID - MIN_ID + 1)))
-    );
+    // 65 279 is the offset of MAX_ID; the search wraps to MIN_ID.
+    assert_eq!(free(&used, 65_279), Some(MIN_ID));
+    // u32::MAX % 65 280 = 255.
+    assert_eq!(free(&BTreeSet::new(), u32::MAX), Some(511));
 }
 
 #[test]
