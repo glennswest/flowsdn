@@ -64,7 +64,10 @@ snat_forward6 248 (ingress4 432 B, no BPF callee but memcpy). Fix: flatten the v
 classifies (tuple, flow lookup) into a per-CPU `flowsdn_nodeport6_scratch` slot and returns a step; the
 classifier calls the leaf (`snat_reply6`, `new_flow6`, `nodeport_forward6`), so the deepest chain is main + one function.
 
-- [ ] Code; object + lock via sc-build; Clippy/tests; docs (runtime, kernel-requirements, ADR-0020), changelog.
+- [x] Code a59dbdd/f8c49c1, docs d2ec163, object + lock ded9b10. Frames now (verifier rounds to 16 with JIT, which
+      reproduces 768 = 16+384+368): v6 worst 16+408 (snat_reply6) = 424, v4 16+432 = 448. sc-build at ded9b10:
+      fmt, workspace + kubernetes Clippy -D warnings, 837 tests (0 failed, 1 ignored), test/build.sh (lock matches).
+      musl build's pre-existing time_t warning filed as #373.
 - [ ] Medium on pvetest2 (fixture-socket-lb-live v4+v6 local and SNAT steps); then `component stage flowsdn`.
 
 ### Multus network-status — #371 (P2), 2026-10-09
