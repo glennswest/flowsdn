@@ -65,9 +65,11 @@ attaches only the primary) is derived from the pod-networks value, merged into t
 (other plugins' entries kept; flowsdn's replaced by name or interface), written with the Pod's
 resourceVersion as precondition (a 409 retries next tick on the fresh view).
 
-- [ ] flowsdn-k8s keeps the network-status annotation on Pods; agent tagging entry + merge; patch both.
-- [ ] Tests; docs (agent-api, runtime, deploy README, README, implementation-status); changelog.
-- [ ] sc-build; close #371.
+- [x] flowsdn-k8s keeps the network-status annotation on Pods; agent tagging entry + merge; patch both (b7a1ede).
+- [x] Tests; docs (agent-api, runtime, deploy README, README, implementation-status, helm, k8s README); changelog (956bd1a).
+- [x] sc-build at 45a5289: fmt --check, workspace + kubernetes Clippy -D warnings, workspace + kubernetes agent
+      tests (837 results, 0 failed, 1 ignored). #371 closed. Live check (a Pod carrying both) comes with the next
+      golden, which waits on #369 (nodeport_ingress stack, staging blocked).
 
 ### Uncompiled upstream WireGuard-tunnel cases — #266, 2026-10-07
 
