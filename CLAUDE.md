@@ -259,9 +259,14 @@ identity line; GC stays the operator's (#332).
 - [x] Controller identities thread; `/v1/ip` identity, endpoint `status.identity` + `pod.identity`,
       `GET /v1/identity`; `kubernetes.identity-allocation`, `kubernetes.cluster-name`.
 - [x] Docs (agent-api, runtime, implementation-status, milestones, deploy README, spec 03 note), changelog (6f9cccb).
-- [ ] sc-build (fmt/Clippy/lints fixed in #361–#365); then golden via `component stage flowsdn`, `shipped`.
+- [x] sc-build at 598a77d: fmt, Clippy x2 -D warnings, 833 tests (0 failed, 1 ignored) incl. loopback-API
+      identity create; chart check, test/build.sh, agent image (no-cilium clean). Fixes #361–#366 closed.
       Build env adds -D clippy::indexing-slicing and arithmetic-side-effects; format via
-      `sc-build 'cargo fmt --all && git diff'` and `git apply` (no local cargo).
+      `sc-build 'cargo fmt --all && git diff'` and `git apply` (no local cargo). Status on #291.
+- [ ] Golden: blocked by #292. Medium c61945e336 found socket-lb unloadable on 7.2 since 0fad164 (user_ip6
+      copy through ctx+8): fixed a97f870/27e10fe (object + lock). Medium ef8e24151d: cgroup programs load;
+      `nodeport_ingress` "combined stack size of 3 calls is 768" (IPv4 NodePort too). Do not stage main
+      until that passes medium on pvetest2 (comment on #292). Test runs work again despite stormcentral#526.
 
 ### Kubernetes-connected agent — #291 (P0), 2026-10-05
 
