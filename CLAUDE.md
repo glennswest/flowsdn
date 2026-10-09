@@ -331,7 +331,7 @@ cannot deliver routed packets to an IPv4 pod).
 
 ### Comment mining — 2026-10-09 (since 2026-10-08)
 
-- [x] Read the 30 comments on the 46 issues updated since 2026-10-08. Filed #368 (P1: node-service probe takes KUBERNETES_SERVICE_HOST as the ClusterIP; pvetest2 runs current flowsdn and kube-dns is programmed), #369 (P1: nodeport_ingress stack 768 > 512, blocks staging), #370 (P2: no verifier load before stage). Added: stormcentral#150 (three more wrong titles), stormcentral#526 (runs complete again), stormcos#303 (identity allocation needs crds/), #296 (rustkube has no node IPAM). #296's §2 decision is already needs-owner. No fixes.
+- [x] Read the 30 comments on the 44 issues updated since 2026-10-08. Filed #368 (P1: node-service probe takes KUBERNETES_SERVICE_HOST as the ClusterIP; pvetest2 runs current flowsdn and kube-dns is programmed), #369 (P1: nodeport_ingress stack 768 > 512, blocks staging), #370 (P2: no verifier load before stage). Added: stormcentral#150 (three more wrong titles), stormcentral#526 (runs complete again), stormcos#303 (identity allocation needs crds/), #296 (rustkube has no node IPAM). #296's §2 decision is already needs-owner. No fixes.
 
 ### Comment mining — 2026-10-08 (since 2026-10-07)
 
