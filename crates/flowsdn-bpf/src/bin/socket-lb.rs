@@ -1202,13 +1202,89 @@ type Tuple6 = (u8, [u8; 16], [u8; 16], [u8; 2], [u8; 2]);
 
 // The IPv6 path is split into BPF functions (BPF-to-BPF calls), each with
 // its own stack frame: inlined into one, its keys, values and addresses
-// exceed the 512-byte frame.
+// exceed the 512-byte frame. The verifier also limits the frames of a call
+// chain to 512 bytes combined (#369), so no IPv6 function calls another:
+// [`ingress6`] classifies the frame into the [`INGRESS6`] slot and returns a
+// step, and the classifier calls the step's function, which reads the slot.
 
-/// [`snat_reply4`] for IPv6.
+/// The IPv6 ingress path's state between its BPF functions: the frame's
+/// tuple and its flow ([`Nodeport6Value`], all zero for a new flow until
+/// [`new_flow6`] fills it).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Ingress6 {
+    tuple: Tuple6,
+    flow: Nodeport6Value,
+}
+/// The [`Ingress6`] slot: per CPU for the reason [`FIB6`] is.
+#[map(name = "flowsdn_nodeport6_scratch")]
+static INGRESS6: PerCpuArray<Ingress6> = PerCpuArray::with_max_entries(1, 0);
+
+/// [`ingress6`]'s steps: not ours, a reply of an SNAT flow, a new flow, a
+/// known forward flow.
+const STEP_PASS: i32 = 0;
+const STEP_REPLY: i32 = 1;
+const STEP_NEW: i32 = 2;
+const STEP_FORWARD: i32 = 3;
+
+/// [`nodeport4_in`] for IPv6, up to the flow lookup: fill [`INGRESS6`] and
+/// return the step.
 #[inline(never)]
-fn snat_reply6(skb: *mut __sk_buff, tuple: &Tuple6, flow: &Nodeport6Value) -> i32 {
+fn ingress6(skb: *mut __sk_buff) -> i32 {
+    classify6(&TcContext::new(skb)).unwrap_or(STEP_PASS)
+}
+#[inline(always)]
+fn classify6(ctx: &TcContext) -> Option<i32> {
+    let state = INGRESS6.get_ptr_mut(0)?;
+    let tuple = tuple6(ctx)?;
+    let (proto, client, front, client_port, front_port) = tuple;
+    let mut key = Nodeport6Key {
+        a: client,
+        b: front,
+        ap: client_port,
+        bp: front_port,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let (step, flow) = if let Some(flow) = unsafe { NODEPORT6.get(&key).copied() } {
+        (STEP_REPLY, flow)
+    } else {
+        key.direction = FORWARD;
+        // SAFETY: as above.
+        match unsafe { NODEPORT6.get(&key).copied() } {
+            Some(known) => (STEP_FORWARD, known),
+            None => (
+                STEP_NEW,
+                Nodeport6Value {
+                    address: [0; 16],
+                    port: [0; 2],
+                    flags: 0,
+                    pad: 0,
+                    other: [0; 16],
+                    other_port: [0; 2],
+                    pad2: [0; 2],
+                },
+            ),
+        }
+    };
+    // SAFETY: this CPU's slot, valid for the whole invocation and used by
+    // nothing else meanwhile (see fib6).
+    unsafe { state.write(Ingress6 { tuple, flow }) };
+    Some(step)
+}
+
+/// [`snat_reply4`] for IPv6, on the [`INGRESS6`] slot.
+#[inline(never)]
+fn snat_reply6(skb: *mut __sk_buff) -> i32 {
     let ctx = TcContext::new(skb);
-    snat_reply6_in(&ctx, tuple, flow).unwrap_or(TC_ACT_OK)
+    let Some(state) = INGRESS6.get_ptr_mut(0) else {
+        return TC_ACT_OK;
+    };
+    // SAFETY: the slot ingress6 filled in this invocation; read only.
+    let state = unsafe { &*state };
+    snat_reply6_in(&ctx, &state.tuple, &state.flow).unwrap_or(TC_ACT_OK)
 }
 #[inline(always)]
 fn snat_reply6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Option<i32> {
@@ -1237,13 +1313,24 @@ fn snat_reply6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Opt
     redirect6(ctx, result, fib)
 }
 
-/// [`snat_forward4`] for IPv6. The route is looked up again rather than kept
-/// from a new flow's lookup.
+/// A forward flow on the [`INGRESS6`] slot: [`snat_forward4`] for IPv6 to
+/// another node's backend, else the destination rewrite to a local one.
 #[inline(never)]
-fn snat_forward6(skb: *mut __sk_buff, tuple: &Tuple6, flow: &Nodeport6Value) -> i32 {
+fn forward6(skb: *mut __sk_buff) -> i32 {
     let ctx = TcContext::new(skb);
-    snat_forward6_in(&ctx, tuple, flow).unwrap_or(TC_ACT_OK)
+    let Some(state) = INGRESS6.get_ptr_mut(0) else {
+        return TC_ACT_OK;
+    };
+    // SAFETY: the slot ingress6 (and new_flow6) filled; read only.
+    let state = unsafe { &*state };
+    if state.flow.flags & FLOW_SNAT != 0 {
+        snat_forward6_in(&ctx, &state.tuple, &state.flow).unwrap_or(TC_ACT_OK)
+    } else {
+        let _ = local6(&ctx, &state.tuple, &state.flow);
+        TC_ACT_OK
+    }
 }
+/// The route is looked up again rather than kept from a new flow's lookup.
 #[inline(always)]
 fn snat_forward6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Option<i32> {
     let (proto, client, front, client_port, front_port) = *tuple;
@@ -1270,14 +1357,34 @@ fn snat_forward6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> O
     )?;
     redirect6(ctx, result, fib)
 }
+/// A node-local backend: rewrite the destination, let the stack deliver it.
+#[inline(always)]
+fn local6(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Option<()> {
+    let (proto, _, front, _, front_port) = *tuple;
+    rewrite6(
+        ctx,
+        proto,
+        IP6_DST,
+        IP6_DPORT,
+        (front, front_port),
+        (flow.address, flow.port),
+    )
+}
 
 /// A new IPv6 flow to a node-local frontend: pick a backend and, for one on
 /// another node, a NAT port; record both directions in [`NODEPORT6`] and
-/// return the forward entry (address 0 when the frame is not ours).
+/// leave the forward entry in the [`INGRESS6`] slot. 0 when the frame is not
+/// ours.
 #[inline(never)]
-fn new_flow6(skb: *mut __sk_buff, tuple: &Tuple6, out: &mut Nodeport6Value) -> i32 {
+fn new_flow6(skb: *mut __sk_buff) -> i32 {
     let ctx = TcContext::new(skb);
-    match new_flow6_in(&ctx, tuple, out) {
+    let Some(state) = INGRESS6.get_ptr_mut(0) else {
+        return 0;
+    };
+    // SAFETY: the slot ingress6 filled in this invocation; nothing else
+    // refers to it while this function runs.
+    let state = unsafe { &mut *state };
+    match new_flow6_in(&ctx, &state.tuple, &mut state.flow) {
         Some(()) => 1,
         None => 0,
     }
@@ -1358,58 +1465,6 @@ fn new_flow6_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> O
     Some(())
 }
 
-/// [`nodeport4_in`] for IPv6.
-#[inline(always)]
-fn nodeport6_in(ctx: &TcContext) -> Option<i32> {
-    let tuple = tuple6(ctx)?;
-    let (proto, client, front, client_port, front_port) = tuple;
-    let mut key = Nodeport6Key {
-        a: client,
-        b: front,
-        ap: client_port,
-        bp: front_port,
-        proto,
-        direction: SNAT_REPLY,
-        pad: [0; 2],
-    };
-    // SAFETY: LRU value copied at once, never written through.
-    if let Some(flow) = unsafe { NODEPORT6.get(&key).copied() } {
-        return Some(snat_reply6(ctx.skb.skb, &tuple, &flow));
-    }
-    key.direction = FORWARD;
-    // SAFETY: LRU value copied at once, never written through.
-    let flow = match unsafe { NODEPORT6.get(&key).copied() } {
-        Some(known) => known,
-        None => {
-            let mut flow = Nodeport6Value {
-                address: [0; 16],
-                port: [0; 2],
-                flags: 0,
-                pad: 0,
-                other: [0; 16],
-                other_port: [0; 2],
-                pad2: [0; 2],
-            };
-            if new_flow6(ctx.skb.skb, &tuple, &mut flow) == 0 {
-                return None;
-            }
-            flow
-        }
-    };
-    if flow.flags & FLOW_SNAT != 0 {
-        return Some(snat_forward6(ctx.skb.skb, &tuple, &flow));
-    }
-    rewrite6(
-        ctx,
-        proto,
-        IP6_DST,
-        IP6_DPORT,
-        (front, front_port),
-        (flow.address, flow.port),
-    )?;
-    Some(TC_ACT_OK)
-}
-
 /// [`nodeport4_out`] for IPv6.
 #[inline(always)]
 fn nodeport6_out(ctx: &TcContext) -> Option<()> {
@@ -1442,10 +1497,6 @@ fn ingress4(skb: *mut __sk_buff) -> i32 {
     nodeport4_in(&TcContext::new(skb)).unwrap_or(TC_ACT_OK)
 }
 #[inline(never)]
-fn ingress6(skb: *mut __sk_buff) -> i32 {
-    nodeport6_in(&TcContext::new(skb)).unwrap_or(TC_ACT_OK)
-}
-#[inline(never)]
 fn egress4(skb: *mut __sk_buff) -> i32 {
     let _ = nodeport4_out(&TcContext::new(skb));
     TC_ACT_OK
@@ -1458,9 +1509,15 @@ fn egress6(skb: *mut __sk_buff) -> i32 {
 
 #[classifier]
 pub fn nodeport_ingress(ctx: TcContext) -> i32 {
+    let skb = ctx.skb.skb;
     match ctx.load::<[u8; 2]>(12) {
-        Ok(ETH_P_IPV6) => ingress6(ctx.skb.skb),
-        _ => ingress4(ctx.skb.skb),
+        Ok(ETH_P_IPV6) => match ingress6(skb) {
+            STEP_REPLY => snat_reply6(skb),
+            STEP_NEW if new_flow6(skb) != 0 => forward6(skb),
+            STEP_FORWARD => forward6(skb),
+            _ => TC_ACT_OK,
+        },
+        _ => ingress4(skb),
     }
 }
 #[classifier]
