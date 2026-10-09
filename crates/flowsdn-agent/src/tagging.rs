@@ -103,7 +103,10 @@ pub fn network_status(current: Option<&Value>, entry: &Value) -> Value {
     let interface = entry.get("interface");
     let ours = |other: &Value| {
         other.get("name") == entry.get("name")
-            || (interface.and_then(Value::as_str).is_some_and(|i| !i.is_empty()) && other.get("interface") == interface)
+            || (interface
+                .and_then(Value::as_str)
+                .is_some_and(|i| !i.is_empty())
+                && other.get("interface") == interface)
     };
     let others = current
         .and_then(Value::as_array)
@@ -207,11 +210,15 @@ mod tests {
     fn network_status_merges_into_other_plugins_entries() {
         let entry = network_status_entry(&pod_networks(7, &document(), "n1"));
         assert_eq!(network_status(None, &entry), json!([entry]));
-        assert_eq!(network_status(Some(&json!({"not":"a list"})), &entry), json!([entry]));
+        assert_eq!(
+            network_status(Some(&json!({"not":"a list"})), &entry),
+            json!([entry])
+        );
         let secondary = json!({"name":"ns/vlan10","interface":"net1","ips":["192.0.2.5"],"mac":"02:aa:00:00:00:01"});
         // Multus's own entry for flowsdn (same name, its own extra keys) and an
         // old one on the same interface are replaced; the default goes first.
-        let multus = json!({"name":"flowsdn","interface":"eth0","ips":["10.5.0.6"],"default":true,"dns":{}});
+        let multus =
+            json!({"name":"flowsdn","interface":"eth0","ips":["10.5.0.6"],"default":true,"dns":{}});
         let stale = json!({"name":"old","interface":"eth0","ips":["10.9.0.1"]});
         assert_eq!(
             network_status(Some(&json!([secondary, multus, stale])), &entry),
@@ -336,7 +343,8 @@ mod tests {
         );
         first(&mut view.pods).pod_networks = Some(value.to_string());
         // Multus added a secondary attachment: flowsdn's entry is current.
-        let secondary = json!({"name":"ns/vlan10","interface":"net1","ips":["192.0.2.5"],"default":false});
+        let secondary =
+            json!({"name":"ns/vlan10","interface":"net1","ips":["192.0.2.5"],"default":false});
         first(&mut view.pods).network_status =
             Some(json!([status.get(0).cloned().expect("entry"), secondary]).to_string());
         assert!(view.annotation_patches().is_empty());

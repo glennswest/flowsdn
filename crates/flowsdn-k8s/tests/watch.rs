@@ -1,6 +1,6 @@
 use flowsdn_k8s::watch::{
-    ANNOTATION_MAX, ContainerStatus, NETWORK_STATUS, Limits, OwnerReference, PageResult, Resource, Scope,
-    WatchState,
+    ANNOTATION_MAX, ContainerStatus, Limits, NETWORK_STATUS, OwnerReference, PageResult, Resource,
+    Scope, WatchState,
 };
 use serde_json::{Value, json};
 
