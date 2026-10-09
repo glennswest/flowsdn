@@ -47,9 +47,15 @@ protobuf remains an open measurement question.
 
 ## Built-in watch state
 
-`watch::WatchState` projects slim Node and local (or, with `Scope::Pods`,
-cluster-wide) Pod documents into the existing
-`flowsdn-table`. It stages bounded list pages and publishes only after a complete
+`watch::WatchState` projects slim documents into the existing `flowsdn-table`
+for each `watch::Scope`: `Nodes`, `LocalPods` (field selector
+`spec.nodeName`), `Pods` (cluster-wide, the IP cache), `Services` and
+`EndpointSlices` (`discovery.k8s.io/v1`, the socket LB). A Pod row keeps node,
+host network, IPs, labels, controller `ownerReferences`, container and init
+container statuses (name, runtime ID) and only its `flowsdn.io/` annotations
+(each at most 16 KiB; #328). A Service row keeps type, cluster/external/
+load-balancer IPs, ports and node ports, internal/external traffic policies and
+`sessionAffinity: ClientIP` with its timeout (default 10800 s). It stages bounded list pages and publishes only after a complete
 consistent list. An interrupted or invalid relist preserves the last snapshot.
 Watch errors and disconnects require a new list; bookmarks advance the opaque
 resource version without changing rows. Deletes require a matching UID, protecting
@@ -59,7 +65,10 @@ The caller connects the transport to this state, paginates and applies
 retry/backoff; the agent's `kubernetes` feature does this
 (`crates/flowsdn-agent/src/kubernetes_controller.rs`). `client::WATCH_ENDED` is
 the error text of a watch the server closed normally, which can resume from the
-last resource version instead of relisting.
+last resource version instead of relisting. `JsonClient::send_json` sends one
+bounded JSON request to an API path (the agent's Events, Pod annotation
+merge-patches and the perf suite's pods) and returns the status rather than
+failing on non-2xx.
 
 ## HTTPS transport checkpoint (Fedora OpenSSL)
 
@@ -79,4 +88,4 @@ features disabled; see [ADR-0016](../../docs/decisions/0016-fedora-openssl.md).
 Build with Fedora `openssl-devel` and `pkgconf-pkg-config`. Vendoring is disabled;
 TLS consumers require the matching Fedora GNU/OpenSSL runtime. The former
 ring dependency-policy failure is resolved; see the [verified TLS checkpoint](../../docs/validation/2026-09-28-fedora-tls.md).
-This remains a library checkpoint, not agent controller integration.
+The agent's `kubernetes` feature (GNU build) is the consumer.

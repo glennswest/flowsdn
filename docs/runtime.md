@@ -1,11 +1,12 @@
 # Current runtime configuration and deployment
 
-This describes the executable code as of 2026-10-05, including changes since
-2026-09-25. The agent owns local endpoints and host-scope IPAM. Built with the
-`kubernetes` feature and configured with a `kubernetes` section, it also
-watches Nodes and Pods, takes its pod CIDR from its Node and routes to the
-other nodes' pod CIDRs (#291); it has no identity allocator, policy or
-Services yet. The broader configuration catalogue
+This describes the executable code as of 2026-10-09 (`53bffc7`), including
+changes since 2026-09-25. The agent owns local endpoints and host-scope IPAM.
+Built with the `kubernetes` feature and configured with a `kubernetes` section,
+it also watches Nodes and Pods, takes its pod CIDR from its Node, routes to the
+other nodes' pod CIDRs (#291) and load balances Services at the socket and, for
+traffic from outside the cluster, on the node's uplink (#292); it has no
+identity allocator or policy enforcement yet. The broader configuration catalogue
 and specifications describe library contracts and planned integrations, not
 additional options accepted by this executable.
 
@@ -35,10 +36,16 @@ limited to 1 MiB. The authoritative reader is
 | `route-mtu` | Required integer, at least 1280 | Route MTU; must not exceed device MTU. |
 | `endpoint-id-max` | `4095` | Integer in `1..=65535`; bounds ID allocation, not BPF map capacity. |
 | `kubernetes` | Omitted or null: disabled | Object; enables Node/Pod discovery. Needs an agent built with `--features kubernetes`; the default (static musl) build fails startup with it. |
-| `kubernetes.node-name` | `K8S_NODE_NAME`, then `NODE_NAME` | This node's Node name. |
+| `kubernetes.node-name` | `K8S_NODE_NAME`, then `NODE_NAME` | This node's Node name: required (from one of the three), at most 253 characters of ASCII letters, digits, `-` and `.`. |
 | `kubernetes.kubeconfig` | In-cluster service account | Explicit kubeconfig path. A developer's default kubeconfig is never consulted. HTTPS must verify. |
 | `kubernetes.auto-direct-node-routes` | `true` | Install `<podCIDR> via <InternalIP> proto kernel` for every other node (spec 10 §3.2.3). |
 | `kubernetes.direct-routing-skip-unreachable` | `false` | Skip, instead of reporting an error for, a node whose InternalIP is reached through a gateway. |
+| `kubernetes.service-lb` | `true` | Watch Services and EndpointSlices and load the embedded `socket-lb` object ([socket LB](#clusterip-socket-lb-292)). |
+| `kubernetes.cgroup-root` | `/sys/fs/cgroup` | Absolute path of the cgroup v2 directory the socket-LB programs attach to (the manifests mount the host's root at `/run/flowsdn/cgroupv2`). |
+| `kubernetes.node-port` | `true` | Attach the NodePort programs to the uplinks (traffic from outside the cluster). Takes effect only with `service-lb`. |
+
+The `kubernetes` booleans must be JSON booleans and its strings strings, or
+startup fails.
 
 Unknown JSON keys are currently ignored; they do not enable features. Gateway
 addresses must match their family and cannot be unspecified, multicast,
@@ -233,12 +240,14 @@ the port; for type LoadBalancer each `status.loadBalancer.ingress[].ip` on
 the port; for types NodePort and LoadBalancer every node's InternalIP on the
 `nodePort` (recomputed when node addresses change). These cover clients
 inside the cluster, pods and node processes, whichever node's address they
-use. Traffic arriving from outside the cluster (#292, IPv4 and IPv6, `kubernetes.node-port`,
-default on): the agent also writes a node-local copy (key scope 1) of every
-NodePort, external and LoadBalancer frontend, with every backend (only this
-node's with `externalTrafficPolicy: Local`), and attaches the
-`nodeport_ingress`/`nodeport_egress` tc programs (TCX) to every interface
-holding this node's InternalIP. For a packet to such a frontend the program
+use. Traffic arriving from outside the cluster (#292, IPv4 and IPv6): the agent
+also writes a node-local copy (key scope 1) of every NodePort, external and
+LoadBalancer frontend (not cluster IPs), with every backend (only this node's
+with `externalTrafficPolicy: Local`), and, with `kubernetes.node-port` (default
+on), attaches the `nodeport_ingress`/`nodeport_egress` tc programs (TCX) to
+every interface holding this node's InternalIP, rechecked every pass of the
+services thread (an interface that no longer holds it is detached; none found
+is a `node-port` health error). For a packet to such a frontend the program
 picks a backend and asks the FIB where it is. On this node (a pod's device,
 or a node address): the destination is rewritten (IPv4 header and TCP/UDP
 checksums fixed; IPv6 has no header checksum, the TCP/UDP one covers the
@@ -258,8 +267,10 @@ a connection keeps its backend and NAT port. A packet the FIB cannot route,
 with TTL 1, or for which no NAT port is free within eight tries passes
 untranslated, and so does an IPv6 packet with extension headers before its
 TCP/UDP header (fragments among them).
-Other packets pass untouched. `GET /v1/service` gives each frontend's `flags.type`
-(`ClusterIP`, `ExternalIPs`, `LoadBalancer`, `NodePort`).
+Other packets pass untouched; the programs never drop. `GET /v1/service` gives
+each frontend's `flags.type` (`ClusterIP`, `ExternalIPs`, `LoadBalancer`,
+`NodePort`) and `frontend-address.scope` (`external` for the socket LB's copy,
+`node-local` for the uplink copy).
 `internalTrafficPolicy: Local` limits a cluster IP to endpoints on this node;
 `externalTrafficPolicy: Local` limits a NodePort on a node's address to that
 node's endpoints (an empty set fails `connect`, as Kubernetes drops such
@@ -272,26 +283,35 @@ change and every 30 s, it reads the maps, plans the difference
 maps hold, and new IDs never reuse a live one) and writes in spec 05 §3.4
 order: backends, slots, then the master entry that publishes the new count,
 then stale masters, slots and backends. A failed write is retried from the
-kernel state on the next pass and reported in health (`services`).
+kernel state on the next pass and reported in the `kubernetes` health member
+(`services`; a socket LB that cannot load or attach is also a
+`ServiceLBUnavailable` Node event, and ClusterIPs are then not handled).
 
 With `bpf-pin-root` the maps and links are pinned under `<pin root>/socket-lb`.
 A restarted agent reuses the maps (a pinned map with another layout refuses
 startup), attaches its programs, then releases the old links. Without a pin
-root the links detach when the agent exits. Not implemented: Maglev, DSR, topology hints, skip-LB for local redirect policy,
-socket termination when a backend goes away (an existing connection stays
-on its backend), SCTP, and tc-level LB for traffic that arrives from outside
-the node. `socket-lb-live` (medium test suite) checks the programs on a
-kernel; no cluster run yet.
+root the links detach when the agent exits. The NodePort uplink links are never
+pinned: they detach when the agent exits, and the per-CPU
+`flowsdn_nodeport6_fib` scratch map is not pinned either. Not implemented:
+Maglev, DSR, topology hints, skip-LB for local redirect policy, socket
+termination when a backend goes away (an existing connection stays on its
+backend), SCTP, NAT46/64, IPv4 fragments other than the first (they pass
+untouched), and BPF masquerade. `socket-lb-live` (medium test suite) checks the
+programs on a kernel, including the NodePort local and SNAT paths through
+`BPF_PROG_TEST_RUN`; no two-node cluster run yet.
 
 Without Kubernetes mode the agent does no Node/Pod discovery, installs no
-remote routes and has no Service handling; uplink ingress attachment is not
-wired in either mode.
+remote routes and has no Service handling. The `local-delivery` object's uplink
+ingress program is not attached in either mode (the NodePort programs above
+are the `socket-lb` object's).
 
-stormcos ships flowsdn as a **golden** containing the static musl agent
-(`/flowsdn-agent`, BPF object embedded) and CNI (`/opt/cni/bin/flowsdn`). Nodes
+stormcos ships flowsdn as a **golden** containing the agent (`/flowsdn-agent`;
+since golden-flowsdn-4e9e3f0bc876 the GNU Kubernetes-mode build with its Fedora
+OpenSSL runtime, stormcos#171) and the static musl CNI (`/opt/cni/bin/flowsdn`). Nodes
 clone goldens copy-on-write and mount it at `/pallets/flowsdn`; nothing is
-pulled. The latest golden is `golden-flowsdn-a7ee3f63195b`, staged from
-`c6c96c7`. The golden/release authority is
+pulled. The latest golden is `golden-flowsdn-cc0835c8a1db`, staged from
+`347581a` (IPv4 NodePort SNAT); the IPv6 NodePort programs (`53bffc7`) are in no
+golden yet. The golden/release authority is
 [stormcos's golden documentation](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 The flowsdn edition and composition are owned by stormcos; source changes reach
 nodes through a newly staged golden and composed release, not through a Git
@@ -305,7 +325,7 @@ manifests (`deploy/stormcos/manifests/`): a DaemonSet with `image: flowsdn`
 single-node IPv4 pool. Whether stormcos applies them is
 [stormcos#261](https://github.com/glennswest/stormcos/issues/261); the node
 provides masquerade. The edition runs no kube-proxy: ClusterIPs are handled by
-the Kubernetes-mode agent's socket LB (#292, below), so they need
+the Kubernetes-mode agent's socket LB (#292, above), so they need
 `deploy/stormcos/manifests-kubernetes/`, the multi-node set for the
 Kubernetes-connected agent.
 

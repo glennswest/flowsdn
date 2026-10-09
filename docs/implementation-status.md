@@ -1,83 +1,119 @@
-# Implementation status — 2026-10-03
+# Implementation status — 2026-10-09
 
 ## Current code
 
+Refreshed against source through `eed1aca` (`git log --since=2026-10-02`).
 The workspace version is still `0.14.0`, but current main includes substantial
 unreleased runtime work. The historical release assessments below describe
 those releases at their validation dates; their statements that an agent,
 pinning or subsystem libraries are absent are **not current status**.
 
+### Agent and CNI
+
 - `flowsdn-agent` serves a persisted local endpoint and host-pool IPAM API on
-  a Unix socket. It embeds the `local-delivery` BPF object built from its commit
-  (a configured `bpf-object` overrides it) and has two egress modes: `fib`
-  (BPF FIB redirect) and `stack` (every endpoint frame, same-node pod-to-pod
-  included, to the host stack, plus per-endpoint host routes).
-  Endpoint map/TCX pins can preserve ownership during agent absence. Restore
-  validates ownership and replays offline deletes.
+  a mode-0600 Unix socket (16 routes, `api::ROUTES`), plus an optional
+  read-only `http-listen` on a loopback address (mutations get 403; other
+  addresses are refused). It embeds the BPF objects built from its commit
+  (`local-delivery`; `socket-lb` in Kubernetes mode), recorded in
+  `bpf-objects.lock`; a configured `bpf-object` overrides `local-delivery`.
+  Two egress modes: `fib` (BPF FIB redirect) and `stack` (every endpoint
+  frame, same-node pod-to-pod included, to the host stack, plus per-endpoint
+  host routes). Endpoint map/TCX pins can preserve ownership during agent
+  absence; restore validates ownership and replays offline deletes.
 - `flowsdn-cni` implements the primary veth CNI and the loopback plugin.
-  `flowsdn-cni install` puts the plugin names and loopback in the host CNI bin
-  directory and writes `00-flowsdn.conflist`.
-- Endpoint list/detail and exact pool counts support node tooling. The agent
-  exposes health modules and health-table queries and successful help/version.
-- `deploy/stormcos/manifests/` is the stormcos flowsdn edition: RBAC, ConfigMap
-  (`egress: stack`, static single-node IPv4 pool) and a DaemonSet on the golden
-  (`image: flowsdn`) with a CNI-install init container. Not yet checked live on
-  a stormcos node; applying it is stormcos#261.
-- `flowsdn-k8s` has a bounded Node/Pod watch client over Fedora system OpenSSL
-  and `flowsdn.io/v1alpha1` CRD registration plans. `flowsdn_k8s::crd` generates
-  the 22 shipped CRD manifests from the vendored reference schemas and
-  `flowsdn_k8s::schema` validates objects offline (CEL subset included); every
-  kind has admitted and rejected examples ([CRD reference](crds.md), #325). No
-  controller, operator registration or CRD readiness gate exists yet. The agent's `kubernetes`
-  feature (GNU target, #291) wires the watches in: `auto` pools from the Node
-  (spec 07 §3.4), direct node routes (spec 10 §3.2.3, persisted ownership,
-  conflict and reachability checks), forwarding sysctls and the `GET /v1/ip`
-  / `GET /v1/node/routes` views. With `service-lb` (#292) it watches Services
-  and EndpointSlices and load balances ClusterIPs at the socket: the
-  `socket-lb` cgroup programs (TCP/UDP, IPv4/IPv6/IPv4-mapped, UDP reverse
-  translation) over the Cilium-layout LB maps, programmed by a stateless
-  planner (`flowsdn_lb::socket`) in spec 05 §3.4 write order; `GET
-  /v1/service`. External IPs, LoadBalancer IPs and NodePorts (on every node
-  address) work for in-cluster clients, with both traffic policies and
-  ClientIP session affinity; from outside the cluster (IPv4 and IPv6) through the
-  uplink tc programs, to this node's backends and (SNAT, FIB redirect) other
-  nodes'. Maglev, DSR, socket termination and
-  policy are not implemented. Verified by unit tests and a
-  controller test against a loopback HTTPS API server; the `socket-lb-live`
-  kernel fixture is in the medium suite but has not run on a test machine; not yet on a cluster (two-node
-  acceptance on pvetest1 + pvetest2, stormcentral#360; the golden's GNU
-  runtime, stormcos#171). No cluster identity allocator, BPF ipcache, Hubble
-  or operator. `deploy/stormcos/manifests-kubernetes/` is its deployment.
-- Kubernetes/operator, Hubble, BGP, Gateway, ClusterMesh, encryption, proxy,
-  service and policy crates provide primitives and focused tests. Their
-  presence does not establish operational controllers or complete networking.
-- The `test/` container runs `short`/`medium`/`long` suites against the commit's
-  own agent, CNI and BPF objects in pod namespaces; it has been built and run
-  unprivileged on the build box, not yet on a test machine (#303).
-- Configuration keys/defaults, actual listeners, delivery and current boundaries
-  are documented in [the runtime guide](runtime.md); the complete served route
-  list is in [the API contract](agent-api.md).
+  `flowsdn-cni install` puts `flowsdn-cni`, `flowsdn` and (if absent)
+  `loopback` in the host CNI bin directory and writes `00-flowsdn.conflist`
+  (type `flowsdn-cni`).
+- Shipped names are flowsdn's only (ADR-0020, #330): `/var/run/flowsdn`,
+  `FLOWSDN_SOCK`, BPF maps `flowsdn_lxc`, `flowsdn_lb{4,6}_*`,
+  `flowsdn_nodeport{4,6}_nat`, the persisted `EndpointUID` key.
+  `tools/check-no-cilium.sh` runs in `test/build.sh`, the release build and
+  the image build.
 
-## Changes since 2026-09-25
+### Kubernetes mode (`kubernetes` cargo feature, GNU + Fedora OpenSSL)
 
-`git log --since=2026-09-25` adds the Rust loopback CNI and binary installer
-(`094437d`, `db0f689`, `816c8c9`); the recovered Node/Pod watch transport
-(`67cb727`) and Fedora OpenSSL TLS (`c66d35a`, ADR-0016); flowsdn-owned CRD
-identity (`e02d811`, ADR-0017, #299); the removal of the disabled GitHub
-workflow (`6d1d2ed`, #304); the test container (`22522a2`, #303); the policy
-oracle decision (`31b3ba2`, ADR-0018, #103); stack egress and host routes
-(`4f9fa43`), the reproducible BPF build (`a3b771c`) and the edition manifests,
-node installer and embedded object (`8c873aa`, #296); and the `__sk_buff`
-`ctx_in` matrix probe (`60030ff`, #256). The flowsdn golden
-`golden-flowsdn-84a7153fcfd0` was staged from `26b7aea`.
+- Node and cluster Pod watches (relist with backoff) on a controller thread;
+  `auto` pools from the Node (spec 07 §3.4, or `10.<last IPv4 byte>.0.0/16`);
+  direct node routes (spec 10 §3.2.3, persisted ownership, conflict and
+  reachability checks); forwarding sysctls; `GET /v1/ip` and
+  `GET /v1/node/routes`.
+- **Services, no kube-proxy** (`service-lb`, default on, #292): Service and
+  EndpointSlice watches; the `socket-lb` cgroup programs (`connect`, `sendmsg`,
+  `recvmsg`, `getpeername`; TCP/UDP, IPv4/IPv6/IPv4-mapped, UDP reverse
+  translation) over the LB maps, programmed by the stateless planner
+  `flowsdn_lb::socket` in spec 05 §3.4 write order; `GET /v1/service`.
+  ClusterIPs, externalIPs, LoadBalancer ingress IPs and NodePorts (every node
+  InternalIP) for clients on the node; `internalTrafficPolicy` and
+  `externalTrafficPolicy: Local`; ClientIP session affinity. Links attach
+  without `BPF_F_ALLOW_MULTI` since `cda5799` (EINVAL on 7.2 before it).
+- **From outside the cluster** (`node-port`, default on): `nodeport_ingress`
+  and `nodeport_egress` on the uplink (the device of the route to other nodes
+  or the default route). Scope-1 frontends DNAT to this node's backends; for
+  `externalTrafficPolicy: Cluster`, remote backends are SNATed to the FIB
+  source address (ports 61000–65535) and FIB-redirected, replies reverse-NATed
+  at uplink ingress. IPv4 (`flowsdn_nodeport4_nat`) and IPv6
+  (`flowsdn_nodeport6_nat`, `53bffc7`).
+- Kubernetes Events on Pods and the Node, aggregated and non-blocking (#298);
+  the `flowsdn.io/pod-networks` annotation on local Pods and pod/container/
+  workload fields on `/v1/endpoint` and `/v1/ip` (#328).
+- Not implemented: cluster identity allocation and a BPF ipcache, policy in
+  the datapath, masquerade (the node provides it), Maglev, DSR, NAT46/64,
+  socket termination, CRD controllers or registration, an operator process,
+  Hubble observer/relay.
+
+### Libraries
+
+- `flowsdn-k8s`: bounded watch client over Fedora OpenSSL; `flowsdn_k8s::crd`
+  generates the 22 shipped `flowsdn.io/v1alpha1` CRDs from the vendored
+  reference schemas; `flowsdn_k8s::schema` validates objects offline (CEL
+  subset); every kind has admitted and rejected examples ([CRD reference](crds.md), #325).
+- `flowsdn-policy`: Kubernetes NetworkPolicy importer (`flowsdn_policy::k8s`)
+  and lowering to the simulator, with tests that the simulator's decisions
+  agree with the compiled map state. The agent does not depend on this crate;
+  there is no BPF policy program or policy map writer.
+- Operator, Hubble (beyond the endpoint model the agent uses), BGP, Gateway,
+  ClusterMesh, encryption, proxy and the remaining IPAM modes provide
+  primitives and focused tests. `flowsdn-cli` is an offline
+  ClusterMesh bundle importer only. None of this establishes an operational
+  controller.
+
+### Delivery and tests
+
+- The `flowsdn` golden carries the GNU Kubernetes-mode agent with its Fedora
+  runtime, the static musl CNI and `nft` (stormcos#171). Latest:
+  `golden-flowsdn-cc0835c8a1db` (`347581a`, IPv4 NodePort SNAT); the IPv6
+  NodePort programs are not in a golden yet. The edition applies
+  `deploy/stormcos/manifests-kubernetes/` (stormcos#261).
+- Standalone, outside the golden (ADR-0019): Helm chart
+  `install/kubernetes/flowsdn`, agent image `images/agent`, release archives
+  from `deploy/release/build.sh`. Built by sc-build, not published.
+- The `test/` container (`short`/`medium`/`long`, plus `perf`/`perf-scale`)
+  has run on hardware: on pvetest2 (stormcos 11.88-flowsdn, kernel
+  7.2.8-200.fc44) medium passed every fixture including `skb-ctx-matrix` and
+  `socket-lb-live` with the IPv4 NodePort/SNAT steps; the node-service checks
+  failed against the node's older flowsdn. The IPv6 NodePort steps, the long
+  suite, `perf` and two-node acceptance (pvetest1 + pvetest2) have not run.
+- Configuration keys/defaults, listeners and boundaries are in
+  [the runtime guide](runtime.md); the served routes in [the API contract](agent-api.md).
+
+## Changes since 2026-10-02
+
+`git log --since=2026-10-02`: Helm chart, image and release archives (`3b04998`,
+#294); flowsdn-only CNI names (`0040f60`) and BPF map names (`5628875`,
+`a6ec683`, #330); Events and the route list (`18b61db`, #298); pod tagging
+(`56d09f0`, `f1d9327`, #328); socket-LB frontend kinds and traffic policies
+(`b381f6e`); session affinity (`58f072d`, `f67de31`); the socket-LB attach fix
+(`cda5799`); the NetworkPolicy importer and lowering (`1261364`, `345e9f7`);
+uplink NodePort (`94fc028`, `b3a6524`), SNAT (`a793819`, `85cab87`) and IPv6
+(`7b788ee`, `53bffc7`), all #292; test-container fixes from the first
+hardware runs (#303, #341, #256).
 
 These are implementation and focused validation results, not completion of
 [the four networking milestones](milestones.md). Issues #291–#294 remain the
-acceptance trackers; #296 tracks the stormcos edition. Validation records under
-[validation/](validation/) retain their source, platform and scope. Compile
-checks on arm64 are not arm64 runtime acceptance; router-namespace traffic is
-not a two-node Kubernetes test. This documentation refresh does not claim new
-build, privileged or cluster test runs.
+acceptance trackers. Validation records under [validation/](validation/)
+retain their source, platform and scope. Compile checks on arm64 are not arm64
+runtime acceptance; namespace fixtures are not a two-node Kubernetes test.
+This documentation refresh does not claim new build or test runs.
 
 ## Historical assessments and release validation
 

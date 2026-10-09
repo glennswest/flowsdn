@@ -44,14 +44,16 @@ Running-component acceptance follows the stormcos test standard: test containers
 built from `test/`, run as Jobs on the test machines, with hardware/kernel/resource
 requirements declared rather than assuming a particular machine. flowsdn's image
 is described in [test/README.md](../test/README.md): `test/build.sh` builds the
-BPF objects with `tools/build-bpf.sh`, refuses a stale embedded
-`local-delivery` or `socket-lb` in the agent, builds the static musl binaries
-and the GNU `flowsdn-perf` (the `perf` suite, #321); and stormcentral
-runs `/test short|medium|long` with `stormcentral test run flowsdn <suite>`.
-Running it on a test machine is still open
-([#303](https://github.com/glennswest/flowsdn/issues/303)).
-Unit tests, cross-compilation and namespace fixtures alone do not establish
-multi-node Kubernetes acceptance.
+BPF objects with `tools/build-bpf.sh`, checks them and the agent's embedded
+`local-delivery` and `socket-lb` against `bpf-objects.lock`, builds the static
+musl binaries and the GNU `flowsdn-perf` (the `perf` suites, #321), and runs
+`tools/check-no-cilium.sh` on what the golden ships (agent, CNI, embedded
+objects; #330). stormcentral runs `/test short|medium|long|perf|perf-scale`
+with `stormcentral test run flowsdn <suite> --tag <machine>`. Short and medium
+have passed on hardware (pvetest2, 11.88-flowsdn: medium a0cd56f37c, short
+dc492b2815; #303 closed); `perf` and the two-node runs still wait for machines
+(#321, #291). Unit tests, cross-compilation and namespace fixtures alone do not
+establish multi-node Kubernetes acceptance.
 
 `tools/aya-kfunc-watch.sh` checks whether the latest aya release, aya main or
 the latest bpf-linker can now relocate the `bpf_sock_destroy` kfunc. It exits 0
@@ -85,16 +87,25 @@ Standalone release archives (ADR-0019, for clusters without stormcos) are
 built with `deploy/release/build.sh OUT_DIR [TARGET...]`, for example
 `sc-build 'deploy/release/build.sh "$TMPDIR/release"'`: static musl
 `flowsdn-agent` and `flowsdn-cni` for amd64 and arm64 in
-`flowsdn-<version>-<arch>.tar.gz`, plus `SHA256SUMS`. They are not part of the
-flowsdn golden, and the script uploads nothing; sc-build deletes them with its
-drive, so publication needs its own recorded step.
+`flowsdn-<version>-<arch>.tar.gz` (with `bpf-objects.lock`, LICENSE, NOTICE,
+README and REVISION), the Helm chart `flowsdn-<version>.tgz` when `helm` is
+installed (after `install/kubernetes/check.sh`), and `SHA256SUMS` over both.
+The archives' agent is the default musl build: it embeds `local-delivery` only
+and refuses a `kubernetes` section, so it has no Node/Pod watches or socket LB;
+the chart uses the GNU Kubernetes-mode agent image from `images/agent/build.sh`
+(`localhost/flowsdn-agent:<version>`, optionally an OCI archive). Every script
+runs `tools/check-no-cilium.sh` on its output. None of this is part of the
+flowsdn golden, and nothing uploads it; sc-build deletes it with its drive, so
+publication needs its own recorded step.
 
 `bpf-objects.lock` pins the BPF objects (#245). `test/build.sh` runs
 `tools/bpf-objects-lock.sh check` on the objects it builds and fails on a stale
 lock or embedded copy. After changing `crates/flowsdn-bpf`, rebuild through
 sc-build (`tools/build-bpf.sh "$TMPDIR/bpf" && tools/bpf-objects-lock.sh write
 "$TMPDIR/bpf" && cat bpf-objects.lock`) and commit the new embedded objects and
-lock; the agent's unit tests check the embedded bytes against it.
+lock; the agent's unit tests check the embedded bytes against it. sc-build hands
+no files back from the build VMs, so the objects come back through the build log
+(for example base64-encoded; stormcentral#543).
 Documentation-only changes do not claim a new networking release.
 
 ## Older specifications and evidence

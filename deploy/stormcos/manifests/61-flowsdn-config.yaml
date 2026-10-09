@@ -1,6 +1,7 @@
 # The agent's configuration (docs/runtime.md). One node: the pool is static and
-# the agent does not read Node podCIDRs yet (#291), so two nodes would hand out
-# the same addresses and have no routes to each other's pods.
+# this set runs without Kubernetes mode, so the agent does not read Node podCIDRs
+# (manifests-kubernetes/ does); two nodes would hand out the same addresses and
+# have no routes to each other's pods.
 #
 # - IPv4 only, like the other stormcos editions. 10.244.0.0/24 stays clear of the
 #   Service range (10.96.0.0/12) and the node networks.

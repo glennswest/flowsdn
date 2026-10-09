@@ -23,7 +23,8 @@ conversion remain outstanding and unsupported modes fail before allocation.
 
 The executable uses `FLOWSDN_SOCK` for a custom agent socket (default `/var/run/flowsdn/flowsdn.sock`). The optional
 `FLOWSDN_DELETE_QUEUE` override selects a queue directory for isolated testing;
-the default preserves the Cilium queue location. This executable is not a
+the default is `/var/run/flowsdn/deleteQueue`, the agent's default beside its
+socket. This executable is not a
 complete networking installation: the deployable agent and cluster integration
 are still being implemented.
 
@@ -57,8 +58,8 @@ Run `flowsdn-agent cni install --source PATH` with the built `flowsdn-cni` binar
 `HOST_PREFIX=/host`). Its `bin` directory must be trusted and writable. The
 installer atomically replaces `flowsdn-cni`, then publishes the hardlink
 `flowsdn` (the golden's path). No `cilium-cni` name is installed (#294).
-`OVERWRITE_PLUGIN=false` retains an existing regular canonical binary and
-relinks the aliases to it. Existing destination symlinks are replaced, never
+`OVERWRITE_PLUGIN=false` retains an existing regular `flowsdn-cni` and
+relinks `flowsdn` to it. Existing destination symlinks are replaced, never
 written through; retaining a canonical symlink is rejected.
 
 `loopback` is copied from the same Rust source binary when absent or when

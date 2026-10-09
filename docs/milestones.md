@@ -17,14 +17,30 @@ that needs them; milestone 4 expands and hardens them. Conntrack/NAT primitives
 needed for milestone 1 are implemented there. Advanced modes of a component
 introduced in milestone 1 remain explicit milestone 3 deliverables.
 
-## Current checkpoint — 2026-09-27
+## Current checkpoint — 2026-10-09
 
-Main now has a standalone agent/CNI, persisted endpoint ownership, pinned
-forwarding, read APIs and deployment examples; the baseline above describes
-v0.14.0 only. Kubernetes watches, remote routing reconciliation and the two-node
-acceptance test remain unfinished. See [current implementation status](implementation-status.md).
-Stormcos ships this component in a golden; chart/image work in milestone 4 is
-additional packaging scope, not a description of that delivery path.
+The baseline above describes v0.14.0 only. Main (through `eed1aca`) has:
+
+- **Milestone 1 (#291):** agent/CNI with persisted endpoints and pinned
+  forwarding; the Kubernetes-mode agent (Node/Pod watches, pod CIDR from the
+  Node, direct routes to other nodes) in the golden. Open: cluster identity
+  allocation and ipcache, and the two-node IPv4/IPv6 acceptance on
+  pvetest1 + pvetest2.
+- **Milestone 2 (#292):** socket LB for ClusterIPs, externalIPs, LoadBalancer
+  IPs and NodePorts, traffic policies, ClientIP affinity; uplink NodePort with
+  SNAT to remote backends (IPv4 in golden `golden-flowsdn-cc0835c8a1db`; IPv6 on
+  main). The NetworkPolicy importer and simulator lowering exist as a library.
+  Open: live ClusterIP acceptance on a node, Maglev, DSR, NAT46/64,
+  socket termination, identity/CIDR policy in the datapath, host firewall.
+- **Milestone 3 (#293):** primitives only; nothing wired into the agent.
+- **Milestone 4 (#294):** Helm chart, agent image, release archives with
+  `SHA256SUMS`, `bpf-objects.lock` and the no-reference-names check exist
+  (built, not published). Open: live install/upgrade/rollback, arm64 at
+  runtime, the full matrix, and the gate on milestones 1–3.
+
+See [current implementation status](implementation-status.md). Stormcos ships
+this component in a golden; the chart, image and archives are a separate
+standalone install, not that delivery path (ADR-0019).
 
 ## Backlog ownership
 

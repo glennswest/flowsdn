@@ -2,13 +2,18 @@
 
 ## The flowsdn edition's manifests (#296, stormcos#261)
 
-[`manifests/`](manifests/) is what stormcos applies in the flowsdn edition in
-place of the cilium manifests (10–75). It contains a ServiceAccount and
-read-only RBAC, the agent ConfigMap and the agent DaemonSet:
+stormcos applies flowsdn's manifests in the flowsdn edition in place of the
+cilium manifests (10–75). There are two sets. [`manifests/`](manifests/) is the
+single-node, static-pool set for the default (static musl) agent: a
+ServiceAccount and read-only RBAC, the agent ConfigMap and the agent DaemonSet.
+[`manifests-kubernetes/`](manifests-kubernetes/) (below) is the Kubernetes-mode
+set; since golden `golden-flowsdn-4e9e3f0bc876` the golden carries the GNU
+Kubernetes-mode agent and its runtime, and the edition ships this set with it
+(stormcos#171). What both share:
 
 - **Image.** The DaemonSet runs the node's flowsdn golden (`image: flowsdn`):
-  `/flowsdn-agent`, and `/opt/cni/bin/flowsdn` with the BPF object embedded in
-  the agent. Nothing is pulled.
+  `/flowsdn-agent` (BPF objects embedded) and `/opt/cni/bin/flowsdn`. Nothing
+  is pulled.
 - **CNI install.** An init container runs `flowsdn install`. It copies the
   plugin into the node's `/opt/cni/bin` (as `flowsdn-cni`, `flowsdn` and,
   if absent, `loopback`) and atomically writes
@@ -26,7 +31,8 @@ What the node must provide besides the manifests:
   agent's socket LB (#292, below), so ClusterIPs need `manifests-kubernetes/`.
 - **Off-node egress.** `net.ipv4.ip_forward=1` and a masquerade for
   `10.244.0.0/24` leaving the node. flowsdn does not masquerade yet.
-- **Kernel.** 6.6 or newer, with TCX and BTF.
+- **Kernel.** 6.6 or newer, with TCX and BTF (6.7 for NodePort SNAT to
+  other nodes' backends, below).
 
 **Limits.** This is one node per cluster: the pool is static and this agent
 does not read Node podCIDRs or route to other nodes. Kubernetes mode, below,
@@ -46,11 +52,13 @@ resources yet, so applying them changes no traffic.
 
 ## Kubernetes mode: more than one node (#291)
 
-[`manifests-kubernetes/`](manifests-kubernetes/) replaces `manifests/` once
-the golden carries the GNU agent built with `cargo build --release -p
-flowsdn-agent --features kubernetes` and its Fedora OpenSSL runtime
-([stormcos#171](https://github.com/glennswest/stormcos/issues/171)). The static
-musl agent refuses its configuration. The differences:
+[`manifests-kubernetes/`](manifests-kubernetes/) replaces `manifests/`. It
+needs the GNU agent built with `cargo build --release -p flowsdn-agent
+--features kubernetes` and its Fedora OpenSSL runtime, which the golden carries
+from `golden-flowsdn-4e9e3f0bc876` on
+([stormcos#171](https://github.com/glennswest/stormcos/issues/171), open until
+Kubernetes HTTPS is verified on a node). The static musl agent refuses its
+configuration. The differences:
 
 - The pod mounts its service account token and gets `K8S_NODE_NAME`. The agent
   lists and watches Nodes and Pods with in-cluster credentials; the kubelet
@@ -78,11 +86,17 @@ musl agent refuses its configuration. The differences:
   (10.96.0.10:53) and the `kubernetes` Service (10.96.0.1:443 -> the
   apiserver). External IPs, LoadBalancer ingress IPs and NodePorts on any
   node's InternalIP are translated the same way for pods and node
-  processes, with ClientIP session affinity per pod. From outside the
-  cluster (`node-port`, IPv4 and IPv6), a NodePort or LB IP on a node reaches every
-  backend: other nodes' through SNAT to the node's address (ports
-  61000-65535), or only that node's with `externalTrafficPolicy: Local`. A ClusterIP:port with no ready backend fails `connect`
-  with EPERM. Without a pin root the programs detach when the agent exits,
+  processes, with ClientIP session affinity per pod and
+  `internalTrafficPolicy: Local`. From outside the cluster (`kubernetes.node-port`,
+  default on; not set in the ConfigMap), programs on the node's uplink (the
+  device of its route to the other nodes, else the default route) send a
+  NodePort, LB or external IP on that node to every backend: other nodes'
+  through SNAT to the node's address (ports 61000-65535; needs
+  `BPF_FIB_LOOKUP_SRC`, Linux 6.7), or only that node's with
+  `externalTrafficPolicy: Local`. IPv4 is in goldens (local backends from
+  `golden-flowsdn-4a0daa7c4bfc`, SNAT from `golden-flowsdn-cc0835c8a1db`); IPv6
+  (53bffc7) is in source only, not yet in a golden or run on hardware. A
+  ClusterIP:port with no ready backend fails `connect` with EPERM. Without a pin root the programs detach when the agent exits,
   and ClusterIPs stop working until it is back.
 - Pod tagging (#328): the agent writes each local Pod's
   `flowsdn.io/pod-networks` annotation (addresses, MAC, gateways, routes,
@@ -95,21 +109,31 @@ install or a drain): restore refuses addresses outside the pool. Status is on
 the agent socket and the read-only loopback port: `GET /v1/healthz` (`kubernetes`
 member), `GET /v1/node/routes`, `GET /v1/ip` and `GET /v1/service`.
 
-The DaemonSet carries no probe: the agent's health is on its Unix socket only
-(see below). It runs privileged as a validation baseline, not a measured
+The DaemonSet carries no probe: the agent's health is on its Unix socket and
+the read-only loopback port (see below), and neither is a readiness signal. It runs privileged as a validation baseline, not a measured
 minimum-capability profile. The stormpump runtime enforces no seccomp profile
 and drops no capabilities, so [deploy/seccomp](../seccomp) is a no-op on stormcos.
 
 ## Golden delivery
 
-The golden carries `/flowsdn-agent` (with the `local-delivery` BPF object
-embedded; the Kubernetes-mode agent also embeds `socket-lb`) and `/opt/cni/bin/flowsdn`, both static musl, mounted on a node at
-`/pallets/flowsdn`. The stormcos kubelet's stormpump runtime maps an image name
+The golden carries `/flowsdn-agent` and `/opt/cni/bin/flowsdn`, mounted on a
+node at `/pallets/flowsdn`. The CNI is static musl. The agent embeds the
+`local-delivery` BPF object; since `golden-flowsdn-4e9e3f0bc876` it is the GNU
+Kubernetes-mode build, which also embeds `socket-lb`, with its Fedora OpenSSL
+runtime (glibc, libssl/libcrypto, OpenSSL configuration and providers, CA
+bundle) and `nft` in the golden (stormcos#171). The stormcos kubelet's stormpump runtime maps an image name
 to `/pallets/<last path component>`, so `image: flowsdn` roots the container on
 the golden; a different last component (for example `flowsdn-runtime`) is a
 registry pull instead. The init container puts the plugin on the host, so the
-golden's internal CNI path does not have to be exposed separately. The latest
-golden is `golden-flowsdn-a7ee3f63195b` (`c6c96c7`). The authoritative
+golden's internal CNI path does not have to be exposed separately.
+
+Goldens are staged with `stormcentral component stage flowsdn` and reach nodes
+only in a stormcos release. The latest is `golden-flowsdn-cc0835c8a1db`
+(flowsdn@347581a: IPv4 NodePort SNAT, #292; release request stormcos#310).
+IPv6 NodePort (53bffc7) is not in a golden yet. Goldens before
+`golden-flowsdn-4b40a980ad16` have a socket LB that cannot attach on kernel 7.2:
+they create the cgroup links with `BPF_F_ALLOW_MULTI`, which the kernel refuses
+with EINVAL (fixed in cda5799), so ClusterIPs do not work with them. The authoritative
 [golden documentation](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md)
 is stormcos's.
 
@@ -178,10 +202,13 @@ arbitrary upgrade compatibility or automatic cleanup of orphaned pod state.
 The separate native-routing fixture demonstrates IPv4/IPv6 traffic across two
 isolated router namespaces with explicit routes and neighbors, and confirms
 that missing routes or detached BPF stop forwarding. It is not a two-node
-Kubernetes installation. This agent does not watch Nodes or Pods, learn remote
-PodCIDRs, install remote routes/neighbors, attach the uplink ingress program,
-or reconcile identity and policy. Assigning different static pools alone does
-not provide those behaviors. Its config response's compatibility value
+Kubernetes installation. The static-pool agent (`manifests/`) does not watch
+Nodes or Pods, learn remote PodCIDRs or install remote routes; assigning
+different static pools alone does not provide those behaviors. The
+Kubernetes-mode agent does those (Node/Pod watches, derived pools, direct node
+routes, the socket LB and the uplink NodePort programs), but no agent
+allocates cluster identities, fills a BPF ipcache, installs remote neighbors or
+enforces policy. Its config response's compatibility value
 `ipam-mode: kubernetes` must not be interpreted as an active Kubernetes IPAM
 controller; allocations currently come from the configured host pools.
 
@@ -192,9 +219,9 @@ collection and coordinated multi-node allocation remain to be implemented.
 Hubble observer gRPC service nor a relay. A console must show these capabilities
 as unavailable, rather than infer that a relay is unnecessary.
 
-Before comparing two StormOS nodes as a working pod network, complete the
-Node/Pod and routing integrations, select and implement multi-node IPAM
-ownership, install CNI under one owner, and demonstrate same-node/cross-node
+Before comparing two StormOS nodes as a working pod network, run the
+Kubernetes-mode agent on the two-node pair (pvetest1 + pvetest2, #291), decide
+multi-node IPAM ownership beyond the derived per-node pools, and demonstrate same-node/cross-node
 IPv4/IPv6, pod churn, agent restart/recovery and cleanup. Service routing,
 network policy, operator controllers and flow/relay APIs have their own
 [implementation acceptance gates](../../docs/milestones.md). No example here
@@ -205,11 +232,11 @@ marks those gates complete.
 The Kubernetes client selects Fedora system OpenSSL under
 [ADR-0016](../../docs/decisions/0016-fedora-openssl.md). Its runtime needs
 matching `openssl-libs`, GNU/glibc, OpenSSL configuration/provider files and
-certificate trust. The current agent/CNI do not use this client and stay static
-musl; a Kubernetes-connected agent needs its golden packaging changed.
-
-Runtime packaging for that integration is tracked in
-[stormcos#171](https://github.com/glennswest/stormcos/issues/171).
+certificate trust. The default agent and the CNI do not link this client and
+stay static musl (`manifests/`, the release archives); the Kubernetes-mode agent
+does. stormcos packages its runtime in the golden
+([stormcos#171](https://github.com/glennswest/stormcos/issues/171); open until
+Kubernetes HTTPS is verified on a node).
 
 The [resource identity decision](../../docs/decisions/0017-flowsdn-resource-identity.md)
 separates retained runtime paths, interface/map names and CNI aliases from

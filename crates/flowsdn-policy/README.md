@@ -9,7 +9,12 @@ Policy-library building blocks from spec 06:
   `io.flowsdn.k8s.namespace.labels.<key>`, same-cluster peers, `ipBlock`
   peers with excepts, ports (named, `endPort`, all-ports `"0"`), and
   `policyTypes`. A direction with no rules gets a default-deny marker whose
-  peer list is empty, so it can never be read as the wildcard;
+  peer list is empty, so it can never be read as the wildcard. `k8s::lower`
+  turns entries into simulator entries (`simulator::Selector::Kubernetes`)
+  for evaluation and compilation over endpoint labels; `ipBlock` peers are
+  returned as `Unsupported` (no CIDR identities yet) and lowered to a peer set
+  that selects nothing, so the subject stays default-deny. Protocols are TCP,
+  UDP and SCTP; anything else is an import error;
 - atomic replacement of one resolved subject's resource rules, rejecting
   Pass/authentication combinations before changing contents or revision;
 - CIDR base/exception prefix planning with allocation-before-publication and
@@ -27,7 +32,7 @@ It refuses authentication inputs rather than reporting an unverified verdict.
 CIDR planning currently requires a base prefix. Selectors containing only
 exception requirements still require an importer planning path; the normative
 contract includes allocating those prefixes before policy publication.
-The importer stops at entries: there is no selector cache over identities, complete optimized
+The importer reaches the simulator, not the kernel: there is no selector cache over identities, complete optimized
 mapstate builder, BPF map writer, policy REST handler, or controller here. Kernel
 publication and its atomicity remain the caller's responsibility. Full policy
 scope and the required fuzz comparison against the eventual optimized builder
@@ -36,5 +41,7 @@ remain in spec 06; this crate is not a claim of network-policy enforcement.
 The interval compiler is checked against the independent oracle with exhaustive
 port enumeration and deterministic generated policies covering all generated
 boundary classes and reversed insertion order. It is not the kernel LPM mapstate
-compiler. Issue #103 remains open for authentication, aggregates, frontend
-resolution, imported regression seeds and the complete fuzz gate.
+compiler. #103 is closed by [ADR-0018](../../docs/decisions/0018-policy-simulator-oracle.md);
+the Rule-to-kernel compiler, authentication inheritance and coverage-guided
+fuzzing it lists remain milestone 2 obligations (#292). No agent code calls the
+importer yet.

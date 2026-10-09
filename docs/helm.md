@@ -9,11 +9,16 @@ The chart creates, in the release namespace (use `kube-system`):
 - the 22 `flowsdn.io` CRDs (the chart's `crds/`, generated with the stormcos copies;
   see [CRD reference](crds.md));
 - ServiceAccount `flowsdn`, ClusterRoles/Bindings `flowsdn` (Nodes, Pods, Namespaces,
-  Services, EndpointSlices, read-only) and `flowsdn-crds` (spec 13 §4.7);
+  Services, EndpointSlices read-only; Events create/update, #298; Pods patch for the
+  `flowsdn.io/pod-networks` annotation, #328) and `flowsdn-crds` (spec 13 §4.7);
 - ConfigMap `flowsdn-config` with the agent's `agent.json` ([runtime reference](runtime.md));
 - DaemonSet `flowsdn`: an `install-cni` init container (`flowsdn-cni install`: the
-  plugin into the node's CNI bin directory, `00-flowsdn.conflist` into its conf
-  directory) and the Kubernetes-mode agent, privileged on the host network.
+  plugin into the node's CNI bin directory as `flowsdn-cni`, `flowsdn` and, if absent
+  or `cni.overwriteLoopback`, `loopback`; `00-flowsdn.conflist` into its conf
+  directory) and the Kubernetes-mode agent (`K8S_NODE_NAME` from the downward API),
+  privileged on the host network, with the host's `/sys/fs/cgroup` at
+  `/run/flowsdn/cgroupv2` for the socket LB and `/var/run/flowsdn`, `/var/lib/flowsdn`
+  from the host.
 
 Every object, label, path and key is flowsdn's (owner, #294: no Cilium in flowsdn);
 `install/kubernetes/check.sh` and the `flowsdn-k8s` tests refuse any that is not.
@@ -35,8 +40,10 @@ The packaged chart (`flowsdn-<version>.tgz`) and the static binary archives come
 Release is a separate, recorded step.
 
 Requirements: Linux 6.6 or newer with TCX and BTF, cgroup v2, no kube-proxy needed for
-ClusterIPs (`agent.serviceLB`), nodes on one L2 segment for direct routes, and a
+Services (`agent.serviceLB`), nodes on one L2 segment for direct routes, and a
 masquerade for pod traffic leaving the cluster (flowsdn does not masquerade yet).
+NodePort from outside the cluster to another node's backend takes its SNAT address
+from `BPF_FIB_LOOKUP_SRC` (Linux 6.7 or newer); on 6.6 only local backends work.
 
 ## Values
 
@@ -56,7 +63,7 @@ masquerade for pod traffic leaving the cluster (flowsdn does not masquerade yet)
 | `agent.autoDirectNodeRoutes` | `true` | Routes to other nodes' pod CIDRs via their InternalIP. |
 | `agent.directRoutingSkipUnreachable` | `false` | Skip, instead of reporting, nodes behind a router. |
 | `agent.serviceLB` | `true` | ClusterIP Services at the socket, without kube-proxy. |
-| `agent.extraConfig` | `{}` | Keys merged into `agent.json`. |
+| `agent.extraConfig` | `{}` | Keys merged (deeply) into `agent.json`, e.g. `{kubernetes: {node-port: false}}` to leave NodePort/LB traffic from outside the cluster alone; `node-port` has no value of its own and is on by default. |
 | `agent.resources`, `priorityClassName`, `nodeSelector`, `tolerations`, `updateStrategy`, `podLabels`, `podAnnotations` | see `values.yaml` | DaemonSet scheduling. |
 | `cni.install` | `true` | Run the `install-cni` init container. |
 | `cni.binPath` / `cni.confPath` | `/opt/cni/bin` / `/etc/cni/net.d` | Host CNI directories. |
@@ -75,7 +82,8 @@ Cilium chart, the settings that have a flowsdn equivalent today:
 | `ipv6.enabled` | `agent.ipv6Pool` (`auto` or a CIDR) |
 | `routingMode=native`, `autoDirectNodeRoutes` | `agent.autoDirectNodeRoutes` (native routing is the only mode) |
 | `directRoutingSkipUnreachable` | `agent.directRoutingSkipUnreachable` |
-| `kubeProxyReplacement=true` (ClusterIP) | `agent.serviceLB=true` |
+| `kubeProxyReplacement=true` (ClusterIP, NodePort, LoadBalancer, externalIPs) | `agent.serviceLB=true` (default), `kubernetes.node-port` via `agent.extraConfig` (default on) |
+| `sessionAffinity: ClientIP`, `internalTrafficPolicy`/`externalTrafficPolicy: Local` | honoured with `agent.serviceLB` |
 | `MTU` | `agent.deviceMTU`, `agent.routeMTU` |
 | `bpf.root` / persistent maps | `agent.bpfPinRoot` |
 | `cni.binPath`, `cni.confPath` | `cni.binPath`, `cni.confPath` |
@@ -83,8 +91,12 @@ Cilium chart, the settings that have a flowsdn equivalent today:
 
 Not available yet, so these have no flowsdn value: tunnels (`tunnelProtocol`), the
 operator, Hubble, encryption, egress gateway, BGP, L2 announcements, Envoy/L7,
-Gateway API/Ingress, ClusterMesh, NodePort/LoadBalancer Services and network policy
-enforcement (milestones 2–3, #292/#293). Their custom resources exist
+Gateway API/Ingress, ClusterMesh, masquerade, Maglev, DSR and network policy
+enforcement (milestones 2–3, #292/#293). Services are partly there: ClusterIP,
+NodePort, LoadBalancer ingress IPs and externalIPs from pods and node processes go
+through the socket LB; from outside the cluster `node-port` handles NodePort, LB and
+external IPs on the node's uplink, IPv4 and IPv6 with SNAT to other nodes' backends.
+The IPv6 external path has passed sc-build but not yet a hardware run. Their custom resources exist
 ([CRD reference](crds.md)) but nothing acts on them. Status comes from `kubectl get
 flowsdn`, the agent's API and `sc net` (#298); there is no `cilium-cli` support.
 

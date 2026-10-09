@@ -9,6 +9,12 @@ Building blocks with no external dependencies from the Hubble/monitor specificat
 - Reference-compatible exporter node-name projection and bounded PacketDrop
   dedupe/rate admission with failed-write completion tokens.
 - A realized-policy snapshot contract and direction/verdict correlation.
+- `endpoint` (#328): `EndpointInfo`, Hubble's flow `Endpoint` JSON (`ID`,
+  `identity`, `namespace`, `labels`, `pod_name`, `workloads`) plus flowsdn's
+  `pod_uid`, `container_id` and `node_name`, empty fields left out; `workload`
+  (controller owner, a hash-named ReplicaSet reported as its Deployment); and
+  `describe`, the one-line `ns/pod (container) → ns/pod:port` form over a
+  `Resolver`. The agent's endpoint `pod` field uses it; no flow producer does yet.
 - A bounded single-owner memory ring model with reserved newest slot, cursor
   loss reporting and fresh-instance restart semantics.
 

@@ -5,16 +5,19 @@ paginate: true
 ---
 
 <!-- Render: npx @marp-team/marp-cli docs/presentation.md (HTML), add --pdf for PDF.
-     Facts as of 2026-10-05, flowsdn main (golden-flowsdn-a7ee3f63195b from c6c96c7,
-     perf suite at e397e16; sizes from sc-build 2026-10-05). Every claim points at code or a doc you can check. -->
+     Facts as of 2026-10-09, flowsdn main at eed1aca (latest golden
+     golden-flowsdn-cc0835c8a1db from 347581a; executable sizes from the
+     2026-10-05 sc-build of golden-flowsdn-a7ee3f63195b). Every claim points at
+     code or a doc you can check. -->
 
 # flowsdn
 
 **Pod networking for stormcos, written in Rust.**
 
 - The CNI plugin and node agent of stormcos's **flowsdn edition**.
-- Cilium's boundary formats (CNI result, agent API, BPF map layouts) are the
-  compatibility target; Cilium itself is not shipped.
+- Cilium's data formats (CNI result, agent API, BPF map layouts) are the
+  compatibility target; nothing that ships carries Cilium's name (ADR-0020,
+  checked on every build by `tools/check-no-cilium.sh`).
 - Rust userspace and **aya** eBPF datapath: no C datapath, no iptables dependency.
 
 Repo: `glennswest/flowsdn` · version 0.14.0 · 31 crates
@@ -69,9 +72,10 @@ From stormcentral's relationships (`stormcentral check`):
                                          ├─ to a local pod: redirect to its veth
                                          └─ otherwise: FIB redirect, or the host stack (egress: stack)
 
-   every process (host + pods) ── cgroup v2 ── socket-lb (BPF): ClusterIP:port → backend
+   every process (host + pods) ── cgroup v2 ── socket-lb (BPF): service IP:port → backend
+   outside client ── uplink TCX ── nodeport_ingress/egress (BPF): DNAT, or SNAT to another node
    kube-apiserver ──watch──► agent (Kubernetes mode): Nodes, Pods, Services, EndpointSlices
-                              → pod CIDR, routes to other nodes, socket-LB maps
+                              → pod CIDR, routes to other nodes, LB maps, Events, pod annotation
 ```
 
 Code: `crates/flowsdn-cni`, `crates/flowsdn-agent`, `crates/flowsdn-bpf`
@@ -101,14 +105,16 @@ From the code, verified by tests in sc-build and namespace fixtures:
 `--features kubernetes` (GNU build, Fedora OpenSSL), the agent in the golden
 since stormcos#171:
 
-- Watches Nodes and all Pods (relist with backoff); pod CIDR from
-  `spec.podCIDRs` or `10.<last byte of node IP>.0.0/16`.
-- **Direct node routes** `<podCIDR> via <nodeIP> proto kernel` to every other
-  node, with reachability and conflict checks, and pruning across restarts.
-- **ClusterIP Services without kube-proxy** (#292): Service + EndpointSlice
-  watches feed the `socket-lb` cgroup programs. TCP/UDP, IPv4/IPv6, UDP
-  replies shown as from the ClusterIP. kube-dns and `kubernetes` covered.
-- Forwarding sysctls; IP cache view with node identities and pod labels.
+- Node and Pod watches; pod CIDR from `spec.podCIDRs` or
+  `10.<last byte of node IP>.0.0/16`; **direct routes** to every other node.
+- **Services without kube-proxy** (#292): socket LB for ClusterIPs,
+  externalIPs, LoadBalancer IPs and NodePorts; TCP/UDP, IPv4/IPv6;
+  internal/external traffic policy `Local`; ClientIP session affinity.
+- **From outside:** uplink TCX programs DNAT a NodePort/LB/external IP to a
+  local backend, or SNAT and FIB-redirect to another node's (IPv4 in the
+  golden, IPv6 on main).
+- Kubernetes Events (#298); `flowsdn.io/pod-networks` annotation (#328);
+  IP cache view with node identities and pod labels.
 
 ---
 
@@ -116,17 +122,18 @@ since stormcos#171:
 
 Tracked by milestone issues; none of this is claimed to work:
 
-- **Milestone 1 (#291):** cluster identity allocation; two-node acceptance on
-  pvetest1 + pvetest2.
-- **Milestone 2 (#292):** NodePort, LoadBalancer/externalIPs, session
-  affinity, Maglev, DSR, NAT46/64, tc-level LB, socket termination;
-  **NetworkPolicy enforcement** and host firewall.
+- **Milestone 1 (#291):** cluster identity allocation and ipcache; two-node
+  acceptance on pvetest1 + pvetest2.
+- **Milestone 2 (#292):** **NetworkPolicy enforcement** (the importer and
+  simulator exist as a library, not in the datapath), host firewall, Maglev,
+  DSR, NAT46/64, socket termination; flowsdn's own masquerade.
 - **Milestone 3 (#293):** remaining IPAM modes and operator controllers,
   WireGuard/IPsec, egress gateway, BGP, Hubble, DNS/L7/Envoy, Gateway/Ingress,
   ClusterMesh.
-- **Milestone 4 (#294):** compatibility and release hardening: upgrades,
-  both architectures at runtime, the full test matrix.
-- **Operator and relay services** (#296); console plugin (#297); `sc net` (#298).
+- **Milestone 4 (#294):** live install/upgrade/rollback, arm64 at runtime,
+  the full test matrix, publishing the chart and archives.
+- **Operator and relay** (#296). Console plugin (stormconsole#83) and
+  `sc net` (stormcos#318) are built on flowsdn's API, events and CRD columns.
 
 ---
 
@@ -137,15 +144,19 @@ Tracked by milestone issues; none of this is claimed to work:
   `/v1/endpoint[/{id}[/healthz]]`, `PUT/DELETE /v1/endpoint/{attachment}`,
   `GET/POST /v1/ipam`, `DELETE /v1/ipam/{address}`, `/v1/health/modules`,
   `/v1/statedb/query`. Kubernetes mode adds `GET /v1/ip`, `/v1/node/routes`
-  and `/v1/service`. Full contract: `docs/agent-api.md`.
+  and `/v1/service`. Optional `http-listen`: the GET routes, read-only, on a
+  loopback port (the edition: `127.0.0.1:9878`). Contract: `docs/agent-api.md`.
 - **CLI:** `flowsdn-agent --config PATH`, `flowsdn-agent cni install`,
   `flowsdn-cni install`.
 - **Config** (JSON, `docs/runtime.md`): `socket-path`, `state-dir`,
   `ipv4-pool`/`ipv6-pool` (CIDR or `auto`), MTUs, `egress`, `bpf-pin-root`,
-  `bpf-object`, `kubernetes{node-name, kubeconfig, auto-direct-node-routes,
-  service-lb, cgroup-root}`.
-- **Health:** `GET /v1/healthz` (with a `kubernetes` member). No TCP listener
-  and no Prometheus metrics yet.
+  `bpf-object`, `http-listen`, `kubernetes{node-name, kubeconfig,
+  auto-direct-node-routes, direct-routing-skip-unreachable, service-lb,
+  node-port, cgroup-root}`.
+- **CRDs:** 22 kinds in `flowsdn.io/v1alpha1` (`fs*` short names), schemas
+  and printer columns; nothing reconciles them yet.
+- **Health:** `GET /v1/healthz` (`agent`, `kubernetes` members). No
+  Prometheus metrics yet.
 
 ---
 
@@ -154,43 +165,48 @@ Tracked by milestone issues; none of this is claimed to work:
 - **Golden:** `flowsdn` is a *special* component, built by stormcos's stage
   mode (`stormcentral component stage flowsdn`). It carries the GNU
   Kubernetes-mode agent with its Fedora OpenSSL runtime, the static musl
-  CNI, and the agent's embedded BPF objects. Latest:
-  **golden-flowsdn-a7ee3f63195b** (c6c96c7), release request stormcos#255.
+  CNI, the agent's embedded BPF objects and `nft`. Latest:
+  **golden-flowsdn-cc0835c8a1db** (347581a, NodePort SNAT), release request
+  stormcos#310.
 - **Start:** a DaemonSet with `image: flowsdn` (stormpump roots it on the
   golden, nothing is pulled). An init container installs the CNI, then the
   agent runs privileged on the host network.
 - **Update:** a new golden composed into a stormcos release; a source push
   alone changes no node. Restarts keep endpoints (state dir) and, with a
   pin root, forwarding.
-- **Build/test:** `sc-build` on dev.g8.lo; `test/` image (`/test
-  short|medium|long|perf`) run by `stormcentral test run flowsdn <suite>`.
+- **Build/test:** `sc-build` on the build VMs; `test/` image (`/test
+  short|medium|long|perf|perf-scale`) run by `stormcentral test run flowsdn <suite>`.
+- **Outside stormcos:** Helm chart, agent image and release archives with
+  `SHA256SUMS` (#294), kept out of the golden; not published yet.
 
 ---
 
 ## How we know: tests
 
-- **sc-build:** rustfmt, Clippy `-D warnings`, 705 workspace tests (0 failed,
-  1 ignored) at e397e16; agent `--features kubernetes` tests; the GNU agent
-  build; `test/build.sh` refuses stale embedded BPF objects.
+- **sc-build** at 53bffc7: rustfmt, Clippy `-D warnings` (workspace and
+  `kubernetes`), 743 workspace tests (0 failed, 1 ignored); `test/build.sh`
+  checks `bpf-objects.lock` and the no-Cilium-names rule.
 - **Kernel fixtures** (`crates/flowsdn-bpftest`, the medium suite): endpoint
-  delivery, native routing, CNI/agent runtime, socket hooks, `socket-lb-live`.
+  delivery, native routing, CNI/agent runtime, socket hooks, `skb-ctx-matrix`,
+  `socket-lb-live` (socket LB, affinity, NodePort DNAT and SNAT by test run).
+- **On hardware:** medium on pvetest2 (stormcos 11.88-flowsdn, kernel
+  7.2.8): every fixture passes, including IPv4 NodePort SNAT (run 5c35ef74e4).
 - **perf suite** (#321): the same measurements on Cilium and flowsdn
-  machines. Pod readiness, RR latency, throughput, ClusterIP, DNS, policy,
-  scale, agent cost, compared in stormcentral (#412).
+  machines: readiness, RR latency, throughput, ClusterIP, DNS, scale, agent cost.
 
-Not yet: a test-machine run of medium or perf (registries full,
-stormcentral#376), or a two-node cluster run.
+Not yet: IPv6 NodePort on a kernel, live ClusterIP checks against a current
+golden, `perf`, or a two-node cluster run.
 
 ---
 
 ## flowsdn vs Cilium: what ships
 
-| | flowsdn (golden-flowsdn-a7ee3f63195b) | Cilium v1.20.1 (`quay.io/cilium/cilium`) |
+| | flowsdn (measured at golden-flowsdn-a7ee3f63195b) | Cilium v1.20.1 (`quay.io/cilium/cilium`) |
 |---|---|---|
 | Language | Rust userspace; Rust (aya) BPF, compiled at build time | Go userspace; C BPF compiled **on the node** (clang + llc in the image) |
-| Executables on a node | **2**: `flowsdn-agent`, `flowsdn-cni` (BPF objects embedded, 172 KB + 199 KB) | **18** in the agent image (agent, dbg, health, bugtool, hubble, envoy, clang, llc, bpftool, cni, …) |
+| Executables on a node | **2**: `flowsdn-agent`, `flowsdn-cni` (BPF objects embedded; today 173 KB + 568 KB) | **18** in the agent image (agent, dbg, health, bugtool, hubble, envoy, clang, llc, bpftool, cni, …) |
 | Size of those executables | agent **9.9 MB** (GNU, Kubernetes mode) or 4.1 MB (static musl), CNI **3.1 MB**: about **13 MB** | **607.5 MB** of executables (`cilium-agent` alone 133.6 MB); 257.7 MB compressed image |
-| Other images | none (operator/relay not built yet, #296) | operator, hubble-relay, clustermesh-apiserver, envoy: separate pulls |
+| Other images | none in stormcos (operator/relay not built yet, #296) | operator, hubble-relay, clustermesh-apiserver, envoy: separate pulls |
 
 The golden is 64 MB with its Fedora glibc/OpenSSL runtime and `nft`. Cilium's
 figures were measured on 2026-09-22 (`docs/validation/cilium-image-sizes-2026-09-22.json`).
@@ -215,9 +231,9 @@ ClusterMesh, which flowsdn doesn't yet.
   throughput on the same machines as Cilium. `perf-scale` adds pods in steps
   of 100 until a step fails, on both flavors.
 - Limits in the code: 1,024 local endpoints per node (endpoint map); endpoint
-  IDs up to 4,095 by default; socket LB 65,536 service-map entries (frontends
-  plus backend slots) and 65,536 backends per family; one route per other
-  node, with no node-count limit coded. Only one node has run it so far.
+  IDs up to 4,095 by default; 65,536 service-map entries (frontends plus
+  backend slots), backends and NodePort NAT flows per family; one route per
+  other node, with no node-count limit coded. Only one node has run it so far.
 
 ---
 
@@ -225,13 +241,14 @@ ClusterMesh, which flowsdn doesn't yet.
 
 | Issue | What | State |
 |---|---|---|
-| #291 | Milestone 1: working pod networking | agent built; two-node acceptance open |
-| #292 | Milestone 2: services and policy | ClusterIP socket LB shipped in a golden; rest open |
-| #321 | perf suite: flowsdn vs Cilium | suite built; runs blocked on test machines |
-| #303 | test containers | built; machine runs blocked (stormcentral#376) |
-| #296 | stormcos manifests, operator, relay | manifests shipped; operator/relay open |
-| #256 | `__sk_buff` ctx matrix on the shipped kernel | waits on a test run |
+| #291 | Milestone 1: working pod networking | agent in the golden; identity and two-node acceptance open |
+| #292 | Milestone 2: services and policy | ClusterIP/NodePort/LB/externalIP, affinity, SNAT shipped; IPv6 NodePort on main; policy enforcement open |
+| #321 | perf suite: flowsdn vs Cilium | built; waits for a flowsdn-flavor machine run |
+| #294 | release hardening | chart, image, archives, lock built; live install/upgrade open |
+| #293 | advanced networking, Hubble | primitives only |
+| #296 | operator, relay | open |
 | #315 | switch socket termination to `bpf_sock_destroy` | waits on aya |
 
-**Next:** a medium/perf run on both flavors, two-node acceptance, then
-NetworkPolicy and NodePort.
+**Next:** IPv6 NodePort on hardware and its golden, live ClusterIP checks on
+pvetest2, the two-node run, then identity allocation and NetworkPolicy in
+the datapath.

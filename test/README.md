@@ -3,8 +3,8 @@
 flowsdn's suites (and the `perf` comparison suite, below) under stormcentral's
 [test standard](https://github.com/glennswest/stormcentral/blob/main/docs/test-standard.md)
 (#303). There is one image, built from `test/Containerfile` with the repository
-root as context, and it runs as `/test short|medium|long`. stormcentral runs it
-as a Job on each test machine:
+root as context, and it runs as `/test short|medium|long|perf|perf-scale`.
+stormcentral runs it as a Job on each test machine:
 `stormcentral test run flowsdn <suite> --url http://stormcentral.g8.lo`.
 
 ## What it tests
@@ -116,8 +116,11 @@ reports the most pods that had working networking and why it stopped, and
 
 ## Machine requirements
 
-[`requires.toml`](requires.toml) declares a privileged pod for each suite, plus
-read-only `/opt/cni/bin` and `/run` for the node probe. The test checks the
+[`requires.toml`](requires.toml) declares a privileged pod for `short`,
+`medium` and `long`, plus read-only `/opt/cni/bin`, `/run` and `/var/run` for the
+node probe (on stormcos `/var/run` is not `/run`). It declares no `budget_secs`
+for them; the budgets in the table above are the suites' own sizing. `perf` and `perf-scale` are not privileged: they declare `host_pid`, a
+cluster read of nodes and budgets of 1800 s and 14400 s. The test checks the
 machine itself:
 
 - If the kernel is older than 6.6 (no TCX) or has no BTF, the test prints one
@@ -134,9 +137,16 @@ and fixture logs go under `/results`.
 ## Build
 
 `test/build.sh` runs on the build box (stormcentral calls it before `podman
-build`). It builds the BPF objects with the nightly pinned in
-`crates/flowsdn-bpf/rust-toolchain.toml`, installing that nightly through rustup
-if it is absent, and with bpf-linker 0.11.1, downloaded and SHA-256 checked if
-it is not on `PATH`. It builds the static musl binaries and stages them all in
-`test/.stage` (git-ignored). The image is `fedora-minimal`, because the fixtures
-and the namespace setup call `ip` and `nft`.
+build`). It builds the BPF objects with `tools/build-bpf.sh`: the nightly pinned
+in `crates/flowsdn-bpf/rust-toolchain.toml` (installed through rustup if absent,
+and `rust-src` added even when it is present) and bpf-linker 0.11.1, downloaded
+and SHA-256 checked if it is not on `PATH`. `tools/bpf-objects-lock.sh check`
+then fails the build if those objects, or the agent's embedded `local-delivery`
+and `socket-lb`, do not match the committed `bpf-objects.lock`. It builds the
+agent, CNI, fixtures and `/test` as static musl (a dynamically linked one fails
+the build) and `flowsdn-perf` for GNU, creates the mount points for the pod's
+volumes, and stages it all in `test/.stage` (git-ignored). Last,
+`tools/check-no-cilium.sh` checks what the golden ships (agent, CNI and the two
+embedded objects) for the name Cilium (#330). The image is `fedora-minimal:43`
+with `iproute`, `nftables` and `openssl-libs`, because the fixtures and the
+namespace setup call `ip` and `nft` and `flowsdn-perf` links OpenSSL.

@@ -13,26 +13,32 @@ in `CHANGELOG.md`; Cargo.lock records workspace packages when versions change.
 Main contains unreleased endpoint agent/CNI work beyond that foundation release.
 This documentation-only audit does not warrant a version bump or release.
 
-As of 2026-10-03, source through `7c8a095` runs a standalone JSON-configured
-agent over a Unix socket and a primary veth + loopback CNI. The agent embeds its
-`local-delivery` BPF object (`bpf-object` optional) and has `egress: fib|stack`;
-`flowsdn-cni install` installs the plugin and `00-flowsdn.conflist` on a node.
-Persisted ownership, pinned endpoint maps/TCX links, offline deletion, bounded
-endpoint reads and exact IPAM summaries are implemented. No non-loopback TCP listener (`http-listen` is loopback read-only, #297),
-Kubernetes watches in the agent (the k8s watch client is library only),
-complete service/policy integration, operator executable or Hubble
-observer/relay exists. See `docs/runtime.md`, `docs/agent-api.md`,
-`docs/implementation-status.md` and `deploy/stormcos/README.md` before changing
-runtime behavior. Fixture traffic and cross-architecture compilation do not
-establish two-node pod networking. Docs were last refreshed from code on
-2026-10-03 (`git log --since=2026-09-25`).
+As of 2026-10-09, source through `eed1aca` runs a standalone JSON-configured
+agent over a Unix socket (`/var/run/flowsdn/flowsdn.sock` in the manifests) and a
+primary veth + loopback CNI (`flowsdn-cni`, conflist `00-flowsdn.conflist`). The
+agent embeds its `local-delivery` BPF object (and, with the `kubernetes` feature,
+`socket-lb`; both pinned by `bpf-objects.lock`) and has `egress: fib|stack`. With
+the `kubernetes` feature (GNU build, Fedora OpenSSL; in the golden since
+golden-flowsdn-4e9e3f0bc876, run by `manifests-kubernetes/`) it watches Nodes/Pods/Services/EndpointSlices, adds
+remote pod-CIDR routes, translates ClusterIP/externalIP/LoadBalancer/NodePort at the
+socket (cgroup hooks, ClientIP affinity, traffic policy Local), serves external
+NodePort/LB/externalIP traffic on the uplink (TCX, IPv4 and IPv6, SNAT to other
+nodes' backends), writes Events and the `flowsdn.io/pod-networks` annotation.
+`http-listen` is a loopback read-only TCP listener (#297). Not implemented:
+identity allocation (#291), policy enforcement in the datapath (the NetworkPolicy
+importer/simulator in flowsdn-policy is library only), the operator executable,
+CRD registration (#337), Hubble observer/relay (#293), Maglev/DSR. See
+`docs/runtime.md`, `docs/agent-api.md`, `docs/implementation-status.md` and
+`deploy/stormcos/README.md` before changing runtime behavior. Fixture traffic and
+cross-architecture compilation do not establish two-node pod networking. Docs
+were last refreshed from code on 2026-10-09 (`git log --since=2026-10-02`).
 
 ## Shipping and ownership
 
-The stormcos flowsdn edition carries the static musl agent (BPF object
-embedded) and CNI in the `flowsdn` golden; `deploy/stormcos/manifests/` runs it
+The stormcos flowsdn edition carries the agent (static musl and GNU Kubernetes
+mode) and CNI in the `flowsdn` golden; `deploy/stormcos/manifests-kubernetes/` runs it
 as `image: flowsdn` with a CNI-install init container (stormcos#261 applies
-them). Latest golden: golden-flowsdn-cc0835c8a1db at 347581a (NodePort SNAT, #292). Source pushes do not update nodes until a new golden is composed into
+them). Latest golden: golden-flowsdn-cc0835c8a1db at 347581a (NodePort SNAT, #292); IPv6 NodePort (53bffc7) is in no golden yet. Goldens before golden-flowsdn-4b40a980ad16 carry a socket LB that cannot attach on 7.2 (cda5799). Source pushes do not update nodes until a new golden is composed into
 a release. Authority:
 [stormcos/docs/goldens.md](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 After validated implementation work, flowsdn uses the special-component

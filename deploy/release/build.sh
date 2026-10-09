@@ -4,7 +4,7 @@
 #   deploy/release/build.sh OUT_DIR [TARGET...]
 #       TARGET defaults to x86_64-unknown-linux-musl aarch64-unknown-linux-musl
 #
-# For each target it builds the static agent (BPF objects embedded) and CNI
+# For each target it builds the static agent (local-delivery BPF object embedded; no Kubernetes mode) and CNI
 # from this commit and writes OUT_DIR/flowsdn-<version>-<arch>.tar.gz, then
 # OUT_DIR/SHA256SUMS over every archive, plus the Helm chart
 # (flowsdn-<version>.tgz) when helm is installed. These are for clusters that do not
@@ -69,7 +69,7 @@ for target in "${targets[@]}"; do
     cat >"$stage/README" <<EOF
 flowsdn $version ($arch), source revision $revision.
 
-flowsdn-agent   the endpoint agent; its BPF objects (bpf-objects.lock) are embedded
+flowsdn-agent   the endpoint agent; its local-delivery BPF object is embedded (hash in bpf-objects.lock); no Kubernetes mode or socket LB
 flowsdn-cni     the CNI plugin; 'flowsdn-cni install' copies it into /opt/cni/bin
                 (as flowsdn-cni, flowsdn and loopback) and writes
                 /etc/cni/net.d/00-flowsdn.conflist

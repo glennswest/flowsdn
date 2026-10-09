@@ -55,9 +55,13 @@ With the `kubernetes` feature (GNU target, Fedora OpenSSL) and a `kubernetes`
 config section, the agent watches Nodes and Pods, resolves `auto` pools from its
 Node and owns direct routes to the other nodes' pod CIDRs. With `service-lb`
 (default on) it also watches Services and EndpointSlices and load balances
-ClusterIPs at the socket with the embedded `socket-lb` object (`bpf/socket-lb`,
-checked like `local-delivery`), attached to `cgroup-root`; see
-[runtime](../../docs/runtime.md#kubernetes-mode). Identity allocation, policy
+Services at the socket with the embedded `socket-lb` object (`bpf/socket-lb`,
+checked like `local-delivery`), attached to `cgroup-root` (default
+`/sys/fs/cgroup`). With `node-port` (default on) the same object's
+`nodeport_ingress`/`nodeport_egress` programs go on the TCX hooks of every
+interface holding the node's InternalIP, for NodePort, external and
+LoadBalancer traffic from outside the cluster (IPv4 and IPv6; other nodes'
+backends through SNAT). See [runtime](../../docs/runtime.md#kubernetes-mode). Identity allocation, policy
 reconciliation, stale-pod garbage collection and graceful shutdown remain
 outstanding. Configured pins allow endpoint maps
 and TCX links to survive agent process absence. Without pinning, traffic depends
@@ -75,7 +79,7 @@ the static musl agent and CNI in a golden; the edition manifests and runtime
 resources are documented in [the deployment contract](../../deploy/stormcos/README.md).
 
 `flowsdn-agent cni install --source PATH` installs the supplied Rust CNI binary
-under primary compatibility names and the loopback entry point. See the
+as `flowsdn-cni` (and the hardlink `flowsdn`) and the loopback entry point. See the
 [CNI installation reference](../flowsdn-cni/README.md#install-binaries) for
 destination and overwrite controls. This command does not load BPF, start the
 API or publish a conflist; `flowsdn-cni install` also writes the conflist.

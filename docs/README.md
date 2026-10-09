@@ -1,7 +1,7 @@
 # Documentation guide
 
-Current behavior was refreshed on 2026-10-03 against source through `7c8a095`
-and `git log --since=2026-09-25`. Read the following as the operational entry
+Current behavior was refreshed on 2026-10-09 against source through `eed1aca`
+and `git log --since=2026-10-02`. Read the following as the operational entry
 points, rather than treating specifications as a list of implemented features.
 
 | Question | Current reference |
@@ -19,7 +19,8 @@ points, rather than treating specifications as a list of implemented features.
 | Configuration library, separate from agent JSON | [Catalogue README](../crates/flowsdn-config/README.md) |
 | Builds, tests and golden publication | [Build and publication](build-and-test.md) |
 | Privileged fixture requirements | [BPF test harness](../crates/flowsdn-bpftest/README.md) |
-| Test container (`/test short\|medium\|long`) | [test/README.md](../test/README.md) |
+| Test container (`/test short\|medium\|long\|perf\|perf-scale`) | [test/README.md](../test/README.md) |
+| Why no reference-project names ship, and the name check | [ADR-0020](decisions/0020-no-reference-names-shipped.md) |
 
 ## Specifications and historical evidence
 
@@ -34,8 +35,8 @@ remains v0.14.0 while main has additional executable runtime work.
 does not prove delivery. In particular, the owner's #299 direction requires
 flowsdn identity for owned CRDs; older text prescribing `cilium.io` ownership is
 superseded. The library's registration plans now use `flowsdn.io/v1alpha1`
-(ADR-0017). The earlier chart/image strategy does not describe the current
-stormcos golden delivery path.
+(ADR-0017). The stormcos golden is the delivery path; the standalone Helm
+chart, agent image and release archives are kept out of it (ADR-0019).
 
 `validation/` and `workcycles/` are dated evidence for named revisions. Earlier
 open-issue counts, runner availability and unsupported-path measurements should

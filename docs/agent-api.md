@@ -10,12 +10,16 @@ no HTTP authentication layer, which is why TCP is loopback and read-only. Config
 agent JSON format, not the full configuration catalogue. `--help` and `--version`
 exit successfully without loading config or starting the daemon.
 
-This is the initial persisted endpoint and host-scope IPAM API. The daemon has
-no Kubernetes watches, identity/policy controllers, operator service, Hubble
-gRPC observer on 4244, or relay. A successful response does not establish a
-working multi-node pod network. The config response's `ipam-mode: kubernetes`
-is a compatibility value; this daemon allocates from configured local prefixes
-and does not discover Kubernetes PodCIDRs.
+This is the persisted endpoint and host-scope IPAM API. Built with the
+`kubernetes` feature and configured with a `kubernetes` section, the agent also
+watches Nodes, Pods and (with `service-lb`) Services and EndpointSlices, and
+serves `/v1/ip`, `/v1/service` and `/v1/node/routes` from them. It has no
+identity/policy controllers, operator service, Hubble gRPC observer on 4244, or
+relay. A successful response does not establish a working multi-node pod
+network. The config response's `ipam-mode: kubernetes` is a compatibility value:
+the agent allocates from its configured local prefixes; with pools `auto` in
+Kubernetes mode that prefix is derived from the Node at startup (see
+[runtime.md](runtime.md)).
 
 ## Stability (#298)
 
@@ -41,7 +45,7 @@ commit.
 Send a bounded request to the configured Unix socket, for example:
 
 ```sh
-curl --unix-socket /run/flowsdn/agent.sock http://localhost/v1/healthz
+curl --unix-socket /var/run/flowsdn/flowsdn.sock http://localhost/v1/healthz   # the edition manifests' socket-path
 curl http://127.0.0.1:9878/v1/endpoint     # with "http-listen": "127.0.0.1:9878"
 ```
 
@@ -54,7 +58,11 @@ Unix-socket-capable probe or an explicit adapter; do not configure a nonexistent
 path and restart an otherwise running daemon.
 
 The body is `{"agent":{"state":"Ok","msg":…}}`, plus a `kubernetes` member in
-Kubernetes mode. (Before #298 the member was named after the reference project;
+Kubernetes mode: `{state, msg, node-name, auto-direct-node-routes, service-lb}`,
+`state` `Warning` until the initial Node and Pod lists (and, with `service-lb`,
+Service and EndpointSlice lists) are complete or while a part has an error
+(`msg` then lists `<part>: <error>`, for example `annotations`, `services`,
+`node-port`), otherwise `Ok` with node, pod and frontend counts. (Before #298 the member was named after the reference project;
 it is `agent` now.)
 
 `GET /v1/health/modules` reports component details, including the degraded
@@ -86,7 +94,7 @@ on recognized endpoint detail/IPAM address routes return HTTP 405.
 | `GET /v1/ipam` | Read the configured default-pool family summaries below. |
 | `POST /v1/ipam` | Allocate pending addresses; requires owner and supports family/default-pool selection. |
 | `DELETE /v1/ipam/{address}?pool=default` | Release an unused allocation; endpoint-owned addresses return 409. |
-| `GET /v1/ip` | Kubernetes mode: the IP cache view (reference `IPListEntry`). Each node InternalIP as `/32`/`/128` with identity 1 (this node) or 6 (remote node); each IP of a non-host-network Pod with `hostIP` (its node's InternalIP of the family), `metadata{source,namespace,name}` (plus flowsdn's `uid`, `containers` and, with a controller owner, `workloads`, #328) and the flowsdn `labels` extension (`k8s:<key>=<value>` plus `k8s:io.kubernetes.pod.namespace`). Pod entries have no `identity` until cluster identity allocation exists. No `cidr` query filter. 404 when Kubernetes mode is off. |
+| `GET /v1/ip` | Kubernetes mode: the IP cache view (reference `IPListEntry`), rows `{cidr, …}` sorted by address. Each node InternalIP as `/32`/`/128` with identity 1 (this node) or 6 (remote node) and `metadata{source,name}`; each IP of a non-host-network Pod with `hostIP` (its node's InternalIP of the family), `metadata{source,namespace,name}` (plus flowsdn's `uid`, `containers` and, with a controller owner, `workloads`, #328) and the flowsdn `labels` extension (`k8s:<key>=<value>` plus `k8s:io.kubernetes.pod.namespace`). Pod entries have no `identity` until cluster identity allocation exists. No `cidr` query filter. 404 when Kubernetes mode is off. |
 | `GET /v1/service` | Kubernetes mode with `service-lb` (reference `Service` model): one row per frontend, `spec{id, frontend-address{ip,port,protocol,scope}, backend-addresses[{ip,port,protocol,state}], flags{type, name, namespace, port-name, service-type}}`; `type` is `ClusterIP`, `ExternalIPs`, `LoadBalancer` or `NodePort`, and `session-affinity-timeout` (seconds) is present for `sessionAffinity: ClientIP` (#292). `frontend-address.scope` is `external` for the cluster view and `node-local` for the copy that serves traffic from outside the cluster on this node's uplink (every backend, other nodes' through SNAT; this node's only with `externalTrafficPolicy: Local`). `id` is the service ID (`rev_nat_index`) the socket-LB maps hold, 0 until programmed; `status.realized` repeats `spec` once it is. Empty until both the Service and EndpointSlice lists are complete. 404 when Kubernetes mode is off. |
 | `GET /v1/node/routes` | Kubernetes mode (flowsdn): the direct node routes, `{destination, gateway, node, state}` with state `installed`, `skipped: …` or `error: …`. Empty before the first Node list or with `auto-direct-node-routes: false`. 404 when Kubernetes mode is off. |
 
