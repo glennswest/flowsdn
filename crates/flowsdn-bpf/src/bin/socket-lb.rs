@@ -293,6 +293,23 @@ fn ip6_words(bytes: [u8; 16]) -> [u32; 4] {
     // SAFETY: as in ip6_bytes.
     unsafe { core::mem::transmute::<[u8; 16], [u32; 4]>(bytes) }
 }
+/// Store an IPv6 address into the context's `user_ip6`: four scalar stores
+/// at fixed context offsets. An array assignment from a stack value compiles
+/// to a copy through a pointer to `ctx + 8`, which the verifier refuses
+/// ("dereference of modified ctx ptr", 7.2, run c61945e336); volatile keeps
+/// LLVM from merging the stores back into that copy.
+#[inline(always)]
+fn set_user_ip6(raw: &mut bpf_sock_addr, words: [u32; 4]) {
+    let [a, b, c, d] = words;
+    let [ra, rb, rc, rd] = &mut raw.user_ip6;
+    // SAFETY: each pointer is a valid, aligned field of the kernel context.
+    unsafe {
+        core::ptr::write_volatile(ra, a);
+        core::ptr::write_volatile(rb, b);
+        core::ptr::write_volatile(rc, c);
+        core::ptr::write_volatile(rd, d);
+    }
+}
 /// The IPv4 address inside `::ffff:a.b.c.d`, if it is one.
 #[inline(always)]
 fn mapped(words: [u32; 4]) -> Option<[u8; 4]> {
@@ -381,7 +398,7 @@ fn forward6(ctx: &SockAddrContext) -> i32 {
                 if raw.protocol == IPPROTO_UDP {
                     remember4(ctx, &backend, (address, port), rev);
                 }
-                raw.user_ip6 = [0, 0, MAPPED, u32::from_ne_bytes(backend.address.0)];
+                set_user_ip6(raw, [0, 0, MAPPED, u32::from_ne_bytes(backend.address.0)]);
                 raw.user_port = port_value(backend.port.0);
                 ALLOW
             }
@@ -395,7 +412,7 @@ fn forward6(ctx: &SockAddrContext) -> i32 {
             if raw.protocol == IPPROTO_UDP {
                 remember6(ctx, &backend, (address, port), rev);
             }
-            raw.user_ip6 = ip6_words(backend.address);
+            set_user_ip6(raw, ip6_words(backend.address));
             raw.user_port = port_value(backend.port.0);
             ALLOW
         }
@@ -443,7 +460,7 @@ fn reverse6(ctx: &SockAddrContext) -> i32 {
         };
         // SAFETY: LRU value copied at once, never written through.
         if let Some(front) = unsafe { LB4_REVERSE_SK.get(&key).copied() } {
-            raw.user_ip6 = [0, 0, MAPPED, u32::from_ne_bytes(front.address.0)];
+            set_user_ip6(raw, [0, 0, MAPPED, u32::from_ne_bytes(front.address.0)]);
             raw.user_port = port_value(front.port.0);
         }
         return ALLOW;
@@ -457,7 +474,7 @@ fn reverse6(ctx: &SockAddrContext) -> i32 {
     };
     // SAFETY: LRU value copied at once, never written through.
     if let Some(front) = unsafe { LB6_REVERSE_SK.get(&key).copied() } {
-        raw.user_ip6 = ip6_words(front.address);
+        set_user_ip6(raw, ip6_words(front.address));
         raw.user_port = port_value(front.port.0);
     }
     ALLOW
