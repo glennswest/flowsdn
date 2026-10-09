@@ -340,7 +340,8 @@ A restarted agent reuses the maps (a pinned map with another layout refuses
 startup), attaches its programs, then releases the old links. Without a pin
 root the links detach when the agent exits. The NodePort uplink links are never
 pinned: they detach when the agent exits, and the per-CPU
-`flowsdn_nodeport6_fib` scratch map is not pinned either. Not implemented:
+`flowsdn_nodeport6_fib` and `flowsdn_nodeport6_scratch` scratch maps are not
+pinned either. Not implemented:
 Maglev, DSR, topology hints, skip-LB for local redirect policy, socket
 termination when a backend goes away (an existing connection stays on its
 backend), SCTP, NAT46/64, IPv4 fragments other than the first (they pass
