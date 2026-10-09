@@ -252,13 +252,16 @@ wait on stormcentral#526. Implementable now: spec 03 §3.3 CRD-mode allocator ov
 FlowsdnIdentity (RBAC create/update already shipped; CRDs applied by stormcos#303). Overlaps #332's
 identity line; GC stays the operator's (#332).
 
-- [ ] flowsdn-k8s: Namespace and FlowsdnIdentity scopes; Pod `serviceAccountName`.
-- [ ] flowsdn-identity filter defaults with flowsdn keys (`io.flowsdn.k8s.*`, ADR-0020/#339).
-- [ ] Agent `identity.rs`: pod labels (spec 03 §3.1), canonical key, reconcile (oldest object, create on a
+- [x] flowsdn-k8s: Namespace and FlowsdnIdentity scopes; Pod `serviceAccountName` (519e7b3).
+- [x] flowsdn-identity filter defaults with flowsdn keys (`io.flowsdn.k8s.*`, ADR-0020/#339).
+- [x] Agent `identity.rs`: pod labels (spec 03 §3.1), canonical key, reconcile (oldest object, create on a
       free id 256..65535, 409 retry, heartbeat removal, recreate when deleted while held); tests.
-- [ ] Controller identities thread; `/v1/ip` identity, endpoint `status.identity` + `pod.identity`,
+- [x] Controller identities thread; `/v1/ip` identity, endpoint `status.identity` + `pod.identity`,
       `GET /v1/identity`; `kubernetes.identity-allocation`, `kubernetes.cluster-name`.
-- [ ] Docs (agent-api, runtime, implementation-status, milestones, deploy README), changelog; sc-build.
+- [x] Docs (agent-api, runtime, implementation-status, milestones, deploy README, spec 03 note), changelog (6f9cccb).
+- [ ] sc-build (fmt/Clippy/lints fixed in #361–#365); then golden via `component stage flowsdn`, `shipped`.
+      Build env adds -D clippy::indexing-slicing and arithmetic-side-effects; format via
+      `sc-build 'cargo fmt --all && git diff'` and `git apply` (no local cargo).
 
 ### Kubernetes-connected agent — #291 (P0), 2026-10-05
 
