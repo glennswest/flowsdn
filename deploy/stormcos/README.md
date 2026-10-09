@@ -221,7 +221,9 @@ as unavailable, rather than infer that a relay is unnecessary.
 
 Before comparing two StormOS nodes as a working pod network, run the
 Kubernetes-mode agent on the two-node pair (pvetest1 + pvetest2, #291), decide
-multi-node IPAM ownership beyond the derived per-node pools, and demonstrate same-node/cross-node
+multi-node IPAM ownership beyond the derived per-node pools (owner question on
+#296: a remote node's route comes only from its Node's `spec.podCIDRs`, which
+stormcos does not set, so two nodes today install no routes to each other), and demonstrate same-node/cross-node
 IPv4/IPv6, pod churn, agent restart/recovery and cleanup. Service routing,
 network policy, operator controllers and flow/relay APIs have their own
 [implementation acceptance gates](../../docs/milestones.md). No example here

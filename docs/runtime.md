@@ -188,7 +188,9 @@ With the `kubernetes` feature and section the agent:
   the server ends resumes from its resourceVersion; any other failure relists
   after 1 s doubling to 30 s, keeping the last good snapshot);
 - with `auto-direct-node-routes`, owns `<podCIDR> via <InternalIP> proto
-  kernel` routes in the main table for every other node, using the node's first
+  kernel` routes in the main table for every other node that has
+  `spec.podCIDRs` (a node's own derived pool is not known to the others, so
+  without `spec.podCIDRs` there is no route to it; #296), using the node's first
   InternalIP of the family. Before installing it checks that the kernel reaches
   the InternalIP without another gateway, and refuses to replace a route of
   another protocol to the same prefix. Installed routes are recorded in
