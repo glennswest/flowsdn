@@ -27,7 +27,9 @@ fn object(id: u32, labels: &Labels, created: &str) -> Object {
     Object::new(id, &security, created, false, "1")
 }
 fn desired(sets: &[Labels]) -> BTreeMap<String, Labels> {
-    sets.iter().map(|l| (l.canonical_key(), l.clone())).collect()
+    sets.iter()
+        .map(|l| (l.canonical_key(), l.clone()))
+        .collect()
 }
 
 #[test]
@@ -40,7 +42,10 @@ fn pod_labels_follow_the_label_model_with_flowsdn_keys() {
             ("io.flowsdn.k8s.policy.cluster", "spoofed"),
             ("io.flowsdn.k8s.policy.serviceaccount", "admin"),
         ]),
-        Some(&map(&[("kubernetes.io/metadata.name", "web"), ("team", "a")])),
+        Some(&map(&[
+            ("kubernetes.io/metadata.name", "web"),
+            ("team", "a"),
+        ])),
         "builder",
         "default",
         &filter(),
@@ -74,9 +79,15 @@ fn cluster_dns_pods_get_the_well_known_identities() {
     };
     let metadata = map(&[("kubernetes.io/metadata.name", "kube-system")]);
     let eks = [("eks.amazonaws.com/component", "coredns")];
-    assert_eq!(well_known(&dns("kube-dns", &[], None), "default"), Some(102));
+    assert_eq!(
+        well_known(&dns("kube-dns", &[], None), "default"),
+        Some(102)
+    );
     assert_eq!(well_known(&dns("coredns", &[], None), "default"), Some(104));
-    assert_eq!(well_known(&dns("coredns", &eks, None), "default"), Some(106));
+    assert_eq!(
+        well_known(&dns("coredns", &eks, None), "default"),
+        Some(106)
+    );
     assert_eq!(
         well_known(&dns("kube-dns", &[], Some(&metadata)), "default"),
         Some(110)
@@ -92,7 +103,10 @@ fn cluster_dns_pods_get_the_well_known_identities() {
         None
     );
     let more = map(&[("kubernetes.io/metadata.name", "kube-system"), ("x", "y")]);
-    assert_eq!(well_known(&dns("coredns", &[], Some(&more)), "default"), None);
+    assert_eq!(
+        well_known(&dns("coredns", &[], Some(&more)), "default"),
+        None
+    );
     assert_eq!(well_known(&web(), "default"), None);
     let mut allocator = Allocator::default();
     let set = dns("coredns", &[], None);
@@ -107,7 +121,11 @@ fn cluster_dns_pods_get_the_well_known_identities() {
 #[test]
 fn a_new_label_set_creates_a_free_number_and_holds_it_once_created() {
     let mut allocator = Allocator::default();
-    let taken = object(256, &pod_labels("a", &BTreeMap::new(), None, "", "default", &filter()), "t");
+    let taken = object(
+        256,
+        &pod_labels("a", &BTreeMap::new(), None, "", "default", &filter()),
+        "t",
+    );
     let want = desired(&[web()]);
     let actions = allocator.reconcile(&want, &[taken.clone()], "default", 0);
     assert_eq!(
@@ -118,19 +136,38 @@ fn a_new_label_set_creates_a_free_number_and_holds_it_once_created() {
         }]
     );
     let key = web().canonical_key();
-    assert_eq!(allocator.get(&key), None, "not before the create is answered");
+    assert_eq!(
+        allocator.get(&key),
+        None,
+        "not before the create is answered"
+    );
     // Unanswered: no second create for the same set.
-    assert!(allocator.reconcile(&want, &[taken.clone()], "default", 0).is_empty());
+    assert!(
+        allocator
+            .reconcile(&want, &[taken.clone()], "default", 0)
+            .is_empty()
+    );
     allocator.created(&key, 257, Outcome::Done);
     assert_eq!(allocator.get(&key), Some(257));
     assert_eq!(allocator.waiting(&want), 0);
     // Created but not listed yet: not taken for a deletion, no recreate.
-    assert!(allocator.reconcile(&want, &[taken.clone()], "default", 0).is_empty());
+    assert!(
+        allocator
+            .reconcile(&want, &[taken.clone()], "default", 0)
+            .is_empty()
+    );
     let listed = object(257, &web(), "t");
-    assert!(allocator.reconcile(&want, &[taken.clone(), listed], "default", 0).is_empty());
+    assert!(
+        allocator
+            .reconcile(&want, &[taken.clone(), listed], "default", 0)
+            .is_empty()
+    );
     // Listed, then gone: recreated.
     assert_eq!(
-        allocator.reconcile(&want, &[taken], "default", 0).first().map(Action::id),
+        allocator
+            .reconcile(&want, &[taken], "default", 0)
+            .first()
+            .map(Action::id),
         Some(257)
     );
 
@@ -143,7 +180,10 @@ fn a_new_label_set_creates_a_free_number_and_holds_it_once_created() {
         body.pointer("/metadata/labels/io.kubernetes.pod.namespace"),
         Some(&json!("web"))
     );
-    assert_eq!(body.pointer("/security-labels/k8s:app"), Some(&json!("web")));
+    assert_eq!(
+        body.pointer("/security-labels/k8s:app"),
+        Some(&json!("web"))
+    );
     assert_eq!(body.pointer("/metadata/resourceVersion"), None);
     assert_eq!(action.path("/c"), "/c");
 }
@@ -171,7 +211,11 @@ fn lookups_converge_on_the_oldest_object_and_keep_a_held_duplicate() {
     let objects = [newer.clone(), older.clone(), tie];
     let mut allocator = Allocator::default();
     let want = desired(&[web()]);
-    assert!(allocator.reconcile(&want, &objects, "default", 0).is_empty());
+    assert!(
+        allocator
+            .reconcile(&want, &objects, "default", 0)
+            .is_empty()
+    );
     assert_eq!(allocator.get(&web().canonical_key()), Some(900));
     // Ties go to the lower number.
     let objects = [newer, object(299, &web(), "2026-10-09T10:00:00Z")];
@@ -201,7 +245,10 @@ fn heartbeat_is_removed_and_a_deleted_held_identity_is_recreated() {
     );
     let action = actions.first().expect("action");
     let body = action.body();
-    assert_eq!(body.pointer("/metadata/resourceVersion"), Some(&json!("42")));
+    assert_eq!(
+        body.pointer("/metadata/resourceVersion"),
+        Some(&json!("42"))
+    );
     assert_eq!(body.pointer("/metadata/annotations"), None);
     assert_eq!(action.path("/c"), "/c/700");
     // The object disappears (GC on a partitioned node): recreate the number.
@@ -226,13 +273,20 @@ fn released_sets_are_dropped_and_their_numbers_not_reused_while_objects_exist() 
     let mut allocator = Allocator::default();
     let want = desired(&[web()]);
     allocator.reconcile(&want, &[object(256, &web(), "t")], "default", 0);
-    assert!(allocator.reconcile(&BTreeMap::new(), &[], "default", 0).is_empty());
+    assert!(
+        allocator
+            .reconcile(&BTreeMap::new(), &[], "default", 0)
+            .is_empty()
+    );
     assert_eq!(allocator.get(&web().canonical_key()), None);
     let used: BTreeSet<u32> = (MIN_ID..=MAX_ID).collect();
     assert_eq!(free(&used, 7), None);
     let used: BTreeSet<u32> = [MAX_ID].into_iter().collect();
     assert_eq!(free(&used, MAX_ID - MIN_ID), Some(MIN_ID));
-    assert_eq!(free(&BTreeSet::new(), u32::MAX), Some(MIN_ID + (u32::MAX % (MAX_ID - MIN_ID + 1))));
+    assert_eq!(
+        free(&BTreeSet::new(), u32::MAX),
+        Some(MIN_ID + (u32::MAX % (MAX_ID - MIN_ID + 1)))
+    );
 }
 
 #[test]

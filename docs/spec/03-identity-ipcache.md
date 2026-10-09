@@ -225,7 +225,7 @@ over `flowsdn.io/v1alpha1` FlowsdnIdentity objects with flowsdn's names
 (ADR-0020): label keys `io.flowsdn.k8s.namespace.labels`,
 `io.flowsdn.k8s.policy.serviceaccount`, `io.flowsdn.k8s.policy.cluster` in
 §3.1, §4.1 and the §4.2 defaults; heartbeat annotation `io.flowsdn.heartbeat`.
-Reference reference-key labels on Pods are not treated specially. Step 9 is
+Step 9 is
 continuous: the reconcile runs every second against the watched list, so a
 heartbeat is removed and a deleted held object recreated within a pass rather
 than at a 5-minute sync. The free number is searched from a random start

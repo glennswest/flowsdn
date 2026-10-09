@@ -325,8 +325,8 @@ fn identity_loop(view: &Shared, kubeconfig: Option<&Path>) {
             let client = runtime
                 .block_on(JsonClient::load(kubeconfig, TransportLimits::default()))
                 .map_err(|e| e.to_string())?;
-            let filter = flowsdn_identity::filter::LabelFilter::identity(&[])
-                .map_err(|e| e.to_string())?;
+            let filter =
+                flowsdn_identity::filter::LabelFilter::identity(&[]).map_err(|e| e.to_string())?;
             Ok((runtime, client, filter))
         });
     let (runtime, client, filter) = match started {
@@ -348,7 +348,11 @@ fn identity_loop(view: &Shared, kubeconfig: Option<&Path>) {
             if sets.is_empty() && !(view.pods_synced && view.namespaces_synced) {
                 continue;
             }
-            (sets, view.identity_objects.clone(), view.cluster_name.clone())
+            (
+                sets,
+                view.identity_objects.clone(),
+                view.cluster_name.clone(),
+            )
         };
         let desired: BTreeMap<String, flowsdn_identity::labels::Labels> = sets
             .iter()
@@ -417,8 +421,7 @@ fn identity_loop(view: &Shared, kubeconfig: Option<&Path>) {
         if failures.is_empty() {
             view.errors.remove("identities");
         } else {
-            view.errors
-                .insert("identities".into(), failures.join("; "));
+            view.errors.insert("identities".into(), failures.join("; "));
         }
     }
 }

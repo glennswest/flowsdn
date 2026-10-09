@@ -125,7 +125,11 @@ fn server(
                     let text = String::from_utf8_lossy(&request).into_owned();
                     let length: usize = text
                         .lines()
-                        .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().to_owned()))
+                        .find_map(|l| {
+                            l.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().to_owned())
+                        })
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(0);
                     let start = request
@@ -334,7 +338,11 @@ fn controller_lists_watches_and_derives_the_pool() {
                 let local = view.pod_identity("ns", "api").expect("local identity");
                 assert!((256..=65_535).contains(&local) && local != 5000);
                 let created = created.lock().expect("created").clone();
-                assert_eq!(created.len(), 1, "one create, no recreate before it is listed");
+                assert_eq!(
+                    created.len(),
+                    1,
+                    "one create, no recreate before it is listed"
+                );
                 let body = created.first().expect("create body");
                 assert_eq!(
                     body.pointer("/metadata/name"),

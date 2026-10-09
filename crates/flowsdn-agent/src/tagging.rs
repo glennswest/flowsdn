@@ -167,7 +167,8 @@ mod tests {
         );
         // With an identity (spec 03 §3.3) the flow endpoint carries it.
         let mut with = view();
-        with.pod_identities.insert(("ns".into(), "web-1".into()), 300);
+        with.pod_identities
+            .insert(("ns".into(), "web-1".into()), 300);
         assert_eq!(
             pod(7, &document(), Some(&with)).get("identity"),
             Some(&json!(300))

@@ -78,9 +78,19 @@ fn identity_settings_default_on_with_the_default_cluster() {
     .expect("enabled");
     assert!(!parsed.identity_allocation);
     assert_eq!(parsed.cluster_name, "lab-2");
-    for bad in ["-a", "a-", "Upper", "a.b", "abcdefghijabcdefghijabcdefghijabc"] {
+    for bad in [
+        "-a",
+        "a-",
+        "Upper",
+        "a.b",
+        "abcdefghijabcdefghijabcdefghijabc",
+    ] {
         assert!(
-            Settings::parse(Some(&json!({"node-name":"n1","cluster-name":bad})), &env(&[])).is_err(),
+            Settings::parse(
+                Some(&json!({"node-name":"n1","cluster-name":bad})),
+                &env(&[])
+            )
+            .is_err(),
             "{bad}"
         );
     }
@@ -121,7 +131,10 @@ fn pod_identities_reach_the_ip_list_and_identity_list() {
         ..View::default()
     };
     view.pods_synced = true;
-    assert!(view.pod_label_sets(&filter).is_empty(), "namespaces not listed");
+    assert!(
+        view.pod_label_sets(&filter).is_empty(),
+        "namespaces not listed"
+    );
     view.namespaces_synced = true;
     view.namespaces.insert(
         "ns".into(),
@@ -144,14 +157,16 @@ fn pod_identities_reach_the_ip_list_and_identity_list() {
     );
     assert!(!sets.get(1).expect("db").1);
 
-    view.pod_identities
-        .insert(("ns".into(), "web".into()), 300);
+    view.pod_identities.insert(("ns".into(), "web".into()), 300);
     view.identities
         .insert(300, crate::identity::label_strings(labels));
     let list = view.ip_list();
     let row = list
         .as_array()
-        .and_then(|rows| rows.iter().find(|r| r.get("cidr") == Some(&json!("10.172.0.5/32"))))
+        .and_then(|rows| {
+            rows.iter()
+                .find(|r| r.get("cidr") == Some(&json!("10.172.0.5/32")))
+        })
         .expect("web row");
     assert_eq!(row.get("identity"), Some(&json!(300)));
     let identities = view.identity_list();

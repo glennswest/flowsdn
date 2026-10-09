@@ -548,7 +548,8 @@ fn services_parse_node_ports_external_and_load_balancer_addresses() {
 fn namespaces_identities_and_service_accounts_parse() {
     let namespace = json!({"kind":"Namespace","metadata":{"name":"web","uid":"u","resourceVersion":"1",
         "labels":{"kubernetes.io/metadata.name":"web","team":"a"}}});
-    let Resource::Namespace(parsed) = Scope::Namespaces.parse(&namespace).expect("namespace") else {
+    let Resource::Namespace(parsed) = Scope::Namespaces.parse(&namespace).expect("namespace")
+    else {
         panic!("namespace")
     };
     assert_eq!(parsed.metadata.namespace, "");
@@ -571,7 +572,9 @@ fn namespaces_identities_and_service_accounts_parse() {
         assert!(Scope::Identities.parse(&bad).is_err(), "{name}");
     }
     let mut bad = identity.clone();
-    bad.as_object_mut().expect("object").remove("security-labels");
+    bad.as_object_mut()
+        .expect("object")
+        .remove("security-labels");
     assert!(Scope::Identities.parse(&bad).is_err());
 
     let mut value = pod("p", "uid", "1");
