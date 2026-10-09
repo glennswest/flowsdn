@@ -112,7 +112,7 @@ fn cluster_dns_pods_get_the_well_known_identities() {
     let set = dns("coredns", &[], None);
     assert!(
         allocator
-            .reconcile(&desired(&[set.clone()]), &[], "default", 0)
+            .reconcile(&desired(std::slice::from_ref(&set)), &[], "default", 0)
             .is_empty()
     );
     assert_eq!(allocator.get(&set.canonical_key()), Some(104));
@@ -127,7 +127,7 @@ fn a_new_label_set_creates_a_free_number_and_holds_it_once_created() {
         "t",
     );
     let want = desired(&[web()]);
-    let actions = allocator.reconcile(&want, &[taken.clone()], "default", 0);
+    let actions = allocator.reconcile(&want, std::slice::from_ref(&taken), "default", 0);
     assert_eq!(
         actions,
         [Action::Create {
@@ -144,7 +144,7 @@ fn a_new_label_set_creates_a_free_number_and_holds_it_once_created() {
     // Unanswered: no second create for the same set.
     assert!(
         allocator
-            .reconcile(&want, &[taken.clone()], "default", 0)
+            .reconcile(&want, std::slice::from_ref(&taken), "default", 0)
             .is_empty()
     );
     allocator.created(&key, 257, Outcome::Done);
@@ -153,7 +153,7 @@ fn a_new_label_set_creates_a_free_number_and_holds_it_once_created() {
     // Created but not listed yet: not taken for a deletion, no recreate.
     assert!(
         allocator
-            .reconcile(&want, &[taken.clone()], "default", 0)
+            .reconcile(&want, std::slice::from_ref(&taken), "default", 0)
             .is_empty()
     );
     let listed = object(257, &web(), "t");
