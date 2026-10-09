@@ -307,7 +307,7 @@ identity line; GC stays the operator's (#332).
       identity create; chart check, test/build.sh, agent image (no-cilium clean). Fixes #361–#366 closed.
       Build env adds -D clippy::indexing-slicing and arithmetic-side-effects; format via
       `sc-build 'cargo fmt --all && git diff'` and `git apply` (no local cargo). Status on #291.
-- [ ] Golden: blocked by #292. Medium c61945e336 found socket-lb unloadable on 7.2 since 0fad164 (user_ip6
+- [x] Golden golden-flowsdn-a690ebee2ba7 (stormcos#494) after the #369 fix. Was: Medium c61945e336 found socket-lb unloadable on 7.2 since 0fad164 (user_ip6
       copy through ctx+8): fixed a97f870/27e10fe (object + lock). Medium ef8e24151d: cgroup programs load;
       `nodeport_ingress` "combined stack size of 3 calls is 768" (IPv4 NodePort too). Do not stage main
       until that passes medium on pvetest2 (comment on #292). Test runs work again despite stormcentral#526.
