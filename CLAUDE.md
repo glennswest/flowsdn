@@ -56,6 +56,19 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Multus network-status — #371 (P2), 2026-10-09
+
+Owner (stormcos#249): multi-NIC is the Multus/NPWG standard as is. flowsdn writes the standard
+`k8s.v1.cni.cncf.io/network-status` entry for its interface beside `flowsdn.io/pod-networks`.
+Design: the entry (`name` flowsdn = conflist name, interface, ips, mac, `default` true: flowsdn
+attaches only the primary) is derived from the pod-networks value, merged into the Pod's array
+(other plugins' entries kept; flowsdn's replaced by name or interface), written with the Pod's
+resourceVersion as precondition (a 409 retries next tick on the fresh view).
+
+- [ ] flowsdn-k8s keeps the network-status annotation on Pods; agent tagging entry + merge; patch both.
+- [ ] Tests; docs (agent-api, runtime, deploy README, README, implementation-status); changelog.
+- [ ] sc-build; close #371.
+
 ### Uncompiled upstream WireGuard-tunnel cases — #266, 2026-10-07
 
 Owner: report nothing upstream; close with flowsdn's handling (upstream_dead, ten decision vectors).
