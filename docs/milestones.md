@@ -29,8 +29,8 @@ The baseline above describes v0.14.0 only. Main (through `eed1aca`) has:
   (multi-node is day-2 per the owner, stormcentral#360).
 - **Milestone 2 (#292):** socket LB for ClusterIPs, externalIPs, LoadBalancer
   IPs and NodePorts, traffic policies, ClientIP affinity; uplink NodePort with
-  SNAT to remote backends (IPv4 in golden `golden-flowsdn-cc0835c8a1db`; IPv6 on
-  main). The NetworkPolicy importer and simulator lowering exist as a library.
+  SNAT to remote backends (IPv4 since golden `golden-flowsdn-cc0835c8a1db`; IPv6 since
+  `golden-flowsdn-a690ebee2ba7`). The NetworkPolicy importer and simulator lowering exist as a library.
   Open: live ClusterIP acceptance on a node, Maglev, DSR, NAT46/64,
   socket termination, identity/CIDR policy in the datapath, host firewall.
 - **Milestone 3 (#293):** primitives only; nothing wired into the agent.

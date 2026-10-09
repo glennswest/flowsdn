@@ -166,8 +166,8 @@ Tracked by milestone issues; none of this is claimed to work:
   mode (`stormcentral component stage flowsdn`). It carries the GNU
   Kubernetes-mode agent with its Fedora OpenSSL runtime, the static musl
   CNI, the agent's embedded BPF objects and `nft`. Latest:
-  **golden-flowsdn-cc0835c8a1db** (347581a, NodePort SNAT), release request
-  stormcos#310.
+  **golden-flowsdn-a690ebee2ba7** (4447eeb, IPv6 NodePort, identities), release
+  request stormcos#494.
 - **Start:** a DaemonSet with `image: flowsdn` (stormpump roots it on the
   golden, nothing is pulled). An init container installs the CNI, then the
   agent runs privileged on the host network.

@@ -87,8 +87,8 @@ pinning or subsystem libraries are absent are **not current status**.
 
 - The `flowsdn` golden carries the GNU Kubernetes-mode agent with its Fedora
   runtime, the static musl CNI and `nft` (stormcos#171). Latest:
-  `golden-flowsdn-cc0835c8a1db` (`347581a`, IPv4 NodePort SNAT); the IPv6
-  NodePort programs are not in a golden yet. The edition applies
+  `golden-flowsdn-a690ebee2ba7` (`4447eeb`: IPv6 NodePort, identity
+  allocation, network-status). The edition applies
   `deploy/stormcos/manifests-kubernetes/` (stormcos#261).
 - Standalone, outside the golden (ADR-0019): Helm chart
   `install/kubernetes/flowsdn`, agent image `images/agent`, release archives

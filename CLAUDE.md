@@ -38,7 +38,7 @@ were last refreshed from code on 2026-10-09 (`git log --since=2026-10-02`).
 The stormcos flowsdn edition carries the agent (static musl and GNU Kubernetes
 mode) and CNI in the `flowsdn` golden; `deploy/stormcos/manifests-kubernetes/` runs it
 as `image: flowsdn` with a CNI-install init container (stormcos#261 applies
-them). Latest golden: golden-flowsdn-cc0835c8a1db at 347581a (NodePort SNAT, #292); IPv6 NodePort (53bffc7) is in no golden yet. Goldens before golden-flowsdn-4b40a980ad16 carry a socket LB that cannot attach on 7.2 (cda5799). Source pushes do not update nodes until a new golden is composed into
+them). Latest golden: golden-flowsdn-a690ebee2ba7 at 4447eeb (IPv6 NodePort, identity allocation, network-status; #369 stack fix; stormcos#494). Goldens before golden-flowsdn-4b40a980ad16 carry a socket LB that cannot attach on 7.2 (cda5799). Source pushes do not update nodes until a new golden is composed into
 a release. Authority:
 [stormcos/docs/goldens.md](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 After validated implementation work, flowsdn uses the special-component
@@ -72,7 +72,7 @@ classifier calls the leaf (`snat_reply6`, `new_flow6`, `nodeport_forward6`), so 
       never listed the image); pvetest1 ef10df8ce1 at 238a767 (7.2.8-200.fc44): 20 pass incl. fixture-socket-lb-live
       (21 PASS: IPv4 + IPv6 NodePort local and SNAT via nodeport_ingress/egress test runs); the 2 failures are
       node-service-dns/-programmed (#368). #369 closed.
-- [ ] `component stage flowsdn` (also carries #291 identity, #371 network-status).
+- [x] Golden golden-flowsdn-a690ebee2ba7 (flowsdn@4447eeb, release request stormcos#494); also carries #291 identity, #371 network-status, IPv6 NodePort.
 
 ### Multus network-status — #371 (P2), 2026-10-09
 

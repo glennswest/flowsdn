@@ -94,8 +94,8 @@ configuration. The differences:
   through SNAT to the node's address (ports 61000-65535; needs
   `BPF_FIB_LOOKUP_SRC`, Linux 6.7), or only that node's with
   `externalTrafficPolicy: Local`. IPv4 is in goldens (local backends from
-  `golden-flowsdn-4a0daa7c4bfc`, SNAT from `golden-flowsdn-cc0835c8a1db`); IPv6
-  (53bffc7) is in source only, not yet in a golden or run on hardware. A
+  `golden-flowsdn-4a0daa7c4bfc`, SNAT from `golden-flowsdn-cc0835c8a1db`); IPv6 from
+  `golden-flowsdn-a690ebee2ba7` (test-run on 7.2 by `fixture-socket-lb-live`). A
   ClusterIP:port with no ready backend fails `connect` with EPERM. Without a pin root the programs detach when the agent exits,
   and ClusterIPs stop working until it is back.
 - Pod tagging (#328): the agent writes each local Pod's
@@ -130,9 +130,10 @@ registry pull instead. The init container puts the plugin on the host, so the
 golden's internal CNI path does not have to be exposed separately.
 
 Goldens are staged with `stormcentral component stage flowsdn` and reach nodes
-only in a stormcos release. The latest is `golden-flowsdn-cc0835c8a1db`
-(flowsdn@347581a: IPv4 NodePort SNAT, #292; release request stormcos#310).
-IPv6 NodePort (53bffc7) is not in a golden yet. Goldens before
+only in a stormcos release. The latest is `golden-flowsdn-a690ebee2ba7`
+(flowsdn@4447eeb: IPv6 NodePort, identity allocation, network-status and the
+#369 stack fix; release request stormcos#494). Goldens built from 0fad164 up to
+#369 were never staged: their socket LB failed the 7.2 verifier. Goldens before
 `golden-flowsdn-4b40a980ad16` have a socket LB that cannot attach on kernel 7.2:
 they create the cgroup links with `BPF_F_ALLOW_MULTI`, which the kernel refuses
 with EINVAL (fixed in cda5799), so ClusterIPs do not work with them. The authoritative

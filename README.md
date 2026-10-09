@@ -118,8 +118,8 @@ Kubernetes-mode agent (`/flowsdn-agent`, GNU build with its Fedora glibc/OpenSSL
 runtime and the BPF objects embedded, stormcos#171), the static musl CNI
 (`/opt/cni/bin/flowsdn`) and `nft` for the node's masquerade. Nodes clone it
 copy-on-write and mount it at `/pallets/flowsdn`. The latest golden,
-`golden-flowsdn-cc0835c8a1db`, was staged from `347581a` (IPv4 NodePort SNAT);
-the IPv6 NodePort programs (`53bffc7`) are not in a golden yet. A source push
+`golden-flowsdn-a690ebee2ba7`, was staged from `4447eeb` (IPv6 NodePort,
+identity allocation, network-status). A source push
 alone does not update nodes: the revision must be staged into a new golden and
 composed into a stormcos release.
 

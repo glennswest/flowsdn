@@ -358,9 +358,8 @@ stormcos ships flowsdn as a **golden** containing the agent (`/flowsdn-agent`;
 since golden-flowsdn-4e9e3f0bc876 the GNU Kubernetes-mode build with its Fedora
 OpenSSL runtime, stormcos#171) and the static musl CNI (`/opt/cni/bin/flowsdn`). Nodes
 clone goldens copy-on-write and mount it at `/pallets/flowsdn`; nothing is
-pulled. The latest golden is `golden-flowsdn-cc0835c8a1db`, staged from
-`347581a` (IPv4 NodePort SNAT); the IPv6 NodePort programs (`53bffc7`) are in no
-golden yet. The golden/release authority is
+pulled. The latest golden is `golden-flowsdn-a690ebee2ba7`, staged from
+`4447eeb` (IPv6 NodePort, identity allocation, network-status). The golden/release authority is
 [stormcos's golden documentation](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 The flowsdn edition and composition are owned by stormcos; source changes reach
 nodes through a newly staged golden and composed release, not through a Git
