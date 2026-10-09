@@ -54,7 +54,8 @@ pinning or subsystem libraries are absent are **not current status**.
   at uplink ingress. IPv4 (`flowsdn_nodeport4_nat`) and IPv6
   (`flowsdn_nodeport6_nat`, `53bffc7`).
 - Kubernetes Events on Pods and the Node, aggregated and non-blocking (#298);
-  the `flowsdn.io/pod-networks` annotation on local Pods and pod/container/
+  the `flowsdn.io/pod-networks` annotation on local Pods (and flowsdn's entry in
+  the Multus `network-status`, #371) and pod/container/
   workload fields on `/v1/endpoint` and `/v1/ip` (#328).
 - Cluster identities for local Pods over FlowsdnIdentity objects (spec 03
   §3.3, #291): oldest-object lookup, create on a free number, heartbeat

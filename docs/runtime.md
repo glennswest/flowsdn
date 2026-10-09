@@ -174,7 +174,9 @@ With the `kubernetes` feature and section the agent:
   annotation (OVN-style: addresses, MAC, gateways, routes, interface, host
   interface, endpoint ID, sandbox, node; [API](agent-api.md#pod-network-annotation-328)),
   merge-patched within about 2 s of the endpoint's creation and rewritten if it
-  is removed or edited. Needs `pods` patch (the manifests and chart grant it).
+  is removed or edited. Beside it, flowsdn's entry in the Multus/NPWG
+  `k8s.v1.cni.cncf.io/network-status` list (name `flowsdn`, interface, ips, mac,
+  `default`; other plugins' entries kept; [API](agent-api.md#multus-network-status-371), #371). Needs `pods` patch (the manifests and chart grant it).
   The Pod view also gives each endpoint and `GET /v1/ip` row its UID, workload
   (Deployment for its ReplicaSets) and containers;
 

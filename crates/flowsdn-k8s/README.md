@@ -53,7 +53,8 @@ for each `watch::Scope`: `Nodes`, `LocalPods` (field selector
 `EndpointSlices` (`discovery.k8s.io/v1`, the socket LB). A Pod row keeps node,
 host network, IPs, labels, controller `ownerReferences`, container and init
 container statuses (name, runtime ID) and only its `flowsdn.io/` annotations
-(each at most 16 KiB; #328). A Service row keeps type, cluster/external/
+and `k8s.v1.cni.cncf.io/network-status` (each at most 16 KiB, larger ones named
+in `oversized`; #328, #371). A Service row keeps type, cluster/external/
 load-balancer IPs, ports and node ports, internal/external traffic policies and
 `sessionAffinity: ClientIP` with its timeout (default 10800 s). It stages bounded list pages and publishes only after a complete
 consistent list. An interrupted or invalid relist preserves the last snapshot.

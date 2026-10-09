@@ -180,6 +180,26 @@ UID as precondition) within about two seconds of the endpoint's creation and
 rewrites it when it is removed or edited; a failing write is retried after 30 s
 and reported in `GET /v1/healthz` under `kubernetes` (`annotations: …`).
 
+### Multus network-status (#371)
+
+Beside it the agent keeps flowsdn's entry in the Pod's
+`k8s.v1.cni.cncf.io/network-status` annotation (Kubernetes Network Plumbing WG
+format, as Multus writes it; stormcos#249), derived from the same value so the
+two always agree:
+
+```json
+[{"name": "flowsdn", "interface": "eth0", "ips": ["10.5.0.7", "f00d::a05:0:0:7"],
+  "mac": "02:…", "default": true}]
+```
+
+`name` is the conflist's network name. The entry is merged into the Pod's list:
+other plugins' entries (Multus's secondary attachments) are kept, an earlier
+flowsdn entry (same name, or same interface) is replaced, and the default
+network's entry is first. These writes carry the Pod's `resourceVersion` as a
+precondition too, so a concurrent write by Multus fails ours (409) instead of
+being lost; it is retried on the next pass. A network-status value too large
+for the Pod view (over 16 KiB) is left alone. No change is needed in RBAC.
+
 Pod metadata is retained CNI-supplied information, not a fresh Kubernetes
 lookup. Missing legacy metadata is JSON null. Existing networking fields also
 include MACs, host addressing and route MTU. `state: ready` describes the initial

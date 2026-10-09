@@ -10,7 +10,7 @@ The chart creates, in the release namespace (use `kube-system`):
   see [CRD reference](crds.md));
 - ServiceAccount `flowsdn`, ClusterRoles/Bindings `flowsdn` (Nodes, Pods, Namespaces,
   Services, EndpointSlices read-only; Events create/update, #298; Pods patch for the
-  `flowsdn.io/pod-networks` annotation, #328) and `flowsdn-crds` (spec 13 §4.7);
+  `flowsdn.io/pod-networks` and Multus `network-status` annotations, #328/#371) and `flowsdn-crds` (spec 13 §4.7);
 - ConfigMap `flowsdn-config` with the agent's `agent.json` ([runtime reference](runtime.md));
 - DaemonSet `flowsdn`: an `install-cni` init container (`flowsdn-cni install`: the
   plugin into the node's CNI bin directory as `flowsdn-cni`, `flowsdn` and, if absent

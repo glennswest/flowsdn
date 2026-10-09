@@ -101,7 +101,9 @@ configuration. The differences:
 - Pod tagging (#328): the agent writes each local Pod's
   `flowsdn.io/pod-networks` annotation (addresses, MAC, gateways, routes,
   interfaces, endpoint ID, sandbox, node), so `kubectl describe pod` shows its
-  flowsdn network; RBAC adds `pods` patch.
+  flowsdn network; RBAC adds `pods` patch. flowsdn's entry in the Multus
+  `k8s.v1.cni.cncf.io/network-status` annotation goes beside it (#371,
+  stormcos#249), merged with Multus's secondary attachments.
 
 Off-node egress still needs a masquerade, now for the node's derived pool.
 Moving a node from the static pool to `auto` needs its endpoints gone (a fresh

@@ -43,7 +43,8 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
   and FIB-redirect to other nodes' backends; IPv4 and IPv6.
 - **Kubernetes Events and pod tagging.** Events on Pods and the Node
   (`EndpointCreated`, `IPAllocationFailed`, `PodCIDRSelected`, …) and the
-  `flowsdn.io/pod-networks` annotation on local Pods (#298, #328).
+  `flowsdn.io/pod-networks` annotation on local Pods, with flowsdn's entry in
+  the Multus `k8s.v1.cni.cncf.io/network-status` beside it (#298, #328, #371).
 - **stormcos edition manifests.** [`deploy/stormcos/manifests-kubernetes/`](deploy/stormcos/manifests-kubernetes/)
   (RBAC, ConfigMap, DaemonSet, the 22 CRDs) is what the edition ships;
   [`manifests/`](deploy/stormcos/manifests/) is the older single-node,
@@ -161,7 +162,7 @@ to stormcos's built-in stormblock driver, not to flowsdn.
   policy simulator, with evaluate-versus-compiled-map agreement tests. Not
   wired into the agent.
 - Agent: Kubernetes Events, stable route list and an `agent` healthz member
-  (#298); `flowsdn.io/pod-networks` annotation and pod/container fields on
+  (#298); `flowsdn.io/pod-networks` and Multus `network-status` (#371) annotations and pod/container fields on
   `/v1/endpoint` and `/v1/ip` (#328); read-only loopback `http-listen` (#297).
 - CRDs: 22 `flowsdn.io/v1alpha1` kinds generated from vendored schemas, with
   printer columns and offline validation ([CRD reference](docs/crds.md), #325).
