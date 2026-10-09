@@ -68,7 +68,11 @@ classifier calls the leaf (`snat_reply6`, `new_flow6`, `nodeport_forward6`), so 
       reproduces 768 = 16+384+368): v6 worst 16+408 (snat_reply6) = 424, v4 16+432 = 448. sc-build at ded9b10:
       fmt, workspace + kubernetes Clippy -D warnings, 837 tests (0 failed, 1 ignored), test/build.sh (lock matches).
       musl build's pre-existing time_t warning filed as #373.
-- [ ] Medium on pvetest2 (fixture-socket-lb-live v4+v6 local and SNAT steps); then `component stage flowsdn`.
+- [x] Medium on 7.2: pvetest2 67ee5a2bae errored (apiserver never ready), C2NR0Q2 62e589e10b errored (registry
+      never listed the image); pvetest1 ef10df8ce1 at 238a767 (7.2.8-200.fc44): 20 pass incl. fixture-socket-lb-live
+      (21 PASS: IPv4 + IPv6 NodePort local and SNAT via nodeport_ingress/egress test runs); the 2 failures are
+      node-service-dns/-programmed (#368). #369 closed.
+- [ ] `component stage flowsdn` (also carries #291 identity, #371 network-status).
 
 ### Multus network-status — #371 (P2), 2026-10-09
 
