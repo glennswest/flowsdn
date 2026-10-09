@@ -56,7 +56,12 @@ pinning or subsystem libraries are absent are **not current status**.
 - Kubernetes Events on Pods and the Node, aggregated and non-blocking (#298);
   the `flowsdn.io/pod-networks` annotation on local Pods and pod/container/
   workload fields on `/v1/endpoint` and `/v1/ip` (#328).
-- Not implemented: cluster identity allocation and a BPF ipcache, policy in
+- Cluster identities for local Pods over FlowsdnIdentity objects (spec 03
+  §3.3, #291): oldest-object lookup, create on a free number, heartbeat
+  removal, recreate; `GET /v1/identity` and identities on `/v1/ip` and
+  endpoints. Library-tested and against a loopback API server, not on a
+  cluster.
+- Not implemented: a BPF ipcache, operator identity GC (#332), policy in
   the datapath, masquerade (the node provides it), Maglev, DSR, NAT46/64,
   socket termination, CRD controllers or registration, an operator process,
   Hubble observer/relay.

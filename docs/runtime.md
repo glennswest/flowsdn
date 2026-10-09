@@ -5,8 +5,9 @@ changes since 2026-09-25. The agent owns local endpoints and host-scope IPAM.
 Built with the `kubernetes` feature and configured with a `kubernetes` section,
 it also watches Nodes and Pods, takes its pod CIDR from its Node, routes to the
 other nodes' pod CIDRs (#291) and load balances Services at the socket and, for
-traffic from outside the cluster, on the node's uplink (#292); it has no
-identity allocator or policy enforcement yet. The broader configuration catalogue
+traffic from outside the cluster, on the node's uplink (#292), and holds a
+cluster identity for each local Pod's labels (#291); it has no policy
+enforcement yet. The broader configuration catalogue
 and specifications describe library contracts and planned integrations, not
 additional options accepted by this executable.
 
@@ -43,6 +44,8 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.service-lb` | `true` | Watch Services and EndpointSlices and load the embedded `socket-lb` object ([socket LB](#clusterip-socket-lb-292)). |
 | `kubernetes.cgroup-root` | `/sys/fs/cgroup` | Absolute path of the cgroup v2 directory the socket-LB programs attach to (the manifests mount the host's root at `/run/flowsdn/cgroupv2`). |
 | `kubernetes.node-port` | `true` | Attach the NodePort programs to the uplinks (traffic from outside the cluster). Takes effect only with `service-lb`. |
+| `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
+| `kubernetes.cluster-name` | `default` | The cluster label on every Pod identity (`io.flowsdn.k8s.policy.cluster`); a DNS label of at most 32 bytes. |
 
 The `kubernetes` booleans must be JSON booleans and its strings strings, or
 startup fails.
@@ -135,10 +138,10 @@ expiration time out after 600 seconds.
 
 `GET /v1/healthz` reports initial API availability after restoration and queued
 deletion replay; in Kubernetes mode it adds a `kubernetes` member (`Ok` once
-the Node and Pod lists, and with `service-lb` the Service and EndpointSlice
-lists, are synced and nothing failed). `/healthz` and `/readyz`
-are not implemented. Module health marks identity and policy controllers as
-unavailable. The config response's `ipam-mode: kubernetes` is a compatibility
+the Node and Pod lists, with `service-lb` the Service and EndpointSlice
+lists, and with `identity-allocation` the Namespace and FlowsdnIdentity lists,
+are synced and nothing failed). `/healthz` and `/readyz`
+are not implemented. Module health marks the policy controllers as unavailable. The config response's `ipam-mode: kubernetes` is a compatibility
 value: allocation uses the configured pools, or with `auto` the pool resolved
 from the Node at startup.
 
@@ -194,11 +197,52 @@ With the `kubernetes` feature and section the agent:
   reconciles on every change of the desired set and every 30 s;
 - with `service-lb` (default on), lists and watches Services and
   EndpointSlices and load balances ClusterIPs at the socket (below);
-- serves `GET /v1/ip`, `GET /v1/node/routes` and `GET /v1/service`
-  ([API](agent-api.md)).
+- with `identity-allocation` (default on), lists and watches Namespaces and
+  FlowsdnIdentity objects and holds a cluster identity for each local Pod
+  ([below](#cluster-identities-291));
+- serves `GET /v1/ip`, `GET /v1/identity`, `GET /v1/node/routes` and
+  `GET /v1/service` ([API](agent-api.md)).
 
-Not yet: a cluster identity allocator (pod IP cache entries and the
-pod-networks annotation carry no numeric identity), a flow/drop observer (the
+### Cluster identities (#291)
+
+Spec 03 §3.3 in CRD mode, over cluster-scoped `flowsdn.io/v1alpha1`
+FlowsdnIdentity objects named by the decimal identity. A Pod's identity labels
+(spec 03 §3.1, flowsdn keys per ADR-0020) are its own labels without
+`io.flowsdn.k8s*` keys, `io.flowsdn.k8s.namespace.labels.<key>` for each
+label of its Namespace, `io.kubernetes.pod.namespace`,
+`io.flowsdn.k8s.policy.serviceaccount` (when set) and
+`io.flowsdn.k8s.policy.cluster`, all source `k8s`, then the default identity
+label filter (spec 03 §4.2 with flowsdn keys: `pod-template-hash`,
+`kubernetes.io/…` and similar are dropped). Host-network Pods have none.
+
+Nothing is allocated before the Pod, Namespace and FlowsdnIdentity lists are
+complete. Every second the identities thread, for each label set among this
+node's Pods:
+
+- uses a well-known identity when the set is a cluster-DNS one (102, 103, 104,
+  106, 110–112, 114; spec 03 §4.4, no API call);
+- else reuses the oldest object with exactly those labels (ties to the lower
+  number), removing the operator's `io.flowsdn.heartbeat` annotation with an
+  Update if present;
+- else creates one on a free number in 256–65535, searched from a random
+  start; a 409 (another node took the number) or other failure drops it and
+  the next pass looks up or tries again;
+- re-creates a held identity whose object was deleted while a local Pod still
+  uses it (master-key protection). A node that created a duplicate for the
+  same labels keeps it; new lookups everywhere converge on the oldest.
+
+Sets no longer used are released without an API call: deleting unused objects
+is the operator's identity GC (#332), which does not run yet, so objects
+accumulate until it does. Remote Pods resolve to the oldest object with their
+labels. The identities appear in `GET /v1/identity`, on Pod rows of
+`GET /v1/ip`, and as `status.identity` and `pod.identity` of local endpoints.
+They are not in BPF maps: nothing in the datapath consumes them until policy
+(#292). Needs `flowsdnidentities` list/watch/create/update and `namespaces`
+list/watch (the manifests and chart grant them) and the FlowsdnIdentity CRD
+(stormcos#303 applies `crds/`); without the CRD the identity watch reports
+an error in health and nothing is allocated.
+
+Not yet: a flow/drop observer (the
 `flowsdn-hubble` `endpoint` module names flow peers `ns/pod (container)` once
 one exists, #293), BPF ipcache maps, tunnel routing, masquerade, and policy enforcement. Unit tests and a loopback-HTTPS controller test cover the
 watch and route logic; two-node pod traffic has not been demonstrated

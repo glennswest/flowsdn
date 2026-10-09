@@ -23,9 +23,10 @@ The baseline above describes v0.14.0 only. Main (through `eed1aca`) has:
 
 - **Milestone 1 (#291):** agent/CNI with persisted endpoints and pinned
   forwarding; the Kubernetes-mode agent (Node/Pod watches, pod CIDR from the
-  Node, direct routes to other nodes) in the golden. Open: cluster identity
-  allocation and ipcache, and the two-node IPv4/IPv6 acceptance on
-  pvetest1 + pvetest2.
+  Node, direct routes to other nodes) in the golden; cluster identities for
+  local Pods over FlowsdnIdentity objects on main (2026-10-09). Open: BPF
+  ipcache, and the two-node IPv4/IPv6 acceptance on pvetest1 + pvetest2
+  (multi-node is day-2 per the owner, stormcentral#360).
 - **Milestone 2 (#292):** socket LB for ClusterIPs, externalIPs, LoadBalancer
   IPs and NodePorts, traffic policies, ClientIP affinity; uplink NodePort with
   SNAT to remote backends (IPv4 in golden `golden-flowsdn-cc0835c8a1db`; IPv6 on

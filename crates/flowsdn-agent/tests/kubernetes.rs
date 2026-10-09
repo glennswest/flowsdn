@@ -1,7 +1,8 @@
 //! The controller against a loopback HTTPS API server: kubeconfig credentials,
-//! Node/Pod lists, a watch event, a watch the server ends, and the pool the
-//! agent derives. No routes are installed (that needs CAP_NET_ADMIN); this is
-//! not cluster acceptance.
+//! Node/Pod lists, a watch event, a watch the server ends, the pool the
+//! agent derives, and a FlowsdnIdentity created for the local Pod while the
+//! remote Pod resolves to an existing one. No routes are installed (that
+//! needs CAP_NET_ADMIN); this is not cluster acceptance.
 #![cfg(feature = "kubernetes")]
 use flowsdn_agent::kubernetes::{Settings, controller::Controller, lock};
 use openssl::{
@@ -22,7 +23,7 @@ use std::{
     net::TcpListener,
     path::PathBuf,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
     thread,
@@ -81,7 +82,12 @@ fn node(name: &str, rv: &str, cidrs: &[&str], ips: &[&str]) -> serde_json::Value
 
 /// Each connection is answered on its own thread: lists, one node watch event
 /// then the end of that watch, and later watches held open.
-fn server(key: PKey<Private>, cert: X509, watches: Arc<AtomicUsize>) -> u16 {
+fn server(
+    key: PKey<Private>,
+    cert: X509,
+    watches: Arc<AtomicUsize>,
+    created: Arc<Mutex<Vec<serde_json::Value>>>,
+) -> u16 {
     let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).expect("acceptor");
     acceptor.set_private_key(&key).expect("key");
     acceptor.set_certificate(&cert).expect("certificate");
@@ -93,6 +99,7 @@ fn server(key: PKey<Private>, cert: X509, watches: Arc<AtomicUsize>) -> u16 {
             let Ok(socket) = socket else { continue };
             let acceptor = Arc::clone(&acceptor);
             let watches = Arc::clone(&watches);
+            let created = Arc::clone(&created);
             thread::spawn(move || {
                 let Ok(mut stream) = acceptor.accept(socket) else {
                     return;
@@ -114,6 +121,37 @@ fn server(key: PKey<Private>, cert: X509, watches: Arc<AtomicUsize>) -> u16 {
                     String::from_utf8_lossy(&request).contains("Bearer test-token"),
                     "credentials from the kubeconfig"
                 );
+                if line.starts_with("POST /apis/flowsdn.io/v1alpha1/flowsdnidentities ") {
+                    let text = String::from_utf8_lossy(&request).into_owned();
+                    let length: usize = text
+                        .lines()
+                        .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().to_owned()))
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(0);
+                    let start = request
+                        .windows(4)
+                        .position(|b| b == b"\r\n\r\n")
+                        .map_or(request.len(), |p| p.saturating_add(4));
+                    let mut body = request.get(start..).unwrap_or_default().to_vec();
+                    while body.len() < length {
+                        let mut buffer = [0_u8; 1024];
+                        match stream.read(&mut buffer) {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => body.extend_from_slice(buffer.get(..n).unwrap_or_default()),
+                        }
+                    }
+                    let value: serde_json::Value =
+                        serde_json::from_slice(&body).expect("identity JSON");
+                    created.lock().expect("created").push(value.clone());
+                    let body = value.to_string();
+                    let response = format!(
+                        "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                    let _ = stream.shutdown();
+                    return;
+                }
                 let nodes = line.starts_with("GET /api/v1/nodes");
                 if line.contains("watch=true") {
                     let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n";
@@ -152,6 +190,21 @@ fn server(key: PKey<Private>, cert: X509, watches: Arc<AtomicUsize>) -> u16 {
                          "ports":[{"name":"dns","protocol":"UDP","port":53},
                                   {"name":"dns-tcp","protocol":"TCP","port":53}]}
                     ]})
+                } else if line.starts_with("GET /api/v1/namespaces") {
+                    json!({"metadata":{"resourceVersion":"50"},"items":[
+                        {"metadata":{"name":"ns","uid":"n1","resourceVersion":"49",
+                            "labels":{"kubernetes.io/metadata.name":"ns"}}}
+                    ]})
+                } else if line.starts_with("GET /apis/flowsdn.io/v1alpha1/flowsdnidentities") {
+                    json!({"metadata":{"resourceVersion":"60"},"items":[
+                        {"apiVersion":"flowsdn.io/v1alpha1","kind":"FlowsdnIdentity",
+                         "metadata":{"name":"5000","uid":"i1","resourceVersion":"59",
+                            "creationTimestamp":"2026-10-09T10:00:00Z"},
+                         "security-labels":{"k8s:app":"web",
+                            "k8s:io.flowsdn.k8s.namespace.labels.kubernetes.io/metadata.name":"ns",
+                            "k8s:io.flowsdn.k8s.policy.cluster":"default",
+                            "k8s:io.kubernetes.pod.namespace":"ns"}}
+                    ]})
                 } else if nodes {
                     json!({"metadata":{"resourceVersion":"10"},"items":[
                         node("local", "8", &[], &["192.0.2.172"]),
@@ -161,7 +214,11 @@ fn server(key: PKey<Private>, cert: X509, watches: Arc<AtomicUsize>) -> u16 {
                     json!({"metadata":{"resourceVersion":"20"},"items":[
                         {"metadata":{"name":"web","namespace":"ns","uid":"p1","resourceVersion":"19",
                             "labels":{"app":"web"}},
-                         "spec":{"nodeName":"peer"},"status":{"podIPs":[{"ip":"10.173.0.5"}]}}
+                         "spec":{"nodeName":"peer"},"status":{"podIPs":[{"ip":"10.173.0.5"}]}},
+                        {"metadata":{"name":"api","namespace":"ns","uid":"p2","resourceVersion":"18",
+                            "labels":{"app":"api"}},
+                         "spec":{"nodeName":"local","serviceAccountName":"api"},
+                         "status":{"podIPs":[{"ip":"10.172.0.7"}]}}
                     ]})
                 }
                 .to_string();
@@ -185,7 +242,8 @@ fn controller_lists_watches_and_derives_the_pool() {
     let ca = dir.join("ca.pem");
     std::fs::write(&ca, cert.to_pem().expect("PEM")).expect("CA file");
     let watches = Arc::new(AtomicUsize::new(0));
-    let port = server(key, cert, Arc::clone(&watches));
+    let created = Arc::new(Mutex::new(Vec::new()));
+    let port = server(key, cert, Arc::clone(&watches), Arc::clone(&created));
     let kubeconfig = dir.join("kubeconfig");
     std::fs::write(
         &kubeconfig,
@@ -203,6 +261,8 @@ fn controller_lists_watches_and_derives_the_pool() {
         service_lb: true,
         cgroup_root: PathBuf::from("/sys/fs/cgroup"),
         node_port: false,
+        identity_allocation: true,
+        cluster_name: "default".into(),
     };
     let controller = Controller::connect(settings, &dir).expect("connect");
     let (pool4, pool6) = controller.wait_for_pools(true, true).expect("pools");
@@ -228,6 +288,8 @@ fn controller_lists_watches_and_derives_the_pool() {
                 && view.slices_synced
                 && peer_v6
                 && watches.load(Ordering::SeqCst) >= 2
+                && view.identities_synced
+                && view.pod_identities.len() == 2
             {
                 // Unprivileged test runs cannot write /proc/sys; nothing else failed.
                 assert!(
@@ -267,6 +329,27 @@ fn controller_lists_watches_and_derives_the_pool() {
                     ]
                 );
                 assert!(view.service_ids.is_empty(), "nothing is programmed");
+                // The remote Pod has the existing object; the local one a new number.
+                assert_eq!(pod.get("identity"), Some(&json!(5000)));
+                let local = view.pod_identity("ns", "api").expect("local identity");
+                assert!((256..=65_535).contains(&local) && local != 5000);
+                let created = created.lock().expect("created").clone();
+                assert_eq!(created.len(), 1, "one create, no recreate before it is listed");
+                let body = created.first().expect("create body");
+                assert_eq!(
+                    body.pointer("/metadata/name"),
+                    Some(&json!(local.to_string()))
+                );
+                assert_eq!(
+                    body.get("security-labels"),
+                    Some(&json!({"k8s:app":"api",
+                        "k8s:io.flowsdn.k8s.namespace.labels.kubernetes.io/metadata.name":"ns",
+                        "k8s:io.flowsdn.k8s.policy.cluster":"default",
+                        "k8s:io.flowsdn.k8s.policy.serviceaccount":"api",
+                        "k8s:io.kubernetes.pod.namespace":"ns"}))
+                );
+                let identities = view.identity_list();
+                assert_eq!(identities.as_array().map(Vec::len), Some(2));
                 break;
             }
         }

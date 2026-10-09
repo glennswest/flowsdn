@@ -124,6 +124,15 @@ fn a_new_label_set_creates_a_free_number_and_holds_it_once_created() {
     allocator.created(&key, 257, Outcome::Done);
     assert_eq!(allocator.get(&key), Some(257));
     assert_eq!(allocator.waiting(&want), 0);
+    // Created but not listed yet: not taken for a deletion, no recreate.
+    assert!(allocator.reconcile(&want, &[taken.clone()], "default", 0).is_empty());
+    let listed = object(257, &web(), "t");
+    assert!(allocator.reconcile(&want, &[taken.clone(), listed], "default", 0).is_empty());
+    // Listed, then gone: recreated.
+    assert_eq!(
+        allocator.reconcile(&want, &[taken], "default", 0).first().map(Action::id),
+        Some(257)
+    );
 
     let action = actions.first().expect("action");
     let body = action.body();

@@ -56,7 +56,8 @@ socket LB and the IPv4 NodePort/SNAT programs, on a stormcos 7.2 kernel
 network**: two-node acceptance (#291) and live ClusterIP acceptance on a node
 (#292) are still open, and the IPv6 NodePort programs have not run on a kernel yet.
 
-Not implemented in the agent: cluster identity allocation and a BPF ipcache,
+The Kubernetes-mode agent also allocates cluster identities for its Pods
+(FlowsdnIdentity objects, #291). Not implemented in the agent: a BPF ipcache,
 network policy in the datapath, flowsdn's own masquerade, Maglev, DSR,
 NAT46/64, socket termination, CRD controllers, an operator process and the
 Hubble observer/relay. Libraries also implement configuration resolution,

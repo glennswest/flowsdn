@@ -228,6 +228,9 @@ struct Held {
     id: u32,
     /// The object exists with these labels (seen, or created by this node).
     verified: bool,
+    /// The identity list has shown it: only then does its absence mean it
+    /// was deleted (a create this node just made may not be listed yet).
+    seen: bool,
 }
 
 /// The identities this node holds for its Pods' label sets.
@@ -254,13 +257,21 @@ impl Allocator {
         let mut actions = Vec::new();
         for (key, labels) in desired {
             if let Some(id) = well_known(labels, cluster) {
-                self.held.insert(key.clone(), Held { id, verified: true });
+                self.held.insert(
+                    key.clone(),
+                    Held {
+                        id,
+                        verified: true,
+                        seen: true,
+                    },
+                );
                 continue;
             }
             if let Some(held) = self.held.get_mut(key) {
                 match by_id.get(&held.id) {
                     Some(object) if object.key().as_ref() == Some(key) => {
                         held.verified = true;
+                        held.seen = true;
                         if object.heartbeat {
                             actions.push(acquire(object, labels));
                         }
@@ -271,14 +282,14 @@ impl Allocator {
                         self.held.remove(key);
                     }
                     // Deleted while held: recreate it (step 8).
-                    None if held.verified => {
+                    None if held.seen => {
                         actions.push(Action::Create {
                             id: held.id,
                             labels: labels.clone(),
                         });
                         continue;
                     }
-                    // Our create has not been answered or seen yet.
+                    // Our create has not been answered or listed yet.
                     None => continue,
                 }
             }
@@ -288,6 +299,7 @@ impl Allocator {
                     Held {
                         id: object.id,
                         verified: true,
+                        seen: true,
                     },
                 );
                 if object.heartbeat {
@@ -306,6 +318,7 @@ impl Allocator {
                     Held {
                         id,
                         verified: false,
+                        seen: false,
                     },
                 );
                 actions.push(Action::Create {

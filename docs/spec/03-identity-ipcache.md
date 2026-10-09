@@ -220,6 +220,21 @@ The allocator MUST implement the following, observable by peers through the
     acknowledges before allocations proceed. Ids seen in the cache are
     removed from the free pool; deleted ids return to it.
 
+**Implementation note (2026-10-09, #291).** The agent implements steps 1–8
+over `flowsdn.io/v1alpha1` FlowsdnIdentity objects with flowsdn's names
+(ADR-0020): label keys `io.flowsdn.k8s.namespace.labels`,
+`io.flowsdn.k8s.policy.serviceaccount`, `io.flowsdn.k8s.policy.cluster` in
+§3.1, §4.1 and the §4.2 defaults; heartbeat annotation `io.flowsdn.heartbeat`.
+Reference reference-key labels on Pods are not treated specially. Step 9 is
+continuous: the reconcile runs every second against the watched list, so a
+heartbeat is removed and a deleted held object recreated within a pass rather
+than at a 5-minute sync. The free number is searched from a random start
+rather than drawn at random. A held object is recreated only after the list
+has shown it once (an object this node just created is not mistaken for a
+deleted one). Well-known identities 105 and 113 (the reference operator) never
+match. Reference counts are per label set among the node's Pods, recomputed
+each pass. See `crates/flowsdn-agent/src/identity.rs` and runtime.md.
+
 Kvstore, double-write and operator-managed modes are behind the backend
 trait (section 11) and are **deferred**. `--identity-allocation-mode` other
 than `crd` is rejected at startup (section 6).

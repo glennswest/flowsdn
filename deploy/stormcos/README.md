@@ -206,9 +206,9 @@ Kubernetes installation. The static-pool agent (`manifests/`) does not watch
 Nodes or Pods, learn remote PodCIDRs or install remote routes; assigning
 different static pools alone does not provide those behaviors. The
 Kubernetes-mode agent does those (Node/Pod watches, derived pools, direct node
-routes, the socket LB and the uplink NodePort programs), but no agent
-allocates cluster identities, fills a BPF ipcache, installs remote neighbors or
-enforces policy. Its config response's compatibility value
+routes, the socket LB, the uplink NodePort programs and cluster identities
+for its Pods, which need the FlowsdnIdentity CRD from `crds/`), but no agent
+fills a BPF ipcache, installs remote neighbors or enforces policy. Its config response's compatibility value
 `ipam-mode: kubernetes` must not be interpreted as an active Kubernetes IPAM
 controller; allocations currently come from the configured host pools.
 
