@@ -161,11 +161,16 @@ fn resolve(server: IpAddr, name: &str, v6: bool) -> Result<(Vec<IpAddr>, SocketA
 pub fn kubernetes_frontends(rows: &[Value]) -> Vec<(SocketAddr, bool)> {
     rows.iter()
         .filter(|row| {
-            let flag = |key: &str| row.pointer(&format!("/spec/flags/{key}")).and_then(Value::as_str);
+            let flag = |key: &str| {
+                row.pointer(&format!("/spec/flags/{key}"))
+                    .and_then(Value::as_str)
+            };
             flag("namespace") == Some("default")
                 && flag("name") == Some("kubernetes")
                 && flag("type") == Some("ClusterIP")
-                && row.pointer("/spec/frontend-address/scope").and_then(Value::as_str)
+                && row
+                    .pointer("/spec/frontend-address/scope")
+                    .and_then(Value::as_str)
                     != Some("node-local")
         })
         .filter_map(|row| {
@@ -178,7 +183,10 @@ pub fn kubernetes_frontends(rows: &[Value]) -> Vec<(SocketAddr, bool)> {
                 .pointer("/spec/frontend-address/port")
                 .and_then(Value::as_u64)
                 .and_then(|p| u16::try_from(p).ok())?;
-            Some((SocketAddr::new(ip, port), row.pointer("/status/realized").is_some()))
+            Some((
+                SocketAddr::new(ip, port),
+                row.pointer("/status/realized").is_some(),
+            ))
         })
         .collect()
 }
@@ -372,13 +380,37 @@ mod tests {
         let cluster: IpAddr = "10.96.0.1".parse().expect("ip");
         let rows = vec![
             row("kube-dns", "ClusterIP", "10.96.0.10", 53, "external", true),
-            row("kubernetes", "NodePort", "192.168.31.173", 443, "external", true),
+            row(
+                "kubernetes",
+                "NodePort",
+                "192.168.31.173",
+                443,
+                "external",
+                true,
+            ),
             row("kubernetes", "ClusterIP", "fd00::1", 443, "external", true),
-            row("kubernetes", "ClusterIP", "10.96.0.1", 443, "node-local", true),
-            row("kubernetes", "ClusterIP", "10.96.0.1", 443, "external", true),
+            row(
+                "kubernetes",
+                "ClusterIP",
+                "10.96.0.1",
+                443,
+                "node-local",
+                true,
+            ),
+            row(
+                "kubernetes",
+                "ClusterIP",
+                "10.96.0.1",
+                443,
+                "external",
+                true,
+            ),
         ];
         let want = SocketAddr::new(cluster, 443);
-        assert_eq!(kubernetes_target(&rows, dns, Some(&[cluster][..])), Ok(want));
+        assert_eq!(
+            kubernetes_target(&rows, dns, Some(&[cluster][..])),
+            Ok(want)
+        );
         assert_eq!(kubernetes_target(&rows, dns, None), Ok(want));
         // #368: the apiserver's node address is not the Service.
         let node: IpAddr = "192.168.31.173".parse().expect("ip");
@@ -387,12 +419,26 @@ mod tests {
         assert!(kubernetes_target(&rows, other_dns, Some(&[cluster][..])).is_err());
         let unrealized = vec![
             row("kube-dns", "ClusterIP", "10.96.0.10", 53, "external", true),
-            row("kubernetes", "ClusterIP", "10.96.0.1", 443, "external", false),
+            row(
+                "kubernetes",
+                "ClusterIP",
+                "10.96.0.1",
+                443,
+                "external",
+                false,
+            ),
         ];
         assert_eq!(
             kubernetes_target(&unrealized, dns, Some(&[cluster][..])),
             Err("kubernetes 10.96.0.1:443 is not programmed yet".into())
         );
-        assert!(kubernetes_target(rows.get(..1).expect("kube-dns row"), dns, Some(&[cluster][..])).is_err());
+        assert!(
+            kubernetes_target(
+                rows.get(..1).expect("kube-dns row"),
+                dns,
+                Some(&[cluster][..])
+            )
+            .is_err()
+        );
     }
 }
