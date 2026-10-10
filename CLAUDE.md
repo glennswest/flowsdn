@@ -362,6 +362,10 @@ cannot deliver routed packets to an IPv4 pod).
 
 - [x] README, docs/, deploy READMEs, crate READMEs, release archive README and CLAUDE.md checked against code through eed1aca; 4a1b564. Closed #353, #354. Filed #359 (P2: startup checks kernel-requirements promises are absent). Docs only; no build, version or golden change.
 
+### Comment mining — 2026-10-10 (since 2026-10-09)
+
+- [x] Read the 23 comments (and new issue bodies) on the 49 issues updated since 2026-10-09. Filed stormblock#388 (P1: ext4 `bit already cleared` on ublkb0 after a keep-data reinstall, from #374). Closed #372 (fixed f8c49c1). Added: stormcentral#512 (C2NR0Q2 62e589e10b), stormcentral#500 (pvetest2 67ee5a2bae), #374 (link to stormblock#388). #296's §2 decision is already needs-owner. No fixes.
+
 ### Comment mining — 2026-10-09 (since 2026-10-08)
 
 - [x] Read the 30 comments on the 44 issues updated since 2026-10-08. Filed #368 (P1: node-service probe takes KUBERNETES_SERVICE_HOST as the ClusterIP; pvetest2 runs current flowsdn and kube-dns is programmed), #369 (P1: nodeport_ingress stack 768 > 512, blocks staging), #370 (P2: no verifier load before stage). Added: stormcentral#150 (three more wrong titles), stormcentral#526 (runs complete again), stormcos#303 (identity allocation needs crds/), #296 (rustkube has no node IPAM). #296's §2 decision is already needs-owner. No fixes.
