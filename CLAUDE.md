@@ -56,6 +56,16 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### node-service probe takes the env as the ClusterIP — #368 (P0), 2026-10-10
+
+On stormcos `KUBERNETES_SERVICE_HOST` is the apiserver's node address, so node-service-dns/-programmed fail
+on a working node (medium c61945e336, ef8e24151d on pvetest2). Fix in test/src/services.rs: the `kubernetes`
+Service's address comes from kube-dns (the DNS answer), its port and programmed state from the agent's
+`GET /v1/service` row `default/kubernetes` (ClusterIP, scope external); connect to that ClusterIP:port.
+
+- [ ] Code + tests, test/README, changelog.
+- [ ] sc-build; medium on pvetest2; close #368, tell #292.
+
 ### nodeport_ingress stack — #369 (P1), 2026-10-09
 
 Medium ef8e24151d on 7.2: "combined stack size of 3 calls is 768". Measured from the committed object
