@@ -32,11 +32,13 @@ flowsdn CNI is not the flowsdn flavor, and both checks report skip.
 On a flowsdn node with a healthy agent, the probe then checks ClusterIP
 Services from the test pod's own network (#292), before the suite isolates
 itself: `node-service-dns` queries kube-dns at the pod's nameserver (its
-ClusterIP) for `kubernetes.default.svc.<domain>` and expects
-`KUBERNETES_SERVICE_HOST`, with the reply from the ClusterIP:53;
-`node-service-kubernetes` connects TCP to that Service and expects the
-ClusterIP as the peer; `node-service-programmed` expects both frontends in the
-agent's `GET /v1/service` with `status.realized`.
+ClusterIP) for `kubernetes.default.svc.<domain>` and expects an address, with
+the reply from the ClusterIP:53; `node-service-programmed` expects kube-dns's
+frontend and the `default/kubernetes` ClusterIP frontend at an address kube-dns
+gave realized in the agent's `GET /v1/service`; `node-service-kubernetes`
+connects TCP to that ClusterIP and port and expects it as the peer. The
+Service's address never comes from `KUBERNETES_SERVICE_HOST`: on stormcos the
+kubelet points that at the apiserver's node address (#368).
 
 Left out of `medium`: `socket-context`, because the kernel's test-run of
 connect hooks is unsupported (errno 524 on 6.17), and `socket-live` covers those

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-10-10
+- **fix:** The node probe's ClusterIP checks no longer take `KUBERNETES_SERVICE_HOST` as the `kubernetes` Service (#368): on stormcos the kubelet points it at the apiserver's node address, so `node-service-dns` and `node-service-programmed` failed on a working node. `node-service-dns` now expects any address from kube-dns (reply from its ClusterIP:53); `node-service-programmed` finds the `default/kubernetes` ClusterIP frontend in the agent's `GET /v1/service` at an address kube-dns gave and checks it and kube-dns realized; `node-service-kubernetes` (now run after it) connects to that ClusterIP and port.
+
 ### 2026-10-09
 - **chore:** Golden golden-flowsdn-a690ebee2ba7 (flowsdn@4447eeb, release request stormcos#494): the #369 stack fix, IPv6 external NodePort, cluster identity allocation (#291) and Multus network-status (#371).
 - **fix:** socket-lb `nodeport_ingress` loads on 7.2 again (#369): the IPv6 path was a call chain of three BPF frames (classifier, `ingress6` ~376 bytes, then `snat_reply6`/`new_flow6`/`snat_forward6` up to ~368 bytes), "combined stack size of 3 calls is 768" over the verifier's 512, so the program failed to load and external NodePort/LB/externalIP stopped for IPv4 as well. `ingress6` now only classifies the frame into a per-CPU `flowsdn_nodeport6_scratch` slot (tuple and flow) and returns a step; the classifier calls the step's function (`snat_reply6`, `new_flow6`, `nodeport_forward6`), so no IPv6 subprogram calls another. Behaviour is unchanged. Embedded object and `bpf-objects.lock` rebuilt. Verified: sc-build at ded9b10 (fmt, workspace + kubernetes Clippy -D warnings, 837 tests, test/build.sh lock check) and medium run ef10df8ce1 on pvetest1 (7.2.8-200.fc44), `fixture-socket-lb-live` 21 PASS incl. IPv4/IPv6 NodePort local and SNAT.

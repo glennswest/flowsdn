@@ -1,9 +1,11 @@
 //! ClusterIP Services on a flowsdn node (#292): from this pod's own network,
 //! before the suite isolates itself, so the node's socket LB is what answers.
 //! kube-dns at the pod's nameserver (its ClusterIP) resolves the `kubernetes`
-//! Service to `KUBERNETES_SERVICE_HOST`, the reply comes from the ClusterIP,
-//! a TCP connect to that Service succeeds with the ClusterIP as its peer, and
-//! the agent reports both frontends programmed. Run only where the node is
+//! Service with the reply from the ClusterIP, the agent reports kube-dns and
+//! that `kubernetes` ClusterIP programmed, and a TCP connect to it succeeds
+//! with the ClusterIP as its peer. The Service's address comes from DNS and
+//! the agent, never `KUBERNETES_SERVICE_HOST`: on stormcos the kubelet points
+//! that at the apiserver's node address (#368). Run only where the node is
 //! the flowsdn flavor.
 use crate::report::Report;
 use flowsdn_api_client::{Client, Method};
@@ -154,38 +156,126 @@ fn resolve(server: IpAddr, name: &str, v6: bool) -> Result<(Vec<IpAddr>, SocketA
     Err(last)
 }
 
+/// The `default/kubernetes` ClusterIP frontends (cluster scope) in the
+/// agent's `GET /v1/service` rows, with whether each is realized.
+pub fn kubernetes_frontends(rows: &[Value]) -> Vec<(SocketAddr, bool)> {
+    rows.iter()
+        .filter(|row| {
+            let flag = |key: &str| row.pointer(&format!("/spec/flags/{key}")).and_then(Value::as_str);
+            flag("namespace") == Some("default")
+                && flag("name") == Some("kubernetes")
+                && flag("type") == Some("ClusterIP")
+                && row.pointer("/spec/frontend-address/scope").and_then(Value::as_str)
+                    != Some("node-local")
+        })
+        .filter_map(|row| {
+            let ip = row
+                .pointer("/spec/frontend-address/ip")
+                .and_then(Value::as_str)?
+                .parse::<IpAddr>()
+                .ok()?;
+            let port = row
+                .pointer("/spec/frontend-address/port")
+                .and_then(Value::as_u64)
+                .and_then(|p| u16::try_from(p).ok())?;
+            Some((SocketAddr::new(ip, port), row.pointer("/status/realized").is_some()))
+        })
+        .collect()
+}
+
+/// Whether `ip:port` is a realized frontend in `GET /v1/service` rows.
+pub fn programmed(rows: &[Value], ip: IpAddr, port: u16) -> bool {
+    rows.iter().any(|row| {
+        row.pointer("/status/realized/frontend-address/ip")
+            .and_then(Value::as_str)
+            == Some(ip.to_string().as_str())
+            && row
+                .pointer("/status/realized/frontend-address/port")
+                .and_then(Value::as_u64)
+                == Some(u64::from(port))
+    })
+}
+
+/// The `kubernetes` Service target: the agent's realized frontend at an
+/// address kube-dns gave (`resolved`; any realized one when DNS failed),
+/// with kube-dns's own frontend `dns`:53 realized too.
+pub fn kubernetes_target(
+    rows: &[Value],
+    dns: IpAddr,
+    resolved: Option<&[IpAddr]>,
+) -> Result<SocketAddr, String> {
+    if !programmed(rows, dns, 53) {
+        return Err(format!("kube-dns {dns}:53 is not a programmed frontend"));
+    }
+    let frontends = kubernetes_frontends(rows);
+    if frontends.is_empty() {
+        return Err(format!(
+            "no default/kubernetes ClusterIP among {} frontends",
+            rows.len()
+        ));
+    }
+    let wanted = |target: &SocketAddr| {
+        target.is_ipv4() == dns.is_ipv4()
+            && resolved.is_none_or(|addresses| addresses.contains(&target.ip()))
+    };
+    let mut matching = frontends.iter().filter(|(target, _)| wanted(target));
+    match matching.clone().find(|(_, realized)| *realized) {
+        Some((target, _)) => Ok(*target),
+        None => match matching.next() {
+            Some((target, _)) => Err(format!("kubernetes {target} is not programmed yet")),
+            None => Err(format!(
+                "kube-dns answered {resolved:?}; the agent has kubernetes at {:?}",
+                frontends.iter().map(|(t, _)| *t).collect::<Vec<_>>()
+            )),
+        },
+    }
+}
+
 pub fn probe(report: &mut Report, socket: &Path) {
     let resolv = std::fs::read_to_string("/etc/resolv.conf").unwrap_or_default();
-    let host = std::env::var("KUBERNETES_SERVICE_HOST")
-        .ok()
-        .and_then(|h| h.parse::<IpAddr>().ok());
-    let port = std::env::var("KUBERNETES_SERVICE_PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(443);
-    let (Some((dns, domain)), Some(kubernetes)) = (resolv_conf(&resolv), host) else {
+    let Some((dns, domain)) = resolv_conf(&resolv) else {
         report.fail(
             "node-service-dns",
             Duration::ZERO,
-            "no nameserver in /etc/resolv.conf or no KUBERNETES_SERVICE_HOST in this pod",
+            "no nameserver in /etc/resolv.conf",
         );
         return;
     };
     let name = format!("kubernetes.default.svc.{domain}");
-    report.check("node-service-dns", || {
-        let (addresses, from) = resolve(dns, &name, kubernetes.is_ipv6())?;
+    let resolved = report.check("node-service-dns", || {
+        let (addresses, from) = resolve(dns, &name, dns.is_ipv6())?;
         if from != SocketAddr::new(dns, 53) {
             return Err(format!(
                 "reply came from {from}, not the ClusterIP {dns}:53 (no reverse translation)"
             ));
         }
-        if !addresses.contains(&kubernetes) {
-            return Err(format!("{name} -> {addresses:?}, expected {kubernetes}"));
+        if addresses.is_empty() {
+            return Err(format!("{name} has no address"));
         }
-        Ok(((), format!("{name} -> {kubernetes} via kube-dns {dns}:53")))
+        let detail = format!("{name} -> {addresses:?} via kube-dns {dns}:53");
+        Ok((addresses, detail))
+    });
+    let target = report.check("node-service-programmed", || {
+        let client = Client::new(socket, Duration::from_secs(2));
+        let reply = client
+            .request(Method::Get, "/v1/service", None)
+            .map_err(|e| format!("GET /v1/service: {e}"))?;
+        let rows = reply
+            .json
+            .as_ref()
+            .and_then(Value::as_array)
+            .ok_or_else(|| format!("GET /v1/service returned {}", reply.status))?;
+        let target = kubernetes_target(rows, dns, resolved.as_deref())?;
+        Ok((
+            target,
+            format!(
+                "{} frontends; kube-dns {dns}:53 and kubernetes {target} programmed",
+                rows.len()
+            ),
+        ))
     });
     report.check("node-service-kubernetes", || {
-        let target = SocketAddr::new(kubernetes, port);
+        let target = target.ok_or("no programmed kubernetes ClusterIP to connect to")?;
         let start = Instant::now();
         let stream = TcpStream::connect_timeout(&target, CONNECT_TIMEOUT)
             .map_err(|e| format!("connect {target}: {e}"))?;
@@ -200,40 +290,6 @@ pub fn probe(report: &mut Report, socket: &Path) {
             format!(
                 "TCP {target} connected in {} ms",
                 start.elapsed().as_millis()
-            ),
-        ))
-    });
-    report.check("node-service-programmed", || {
-        let client = Client::new(socket, Duration::from_secs(2));
-        let reply = client
-            .request(Method::Get, "/v1/service", None)
-            .map_err(|e| format!("GET /v1/service: {e}"))?;
-        let rows = reply
-            .json
-            .as_ref()
-            .and_then(Value::as_array)
-            .ok_or_else(|| format!("GET /v1/service returned {}", reply.status))?;
-        let programmed = |ip: IpAddr, port: u16| {
-            rows.iter().any(|row| {
-                row.pointer("/status/realized/frontend-address/ip")
-                    .and_then(Value::as_str)
-                    == Some(ip.to_string().as_str())
-                    && row
-                        .pointer("/status/realized/frontend-address/port")
-                        .and_then(Value::as_u64)
-                        == Some(u64::from(port))
-            })
-        };
-        for (ip, port) in [(dns, 53), (kubernetes, port)] {
-            if !programmed(ip, port) {
-                return Err(format!("{ip}:{port} is not a programmed frontend"));
-            }
-        }
-        Ok((
-            (),
-            format!(
-                "{} frontends; kube-dns and kubernetes programmed",
-                rows.len()
             ),
         ))
     });
@@ -295,5 +351,48 @@ mod tests {
         assert_eq!(answers(&failed, 7), Err("DNS rcode 3".into()));
         assert!(answers(&q, 7).is_err(), "a query is not a response");
         assert!(answers(reply.get(..reply.len().saturating_sub(3)).expect("cut"), 7).is_err());
+    }
+
+    fn row(name: &str, kind: &str, ip: &str, port: u16, scope: &str, realized: bool) -> Value {
+        let spec = serde_json::json!({
+            "id": 1,
+            "frontend-address": {"ip": ip, "port": port, "protocol": "TCP", "scope": scope},
+            "flags": {"type": kind, "name": name, "namespace": if name == "kubernetes" { "default" } else { "kube-system" }},
+        });
+        if realized {
+            serde_json::json!({"spec": spec.clone(), "status": {"realized": spec}})
+        } else {
+            serde_json::json!({"spec": spec, "status": {}})
+        }
+    }
+
+    #[test]
+    fn kubernetes_target_comes_from_dns_and_the_agent_not_the_environment() {
+        let dns: IpAddr = "10.96.0.10".parse().expect("ip");
+        let cluster: IpAddr = "10.96.0.1".parse().expect("ip");
+        let rows = vec![
+            row("kube-dns", "ClusterIP", "10.96.0.10", 53, "external", true),
+            row("kubernetes", "NodePort", "192.168.31.173", 443, "external", true),
+            row("kubernetes", "ClusterIP", "fd00::1", 443, "external", true),
+            row("kubernetes", "ClusterIP", "10.96.0.1", 443, "node-local", true),
+            row("kubernetes", "ClusterIP", "10.96.0.1", 443, "external", true),
+        ];
+        let want = SocketAddr::new(cluster, 443);
+        assert_eq!(kubernetes_target(&rows, dns, Some(&[cluster][..])), Ok(want));
+        assert_eq!(kubernetes_target(&rows, dns, None), Ok(want));
+        // #368: the apiserver's node address is not the Service.
+        let node: IpAddr = "192.168.31.173".parse().expect("ip");
+        assert!(kubernetes_target(&rows, dns, Some(&[node][..])).is_err());
+        let other_dns: IpAddr = "10.96.0.11".parse().expect("ip");
+        assert!(kubernetes_target(&rows, other_dns, Some(&[cluster][..])).is_err());
+        let unrealized = vec![
+            row("kube-dns", "ClusterIP", "10.96.0.10", 53, "external", true),
+            row("kubernetes", "ClusterIP", "10.96.0.1", 443, "external", false),
+        ];
+        assert_eq!(
+            kubernetes_target(&unrealized, dns, Some(&[cluster][..])),
+            Err("kubernetes 10.96.0.1:443 is not programmed yet".into())
+        );
+        assert!(kubernetes_target(rows.get(..1).expect("kube-dns row"), dns, Some(&[cluster][..])).is_err());
     }
 }
