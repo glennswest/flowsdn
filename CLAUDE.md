@@ -63,7 +63,7 @@ on a working node (medium c61945e336, ef8e24151d on pvetest2). Fix in test/src/s
 Service's address comes from kube-dns (the DNS answer), its port and programmed state from the agent's
 `GET /v1/service` row `default/kubernetes` (ClusterIP, scope external); connect to that ClusterIP:port.
 
-- [ ] Code + tests, test/README, changelog.
+- [x] Code + tests, test/README, changelog (c791491, fmt 1f1ed95). sc-build at c791491: Clippy -D warnings (+ indexing, arithmetic), 8 flowsdn-test tests.
 - [ ] sc-build; medium on pvetest2; close #368, tell #292.
 
 ### nodeport_ingress stack — #369 (P1), 2026-10-09
