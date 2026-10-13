@@ -1253,7 +1253,8 @@ mod tests {
             .expect("body");
         let body: Value = serde_json::from_str(body).expect("JSON");
         assert_eq!(
-            body.pointer("/container-netns-path").expect("fixture field"),
+            body.pointer("/container-netns-path")
+                .expect("fixture field"),
             "/fixture/netns"
         );
         assert_eq!(

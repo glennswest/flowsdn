@@ -731,15 +731,17 @@ fn terminate(lb: &mut SocketLb, services: &mut [Service], server: &UdpSocket) ->
         .collect();
     let mut destroyed = 0u32;
     for socket in sock_diag::udp_sockets().map_err(|e| e.to_string())? {
-        if cookies.contains(&socket.cookie)
-            && (socket.destination, socket.destination_port) == gone
+        if cookies.contains(&socket.cookie) && (socket.destination, socket.destination_port) == gone
         {
             sock_diag::destroy(&socket).map_err(|e| e.to_string())?;
             destroyed = destroyed.saturating_add(1);
         }
     }
     if destroyed != 1 {
-        return Err(format!("{destroyed} sockets destroyed, expected the one through the frontend").into());
+        return Err(format!(
+            "{destroyed} sockets destroyed, expected the one through the frontend"
+        )
+        .into());
     }
     through.set_read_timeout(Some(TIMEOUT))?;
     match through.recv(&mut buffer) {

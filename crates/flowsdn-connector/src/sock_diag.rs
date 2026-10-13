@@ -83,8 +83,15 @@ pub fn parse_message(payload: &[u8]) -> Option<UdpSocket> {
         return None;
     }
     let family = *payload.first()?;
-    let id: [u8; SOCKID] = payload.get(4..4usize.saturating_add(SOCKID))?.try_into().ok()?;
-    let port = |at: usize| Some(u16::from_be_bytes(id.get(at..at.saturating_add(2))?.try_into().ok()?));
+    let id: [u8; SOCKID] = payload
+        .get(4..4usize.saturating_add(SOCKID))?
+        .try_into()
+        .ok()?;
+    let port = |at: usize| {
+        Some(u16::from_be_bytes(
+            id.get(at..at.saturating_add(2))?.try_into().ok()?,
+        ))
+    };
     let cookie = u64::from_ne_bytes(id.get(40..48)?.try_into().ok()?);
     Some(UdpSocket {
         family,
@@ -139,8 +146,18 @@ pub fn udp_sockets() -> Result<Vec<UdpSocket>> {
     let mut out = Vec::new();
     for family in [AF_INET, AF_INET6] {
         let fd = open()?;
-        let message = request(SOCK_DIAG_BY_FAMILY, NLM_F_REQUEST | NLM_F_DUMP, family, &[0; SOCKID]);
-        sendto(fd.as_raw_fd(), &message, &NetlinkAddr::new(0, 0), MsgFlags::empty())?;
+        let message = request(
+            SOCK_DIAG_BY_FAMILY,
+            NLM_F_REQUEST | NLM_F_DUMP,
+            family,
+            &[0; SOCKID],
+        );
+        sendto(
+            fd.as_raw_fd(),
+            &message,
+            &NetlinkAddr::new(0, 0),
+            MsgFlags::empty(),
+        )?;
         let mut buffer = vec![0u8; 65536];
         'dump: loop {
             let n = recv(fd.as_raw_fd(), &mut buffer, MsgFlags::empty())?;
@@ -167,8 +184,18 @@ pub fn udp_sockets() -> Result<Vec<UdpSocket>> {
 /// without `SOCK_DESTROY` support returns `EOPNOTSUPP`.
 pub fn destroy(socket: &UdpSocket) -> Result<()> {
     let fd = open()?;
-    let message = request(SOCK_DESTROY, NLM_F_REQUEST | NLM_F_ACK, socket.family, &socket.id);
-    sendto(fd.as_raw_fd(), &message, &NetlinkAddr::new(0, 0), MsgFlags::empty())?;
+    let message = request(
+        SOCK_DESTROY,
+        NLM_F_REQUEST | NLM_F_ACK,
+        socket.family,
+        &socket.id,
+    );
+    sendto(
+        fd.as_raw_fd(),
+        &message,
+        &NetlinkAddr::new(0, 0),
+        MsgFlags::empty(),
+    )?;
     let mut buffer = vec![0u8; 4096];
     let n = recv(fd.as_raw_fd(), &mut buffer, MsgFlags::empty())?;
     for (kind, payload) in messages(buffer.get(..n).unwrap_or_default()) {
@@ -208,7 +235,12 @@ mod tests {
 
     #[test]
     fn dump_request_layout() {
-        let message = request(SOCK_DIAG_BY_FAMILY, NLM_F_REQUEST | NLM_F_DUMP, AF_INET, &[0; SOCKID]);
+        let message = request(
+            SOCK_DIAG_BY_FAMILY,
+            NLM_F_REQUEST | NLM_F_DUMP,
+            AF_INET,
+            &[0; SOCKID],
+        );
         assert_eq!(message.len(), 72);
         assert_eq!(message.get(..4), Some(&72u32.to_ne_bytes()[..]));
         assert_eq!(message.get(4..6), Some(&20u16.to_ne_bytes()[..]));
