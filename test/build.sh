@@ -33,7 +33,8 @@ done
 "$root/tools/bpf-objects-lock.sh" check "$stage/opt/flowsdn/bpf"
 
 fixtures=(flowsdn-bpftest flowsdn-endpoint-test agent-runtime cni-runtime loader-features
-    native-routing packet-ingress socket-live socket-lb-live uplink-ingress skb-ctx-matrix)
+    native-routing packet-ingress socket-live socket-lb-live uplink-ingress skb-ctx-matrix
+    policy-live)
 cargo build --manifest-path "$root/Cargo.toml" --release --locked --target "$target" \
     -p flowsdn-agent -p flowsdn-cni -p flowsdn-bpftest -p flowsdn-test
 out=${CARGO_TARGET_DIR:-$root/target}/$target/release

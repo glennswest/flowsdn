@@ -496,7 +496,16 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     for pin in &pins {
         fs::remove_file(pin)?;
     }
-    fs::remove_file(pin_root.join("flowsdn_lxc"))?;
+    for entry in fs::read_dir(&pin_root)? {
+        let path = entry?.path();
+        if path
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with("egress-"))
+        {
+            fs::remove_file(path)?;
+        }
+    }
+    remove_map_pins(&pin_root)?;
     let detached = Instant::now();
     loop {
         let mut all_detached = true;
@@ -610,7 +619,7 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
     println!(
         "PASS: offline CNI deletion survives process restart, does not resurrect stale links, drains durable queue and tears down remaining endpoint"
     );
-    fs::remove_file(pin_root.join("flowsdn_lxc"))?;
+    remove_map_pins(&pin_root)?;
     let remaining_bpf_entries = fs::read_dir(&pin_root)?
         .map(|e| e.map(|e| e.file_name()))
         .collect::<std::io::Result<std::collections::BTreeSet<_>>>()?;
@@ -619,6 +628,19 @@ fn run(cni_binary: &Path, agent_binary: &Path, object: &Path) -> Result<()> {
         "endpoint deletion left pinned links",
     )?;
     nix::mount::umount(&pin_root)?;
+    Ok(())
+}
+/// The maps the agent pins (the endpoint map and the policy state).
+fn remove_map_pins(pin_root: &Path) -> Result<()> {
+    for name in [
+        "flowsdn_lxc",
+        "flowsdn_policy_ep",
+        "flowsdn_policy",
+        "flowsdn_ipcache",
+        "flowsdn_policy_ct",
+    ] {
+        fs::remove_file(pin_root.join(name))?;
+    }
     Ok(())
 }
 fn main() -> Result<()> {

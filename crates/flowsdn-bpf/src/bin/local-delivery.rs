@@ -1,9 +1,13 @@
-//! Isolated integration entrypoint for local delivery, not a complete policy pipeline.
+//! Endpoint programs: `local_delivery` on each endpoint's host veth ingress
+//! (pod egress: policy, then delivery or the host stack) and `to_container`
+//! on its egress (pod ingress: policy). See `local-delivery/policy.rs`.
 #![no_std]
 #![no_main]
 
 #[path = "../helper_coverage.rs"]
 mod helper_coverage;
+#[path = "local-delivery/policy.rs"]
+mod policy;
 
 use aya_ebpf::{
     bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, TC_ACT_SHOT},
@@ -31,6 +35,9 @@ static __config_stack_egress: u32 = 0;
 
 #[classifier]
 pub fn local_delivery(ctx: TcContext) -> i32 {
+    if policy::enforce(&ctx, 1) != TC_ACT_OK {
+        return TC_ACT_SHOT;
+    }
     // SAFETY: valid immutable global; volatile prevents constant folding so
     // the loader's pre-load override is what the kernel program reads.
     if unsafe { core::ptr::read_volatile(&raw const __config_stack_egress) } != 0 {
@@ -46,6 +53,13 @@ pub fn local_delivery(ctx: TcContext) -> i32 {
         return flowsdn_bpf::native_routing::route(&ctx);
     };
     deliver(&ctx, endpoint)
+}
+
+/// Traffic into an endpoint, on its host veth's egress: the endpoint's
+/// ingress policy. Delivery itself is the stack's or `local_delivery`'s.
+#[classifier]
+pub fn to_container(ctx: TcContext) -> i32 {
+    policy::enforce(&ctx, 0)
 }
 
 /// Bounded native-device ingress: leave host/discovery/remote traffic to the

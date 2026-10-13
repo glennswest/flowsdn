@@ -2,7 +2,7 @@
 //! This is not the full pin/reuse/upgrade loader or a policy-aware agent.
 use aya::{
     Ebpf, EbpfLoader,
-    maps::{HashMap, Map, MapData, MapError, MapInfo, MapType},
+    maps::{HashMap, LpmTrie, Map, MapData, MapError, MapInfo, MapType},
     programs::{
         LinkOrder, SchedClassifier, TcAttachType,
         links::{FdLink, Link, PinnedLink},
@@ -26,6 +26,9 @@ mod tcx_identity;
 #[path = "socket_lb.rs"]
 pub mod socket_lb;
 
+#[path = "policy_maps.rs"]
+mod policy_maps;
+
 pub type KernelResult<T> = Result<T, Box<dyn Error>>;
 
 /// Owns the loaded program, its attachments and an anonymous endpoint map.
@@ -34,9 +37,17 @@ pub type KernelResult<T> = Result<T, Box<dyn Error>>;
 pub struct LocalDelivery {
     bpf: Ebpf,
     endpoints: HashMap<MapData, [u8; 20], [u8; 48]>,
-    interfaces: BTreeMap<String, OwnedLink>,
+    policy_endpoints: HashMap<MapData, u32, [u8; 8]>,
+    policy: LpmTrie<MapData, [u8; 12], [u8; 12]>,
+    ipcache: LpmTrie<MapData, [u8; 20], [u8; 24]>,
+    policy_ct: HashMap<MapData, [u8; 40], [u8; 16]>,
+    interfaces: BTreeMap<String, Attached>,
     pin_root: Option<PathBuf>,
     map_id: u32,
+}
+struct Attached {
+    ingress: OwnedLink,
+    egress: OwnedLink,
 }
 enum OwnedLink {
     Ephemeral(SchedClassifierLink),
@@ -69,6 +80,60 @@ impl Object<'_> {
     }
 }
 
+/// A map an owner with a pin root keeps across restarts, and its ABI.
+struct PinnedMap {
+    name: &'static str,
+    kind: MapType,
+    key: u32,
+    value: u32,
+    max_entries: u32,
+    flags: u32,
+}
+/// Endpoints, and the policy state that must survive an agent restart:
+/// without it, established flows of enforced endpoints would be judged anew.
+const PINNED_MAPS: [PinnedMap; 5] = [
+    PinnedMap {
+        name: "flowsdn_lxc",
+        kind: MapType::Hash,
+        key: 20,
+        value: 48,
+        max_entries: 1024,
+        flags: 1,
+    },
+    PinnedMap {
+        name: "flowsdn_policy_ep",
+        kind: MapType::Hash,
+        key: 4,
+        value: 8,
+        max_entries: 1024,
+        flags: 1,
+    },
+    PinnedMap {
+        name: "flowsdn_policy",
+        kind: MapType::LpmTrie,
+        key: 16,
+        value: 12,
+        max_entries: 65536,
+        flags: 1,
+    },
+    PinnedMap {
+        name: "flowsdn_ipcache",
+        kind: MapType::LpmTrie,
+        key: 24,
+        value: 24,
+        max_entries: 65536,
+        flags: 1,
+    },
+    PinnedMap {
+        name: "flowsdn_policy_ct",
+        kind: MapType::LruHash,
+        key: 40,
+        value: 16,
+        max_entries: 65536,
+        flags: 0,
+    },
+];
+
 /// The `.rodata.config` value that selects [`Egress::Stack`].
 static STACK_EGRESS: u32 = 1;
 
@@ -98,14 +163,25 @@ impl LocalDelivery {
             _ => return Err("unexpected endpoint map type".into()),
         };
         let endpoints = HashMap::try_from(map)?;
-        let program: &mut SchedClassifier = bpf
-            .program_mut("local_delivery")
-            .ok_or("missing local delivery program")?
-            .try_into()?;
-        program.load()?;
+        let mut take = |name: &str| bpf.take_map(name).ok_or(format!("missing map {name}"));
+        let policy_endpoints = HashMap::try_from(take("flowsdn_policy_ep")?)?;
+        let policy = LpmTrie::try_from(take("flowsdn_policy")?)?;
+        let ipcache = LpmTrie::try_from(take("flowsdn_ipcache")?)?;
+        let policy_ct = HashMap::try_from(take("flowsdn_policy_ct")?)?;
+        for name in ["local_delivery", "to_container"] {
+            let program: &mut SchedClassifier = bpf
+                .program_mut(name)
+                .ok_or("missing endpoint program")?
+                .try_into()?;
+            program.load()?;
+        }
         Ok(Self {
             bpf,
             endpoints,
+            policy_endpoints,
+            policy,
+            ipcache,
+            policy_ct,
             interfaces: BTreeMap::new(),
             pin_root,
             map_id,
@@ -145,30 +221,34 @@ impl LocalDelivery {
         if fs::symlink_metadata(root)?.file_type().is_symlink() {
             return Err("pin root cannot be a symlink".into());
         }
-        let map_path = root.join("flowsdn_lxc");
-        match fs::symlink_metadata(&map_path) {
-            Ok(meta) => {
-                if meta.file_type().is_symlink() {
-                    return Err("map pin cannot be a symlink".into());
+        let mut loader = loader(egress);
+        for pinned in PINNED_MAPS {
+            let map_path = root.join(pinned.name);
+            match fs::symlink_metadata(&map_path) {
+                Ok(meta) => {
+                    if meta.file_type().is_symlink() {
+                        return Err("map pin cannot be a symlink".into());
+                    }
+                    let info = MapInfo::from_pin(&map_path)?;
+                    if info.map_type()? != pinned.kind
+                        || info.key_size() != pinned.key
+                        || info.value_size() != pinned.value
+                        || info.max_entries() != pinned.max_entries
+                        || info.map_flags() != pinned.flags
+                    {
+                        return Err(format!(
+                            "pinned map {} ABI differs; preserve it and refuse startup",
+                            pinned.name
+                        )
+                        .into());
+                    }
                 }
-                let info = MapInfo::from_pin(&map_path)?;
-                if info.map_type()? != MapType::Hash
-                    || info.key_size() != 20
-                    || info.value_size() != 48
-                    || info.max_entries() != 1024
-                    || info.map_flags() != 1
-                {
-                    return Err(
-                        "pinned endpoint map ABI differs; preserve it and refuse startup".into(),
-                    );
-                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e.into()),
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e.into()),
+            loader.map_pin_path(pinned.name, map_path);
         }
-        let bpf = loader(egress)
-            .map_pin_path("flowsdn_lxc", &map_path)
-            .load(&object.read()?)?;
+        let bpf = loader.load(&object.read()?)?;
         Self::from_bpf(bpf, Some(root.to_owned()))
     }
 
@@ -177,18 +257,33 @@ impl LocalDelivery {
         Ok(self.map_id)
     }
 
-    /// Attach once per ingress interface, atomically updating owned pinned TCX links.
+    /// Attach once per endpoint interface: `local_delivery` on its ingress
+    /// and `to_container` (the endpoint's ingress policy) on its egress,
+    /// atomically updating owned pinned TCX links.
     pub fn attach(&mut self, interface: &str) -> KernelResult<()> {
-        if interface.is_empty() || interface.len() >= 16 || interface.contains(['\0', '/']) {
-            return Err("invalid network interface name".into());
-        }
+        valid_interface(interface)?;
         if self.interfaces.contains_key(interface) {
             return Err("interface already attached".into());
         }
+        let ingress = self.attach_one(interface, Direction::Ingress)?;
+        let egress = match self.attach_one(interface, Direction::Egress) {
+            Ok(link) => link,
+            Err(error) => {
+                // Keep attach all-or-nothing; the caller retries the whole step.
+                let _ = Self::release(ingress);
+                return Err(error);
+            }
+        };
+        self.interfaces
+            .insert(interface.to_owned(), Attached { ingress, egress });
+        Ok(())
+    }
+
+    fn attach_one(&mut self, interface: &str, direction: Direction) -> KernelResult<OwnedLink> {
         let persistent = self
             .pin_root
             .as_ref()
-            .map(|root| root.join(format!("ingress-{interface}")));
+            .map(|root| root.join(format!("{}-{interface}", direction.pin_prefix())));
         let existing = if let Some(path) = &persistent {
             match std::fs::symlink_metadata(path) {
                 Ok(meta) => {
@@ -197,10 +292,11 @@ impl LocalDelivery {
                     }
                     let old = FdLink::from(PinnedLink::from_pin(path)?);
                     let info = tcx_identity::read(path)?;
-                    if info.id != old.info()?.id() || !info.matches(interface, false)? {
+                    if info.id != old.info()?.id()
+                        || !info.matches(interface, direction.egress(), false)?
+                    {
                         return Err(
-                            "pinned TCX link does not belong to the restored interface ingress"
-                                .into(),
+                            "pinned TCX link does not belong to the restored interface".into(),
                         );
                     }
                     Some(old)
@@ -213,17 +309,17 @@ impl LocalDelivery {
         };
         let program: &mut SchedClassifier = self
             .bpf
-            .program_mut("local_delivery")
-            .ok_or("missing local delivery program")?
+            .program_mut(direction.program())
+            .ok_or("missing endpoint program")?
             .try_into()?;
-        let link = if let Some(path) = persistent {
+        Ok(if let Some(path) = persistent {
             let reused = existing.is_some();
             let id = if let Some(old) = existing {
                 program.attach_to_link(old.try_into()?)?
             } else {
                 program.attach_with_options(
                     interface,
-                    TcAttachType::Ingress,
+                    direction.attach_type(),
                     TcAttachOptions::TcxOrder(LinkOrder::default()),
                 )?
             };
@@ -235,53 +331,63 @@ impl LocalDelivery {
             };
             OwnedLink::Persistent { link, path }
         } else {
-            let id = program.attach(interface, TcAttachType::Ingress)?;
+            let id = program.attach(interface, direction.attach_type())?;
             OwnedLink::Ephemeral(program.take_link(id)?)
-        };
-        self.interfaces.insert(interface.to_owned(), link);
-        Ok(())
+        })
     }
 
-    /// Remove the owned attachment; retrying an already detached name succeeds.
+    /// Remove the owned attachments; retrying an already detached name succeeds.
     pub fn detach(&mut self, interface: &str) -> KernelResult<()> {
-        if interface.is_empty() || interface.len() >= 16 || interface.contains(['\0', '/']) {
-            return Err("invalid network interface name".into());
-        }
+        valid_interface(interface)?;
         if !self.interfaces.contains_key(interface)
             && let Some(root) = &self.pin_root
         {
-            let path = root.join(format!("ingress-{interface}"));
-            match std::fs::symlink_metadata(&path) {
-                Ok(meta) => {
-                    if meta.file_type().is_symlink() {
-                        return Err("link pin cannot be a symlink".into());
+            for direction in [Direction::Ingress, Direction::Egress] {
+                let path = root.join(format!("{}-{interface}", direction.pin_prefix()));
+                match std::fs::symlink_metadata(&path) {
+                    Ok(meta) => {
+                        if meta.file_type().is_symlink() {
+                            return Err("link pin cannot be a symlink".into());
+                        }
+                        let pinned = FdLink::from(PinnedLink::from_pin(&path)?);
+                        let info = tcx_identity::read(&path)?;
+                        if info.id != pinned.info()?.id()
+                            || !info.matches(interface, direction.egress(), true)?
+                        {
+                            return Err("refusing to detach a foreign pinned link".into());
+                        }
+                        let link: SchedClassifierLink = pinned.try_into()?;
+                        std::fs::remove_file(path)?;
+                        link.detach()?;
                     }
-                    let pinned = FdLink::from(PinnedLink::from_pin(&path)?);
-                    let info = tcx_identity::read(&path)?;
-                    if info.id != pinned.info()?.id() || !info.matches(interface, true)? {
-                        return Err("refusing to detach a foreign pinned link".into());
-                    }
-                    let link: SchedClassifierLink = pinned.try_into()?;
-                    std::fs::remove_file(path)?;
-                    link.detach()?;
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.into()),
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e.into()),
             }
         }
         // Keep the handle on unlink failure so teardown can be retried.
-        if let Some(OwnedLink::Persistent { path, .. }) = self.interfaces.get(interface) {
-            match std::fs::remove_file(path) {
-                Ok(()) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e.into()),
+        if let Some(attached) = self.interfaces.get(interface) {
+            for link in [&attached.ingress, &attached.egress] {
+                if let OwnedLink::Persistent { path, .. } = link {
+                    match std::fs::remove_file(path) {
+                        Ok(()) => {}
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(e) => return Err(e.into()),
+                    }
+                }
             }
         }
-        if let Some(link) = self.interfaces.remove(interface) {
-            match link {
-                OwnedLink::Ephemeral(link) => link.detach()?,
-                OwnedLink::Persistent { link, .. } => link.detach()?,
-            }
+        if let Some(attached) = self.interfaces.remove(interface) {
+            Self::release(attached.ingress)?;
+            Self::release(attached.egress)?;
+        }
+        Ok(())
+    }
+
+    fn release(link: OwnedLink) -> KernelResult<()> {
+        match link {
+            OwnedLink::Ephemeral(link) => link.detach()?,
+            OwnedLink::Persistent { link, .. } => link.detach()?,
         }
         Ok(())
     }
@@ -354,6 +460,43 @@ impl LocalDelivery {
             .program("local_delivery")
             .ok_or("missing local delivery program")?
             .try_into()?)
+    }
+}
+
+fn valid_interface(interface: &str) -> KernelResult<()> {
+    if interface.is_empty() || interface.len() >= 16 || interface.contains(['\0', '/']) {
+        return Err("invalid network interface name".into());
+    }
+    Ok(())
+}
+
+/// The two endpoint programs and where their TCX links live.
+#[derive(Clone, Copy)]
+enum Direction {
+    Ingress,
+    Egress,
+}
+impl Direction {
+    fn program(self) -> &'static str {
+        match self {
+            Self::Ingress => "local_delivery",
+            Self::Egress => "to_container",
+        }
+    }
+    fn attach_type(self) -> TcAttachType {
+        match self {
+            Self::Ingress => TcAttachType::Ingress,
+            Self::Egress => TcAttachType::Egress,
+        }
+    }
+    fn pin_prefix(self) -> &'static str {
+        match self {
+            Self::Ingress => "ingress",
+            Self::Egress => "egress",
+        }
+    }
+    fn egress(self) -> bool {
+        matches!(self, Self::Egress)
     }
 }
 

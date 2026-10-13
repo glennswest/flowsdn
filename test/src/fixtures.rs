@@ -60,7 +60,12 @@ fn fixtures(env: &Env) -> Vec<(&'static str, PathBuf, Vec<PathBuf>)> {
         (
             "fixture-agent-runtime",
             env.fixture("agent-runtime"),
-            vec![env.cni(), env.agent(), delivery],
+            vec![env.cni(), env.agent(), delivery.clone()],
+        ),
+        (
+            "fixture-policy-live",
+            env.fixture("policy-live"),
+            vec![delivery],
         ),
         (
             "fixture-skb-ctx-matrix",

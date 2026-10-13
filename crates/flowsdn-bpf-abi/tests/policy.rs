@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 use flowsdn_bpf_abi::{MapBytes, policy::*};
 
 #[test]
@@ -94,4 +94,48 @@ fn stats_fixtures_preserve_padding_and_full_width_counters() {
     assert_eq!(value.packets, 0x0102_0304_0506_0708);
     assert_eq!(value.bytes, u64::MAX);
     assert_eq!(value.to_bytes(), counters);
+}
+
+#[test]
+fn endpoint_policy_key_leads_with_the_endpoint() {
+    let inner = PolicyKey::new(0x1234_5678, true, 6, 443, 16).unwrap();
+    let key = EndpointPolicyKey::new(7, inner);
+    assert_eq!(key.prefixlen, ENDPOINT_POLICY_FULL_PREFIX);
+    let bytes = [
+        96, 0, 0, 0, 7, 0, 0, 0, 0x78, 0x56, 0x34, 0x12, 1, 6, 1, 0xbb,
+    ];
+    assert_eq!(key.to_bytes(), bytes);
+    assert_eq!(EndpointPolicyKey::from_bytes(bytes), key);
+    assert_eq!(key.policy_key(), inner);
+    let wildcard = EndpointPolicyKey::new(7, PolicyKey::new(0, false, 0, 0, 0).unwrap());
+    assert_eq!(wildcard.prefixlen, 72);
+}
+
+#[test]
+fn policy_endpoint_and_flow_round_trip() {
+    let endpoint = PolicyEndpoint {
+        endpoint: 7,
+        flags: enforce::INGRESS | enforce::EGRESS,
+    };
+    assert_eq!(endpoint.to_bytes(), [7, 0, 0, 0, 3, 0, 0, 0]);
+    assert_eq!(PolicyEndpoint::from_bytes(endpoint.to_bytes()), endpoint);
+    let mut flow = PolicyCtKey {
+        sport: flowsdn_bpf_abi::Be16::new(40000),
+        dport: flowsdn_bpf_abi::Be16::new(80),
+        protocol: 6,
+        family: flowsdn_bpf_abi::FAMILY_V4,
+        egress: 1,
+        ..Default::default()
+    };
+    flow.saddr[..4].copy_from_slice(&[10, 0, 0, 7]);
+    flow.daddr[..4].copy_from_slice(&[10, 0, 1, 5]);
+    let bytes = flow.to_bytes();
+    assert_eq!(bytes[32..40], [0x9c, 0x40, 0, 80, 6, 1, 1, 0]);
+    assert_eq!(PolicyCtKey::from_bytes(bytes), flow);
+    let value = PolicyCtValue {
+        expires: 99,
+        flags: POLICY_CT_CLOSING,
+        pad: 0,
+    };
+    assert_eq!(PolicyCtValue::from_bytes(value.to_bytes()), value);
 }

@@ -18,11 +18,16 @@ pub struct Identity {
     attach_type: u32,
 }
 impl Identity {
-    pub fn matches(&self, interface: &str, allow_detached: bool) -> KernelResult<bool> {
+    pub fn matches(&self, interface: &str, egress: bool, allow_detached: bool) -> KernelResult<bool> {
         let name = CString::new(interface)?;
         // SAFETY: name remains a valid NUL-terminated string for the call.
         let index = unsafe { libc::if_nametoindex(name.as_ptr()) };
-        Ok(self.attach_type == bpf_attach_type::BPF_TCX_INGRESS as u32
+        let want = if egress {
+            bpf_attach_type::BPF_TCX_EGRESS
+        } else {
+            bpf_attach_type::BPF_TCX_INGRESS
+        };
+        Ok(self.attach_type == want as u32
             && ((index != 0 && index == self.ifindex)
                 || (allow_detached && index == 0 && self.ifindex == 0)))
     }

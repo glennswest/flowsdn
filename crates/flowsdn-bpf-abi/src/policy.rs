@@ -187,6 +187,160 @@ impl MapBytes<16> for PolicyStatsValue {
     }
 }
 
+/// flowsdn's endpoint policy map key (ADR-0021): one LPM trie for every
+/// endpoint, so the key leads with the 32-bit endpoint ID ahead of the
+/// spec 06 §4.4 [`PolicyKey`] fields. The endpoint is always fully specified,
+/// so `prefixlen` is the policy key's prefix plus 32.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EndpointPolicyKey {
+    pub prefixlen: u32,
+    pub endpoint: u32,
+    pub sec_label: u32,
+    pub egress: u8,
+    pub protocol: u8,
+    pub dport: Be16,
+}
+/// The prefix of a datapath lookup: endpoint, identity, direction, protocol, port.
+pub const ENDPOINT_POLICY_FULL_PREFIX: u32 = 96;
+impl EndpointPolicyKey {
+    pub fn new(endpoint: u16, key: PolicyKey) -> Self {
+        Self {
+            prefixlen: key.prefixlen.saturating_add(32),
+            endpoint: u32::from(endpoint),
+            sec_label: key.sec_label,
+            egress: key.egress,
+            protocol: key.protocol,
+            dport: key.dport,
+        }
+    }
+    /// The spec 06 policy key without the endpoint.
+    pub fn policy_key(self) -> PolicyKey {
+        PolicyKey {
+            prefixlen: self.prefixlen.saturating_sub(32),
+            sec_label: self.sec_label,
+            egress: self.egress,
+            protocol: self.protocol,
+            dport: self.dport,
+        }
+    }
+}
+impl MapBytes<16> for EndpointPolicyKey {
+    fn to_bytes(self) -> [u8; 16] {
+        let mut out = [0; 16];
+        put(&mut out, 0, self.prefixlen.to_le_bytes());
+        put(&mut out, 4, self.endpoint.to_le_bytes());
+        put(&mut out, 8, self.sec_label.to_le_bytes());
+        put(&mut out, 12, [self.egress, self.protocol]);
+        put(&mut out, 14, self.dport.0);
+        out
+    }
+    fn from_bytes(b: [u8; 16]) -> Self {
+        Self {
+            prefixlen: u32::from_le_bytes(take(&b, 0)),
+            endpoint: u32::from_le_bytes(take(&b, 4)),
+            sec_label: u32::from_le_bytes(take(&b, 8)),
+            egress: take::<1, 16>(&b, 12)[0],
+            protocol: take::<1, 16>(&b, 13)[0],
+            dport: Be16(take(&b, 14)),
+        }
+    }
+}
+
+/// `flowsdn_policy_ep` flags: which directions of the endpoint are enforced.
+pub mod enforce {
+    pub const INGRESS: u32 = 1;
+    pub const EGRESS: u32 = 2;
+}
+/// `flowsdn_policy_ep` value, keyed by the endpoint's host-side interface
+/// index (u32). An endpoint without an entry has no policy and no tracking.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PolicyEndpoint {
+    pub endpoint: u32,
+    pub flags: u32,
+}
+impl MapBytes<8> for PolicyEndpoint {
+    fn to_bytes(self) -> [u8; 8] {
+        let mut out = [0; 8];
+        put(&mut out, 0, self.endpoint.to_le_bytes());
+        put(&mut out, 4, self.flags.to_le_bytes());
+        out
+    }
+    fn from_bytes(b: [u8; 8]) -> Self {
+        Self {
+            endpoint: u32::from_le_bytes(take(&b, 0)),
+            flags: u32::from_le_bytes(take(&b, 4)),
+        }
+    }
+}
+
+/// `flowsdn_policy_ct` key: a flow as the enforcing program first saw it,
+/// with the direction it was allowed in (`egress` 1 = leaving the endpoint).
+/// An IPv4 address fills the first four bytes; ICMP echo puts its identifier
+/// in `sport` (request) or `dport` (reply), so a reply reverses to its request.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PolicyCtKey {
+    pub saddr: [u8; 16],
+    pub daddr: [u8; 16],
+    pub sport: Be16,
+    pub dport: Be16,
+    pub protocol: u8,
+    pub family: u8,
+    pub egress: u8,
+    pub pad: u8,
+}
+impl MapBytes<40> for PolicyCtKey {
+    fn to_bytes(self) -> [u8; 40] {
+        let mut out = [0; 40];
+        put(&mut out, 0, self.saddr);
+        put(&mut out, 16, self.daddr);
+        put(&mut out, 32, self.sport.0);
+        put(&mut out, 34, self.dport.0);
+        put(&mut out, 36, [self.protocol, self.family, self.egress, self.pad]);
+        out
+    }
+    fn from_bytes(b: [u8; 40]) -> Self {
+        Self {
+            saddr: take(&b, 0),
+            daddr: take(&b, 16),
+            sport: Be16(take(&b, 32)),
+            dport: Be16(take(&b, 34)),
+            protocol: take::<1, 40>(&b, 36)[0],
+            family: take::<1, 40>(&b, 37)[0],
+            egress: take::<1, 40>(&b, 38)[0],
+            pad: take::<1, 40>(&b, 39)[0],
+        }
+    }
+}
+/// `flowsdn_policy_ct` value flag: a FIN or RST was seen.
+pub const POLICY_CT_CLOSING: u32 = 1;
+/// `flowsdn_policy_ct` value: monotonic second after which the entry is dead.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PolicyCtValue {
+    pub expires: u64,
+    pub flags: u32,
+    pub pad: u32,
+}
+impl MapBytes<16> for PolicyCtValue {
+    fn to_bytes(self) -> [u8; 16] {
+        let mut out = [0; 16];
+        put(&mut out, 0, self.expires.to_le_bytes());
+        put(&mut out, 8, self.flags.to_le_bytes());
+        put(&mut out, 12, self.pad.to_le_bytes());
+        out
+    }
+    fn from_bytes(b: [u8; 16]) -> Self {
+        Self {
+            expires: u64::from_le_bytes(take(&b, 0)),
+            flags: u32::from_le_bytes(take(&b, 8)),
+            pad: u32::from_le_bytes(take(&b, 12)),
+        }
+    }
+}
+
 const _: () = {
     use core::mem::{align_of, offset_of, size_of};
     assert!(size_of::<PolicyKey>() == 12);
@@ -216,4 +370,15 @@ const _: () = {
     assert!(align_of::<PolicyStatsValue>() == 8);
     assert!(offset_of!(PolicyStatsValue, packets) == 0);
     assert!(offset_of!(PolicyStatsValue, bytes) == 8);
+    assert!(size_of::<EndpointPolicyKey>() == 16);
+    assert!(offset_of!(EndpointPolicyKey, endpoint) == 4);
+    assert!(offset_of!(EndpointPolicyKey, sec_label) == 8);
+    assert!(offset_of!(EndpointPolicyKey, egress) == 12);
+    assert!(offset_of!(EndpointPolicyKey, dport) == 14);
+    assert!(size_of::<PolicyEndpoint>() == 8);
+    assert!(size_of::<PolicyCtKey>() == 40);
+    assert!(offset_of!(PolicyCtKey, sport) == 32);
+    assert!(offset_of!(PolicyCtKey, protocol) == 36);
+    assert!(offset_of!(PolicyCtKey, egress) == 38);
+    assert!(size_of::<PolicyCtValue>() == 16);
 };

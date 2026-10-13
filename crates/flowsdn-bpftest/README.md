@@ -82,6 +82,21 @@ move; both of two backends chosen over 64 connects; ClientIP affinity (32
 connects on one backend, then a move when that backend leaves); and frontend
 removal down to empty maps. It restores its cgroup membership on exit.
 
+Run `policy-live` with the `local-delivery` BPF object for endpoint network
+policy in the datapath (#292, ADR-0021). In an anonymous network namespace it
+loads the object through the agent's `LocalDelivery` owner and test-runs
+`to_container` (pod ingress) and `local_delivery` (pod egress, stack mode) on
+frames with a dummy device's ifindex as the endpoint's host veth, writing the
+policy-endpoint, ipcache and policy maps through the owner. It checks: an
+endpoint without a policy entry passes and is not tracked; default deny when
+enforced; the host, ARP, neighbour discovery and fragmentation-needed pass;
+identity + protocol + port and port-range (LPM) allows; IPv6; non-first
+fragments dropped; the reply of an allowed flow passing enforced egress
+(conntrack) while a new egress flow is dropped; the aggregate-cluster and
+wildcard identities; a top-precedence deny over a broader allow; ICMP echo
+replies by conntrack only; maps reading back as written; and removal of
+enforcement.
+
 `socket-live` and `socket-lb-live` use the cgroup v2 hierarchy at
 `/sys/fs/cgroup`. Where a container has none there (stormcos's privileged test
 pods, #341), they mount cgroup2 at that path in a private mount namespace of
