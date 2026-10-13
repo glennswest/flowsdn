@@ -56,6 +56,24 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Network policy in the datapath — #292 (P0), 2026-10-13
+
+Next #292 row: identity/CIDR L3/L4 policy enforced in BPF (Kubernetes NetworkPolicy first). Design
+(ADR-0021): one shared program pair on each endpoint's host veth, so no per-endpoint object:
+`local_delivery` (veth ingress = pod egress) and new `to_container` (veth egress = pod ingress).
+Maps: `flowsdn_policy_ep` (host-veth ifindex -> endpoint id + enforce bits; absent = no policy, today's
+behaviour), `flowsdn_ipcache` (IpCacheKey LPM -> identity; miss = world), `flowsdn_policy` (LPM:
+32-bit endpoint id + spec 06 §3.8 PolicyKey/PolicyEntry, same three lookups), `flowsdn_policy_ct`
+(LRU, {tuple, direction}: established = {p, d}, reply = {reverse(p), !d}; lazy expiry). Always pass:
+non-IP, NDP, ICMP frag-needed/PTB; ingress from host (1). pvetest2's 12.16-flowsdn install failed,
+so no flowsdn node runs tests right now (pvetest1 medium d98fac3ee3 at 728f595 passed, cilium flavor).
+
+- [ ] ABI (EndpointPolicyKey, PolicyEndpoint, PolicyCtKey/Value), BPF policy module + `to_container`, loader maps/egress attach.
+- [ ] `policy-live` fixture (BPF_PROG_TEST_RUN: deny/allow/aggregate/port LPM/CT reply/host/NDP); medium suite.
+- [ ] Object + lock via sc-build; workspace sc-build.
+- [ ] Agent: ipcache from pods/nodes/identities, NetworkPolicy watch -> selector resolution -> LPM records -> maps; status/events for unsupported peers.
+- [ ] Docs (runtime, agent-api, implementation-status, milestones, spec 06/02 notes), changelog; medium; stage golden.
+
 ### node-service probe takes the env as the ClusterIP — #368 (P0), 2026-10-10
 
 On stormcos `KUBERNETES_SERVICE_HOST` is the apiserver's node address, so node-service-dns/-programmed fail
