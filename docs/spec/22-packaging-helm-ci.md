@@ -985,6 +985,13 @@ binaries, layers and image digests.** Method:
    and mtimes are fixed.
 6. The BPF objects are pinned by `bpf-objects.lock` and reproduced by the same
    nightly + `bpf-linker` pin.
+   Amendment (2026-10-13, #292): `tools/build-bpf.sh` passes its path remaps
+   through a rustc wrapper (`tools/bpf-rustc-wrapper.sh`), not RUSTFLAGS. Cargo
+   hashes RUSTFLAGS into each crate's `-C metadata`, so remaps naming the
+   checkout, target and home paths changed symbol hashes and the linked code:
+   the same commit gave two `local-delivery` objects from two directories
+   (test image 3937417bc1). Item 2's RUSTFLAGS remaps have the same effect on
+   the release binaries.
 
 Verification remains a packaging acceptance requirement: build the same pushed
 release revision in two separately recorded clean environments with matching
