@@ -104,6 +104,13 @@ configuration. The differences:
   flowsdn network; RBAC adds `pods` patch. flowsdn's entry in the Multus
   `k8s.v1.cni.cncf.io/network-status` annotation goes beside it (#371,
   stormcos#249), merged with Multus's secondary attachments.
+- `network-policy` (#292, default on; not set in the ConfigMap): Kubernetes
+  NetworkPolicies are enforced in the endpoint programs (RBAC adds
+  `networking.k8s.io/networkpolicies`, read-only). A Pod a policy selects is
+  isolated in that direction; allowed peers are Pods by label, `ipBlock`s and
+  ports. Traffic from the node to its Pods (kubelet probes) always passes.
+  `podSelector`/`namespaceSelector` peers need `identity-allocation`. Not in a
+  golden yet ([runtime](../../docs/runtime.md#networkpolicy-enforcement-292)).
 
 Off-node egress still needs a masquerade, now for the node's derived pool.
 Moving a node from the static pool to `auto` needs its endpoints gone (a fresh

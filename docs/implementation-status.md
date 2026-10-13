@@ -62,10 +62,18 @@ pinning or subsystem libraries are absent are **not current status**.
   removal, recreate; `GET /v1/identity` and identities on `/v1/ip` and
   endpoints. Library-tested and against a loopback API server, not on a
   cluster.
-- Not implemented: a BPF ipcache, operator identity GC (#332), policy in
-  the datapath, masquerade (the node provides it), Maglev, DSR, NAT46/64,
-  socket termination, CRD controllers or registration, an operator process,
-  Hubble observer/relay.
+- Kubernetes NetworkPolicy enforced in the endpoint programs (#292,
+  ADR-0021): `to_container` on each endpoint's host veth egress and policy
+  in `local_delivery`, a BPF ipcache, one endpoint-keyed policy LPM map and a
+  policy flow table for replies; the agent's policy thread compiles
+  NetworkPolicies (selector, `ipBlock` with CIDR identities, ports, ranges,
+  named ports) into them. Programs checked by `policy-live` under
+  BPF_PROG_TEST_RUN; compiler unit-tested; not run on a cluster yet.
+- Not implemented: operator identity GC (#332), CiliumNetworkPolicy-style
+  rules (deny, L7, entities, FQDN), host firewall, policy verdict events,
+  masquerade (the node provides it), Maglev, DSR, NAT46/64, socket
+  termination, CRD controllers or registration, an operator process, Hubble
+  observer/relay.
 
 ### Libraries
 
@@ -75,8 +83,8 @@ pinning or subsystem libraries are absent are **not current status**.
   subset); every kind has admitted and rejected examples ([CRD reference](crds.md), #325).
 - `flowsdn-policy`: Kubernetes NetworkPolicy importer (`flowsdn_policy::k8s`)
   and lowering to the simulator, with tests that the simulator's decisions
-  agree with the compiled map state. The agent does not depend on this crate;
-  there is no BPF policy program or policy map writer.
+  agree with the compiled map state. The agent uses the importer, port
+  blocks and CIDR types for NetworkPolicy enforcement (#292).
 - Operator, Hubble (beyond the endpoint model the agent uses), BGP, Gateway,
   ClusterMesh, encryption, proxy and the remaining IPAM modes provide
   primitives and focused tests. `flowsdn-cli` is an offline

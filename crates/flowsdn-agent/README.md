@@ -62,8 +62,11 @@ checked like `local-delivery`), attached to `cgroup-root` (default
 interface holding the node's InternalIP, for NodePort, external and
 LoadBalancer traffic from outside the cluster (IPv4 and IPv6; other nodes'
 backends through SNAT). With `identity-allocation` (default on) it holds a
-FlowsdnIdentity for each local Pod's labels (spec 03 §3.3). See
-[runtime](../../docs/runtime.md#kubernetes-mode). Policy reconciliation, stale-pod garbage collection and graceful shutdown remain
+FlowsdnIdentity for each local Pod's labels (spec 03 §3.3). With
+`network-policy` (default on) it watches NetworkPolicies and keeps the
+endpoint policy maps of `local-delivery` (`to_container`, ipcache, policy
+LPM, flow table; ADR-0021) from them. See
+[runtime](../../docs/runtime.md#kubernetes-mode). Stale-pod garbage collection and graceful shutdown remain
 outstanding. Configured pins allow endpoint maps
 and TCX links to survive agent process absence. Without pinning, traffic depends
 on the live process and recovers after successful restore. This does not establish

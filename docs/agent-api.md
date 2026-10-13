@@ -58,11 +58,16 @@ Unix-socket-capable probe or an explicit adapter; do not configure a nonexistent
 path and restart an otherwise running daemon.
 
 The body is `{"agent":{"state":"Ok","msg":…}}`, plus a `kubernetes` member in
-Kubernetes mode: `{state, msg, node-name, auto-direct-node-routes, service-lb}`,
-`state` `Warning` until the initial Node and Pod lists (and, with `service-lb`,
-Service and EndpointSlice lists) are complete or while a part has an error
-(`msg` then lists `<part>: <error>`, for example `annotations`, `services`,
-`node-port`), otherwise `Ok` with node, pod and frontend counts. (Before #298 the member was named after the reference project;
+Kubernetes mode: `{state, msg, node-name, auto-direct-node-routes, service-lb,
+identity-allocation, network-policy, policy}`, `state` `Warning` until the
+initial Node and Pod lists (and, with `service-lb`, Service and EndpointSlice
+lists; with `identity-allocation` or `network-policy`, Namespaces and
+FlowsdnIdentity or NetworkPolicy lists) are complete or while a part has an
+error (`msg` then lists `<part>: <error>`, for example `annotations`,
+`services`, `node-port`, `policy`), otherwise `Ok` with node, pod and frontend
+counts. `policy` is what the policy thread last programmed (#292):
+`{endpoints: [{id, pod, ingress-enforced, egress-enforced, entries}], ipcache,
+problems}`, `null` before its first pass. (Before #298 the member was named after the reference project;
 it is `agent` now.)
 
 `GET /v1/health/modules` reports component details, including the degraded

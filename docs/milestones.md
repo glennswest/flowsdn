@@ -30,9 +30,11 @@ The baseline above describes v0.14.0 only. Main (through `eed1aca`) has:
 - **Milestone 2 (#292):** socket LB for ClusterIPs, externalIPs, LoadBalancer
   IPs and NodePorts, traffic policies, ClientIP affinity; uplink NodePort with
   SNAT to remote backends (IPv4 since golden `golden-flowsdn-cc0835c8a1db`; IPv6 since
-  `golden-flowsdn-a690ebee2ba7`). The NetworkPolicy importer and simulator lowering exist as a library.
-  Open: live ClusterIP acceptance on a node, Maglev, DSR, NAT46/64,
-  socket termination, identity/CIDR policy in the datapath, host firewall.
+  `golden-flowsdn-a690ebee2ba7`). Kubernetes NetworkPolicy enforced in the
+  endpoint programs (identity and CIDR L3/L4, ADR-0021; unreleased, kernel
+  test-run only). Open: live ClusterIP and policy acceptance on a node,
+  Maglev, DSR, NAT46/64, socket termination, CiliumNetworkPolicy-style rules,
+  host firewall.
 - **Milestone 3 (#293):** primitives only; nothing wired into the agent.
 - **Milestone 4 (#294):** Helm chart, agent image, release archives with
   `SHA256SUMS`, `bpf-objects.lock` and the no-reference-names check exist

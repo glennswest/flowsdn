@@ -792,6 +792,13 @@ destination `endpoint_info`, metric direction, `from_host`, `from_tunnel`,
 
 ### 3.10 Policy verdict computation (datapath side)
 
+> flowsdn amendment (2026-10-13, #292): flowsdn keeps every endpoint's entries
+> in one `flowsdn_policy` LPM trie keyed by a 32-bit endpoint ID ahead of the
+> key below, selected by the host interface the program runs on, and replies
+> are recognised by its own `flowsdn_policy_ct` flow table instead of spec 04
+> conntrack ([ADR-0021](../decisions/0021-endpoint-policy-datapath.md)). The
+> lookup algorithm below is unchanged.
+
 Map: the endpoint's `cilium_policy_v3_<epid>` LPM trie (spec 01). Key
 (12 B) `{prefixlen u32, sec_label u32, egress:1 u8, protocol u8, dport
 be16}`; value `{proxy_port be16, deny:1 reserved:2 lpm_prefix_length:5,

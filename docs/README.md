@@ -21,6 +21,7 @@ points, rather than treating specifications as a list of implemented features.
 | Privileged fixture requirements | [BPF test harness](../crates/flowsdn-bpftest/README.md) |
 | Test container (`/test short\|medium\|long\|perf\|perf-scale`) | [test/README.md](../test/README.md) |
 | Why no reference-project names ship, and the name check | [ADR-0020](decisions/0020-no-reference-names-shipped.md) |
+| How endpoint policy is enforced (shared programs and maps) | [ADR-0021](decisions/0021-endpoint-policy-datapath.md) |
 
 ## Specifications and historical evidence
 

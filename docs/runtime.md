@@ -45,6 +45,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.cgroup-root` | `/sys/fs/cgroup` | Absolute path of the cgroup v2 directory the socket-LB programs attach to (the manifests mount the host's root at `/run/flowsdn/cgroupv2`). |
 | `kubernetes.node-port` | `true` | Attach the NodePort programs to the uplinks (traffic from outside the cluster). Takes effect only with `service-lb`. |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
+| `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
 | `kubernetes.cluster-name` | `default` | The cluster label on every Pod identity (`io.flowsdn.k8s.policy.cluster`); a DNS label of at most 32 bytes. |
 
 The `kubernetes` booleans must be JSON booleans and its strings strings, or
@@ -204,6 +205,9 @@ With the `kubernetes` feature and section the agent:
 - with `identity-allocation` (default on), lists and watches Namespaces and
   FlowsdnIdentity objects and holds a cluster identity for each local Pod
   ([below](#cluster-identities-291));
+- with `network-policy` (default on), lists and watches NetworkPolicies (and
+  Namespaces) and enforces them in the endpoint programs
+  ([below](#networkpolicy-enforcement-292));
 - serves `GET /v1/ip`, `GET /v1/identity`, `GET /v1/node/routes` and
   `GET /v1/service` ([API](agent-api.md)).
 
@@ -384,6 +388,61 @@ plans use flowsdn's own `flowsdn.io/v1alpha1` group with `Flowsdn*` kinds
 schemas are read only by the explicit migration projection. The agent does not
 register or reconcile CRDs. Compatibility with Cilium formats is an integration
 goal, not a claim that all Cilium APIs, CRDs, CLIs or networking features work today.
+
+### NetworkPolicy enforcement (#292)
+
+Kubernetes `networking.k8s.io/v1` NetworkPolicy, enforced in the datapath
+([ADR-0021](decisions/0021-endpoint-policy-datapath.md)). The `local-delivery`
+object has two programs on each endpoint's host-side veth: `local_delivery` on
+its ingress (traffic leaving the Pod: the Pod's egress policy, then delivery or
+the host stack) and `to_container` on its egress (traffic into the Pod: its
+ingress policy). Both read:
+
+- `flowsdn_policy_ep` (host interface index -> endpoint ID and the enforced
+  directions): an endpoint without an entry is neither enforced nor tracked;
+- `flowsdn_ipcache` (LPM, address -> identity): every Pod IP with an identity,
+  this node's InternalIPs and router addresses (host, 1), and one local identity
+  (`1<<24 | n`) per `ipBlock` prefix and exception. Anything else, other nodes
+  included, is world;
+- `flowsdn_policy` (LPM): spec 06 §4.4 policy keys and entries behind a 32-bit
+  endpoint ID, looked up as spec 02 §3.10 says (the identity, its aggregate,
+  then the wildcard identity 0);
+- `flowsdn_policy_ct` (LRU, 65536): flows an enforcing program allowed, with
+  the direction. A packet of a known flow, or the reply of a flow allowed in
+  the other direction, passes without a policy lookup. TCP lives 6 h without
+  traffic (10 s after a FIN or RST), anything else 60 s.
+
+Always passed: non-IP frames (ARP), IPv6 neighbour/router discovery, ICMP
+fragmentation-needed and IPv6 packet-too-big, and traffic into a Pod from the
+node itself (kubelet probes). Where enforced, fragments other than the first
+(and IPv6 fragments) and malformed IP headers are dropped.
+
+The policy thread compiles, every second once the NetworkPolicy, Pod, Node and
+Namespace lists are complete and the endpoints are published:
+
+- a local Pod is enforced in a direction when a NetworkPolicy selects it for
+  that direction (its identity labels, computed from the Pod and Namespace, so
+  enforcement does not wait for the identity allocator);
+- each rule's peers resolve to identities: `podSelector`/`namespaceSelector`
+  peers against every identity's labels (so they need `identity-allocation`),
+  no `from`/`to` to the wildcard identity, `ipBlock` to the CIDR identities it
+  covers minus its exceptions, plus the host when one of the node's addresses
+  is inside it; ports to masked LPM blocks (spec 06 §5.2), named ports to the
+  Pod's container ports (ingress) or the peer Pods' (egress);
+- the maps are brought to the result when it changes and every minute,
+  compared with what the kernel holds: entries and ipcache before enforcement,
+  removals last.
+
+With a pin root the four maps are pinned beside `flowsdn_lxc`, so enforcement
+and tracked flows survive an agent restart. `GET /v1/healthz` reports
+`network-policy` and `policy` (enforced endpoints, ipcache size, problems)
+under `kubernetes`; a policy that cannot be enforced as written (a rule the
+importer refuses, an invalid `ipBlock`) is a `policy` problem and allows
+nothing. Not implemented: CiliumNetworkPolicy-style rules (deny, L7, entities,
+FQDN), host firewall, audit mode, policy verdict events, ICMP errors as related
+traffic, and enforcement on flows already open when a policy first selects a
+Pod (their replies are judged as new flows). `policy-live` (medium test suite)
+checks the programs on a kernel through `BPF_PROG_TEST_RUN`; no cluster run yet.
 
 ## Fedora TLS build boundary
 

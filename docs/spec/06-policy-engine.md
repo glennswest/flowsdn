@@ -999,6 +999,11 @@ plan; it does not install lockdown keys or emit runtime metrics. On apply:
 
 ### 3.8 Datapath contract (normative summary; spec 02 §3.10 / §5.2 govern)
 
+> flowsdn amendment (2026-10-13, #292): the endpoint's map is the endpoint's
+> slice of one shared `flowsdn_policy` trie (endpoint ID ahead of the key);
+> the agent currently compiles Kubernetes NetworkPolicy only (allow entries,
+> one precedence) ([ADR-0021](../decisions/0021-endpoint-policy-datapath.md)).
+
 For a NEW connection with remote identity `r`, direction `d`, protocol `p`,
 destination port `q` (ICMP type in `q` when `enable_icmp_rule`), the
 datapath performs at most three LPM lookups on the endpoint's map with the
