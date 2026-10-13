@@ -5,9 +5,9 @@
 #
 # Uses the nightly pinned in crates/flowsdn-bpf/rust-toolchain.toml (installed
 # through rustup if absent) and bpf-linker 0.11.1 (downloaded and SHA-256
-# checked if not on PATH). Build paths are remapped, so the code sections are
-# the same wherever the commit is built (debug info still carries a hash of the
-# checkout path). The agent embeds local-delivery
+# checked if not on PATH). Build paths are remapped by a rustc wrapper (kept out
+# of RUSTFLAGS, which cargo hashes into symbol names), so the code sections are
+# the same wherever the commit is built. The agent embeds local-delivery
 # (crates/flowsdn-agent/bpf/local-delivery) and socket-lb; test/build.sh rebuilds them and
 # refuses a copy whose code differs. Copies smoke, local-delivery, loader-features,
 # socket-context, skb-ctx and socket-lb into OUT_DIR.
@@ -47,9 +47,14 @@ fi
 target=${CARGO_TARGET_DIR:-$root/crates/flowsdn-bpf/target}
 cargo_home=${CARGO_HOME:-$HOME/.cargo}
 rustup_home=${RUSTUP_HOME:-$HOME/.rustup}
-CARGO_TARGET_BPFEL_UNKNOWN_NONE_RUSTFLAGS="-C debuginfo=2 -C link-arg=--btf \
---remap-path-prefix=$root=/flowsdn --remap-path-prefix=$cargo_home=/cargo \
---remap-path-prefix=$rustup_home=/rustup --remap-path-prefix=$target=/target" \
+# The remaps go through the wrapper, not RUSTFLAGS: cargo hashes RUSTFLAGS
+# into -C metadata, which made the code depend on these paths.
+FLOWSDN_BPF_REMAP="--remap-path-prefix=$root=/flowsdn
+--remap-path-prefix=$cargo_home=/cargo
+--remap-path-prefix=$rustup_home=/rustup
+--remap-path-prefix=$target=/target" \
+RUSTC_WRAPPER="$root/tools/bpf-rustc-wrapper.sh" \
+CARGO_TARGET_BPFEL_UNKNOWN_NONE_RUSTFLAGS="-C debuginfo=2 -C link-arg=--btf" \
     cargo "+$nightly" build --manifest-path "$root/crates/flowsdn-bpf/Cargo.toml" \
     --target bpfel-unknown-none -Z build-std=core --release --locked \
     --target-dir "$target"
