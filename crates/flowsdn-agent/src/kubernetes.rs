@@ -221,6 +221,10 @@ pub struct LocalEndpoint {
     /// and its index (the policy-endpoint map key).
     pub interface: String,
     pub ifindex: u32,
+    /// The Pod's network namespace path as the CNI saw it, and the
+    /// namespace's cookie (socket termination enters it only on a match).
+    pub netns_path: String,
+    pub netns_cookie: u64,
 }
 /// One annotation write: merge-patch the Pod's `flowsdn.io/pod-networks`
 /// and/or `network-status` (JSON text, None = already current), with the UID

@@ -79,6 +79,9 @@ spec:
             - { name: run, mountPath: /var/run/flowsdn }
             - { name: state, mountPath: /var/lib/flowsdn }
             - { name: cgroup, mountPath: /run/flowsdn/cgroupv2 }
+            # Pod network namespaces (/run/netns/<sandbox>), entered to end UDP
+            # sockets of a removed Service backend (#292); new ones must appear.
+            - { name: netns, mountPath: /run/netns, mountPropagation: HostToContainer }
             {{- if .Values.agent.bpfPinRoot }}
             - { name: bpffs, mountPath: /sys/fs/bpf, mountPropagation: Bidirectional }
             {{- end }}
@@ -91,6 +94,8 @@ spec:
           hostPath: { path: /var/lib/flowsdn, type: DirectoryOrCreate }
         - name: cgroup
           hostPath: { path: /sys/fs/cgroup, type: Directory }
+        - name: netns
+          hostPath: { path: /run/netns, type: DirectoryOrCreate }
         - name: cni-path
           hostPath: { path: {{ .Values.cni.binPath }}, type: DirectoryOrCreate }
         - name: etc-cni-netd

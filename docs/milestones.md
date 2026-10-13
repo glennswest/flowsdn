@@ -33,7 +33,7 @@ The baseline above describes v0.14.0 only. Main (through `eed1aca`) has:
   `golden-flowsdn-a690ebee2ba7`). Kubernetes NetworkPolicy enforced in the
   endpoint programs (identity and CIDR L3/L4, ADR-0021; golden-flowsdn-760c3a2e89d6,
   kernel test-run only). Open: live ClusterIP and policy acceptance on a node,
-  Maglev, DSR, NAT46/64, socket termination, CiliumNetworkPolicy-style rules,
+  Maglev, DSR, NAT46/64, TCP socket termination (UDP is done), CiliumNetworkPolicy-style rules,
   host firewall.
 - **Milestone 3 (#293):** primitives only; nothing wired into the agent.
 - **Milestone 4 (#294):** Helm chart, agent image, release archives with

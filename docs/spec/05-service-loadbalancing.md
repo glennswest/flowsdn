@@ -482,6 +482,11 @@ post_bind/sock_release` hooks). Userspace obligations (**socket LB retained for 
 - `cilium_lb{4,6}_reverse_sk` is sized by `bpf-sock-rev-map-max` (0 = dynamic:
   the CT-any default through the dynamic-size calculator, at least 64Ki,
   LRU-aligned, within `[1Ki, 16Mi]`).
+- flowsdn amendment (2026-10-13, #292): UDP termination is implemented in the
+  agent's services thread (netlink `SOCK_DESTROY`; host netns and pod netns
+  entered by the CNI's `CNI_NETNS` path after a netns-cookie match), on a
+  backend leaving the programmed services; no 50 ms batching, no
+  hostns-only/all-protos switches (TCP is not terminated).
 - **Socket termination** — **scheduled for the LB implementation milestone** (#82;
   §12.3). When implemented it MUST: watch backend changes; for deleted or
   non-alive UDP backends (TCP too only with hidden

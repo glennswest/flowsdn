@@ -346,12 +346,24 @@ root the links detach when the agent exits. The NodePort uplink links are never
 pinned: they detach when the agent exits, and the per-CPU
 `flowsdn_nodeport6_fib` and `flowsdn_nodeport6_scratch` scratch maps are not
 pinned either. Not implemented:
-Maglev, DSR, topology hints, skip-LB for local redirect policy, socket
-termination when a backend goes away (an existing connection stays on its
-backend), SCTP, NAT46/64, IPv4 fragments other than the first (they pass
+Maglev, DSR, topology hints, skip-LB for local redirect policy, TCP socket
+termination (an existing TCP connection stays on its backend), SCTP, NAT46/64, IPv4 fragments other than the first (they pass
 untouched), and BPF masquerade. `socket-lb-live` (medium test suite) checks the
 programs on a kernel, including the NodePort local and SNAT paths through
 `BPF_PROG_TEST_RUN`; no two-node cluster run yet.
+
+UDP socket termination (spec 05 §3.8): when a UDP backend leaves the
+programmed services, the services thread finds the sockets the socket LB sent
+to it (their cookies in `flowsdn_lb{4,6}_reverse_sk` with that backend) and
+destroys them with netlink `SOCK_DESTROY` (`CONFIG_INET_DIAG_DESTROY`), so the
+application's next call fails with `ECONNABORTED` and it reconnects to a live
+backend (a CoreDNS restart, for example). It looks in the host network
+namespace and in each local Pod's: the CNI passes the observed `CNI_NETNS`
+(`/run/netns/<sandbox>` on stormcos, mounted into the agent with
+HostToContainer propagation), and the agent enters it only when the
+namespace's cookie equals the endpoint's. A failure (a namespace it cannot
+enter, a kernel without `SOCK_DESTROY`) is a `socket-termination` error in
+`GET /v1/healthz`. Removals while the agent was down are not terminated.
 
 Without Kubernetes mode the agent does no Node/Pod discovery, installs no
 remote routes and has no Service handling. The `local-delivery` object's uplink

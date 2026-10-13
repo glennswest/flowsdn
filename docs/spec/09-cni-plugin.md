@@ -275,7 +275,11 @@ step 7 the rollback of section 3.4.1 runs and the error is returned.
     (kernel < 5.14) → `"0"` and an info log; the reference remembers the
     failure per process, which is meaningless for a one-shot binary and MUST
     NOT be reproduced.
-12. **Create the endpoint**: set `sync-build-endpoint = true` and omit
+12. **Create the endpoint**: set `sync-build-endpoint = true`. flowsdn
+    amendment (2026-10-13, #292): send the observed `CNI_NETNS` as
+    `container-netns-path`, which the agent uses only to enter the namespace
+    for socket termination after its cookie matches `netns-cookie`; the rest
+    of #130 stands. Originally: omit
     `container-netns-path` (#130). The CNI does not create a persistent namespace
     bind mount and MUST NOT invent a path implying one exists. The open sandbox
     descriptor and kernel namespace cookie identify this invocation; the CNI

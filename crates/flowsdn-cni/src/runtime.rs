@@ -403,7 +403,11 @@ impl AddBackend for Platform {
             "interface-name":link.host_name,"interface-index":link.host_index,"mac":link.peer_mac,"host-mac":link.host_mac,
             "k8s-pod-name":request.pod_name,"k8s-namespace":request.pod_namespace,"k8s-uid":request.pod_uid,
             "state":"waiting-for-identity","labels":[],"addressing":addressing,"datapath-configuration":{},"properties":{},
-            "netns-cookie":self.cookie.to_string(),"cni-route-mtu":self.route_mtu,"sync-build-endpoint":true});
+            "netns-cookie":self.cookie.to_string(),"cni-route-mtu":self.route_mtu,"sync-build-endpoint":true,
+            // The observed CNI_NETNS, for entering the namespace later (socket
+            // termination, #292); the agent trusts it only with a matching
+            // netns cookie, never as ownership proof (#130).
+            "container-netns-path":request.netns});
         // A transport error can occur after the server committed. Do not free
         // backing resources until deletion is confirmed; a duplicate ADD can
         // reconcile a complete committed attachment, otherwise DEL can recover.
@@ -1248,7 +1252,10 @@ mod tests {
             .split_once('\n')
             .expect("body");
         let body: Value = serde_json::from_str(body).expect("JSON");
-        assert!(body.get("container-netns-path").is_none());
+        assert_eq!(
+            body.pointer("/container-netns-path").expect("fixture field"),
+            "/fixture/netns"
+        );
         assert_eq!(
             body.pointer("/netns-cookie").expect("fixture field"),
             "9007199254740993"

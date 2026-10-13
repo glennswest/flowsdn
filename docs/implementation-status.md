@@ -69,9 +69,11 @@ pinning or subsystem libraries are absent are **not current status**.
   NetworkPolicies (selector, `ipBlock` with CIDR identities, ports, ranges,
   named ports) into them. Programs checked by `policy-live` under
   BPF_PROG_TEST_RUN; compiler unit-tested; not run on a cluster yet.
+- UDP socket termination when a Service backend leaves (spec 05 §3.8,
+  netlink `SOCK_DESTROY`, host and pod network namespaces; #292).
 - Not implemented: operator identity GC (#332), CiliumNetworkPolicy-style
   rules (deny, L7, entities, FQDN), host firewall, policy verdict events,
-  masquerade (the node provides it), Maglev, DSR, NAT46/64, socket
+  masquerade (the node provides it), Maglev, DSR, NAT46/64, TCP socket
   termination, CRD controllers or registration, an operator process, Hubble
   observer/relay.
 

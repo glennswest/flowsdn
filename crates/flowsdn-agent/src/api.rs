@@ -401,6 +401,12 @@ impl Api {
                     .and_then(Value::as_u64)
                     .and_then(|n| u32::try_from(n).ok())
                     .unwrap_or(0),
+                netns_path: text(&record.document, "ContainerNetnsPath"),
+                netns_cookie: record
+                    .document
+                    .get("NetnsCookie")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0),
             })
             .collect();
         let mut view = crate::kubernetes::lock(view);

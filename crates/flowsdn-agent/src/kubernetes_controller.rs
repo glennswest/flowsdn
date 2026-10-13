@@ -847,6 +847,8 @@ fn service_loop(
     node_port: bool,
 ) {
     let mut desired: Option<Vec<socket::Service>> = None;
+    // The UDP backends last programmed; None until the first success.
+    let mut programmed: Option<BTreeSet<(IpAddr, u16)>> = None;
     loop {
         match receiver.recv_timeout(RECONCILE_INTERVAL) {
             Ok(next) => {
@@ -861,6 +863,32 @@ fn service_loop(
         }
         if let Some(services) = &desired {
             let result = program(lb, services);
+            if result.is_ok() {
+                let now = udp_backends(services);
+                if let Some(before) = &programmed {
+                    let gone: BTreeSet<_> = before.difference(&now).copied().collect();
+                    if !gone.is_empty() {
+                        let namespaces = lock(view)
+                            .endpoints
+                            .iter()
+                            .filter(|e| !e.netns_path.is_empty())
+                            .map(|e| (PathBuf::from(&e.netns_path), e.netns_cookie))
+                            .collect();
+                        let outcome = terminate(lb, &gone, namespaces);
+                        let mut view = lock(view);
+                        match outcome {
+                            Ok(_) => {
+                                view.errors.remove("socket-termination");
+                            }
+                            Err(error) => {
+                                eprintln!("socket termination: {error}");
+                                view.errors.insert("socket-termination".into(), error);
+                            }
+                        }
+                    }
+                }
+                programmed = Some(now);
+            }
             let mut view = lock(view);
             match result {
                 Ok(ids) => {
@@ -943,6 +971,77 @@ fn attach_uplinks(lb: &mut SocketLb, addresses: &[IpAddr]) -> std::result::Resul
     }
     Ok(())
 }
+/// Every UDP backend address of the services (IPv4-mapped as IPv4).
+fn udp_backends(services: &[socket::Service]) -> BTreeSet<(IpAddr, u16)> {
+    services
+        .iter()
+        .flat_map(|s| &s.backends)
+        .filter(|b| b.proto == socket::PROTO_UDP)
+        .map(|b| (unmapped(b.ip), b.port))
+        .collect()
+}
+fn unmapped(ip: IpAddr) -> IpAddr {
+    match ip {
+        IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(ip, IpAddr::V4),
+        v4 => v4,
+    }
+}
+
+/// Spec 05 §3.8 socket termination: destroy the UDP sockets the socket LB
+/// translated to a backend that is gone (their cookies are in `_reverse_sk`
+/// with that backend), in the host network namespace and in each local
+/// endpoint's (entered by its path only when the namespace cookie matches).
+/// Returns how many were destroyed; a namespace that cannot be entered or
+/// a kernel without `SOCK_DESTROY` is an error after the rest were tried.
+fn terminate(
+    lb: &SocketLb,
+    gone: &BTreeSet<(IpAddr, u16)>,
+    namespaces: Vec<(PathBuf, u64)>,
+) -> std::result::Result<usize, String> {
+    use flowsdn_connector::sock_diag;
+    let cookies: BTreeSet<u64> = lb
+        .reverse_sockets()
+        .map_err(|e| format!("read reverse socket maps: {e}"))?
+        .into_iter()
+        .filter(|(_, ip, port)| gone.contains(&(unmapped(*ip), *port)))
+        .map(|(cookie, _, _)| cookie)
+        .collect();
+    if cookies.is_empty() {
+        return Ok(0);
+    }
+    let kill = move |cookies: BTreeSet<u64>, gone: BTreeSet<(IpAddr, u16)>| {
+        move || -> flowsdn_connector::Result<usize> {
+            let mut count = 0usize;
+            for socket in sock_diag::udp_sockets()? {
+                if cookies.contains(&socket.cookie)
+                    && gone.contains(&(unmapped(socket.destination), socket.destination_port))
+                {
+                    sock_diag::destroy(&socket)?;
+                    count = count.saturating_add(1);
+                }
+            }
+            Ok(count)
+        }
+    };
+    let mut count = 0usize;
+    let mut failures = Vec::new();
+    match kill(cookies.clone(), gone.clone())() {
+        Ok(n) => count = count.saturating_add(n),
+        Err(e) => failures.push(format!("host: {e}")),
+    }
+    for (path, cookie) in namespaces {
+        match sock_diag::in_endpoint_namespace(&path, cookie, kill(cookies.clone(), gone.clone())) {
+            Ok(n) => count = count.saturating_add(n),
+            Err(e) => failures.push(format!("{}: {e}", path.display())),
+        }
+    }
+    if failures.is_empty() {
+        Ok(count)
+    } else {
+        Err(failures.join("; "))
+    }
+}
+
 fn program(
     lb: &mut SocketLb,
     services: &[socket::Service],

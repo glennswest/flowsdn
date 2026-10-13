@@ -104,6 +104,10 @@ configuration. The differences:
   flowsdn network; RBAC adds `pods` patch. flowsdn's entry in the Multus
   `k8s.v1.cni.cncf.io/network-status` annotation goes beside it (#371,
   stormcos#249), merged with Multus's secondary attachments.
+- UDP socket termination (#292): when a UDP Service backend goes away, the
+  agent destroys the sockets the socket LB sent to it, on the node and in its
+  Pods' network namespaces (the DaemonSet mounts the host's `/run/netns` with
+  HostToContainer propagation; the CNI passes `CNI_NETNS`).
 - `network-policy` (#292, default on; not set in the ConfigMap): Kubernetes
   NetworkPolicies are enforced in the endpoint programs (RBAC adds
   `networking.k8s.io/networkpolicies`, read-only). A Pod a policy selects is

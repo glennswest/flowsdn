@@ -17,6 +17,7 @@ use aya::{
 use flowsdn_lb::socket::{Maps, Op};
 use std::{
     fs::{self, File},
+    net::IpAddr,
     path::{Path, PathBuf},
 };
 
@@ -314,6 +315,41 @@ impl SocketLb {
             }
         }
         Ok(())
+    }
+
+    /// The UDP sockets the socket LB translated (`_reverse_sk`): each socket
+    /// cookie with the backend address and port it was sent to (spec 05
+    /// §3.8 socket termination filters on these).
+    pub fn reverse_sockets(&self) -> KernelResult<Vec<(u64, IpAddr, u16)>> {
+        let mut out = Vec::new();
+        let map = |name: &str| self.bpf.map(name).ok_or(format!("missing map {name}"));
+        let v4: HashMap<&MapData, [u8; 16], [u8; 8]> =
+            HashMap::try_from(map("flowsdn_lb4_reverse_sk")?)?;
+        for key in v4.keys() {
+            let key = key?;
+            let (cookie, rest) = key.split_at(8);
+            let address: [u8; 4] = rest.get(..4).ok_or("key")?.try_into()?;
+            let port: [u8; 2] = rest.get(4..6).ok_or("key")?.try_into()?;
+            out.push((
+                u64::from_le_bytes(cookie.try_into()?),
+                IpAddr::from(address),
+                u16::from_be_bytes(port),
+            ));
+        }
+        let v6: HashMap<&MapData, [u8; 32], [u8; 20]> =
+            HashMap::try_from(map("flowsdn_lb6_reverse_sk")?)?;
+        for key in v6.keys() {
+            let key = key?;
+            let (cookie, rest) = key.split_at(8);
+            let address: [u8; 16] = rest.get(..16).ok_or("key")?.try_into()?;
+            let port: [u8; 2] = rest.get(16..18).ok_or("key")?.try_into()?;
+            out.push((
+                u64::from_le_bytes(cookie.try_into()?),
+                IpAddr::from(address),
+                u16::from_be_bytes(port),
+            ));
+        }
+        Ok(out)
     }
 }
 

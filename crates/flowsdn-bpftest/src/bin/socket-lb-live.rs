@@ -8,7 +8,8 @@
 //! uplink programs (#292) by BPF_PROG_TEST_RUN: destination rewrite to a
 //! node-local backend and the reply's source rewrite, checksums checked; and
 //! SNAT to a backend on another node with the FIB redirect, run as arriving
-//! on a dummy uplink in this netns; IPv4 and IPv6.
+//! on a dummy uplink in this netns; IPv4 and IPv6; and UDP socket termination
+//! through SOCK_DIAG when a backend leaves.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_lb::socket::{self, Address, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
@@ -697,6 +698,71 @@ fn snat6(
     Ok(())
 }
 
+/// Socket termination (spec 05 §3.8, #292): a UDP socket connected through
+/// the frontend to a backend that leaves is destroyed through SOCK_DIAG (its
+/// cookie is in `_reverse_sk` with that backend), so its next receive fails
+/// with ECONNABORTED; a socket connected to the backend address directly is
+/// not the socket LB's and stays.
+fn terminate(lb: &mut SocketLb, services: &mut [Service], server: &UdpSocket) -> Result<()> {
+    use flowsdn_connector::sock_diag;
+    let through = UdpSocket::bind("127.0.0.1:0")?;
+    through.connect(sa("192.0.2.10:53")?)?;
+    through.send(b"query")?;
+    let direct = UdpSocket::bind("127.0.0.1:0")?;
+    direct.connect(sa("127.0.0.1:15353")?)?;
+    direct.send(b"query")?;
+    server.set_read_timeout(Some(TIMEOUT))?;
+    let mut buffer = [0; 16];
+    for _ in 0..2 {
+        server.recv_from(&mut buffer)?;
+    }
+    let udp = services
+        .iter_mut()
+        .find(|s| s.frontend.proto == PROTO_UDP && s.frontend.ip.is_ipv4())
+        .ok_or("IPv4 UDP service")?;
+    udp.backends = vec![address("127.0.0.2:15353", PROTO_UDP)?];
+    program(lb, services)?;
+    let gone = (IpAddr::from([127, 0, 0, 1]), 15353u16);
+    let cookies: Vec<u64> = lb
+        .reverse_sockets()?
+        .into_iter()
+        .filter(|(_, ip, port)| (*ip, *port) == gone)
+        .map(|(cookie, _, _)| cookie)
+        .collect();
+    let mut destroyed = 0u32;
+    for socket in sock_diag::udp_sockets().map_err(|e| e.to_string())? {
+        if cookies.contains(&socket.cookie)
+            && (socket.destination, socket.destination_port) == gone
+        {
+            sock_diag::destroy(&socket).map_err(|e| e.to_string())?;
+            destroyed = destroyed.saturating_add(1);
+        }
+    }
+    if destroyed != 1 {
+        return Err(format!("{destroyed} sockets destroyed, expected the one through the frontend").into());
+    }
+    through.set_read_timeout(Some(TIMEOUT))?;
+    match through.recv(&mut buffer) {
+        Err(error) if error.raw_os_error() == Some(nix::libc::ECONNABORTED) => {}
+        other => return Err(format!("terminated socket: {other:?}, expected ECONNABORTED").into()),
+    }
+    direct.send(b"still")?;
+    let (n, _) = server.recv_from(&mut buffer)?;
+    if buffer.get(..n) != Some(b"still".as_slice()) {
+        return Err("the directly connected socket stopped working".into());
+    }
+    let udp = services
+        .iter_mut()
+        .find(|s| s.frontend.proto == PROTO_UDP && s.frontend.ip.is_ipv4())
+        .ok_or("IPv4 UDP service")?;
+    udp.backends = vec![address("127.0.0.1:15353", PROTO_UDP)?];
+    program(lb, services)?;
+    println!(
+        "PASS socket termination: the UDP socket connected through 192.0.2.10:53 to the removed backend was destroyed (ECONNABORTED); one connected to that backend directly stayed"
+    );
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let object = std::env::args_os()
         .nth(1)
@@ -825,6 +891,7 @@ fn main() -> Result<()> {
     if let Some(first) = services.first_mut() {
         first.affinity = None;
     }
+    terminate(&mut lb, &mut services, &udp4)?;
 
     // Removal: the frontend is no longer translated (no route in this netns).
     services.retain(|s| s.frontend.port != 80 || s.frontend.ip.is_ipv6());
