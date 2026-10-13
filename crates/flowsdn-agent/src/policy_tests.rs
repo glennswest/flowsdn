@@ -155,7 +155,10 @@ fn default_deny_both_directions_has_no_entries() {
         Some(enforce::INGRESS | enforce::EGRESS)
     );
     assert!(desired.entries.is_empty());
-    assert_eq!(desired.enforced, vec![(7, "shop/web".into(), true, true, 0)]);
+    assert_eq!(
+        desired.enforced,
+        vec![(7, "shop/web".into(), true, true, 0)]
+    );
 }
 
 #[test]
@@ -184,7 +187,10 @@ fn egress_ip_block_with_except_gets_cidr_identities() {
     let excepted = cidr("10.9.0.0", 16);
     assert!(allowed > CIDR_IDENTITY_BASE && excepted > CIDR_IDENTITY_BASE);
     assert_ne!(allowed, excepted);
-    assert_eq!(keys_of(&desired), BTreeSet::from([(allowed, true, 0, 0, 0)]));
+    assert_eq!(
+        keys_of(&desired),
+        BTreeSet::from([(allowed, true, 0, 0, 0)])
+    );
 }
 
 #[test]
@@ -219,8 +225,10 @@ fn named_ports_resolve_on_the_destination_and_ranges_are_masked() {
 
 #[test]
 fn a_policy_that_cannot_be_read_is_reported() {
-    let view = view(vec![json!({"kind":"NetworkPolicy","metadata":{"name":"bad","namespace":"shop"},
-        "spec":{"podSelector":{"matchExpressions":[{"key":"a","operator":"Bogus"}]}}})]);
+    let view = view(vec![
+        json!({"kind":"NetworkPolicy","metadata":{"name":"bad","namespace":"shop"},
+        "spec":{"podSelector":{"matchExpressions":[{"key":"a","operator":"Bogus"}]}}}),
+    ]);
     let desired = compile(&view, &[]);
     assert!(desired.endpoints.is_empty());
     assert!(

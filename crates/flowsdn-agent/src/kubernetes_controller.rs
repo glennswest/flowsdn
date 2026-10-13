@@ -724,7 +724,10 @@ fn apply_policy(
             maps.set_policy_endpoint(*ifindex, *value).map_err(text)?;
         }
     }
-    for ifindex in endpoints.keys().filter(|k| !desired.endpoints.contains_key(k)) {
+    for ifindex in endpoints
+        .keys()
+        .filter(|k| !desired.endpoints.contains_key(k))
+    {
         maps.remove_policy_endpoint(*ifindex).map_err(text)?;
     }
     for key in ipcache.keys().filter(|k| !desired.ipcache.contains_key(*k)) {

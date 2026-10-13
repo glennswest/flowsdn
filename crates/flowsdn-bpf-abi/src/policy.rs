@@ -298,7 +298,11 @@ impl MapBytes<40> for PolicyCtKey {
         put(&mut out, 16, self.daddr);
         put(&mut out, 32, self.sport.0);
         put(&mut out, 34, self.dport.0);
-        put(&mut out, 36, [self.protocol, self.family, self.egress, self.pad]);
+        put(
+            &mut out,
+            36,
+            [self.protocol, self.family, self.egress, self.pad],
+        );
         out
     }
     fn from_bytes(b: [u8; 40]) -> Self {

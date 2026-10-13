@@ -141,8 +141,9 @@ impl Compiler<'_> {
                             .map(|except| (allow, except))
                     });
                     let Ok((allow, except)) = parsed else {
-                        self.problems
-                            .insert(format!("{policy}: ipBlock {cidr} is not a CIDR; it allows nothing"));
+                        self.problems.insert(format!(
+                            "{policy}: ipBlock {cidr} is not a CIDR; it allows nothing"
+                        ));
                         continue;
                     };
                     let selected = |p: CidrPrefix| {
@@ -154,9 +155,11 @@ impl Compiler<'_> {
                             .filter(|(p, _)| selected(**p))
                             .map(|(_, id)| *id),
                     );
-                    if self.host.iter().any(|ip| {
-                        CidrPrefix::new(*ip, host_bits(*ip)).is_ok_and(|p| selected(p))
-                    }) {
+                    if self
+                        .host
+                        .iter()
+                        .any(|ip| CidrPrefix::new(*ip, host_bits(*ip)).is_ok_and(&selected))
+                    {
                         out.insert(HOST);
                     }
                 }
@@ -294,9 +297,7 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             view.pod_label_sets(f)
                 .into_iter()
                 .filter(|(_, local, _)| *local)
-                .map(|(pod, _, labels)| {
-                    (pod, label_map(&crate::identity::label_strings(&labels)))
-                })
+                .map(|(pod, _, labels)| (pod, label_map(&crate::identity::label_strings(&labels))))
                 .collect()
         })
         .unwrap_or_default();

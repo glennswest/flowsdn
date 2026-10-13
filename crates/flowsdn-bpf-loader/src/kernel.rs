@@ -287,7 +287,7 @@ impl LocalDelivery {
                         || !info.matches(interface, direction.egress(), false)?
                     {
                         return Err(
-                            "pinned TCX link does not belong to the restored interface".into(),
+                            "pinned TCX link does not belong to the restored interface".into()
                         );
                     }
                     Some(old)

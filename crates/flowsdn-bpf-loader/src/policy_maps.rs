@@ -113,12 +113,15 @@ impl LocalDelivery {
 
 impl PolicyMaps {
     /// Enforce (or only track) the endpoint behind host interface `ifindex`.
-    pub fn set_policy_endpoint(&mut self, ifindex: u32, endpoint: PolicyEndpoint) -> KernelResult<()> {
+    pub fn set_policy_endpoint(
+        &mut self,
+        ifindex: u32,
+        endpoint: PolicyEndpoint,
+    ) -> KernelResult<()> {
         if ifindex == 0 {
             return Err("policy endpoint needs an interface index".into());
         }
-        self.endpoints
-            .insert(ifindex, endpoint.to_bytes(), 0)?;
+        self.endpoints.insert(ifindex, endpoint.to_bytes(), 0)?;
         Ok(())
     }
     /// Stop enforcing and tracking the endpoint behind `ifindex`; absent is fine.
@@ -137,7 +140,11 @@ impl PolicyMaps {
         Ok(out)
     }
 
-    pub fn upsert_policy(&mut self, key: EndpointPolicyKey, entry: PolicyEntry) -> KernelResult<()> {
+    pub fn upsert_policy(
+        &mut self,
+        key: EndpointPolicyKey,
+        entry: PolicyEntry,
+    ) -> KernelResult<()> {
         let (prefix, data) = split::<16, 12>(key.to_bytes());
         self.policy
             .insert(&Key::new(prefix, data), entry.to_bytes(), 0)?;
@@ -161,7 +168,11 @@ impl PolicyMaps {
         Ok(out)
     }
 
-    pub fn upsert_ipcache(&mut self, key: IpCacheKey, info: RemoteEndpointInfo) -> KernelResult<()> {
+    pub fn upsert_ipcache(
+        &mut self,
+        key: IpCacheKey,
+        info: RemoteEndpointInfo,
+    ) -> KernelResult<()> {
         let (prefix, data) = split::<24, 20>(key.to_bytes());
         self.ipcache
             .insert(&Key::new(prefix, data), info.to_bytes(), 0)?;
@@ -190,9 +201,11 @@ impl PolicyMaps {
         let mut out = Vec::new();
         for item in self.flows.iter() {
             let (key, value) = item?;
-            out.push((PolicyCtKey::from_bytes(key), PolicyCtValue::from_bytes(value)));
+            out.push((
+                PolicyCtKey::from_bytes(key),
+                PolicyCtValue::from_bytes(value),
+            ));
         }
         Ok(out)
     }
-
 }

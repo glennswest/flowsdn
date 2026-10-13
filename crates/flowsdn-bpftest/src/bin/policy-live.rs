@@ -223,7 +223,11 @@ fn run(object: &[u8]) -> Result<()> {
     let syn = |src, dport| v4(TCP, src, POD, 0, &tcp(40000, dport, SYN));
 
     lab.ingress("no policy endpoint", &syn(PEER, 80), OK)?;
-    lab.egress("no policy endpoint", &v4(UDP, POD, WORLD, 0, &udp(5000, 53)), OK)?;
+    lab.egress(
+        "no policy endpoint",
+        &v4(UDP, POD, WORLD, 0, &udp(5000, 53)),
+        OK,
+    )?;
     if !lab.delivery.policy().policy_flows()?.is_empty() {
         return Err("an endpoint without a policy entry was tracked".into());
     }
@@ -300,7 +304,9 @@ fn run(object: &[u8]) -> Result<()> {
     {
         return Err(format!("no ingress flow tracked: {} entries", tracked.len()).into());
     }
-    println!("PASS conntrack: the reply of an allowed ingress flow passes enforced egress; a new egress flow does not");
+    println!(
+        "PASS conntrack: the reply of an allowed ingress flow passes enforced egress; a new egress flow does not"
+    );
 
     lab.rule(allow(11, false, 0, 0, 0))?;
     lab.ingress(
@@ -323,7 +329,11 @@ fn run(object: &[u8]) -> Result<()> {
         deny: true,
         ..allow(300, false, TCP, 22, 16)
     })?;
-    lab.ingress("deny for 300 over the aggregate allow", &syn(PEER, 22), SHOT)?;
+    lab.ingress(
+        "deny for 300 over the aggregate allow",
+        &syn(PEER, 22),
+        SHOT,
+    )?;
     lab.ingress("aggregate allow for 302 on port 22", &syn(CLUSTER, 22), OK)?;
     println!(
         "PASS aggregate-cluster and wildcard identities; a top-precedence deny wins over a broader allow"
@@ -336,7 +346,11 @@ fn run(object: &[u8]) -> Result<()> {
         ))?;
     }
     lab.rule(allow(300, true, ICMP, 0, 0))?;
-    lab.egress("echo request to 300", &v4(ICMP, POD, PEER, 0, &icmp(8, 77)), OK)?;
+    lab.egress(
+        "echo request to 300",
+        &v4(ICMP, POD, PEER, 0, &icmp(8, 77)),
+        OK,
+    )?;
     lab.ingress("its echo reply", &v4(ICMP, PEER, POD, 0, &icmp(0, 77)), OK)?;
     lab.ingress(
         "an echo reply nobody asked for",
@@ -346,7 +360,11 @@ fn run(object: &[u8]) -> Result<()> {
     println!("PASS ICMP echo: the request is allowed by protocol, its reply by conntrack");
 
     let entries = lab.delivery.policy().policy_entries()?;
-    if entries.len() != 4 || entries.iter().any(|(k, _)| k.endpoint != u32::from(ENDPOINT)) {
+    if entries.len() != 4
+        || entries
+            .iter()
+            .any(|(k, _)| k.endpoint != u32::from(ENDPOINT))
+    {
         return Err(format!("policy map holds {} entries, expected 4", entries.len()).into());
     }
     if lab.delivery.policy().ipcache_entries()?.len() != 5 {
