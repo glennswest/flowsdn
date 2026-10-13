@@ -2,7 +2,7 @@
 //! This is not the full pin/reuse/upgrade loader or a policy-aware agent.
 use aya::{
     Ebpf, EbpfLoader,
-    maps::{HashMap, LpmTrie, Map, MapData, MapError, MapInfo, MapType},
+    maps::{HashMap, Map, MapData, MapError, MapInfo, MapType},
     programs::{
         LinkOrder, SchedClassifier, TcAttachType,
         links::{FdLink, Link, PinnedLink},
@@ -28,6 +28,7 @@ pub mod socket_lb;
 
 #[path = "policy_maps.rs"]
 mod policy_maps;
+pub use policy_maps::PolicyMaps;
 
 pub type KernelResult<T> = Result<T, Box<dyn Error>>;
 
@@ -37,10 +38,7 @@ pub type KernelResult<T> = Result<T, Box<dyn Error>>;
 pub struct LocalDelivery {
     bpf: Ebpf,
     endpoints: HashMap<MapData, [u8; 20], [u8; 48]>,
-    policy_endpoints: HashMap<MapData, u32, [u8; 8]>,
-    policy: LpmTrie<MapData, [u8; 12], [u8; 12]>,
-    ipcache: LpmTrie<MapData, [u8; 20], [u8; 24]>,
-    policy_ct: HashMap<MapData, [u8; 40], [u8; 16]>,
+    policy: PolicyMaps,
     interfaces: BTreeMap<String, Attached>,
     pin_root: Option<PathBuf>,
     map_id: u32,
@@ -163,11 +161,7 @@ impl LocalDelivery {
             _ => return Err("unexpected endpoint map type".into()),
         };
         let endpoints = HashMap::try_from(map)?;
-        let mut take = |name: &str| bpf.take_map(name).ok_or(format!("missing map {name}"));
-        let policy_endpoints = HashMap::try_from(take("flowsdn_policy_ep")?)?;
-        let policy = LpmTrie::try_from(take("flowsdn_policy")?)?;
-        let ipcache = LpmTrie::try_from(take("flowsdn_ipcache")?)?;
-        let policy_ct = HashMap::try_from(take("flowsdn_policy_ct")?)?;
+        let policy = PolicyMaps::take(&mut bpf)?;
         for name in ["local_delivery", "to_container"] {
             let program: &mut SchedClassifier = bpf
                 .program_mut(name)
@@ -178,10 +172,7 @@ impl LocalDelivery {
         Ok(Self {
             bpf,
             endpoints,
-            policy_endpoints,
             policy,
-            ipcache,
-            policy_ct,
             interfaces: BTreeMap::new(),
             pin_root,
             map_id,

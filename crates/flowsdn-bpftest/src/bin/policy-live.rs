@@ -148,7 +148,7 @@ impl Lab {
         self.expect(what, true, frame, want)
     }
     fn enforce(&mut self, flags: u32) -> Result<()> {
-        self.delivery.set_policy_endpoint(
+        self.delivery.policy().set_policy_endpoint(
             self.ifindex,
             PolicyEndpoint {
                 endpoint: u32::from(ENDPOINT),
@@ -162,7 +162,7 @@ impl Lab {
             IpAddr::V6(a) => IpCacheKey::v6(a.octets(), 128, 0),
         }
         .map_err(|_| "ipcache prefix")?;
-        self.delivery.upsert_ipcache(
+        self.delivery.policy().upsert_ipcache(
             key,
             RemoteEndpointInfo {
                 sec_identity: identity,
@@ -224,7 +224,7 @@ fn run(object: &[u8]) -> Result<()> {
 
     lab.ingress("no policy endpoint", &syn(PEER, 80), OK)?;
     lab.egress("no policy endpoint", &v4(UDP, POD, WORLD, 0, &udp(5000, 53)), OK)?;
-    if !lab.delivery.policy_flows()?.is_empty() {
+    if !lab.delivery.policy().policy_flows()?.is_empty() {
         return Err("an endpoint without a policy entry was tracked".into());
     }
     println!("PASS endpoint without a policy entry: both programs pass, nothing tracked");
@@ -293,7 +293,7 @@ fn run(object: &[u8]) -> Result<()> {
         &v4(TCP, POD, PEER, 0, &tcp(41000, 9999, SYN)),
         SHOT,
     )?;
-    let tracked = lab.delivery.policy_flows()?;
+    let tracked = lab.delivery.policy().policy_flows()?;
     if !tracked
         .iter()
         .any(|(key, _)| key.egress == 0 && key.daddr.get(..4) == Some(&POD[..]))
@@ -330,7 +330,7 @@ fn run(object: &[u8]) -> Result<()> {
     );
 
     for (identity, egress) in [(0, true), (11, false)] {
-        lab.delivery.remove_policy(EndpointPolicyKey::new(
+        lab.delivery.policy().remove_policy(EndpointPolicyKey::new(
             ENDPOINT,
             PolicyKey::new(identity, egress, 0, 0, 0).map_err(|_| "key")?,
         ))?;
@@ -345,14 +345,14 @@ fn run(object: &[u8]) -> Result<()> {
     )?;
     println!("PASS ICMP echo: the request is allowed by protocol, its reply by conntrack");
 
-    let entries = lab.delivery.policy_entries()?;
+    let entries = lab.delivery.policy().policy_entries()?;
     if entries.len() != 4 || entries.iter().any(|(k, _)| k.endpoint != u32::from(ENDPOINT)) {
         return Err(format!("policy map holds {} entries, expected 4", entries.len()).into());
     }
-    if lab.delivery.ipcache_entries()?.len() != 5 {
+    if lab.delivery.policy().ipcache_entries()?.len() != 5 {
         return Err("ipcache does not hold the 5 written prefixes".into());
     }
-    lab.delivery.remove_policy_endpoint(lab.ifindex)?;
+    lab.delivery.policy().remove_policy_endpoint(lab.ifindex)?;
     lab.ingress("enforcement removed", &syn(PEER, 81), OK)?;
     lab.egress(
         "enforcement removed",

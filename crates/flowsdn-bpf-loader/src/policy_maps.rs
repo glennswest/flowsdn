@@ -3,7 +3,8 @@
 //! read-only view of `flowsdn_policy_ct`. Contents are the agent's.
 use super::{KernelResult, LocalDelivery};
 use aya::{
-    maps::{MapError, lpm_trie::Key},
+    Ebpf,
+    maps::{HashMap, IterableMap, LpmTrie, Map, MapData, MapError, lpm_trie::Key},
     programs::SchedClassifier,
 };
 use flowsdn_bpf_abi::{
@@ -39,26 +40,97 @@ fn join<const N: usize, const M: usize>(prefix: u32, data: [u8; M]) -> [u8; N] {
     out
 }
 
+/// Handles on the policy maps. [`LocalDelivery::policy`] is the owner's;
+/// [`LocalDelivery::share_policy`] opens another set by map ID for a thread
+/// of its own (the kernel serializes each map operation).
+pub struct PolicyMaps {
+    endpoints: HashMap<MapData, u32, [u8; 8]>,
+    policy: LpmTrie<MapData, [u8; 12], [u8; 12]>,
+    ipcache: LpmTrie<MapData, [u8; 20], [u8; 24]>,
+    flows: HashMap<MapData, [u8; 40], [u8; 16]>,
+}
+const NAMES: [&str; 4] = [
+    "flowsdn_policy_ep",
+    "flowsdn_policy",
+    "flowsdn_ipcache",
+    "flowsdn_policy_ct",
+];
+impl PolicyMaps {
+    pub(super) fn take(bpf: &mut Ebpf) -> KernelResult<Self> {
+        let mut maps = Vec::new();
+        for name in NAMES {
+            maps.push(bpf.take_map(name).ok_or(format!("missing map {name}"))?);
+        }
+        Self::from_maps(maps)
+    }
+    fn from_maps(maps: Vec<Map>) -> KernelResult<Self> {
+        let [endpoints, policy, ipcache, flows]: [Map; 4] =
+            maps.try_into().map_err(|_| "policy map count")?;
+        Ok(Self {
+            endpoints: HashMap::try_from(endpoints)?,
+            policy: LpmTrie::try_from(policy)?,
+            ipcache: LpmTrie::try_from(ipcache)?,
+            flows: HashMap::try_from(flows)?,
+        })
+    }
+    fn ids(&self) -> KernelResult<[u32; 4]> {
+        let data: [&MapData; 4] = [
+            IterableMap::map(&self.endpoints),
+            IterableMap::map(&self.policy),
+            IterableMap::map(&self.ipcache),
+            IterableMap::map(&self.flows),
+        ];
+        let mut ids = [0; 4];
+        for (id, map) in ids.iter_mut().zip(data) {
+            *id = map.info()?.id();
+        }
+        Ok(ids)
+    }
+}
+
 impl LocalDelivery {
+    /// The owner's handles on the policy maps.
+    pub fn policy(&mut self) -> &mut PolicyMaps {
+        &mut self.policy
+    }
+    /// Another set of handles on the same maps, for a thread of its own.
+    pub fn share_policy(&self) -> KernelResult<PolicyMaps> {
+        let mut maps = Vec::new();
+        for id in self.policy.ids()? {
+            maps.push(Map::from_map_data(MapData::from_id(id)?)?);
+        }
+        PolicyMaps::from_maps(maps)
+    }
+    /// The pod-ingress policy program, for the kernel packet-test harness.
+    pub fn to_container_program(&self) -> KernelResult<&SchedClassifier> {
+        Ok(self
+            .bpf
+            .program("to_container")
+            .ok_or("missing to_container program")?
+            .try_into()?)
+    }
+}
+
+impl PolicyMaps {
     /// Enforce (or only track) the endpoint behind host interface `ifindex`.
     pub fn set_policy_endpoint(&mut self, ifindex: u32, endpoint: PolicyEndpoint) -> KernelResult<()> {
         if ifindex == 0 {
             return Err("policy endpoint needs an interface index".into());
         }
-        self.policy_endpoints
+        self.endpoints
             .insert(ifindex, endpoint.to_bytes(), 0)?;
         Ok(())
     }
     /// Stop enforcing and tracking the endpoint behind `ifindex`; absent is fine.
     pub fn remove_policy_endpoint(&mut self, ifindex: u32) -> KernelResult<()> {
-        match self.policy_endpoints.remove(&ifindex) {
+        match self.endpoints.remove(&ifindex) {
             Err(error) if !missing(&error) => Err(error.into()),
             _ => Ok(()),
         }
     }
     pub fn policy_endpoints(&self) -> KernelResult<Vec<(u32, PolicyEndpoint)>> {
         let mut out = Vec::new();
-        for item in self.policy_endpoints.iter() {
+        for item in self.endpoints.iter() {
             let (ifindex, value) = item?;
             out.push((ifindex, PolicyEndpoint::from_bytes(value)));
         }
@@ -116,19 +188,11 @@ impl LocalDelivery {
     /// The flows the endpoint programs remember as allowed.
     pub fn policy_flows(&self) -> KernelResult<Vec<(PolicyCtKey, PolicyCtValue)>> {
         let mut out = Vec::new();
-        for item in self.policy_ct.iter() {
+        for item in self.flows.iter() {
             let (key, value) = item?;
             out.push((PolicyCtKey::from_bytes(key), PolicyCtValue::from_bytes(value)));
         }
         Ok(out)
     }
 
-    /// The pod-ingress policy program, for the kernel packet-test harness.
-    pub fn to_container_program(&self) -> KernelResult<&SchedClassifier> {
-        Ok(self
-            .bpf
-            .program("to_container")
-            .ok_or("missing to_container program")?
-            .try_into()?)
-    }
 }
