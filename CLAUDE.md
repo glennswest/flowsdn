@@ -68,11 +68,12 @@ behaviour), `flowsdn_ipcache` (IpCacheKey LPM -> identity; miss = world), `flows
 non-IP, NDP, ICMP frag-needed/PTB; ingress from host (1). pvetest2's 12.16-flowsdn install failed,
 so no flowsdn node runs tests right now (pvetest1 medium d98fac3ee3 at 728f595 passed, cilium flavor).
 
-- [ ] ABI (EndpointPolicyKey, PolicyEndpoint, PolicyCtKey/Value), BPF policy module + `to_container`, loader maps/egress attach.
-- [ ] `policy-live` fixture (BPF_PROG_TEST_RUN: deny/allow/aggregate/port LPM/CT reply/host/NDP); medium suite.
-- [ ] Object + lock via sc-build; workspace sc-build.
-- [ ] Agent: ipcache from pods/nodes/identities, NetworkPolicy watch -> selector resolution -> LPM records -> maps; status/events for unsupported peers.
-- [ ] Docs (runtime, agent-api, implementation-status, milestones, spec 06/02 notes), changelog; medium; stage golden.
+- [x] ABI (EndpointPolicyKey, PolicyEndpoint, PolicyCtKey/Value), BPF policy module + `to_container`, loader maps/egress attach (778c0f0, PolicyMaps 3073f32).
+- [x] `policy-live` fixture (BPF_PROG_TEST_RUN: deny/allow/aggregate/port LPM/CT reply/host/NDP); medium suite.
+- [x] Object + lock via sc-build (330f46a; max frame 240 B by r10 scan). Clippy x2 + tests passed at 778c0f0 (fmt pending).
+- [x] Agent: NetworkPolicy watch, `policy.rs` compiler (+ tests), policy thread, ipcache, RBAC (b1ef8b0).
+- [x] Docs (ADR-0021, runtime, agent-api, implementation-status, milestones, spec 06/02 notes), changelog (82a42a4).
+- [ ] sc-build fmt patch + Clippy x2 + tests at b1ef8b0+; test/build.sh; medium on pvetest1 (policy-live under the 7.2 verifier); stage golden.
 
 ### node-service probe takes the env as the ClusterIP — #368 (P0), 2026-10-10
 
