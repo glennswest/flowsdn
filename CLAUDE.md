@@ -74,7 +74,7 @@ so no flowsdn node runs tests right now (pvetest1 medium d98fac3ee3 at 728f595 p
 - [x] Agent: NetworkPolicy watch, `policy.rs` compiler (+ tests), policy thread, ipcache, RBAC (b1ef8b0).
 - [x] Docs (ADR-0021, runtime, agent-api, implementation-status, milestones, spec 06/02 notes), changelog (82a42a4).
 - [x] Restore keeps a restored endpoint's pinned policy entry (d8e0db9). sc-build at d8e0db9: fmt, Clippy x2, 856 tests (0 failed, 1 ignored) + kubernetes agent tests. Status comment 6150239436.
-- [ ] Medium df50796eb6 at 758b43d on C2NR0Q2 (leased to another session until 17:28Z; pvetest1/2 refuse: 12.16 installs failed): `stormcentral test show df50796eb6`. If policy-live passes, `stormcentral component stage flowsdn`; else fix the verifier finding.
+- [ ] Medium a75ea7d2c5 at 6362125 on C2NR0Q2 (leased to another session until 17:28Z; pvetest1/2 refuse: 12.16 installs failed): `stormcentral test show a75ea7d2c5`. If policy-live passes, `stormcentral component stage flowsdn`; else fix the verifier finding.
 
 ### node-service probe takes the env as the ClusterIP — #368 (P0), 2026-10-10
 
