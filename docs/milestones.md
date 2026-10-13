@@ -31,8 +31,8 @@ The baseline above describes v0.14.0 only. Main (through `eed1aca`) has:
   IPs and NodePorts, traffic policies, ClientIP affinity; uplink NodePort with
   SNAT to remote backends (IPv4 since golden `golden-flowsdn-cc0835c8a1db`; IPv6 since
   `golden-flowsdn-a690ebee2ba7`). Kubernetes NetworkPolicy enforced in the
-  endpoint programs (identity and CIDR L3/L4, ADR-0021; unreleased, kernel
-  test-run only). Open: live ClusterIP and policy acceptance on a node,
+  endpoint programs (identity and CIDR L3/L4, ADR-0021; golden-flowsdn-760c3a2e89d6,
+  kernel test-run only). Open: live ClusterIP and policy acceptance on a node,
   Maglev, DSR, NAT46/64, socket termination, CiliumNetworkPolicy-style rules,
   host firewall.
 - **Milestone 3 (#293):** primitives only; nothing wired into the agent.

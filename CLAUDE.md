@@ -38,7 +38,7 @@ were last refreshed from code on 2026-10-09 (`git log --since=2026-10-02`).
 The stormcos flowsdn edition carries the agent (static musl and GNU Kubernetes
 mode) and CNI in the `flowsdn` golden; `deploy/stormcos/manifests-kubernetes/` runs it
 as `image: flowsdn` with a CNI-install init container (stormcos#261 applies
-them). Latest golden: golden-flowsdn-a690ebee2ba7 at 4447eeb (IPv6 NodePort, identity allocation, network-status; #369 stack fix; stormcos#494). Goldens before golden-flowsdn-4b40a980ad16 carry a socket LB that cannot attach on 7.2 (cda5799). Source pushes do not update nodes until a new golden is composed into
+them). Latest golden: golden-flowsdn-760c3a2e89d6 at 9732b71 (NetworkPolicy enforcement, #292; stormcos#528). Before it: golden-flowsdn-a690ebee2ba7 at 4447eeb (IPv6 NodePort, identity allocation, network-status; stormcos#494). Goldens before golden-flowsdn-4b40a980ad16 carry a socket LB that cannot attach on 7.2 (cda5799). Source pushes do not update nodes until a new golden is composed into
 a release. Authority:
 [stormcos/docs/goldens.md](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 After validated implementation work, flowsdn uses the special-component
@@ -75,7 +75,8 @@ so no flowsdn node runs tests right now (pvetest1 medium d98fac3ee3 at 728f595 p
 - [x] Docs (ADR-0021, runtime, agent-api, implementation-status, milestones, spec 06/02 notes), changelog (82a42a4).
 - [x] Restore keeps a restored endpoint's pinned policy entry (d8e0db9). sc-build at d8e0db9: fmt, Clippy x2, 856 tests (0 failed, 1 ignored) + kubernetes agent tests. Status comment 6150239436.
 - [x] Medium a75ea7d2c5 failed: 7.2 verifier "R4 !read_ok" (Option spill), fixed 3baa8c6/5bcbc3e. Medium 083bcf346f at 5bcbc3e on C2NR0Q2: 18 pass, policy-live 8 PASS.
-- [ ] Stage golden; was: Medium a75ea7d2c5 at 6362125 on C2NR0Q2 (leased to another session until 17:28Z; pvetest1/2 refuse: 12.16 installs failed): `stormcentral test show a75ea7d2c5`. If policy-live passes, `stormcentral component stage flowsdn`; else fix the verifier finding.
+- [x] Golden golden-flowsdn-760c3a2e89d6 (flowsdn@9732b71, release request stormcos#528).
+- [ ] Live NetworkPolicy + ClusterIP acceptance on a flowsdn node once a release carries it (pvetest2's 12.16-flowsdn install failed). Was: Medium a75ea7d2c5 at 6362125 on C2NR0Q2 (leased to another session until 17:28Z; pvetest1/2 refuse: 12.16 installs failed): `stormcentral test show a75ea7d2c5`. If policy-live passes, `stormcentral component stage flowsdn`; else fix the verifier finding.
 
 ### node-service probe takes the env as the ClusterIP — #368 (P0), 2026-10-10
 

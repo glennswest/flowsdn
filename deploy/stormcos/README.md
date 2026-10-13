@@ -109,8 +109,8 @@ configuration. The differences:
   `networking.k8s.io/networkpolicies`, read-only). A Pod a policy selects is
   isolated in that direction; allowed peers are Pods by label, `ipBlock`s and
   ports. Traffic from the node to its Pods (kubelet probes) always passes.
-  `podSelector`/`namespaceSelector` peers need `identity-allocation`. Not in a
-  golden yet ([runtime](../../docs/runtime.md#networkpolicy-enforcement-292)).
+  `podSelector`/`namespaceSelector` peers need `identity-allocation`. In
+  golden-flowsdn-760c3a2e89d6 ([runtime](../../docs/runtime.md#networkpolicy-enforcement-292)).
 
 Off-node egress still needs a masquerade, now for the node's derived pool.
 Moving a node from the static pool to `auto` needs its endpoints gone (a fresh
