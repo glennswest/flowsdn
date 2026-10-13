@@ -2,8 +2,9 @@
 //! before the suite isolates itself, so the node's socket LB is what answers.
 //! kube-dns at the pod's nameserver (its ClusterIP) resolves the `kubernetes`
 //! Service with the reply from the ClusterIP, the agent reports kube-dns and
-//! that `kubernetes` ClusterIP programmed, and a TCP connect to it succeeds
-//! with the ClusterIP as its peer. The Service's address comes from DNS and
+//! that `kubernetes` ClusterIP programmed, and a TCP connect to it reaches
+//! one of that Service's programmed backends (the socket LB reverse-maps only
+//! UDP peers, so a TCP socket's peer is the backend). The Service's address comes from DNS and
 //! the agent, never `KUBERNETES_SERVICE_HOST`: on stormcos the kubelet points
 //! that at the apiserver's node address (#368). Run only where the node is
 //! the flowsdn flavor.
@@ -191,6 +192,30 @@ pub fn kubernetes_frontends(rows: &[Value]) -> Vec<(SocketAddr, bool)> {
         .collect()
 }
 
+/// The realized backends of frontend `target` in `GET /v1/service` rows.
+pub fn realized_backends(rows: &[Value], target: SocketAddr) -> Vec<SocketAddr> {
+    rows.iter()
+        .filter_map(|row| row.pointer("/status/realized"))
+        .filter(|realized| {
+            let front = realized.get("frontend-address");
+            front
+                .and_then(|f| f.get("ip"))
+                .and_then(Value::as_str)
+                .and_then(|ip| ip.parse::<IpAddr>().ok())
+                == Some(target.ip())
+                && front.and_then(|f| f.get("port")).and_then(Value::as_u64)
+                    == Some(u64::from(target.port()))
+        })
+        .filter_map(|realized| realized.get("backend-addresses").and_then(Value::as_array))
+        .flatten()
+        .filter_map(|backend| {
+            let ip = backend.get("ip")?.as_str()?.parse::<IpAddr>().ok()?;
+            let port = u16::try_from(backend.get("port")?.as_u64()?).ok()?;
+            Some(SocketAddr::new(ip, port))
+        })
+        .collect()
+}
+
 /// Whether `ip:port` is a realized frontend in `GET /v1/service` rows.
 pub fn programmed(rows: &[Value], ip: IpAddr, port: u16) -> bool {
     rows.iter().any(|row| {
@@ -275,7 +300,7 @@ pub fn probe(report: &mut Report, socket: &Path) {
             .ok_or_else(|| format!("GET /v1/service returned {}", reply.status))?;
         let target = kubernetes_target(rows, dns, resolved.as_deref())?;
         Ok((
-            target,
+            (target, realized_backends(rows, target)),
             format!(
                 "{} frontends; kube-dns {dns}:53 and kubernetes {target} programmed",
                 rows.len()
@@ -283,20 +308,23 @@ pub fn probe(report: &mut Report, socket: &Path) {
         ))
     });
     report.check("node-service-kubernetes", || {
-        let target = target.ok_or("no programmed kubernetes ClusterIP to connect to")?;
+        let (target, backends) =
+            target.ok_or("no programmed kubernetes ClusterIP to connect to")?;
         let start = Instant::now();
         let stream = TcpStream::connect_timeout(&target, CONNECT_TIMEOUT)
             .map_err(|e| format!("connect {target}: {e}"))?;
         let peer = stream.peer_addr().map_err(|e| e.to_string())?;
-        if peer != target {
+        // TCP is translated once at connect and not reverse-mapped, so the
+        // peer is the backend the socket LB chose (or the ClusterIP itself).
+        if peer != target && !backends.contains(&peer) {
             return Err(format!(
-                "connected, but the peer shows {peer}, not {target}"
+                "connected, but the peer {peer} is neither {target} nor one of its backends {backends:?}"
             ));
         }
         Ok((
             (),
             format!(
-                "TCP {target} connected in {} ms",
+                "TCP {target} connected to backend {peer} in {} ms",
                 start.elapsed().as_millis()
             ),
         ))
@@ -440,5 +468,24 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn realized_backends_are_the_tcp_peers_a_connect_may_show() {
+        let spec = serde_json::json!({
+            "id": 1,
+            "frontend-address": {"ip": "10.96.0.1", "port": 443, "protocol": "TCP"},
+            "backend-addresses": [{"ip": "192.168.31.173", "port": 6443, "protocol": "TCP"}],
+            "flags": {"type": "ClusterIP", "name": "kubernetes", "namespace": "default"},
+        });
+        let rows = vec![
+            serde_json::json!({"spec": spec.clone(), "status": {"realized": spec}}),
+            row("kube-dns", "ClusterIP", "10.96.0.10", 53, "external", true),
+        ];
+        let target = SocketAddr::new("10.96.0.1".parse().expect("ip"), 443);
+        let node = SocketAddr::new("192.168.31.173".parse().expect("ip"), 6443);
+        assert_eq!(realized_backends(&rows, target), vec![node]);
+        let other = SocketAddr::new("10.96.0.10".parse().expect("ip"), 53);
+        assert!(realized_backends(&rows, other).is_empty());
     }
 }

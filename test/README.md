@@ -36,7 +36,9 @@ ClusterIP) for `kubernetes.default.svc.<domain>` and expects an address, with
 the reply from the ClusterIP:53; `node-service-programmed` expects kube-dns's
 frontend and the `default/kubernetes` ClusterIP frontend at an address kube-dns
 gave realized in the agent's `GET /v1/service`; `node-service-kubernetes`
-connects TCP to that ClusterIP and port and expects it as the peer. The
+connects TCP to that ClusterIP and port and expects the peer to be one of
+its realized backends (the socket LB reverse-maps only UDP, so a TCP
+socket's peer is the backend it chose) or the ClusterIP itself. The
 Service's address never comes from `KUBERNETES_SERVICE_HOST`: on stormcos the
 kubelet points that at the apiserver's node address (#368).
 
