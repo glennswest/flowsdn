@@ -48,6 +48,10 @@ pub struct Settings {
     pub identity_allocation: bool,
     /// `io.flowsdn.k8s.policy.cluster` on every Pod identity; `default`.
     pub cluster_name: String,
+    /// Kubernetes NetworkPolicy enforcement in the datapath (#292,
+    /// ADR-0021), default on: watch NetworkPolicies (and Namespaces) and keep
+    /// the endpoint policy maps.
+    pub network_policy: bool,
 }
 /// Where a DaemonSet mounts the host's cgroup v2 root.
 pub const DEFAULT_CGROUP_ROOT: &str = "/sys/fs/cgroup";
@@ -127,6 +131,7 @@ impl Settings {
             service_lb: flag("service-lb", true)?,
             node_port: flag("node-port", true)?,
             identity_allocation: flag("identity-allocation", true)?,
+            network_policy: flag("network-policy", true)?,
             cluster_name,
             cgroup_root,
         }))
@@ -160,6 +165,8 @@ pub struct PodInfo {
     pub network_status: Option<String>,
     pub network_status_oversized: bool,
     pub resource_version: String,
+    /// Named container ports: (protocol number, name, port).
+    pub named_ports: Vec<(u8, String, u16)>,
 }
 /// A container of a Pod: name and runtime ID (`<runtime>://<id>`, empty
 /// until created); `init` for init containers.
@@ -210,6 +217,10 @@ pub struct LocalEndpoint {
     pub name: String,
     pub uid: String,
     pub value: Value,
+    /// The endpoint's host-side interface (where its programs are attached)
+    /// and its index (the policy-endpoint map key).
+    pub interface: String,
+    pub ifindex: u32,
 }
 /// One annotation write: merge-patch the Pod's `flowsdn.io/pod-networks`
 /// and/or `network-status` (JSON text, None = already current), with the UID
@@ -407,6 +418,12 @@ pub struct View {
     pub identities: BTreeMap<u32, Vec<String>>,
     /// Local label sets still without an identity.
     pub identities_waiting: usize,
+    /// NetworkPolicy enforcement (#292): the NetworkPolicy objects, and
+    /// what the policy thread last programmed (`Desired::status`).
+    pub network_policy: bool,
+    pub network_policies: Vec<Value>,
+    pub policies_synced: bool,
+    pub policy_status: Value,
     /// The latest failure of each controller part (`nodes`, `pods`, `routes`).
     pub errors: BTreeMap<String, String>,
 }
@@ -616,7 +633,8 @@ impl View {
         let synced = self.nodes_synced
             && self.pods_synced
             && (!self.service_lb || (self.services_synced && self.slices_synced))
-            && (!self.identity || (self.namespaces_synced && self.identities_synced));
+            && (!self.identity || (self.namespaces_synced && self.identities_synced))
+            && (!self.network_policy || (self.namespaces_synced && self.policies_synced));
         let (state, msg) = match (errors.is_empty(), synced) {
             (false, _) => ("Warning", errors.join("; ")),
             (true, false) => ("Warning", "waiting for the initial Kubernetes lists".into()),
@@ -642,7 +660,8 @@ impl View {
         };
         json!({"state":state,"msg":msg,"node-name":self.local_node,
             "auto-direct-node-routes":self.direct_routes,"service-lb":self.service_lb,
-            "identity-allocation":self.identity})
+            "identity-allocation":self.identity,"network-policy":self.network_policy,
+            "policy":self.policy_status})
     }
 }
 

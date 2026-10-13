@@ -4,12 +4,13 @@
 //! routes (spec 10 §3.2.3, §5.2); a services thread that owns the
 //! socket-LB maps (spec 05 §3.4, §3.8); and an identities thread that holds
 //! a FlowsdnIdentity for each local Pod's labels (spec 03 §3.3), fed by
-//! Namespace and FlowsdnIdentity watches.
+//! Namespace and FlowsdnIdentity watches; and a policy thread that keeps the
+//! endpoint policy maps from the NetworkPolicy watch (#292, ADR-0021).
 use super::*;
 use crate::events::Type::Warning;
 use crate::identity::{self, Allocator, Outcome};
 use crate::services::{self, ServiceInfo, SliceInfo};
-use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
+use flowsdn_bpf_loader::kernel::{Object, PolicyMaps, socket_lb::SocketLb};
 use flowsdn_connector::Connector;
 use flowsdn_k8s::{
     client::{IDENTITIES_PATH, JsonClient, Query, TransportLimits, WATCH_ENDED},
@@ -34,6 +35,9 @@ const ROUTES_FILE: &str = "direct-routes.json";
 const ANNOTATE_INTERVAL: Duration = Duration::from_secs(2);
 const ANNOTATE_RETRY: Duration = Duration::from_secs(30);
 const IDENTITY_INTERVAL: Duration = Duration::from_secs(1);
+const POLICY_INTERVAL: Duration = Duration::from_secs(1);
+/// The policy maps are compared with the kernel at least this often.
+const POLICY_RESYNC: Duration = Duration::from_secs(60);
 
 pub struct Controller {
     runtime: tokio::runtime::Runtime,
@@ -96,20 +100,31 @@ impl Controller {
     /// under `pin_root`), attached to the cgroup root and kept programmed by
     /// a services thread. A load or attach failure is reported in the view's
     /// health, and the rest of the agent keeps running.
+    /// With network-policy on and the endpoint policy maps given, a policy
+    /// thread keeps them from the NetworkPolicies; `gateways` are this
+    /// node's router addresses (the host identity, with its InternalIPs).
     pub fn spawn(
         self,
         ipv6: bool,
         socket_lb: Option<&[u8]>,
         pin_root: Option<&Path>,
+        policy: Option<(PolicyMaps, Vec<IpAddr>)>,
     ) -> Result<Shared> {
         let view: Shared = Arc::new(Mutex::new(View {
             local_node: self.settings.node_name.clone(),
             direct_routes: self.settings.auto_direct_node_routes,
             service_lb: self.settings.service_lb,
             identity: self.settings.identity_allocation,
+            network_policy: self.settings.network_policy,
             cluster_name: self.settings.cluster_name.clone(),
             ..View::default()
         }));
+        if let Some((mut maps, gateways)) = policy.filter(|_| self.settings.network_policy) {
+            let policy_view = Arc::clone(&view);
+            std::thread::Builder::new()
+                .name("flowsdn-policy".into())
+                .spawn(move || policy_loop(&policy_view, &mut maps, &gateways))?;
+        }
         let failed = apply_sysctls(Path::new("/proc/sys"), ipv6);
         if !failed.is_empty() {
             crate::events::node(Warning, "SysctlFailed", failed.join("; "));
@@ -224,7 +239,7 @@ impl Controller {
                     view.pods_synced = true;
                 });
                 let mut parts = vec![nodes.boxed_local(), pods.boxed_local()];
-                if settings.identity_allocation {
+                if settings.identity_allocation || settings.network_policy {
                     let ns_view = Arc::clone(&watch_view);
                     parts.push(
                         watch_forever(
@@ -241,6 +256,26 @@ impl Controller {
                         )
                         .boxed_local(),
                     );
+                }
+                if settings.network_policy {
+                    let np_view = Arc::clone(&watch_view);
+                    parts.push(
+                        watch_forever(
+                            &client,
+                            Scope::NetworkPolicies,
+                            "networkpolicies-watch",
+                            &watch_view,
+                            move |state| {
+                                let rows = policy_rows(state);
+                                let mut view = lock(&np_view);
+                                view.network_policies = rows;
+                                view.policies_synced = true;
+                            },
+                        )
+                        .boxed_local(),
+                    );
+                }
+                if settings.identity_allocation {
                     let id_view = Arc::clone(&watch_view);
                     parts.push(
                         watch_forever(
@@ -576,6 +611,7 @@ fn pod_rows(state: &WatchState) -> Vec<PodInfo> {
                     .iter()
                     .any(|key| key == crate::tagging::NETWORK_STATUS),
                 resource_version: pod.metadata.resource_version.clone(),
+                named_ports: pod.named_ports.clone(),
             }),
             _ => None,
         })
@@ -591,6 +627,117 @@ fn namespace_rows(state: &WatchState) -> BTreeMap<String, BTreeMap<String, Strin
         })
         .collect()
 }
+fn policy_rows(state: &WatchState) -> Vec<Value> {
+    state
+        .snapshot()
+        .all()
+        .filter_map(|(row, _)| match &*row {
+            Resource::NetworkPolicy(p) => Some(p.object.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The policy thread (#292, ADR-0021): once the lists it needs are complete,
+/// compile the view every second; when the result changes (or a minute has
+/// passed) bring the maps to it, comparing with what the kernel holds.
+/// Writes come before removals, so a change never passes through a state
+/// that allows less than both ends (new entries, then ipcache and
+/// enforcement, then stale entries).
+fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
+    let mut applied: Option<(crate::policy::Desired, Instant)> = None;
+    loop {
+        std::thread::sleep(POLICY_INTERVAL);
+        let desired = {
+            let view = lock(view);
+            if !(view.policies_synced
+                && view.pods_synced
+                && view.nodes_synced
+                && view.namespaces_synced
+                && view.endpoints_published)
+            {
+                continue;
+            }
+            crate::policy::compile(&view, gateways)
+        };
+        if applied
+            .as_ref()
+            .is_some_and(|(last, at)| *last == desired && at.elapsed() < POLICY_RESYNC)
+        {
+            continue;
+        }
+        let result = apply_policy(maps, &desired);
+        let mut view = lock(view);
+        view.policy_status = desired.status();
+        match result {
+            Ok(()) if desired.problems.is_empty() => {
+                view.errors.remove("policy");
+            }
+            Ok(()) => {
+                view.errors
+                    .insert("policy".into(), desired.problems.join("; "));
+            }
+            Err(error) => {
+                view.errors.insert("policy".into(), error.clone());
+                drop(view);
+                eprintln!("policy maps: {error}");
+                continue;
+            }
+        }
+        applied = Some((desired, Instant::now()));
+    }
+}
+
+fn apply_policy(
+    maps: &mut PolicyMaps,
+    desired: &crate::policy::Desired,
+) -> std::result::Result<(), String> {
+    use flowsdn_bpf_abi::{IpCacheKey, MapBytes, policy::EndpointPolicyKey};
+    let text = |e: Box<dyn std::error::Error>| e.to_string();
+    let entries: BTreeMap<[u8; 16], _> = maps
+        .policy_entries()
+        .map_err(text)?
+        .into_iter()
+        .map(|(k, v)| (k.to_bytes(), v))
+        .collect();
+    let ipcache: BTreeMap<[u8; 24], _> = maps
+        .ipcache_entries()
+        .map_err(text)?
+        .into_iter()
+        .map(|(k, v)| (k.to_bytes(), v))
+        .collect();
+    let endpoints: BTreeMap<u32, _> = maps.policy_endpoints().map_err(text)?.into_iter().collect();
+    for (key, value) in &desired.entries {
+        if entries.get(key) != Some(value) {
+            maps.upsert_policy(EndpointPolicyKey::from_bytes(*key), *value)
+                .map_err(text)?;
+        }
+    }
+    for (key, value) in &desired.ipcache {
+        if ipcache.get(key) != Some(value) {
+            maps.upsert_ipcache(IpCacheKey::from_bytes(*key), *value)
+                .map_err(text)?;
+        }
+    }
+    for (ifindex, value) in &desired.endpoints {
+        if endpoints.get(ifindex) != Some(value) {
+            maps.set_policy_endpoint(*ifindex, *value).map_err(text)?;
+        }
+    }
+    for ifindex in endpoints.keys().filter(|k| !desired.endpoints.contains_key(k)) {
+        maps.remove_policy_endpoint(*ifindex).map_err(text)?;
+    }
+    for key in ipcache.keys().filter(|k| !desired.ipcache.contains_key(*k)) {
+        maps.remove_ipcache(IpCacheKey::from_bytes(*key))
+            .map_err(text)?;
+    }
+    for key in entries.keys().filter(|k| !desired.entries.contains_key(*k)) {
+        maps.remove_policy(EndpointPolicyKey::from_bytes(*key))
+            .map_err(text)?;
+    }
+    Ok(())
+}
+
 fn identity_rows(state: &WatchState) -> Vec<identity::Object> {
     state
         .snapshot()

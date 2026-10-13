@@ -374,6 +374,7 @@ dependencies = [
  "flowsdn-ipam",
  "flowsdn-k8s",
  "flowsdn-lb",
+ "flowsdn-policy",
  "futures",
  "http",
  "httparse",

@@ -1,6 +1,7 @@
 # flowsdn's identity in the cluster, Kubernetes mode (#291, #292): the agent
 # lists and watches Nodes (pod CIDRs, InternalIPs -> direct routes), Pods (the
-# IP cache), and Services and EndpointSlices (ClusterIP socket LB), read-only,
+# IP cache), Services and EndpointSlices (ClusterIP socket LB) and
+# NetworkPolicies (policy enforcement), read-only,
 # writes Events (#298) and patches its Pods' flowsdn.io/pod-networks
 # annotation (#328).
 ---
@@ -22,6 +23,10 @@ rules:
     verbs: [get, list, watch]
   - apiGroups: [discovery.k8s.io]
     resources: [endpointslices]
+    verbs: [get, list, watch]
+  # NetworkPolicy enforcement in the datapath (#292).
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
     verbs: [get, list, watch]
   # Events on Pods (endpoint created/failed, IP allocation) and on this node
   # (pod CIDR, direct routes, socket LB, sysctls), #298.

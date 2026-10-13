@@ -2,7 +2,7 @@
 //! Identity/policy reconciliation and API request authorization remain caller work.
 use crate::state::{DEFAULT_ENDPOINT_ID_MAX, IdPool, Record, Result, Store};
 use flowsdn_bpf_abi::endpoint::EndpointInfo;
-use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object};
+use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object, PolicyMaps};
 use flowsdn_connector::Connector;
 use flowsdn_ipam::Ipam;
 use serde_json::{Value, json};
@@ -229,6 +229,10 @@ impl Manager {
     pub fn get(&self, attachment: &str) -> Option<&Record> {
         self.records.get(attachment)
     }
+    /// Handles on the endpoint policy maps for the policy thread (#292).
+    pub fn share_policy(&self) -> Result<PolicyMaps> {
+        kernel(self.driver.share_policy())
+    }
     pub fn records(&self) -> impl Iterator<Item = &Record> {
         self.records.values()
     }
@@ -365,6 +369,9 @@ fn install(driver: &mut LocalDelivery, record: &Record, egress: Egress) -> Resul
             kernel(driver.upsert(ip, endpoint))?;
             installed.push((ip, old));
         }
+        // A reused interface index must not inherit another endpoint's
+        // policy; the policy thread writes this endpoint's own.
+        kernel(driver.policy().remove_policy_endpoint(endpoint.ifindex))?;
         kernel(driver.attach(text(&record.document, "IfName")))?;
         if egress == Egress::Stack {
             // The routes go with the host link: deleting it removes them.
@@ -383,6 +390,10 @@ fn install(driver: &mut LocalDelivery, record: &Record, egress: Egress) -> Resul
     outcome
 }
 fn uninstall(driver: &mut LocalDelivery, record: &Record) -> Result<()> {
+    // The interface index can be reused: its policy entry goes first.
+    if let Ok(endpoint) = info(record) {
+        kernel(driver.policy().remove_policy_endpoint(endpoint.ifindex))?;
+    }
     kernel(driver.detach(text(&record.document, "IfName")))?;
     // Map deletes need to remain idempotent if a prior teardown was interrupted.
     for ip in addresses(&record.document)? {

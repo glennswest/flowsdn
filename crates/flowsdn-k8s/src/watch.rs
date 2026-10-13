@@ -37,6 +37,9 @@ pub struct Pod {
     pub owners: Vec<OwnerReference>,
     /// `status.containerStatuses` then `status.initContainerStatuses`.
     pub containers: Vec<ContainerStatus>,
+    /// Named container ports (`spec.containers[].ports[]` with a name): the
+    /// (protocol number, name, port) NetworkPolicy named ports resolve to.
+    pub named_ports: Vec<(u8, String, u16)>,
     /// Only the annotations the agent writes (`flowsdn.io/` and
     /// [`NETWORK_STATUS`]), each at most [`ANNOTATION_MAX`] bytes; other
     /// annotations are not kept.
@@ -142,6 +145,13 @@ pub struct Identity {
     pub created: String,
     pub heartbeat: bool,
 }
+/// A `networking.k8s.io/v1` NetworkPolicy, kept whole: the policy importer
+/// (flowsdn-policy `k8s`) reads the object.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NetworkPolicy {
+    pub metadata: Metadata,
+    pub object: Value,
+}
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Resource {
     Node(Node),
@@ -150,6 +160,7 @@ pub enum Resource {
     EndpointSlice(EndpointSlice),
     Namespace(Namespace),
     Identity(Identity),
+    NetworkPolicy(NetworkPolicy),
 }
 impl Resource {
     pub fn metadata(&self) -> &Metadata {
@@ -160,6 +171,7 @@ impl Resource {
             Self::EndpointSlice(e) => &e.metadata,
             Self::Namespace(n) => &n.metadata,
             Self::Identity(i) => &i.metadata,
+            Self::NetworkPolicy(p) => &p.metadata,
         }
     }
 }
@@ -185,6 +197,8 @@ pub enum Scope {
     Namespaces,
     /// Every `flowsdn.io/v1alpha1` FlowsdnIdentity (identity allocation).
     Identities,
+    /// Every `networking.k8s.io/v1` NetworkPolicy (policy enforcement).
+    NetworkPolicies,
 }
 impl Scope {
     pub fn field_selector(&self) -> Option<String> {
@@ -206,6 +220,7 @@ impl Scope {
                 Self::EndpointSlices => "EndpointSlice",
                 Self::Namespaces => "Namespace",
                 Self::Identities => "FlowsdnIdentity",
+                Self::NetworkPolicies => "NetworkPolicy",
             };
             if text(kind)? != expected {
                 return Err(error("unexpected resource kind"));
@@ -278,6 +293,7 @@ impl Scope {
                     pod_ips: ips,
                     owners: owner_references(value),
                     containers: container_statuses(value),
+                    named_ports: named_ports(value),
                     annotations: flowsdn_annotations(value),
                     oversized: oversized_annotations(value),
                 }))
@@ -289,6 +305,10 @@ impl Scope {
                 metadata,
             })),
             Self::Identities => parse_identity(value, metadata).map(Resource::Identity),
+            Self::NetworkPolicies => Ok(Resource::NetworkPolicy(NetworkPolicy {
+                metadata,
+                object: value.clone(),
+            })),
         }
     }
 }
@@ -355,6 +375,38 @@ fn owner_references(value: &Value) -> Vec<OwnerReference> {
             })
         })
         .collect()
+}
+fn named_ports(value: &Value) -> Vec<(u8, String, u16)> {
+    let mut ports = Vec::new();
+    let containers = value
+        .pointer("/spec/containers")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten();
+    for port in containers
+        .filter_map(|c| c.get("ports").and_then(Value::as_array))
+        .flatten()
+    {
+        let Some(name) = port.get("name").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(number) = port
+            .get("containerPort")
+            .and_then(Value::as_u64)
+            .and_then(|p| u16::try_from(p).ok())
+            .filter(|p| *p != 0)
+        else {
+            continue;
+        };
+        let protocol = match port.get("protocol").and_then(Value::as_str) {
+            None | Some("TCP") => 6,
+            Some("UDP") => 17,
+            Some("SCTP") => 132,
+            Some(_) => continue,
+        };
+        ports.push((protocol, name.to_owned(), number));
+    }
+    ports
 }
 fn container_statuses(value: &Value) -> Vec<ContainerStatus> {
     let mut containers = Vec::new();

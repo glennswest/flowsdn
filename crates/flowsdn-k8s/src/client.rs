@@ -77,6 +77,7 @@ pub fn request_uri(scope: &Scope, query: &Query<'_>) -> Result<String, Error> {
         Scope::EndpointSlices => "/apis/discovery.k8s.io/v1/endpointslices",
         Scope::Namespaces => "/api/v1/namespaces",
         Scope::Identities => IDENTITIES_PATH,
+        Scope::NetworkPolicies => "/apis/networking.k8s.io/v1/networkpolicies",
     };
     let mut params = Vec::new();
     if let Some(selector) = scope.field_selector() {

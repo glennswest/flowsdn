@@ -303,6 +303,7 @@ mod tests {
             name: "web-1".into(),
             uid: "uid-1".into(),
             value: value.clone(),
+            ..LocalEndpoint::default()
         }];
         assert!(view.annotation_patches().is_empty(), "pods not synced");
         view.pods_synced = true;

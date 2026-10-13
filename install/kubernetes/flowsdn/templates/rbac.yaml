@@ -22,6 +22,10 @@ rules:
   - apiGroups: [discovery.k8s.io]
     resources: [endpointslices]
     verbs: [get, list, watch]
+  # NetworkPolicy enforcement in the datapath (#292).
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, list, watch]
   # Events on Pods (endpoint created/failed, IP allocation) and on this node
   # (pod CIDR, direct routes, socket LB, sysctls), #298.
   - apiGroups: [""]

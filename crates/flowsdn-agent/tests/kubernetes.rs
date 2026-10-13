@@ -266,6 +266,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         cgroup_root: PathBuf::from("/sys/fs/cgroup"),
         node_port: false,
         identity_allocation: true,
+        network_policy: false,
         cluster_name: "default".into(),
     };
     let controller = Controller::connect(settings, &dir).expect("connect");
@@ -275,7 +276,7 @@ fn controller_lists_watches_and_derives_the_pool() {
     assert_eq!(pool6, Some(("f00d::aac:0:0:0".parse().expect("IP"), 96)));
     // No socket-lb object: Services and EndpointSlices are watched, nothing
     // is attached (that needs CAP_BPF and a cgroup).
-    let view = controller.spawn(false, None, None).expect("spawn");
+    let view = controller.spawn(false, None, None, None).expect("spawn");
     let deadline = Instant::now()
         .checked_add(Duration::from_secs(20))
         .expect("deadline");

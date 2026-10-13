@@ -394,6 +394,13 @@ impl Api {
                 name: text(&record.document, "K8sPodName"),
                 uid: text(&record.document, "K8sUID"),
                 value: tagging::pod_networks(record.id, &record.document, &node),
+                interface: text(&record.document, "IfName"),
+                ifindex: record
+                    .document
+                    .get("IfIndex")
+                    .and_then(Value::as_u64)
+                    .and_then(|n| u32::try_from(n).ok())
+                    .unwrap_or(0),
             })
             .collect();
         let mut view = crate::kubernetes::lock(view);
@@ -1212,14 +1219,16 @@ fn spawn_kubernetes(
     controller: Kubernetes,
     ipv6: bool,
     pin_root: Option<&Path>,
+    policy: Option<(flowsdn_bpf_loader::kernel::PolicyMaps, Vec<IpAddr>)>,
 ) -> Result<crate::kubernetes::Shared> {
-    controller.spawn(ipv6, Some(SOCKET_LB_OBJECT), pin_root)
+    controller.spawn(ipv6, Some(SOCKET_LB_OBJECT), pin_root, policy)
 }
 #[cfg(not(feature = "kubernetes"))]
 fn spawn_kubernetes(
     never: Kubernetes,
     _ipv6: bool,
     _pin_root: Option<&Path>,
+    _policy: Option<(flowsdn_bpf_loader::kernel::PolicyMaps, Vec<IpAddr>)>,
 ) -> Result<crate::kubernetes::Shared> {
     match never {}
 }
@@ -1244,9 +1253,30 @@ pub fn run(config_path: &Path) -> Result<()> {
     // Routes are written under the state directory, so start after restore
     // holds its exclusive lock.
     let ipv6 = config.v6.is_some();
-    let kubernetes = kubernetes
-        .map(|controller| spawn_kubernetes(controller, ipv6, config.pin_root.as_deref()))
-        .transpose()?;
+    let kubernetes = match kubernetes {
+        Some(controller) => {
+            let policy = match manager.share_policy() {
+                Ok(maps) => Some((
+                    maps,
+                    [config.gateway4, config.gateway6]
+                        .into_iter()
+                        .flatten()
+                        .collect(),
+                )),
+                Err(error) => {
+                    eprintln!("policy maps unavailable, NetworkPolicy is not enforced: {error}");
+                    None
+                }
+            };
+            Some(spawn_kubernetes(
+                controller,
+                ipv6,
+                config.pin_root.as_deref(),
+                policy,
+            )?)
+        }
+        None => None,
+    };
     let enabled = kubernetes.is_some();
     let mut api = Api {
         config,
@@ -1290,7 +1320,7 @@ pub fn run(config_path: &Path) -> Result<()> {
     drop(replay);
     let health = health_api::ModuleHealth::new(enabled)?;
     eprintln!(
-        "initial endpoint API listening; Kubernetes node discovery {}; policy enforcement is not enabled",
+        "initial endpoint API listening; Kubernetes node discovery {}",
         if enabled { "enabled" } else { "not enabled" }
     );
     let http = match api.config.http {

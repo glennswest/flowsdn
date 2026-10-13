@@ -5,6 +5,7 @@ pub mod endpoints;
 pub mod events;
 pub mod identity;
 pub mod kubernetes;
+pub mod policy;
 pub mod services;
 pub mod state;
 pub mod tagging;
