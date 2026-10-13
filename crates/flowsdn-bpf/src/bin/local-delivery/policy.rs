@@ -259,8 +259,17 @@ fn aggregate(identity: u32) -> u32 {
     }
 }
 
+/// One policy lookup: `found` and the entry (zeroed on a miss). Not an
+/// `Option`: LLVM spills a `None`'s undefined fields, and the verifier
+/// refuses to read an uninitialized register ("R4 !read_ok" on 7.2).
+#[derive(Clone, Copy)]
+struct Hit {
+    found: bool,
+    entry: PolicyEntry,
+}
+
 #[inline(always)]
-fn entry(endpoint: u32, identity: u32, egress: u8, flow: &Flow) -> Option<PolicyEntry> {
+fn entry(endpoint: u32, identity: u32, egress: u8, flow: &Flow) -> Hit {
     let key = Key::new(
         ENDPOINT_POLICY_FULL_PREFIX,
         PolicyData {
@@ -271,7 +280,16 @@ fn entry(endpoint: u32, identity: u32, egress: u8, flow: &Flow) -> Option<Policy
             dport: flow.port,
         },
     );
-    POLICY.get(key).copied()
+    match POLICY.get(key) {
+        Some(found) => Hit {
+            found: true,
+            entry: *found,
+        },
+        None => Hit {
+            found: false,
+            entry: PolicyEntry::default(),
+        },
+    }
 }
 
 /// spec 02 §3.10: the specific entry, the aggregate's, then the wildcard
@@ -279,44 +297,43 @@ fn entry(endpoint: u32, identity: u32, egress: u8, flow: &Flow) -> Option<Policy
 #[inline(always)]
 fn allowed(endpoint: u32, remote: u32, egress: u8, flow: &Flow) -> bool {
     let specific = entry(endpoint, remote, egress, flow);
-    if let Some(found) = specific
-        && found.precedence == MAX_PRECEDENCE
-    {
-        return !found.denies();
+    if specific.found && specific.entry.precedence == MAX_PRECEDENCE {
+        return !specific.entry.denies();
     }
     let group = aggregate(remote);
-    let mut broader = if group == remote {
-        None
-    } else {
-        entry(endpoint, group, egress, flow)
+    let mut broader = Hit {
+        found: false,
+        entry: PolicyEntry::default(),
     };
-    if broader.is_none() && specific.is_none() && group != 0 {
+    if group != remote {
+        broader = entry(endpoint, group, egress, flow);
+    }
+    if !broader.found && !specific.found && group != 0 {
         broader = entry(endpoint, 0, egress, flow);
     }
-    let (chosen, other) = match (specific, broader) {
-        (None, None) => return false,
-        (None, Some(b)) => (b, None),
-        (Some(s), None) => (s, None),
-        (Some(s), Some(b)) => {
-            if b.precedence > s.precedence
-                || (b.precedence == s.precedence && b.lpm_prefix_length() > s.lpm_prefix_length())
-            {
-                (b, Some(s))
-            } else {
-                (s, Some(b))
-            }
-        }
+    if !specific.found && !broader.found {
+        return false;
+    }
+    let (chosen, other) = if !specific.found
+        || (broader.found
+            && (broader.entry.precedence > specific.entry.precedence
+                || (broader.entry.precedence == specific.entry.precedence
+                    && broader.entry.lpm_prefix_length() > specific.entry.lpm_prefix_length())))
+    {
+        (broader.entry, specific)
+    } else {
+        (specific.entry, broader)
     };
     if chosen.denies() {
         return false;
     }
     let mut auth = chosen.auth_type();
-    if let Some(other) = other
-        && other.precedence == chosen.precedence
+    if other.found
+        && other.entry.precedence == chosen.precedence
         && !chosen.has_explicit_auth_type()
-        && other.auth_type() > auth
+        && other.entry.auth_type() > auth
     {
-        auth = other.auth_type();
+        auth = other.entry.auth_type();
     }
     // No authentication map: an entry that requires it is not satisfied.
     auth == 0
