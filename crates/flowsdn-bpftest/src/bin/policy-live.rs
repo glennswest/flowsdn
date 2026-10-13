@@ -189,6 +189,7 @@ impl Lab {
         let entry = PolicyEntry::new(0, rule.deny, prefix, 0, false, precedence, 0)
             .map_err(|_| "policy entry")?;
         self.delivery
+            .policy()
             .upsert_policy(EndpointPolicyKey::new(ENDPOINT, key), entry)
     }
 }
