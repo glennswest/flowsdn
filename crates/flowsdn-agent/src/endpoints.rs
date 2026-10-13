@@ -206,6 +206,18 @@ impl Manager {
             }
         }
         for record in stale {
+            // Only its own entry: the index may belong to another link now.
+            if let Ok(endpoint) = info(&record)
+                && kernel(manager.driver.policy().policy_endpoint(endpoint.ifindex))?
+                    .is_some_and(|entry| entry.endpoint == u32::from(record.id))
+            {
+                kernel(
+                    manager
+                        .driver
+                        .policy()
+                        .remove_policy_endpoint(endpoint.ifindex),
+                )?;
+            }
             kernel(manager.driver.detach(text(&record.document, "IfName")))?;
             for ip in addresses(&record.document)? {
                 kernel(manager.driver.remove_if_present(ip))?;
@@ -370,8 +382,13 @@ fn install(driver: &mut LocalDelivery, record: &Record, egress: Egress) -> Resul
             installed.push((ip, old));
         }
         // A reused interface index must not inherit another endpoint's
-        // policy; the policy thread writes this endpoint's own.
-        kernel(driver.policy().remove_policy_endpoint(endpoint.ifindex))?;
+        // policy (the policy thread writes this endpoint's own); a restored
+        // endpoint keeps its pinned entry, so a restart enforces throughout.
+        if kernel(driver.policy().policy_endpoint(endpoint.ifindex))?
+            .is_some_and(|entry| entry.endpoint != u32::from(record.id))
+        {
+            kernel(driver.policy().remove_policy_endpoint(endpoint.ifindex))?;
+        }
         kernel(driver.attach(text(&record.document, "IfName")))?;
         if egress == Egress::Stack {
             // The routes go with the host link: deleting it removes them.

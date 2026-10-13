@@ -124,6 +124,14 @@ impl PolicyMaps {
         self.endpoints.insert(ifindex, endpoint.to_bytes(), 0)?;
         Ok(())
     }
+    /// The policy entry of host interface `ifindex`, if any.
+    pub fn policy_endpoint(&self, ifindex: u32) -> KernelResult<Option<PolicyEndpoint>> {
+        match self.endpoints.get(&ifindex, 0) {
+            Ok(value) => Ok(Some(PolicyEndpoint::from_bytes(value))),
+            Err(error) if missing(&error) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
     /// Stop enforcing and tracking the endpoint behind `ifindex`; absent is fine.
     pub fn remove_policy_endpoint(&mut self, ifindex: u32) -> KernelResult<()> {
         match self.endpoints.remove(&ifindex) {
