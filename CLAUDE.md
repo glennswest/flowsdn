@@ -56,6 +56,20 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### UDP socket termination — #292 (P0), 2026-10-13
+
+Spec 05 §3.8 "Socket termination" (owner #3: netlink SOCK_DESTROY, not the kfunc). When UDP backends leave
+the socket LB's services, destroy the sockets it translated to them (cookie in `_reverse_sk` with that
+backend) in the host netns and each local pod's netns. Pod netns: the CNI also sends the observed
+`CNI_NETNS` (stormcos: /run/netns/<sandbox>, persistent) as `container-netns-path`; the agent enters it only
+when the namespace's cookie equals the endpoint's `NetnsCookie` (#130's rule kept: a path is not proof).
+The DaemonSet mounts host /run/netns (HostToContainer). EOPNOTSUPP -> `socket-termination` degraded.
+
+- [ ] connector `sock_diag` (dump UDP v4/v6, destroy by id+cookie, enter netns by path + cookie check); unit tests.
+- [ ] loader `SocketLb::reverse_sockets`; agent services thread: removed UDP backends -> cookies -> destroy.
+- [ ] CNI sends container-netns-path; agent keeps it; manifests/chart mount /run/netns; spec 09/05 notes.
+- [ ] socket-lb-live termination step; docs, changelog; sc-build; medium; golden.
+
 ### Network policy in the datapath — #292 (P0), 2026-10-13
 
 Next #292 row: identity/CIDR L3/L4 policy enforced in BPF (Kubernetes NetworkPolicy first). Design
