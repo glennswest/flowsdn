@@ -84,7 +84,10 @@ reference's two-round mix; sport 0 with affinity), else random slot. Agent: `kub
 - [x] ABI jhash/tuple hash + constants; planner LUTs + ops + tests; loader outer maps (pin check, dump, apply) (38f1c27).
 - [x] BPF selection in nodeport4_in/new_flow6_in; agent setting + annotation; socket-lb-live Maglev step (38f1c27).
 - [x] Docs (spec 05/02 notes, runtime, agent-api, implementation-status, milestones, README), changelog (c096990).
-      Object + lock from sc-build at 21b7d3a (21ce52d). Full sc-build at 21ce52d running (fmt, Clippy x2, tests, test/build.sh).
+      Object + lock from sc-build at 21b7d3a (21ce52d). sc-build at fb44da4: fmt, Clippy x2, 877 tests (0 failed,
+      1 ignored), test/build.sh (lock matches, no-cilium). Catalogue provenance lines remapped (#358 fragility).
+- [ ] Medium 17f361a64f at fb44da4 on pvetest2 (C2NR0Q2 refuses: 12.21 install failed); pvetest2 may still be
+      stuck on stormcentral#846. `stormcentral test show 17f361a64f`; then stage the golden.
 - [ ] Medium on a 7.2 machine (socket-lb-live Maglev step), then stage.
 
 ### UDP socket termination — #292 (P0), 2026-10-13
