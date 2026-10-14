@@ -265,6 +265,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         service_lb: true,
         cgroup_root: PathBuf::from("/sys/fs/cgroup"),
         node_port: false,
+        maglev: false,
         identity_allocation: true,
         network_policy: false,
         cluster_name: "default".into(),
