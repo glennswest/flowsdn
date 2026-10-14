@@ -47,6 +47,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.lb-algorithm` | `random` | `random` or `maglev`: how the uplink programs pick a backend for a new flow from outside the cluster ([Maglev](#clusterip-socket-lb-292)). A Service's `service.flowsdn.io/lb-algorithm` annotation (`random` or `maglev`) overrides it. |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
+| `kubernetes.host-firewall` | `off` | `off`, `audit` or `enforce`: filter traffic to the node itself from FlowsdnClusterwideNetworkPolicy host rules ([host firewall](#host-firewall-379)); `audit` counts would-be drops and passes them. |
 | `kubernetes.cluster-name` | `default` | The cluster label on every Pod identity (`io.flowsdn.k8s.policy.cluster`); a DNS label of at most 32 bytes. |
 
 The `kubernetes` booleans must be JSON booleans and its strings strings, or
@@ -435,9 +436,9 @@ ingress policy). Both read:
 - `flowsdn_policy_ep` (host interface index -> endpoint ID and the enforced
   directions): an endpoint without an entry is neither enforced nor tracked;
 - `flowsdn_ipcache` (LPM, address -> identity): every Pod IP with an identity,
-  this node's InternalIPs and router addresses (host, 1), and one local identity
-  (`1<<24 | n`) per `ipBlock` prefix and exception. Anything else, other nodes
-  included, is world;
+  this node's InternalIPs and router addresses (host, 1), other nodes'
+  InternalIPs (remote-node, 6), and one local identity (`1<<24 | n`) per
+  `ipBlock`/host-rule prefix and exception. Anything else is world;
 - `flowsdn_policy` (LPM): spec 06 §4.4 policy keys and entries behind a 32-bit
   endpoint ID, looked up as spec 02 §3.10 says (the identity, its aggregate,
   then the wildcard identity 0);
@@ -460,8 +461,8 @@ Namespace lists are complete and the endpoints are published:
 - each rule's peers resolve to identities: `podSelector`/`namespaceSelector`
   peers against every identity's labels (so they need `identity-allocation`),
   no `from`/`to` to the wildcard identity, `ipBlock` to the CIDR identities it
-  covers minus its exceptions, plus the host when one of the node's addresses
-  is inside it; ports to masked LPM blocks (spec 06 §5.2), named ports to the
+  covers minus its exceptions, plus the host and remote nodes when one of
+  their addresses is inside it; ports to masked LPM blocks (spec 06 §5.2), named ports to the
   Pod's container ports (ingress) or the peer Pods' (egress);
 - the maps are brought to the result when it changes and every minute,
   compared with what the kernel holds: entries and ipcache before enforcement,
@@ -472,11 +473,63 @@ and tracked flows survive an agent restart. `GET /v1/healthz` reports
 `network-policy` and `policy` (enforced endpoints, ipcache size, problems)
 under `kubernetes`; a policy that cannot be enforced as written (a rule the
 importer refuses, an invalid `ipBlock`) is a `policy` problem and allows
-nothing. Not implemented: CiliumNetworkPolicy-style rules (deny, L7, entities,
-FQDN), host firewall, audit mode, policy verdict events, ICMP errors as related
-traffic, and enforcement on flows already open when a policy first selects a
-Pod (their replies are judged as new flows). `policy-live` (medium test suite)
-checks the programs on a kernel through `BPF_PROG_TEST_RUN`; no cluster run yet.
+nothing. Each decision of an enforcing program (a rule allowed a new flow, a
+drop, an audit pass) is counted in `flowsdn_policy_verdicts` (LRU per-CPU,
+16384 rows): `GET /v1/policy/verdicts`. Not implemented for Pods:
+CiliumNetworkPolicy-style rules (deny, L7, entities, FQDN), audit mode,
+policy verdict events, ICMP errors as related traffic, and enforcement on
+flows already open when a policy first selects a Pod (their replies are
+judged as new flows). `policy-live` (medium test suite) checks the programs
+on a kernel through `BPF_PROG_TEST_RUN`; no cluster run yet.
+
+### Host firewall (#379)
+
+Traffic to the node itself, filtered in eBPF from the same rule model as the
+reference's host firewall ([ADR-0022](decisions/0022-host-firewall.md)), so one
+policy works on both stormcos flavours: stormfw (stormcos#558) translates its
+`HostFirewallPolicy` into a `FlowsdnClusterwideNetworkPolicy` here as it does
+into a `CiliumClusterwideNetworkPolicy` there. Off by default
+(`kubernetes.host-firewall`).
+
+- **Policies.** Every FlowsdnClusterwideNetworkPolicy spec (`spec` or
+  `specs[]`) with a `nodeSelector` that matches this Node's labels.
+  Supported: `ingress` and `ingressDeny` rules with `fromEntities` (`all`,
+  `world`, `cluster`, `host`, `remote-node`, `health`, `init`,
+  `kube-apiserver`, `ingress`, `unmanaged`), `fromCIDR`, `fromCIDRSet`
+  (`cidr`, `except`), `fromEndpoints` (Pod label selectors, any namespace
+  unless the selector names one), `toPorts` (`port`, `endPort`, `protocol`
+  TCP/UDP/SCTP/ANY), and `enableDefaultDeny.ingress`. An L4-only rule allows
+  every source; `ingress: [{}]` turns on default deny and allows nothing.
+  Denies win over the allows they cover. Reported in `policy` problems and
+  not enforced: host egress rules, L7 rules, ICMP rules, `fromRequires`,
+  `fromNodes`, `fromGroups`, `cidrGroupRef`, authentication, named ports, and
+  `endpointSelector` specs (Pod rules of this kind).
+- **Where.** The `from_netdev` program on the TCX ingress of every interface
+  holding one of this node's InternalIPs (after the NodePort program, so
+  NodePort traffic is judged as the Pod's after translation), and `to_netdev`
+  on its egress. Only packets to (ingress) or from (egress) the node's own
+  addresses are looked at; forwarded traffic passes. The host is endpoint
+  65536 in the policy maps, under each uplink's interface index.
+- **State.** `to_netdev` remembers the flows the node starts, so their
+  replies pass; `from_netdev` remembers allowed flows. On a new uplink the
+  firewall only learns flows for its first 60 s, so connections the node
+  already has (kubelet, the API server, SSH sessions) keep working when
+  enforcement starts.
+- **Audit.** `kubernetes.host-firewall: audit`, or a selecting policy with
+  the annotation `policy.flowsdn.io/audit: "true"`: what the policy refuses is
+  counted (`audit` in `GET /v1/policy/verdicts`) and passed.
+- **Always passed:** ARP, IPv6 neighbour/router discovery, ICMP
+  fragmentation-needed and packet-too-big.
+- **Status.** `kubernetes.policy.host-firewall` in `GET /v1/healthz`: mode,
+  selecting policies, uplinks, those still learning and those enforcing. An
+  uplink that cannot be found or attached is a `host-firewall` /
+  `host-firewall-attach` part error.
+
+Not covered: host egress policy, traffic from local Pods to the node (it
+arrives on their veths, not an uplink), interfaces without an InternalIP, and
+the window before the agent runs (stormfw's boot-time program covers it,
+stormcos#558). The links are not pinned: the firewall is off while the agent
+restarts. `policy-live` test-runs both programs; no cluster run yet.
 
 ## Fedora TLS build boundary
 

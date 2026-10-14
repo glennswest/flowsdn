@@ -34,8 +34,8 @@ The baseline above describes v0.14.0 only. Main (through `eed1aca`) has:
   endpoint programs (identity and CIDR L3/L4, ADR-0021; golden-flowsdn-760c3a2e89d6,
   kernel test-run only). Maglev for traffic from outside the cluster (uplink
   programs, kernel test-run only). UDP socket termination. Open: live ClusterIP and policy acceptance on a node,
-  DSR, NAT46/64, TCP socket termination, CiliumNetworkPolicy-style rules,
-  host firewall.
+  DSR, NAT46/64, TCP socket termination, CiliumNetworkPolicy-style rules
+  for Pods. Host firewall (ingress, #379, ADR-0022): kernel test-run only.
 - **Milestone 3 (#293):** primitives only; nothing wired into the agent.
 - **Milestone 4 (#294):** Helm chart, agent image, release archives with
   `SHA256SUMS`, `bpf-objects.lock` and the no-reference-names check exist

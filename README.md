@@ -43,6 +43,10 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
   and FIB-redirect to other nodes' backends; IPv4 and IPv6. New flows pick a
   backend at random or by Maglev (`kubernetes.lb-algorithm`, or the
   `service.flowsdn.io/lb-algorithm` annotation).
+- **Host firewall** (`kubernetes.host-firewall: audit|enforce`, default off;
+  ADR-0022): FlowsdnClusterwideNetworkPolicy host rules (`nodeSelector`)
+  filter traffic to the node on its uplinks in eBPF, with audit mode and
+  verdict counters (`GET /v1/policy/verdicts`).
 - **Kubernetes NetworkPolicy in the datapath** (`kubernetes.network-policy`,
   default on; ADR-0021) and **UDP socket termination** when a Service backend
   leaves (netlink `SOCK_DESTROY`).
@@ -66,7 +70,7 @@ two-node acceptance (#291) and live NetworkPolicy acceptance on a cluster
 
 The Kubernetes-mode agent also allocates cluster identities for its Pods
 (FlowsdnIdentity objects, #291). Not implemented in the agent:
-CiliumNetworkPolicy-style rules, host firewall, flowsdn's own masquerade, DSR,
+CiliumNetworkPolicy-style rules for Pods, host egress policy, flowsdn's own masquerade, DSR,
 NAT46/64, TCP socket termination, CRD controllers, an operator process and the
 Hubble observer/relay. Libraries also implement configuration resolution,
 identity and map layouts, a Kubernetes NetworkPolicy importer and policy

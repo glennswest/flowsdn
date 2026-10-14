@@ -124,12 +124,20 @@ configuration. The differences:
   ports. Traffic from the node to its Pods (kubelet probes) always passes.
   `podSelector`/`namespaceSelector` peers need `identity-allocation`. In
   golden-flowsdn-760c3a2e89d6 ([runtime](../../docs/runtime.md#networkpolicy-enforcement-292)).
+- `host-firewall` (#379, default `off`; not set in the ConfigMap): with
+  `audit` or `enforce`, FlowsdnClusterwideNetworkPolicy specs whose
+  `nodeSelector` matches the Node filter traffic to the node on its uplinks
+  (the flowsdn backend of stormfw, stormcos#558). The agent RBAC already
+  lists and watches that CRD; the CRD must be applied (`crds/`). New uplinks
+  learn flows for 60 s before enforcing. `GET /v1/policy/verdicts` gives the
+  counters ([runtime](../../docs/runtime.md#host-firewall-379)).
 
 Off-node egress still needs a masquerade, now for the node's derived pool.
 Moving a node from the static pool to `auto` needs its endpoints gone (a fresh
 install or a drain): restore refuses addresses outside the pool. Status is on
 the agent socket and the read-only loopback port: `GET /v1/healthz` (`kubernetes`
-member), `GET /v1/node/routes`, `GET /v1/ip` and `GET /v1/service`.
+member), `GET /v1/node/routes`, `GET /v1/ip`, `GET /v1/service` and
+`GET /v1/policy/verdicts`.
 
 The DaemonSet carries no probe: the agent's health is on its Unix socket and
 the read-only loopback port (see below), and neither is a readiness signal. It runs privileged as a validation baseline, not a measured
