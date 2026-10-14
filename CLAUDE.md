@@ -64,8 +64,10 @@ carries shell (golden = agent + CNI binaries, CNI `install` is Rust; the package
 the check belongs in build tooling, not the node binaries: `cargo xtask chart-check` (Rust, drives helm via
 std::process), check.sh deleted, deploy/release/build.sh calls it.
 
-- [ ] xtask `chart` module + pure checks with unit tests; release build.sh; delete check.sh.
-- [ ] Docs (helm.md, build-and-test, ADR-0019/0020 notes, xtask README), changelog; sc-build incl. the chart check; close #375.
+- [x] xtask `chart` module + pure checks with unit tests; release build.sh; delete check.sh (f1b4c1e, fmt 1d6f422).
+- [x] Docs (helm.md, build-and-test, ADR-0019/0020, xtask README), changelog. sc-build at 1d6f422: fmt --check, xtask Clippy
+      -D warnings, 16 xtask tests, `cargo xtask chart-check` passes (lint, 22 CRDs, 4 guards refuse); at f1b4c1e a wrong
+      Chart.yaml version makes it fail. #375 closed. Build-only scripts (tools/, test/build.sh, release/image build.sh) remain.
 
 ### UDP socket termination — #292 (P0), 2026-10-13
 
