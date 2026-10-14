@@ -86,11 +86,15 @@ fromCIDRSet, fromEndpoints, toPorts (port, endPort, protocol); precedence per sp
 FFFFFFFF), denies propagated over allows they cover. Remote nodes get ipcache identity remote-node (6); ipBlock
 keeps selecting them (as the host). Not covered: host egress policy, pod-to-host on veths, L7/FQDN/ICMP rules.
 
-- [ ] ABI (AUDIT bit, HOST_ENDPOINT, verdict key/value); BPF from_netdev/to_netdev, scope + audit + counters.
-- [ ] Loader: verdict map, attach_host/detach_host; nodeport links first in TCX order.
-- [ ] flowsdn-k8s: ClusterwidePolicies scope, Node labels. Agent: setting, host_policy compiler (+ tests), remote-node
-      ipcache, API thread host attach tick, /v1/policy/verdicts, health.
-- [ ] policy-live host steps; object + lock via sc-build; ADR-0022, docs, changelog; sc-build; medium when a machine runs.
+- [x] ABI (AUDIT bit, HOST_ENDPOINT, verdict key/value); BPF from_netdev/to_netdev, scope + audit + counters (8b02e45).
+- [x] Loader: verdict map, attach_host/detach_host; nodeport links first in TCX order (8b02e45).
+- [x] flowsdn-k8s: ClusterwidePolicies scope, Node labels. Agent: setting, host_policy compiler (+ tests), remote-node
+      ipcache, API thread host attach tick, /v1/policy/verdicts, health (8b02e45).
+- [x] policy-live host steps; object + lock (12ec054); ADR-0022, docs, changelog (eaab1f5). sc-build at 12ec054: fmt,
+      Clippy x2, 890 tests (0 failed, 1 ignored), test/build.sh. Status 6172466673; stormcos#558 told the interface.
+- [ ] Medium 71c495971d at 12ec054 queued on pvetest2 (stormcentral#846: pvetest2 does not come up; C2NR0Q2 refuses).
+      `stormcentral test show 71c495971d`: policy-live host steps (+ socket-lb-live Maglev for #292). Pass -> stage
+      the golden (`stormcentral component stage flowsdn`), close #379 with the run.
 
 ### Maglev on the uplink NodePort path — #292 (P0), 2026-10-14
 
