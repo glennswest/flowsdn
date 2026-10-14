@@ -57,7 +57,7 @@ the manifest-level compatibility retained by ADR-0017:
   (`flowsdn.sock`, `deleteQueue`); `CILIUM_SOCK` is `FLOWSDN_SOCK`.
 - The shipped CRDs carry flowsdn names in every string (descriptions, enum
   values, printer columns): `FlowsdnInternalIP`, `io.flowsdn.k8s.policy.*`.
-- A test (`no_cilium_in_shipped_manifests`) and `install/kubernetes/check.sh`
+- A test (`no_cilium_in_shipped_manifests`) and `cargo xtask chart-check`
   refuse "cilium" in any manifest or chart file or rendering.
 
 Names inside the code that the manifests do not show (BPF map/pin names,

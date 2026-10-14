@@ -85,7 +85,7 @@ EOF
 done
 # The Helm chart (install/kubernetes/flowsdn), when helm is available.
 if command -v helm >/dev/null; then
-    "$root/install/kubernetes/check.sh"
+    (cd "$root" && cargo xtask chart-check)
     helm package "$root/install/kubernetes/flowsdn" --destination "$out"
 fi
 (cd "$out" && sha256sum $(ls flowsdn-*.tar.gz flowsdn-*.tgz 2>/dev/null) >SHA256SUMS && cat SHA256SUMS)

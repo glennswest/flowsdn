@@ -45,7 +45,7 @@ compatibility rows.
   `deploy/release/build.sh` (each archive's contents) and
   `images/agent/build.sh` (the GNU Kubernetes agent and CNI).
 - The test `no_cilium_in_shipped_manifests` covers `deploy/` manifests and the
-  chart; `install/kubernetes/check.sh` covers the rendered chart.
+  chart; `cargo xtask chart-check` covers the rendered chart.
 - Names left in library code that does not ship yet (configuration catalogue,
   clustermesh prefixes, identity labels, packaging helpers) are #339's, with a
   repository-wide check.

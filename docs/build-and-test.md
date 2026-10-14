@@ -89,7 +89,7 @@ built with `deploy/release/build.sh OUT_DIR [TARGET...]`, for example
 `flowsdn-agent` and `flowsdn-cni` for amd64 and arm64 in
 `flowsdn-<version>-<arch>.tar.gz` (with `bpf-objects.lock`, LICENSE, NOTICE,
 README and REVISION), the Helm chart `flowsdn-<version>.tgz` when `helm` is
-installed (after `install/kubernetes/check.sh`), and `SHA256SUMS` over both.
+installed (after `cargo xtask chart-check`), and `SHA256SUMS` over both.
 The archives' agent is the default musl build: it embeds `local-delivery` only
 and refuses a `kubernetes` section, so it has no Node/Pod watches or socket LB;
 the chart uses the GNU Kubernetes-mode agent image from `images/agent/build.sh`

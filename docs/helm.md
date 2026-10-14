@@ -21,7 +21,7 @@ The chart creates, in the release namespace (use `kube-system`):
   from the host.
 
 Every object, label, path and key is flowsdn's (owner, #294: no Cilium in flowsdn);
-`install/kubernetes/check.sh` and the `flowsdn-k8s` tests refuse any that is not.
+`cargo xtask chart-check` and the `flowsdn-k8s` tests refuse any that is not.
 
 ## Install
 
@@ -109,6 +109,6 @@ DaemonSet schedule there. Policies are rewritten as `flowsdn.io` kinds
 ## Not yet validated
 
 `helm lint`, rendering, the guards and the name rule are checked on every build
-(`install/kubernetes/check.sh`, run by `deploy/release/build.sh`). The chart has not
+(`cargo xtask chart-check`, run by `deploy/release/build.sh`). The chart has not
 been installed on a live cluster, and upgrade/rollback between chart versions is not
 yet measured; both are milestone 4 gates on #294.
