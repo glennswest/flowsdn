@@ -330,7 +330,7 @@ contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots
 - [x] 2026-10-07 (b381f6e, cd99e1c; sc-build 782 tests, Clippy x2): Service types for in-cluster clients through the socket LB: externalIPs, LoadBalancer ingress IPs, NodePort on every node InternalIP; internalTrafficPolicy Local for ClusterIPs (backends on this node); `flags.type` per frontend; frontends refresh on Node changes. External clients need tc NodePort (still open).
 - [ ] fixture-socket-lb-live on a kernel: run dbfc4e45b1 (C2NR0Q2) failed on push, registry full (stormcentral#376). Rerun `stormcentral test run flowsdn medium --tag <machine>`; live kube-dns check on a flowsdn node after release. Not implemented (stays open on #292): NodePort/LB/externalIPs, affinity, Maglev, DSR, NAT46/64, tc-level LB, socket termination, policy.
 
-### stormcos needs: operator and relay — #296 (P1), 2026-10-09
+### stormcos needs: operator and relay — #296 (P1), 2026-10-09 (closed 2026-10-13)
 
 §1 manifests, §4 API, §5 --help/--version/healthz done (validated 2026-10-09). Remaining §2 operator, §3 relay.
 
@@ -340,11 +340,12 @@ contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots
 - [x] Owner decision posted on #296 (`wait-owner`): pod CIDRs/operator duties — A controller-manager node
       IPAM, B flowsdn-operator (#337), C agent derives every node's CIDR with collision refusal.
 - [x] Decided 2026-10-13 (master, owner "yes, decide them"): C now, A (rustkube node IPAM) later, B only if A can't.
-- [ ] Agent: `node_cidrs` = spec.podCIDRs, else the derived rule for families whose local pool is `auto`;
+- [x] Agent (e9738f0, fmt 2a27b04): `node_cidrs` = spec.podCIDRs, else the derived rule for families whose local pool is `auto`;
       `desired_routes` -> RoutePlan {routes, collisions}; overlapping CIDRs get no route; `pod-cidrs` health
       error + `PodCIDRCollision` Event. Tests (pvetest1/2 pair, collisions, overlap).
-- [ ] Docs (runtime, deploy README, implementation-status, spec 07/10 note), changelog; sc-build; close #296
-      (§2 C, §3 answered; operator stays #337, two-node live check is #291/day-2).
+- [x] Docs (runtime, deploy README, implementation-status, spec 07 note), changelog (71add3c). sc-build at 2a27b04:
+      fmt --check, workspace + kubernetes Clippy -D warnings, 865 tests (0 failed, 1 ignored) incl. the 4 route tests.
+      #296 closed (§2 C, §3 answered; operator #337, two-node live check #291/day-2). Golden waits on stormcentral#827.
 
 ### Cluster identity allocation — #291 (P0), 2026-10-09
 
