@@ -69,6 +69,9 @@ pinning or subsystem libraries are absent are **not current status**.
   NetworkPolicies (selector, `ipBlock` with CIDR identities, ports, ranges,
   named ports) into them. Programs checked by `policy-live` under
   BPF_PROG_TEST_RUN; compiler unit-tested; not run on a cluster yet.
+- Pod CIDRs of other nodes without `spec.podCIDRs` derived by the same rule
+  as their agents (#296, option C), with overlapping CIDRs refused
+  (`PodCIDRCollision`, `pod-cidrs` health); unit-tested, not on two nodes yet.
 - UDP socket termination when a Service backend leaves (spec 05 §3.8,
   netlink `SOCK_DESTROY`, host and pod network namespaces; #292).
 - Not implemented: operator identity GC (#332), CiliumNetworkPolicy-style

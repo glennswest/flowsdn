@@ -200,7 +200,7 @@ impl Definition {
             "hubble-tls-cert-file" => "docs/spec/11-hubble-monitor.md:2505",
             "hubble-tls-client-ca-files" => "docs/spec/11-hubble-monitor.md:2507",
             "hubble-tls-key-file" => "docs/spec/11-hubble-monitor.md:2506",
-            "ipam-multi-pool-pre-allocation" => "docs/spec/07-ipam.md:1265",
+            "ipam-multi-pool-pre-allocation" => "docs/spec/07-ipam.md:1273",
             "kvstore" => "docs/spec/20-clustermesh-kvstore.md:1544",
             "node-port-range" => "docs/spec/05-service-loadbalancing.md:941",
             "policy-secrets-only-from-secrets-namespace" => "docs/spec/16-l7-envoy-dns.md:1523",

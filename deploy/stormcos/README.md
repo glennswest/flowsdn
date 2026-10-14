@@ -69,10 +69,16 @@ configuration. The differences:
   `10.172.0.0/16` and pvetest2 `10.173.0.0/16`. Node addresses ending in
   96–111 would derive a pool inside the Service range; give such nodes a
   podCIDR.
-- `auto-direct-node-routes`. The agent installs `<other node's podCIDR> via
+- `auto-direct-node-routes`. The agent installs `<other node's pod CIDR> via
   <its InternalIP> proto kernel` and removes routes for nodes that leave, so
   nodes on one L2 segment reach each other's pods without a tunnel. A node
-  that is only reachable through a router is reported as an error.
+  that is only reachable through a router is reported as an error. Without
+  `podCIDRs` the other nodes' pools are derived by the same rule (#296), so
+  pvetest1 routes `10.173.0.0/16 via 192.168.31.173` and pvetest2
+  `10.172.0.0/16 via 192.168.31.172`. Nodes that would derive the same pool
+  (the same last address byte on different subnets) get no route; the agent
+  raises `PodCIDRCollision` and the `pod-cidrs` health error. Give one of them
+  a podCIDR.
 - The agent sets `net.ipv4.ip_forward`, `net.ipv4.conf.all.forwarding` (IPv6
   forwarding with an IPv6 pool) to 1 and `net.ipv4.conf.all.rp_filter` to 0.
 - `service-lb` (#292): ClusterIP Services without kube-proxy. The agent also
@@ -234,10 +240,7 @@ Hubble observer gRPC service nor a relay. A console must show these capabilities
 as unavailable, rather than infer that a relay is unnecessary.
 
 Before comparing two StormOS nodes as a working pod network, run the
-Kubernetes-mode agent on the two-node pair (pvetest1 + pvetest2, #291), decide
-multi-node IPAM ownership beyond the derived per-node pools (owner question on
-#296: a remote node's route comes only from its Node's `spec.podCIDRs`, which
-stormcos does not set, so two nodes today install no routes to each other), and demonstrate same-node/cross-node
+Kubernetes-mode agent on the two-node pair (pvetest1 + pvetest2, #291), and demonstrate same-node/cross-node
 IPv4/IPv6, pod churn, agent restart/recovery and cleanup. Service routing,
 network policy, operator controllers and flow/relay APIs have their own
 [implementation acceptance gates](../../docs/milestones.md). No example here

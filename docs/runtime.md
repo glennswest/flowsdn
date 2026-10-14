@@ -165,8 +165,8 @@ With the `kubernetes` feature and section the agent:
   `kubectl describe` / `sc describe` shows what it did. On the Pod:
   `EndpointCreated` (Normal: endpoint ID and addresses), `EndpointCreateFailed`
   and `IPAllocationFailed` (Warning: the reason). On its Node: `PodCIDRSelected`
-  (Normal), `DirectRouteFailed`, `ServiceLBUnavailable` and `SysctlFailed`
-  (Warning). Repeats of one object, reason and message are one Event with a
+  (Normal), `DirectRouteFailed`, `PodCIDRCollision`, `ServiceLBUnavailable` and
+  `SysctlFailed` (Warning). Repeats of one object, reason and message are one Event with a
   growing `count`, rewritten at most once a minute and forgotten after an hour.
   Recording never blocks or fails a request: a full queue (256) drops events. Needs
   `events` create/update (the manifests and chart grant it);
@@ -191,10 +191,17 @@ With the `kubernetes` feature and section the agent:
   the server ends resumes from its resourceVersion; any other failure relists
   after 1 s doubling to 30 s, keeping the last good snapshot);
 - with `auto-direct-node-routes`, owns `<podCIDR> via <InternalIP> proto
-  kernel` routes in the main table for every other node that has
-  `spec.podCIDRs` (a node's own derived pool is not known to the others, so
-  without `spec.podCIDRs` there is no route to it; #296), using the node's first
-  InternalIP of the family. Before installing it checks that the kernel reaches
+  kernel` routes in the main table for every other node's pod CIDRs, using the
+  node's first InternalIP of the family. A node's pod CIDRs are its
+  `spec.podCIDRs`; for a family whose pool is `auto` on this agent and which the
+  Node has none of, the agent derives it by the same rule as that node's own
+  agent (`10.<last IPv4 byte>.0.0/16`, `f00d::…/96`; #296, owner decision C:
+  no operator or node IPAM needed). Two nodes whose pod CIDRs overlap (the same
+  last IPv4 byte on different subnets, or a podCIDR inside a derived pool) get
+  no route for the overlapping CIDRs, and the agent reports it: a
+  `PodCIDRCollision` Event on its Node and the `pod-cidrs` healthz error,
+  cleared when the collision goes. Refusing is chosen over routing pods to the
+  wrong node. Before installing it checks that the kernel reaches
   the InternalIP without another gateway, and refuses to replace a route of
   another protocol to the same prefix. Installed routes are recorded in
   `<state-dir>/direct-routes.json` before they are added, so routes for nodes

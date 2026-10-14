@@ -215,6 +215,14 @@ been received. Pools whose selector fails to compile are ignored (logged).
   the CIDR as label.
 - Dual-stack: one bitmap per family over the corresponding CIDR; only the first
   CIDR of each family is used.
+- flowsdn amendment (2026-10-13, #296, owner decision C): the reference knows a
+  remote node's CIDR only from its Node (or CiliumNode). flowsdn agents with an
+  `auto` pool also apply the derived default above to every *other* Node that
+  has no `spec.podCIDRs` of that family, so direct routes (spec 10 §3.2.3) reach
+  derived pools without an operator or node IPAM. Overlapping node CIDRs are a
+  refused configuration: no route to any overlapping CIDR, a `PodCIDRCollision`
+  Event and the `pod-cidrs` health error. Kubernetes node IPAM (rustkube) is
+  the long-term source; the agent prefers `spec.podCIDRs` whenever set.
 
 ### 3.5 `cluster-pool` (default)
 
