@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-10-14
+- **chore:** #292 verification: medium 3a2829dedb at e140887 on pvetest2 passed 23/23 (UDP socket termination, policy-live, node-service-* on a flowsdn node). Golden build 745f3ee2edf9 aborted on stormcentral#841; live perf run 7899f5fca9 (NetworkPolicy deny/restore, ClusterIP) errored on stormcentral#846 (pvetest2 did not come up).
+
 ### 2026-10-13
 - **refactor:** The chart check is Rust: `cargo xtask chart-check` (xtask `chart` module) replaces `install/kubernetes/check.sh` (#375, owner: "is the shell not rustable?"). Same checks: version/appVersion match, `helm lint --strict`, renders with 22 CRDs and the five kinds, no Cilium in either render (now with line numbers), and the four guards that must refuse. Its pure checks have unit tests. `deploy/release/build.sh` runs it; helm.md, build-and-test, ADR-0019/0020 and the xtask README name it. No flowsdn deliverable carried the script (golden, release archives, image and the packaged chart are binaries and YAML; the CNI's `install` was already Rust).
 - **feat:** Other nodes' pod CIDRs without `spec.podCIDRs` (#296, owner decision C: the agent, not an operator or node IPAM). For each family whose pool is `auto` here, a Node with no pod CIDR of that family gets the derived one (`10.<last IPv4 byte>.0.0/16`, `f00d::…/96`, as its own agent uses), so direct routes reach it: pvetest1 and pvetest2 route `10.173.0.0/16` and `10.172.0.0/16` to each other. Overlapping node CIDRs get no route; the agent raises `PodCIDRCollision` on its Node and the `pod-cidrs` healthz error. `desired_routes` returns a `RoutePlan` (routes, collisions). Docs: runtime.md, deploy/stormcos README, implementation-status, spec 07 §3.4 amendment.

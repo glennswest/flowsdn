@@ -90,8 +90,10 @@ The DaemonSet mounts host /run/netns (HostToContainer). EOPNOTSUPP -> `socket-te
 - [ ] Golden: #827 fixed (2026-10-14), but build 745f3ee2edf9 aborts on stormcentral#841 (sc-build-out mounts the
       multipath path /dev/nvme0c0n1; commented). Stage again when #841 is fixed.
 - [ ] Live policy + ClusterIP on pvetest2 (12.21-flowsdn carries 760c3a2e89d6): perf 7899f5fca9 (policy-deny-enforced,
-      policy-remove-restored, policy-rules-100/1000, svc-*-clusterip). Earlier perf runs failed at setup on stormpump#102
-      (SA token behind Fedora's /var/run symlink), fixed in golden-stormpump-236d2ed1dadd.
+      policy-remove-restored, policy-rules-100/1000, svc-*-clusterip) errored: pvetest2 did not come up within 30 min of
+      power-on (stormcentral#846, commented). Earlier perf runs failed at setup on stormpump#102 (SA token behind
+      Fedora's /var/run symlink), fixed in golden-stormpump-236d2ed1dadd. Rerun
+      `stormcentral test run flowsdn perf --tag pvetest2` when #846 is fixed.
 
 ### Network policy in the datapath — #292 (P0), 2026-10-13
 
