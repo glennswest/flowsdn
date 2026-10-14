@@ -99,7 +99,10 @@ configuration. The differences:
   NodePort, LB or external IP on that node to every backend: other nodes'
   through SNAT to the node's address (ports 61000-65535; needs
   `BPF_FIB_LOOKUP_SRC`, Linux 6.7), or only that node's with
-  `externalTrafficPolicy: Local`. IPv4 is in goldens (local backends from
+  `externalTrafficPolicy: Local`. New flows pick a backend at random, or by
+  Maglev with `kubernetes.lb-algorithm: maglev` or a Service's
+  `service.flowsdn.io/lb-algorithm: maglev` annotation (every node then
+  sends a flow to the same backend). IPv4 is in goldens (local backends from
   `golden-flowsdn-4a0daa7c4bfc`, SNAT from `golden-flowsdn-cc0835c8a1db`); IPv6 from
   `golden-flowsdn-a690ebee2ba7` (test-run on 7.2 by `fixture-socket-lb-live`). A
   ClusterIP:port with no ready backend fails `connect` with EPERM. Without a pin root the programs detach when the agent exits,

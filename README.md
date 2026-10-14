@@ -40,7 +40,12 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
 - **NodePort/LB/externalIP from outside the cluster** (`kubernetes.node-port`,
   default on). `nodeport_ingress`/`nodeport_egress` on the uplink's TCX hooks
   DNAT to this node's backends or, for `externalTrafficPolicy: Cluster`, SNAT
-  and FIB-redirect to other nodes' backends; IPv4 and IPv6.
+  and FIB-redirect to other nodes' backends; IPv4 and IPv6. New flows pick a
+  backend at random or by Maglev (`kubernetes.lb-algorithm`, or the
+  `service.flowsdn.io/lb-algorithm` annotation).
+- **Kubernetes NetworkPolicy in the datapath** (`kubernetes.network-policy`,
+  default on; ADR-0021) and **UDP socket termination** when a Service backend
+  leaves (netlink `SOCK_DESTROY`).
 - **Kubernetes Events and pod tagging.** Events on Pods and the Node
   (`EndpointCreated`, `IPAllocationFailed`, `PodCIDRSelected`, …) and the
   `flowsdn.io/pod-networks` annotation on local Pods, with flowsdn's entry in
@@ -52,15 +57,17 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
 
 Privileged fixtures in the test container's `medium` suite have exercised
 same-node IPv4/IPv6 delivery, native routing between router namespaces, the
-socket LB and the IPv4 NodePort/SNAT programs, on a stormcos 7.2 kernel
-(pvetest2). Those fixtures are **not acceptance of a two-node Kubernetes
-network**: two-node acceptance (#291) and live ClusterIP acceptance on a node
-(#292) are still open, and the IPv6 NodePort programs have not run on a kernel yet.
+socket LB, the IPv4 and IPv6 NodePort/SNAT programs, UDP socket termination
+and the policy programs, on a stormcos 7.2 kernel (pvetest2), and the node
+probe found kube-dns and the `kubernetes` Service programmed on a flowsdn node.
+Those fixtures are **not acceptance of a two-node Kubernetes network**:
+two-node acceptance (#291) and live NetworkPolicy acceptance on a cluster
+(#292) are still open.
 
 The Kubernetes-mode agent also allocates cluster identities for its Pods
-(FlowsdnIdentity objects, #291). Not implemented in the agent: a BPF ipcache,
-network policy in the datapath, flowsdn's own masquerade, Maglev, DSR,
-NAT46/64, socket termination, CRD controllers, an operator process and the
+(FlowsdnIdentity objects, #291). Not implemented in the agent:
+CiliumNetworkPolicy-style rules, host firewall, flowsdn's own masquerade, DSR,
+NAT46/64, TCP socket termination, CRD controllers, an operator process and the
 Hubble observer/relay. Libraries also implement configuration resolution,
 identity and map layouts, a Kubernetes NetworkPolicy importer and policy
 simulator, Maglev tables, BGP codecs/session state, encryption and egress

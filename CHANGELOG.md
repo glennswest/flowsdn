@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-10-14
+- **feat:** Maglev backend selection for traffic from outside the cluster (#292, spec 05 §3.13/§5.1). `kubernetes.lb-algorithm: maglev` (default `random`), or a Service's `service.flowsdn.io/lb-algorithm` annotation, makes the node-local (uplink) frontends Maglev: the planner (`flowsdn_lb::socket`) builds a 16381-entry table per frontend with `maglev::table` (seed `JLfvgnHc2kaSUFaI`, fixed so every node agrees), writes it after the backends and before the master (algorithm byte 2), and deletes stale tables after masters; `nodeport_ingress` picks entry `jhash(client, ports, proto) % 16381` from `flowsdn_lb{4,6}_maglev` (BTF hash of maps, one-entry inner array swapped in whole), client port left out with ClientIP affinity, random slot without a table. The hash lives in `flowsdn_bpf_abi::maglev`, shared by the program and `socket::maglev_pick`. `GET /v1/service` flags `lb-algorithm: maglev`. `socket-lb-live` checks the kernel's picks against the planner's tables (IPv4 TCP, IPv6 UDP). The socket LB still picks at random. Docs: runtime, agent-api, implementation-status, milestones, deploy README, README (also refreshed its stale not-implemented list).
 - **chore:** #292 verification: medium 3a2829dedb at e140887 on pvetest2 passed 23/23 (UDP socket termination, policy-live, node-service-* on a flowsdn node). Golden build 745f3ee2edf9 aborted on stormcentral#841; live perf run 7899f5fca9 (NetworkPolicy deny/restore, ClusterIP) errored on stormcentral#846 (pvetest2 did not come up).
 
 ### 2026-10-13

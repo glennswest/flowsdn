@@ -636,6 +636,24 @@ LoadBalancer, HostPort, ExternalIPs, or ClusterIP only with
 `bpf-lb-external-clusterip`}). The datapath uses the annotation byte when
 non-zero, else the compile-time default (spec 02 §3.12).
 
+flowsdn amendment (2026-10-14, #292): Maglev is implemented for the
+node-local (scope 1) copies of NodePort, ExternalIPs and LoadBalancer
+frontends, the uplink `nodeport_ingress` path. Selection: the Service
+annotation `service.flowsdn.io/lb-algorithm` (`random`|`maglev`, always
+honoured; no `bpf-lb-algorithm-annotation` switch) else the agent's
+`kubernetes.lb-algorithm` (default `random`). The agent writes the master's
+algorithm byte explicitly (2 for Maglev; Random 1 only with affinity, else 0)
+and the datapath reads Maglev only when the byte is 2 and a table exists,
+otherwise a random slot. `M` = 16381 and the seed (`JLfvgnHc2kaSUFaI`) are
+fixed, not configurable. The flow hash (`flowsdn_bpf_abi::maglev`) is the
+reference construction with address words and ports as numeric values:
+IPv4 `jhash_3words(client, dport << 16 | sport, proto, seed4)`, IPv6 the
+two-round mix of `hash_from_tuple_v6`; sport 0 with session affinity.
+Tables are written after backends and before masters, deleted after stale
+masters; a table is never written in place (a new inner map is swapped in).
+Maglev for ClusterIP (`bpf-lb-external-clusterip`) and for the socket LB is
+not implemented.
+
 ## 4. Data model
 
 ### 4.1 Tables (flowsdn-table, spec 00)

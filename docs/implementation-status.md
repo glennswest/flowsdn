@@ -74,9 +74,14 @@ pinning or subsystem libraries are absent are **not current status**.
   (`PodCIDRCollision`, `pod-cidrs` health); unit-tested, not on two nodes yet.
 - UDP socket termination when a Service backend leaves (spec 05 §3.8,
   netlink `SOCK_DESTROY`, host and pod network namespaces; #292).
+- Maglev backend selection for traffic from outside the cluster (spec 05
+  §3.13/§5.1, `kubernetes.lb-algorithm` or the
+  `service.flowsdn.io/lb-algorithm` annotation): per-frontend tables in
+  `flowsdn_lb{4,6}_maglev`, planner unit-tested; the kernel's picks are
+  checked against the tables by `socket-lb-live`; not on a cluster yet.
 - Not implemented: operator identity GC (#332), CiliumNetworkPolicy-style
   rules (deny, L7, entities, FQDN), host firewall, policy verdict events,
-  masquerade (the node provides it), Maglev, DSR, NAT46/64, TCP socket
+  masquerade (the node provides it), Maglev in the socket LB, DSR, NAT46/64, TCP socket
   termination, CRD controllers or registration, an operator process, Hubble
   observer/relay.
 

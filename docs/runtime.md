@@ -44,6 +44,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.service-lb` | `true` | Watch Services and EndpointSlices and load the embedded `socket-lb` object ([socket LB](#clusterip-socket-lb-292)). |
 | `kubernetes.cgroup-root` | `/sys/fs/cgroup` | Absolute path of the cgroup v2 directory the socket-LB programs attach to (the manifests mount the host's root at `/run/flowsdn/cgroupv2`). |
 | `kubernetes.node-port` | `true` | Attach the NodePort programs to the uplinks (traffic from outside the cluster). Takes effect only with `service-lb`. |
+| `kubernetes.lb-algorithm` | `random` | `random` or `maglev`: how the uplink programs pick a backend for a new flow from outside the cluster ([Maglev](#clusterip-socket-lb-292)). A Service's `service.flowsdn.io/lb-algorithm` annotation (`random` or `maglev`) overrides it. |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
 | `kubernetes.cluster-name` | `default` | The cluster label on every Pod identity (`io.flowsdn.k8s.policy.cluster`); a DNS label of at most 32 bytes. |
@@ -326,6 +327,19 @@ a connection keeps its backend and NAT port. A packet the FIB cannot route,
 with TTL 1, or for which no NAT port is free within eight tries passes
 untranslated, and so does an IPv6 packet with extension headers before its
 TCP/UDP header (fragments among them).
+A new flow's backend is a random slot, or, for a Maglev frontend
+(`kubernetes.lb-algorithm: maglev` or the Service's
+`service.flowsdn.io/lb-algorithm: maglev` annotation; spec 05 §3.13), entry
+`hash % 16381` of the frontend's lookup table: the hash is Linux jhash over
+the client address, both ports and the protocol (the client port left out
+with ClientIP affinity), so every node sends a flow to the same backend and
+a backend change moves few flows. The agent builds each table (spec 05 §5.1,
+16381 entries, fixed seeds so every node agrees) from the frontend's backends
+and swaps it in whole as an inner map of `flowsdn_lb4_maglev` /
+`flowsdn_lb6_maglev` (BTF hash of maps, keyed by service ID) after the
+backends and before the master entry, which carries the algorithm. A Maglev
+master without a table picks at random. The socket LB (clients inside the
+cluster) always picks at random.
 Other packets pass untouched; the programs never drop. `GET /v1/service` gives
 each frontend's `flags.type` (`ClusterIP`, `ExternalIPs`, `LoadBalancer`,
 `NodePort`) and `frontend-address.scope` (`external` for the socket LB's copy,
@@ -340,8 +354,8 @@ ready. A services thread owns the maps. Once both lists are complete, on each
 change and every 30 s, it reads the maps, plans the difference
 (`flowsdn_lb::socket`: service IDs and backend IDs are kept from what the
 maps hold, and new IDs never reuse a live one) and writes in spec 05 §3.4
-order: backends, slots, then the master entry that publishes the new count,
-then stale masters, slots and backends. A failed write is retried from the
+order: backends, Maglev tables, slots, then the master entry that publishes
+the new count, then stale masters, slots, tables and backends. A failed write is retried from the
 kernel state on the next pass and reported in the `kubernetes` health member
 (`services`; a socket LB that cannot load or attach is also a
 `ServiceLBUnavailable` Node event, and ClusterIPs are then not handled).
@@ -353,11 +367,12 @@ root the links detach when the agent exits. The NodePort uplink links are never
 pinned: they detach when the agent exits, and the per-CPU
 `flowsdn_nodeport6_fib` and `flowsdn_nodeport6_scratch` scratch maps are not
 pinned either. Not implemented:
-Maglev, DSR, topology hints, skip-LB for local redirect policy, TCP socket
+Maglev for the socket LB, DSR, topology hints, skip-LB for local redirect policy, TCP socket
 termination (an existing TCP connection stays on its backend), SCTP, NAT46/64, IPv4 fragments other than the first (they pass
 untouched), and BPF masquerade. `socket-lb-live` (medium test suite) checks the
 programs on a kernel, including the NodePort local and SNAT paths through
-`BPF_PROG_TEST_RUN`; no two-node cluster run yet.
+`BPF_PROG_TEST_RUN` and Maglev picks against the planner's tables; no
+two-node cluster run yet.
 
 UDP socket termination (spec 05 §3.8): when a UDP backend leaves the
 programmed services, the services thread finds the sockets the socket LB sent
