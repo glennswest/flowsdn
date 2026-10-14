@@ -65,10 +65,14 @@ backend) in the host netns and each local pod's netns. Pod netns: the CNI also s
 when the namespace's cookie equals the endpoint's `NetnsCookie` (#130's rule kept: a path is not proof).
 The DaemonSet mounts host /run/netns (HostToContainer). EOPNOTSUPP -> `socket-termination` degraded.
 
-- [ ] connector `sock_diag` (dump UDP v4/v6, destroy by id+cookie, enter netns by path + cookie check); unit tests.
-- [ ] loader `SocketLb::reverse_sockets`; agent services thread: removed UDP backends -> cookies -> destroy.
-- [ ] CNI sends container-netns-path; agent keeps it; manifests/chart mount /run/netns; spec 09/05 notes.
-- [ ] socket-lb-live termination step; docs, changelog; sc-build; medium; golden.
+- [x] connector `sock_diag` (dump UDP v4/v6, destroy by id+cookie, enter netns by path + cookie check); unit tests (c703fb4).
+- [x] loader `SocketLb::reverse_sockets`; agent services thread: removed UDP backends -> cookies -> destroy.
+- [x] CNI sends container-netns-path; agent keeps it; manifests/chart mount /run/netns; spec 09/05 notes.
+- [x] socket-lb-live termination step; docs, changelog. sc-build at 8c77624: fmt, Clippy x2, 858 tests. Medium d1d0a2bec6
+      on pvetest2 (12.21-flowsdn, 7.2.8): socket-lb-live 22 PASS incl. termination, policy-live 8, node-service-dns/-programmed
+      pass (#368); node-service-kubernetes wrongly expected a TCP peer = ClusterIP (fixed 228925e). Test image at 228925e
+      hit a path-dependent BPF build (RUSTFLAGS remaps hashed into -C metadata), fixed 00d59f9 (rustc wrapper; same objects).
+- [ ] Golden (staged after this); live acceptance on pvetest2 once it is free (fastetcd lease, 12.22-flowsdn install queued).
 
 ### Network policy in the datapath — #292 (P0), 2026-10-13
 
@@ -100,7 +104,7 @@ Service's address comes from kube-dns (the DNS answer), its port and programmed 
 `GET /v1/service` row `default/kubernetes` (ClusterIP, scope external); connect to that ClusterIP:port.
 
 - [x] Code + tests, test/README, changelog (c791491, fmt 1f1ed95). sc-build at c791491: Clippy -D warnings (+ indexing, arithmetic), 8 flowsdn-test tests.
-- [ ] Medium on pvetest2 once it runs a release (12.16- and 12.18-flowsdn installs failed, stormcos#543; #368 proposed after it); close #368, tell #292.
+- [x] Medium d1d0a2bec6 on pvetest2 (12.21-flowsdn): node-service-dns and -programmed pass on a working flowsdn node. #368 closed.
 
 ### nodeport_ingress stack — #369 (P1), 2026-10-09
 
