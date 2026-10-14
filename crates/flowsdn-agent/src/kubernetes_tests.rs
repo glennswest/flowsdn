@@ -296,7 +296,14 @@ fn nodes_without_pod_cidrs_get_derived_routes_for_auto_families() {
         ]
     );
     // The other side sees pvetest1's derived pool.
-    let back = desired_routes("pvetest2", &nodes, Derive { v4: true, v6: false });
+    let back = desired_routes(
+        "pvetest2",
+        &nodes,
+        Derive {
+            v4: true,
+            v6: false,
+        },
+    );
     assert!(route_text(&back).contains(&"10.172.0.0/16 via 192.168.31.172".to_owned()));
 }
 
@@ -310,17 +317,34 @@ fn colliding_pod_cidrs_get_no_route_and_are_reported() {
         node("c", &[("10.5.3.0", 24)], &["192.168.31.6"]),
         node("d", &[], &["192.168.31.7"]),
     ];
-    let plan = desired_routes("local", &nodes, Derive { v4: true, v6: false });
+    let plan = desired_routes(
+        "local",
+        &nodes,
+        Derive {
+            v4: true,
+            v6: false,
+        },
+    );
     assert_eq!(route_text(&plan), ["10.7.0.0/16 via 192.168.31.7"]);
     assert_eq!(plan.collisions.len(), 3, "{:?}", plan.collisions);
-    assert!(plan.collisions.iter().any(|c| c
-        == "nodes a (10.5.0.0/16) and b (10.5.0.0/16) have overlapping pod CIDRs"));
+    assert!(
+        plan.collisions
+            .iter()
+            .any(|c| c == "nodes a (10.5.0.0/16) and b (10.5.0.0/16) have overlapping pod CIDRs")
+    );
     // A remote node that collides with this one gets no route either.
     let mine = [
         node("local", &[], &["192.168.31.5"]),
         node("twin", &[], &["192.168.40.5"]),
     ];
-    let plan = desired_routes("local", &mine, Derive { v4: true, v6: false });
+    let plan = desired_routes(
+        "local",
+        &mine,
+        Derive {
+            v4: true,
+            v6: false,
+        },
+    );
     assert!(plan.routes.is_empty());
     assert_eq!(plan.collisions.len(), 1);
 }
@@ -329,7 +353,10 @@ fn colliding_pod_cidrs_get_no_route_and_are_reported() {
 fn overlap_compares_under_the_shorter_prefix() {
     assert!(overlaps((ip("10.5.0.0"), 16), (ip("10.5.3.0"), 24)));
     assert!(!overlaps((ip("10.5.0.0"), 16), (ip("10.6.0.0"), 16)));
-    assert!(overlaps((ip("f00d::aac:0:0:0"), 96), (ip("f00d::aac:0:0:0"), 96)));
+    assert!(overlaps(
+        (ip("f00d::aac:0:0:0"), 96),
+        (ip("f00d::aac:0:0:0"), 96)
+    ));
     assert!(!overlaps((ip("10.5.0.0"), 16), (ip("f00d::"), 96)));
     assert!(overlaps((ip("10.0.0.0"), 0), (ip("192.0.2.0"), 24)));
 }

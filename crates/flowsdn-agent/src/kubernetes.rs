@@ -379,7 +379,9 @@ pub fn overlaps((a, a_len): (IpAddr, u8), (b, b_len): (IpAddr, u8)) -> bool {
     let shorter = u32::from(a_len.min(b_len));
     match (a, b) {
         (IpAddr::V4(a), IpAddr::V4(b)) => {
-            let mask = u32::MAX.checked_shl(32u32.saturating_sub(shorter)).unwrap_or(0);
+            let mask = u32::MAX
+                .checked_shl(32u32.saturating_sub(shorter))
+                .unwrap_or(0);
             u32::from(a) & mask == u32::from(b) & mask
         }
         (IpAddr::V6(a), IpAddr::V6(b)) => {
