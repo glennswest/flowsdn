@@ -363,7 +363,10 @@ fn maglev_tables_follow_their_backends() {
     );
     // A backend leaves: the table is rewritten without it before the
     // backend goes (checked in sync); entries of the others mostly stay.
-    sync(&mut maps, &maglev(&["10.1.0.5", "10.1.0.6"], &["fd00::5"], None));
+    sync(
+        &mut maps,
+        &maglev(&["10.1.0.5", "10.1.0.6"], &["fd00::5"], None),
+    );
     let after = maps.maglev4.get(&id).expect("table");
     let kept = table
         .iter()
@@ -374,7 +377,11 @@ fn maglev_tables_follow_their_backends() {
     // With affinity the client port does not matter.
     sync(
         &mut maps,
-        &maglev(&["10.1.0.5", "10.1.0.6", "10.2.0.7"], &["fd00::5"], Some(60)),
+        &maglev(
+            &["10.1.0.5", "10.1.0.6", "10.2.0.7"],
+            &["fd00::5"],
+            Some(60),
+        ),
     );
     let sticky: BTreeSet<Address> = (40000..40064)
         .filter_map(|port| maglev_pick(&maps, front, SCOPE_NODE_LOCAL, client, port))
@@ -389,5 +396,8 @@ fn maglev_tables_follow_their_backends() {
         .collect();
     sync(&mut maps, &plain);
     assert!(maps.maglev4.is_empty() && maps.maglev6.is_empty());
-    assert_eq!(maglev_pick(&maps, front, SCOPE_NODE_LOCAL, client, 40000), None);
+    assert_eq!(
+        maglev_pick(&maps, front, SCOPE_NODE_LOCAL, client, 40000),
+        None
+    );
 }

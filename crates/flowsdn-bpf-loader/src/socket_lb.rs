@@ -101,7 +101,7 @@ fn write_maglev(map: &mut MaglevMap, id: u16, table: &[u32]) -> KernelResult<()>
         .try_into()
         .map_err(|_| "Maglev table size")?;
     let mut inner = Array::<MapData, Table>::create(1, 0)?;
-    inner.set(0, &*table, 0)?;
+    inner.set(0, *table, 0)?;
     map.insert(id, &inner, 0)?;
     Ok(())
 }
