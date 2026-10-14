@@ -85,9 +85,13 @@ The DaemonSet mounts host /run/netns (HostToContainer). EOPNOTSUPP -> `socket-te
       on pvetest2 (12.21-flowsdn, 7.2.8): socket-lb-live 22 PASS incl. termination, policy-live 8, node-service-dns/-programmed
       pass (#368); node-service-kubernetes wrongly expected a TCP peer = ClusterIP (fixed 228925e). Test image at 228925e
       hit a path-dependent BPF build (RUSTFLAGS remaps hashed into -C metadata), fixed 00d59f9 (rustc wrapper; same objects).
-- [ ] Golden: `stormcentral component build flowsdn` (40af334a9cb4, 65cad565c31a) aborts on stormcentral#827 (stormd input
-      golden gone, POST /exports 404); #292 proposed after it, status comment 6158332055. Stage again when #827 is fixed.
-      Medium 3a2829dedb at e140887 queued on pvetest2 (fastetcd lease, then 12.22-flowsdn install).
+- [x] Medium 3a2829dedb at e140887 on pvetest2 (7.2.8): 23 pass, 0 fail, incl. node-service-dns/-programmed/-kubernetes
+      (fixed probe), socket-lb-live 22 PASS, policy-live 8 PASS.
+- [ ] Golden: #827 fixed (2026-10-14), but build 745f3ee2edf9 aborts on stormcentral#841 (sc-build-out mounts the
+      multipath path /dev/nvme0c0n1; commented). Stage again when #841 is fixed.
+- [ ] Live policy + ClusterIP on pvetest2 (12.21-flowsdn carries 760c3a2e89d6): perf 7899f5fca9 (policy-deny-enforced,
+      policy-remove-restored, policy-rules-100/1000, svc-*-clusterip). Earlier perf runs failed at setup on stormpump#102
+      (SA token behind Fedora's /var/run symlink), fixed in golden-stormpump-236d2ed1dadd.
 
 ### Network policy in the datapath — #292 (P0), 2026-10-13
 
