@@ -356,7 +356,7 @@ fn maglev_applies_to_the_node_local_copies_only() {
         name: "n1".into(),
         ips: vec![ip("192.168.0.1")],
     }];
-    let out = frontends(&[web.clone()], &[], "n1", &nodes);
+    let out = frontends(std::slice::from_ref(&web), &[], "n1", &nodes);
     assert_eq!(out.len(), 3, "cluster IP, NodePort and its node-local copy");
     for f in &out {
         assert_eq!(f.service.maglev, f.service.scope == SCOPE_NODE_LOCAL);
