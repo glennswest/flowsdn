@@ -81,9 +81,10 @@ LUTs after masters. BPF: master algorithm 2 + LUT -> `lut[jhash(tuple, seed) % M
 reference's two-round mix; sport 0 with affinity), else random slot. Agent: `kubernetes.lb-algorithm`
 (random|maglev, default random), annotation `service.flowsdn.io/lb-algorithm`. M and seeds fixed (cluster-wide).
 
-- [ ] ABI jhash/tuple hash + constants; planner LUTs + ops + tests; loader outer maps (pin check, dump, apply).
-- [ ] BPF selection in nodeport4_in/new_flow6_in; agent setting + annotation; socket-lb-live Maglev step.
-- [ ] Object + lock via sc-build; docs (spec notes, runtime, agent-api, implementation-status, milestones), changelog.
+- [x] ABI jhash/tuple hash + constants; planner LUTs + ops + tests; loader outer maps (pin check, dump, apply) (38f1c27).
+- [x] BPF selection in nodeport4_in/new_flow6_in; agent setting + annotation; socket-lb-live Maglev step (38f1c27).
+- [x] Docs (spec 05/02 notes, runtime, agent-api, implementation-status, milestones, README), changelog (c096990).
+      Object + lock from sc-build at 21b7d3a (21ce52d). Full sc-build at 21ce52d running (fmt, Clippy x2, tests, test/build.sh).
 - [ ] Medium on a 7.2 machine (socket-lb-live Maglev step), then stage.
 
 ### UDP socket termination — #292 (P0), 2026-10-13
