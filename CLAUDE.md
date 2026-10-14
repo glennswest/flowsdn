@@ -69,6 +69,23 @@ std::process), check.sh deleted, deploy/release/build.sh calls it.
       -D warnings, 16 xtask tests, `cargo xtask chart-check` passes (lint, 22 CRDs, 4 guards refuse); at f1b4c1e a wrong
       Chart.yaml version makes it fail. #375 closed. Build-only scripts (tools/, test/build.sh, release/image build.sh) remain.
 
+### Maglev on the uplink NodePort path — #292 (P0), 2026-10-14
+
+Golden golden-flowsdn-2321f5468852 (flowsdn@6d5b744, stormcos#528) carries everything below through UDP
+termination (built in the 12.23 wave after stormcentral#841). Live perf waits on stormcentral#846. Next #292
+row: Maglev (spec 05 §3.13/§5.1, spec 02 §3.12) for external traffic (scope-1 frontends, `nodeport_ingress`).
+Design: BTF `HashOfMaps` `flowsdn_lb{4,6}_maglev` (u16 service id -> inner ARRAY 1 x `u32[16381]`, spec 01
+§2.2); the planner builds each Maglev frontend's LUT with `flowsdn_lb::maglev::table` (seed bytes 0-3 of the
+default `JLfvgnHc2kaSUFaI`), writes it after backends and before the master (algorithm byte 2), deletes stale
+LUTs after masters. BPF: master algorithm 2 + LUT -> `lut[jhash(tuple, seed) % M]` (v4 jhash_3words, v6 the
+reference's two-round mix; sport 0 with affinity), else random slot. Agent: `kubernetes.lb-algorithm`
+(random|maglev, default random), annotation `service.flowsdn.io/lb-algorithm`. M and seeds fixed (cluster-wide).
+
+- [ ] ABI jhash/tuple hash + constants; planner LUTs + ops + tests; loader outer maps (pin check, dump, apply).
+- [ ] BPF selection in nodeport4_in/new_flow6_in; agent setting + annotation; socket-lb-live Maglev step.
+- [ ] Object + lock via sc-build; docs (spec notes, runtime, agent-api, implementation-status, milestones), changelog.
+- [ ] Medium on a 7.2 machine (socket-lb-live Maglev step), then stage.
+
 ### UDP socket termination — #292 (P0), 2026-10-13
 
 Spec 05 §3.8 "Socket termination" (owner #3: netlink SOCK_DESTROY, not the kfunc). When UDP backends leave
