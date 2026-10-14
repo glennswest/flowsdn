@@ -69,6 +69,29 @@ std::process), check.sh deleted, deploy/release/build.sh calls it.
       -D warnings, 16 xtask tests, `cargo xtask chart-check` passes (lint, 22 CRDs, 4 guards refuse); at f1b4c1e a wrong
       Chart.yaml version makes it fail. #375 closed. Build-only scripts (tools/, test/build.sh, release/image build.sh) remain.
 
+### Host firewall (host-policy plugin) — #379 (P2), 2026-10-14
+
+stormcos#558 (stormfw): HostFirewallPolicy -> Cilium host firewall (CCNP + nodeSelector) or flowsdn. Input here is
+the same model: `FlowsdnClusterwideNetworkPolicy` (flowsdn.io/v1alpha1, already shipped, RBAC list/watch) with
+`spec.nodeSelector` (and `specs[]`), so stormfw translates to FCNP as it does to CCNP. No stormfw schema needed.
+Design (ADR-0022): host endpoint ID 65536 in the ADR-0021 maps; `flowsdn_policy_ep` entries keyed by each uplink
+ifindex (interfaces holding this node's InternalIPs); local-delivery gets `from_netdev` (uplink TCX ingress:
+enforce only when the destination's ipcache identity is host) and `to_netdev` (uplink egress: track host-sourced
+flows so replies pass). `kubernetes.host-firewall: off|audit|enforce` (default off): on attaches the programs
+and tracks host flows; ingress enforcement starts 60 s after attach (learning). Audit flag (enforce bit 4):
+would-be drops counted and passed; FCNP annotation `policy.flowsdn.io/audit: "true"` puts the host in audit.
+Verdict counters `flowsdn_policy_verdicts` (LRU per-CPU {endpoint, port, proto, dir, verdict} -> packets/bytes)
+for every enforced endpoint; `GET /v1/policy/verdicts`. Rules: ingress/ingressDeny with fromEntities, fromCIDR,
+fromCIDRSet, fromEndpoints, toPorts (port, endPort, protocol); precedence per spec 06 §3.5.2 (allow FF01, deny
+FFFFFFFF), denies propagated over allows they cover. Remote nodes get ipcache identity remote-node (6); ipBlock
+keeps selecting them (as the host). Not covered: host egress policy, pod-to-host on veths, L7/FQDN/ICMP rules.
+
+- [ ] ABI (AUDIT bit, HOST_ENDPOINT, verdict key/value); BPF from_netdev/to_netdev, scope + audit + counters.
+- [ ] Loader: verdict map, attach_host/detach_host; nodeport links first in TCX order.
+- [ ] flowsdn-k8s: ClusterwidePolicies scope, Node labels. Agent: setting, host_policy compiler (+ tests), remote-node
+      ipcache, API thread host attach tick, /v1/policy/verdicts, health.
+- [ ] policy-live host steps; object + lock via sc-build; ADR-0022, docs, changelog; sc-build; medium when a machine runs.
+
 ### Maglev on the uplink NodePort path — #292 (P0), 2026-10-14
 
 Golden golden-flowsdn-2321f5468852 (flowsdn@6d5b744, stormcos#528) carries everything below through UDP
