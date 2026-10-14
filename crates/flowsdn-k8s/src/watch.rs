@@ -97,7 +97,12 @@ pub struct Service {
     /// `spec.sessionAffinity: ClientIP`: the timeout in seconds
     /// (`sessionAffinityConfig.clientIP.timeoutSeconds`, default 10800).
     pub affinity: Option<u32>,
+    /// The [`LB_ALGORITHM_ANNOTATION`] when it is `random` or `maglev`
+    /// (spec 05 §3.13); other values are ignored.
+    pub lb_algorithm: Option<String>,
 }
+/// The per-Service load-balancing algorithm annotation.
+pub const LB_ALGORITHM_ANNOTATION: &str = "service.flowsdn.io/lb-algorithm";
 /// An EndpointSlice port; `port` is absent for "all ports".
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EndpointPort {
@@ -550,6 +555,11 @@ fn parse_service(value: &Value, metadata: Metadata) -> Result<Service, Error> {
                 .filter(|t| *t > 0)
                 .unwrap_or(10800)
         }),
+        lb_algorithm: value
+            .pointer("/metadata/annotations/service.flowsdn.io~1lb-algorithm")
+            .and_then(Value::as_str)
+            .filter(|a| matches!(*a, "random" | "maglev"))
+            .map(str::to_owned),
     })
 }
 fn parse_slice(value: &Value, metadata: Metadata) -> Result<EndpointSlice, Error> {

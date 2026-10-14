@@ -337,3 +337,46 @@ fn client_ip_affinity_reaches_every_frontend_and_the_api() {
         None
     );
 }
+
+#[test]
+fn maglev_applies_to_the_node_local_copies_only() {
+    let web = ServiceInfo {
+        namespace: "ns".into(),
+        name: "web".into(),
+        service_type: "NodePort".into(),
+        cluster_ips: vec![ip("10.96.5.5")],
+        ports: vec![ServicePort {
+            node_port: Some(30080),
+            ..port("http", "TCP", 80)
+        }],
+        maglev: true,
+        ..ServiceInfo::default()
+    };
+    let nodes = [NodeAddresses {
+        name: "n1".into(),
+        ips: vec![ip("192.168.0.1")],
+    }];
+    let out = frontends(&[web.clone()], &[], "n1", &nodes);
+    assert_eq!(out.len(), 3, "cluster IP, NodePort and its node-local copy");
+    for f in &out {
+        assert_eq!(f.service.maglev, f.service.scope == SCOPE_NODE_LOCAL);
+    }
+    let rows = service_list(&out, &BTreeMap::new());
+    let algorithms: Vec<_> = rows
+        .as_array()
+        .expect("rows")
+        .iter()
+        .map(|r| r.pointer("/spec/flags/lb-algorithm").cloned())
+        .collect();
+    assert_eq!(
+        algorithms.iter().filter(|a| a.is_some()).count(),
+        1,
+        "{algorithms:?}"
+    );
+    let random = ServiceInfo {
+        maglev: false,
+        ..web
+    };
+    let out = frontends(&[random], &[], "n1", &nodes);
+    assert!(out.iter().all(|f| !f.service.maglev));
+}

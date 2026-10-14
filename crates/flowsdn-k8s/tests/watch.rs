@@ -504,7 +504,8 @@ fn pod_tagging_metadata_owners_containers_and_flowsdn_annotations() {
 
 #[test]
 fn services_parse_node_ports_external_and_load_balancer_addresses() {
-    let lb = json!({"metadata":{"name":"web","namespace":"ns","uid":"u","resourceVersion":"1"},
+    let lb = json!({"metadata":{"name":"web","namespace":"ns","uid":"u","resourceVersion":"1",
+            "annotations":{"service.flowsdn.io/lb-algorithm":"maglev"}},
         "spec":{"type":"LoadBalancer","clusterIP":"10.96.5.5","externalIPs":["192.0.2.10","not-an-ip"],
             "internalTrafficPolicy":"Local","externalTrafficPolicy":"Local",
             "ports":[{"name":"http","port":80,"nodePort":30080},{"name":"other","port":81}]},
@@ -517,6 +518,7 @@ fn services_parse_node_ports_external_and_load_balancer_addresses() {
     assert_eq!(parsed.load_balancer_ips, vec![ip("198.51.100.7")]);
     assert!(parsed.internal_local && parsed.external_local);
     assert_eq!(parsed.affinity, None);
+    assert_eq!(parsed.lb_algorithm.as_deref(), Some("maglev"));
     assert_eq!(
         parsed.ports.iter().map(|p| p.node_port).collect::<Vec<_>>(),
         vec![Some(30080), None]
@@ -528,6 +530,18 @@ fn services_parse_node_ports_external_and_load_balancer_addresses() {
     };
     assert!(parsed.external_ips.is_empty() && parsed.load_balancer_ips.is_empty());
     assert!(!parsed.internal_local && !parsed.external_local);
+    assert_eq!(parsed.lb_algorithm, None);
+    let mut odd = plain.clone();
+    if let Some(metadata) = odd.get_mut("metadata").and_then(Value::as_object_mut) {
+        metadata.insert(
+            "annotations".into(),
+            json!({"service.flowsdn.io/lb-algorithm":"round-robin"}),
+        );
+    }
+    match Scope::Services.parse(&odd).expect("service") {
+        Resource::Service(service) => assert_eq!(service.lb_algorithm, None),
+        _ => panic!("service row expected"),
+    }
     let sticky = |config: Value| {
         let mut value = plain.clone();
         if let Some(spec) = value.get_mut("spec").and_then(Value::as_object_mut) {

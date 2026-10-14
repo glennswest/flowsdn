@@ -318,6 +318,7 @@ impl Controller {
                 }
                 if settings.service_lb {
                     let (svc_view, svc_lb) = (Arc::clone(&watch_view), lb.clone());
+                    let maglev = settings.maglev;
                     parts.push(
                         watch_forever(
                             &client,
@@ -325,7 +326,7 @@ impl Controller {
                             "services-watch",
                             &watch_view,
                             move |state| {
-                                let rows = service_rows(state);
+                                let rows = service_rows(state, maglev);
                                 let frontends = {
                                     let mut view = lock(&svc_view);
                                     view.services = rows;
@@ -780,7 +781,9 @@ fn identity_rows(state: &WatchState) -> Vec<identity::Object> {
         })
         .collect()
 }
-fn service_rows(state: &WatchState) -> Vec<ServiceInfo> {
+/// The Services; `maglev` is the `lb-algorithm` default a Service's
+/// annotation overrides.
+fn service_rows(state: &WatchState, maglev: bool) -> Vec<ServiceInfo> {
     state
         .snapshot()
         .all()
@@ -805,6 +808,11 @@ fn service_rows(state: &WatchState) -> Vec<ServiceInfo> {
                 internal_local: service.internal_local,
                 external_local: service.external_local,
                 affinity: service.affinity,
+                maglev: match service.lb_algorithm.as_deref() {
+                    Some("maglev") => true,
+                    Some(_) => false,
+                    None => maglev,
+                },
             }),
             _ => None,
         })

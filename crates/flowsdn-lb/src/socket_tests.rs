@@ -16,6 +16,7 @@ fn dns(backends: &[&str]) -> Vec<Service> {
             backends: backends.iter().map(|ip| addr(ip, 53, proto)).collect(),
             affinity: None,
             scope: SCOPE_CLUSTER,
+            maglev: false,
         })
         .collect()
 }
@@ -42,6 +43,13 @@ fn sync(current: &mut Maps, services: &[Service]) -> Desired {
             if let Some(result) = resolve_scope(&step, frontend, scope) {
                 result.expect("intermediate state resolves");
             }
+        }
+        // A Maglev table never names a backend ID that is gone.
+        for id in step.maglev4.values().chain(step.maglev6.values()).flatten() {
+            assert!(
+                step.backends4.contains_key(id) || step.backends6.contains_key(id),
+                "Maglev table names a deleted backend {id}"
+            );
         }
         // A remembered affinity is only honoured through a match entry, so
         // a match must never name a backend ID that is gone.
@@ -147,12 +155,14 @@ fn dual_stack_and_mixed_backends() {
             ],
             affinity: None,
             scope: SCOPE_CLUSTER,
+            maglev: false,
         },
         Service {
             frontend: addr("fd00:10:96::1", 443, PROTO_TCP),
             backends: vec![addr("fd00::1", 6443, PROTO_TCP)],
             affinity: None,
             scope: SCOPE_CLUSTER,
+            maglev: false,
         },
     ];
     sync(&mut maps, &services);
@@ -265,10 +275,12 @@ fn node_local_scope_is_a_separate_service_with_its_own_id() {
         ],
         affinity: None,
         scope: SCOPE_CLUSTER,
+        maglev: false,
     };
     let local = Service {
         backends: vec![addr("10.1.0.5", 8080, PROTO_TCP)],
         scope: SCOPE_NODE_LOCAL,
+        maglev: false,
         ..cluster.clone()
     };
     let want = sync(&mut maps, &[cluster.clone(), local.clone()]);
@@ -292,4 +304,90 @@ fn node_local_scope_is_a_separate_service_with_its_own_id() {
     let again = desired(&maps, &[cluster, local]).expect("desired");
     assert_eq!(again.ids, want.ids);
     assert!(plan(&maps, &again.maps).is_empty());
+}
+
+#[test]
+fn maglev_tables_follow_their_backends() {
+    let front = addr("192.168.0.1", 30080, PROTO_TCP);
+    let front6 = addr("2001:db8::1", 30080, PROTO_TCP);
+    let maglev = |backends: &[&str], backends6: &[&str], affinity| {
+        vec![
+            Service {
+                frontend: front,
+                backends: backends.iter().map(|b| addr(b, 8080, PROTO_TCP)).collect(),
+                affinity,
+                scope: SCOPE_NODE_LOCAL,
+                maglev: true,
+            },
+            Service {
+                frontend: front6,
+                backends: backends6.iter().map(|b| addr(b, 8080, PROTO_TCP)).collect(),
+                affinity,
+                scope: SCOPE_NODE_LOCAL,
+                maglev: true,
+            },
+        ]
+    };
+    let mut maps = Maps::default();
+    let want = sync(
+        &mut maps,
+        &maglev(&["10.1.0.5", "10.1.0.6", "10.2.0.7"], &["fd00::5"], None),
+    );
+    let id = *want.ids.get(&(front, SCOPE_NODE_LOCAL)).expect("id");
+    let table = maps.maglev4.get(&id).expect("table").clone();
+    assert_eq!(table.len(), TABLE_LEN);
+    assert_eq!(table.iter().collect::<BTreeSet<_>>().len(), 3);
+    assert_eq!(maps.maglev6.len(), 1);
+    let master = LbService::from_bytes(
+        *maps
+            .services4
+            .get(&key4(front, SCOPE_NODE_LOCAL, 0).expect("key"))
+            .expect("master"),
+    );
+    assert_eq!(master.algorithm_code(), ALGORITHM_MAGLEV);
+    assert_eq!(master.service_flags(), service_flags::ROUTABLE);
+    // Picks are deterministic and spread over the backends.
+    let client: IpAddr = "198.51.100.9".parse().expect("ip");
+    let picks: BTreeSet<Address> = (40000..40064)
+        .filter_map(|port| maglev_pick(&maps, front, SCOPE_NODE_LOCAL, client, port))
+        .collect();
+    assert_eq!(picks.len(), 3);
+    assert_eq!(
+        maglev_pick(&maps, front, SCOPE_NODE_LOCAL, client, 40000),
+        maglev_pick(&maps, front, SCOPE_NODE_LOCAL, client, 40000)
+    );
+    let client6: IpAddr = "2001:db8:3::9".parse().expect("ip");
+    assert_eq!(
+        maglev_pick(&maps, front6, SCOPE_NODE_LOCAL, client6, 40000),
+        Some(addr("fd00::5", 8080, PROTO_TCP))
+    );
+    // A backend leaves: the table is rewritten without it before the
+    // backend goes (checked in sync); entries of the others mostly stay.
+    sync(&mut maps, &maglev(&["10.1.0.5", "10.1.0.6"], &["fd00::5"], None));
+    let after = maps.maglev4.get(&id).expect("table");
+    let kept = table
+        .iter()
+        .zip(after)
+        .filter(|(a, b)| a == b && after.contains(a))
+        .count();
+    assert!(kept * 100 > table.len() * 60, "kept {kept}");
+    // With affinity the client port does not matter.
+    sync(
+        &mut maps,
+        &maglev(&["10.1.0.5", "10.1.0.6", "10.2.0.7"], &["fd00::5"], Some(60)),
+    );
+    let sticky: BTreeSet<Address> = (40000..40064)
+        .filter_map(|port| maglev_pick(&maps, front, SCOPE_NODE_LOCAL, client, port))
+        .collect();
+    assert_eq!(sticky.len(), 1);
+    // No backends: no table. Not Maglev: tables go, the master is plain.
+    sync(&mut maps, &maglev(&[], &["fd00::5"], None));
+    assert!(!maps.maglev4.contains_key(&id));
+    let plain: Vec<Service> = maglev(&["10.1.0.5"], &["fd00::5"], None)
+        .into_iter()
+        .map(|s| Service { maglev: false, ..s })
+        .collect();
+    sync(&mut maps, &plain);
+    assert!(maps.maglev4.is_empty() && maps.maglev6.is_empty());
+    assert_eq!(maglev_pick(&maps, front, SCOPE_NODE_LOCAL, client, 40000), None);
 }

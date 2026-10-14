@@ -10,8 +10,12 @@
 //! the agent's affinity-match map still pairs the backend with the service.
 //! The `nodeport_*` tc programs serve NodePort, external and LoadBalancer
 //! addresses to clients outside the cluster (IPv4 and IPv6, with SNAT to
-//! backends on other nodes). Maglev, DSR, skip-LB and socket termination are not
-//! implemented here.
+//! backends on other nodes). A frontend whose master carries the Maglev
+//! algorithm picks a new flow's backend from its lookup table in
+//! `flowsdn_lb{4,6}_maglev` by the flow hash, so every node sends a flow to
+//! the same backend (spec 05 §3.13, §5.1); without a table it picks at
+//! random. DSR and skip-LB are not implemented here; the agent terminates
+//! sockets.
 #![no_std]
 #![no_main]
 
@@ -22,7 +26,8 @@ use aya_ebpf::{
         bpf_fib_lookup as fib_lookup, bpf_get_netns_cookie, bpf_get_prandom_u32,
         bpf_get_socket_cookie, bpf_ktime_get_ns, bpf_redirect, bpf_redirect_neigh,
     },
-    macros::{cgroup_sock_addr, classifier, map},
+    btf_maps::{Array as BtfArray, HashOfMaps},
+    macros::{btf_map, cgroup_sock_addr, classifier, map},
     maps::{HashMap, LruHashMap, PerCpuArray},
     programs::{SockAddrContext, TcContext},
 };
@@ -33,6 +38,7 @@ use flowsdn_bpf_abi::{
         Ipv4RevnatEntry, Ipv4RevnatTuple, Ipv6RevnatEntry, Ipv6RevnatTuple, Lb4Backend, Lb4Key,
         Lb6Backend, Lb6Key, LbService, service_flags,
     },
+    maglev::{self, ALGORITHM_MAGLEV, TABLE_LEN},
 };
 
 const IPPROTO_TCP: u32 = 6;
@@ -59,6 +65,14 @@ static LB6_BACKENDS: HashMap<u32, Lb6Backend> = HashMap::with_max_entries(65536,
 #[map(name = "flowsdn_lb6_reverse_sk")]
 static LB6_REVERSE_SK: LruHashMap<Ipv6RevnatTuple, Ipv6RevnatEntry> =
     LruHashMap::with_max_entries(65536, 0);
+
+/// Each Maglev frontend's lookup table by service ID (`rev_nat_index`):
+/// [`TABLE_LEN`] backend IDs in the single entry of an inner array. The agent
+/// swaps in a new inner map rather than writing into one.
+#[btf_map(name = "flowsdn_lb4_maglev")]
+static LB4_MAGLEV: HashOfMaps<u16, BtfArray<[u32; TABLE_LEN], 1>, 65536> = HashOfMaps::new();
+#[btf_map(name = "flowsdn_lb6_maglev")]
+static LB6_MAGLEV: HashOfMaps<u16, BtfArray<[u32; TABLE_LEN], 1>, 65536> = HashOfMaps::new();
 
 #[map(name = "flowsdn_lb4_affinity")]
 static LB4_AFFINITY: LruHashMap<Lb4AffinityKey, LbAffinityVal> =
@@ -119,6 +133,64 @@ fn affine(remembered: Option<LbAffinityVal>, rev: u16, timeout: u32, now: u64) -
     // SAFETY: presence check only; the value is never read.
     unsafe { LB_AFFINITY_MATCH.get(&pair) }?;
     Some(backend_id)
+}
+
+/// The client port a Maglev flow hash uses: none with session affinity, so
+/// a client keeps its backend.
+#[inline(always)]
+fn maglev_port(service: &LbService, client_port: [u8; 2]) -> u16 {
+    if service.service_flags() & service_flags::SESSION_AFFINITY != 0 {
+        0
+    } else {
+        u16::from_be_bytes(client_port)
+    }
+}
+/// The backend ID a Maglev frontend's table gives a new flow; `None` when
+/// the master is not Maglev or has no table (the caller picks at random).
+#[inline(always)]
+fn maglev4(
+    service: &LbService,
+    client: [u8; 4],
+    client_port: [u8; 2],
+    front_port: [u8; 2],
+    proto: u8,
+) -> Option<u32> {
+    if service.algorithm_code() != ALGORITHM_MAGLEV {
+        return None;
+    }
+    let hash = maglev::flow_hash4(
+        client,
+        maglev_port(service, client_port),
+        u16::from_be_bytes(front_port),
+        proto,
+    );
+    let index = usize::try_from(maglev::entry(hash)).ok()?;
+    // SAFETY: read once; the agent never writes into a published table.
+    let table = unsafe { LB4_MAGLEV.get_value(&service.rev_nat_index, &0) }?;
+    table.get(index).copied()
+}
+/// [`maglev4`] for IPv6.
+#[inline(always)]
+fn maglev6(
+    service: &LbService,
+    client: [u8; 16],
+    client_port: [u8; 2],
+    front_port: [u8; 2],
+    proto: u8,
+) -> Option<u32> {
+    if service.algorithm_code() != ALGORITHM_MAGLEV {
+        return None;
+    }
+    let hash = maglev::flow_hash6(
+        client,
+        maglev_port(service, client_port),
+        u16::from_be_bytes(front_port),
+        proto,
+    );
+    let index = usize::try_from(maglev::entry(hash)).ok()?;
+    // SAFETY: as in maglev4.
+    let table = unsafe { LB6_MAGLEV.get_value(&service.rev_nat_index, &0) }?;
+    table.get(index).copied()
 }
 
 #[inline(always)]
@@ -883,11 +955,17 @@ fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
             };
             // SAFETY: see lookup4.
             let service = unsafe { LB4_SERVICES.get(&service_key).copied() }?;
-            service_key.backend_slot = slot(service.count)?;
+            let id = match maglev4(&service, client, client_port, front_port, proto) {
+                Some(id) => id,
+                None => {
+                    service_key.backend_slot = slot(service.count)?;
+                    // SAFETY: see lookup4.
+                    let entry = unsafe { LB4_SERVICES.get(&service_key).copied() }?;
+                    entry.backend_id()
+                }
+            };
             // SAFETY: see lookup4.
-            let entry = unsafe { LB4_SERVICES.get(&service_key).copied() }?;
-            // SAFETY: see lookup4.
-            let chosen = unsafe { LB4_BACKENDS.get(&entry.backend_id()).copied() }?;
+            let chosen = unsafe { LB4_BACKENDS.get(&id).copied() }?;
             let backend = (chosen.address.0, chosen.port.0);
             let (result, fib) = fib4(ctx, proto, client, backend.0, 0);
             let mut flow = Nodeport4Value {
@@ -1402,11 +1480,17 @@ fn new_flow6_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> O
     };
     // SAFETY: see lookup6.
     let service = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
-    service_key.backend_slot = slot(service.count)?;
+    let id = match maglev6(&service, client, client_port, front_port, proto) {
+        Some(id) => id,
+        None => {
+            service_key.backend_slot = slot(service.count)?;
+            // SAFETY: see lookup6.
+            let entry = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
+            entry.backend_id()
+        }
+    };
     // SAFETY: see lookup6.
-    let entry = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
-    // SAFETY: see lookup6.
-    let chosen = unsafe { LB6_BACKENDS.get(&entry.backend_id()).copied() }?;
+    let chosen = unsafe { LB6_BACKENDS.get(&id).copied() }?;
     let backend = (chosen.address, chosen.port.0);
     flow.address = backend.0;
     flow.port = backend.1;

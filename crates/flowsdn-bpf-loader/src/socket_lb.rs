@@ -1,19 +1,21 @@
 //! Live ownership of the socket-LB object (spec 05 §3.8): its eight cgroup
 //! sock_addr programs attached to one cgroup v2 directory (normally the host
 //! root, so every pod and host process is covered), and its service, backend,
-//! reverse-socket and session-affinity maps. With a pin root the maps and links are pinned,
+//! reverse-socket, session-affinity and Maglev maps (the uplink programs'
+//! per-service lookup tables, each an inner array swapped in whole). With a pin root the maps and links are pinned,
 //! so translation and UDP reverse entries survive an agent restart; the new
 //! owner attaches before it releases the old links.
 use super::{KernelResult, Object};
 use aya::{
     Ebpf, EbpfLoader,
-    maps::{HashMap, Map, MapData, MapError, MapInfo, MapType},
+    maps::{Array, HashMap, HashOfMaps, Map, MapData, MapError, MapInfo, MapType},
     programs::{
         CgroupAttachMode, CgroupSockAddr, LinkOrder, SchedClassifier, TcAttachType,
         links::{FdLink, PinnedLink},
         tc::{SchedClassifierLink, TcAttachOptions},
     },
 };
+use flowsdn_bpf_abi::maglev::TABLE_LEN;
 use flowsdn_lb::socket::{Maps, Op};
 use std::{
     fs::{self, File},
@@ -36,7 +38,7 @@ pub const PROGRAMS: [&str; 8] = [
 /// names and §4.3 layouts; flowsdn sizes the reverse and affinity maps at
 /// 64Ki. The affinity maps are the programs' own; the agent writes the
 /// match map.
-const MAPS: [(&str, MapType, u32, u32, u32, u32); 11] = [
+const MAPS: [(&str, MapType, u32, u32, u32, u32); 13] = [
     ("flowsdn_lb4_services", MapType::Hash, 12, 12, 65536, 1),
     ("flowsdn_lb4_backends", MapType::Hash, 4, 12, 65536, 1),
     ("flowsdn_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
@@ -48,6 +50,8 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 11] = [
     ("flowsdn_lb_affinity_match", MapType::Hash, 8, 1, 65536, 1),
     ("flowsdn_nodeport4_nat", MapType::LruHash, 16, 16, 65536, 0),
     ("flowsdn_nodeport6_nat", MapType::LruHash, 40, 40, 65536, 0),
+    ("flowsdn_lb4_maglev", MapType::HashOfMaps, 2, 4, 65536, 0),
+    ("flowsdn_lb6_maglev", MapType::HashOfMaps, 2, 4, 65536, 0),
 ];
 
 pub struct SocketLb {
@@ -57,11 +61,49 @@ pub struct SocketLb {
     services6: HashMap<MapData, [u8; 24], [u8; 12]>,
     backends6: HashMap<MapData, u32, [u8; 24]>,
     affinity_match: HashMap<MapData, [u8; 8], u8>,
+    maglev4: MaglevMap,
+    maglev6: MaglevMap,
     pin_root: Option<PathBuf>,
     /// Owned links; unpinned ones detach when this owner drops.
     links: Vec<FdLink>,
     /// The NodePort programs' TCX links on uplinks (#292), by interface.
     uplinks: std::collections::BTreeMap<String, Vec<SchedClassifierLink>>,
+}
+
+/// A Maglev lookup table: one inner-map value (spec 01 §2.2).
+type Table = [u32; TABLE_LEN];
+/// `flowsdn_lb{4,6}_maglev`: service ID to a one-entry array of a [`Table`].
+type MaglevMap = HashOfMaps<MapData, u16, Array<MapData, Table>>;
+
+fn take_maglev(bpf: &mut Ebpf, name: &str) -> KernelResult<MaglevMap> {
+    let map = bpf
+        .take_map(name)
+        .ok_or_else(|| format!("socket-lb object has no map {name}"))?;
+    match map {
+        Map::HashOfMaps(_) => Ok(HashOfMaps::try_from(map)?),
+        _ => Err(format!("socket-lb map {name} is not a hash of maps").into()),
+    }
+}
+fn dump_maglev(map: &MaglevMap) -> KernelResult<std::collections::BTreeMap<u16, Vec<u32>>> {
+    let mut out = std::collections::BTreeMap::new();
+    for id in map.keys() {
+        let id = id?;
+        let table: Table = map.get(&id, 0)?.get(&0, 0)?;
+        out.insert(id, table.to_vec());
+    }
+    Ok(out)
+}
+/// Replace service `id`'s table at once: a new inner map, swapped in.
+fn write_maglev(map: &mut MaglevMap, id: u16, table: &[u32]) -> KernelResult<()> {
+    let table: Box<Table> = table
+        .to_vec()
+        .into_boxed_slice()
+        .try_into()
+        .map_err(|_| "Maglev table size")?;
+    let mut inner = Array::<MapData, Table>::create(1, 0)?;
+    inner.set(0, &*table, 0)?;
+    map.insert(id, &inner, 0)?;
+    Ok(())
 }
 
 fn take<K: aya::Pod, V: aya::Pod>(
@@ -132,6 +174,8 @@ impl SocketLb {
         let services6 = take(&mut bpf, "flowsdn_lb6_services")?;
         let backends6 = take(&mut bpf, "flowsdn_lb6_backends")?;
         let affinity_match = take(&mut bpf, "flowsdn_lb_affinity_match")?;
+        let maglev4 = take_maglev(&mut bpf, "flowsdn_lb4_maglev")?;
+        let maglev6 = take_maglev(&mut bpf, "flowsdn_lb6_maglev")?;
         for name in PROGRAMS {
             let program: &mut CgroupSockAddr = bpf
                 .program_mut(name)
@@ -146,6 +190,8 @@ impl SocketLb {
             services6,
             backends6,
             affinity_match,
+            maglev4,
+            maglev6,
             pin_root: pin_root.map(Path::to_owned),
             links: Vec::new(),
             uplinks: std::collections::BTreeMap::new(),
@@ -294,6 +340,8 @@ impl SocketLb {
         for key in self.affinity_match.keys() {
             maps.affinity_match.insert(key?);
         }
+        maps.maglev4 = dump_maglev(&self.maglev4)?;
+        maps.maglev6 = dump_maglev(&self.maglev6)?;
         Ok(maps)
     }
 
@@ -302,6 +350,10 @@ impl SocketLb {
     pub fn apply(&mut self, ops: &[Op]) -> KernelResult<()> {
         for op in ops {
             match *op {
+                Op::Maglev4(id, ref table) => write_maglev(&mut self.maglev4, id, table)?,
+                Op::Maglev6(id, ref table) => write_maglev(&mut self.maglev6, id, table)?,
+                Op::DeleteMaglev4(id) => absent(self.maglev4.remove(&id))?,
+                Op::DeleteMaglev6(id) => absent(self.maglev6.remove(&id))?,
                 Op::Backend4(id, value) => self.backends4.insert(id, value, 0)?,
                 Op::Backend6(id, value) => self.backends6.insert(id, value, 0)?,
                 Op::Service4(key, value) => self.services4.insert(key, value, 0)?,

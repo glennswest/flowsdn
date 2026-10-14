@@ -8,7 +8,8 @@
 //! uplink programs (#292) by BPF_PROG_TEST_RUN: destination rewrite to a
 //! node-local backend and the reply's source rewrite, checksums checked; and
 //! SNAT to a backend on another node with the FIB redirect, run as arriving
-//! on a dummy uplink in this netns; IPv4 and IPv6; and UDP socket termination
+//! on a dummy uplink in this netns; IPv4 and IPv6; Maglev backend selection
+//! checked against the planner's tables; and UDP socket termination
 //! through SOCK_DIAG when a backend leaves.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
@@ -50,6 +51,7 @@ fn service(frontend: &str, proto: u8, backends: &[&str]) -> Result<Service> {
             .collect::<Result<_>>()?,
         affinity: None,
         scope: socket::SCOPE_CLUSTER,
+        maglev: false,
     })
 }
 /// Plan from the kernel's maps and apply, as the agent's services thread does.
@@ -385,6 +387,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             backends: vec![address("10.9.0.5:8080", proto)?],
             affinity: None,
             scope: SCOPE_NODE_LOCAL,
+            maglev: false,
         });
     }
     program(lb, services)?;
@@ -432,7 +435,93 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     );
     nodeport6(lb, services)?;
     snat(lb, services)?;
+    maglev(lb, services)?;
     services.retain(|s| s.scope != SCOPE_NODE_LOCAL);
+    Ok(())
+}
+
+/// Maglev frontends (spec 05 §3.13): `nodeport_ingress` sends each new flow
+/// to the backend the planner's table gives it ([`socket::maglev_pick`],
+/// the flow hash both sides share), IPv4 and IPv6, over several backends;
+/// a frame of a known flow keeps its backend.
+fn maglev(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
+    services.push(Service {
+        frontend: address("192.0.2.20:30070", PROTO_TCP)?,
+        backends: ["10.9.0.5:8080", "10.9.0.6:8080", "10.9.0.7:8080"]
+            .iter()
+            .map(|b| address(b, PROTO_TCP))
+            .collect::<Result<_>>()?,
+        affinity: None,
+        scope: SCOPE_NODE_LOCAL,
+        maglev: true,
+    });
+    services.push(Service {
+        frontend: address("[2001:db8:2::20]:30070", PROTO_UDP)?,
+        backends: ["[fd00:9::5]:8080", "[fd00:9::6]:8080"]
+            .iter()
+            .map(|b| address(b, PROTO_UDP))
+            .collect::<Result<_>>()?,
+        affinity: None,
+        scope: SCOPE_NODE_LOCAL,
+        maglev: true,
+    });
+    program(lb, services)?;
+    let maps = lb.dump()?;
+    if maps.maglev4.len() != 1 || maps.maglev6.len() != 1 {
+        return Err("the kernel does not hold one Maglev table per family".into());
+    }
+    let (front, client) = ([192, 0, 2, 20], [198, 51, 100, 9]);
+    let (front6, client6) = (ip6("2001:db8:2::20")?, ip6("2001:db8:3::9")?);
+    let mut seen = std::collections::BTreeSet::new();
+    for sport in 41000..41032u16 {
+        let want = socket::maglev_pick(
+            &maps,
+            address("192.0.2.20:30070", PROTO_TCP)?,
+            SCOPE_NODE_LOCAL,
+            IpAddr::from(client),
+            sport,
+        )
+        .ok_or("no Maglev pick for an IPv4 flow")?;
+        let request = frame4(6, client, front, sport, 30070, false);
+        for _ in 0..2 {
+            let (_, dst, _, d, ip_ok, l4_ok) = parse4(&run(lb, "nodeport_ingress", &request)?)?;
+            let got = SocketAddr::from((dst, d));
+            if got != SocketAddr::new(want.ip, want.port) || !ip_ok || !l4_ok {
+                return Err(format!(
+                    "Maglev IPv4 flow port {sport}: kernel picked {got}, the table {}:{}",
+                    want.ip, want.port
+                )
+                .into());
+            }
+        }
+        seen.insert(want.ip);
+        let want = socket::maglev_pick(
+            &maps,
+            address("[2001:db8:2::20]:30070", PROTO_UDP)?,
+            SCOPE_NODE_LOCAL,
+            IpAddr::from(client6),
+            sport,
+        )
+        .ok_or("no Maglev pick for an IPv6 flow")?;
+        let request = frame6(17, client6, front6, sport, 30070, false);
+        let (_, dst, _, d, _, l4_ok) = parse6(&run(lb, "nodeport_ingress", &request)?)?;
+        let got = SocketAddr::from((dst, d));
+        if got != SocketAddr::new(want.ip, want.port) || !l4_ok {
+            return Err(format!(
+                "Maglev IPv6 flow port {sport}: kernel picked {got}, the table {}:{}",
+                want.ip, want.port
+            )
+            .into());
+        }
+        seen.insert(want.ip);
+    }
+    if seen.len() < 4 {
+        return Err(format!("32 flows per family reached only {seen:?}").into());
+    }
+    println!(
+        "PASS Maglev: 32 TCP flows to 192.0.2.20:30070 and 32 UDP flows to [2001:db8:2::20]:30070 each went to the backend the planner's table gives (flow hash shared with the agent), over {} backends; repeated frames kept theirs",
+        seen.len()
+    );
     Ok(())
 }
 
@@ -450,6 +539,7 @@ fn nodeport6(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             backends: vec![address("[fd00:9::5]:8080", proto)?],
             affinity: None,
             scope: SCOPE_NODE_LOCAL,
+            maglev: false,
         });
     }
     program(lb, services)?;
@@ -512,6 +602,7 @@ fn snat(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             backends: vec![address("10.9.1.5:8080", proto)?],
             affinity: None,
             scope: SCOPE_NODE_LOCAL,
+            maglev: false,
         });
     }
     program(lb, services)?;
@@ -638,6 +729,7 @@ fn snat6(
             backends: vec![address("[fd00:9:1::5]:8080", proto)?],
             affinity: None,
             scope: SCOPE_NODE_LOCAL,
+            maglev: false,
         });
     }
     program(lb, services)?;

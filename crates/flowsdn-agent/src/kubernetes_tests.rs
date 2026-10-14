@@ -35,12 +35,13 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(parsed.auto_direct_node_routes);
     assert!(parsed.service_lb);
     assert!(parsed.node_port);
+    assert!(!parsed.maglev);
     assert_eq!(parsed.cgroup_root, PathBuf::from(DEFAULT_CGROUP_ROOT));
     let parsed = Settings::parse(
         Some(
             &json!({"node-name":"n1","kubeconfig":"/k","auto-direct-node-routes":false,
             "direct-routing-skip-unreachable":true,"service-lb":false,"node-port":false,
-            "cgroup-root":"/run/flowsdn/cgroupv2"}),
+            "cgroup-root":"/run/flowsdn/cgroupv2","lb-algorithm":"maglev"}),
         ),
         &env(&[("K8S_NODE_NAME", "a")]),
     )
@@ -51,7 +52,15 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(!parsed.auto_direct_node_routes && parsed.skip_unreachable);
     assert!(!parsed.service_lb);
     assert!(!parsed.node_port);
+    assert!(parsed.maglev);
     assert_eq!(parsed.cgroup_root, PathBuf::from("/run/flowsdn/cgroupv2"));
+    assert!(
+        Settings::parse(
+            Some(&json!({"node-name":"n1","lb-algorithm":"round-robin"})),
+            &env(&[])
+        )
+        .is_err()
+    );
     assert!(
         Settings::parse(
             Some(&json!({"node-name":"n1","cgroup-root":"relative"})),

@@ -1,15 +1,19 @@
 //! Socket-LB map planning (spec 05 §3.4, spec 01 §4.3): desired service
 //! frontends and their backends become the contents of
-//! `flowsdn_lb{4,6}_services`, `_backends` and `flowsdn_lb_affinity_match`, and the difference from the
-//! kernel's current contents becomes an ordered list of map writes.
+//! `flowsdn_lb{4,6}_services`, `_backends`, `flowsdn_lb_affinity_match` and
+//! (Maglev frontends, spec 05 §3.13) the lookup tables of
+//! `flowsdn_lb{4,6}_maglev`, and the difference from the kernel's current
+//! contents becomes an ordered list of map writes.
 //!
 //! Stateless by design: service IDs (`rev_nat_index`) and backend IDs are
 //! recovered from the current maps, so a restarted agent keeps them and a
 //! failed write is retried by planning again from what the kernel holds.
+use crate::maglev;
 use flowsdn_bpf_abi::{
     Be16, Be32, MapBytes,
     affinity::LbAffinityMatch,
     lb::{Algorithm, Lb4Backend, Lb4Key, Lb6Backend, Lb6Key, LbService, service_flags},
+    maglev::{ALGORITHM_MAGLEV, SEED_MURMUR, TABLE_LEN},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -58,6 +62,10 @@ pub struct Service {
     pub affinity: Option<u32>,
     /// [`SCOPE_CLUSTER`] or [`SCOPE_NODE_LOCAL`].
     pub scope: u8,
+    /// Maglev backend selection (spec 05 §3.13): the master carries
+    /// algorithm 2 and the frontend gets a lookup table. Only the uplink
+    /// NodePort programs (scope 1) read it; the socket LB picks at random.
+    pub maglev: bool,
 }
 
 /// The four maps' contents as raw map bytes, keyed as the kernel keys them.
@@ -70,11 +78,15 @@ pub struct Maps {
     /// `flowsdn_lb_affinity_match` keys: (backend ID, service ID) pairs a
     /// remembered affinity may still use.
     pub affinity_match: BTreeSet<[u8; 8]>,
+    /// `flowsdn_lb{4,6}_maglev`: each Maglev frontend's lookup table
+    /// ([`TABLE_LEN`] backend IDs) by service ID.
+    pub maglev4: BTreeMap<u16, Vec<u32>>,
+    pub maglev6: BTreeMap<u16, Vec<u32>>,
 }
 
 /// One map write. [`plan`] orders them so a concurrent lookup never reads a
 /// slot beyond its master's count or a backend ID with no backend.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Op {
     Backend4(u32, [u8; 12]),
     Backend6(u32, [u8; 24]),
@@ -86,6 +98,11 @@ pub enum Op {
     DeleteBackend6(u32),
     AffinityMatch([u8; 8]),
     DeleteAffinityMatch([u8; 8]),
+    /// A service's whole Maglev table, replaced at once.
+    Maglev4(u16, Vec<u32>),
+    Maglev6(u16, Vec<u32>),
+    DeleteMaglev4(u16),
+    DeleteMaglev6(u16),
 }
 
 /// What [`desired`] chose: the map contents, and the service ID of each frontend.
@@ -282,16 +299,30 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
             rev_nat_index: id,
             ..LbService::default()
         };
+        let algorithm = if service.maglev {
+            Algorithm::Maglev
+        } else {
+            Algorithm::Random
+        };
         match service.affinity {
             Some(seconds) => {
                 master.set_service_flags(service_flags::ROUTABLE | service_flags::SESSION_AFFINITY);
                 master
-                    .set_affinity(Algorithm::Random, seconds)
+                    .set_affinity(algorithm, seconds)
                     .map_err(|_| format!("{frontend}: affinity timeout {seconds} s too long"))?;
             }
-            None => master.set_service_flags(service_flags::ROUTABLE),
+            None => {
+                master.set_service_flags(service_flags::ROUTABLE);
+                if service.maglev {
+                    // The union's top byte is the algorithm; no timeout.
+                    master
+                        .set_affinity(algorithm, 0)
+                        .map_err(|_| format!("{frontend}: master"))?;
+                }
+            }
         }
         let mut slots = vec![(0u16, master)];
+        let mut table_input = Vec::new();
         for (index, backend) in backends.into_iter().enumerate() {
             let backend_id = match backend_ids.get(&backend) {
                 Some(id) => *id,
@@ -321,6 +352,17 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
                     .to_bytes(),
                 );
             }
+            if service.maglev {
+                table_input.push(maglev::Backend {
+                    id: backend_id,
+                    address: backend.ip,
+                    port: backend.port,
+                    protocol: protocol_name(backend.proto).ok_or("Maglev backend protocol")?,
+                    cluster: 0,
+                    internal: false,
+                    weight: 1,
+                });
+            }
             let slot = u16::try_from(index)
                 .ok()
                 .and_then(|i| i.checked_add(1))
@@ -333,6 +375,17 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
                     ..LbService::default()
                 },
             ));
+        }
+        // No backends, no table (spec 05 §3.4 step 7): the master's count of
+        // 0 already refuses the frontend.
+        if !table_input.is_empty() {
+            let table = maglev::table(&table_input, TABLE_LEN, SEED_MURMUR)
+                .map_err(|e| format!("{frontend}: Maglev table: {e}"))?;
+            let tables = match frontend.ip {
+                IpAddr::V4(_) => &mut out.maps.maglev4,
+                IpAddr::V6(_) => &mut out.maps.maglev6,
+            };
+            tables.insert(id, table);
         }
         for (slot, value) in slots {
             match frontend.ip {
@@ -351,10 +404,10 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
 }
 
 /// The writes that turn `current` into `desired`, in the order spec 05 §3.4
-/// requires: backends, affinity matches, then slots, then masters (the
-/// publish point); then stale masters, stale slots, stale affinity matches
-/// (so a remembered affinity never reaches a dead backend ID) and stale
-/// backends.
+/// requires: backends, affinity matches, Maglev tables, then slots, then
+/// masters (the publish point); then stale masters, stale slots, stale
+/// Maglev tables, stale affinity matches (so a remembered affinity never
+/// reaches a dead backend ID) and stale backends.
 pub fn plan(current: &Maps, desired: &Maps) -> Vec<Op> {
     let mut ops = Vec::new();
     let changed4 = |key: &u32, value: &[u8; 12]| current.backends4.get(key) != Some(value);
@@ -371,6 +424,16 @@ pub fn plan(current: &Maps, desired: &Maps) -> Vec<Op> {
     }
     for key in desired.affinity_match.difference(&current.affinity_match) {
         ops.push(Op::AffinityMatch(*key));
+    }
+    for (id, table) in &desired.maglev4 {
+        if current.maglev4.get(id) != Some(table) {
+            ops.push(Op::Maglev4(*id, table.clone()));
+        }
+    }
+    for (id, table) in &desired.maglev6 {
+        if current.maglev6.get(id) != Some(table) {
+            ops.push(Op::Maglev6(*id, table.clone()));
+        }
     }
     for master in [false, true] {
         for (key, value) in &desired.services4 {
@@ -400,6 +463,16 @@ pub fn plan(current: &Maps, desired: &Maps) -> Vec<Op> {
             }
         }
     }
+    for id in current.maglev4.keys() {
+        if !desired.maglev4.contains_key(id) {
+            ops.push(Op::DeleteMaglev4(*id));
+        }
+    }
+    for id in current.maglev6.keys() {
+        if !desired.maglev6.contains_key(id) {
+            ops.push(Op::DeleteMaglev6(*id));
+        }
+    }
     for key in current.affinity_match.difference(&desired.affinity_match) {
         ops.push(Op::DeleteAffinityMatch(*key));
     }
@@ -420,7 +493,7 @@ pub fn plan(current: &Maps, desired: &Maps) -> Vec<Op> {
 /// after a successful apply).
 pub fn apply(maps: &mut Maps, ops: &[Op]) {
     for op in ops {
-        match *op {
+        match op.clone() {
             Op::Backend4(id, value) => {
                 maps.backends4.insert(id, value);
             }
@@ -450,6 +523,18 @@ pub fn apply(maps: &mut Maps, ops: &[Op]) {
             }
             Op::DeleteAffinityMatch(key) => {
                 maps.affinity_match.remove(&key);
+            }
+            Op::Maglev4(id, table) => {
+                maps.maglev4.insert(id, table);
+            }
+            Op::Maglev6(id, table) => {
+                maps.maglev6.insert(id, table);
+            }
+            Op::DeleteMaglev4(id) => {
+                maps.maglev4.remove(&id);
+            }
+            Op::DeleteMaglev6(id) => {
+                maps.maglev6.remove(&id);
             }
         }
     }
@@ -492,6 +577,70 @@ pub fn resolve_scope(
         }
     }
     Some(Ok(out))
+}
+
+/// The backend the uplink programs pick for a new flow from `client` to a
+/// Maglev frontend, the way `nodeport_ingress` does: the flow hash (client
+/// port 0 with session affinity) selects a table entry. `None` when the
+/// frontend is absent, not Maglev, or its table or backend is missing.
+pub fn maglev_pick(
+    maps: &Maps,
+    frontend: Address,
+    scope: u8,
+    client: IpAddr,
+    client_port: u16,
+) -> Option<Address> {
+    let master = match frontend.ip {
+        IpAddr::V4(_) => maps.services4.get(&key4(frontend, scope, 0)?),
+        IpAddr::V6(_) => maps.services6.get(&key6(frontend, scope, 0)?),
+    }
+    .copied()
+    .map(LbService::from_bytes)?;
+    if master.algorithm_code() != ALGORITHM_MAGLEV {
+        return None;
+    }
+    let client_port = if master.service_flags() & service_flags::SESSION_AFFINITY != 0 {
+        0
+    } else {
+        client_port
+    };
+    let id = master.rev_nat_index;
+    let (table, hash) = match (frontend.ip, client) {
+        (IpAddr::V4(_), IpAddr::V4(client)) => (
+            maps.maglev4.get(&id)?,
+            flowsdn_bpf_abi::maglev::flow_hash4(
+                client.octets(),
+                client_port,
+                frontend.port,
+                frontend.proto,
+            ),
+        ),
+        (IpAddr::V6(_), IpAddr::V6(client)) => (
+            maps.maglev6.get(&id)?,
+            flowsdn_bpf_abi::maglev::flow_hash6(
+                client.octets(),
+                client_port,
+                frontend.port,
+                frontend.proto,
+            ),
+        ),
+        _ => return None,
+    };
+    let entry = usize::try_from(flowsdn_bpf_abi::maglev::entry(hash)).ok()?;
+    let backend = *table.get(entry)?;
+    match frontend.ip {
+        IpAddr::V4(_) => maps.backends4.get(&backend).map(|v| backend4(*v)),
+        IpAddr::V6(_) => maps.backends6.get(&backend).map(|v| backend6(*v)),
+    }
+}
+
+/// The Maglev hash string's protocol name (spec 05 §5.1).
+fn protocol_name(proto: u8) -> Option<&'static str> {
+    match proto {
+        PROTO_TCP => Some("TCP"),
+        PROTO_UDP => Some("UDP"),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

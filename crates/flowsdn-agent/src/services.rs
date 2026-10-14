@@ -12,7 +12,8 @@
 //! Each NodePort, external and LoadBalancer frontend also has a node-local
 //! copy (scope 1) for packets from outside the cluster arriving on this
 //! node's uplink: every backend (the uplink programs SNAT to other nodes'),
-//! or this node's only with `externalTrafficPolicy: Local`.
+//! or this node's only with `externalTrafficPolicy: Local`. Those copies
+//! use Maglev when the Service asks for it (spec 05 §3.13).
 //! Pure data; the `kubernetes` controller feeds and applies it.
 use flowsdn_lb::socket::{Address, PROTO_TCP, PROTO_UDP, SCOPE_CLUSTER, SCOPE_NODE_LOCAL, Service};
 use serde_json::{Value, json};
@@ -41,6 +42,9 @@ pub struct ServiceInfo {
     pub external_local: bool,
     /// ClientIP session affinity timeout in seconds.
     pub affinity: Option<u32>,
+    /// Maglev for traffic from outside the cluster (the node-local
+    /// frontends); the socket LB always picks at random.
+    pub maglev: bool,
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Endpoint {
@@ -223,6 +227,7 @@ pub fn frontends(
                             backends: backends(port, proto, ip.is_ipv6(), slices, only),
                             affinity: service.affinity,
                             scope,
+                            maglev: service.maglev && scope == SCOPE_NODE_LOCAL,
                         },
                     });
                 }
@@ -281,6 +286,9 @@ pub fn service_list(frontends: &[Frontend], ids: &BTreeMap<(Address, u8), u16>) 
                     "port-name":f.port_name,"service-type":f.service_type});
                 if let (Some(seconds), Some(object)) = (f.service.affinity, flags.as_object_mut()) {
                     object.insert("session-affinity-timeout".into(), json!(seconds));
+                }
+                if let (true, Some(object)) = (f.service.maglev, flags.as_object_mut()) {
+                    object.insert("lb-algorithm".into(), json!("maglev"));
                 }
                 let spec = json!({"id":id,"frontend-address":front,"backend-addresses":backends,
                     "flags":flags});

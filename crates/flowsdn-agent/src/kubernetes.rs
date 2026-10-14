@@ -42,6 +42,12 @@ pub struct Settings {
     /// cluster (#292), default on with `service-lb`: tc programs on the
     /// interfaces holding this node's InternalIPs.
     pub node_port: bool,
+    /// `lb-algorithm: maglev` (default `random`): NodePort, external and
+    /// LoadBalancer traffic from outside the cluster picks backends by
+    /// Maglev (spec 05 §3.13), so every node sends a flow to the same
+    /// backend. A Service's `service.flowsdn.io/lb-algorithm` annotation
+    /// overrides it.
+    pub maglev: bool,
     /// Cluster identity allocation (spec 03 §3.3, #291), default on: watch
     /// Namespaces and FlowsdnIdentity objects and hold an identity for each
     /// local Pod's labels.
@@ -99,6 +105,11 @@ impl Settings {
                 "kubernetes.node-name (or K8S_NODE_NAME/NODE_NAME) must be a node name".into(),
             );
         }
+        let maglev = match text("lb-algorithm")?.as_str() {
+            "" | "random" => false,
+            "maglev" => true,
+            _ => return Err("kubernetes.lb-algorithm must be random or maglev".into()),
+        };
         let kubeconfig = text("kubeconfig")?;
         let cgroup_root = text("cgroup-root")?;
         let cgroup_root = if cgroup_root.is_empty() {
@@ -130,6 +141,7 @@ impl Settings {
             skip_unreachable: flag("direct-routing-skip-unreachable", false)?,
             service_lb: flag("service-lb", true)?,
             node_port: flag("node-port", true)?,
+            maglev,
             identity_allocation: flag("identity-allocation", true)?,
             network_policy: flag("network-policy", true)?,
             cluster_name,
