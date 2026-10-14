@@ -1197,7 +1197,8 @@ fn connect_kubernetes(config: &mut Config) -> Result<Option<Kubernetes>> {
     let Some(settings) = config.kubernetes.clone() else {
         return Ok(None);
     };
-    let controller = Kubernetes::connect(settings, &config.state)?;
+    let mut controller = Kubernetes::connect(settings, &config.state)?;
+    controller.derive_pod_cidrs(config.auto4, config.auto6);
     if config.auto4 || config.auto6 {
         let (pool4, pool6) = controller.wait_for_pools(config.auto4, config.auto6)?;
         config.resolve_auto(pool4, pool6)?;

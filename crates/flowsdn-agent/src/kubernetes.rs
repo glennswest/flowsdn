@@ -351,28 +351,111 @@ pub struct DesiredRoute {
     pub node: String,
 }
 
+/// The families whose pod CIDRs are derived for a Node that has none (#296,
+/// option C): those where this agent's own pool is `auto`. Every agent of the
+/// cluster applies `alloc_cidr`'s rule to every Node, so each one knows the
+/// others' pools without an operator or Kubernetes node IPAM.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Derive {
+    pub v4: bool,
+    pub v6: bool,
+}
+
+/// A node's pod CIDRs: its `spec.podCIDRs`, plus, for each derived family it
+/// has none of, the CIDR `alloc_cidr` derives (what that node's agent uses).
+pub fn node_cidrs(node: &NodeInfo, derive: Derive) -> Vec<(IpAddr, u8)> {
+    let mut cidrs = node.pod_cidrs.clone();
+    for (v6, on) in [(false, derive.v4), (true, derive.v6)] {
+        if on && !cidrs.iter().any(|(ip, _)| ip.is_ipv6() == v6) {
+            cidrs.extend(alloc_cidr(node, v6));
+        }
+    }
+    cidrs
+}
+
+/// Whether two CIDRs share an address (same family, equal under the shorter
+/// prefix).
+pub fn overlaps((a, a_len): (IpAddr, u8), (b, b_len): (IpAddr, u8)) -> bool {
+    let shorter = u32::from(a_len.min(b_len));
+    match (a, b) {
+        (IpAddr::V4(a), IpAddr::V4(b)) => {
+            let mask = u32::MAX.checked_shl(32u32.saturating_sub(shorter)).unwrap_or(0);
+            u32::from(a) & mask == u32::from(b) & mask
+        }
+        (IpAddr::V6(a), IpAddr::V6(b)) => {
+            let mask = u128::MAX
+                .checked_shl(128u32.saturating_sub(shorter))
+                .unwrap_or(0);
+            u128::from(a) & mask == u128::from(b) & mask
+        }
+        _ => false,
+    }
+}
+
+/// The direct routes, and the pod CIDR collisions that withheld some.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RoutePlan {
+    pub routes: Vec<DesiredRoute>,
+    /// One line per pair of nodes whose pod CIDRs overlap.
+    pub collisions: Vec<String>,
+}
+
 /// `<podCIDR> via <nodeIP>` for every other node and each of its pod CIDRs
-/// (spec 10 §3.2.3 native routing), using the node's first InternalIP of that
-/// family. A node without one gets no route; the view records it.
-pub fn desired_routes(local: &str, nodes: &[NodeInfo]) -> Vec<DesiredRoute> {
+/// (`node_cidrs`; spec 10 §3.2.3 native routing), using the node's first
+/// InternalIP of that family. A node without one gets no route. Two nodes
+/// whose CIDRs overlap (a derived rule can give the same 10.<byte>/16 to nodes
+/// on different subnets) get no route for the overlapping CIDRs, and the
+/// collision is reported: refusing is better than routing a pod's traffic to
+/// the wrong node.
+pub fn desired_routes(local: &str, nodes: &[NodeInfo], derive: Derive) -> RoutePlan {
+    let cidrs: Vec<(&NodeInfo, Vec<(IpAddr, u8)>)> = nodes
+        .iter()
+        .map(|node| (node, node_cidrs(node, derive)))
+        .collect();
+    let mut refused = BTreeSet::new();
+    let mut collisions = Vec::new();
+    for (at, (a, a_cidrs)) in cidrs.iter().enumerate() {
+        for (b, b_cidrs) in cidrs.iter().skip(at.saturating_add(1)) {
+            for x in a_cidrs {
+                for y in b_cidrs.iter().filter(|y| overlaps(*x, **y)) {
+                    collisions.push(format!(
+                        "nodes {} ({}) and {} ({}) have overlapping pod CIDRs",
+                        a.name,
+                        cidr_text(x.0, x.1),
+                        b.name,
+                        cidr_text(y.0, y.1)
+                    ));
+                    refused.insert((a.name.as_str(), *x));
+                    refused.insert((b.name.as_str(), *y));
+                }
+            }
+        }
+    }
     let mut routes = BTreeSet::new();
-    for node in nodes.iter().filter(|node| node.name != local) {
-        for (destination, prefix) in &node.pod_cidrs {
+    for (node, node_cidrs) in cidrs.iter().filter(|(node, _)| node.name != local) {
+        for cidr in node_cidrs {
+            if refused.contains(&(node.name.as_str(), *cidr)) {
+                continue;
+            }
+            let (destination, prefix) = *cidr;
             if let Some(gateway) = node
                 .internal_ips
                 .iter()
                 .find(|ip| ip.is_ipv6() == destination.is_ipv6())
             {
                 routes.insert(DesiredRoute {
-                    destination: *destination,
-                    prefix: *prefix,
+                    destination,
+                    prefix,
                     gateway: *gateway,
                     node: node.name.clone(),
                 });
             }
         }
     }
-    routes.into_iter().collect()
+    RoutePlan {
+        routes: routes.into_iter().collect(),
+        collisions,
+    }
 }
 
 pub type Shared = Arc<Mutex<View>>;

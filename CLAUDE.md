@@ -337,9 +337,14 @@ contents (spec 05 §3.4 write order: backends, slots, master; stale master/slots
 - [x] Found: remote routes come only from Node `spec.podCIDRs`; stormcos sets none, so two flowsdn nodes
       install no routes to each other (derived pools are local). Docs: runtime.md, deploy README.
 - [x] §3 answered on #296: no observer/relay; console shows flows unavailable; observer is #293.
-- [ ] Owner decision posted on #296 (`wait-owner`): pod CIDRs/operator duties — A controller-manager node
-      IPAM, B flowsdn-operator (#337), C agent derives every node's CIDR with collision refusal
-      (recommended now, B later). Then implement the chosen option; close #296.
+- [x] Owner decision posted on #296 (`wait-owner`): pod CIDRs/operator duties — A controller-manager node
+      IPAM, B flowsdn-operator (#337), C agent derives every node's CIDR with collision refusal.
+- [x] Decided 2026-10-13 (master, owner "yes, decide them"): C now, A (rustkube node IPAM) later, B only if A can't.
+- [ ] Agent: `node_cidrs` = spec.podCIDRs, else the derived rule for families whose local pool is `auto`;
+      `desired_routes` -> RoutePlan {routes, collisions}; overlapping CIDRs get no route; `pod-cidrs` health
+      error + `PodCIDRCollision` Event. Tests (pvetest1/2 pair, collisions, overlap).
+- [ ] Docs (runtime, deploy README, implementation-status, spec 07/10 note), changelog; sc-build; close #296
+      (§2 C, §3 answered; operator stays #337, two-node live check is #291/day-2).
 
 ### Cluster identity allocation — #291 (P0), 2026-10-09
 

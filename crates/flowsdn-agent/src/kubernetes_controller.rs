@@ -44,6 +44,7 @@ pub struct Controller {
     client: JsonClient,
     settings: Settings,
     routes_file: PathBuf,
+    derive: Derive,
 }
 impl Controller {
     /// Load credentials (explicit kubeconfig, else in-cluster) and verify TLS
@@ -62,7 +63,13 @@ impl Controller {
             client,
             settings,
             routes_file: state_dir.join(ROUTES_FILE),
+            derive: Derive::default(),
         })
+    }
+    /// The families whose pools are `auto` here: other Nodes without a pod
+    /// CIDR of that family get the derived one too (#296, option C).
+    pub fn derive_pod_cidrs(&mut self, v4: bool, v6: bool) {
+        self.derive = Derive { v4, v6 };
     }
     /// Block until this node's Node object yields an allocation CIDR for every
     /// requested family (spec 07 §3.4/§3.5: IPAM waits, logging every 5 s).
@@ -191,17 +198,33 @@ impl Controller {
                     runtime,
                     client,
                     settings,
+                    derive,
                     ..
                 } = self;
                 let local = settings.node_name;
                 let node_view = Arc::clone(&watch_view);
                 let node_lb = lb.clone();
                 let mut sent: Option<Vec<DesiredRoute>> = None;
+                let mut reported: Vec<String> = Vec::new();
                 let mut addresses: Option<Vec<(String, Vec<IpAddr>)>> = None;
                 let nodes =
                     watch_forever(&client, Scope::Nodes, "nodes", &watch_view, move |state| {
                         let nodes = node_rows(state);
-                        let desired = desired_routes(&local, &nodes);
+                        let RoutePlan {
+                            routes: desired,
+                            collisions,
+                        } = desired_routes(&local, &nodes, derive);
+                        if collisions != reported {
+                            let text = collisions.join("; ");
+                            let mut view = lock(&node_view);
+                            if collisions.is_empty() {
+                                view.errors.remove("pod-cidrs");
+                            } else {
+                                crate::events::node(Warning, "PodCIDRCollision", text.clone());
+                                view.errors.insert("pod-cidrs".into(), text);
+                            }
+                            reported = collisions;
+                        }
                         // NodePort frontends follow the nodes' InternalIPs.
                         let current: Vec<_> = nodes
                             .iter()

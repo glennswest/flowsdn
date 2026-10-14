@@ -239,8 +239,10 @@ fn desired_routes_cover_other_nodes_by_family() {
             &["192.168.31.174"],
         ),
     ];
-    let routes = desired_routes("local", &nodes);
-    let text: Vec<_> = routes
+    let plan = desired_routes("local", &nodes, Derive::default());
+    assert!(plan.collisions.is_empty());
+    let text: Vec<_> = plan
+        .routes
         .iter()
         .map(|r| {
             format!(
@@ -259,6 +261,77 @@ fn desired_routes_cover_other_nodes_by_family() {
             "f00d::aad:0:0:0/96 via 2001:db8::173 (peer)",
         ]
     );
+}
+
+fn route_text(plan: &RoutePlan) -> Vec<String> {
+    plan.routes
+        .iter()
+        .map(|r| format!("{} via {}", cidr_text(r.destination, r.prefix), r.gateway))
+        .collect()
+}
+
+#[test]
+fn nodes_without_pod_cidrs_get_derived_routes_for_auto_families() {
+    // pvetest1 + pvetest2 (#296, option C): stormcos sets no podCIDRs.
+    let nodes = [
+        node("pvetest1", &[], &["192.168.31.172"]),
+        node("pvetest2", &[], &["192.168.31.173", "2001:db8::173"]),
+        node("explicit", &[("10.9.0.0", 24)], &["192.168.31.9"]),
+    ];
+    assert!(
+        desired_routes("pvetest1", &nodes, Derive::default())
+            .routes
+            .iter()
+            .all(|r| r.node == "explicit"),
+        "nothing is derived unless the local pool is auto"
+    );
+    let plan = desired_routes("pvetest1", &nodes, Derive { v4: true, v6: true });
+    assert!(plan.collisions.is_empty(), "{:?}", plan.collisions);
+    assert_eq!(
+        route_text(&plan),
+        [
+            "10.9.0.0/24 via 192.168.31.9",
+            "10.173.0.0/16 via 192.168.31.173",
+            "f00d::aad:0:0:0/96 via 2001:db8::173",
+        ]
+    );
+    // The other side sees pvetest1's derived pool.
+    let back = desired_routes("pvetest2", &nodes, Derive { v4: true, v6: false });
+    assert!(route_text(&back).contains(&"10.172.0.0/16 via 192.168.31.172".to_owned()));
+}
+
+#[test]
+fn colliding_pod_cidrs_get_no_route_and_are_reported() {
+    // Same last IPv4 byte on two subnets: both derive 10.5.0.0/16.
+    let nodes = [
+        node("local", &[], &["192.168.31.4"]),
+        node("a", &[], &["192.168.31.5"]),
+        node("b", &[], &["192.168.40.5"]),
+        node("c", &[("10.5.3.0", 24)], &["192.168.31.6"]),
+        node("d", &[], &["192.168.31.7"]),
+    ];
+    let plan = desired_routes("local", &nodes, Derive { v4: true, v6: false });
+    assert_eq!(route_text(&plan), ["10.7.0.0/16 via 192.168.31.7"]);
+    assert_eq!(plan.collisions.len(), 3, "{:?}", plan.collisions);
+    assert!(plan.collisions.iter().any(|c| c
+        == "nodes a (10.5.0.0/16) and b (10.5.0.0/16) have overlapping pod CIDRs"));
+    // A remote node that collides with this one gets no route either.
+    let mine = [
+        node("local", &[], &["192.168.31.5"]),
+        node("twin", &[], &["192.168.40.5"]),
+    ];
+    let plan = desired_routes("local", &mine, Derive { v4: true, v6: false });
+    assert!(plan.routes.is_empty());
+    assert_eq!(plan.collisions.len(), 1);
+}
+
+#[test]
+fn overlap_compares_under_the_shorter_prefix() {
+    assert!(overlaps((ip("10.5.0.0"), 16), (ip("10.5.3.0"), 24)));
+    assert!(!overlaps((ip("10.5.0.0"), 16), (ip("10.6.0.0"), 16)));
+    assert!(overlaps((ip("f00d::aac:0:0:0"), 96), (ip("f00d::aac:0:0:0"), 96)));
+    assert!(!overlaps((ip("10.5.0.0"), 16), (ip("f00d::"), 96)));
+    assert!(overlaps((ip("10.0.0.0"), 0), (ip("192.0.2.0"), 24)));
 }
 
 #[test]
