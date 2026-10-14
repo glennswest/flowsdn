@@ -56,6 +56,17 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Install check to Rust — #375 (P3), 2026-10-13
+
+Owner: "is the shell not rustable?" flowsdn's install check is `install/kubernetes/check.sh` (the chart check:
+helm lint, renders, version match, 22 CRDs, kinds, no Cilium names, guards refuse). No shipped artifact
+carries shell (golden = agent + CNI binaries, CNI `install` is Rust; the packaged chart excludes check.sh), so
+the check belongs in build tooling, not the node binaries: `cargo xtask chart-check` (Rust, drives helm via
+std::process), check.sh deleted, deploy/release/build.sh calls it.
+
+- [ ] xtask `chart` module + pure checks with unit tests; release build.sh; delete check.sh.
+- [ ] Docs (helm.md, build-and-test, ADR-0019/0020 notes, xtask README), changelog; sc-build incl. the chart check; close #375.
+
 ### UDP socket termination — #292 (P0), 2026-10-13
 
 Spec 05 §3.8 "Socket termination" (owner #3: netlink SOCK_DESTROY, not the kfunc). When UDP backends leave
