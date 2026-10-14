@@ -154,8 +154,5 @@ fn verdict_key_layout_and_host_endpoint() {
     assert_eq!(bytes, [0, 0, 1, 0, 0, 22, 6, 0, 3, 0, 0, 0]);
     assert_eq!(PolicyVerdictKey::from_bytes(bytes), key);
     assert!(HOST_ENDPOINT > u32::from(u16::MAX));
-    assert_eq!(
-        enforce::AUDIT & (enforce::INGRESS | enforce::EGRESS),
-        0
-    );
+    assert_eq!(enforce::AUDIT & (enforce::INGRESS | enforce::EGRESS), 0);
 }

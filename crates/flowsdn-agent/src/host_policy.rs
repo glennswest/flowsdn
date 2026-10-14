@@ -41,7 +41,10 @@ pub const AGGREGATE_WORLD: u32 = 13;
 pub enum Peer {
     /// Fixed identities (entities).
     Identities(Vec<u32>),
-    Cidr { cidr: String, except: Vec<String> },
+    Cidr {
+        cidr: String,
+        except: Vec<String>,
+    },
     /// Pods whose identity labels match.
     Endpoints(LabelSelector),
 }
@@ -140,7 +143,11 @@ fn strings(value: Option<&Value>) -> Option<Vec<String>> {
 }
 
 /// (protocol number, range) pairs of `toPorts`; `ANY` is TCP, UDP and SCTP.
-fn ports(rule: &Value, policy: &str, problems: &mut BTreeSet<String>) -> Option<Vec<(u8, PortRange)>> {
+fn ports(
+    rule: &Value,
+    policy: &str,
+    problems: &mut BTreeSet<String>,
+) -> Option<Vec<(u8, PortRange)>> {
     let mut out = Vec::new();
     let Some(list) = rule.get("toPorts").filter(|v| !v.is_null()) else {
         return Some(out);
@@ -149,7 +156,9 @@ fn ports(rule: &Value, policy: &str, problems: &mut BTreeSet<String>) -> Option<
         if item.get("rules").is_some_and(|v| !v.is_null())
             || item.get("listener").is_some_and(|v| !v.is_null())
         {
-            problems.insert(format!("{policy}: L7 rules are not enforced; the rule is skipped"));
+            problems.insert(format!(
+                "{policy}: L7 rules are not enforced; the rule is skipped"
+            ));
             return None;
         }
         let Some(entries) = item.get("ports").and_then(Value::as_array) else {
@@ -194,12 +203,7 @@ fn ports(rule: &Value, policy: &str, problems: &mut BTreeSet<String>) -> Option<
 }
 
 /// One `ingress`/`ingressDeny` rule.
-fn rule(
-    value: &Value,
-    deny: bool,
-    policy: &str,
-    problems: &mut BTreeSet<String>,
-) -> Option<Rule> {
+fn rule(value: &Value, deny: bool, policy: &str, problems: &mut BTreeSet<String>) -> Option<Rule> {
     for field in [
         "fromRequires",
         "fromNodes",
@@ -222,7 +226,9 @@ fn rule(
             match entity(&name) {
                 Some(ids) => peers.push(Peer::Identities(ids)),
                 None => {
-                    problems.insert(format!("{policy}: unknown entity {name}; it allows nothing"));
+                    problems.insert(format!(
+                        "{policy}: unknown entity {name}; it allows nothing"
+                    ));
                 }
             }
         }
@@ -258,7 +264,9 @@ fn rule(
             match LabelSelector::parse(Some(item)) {
                 Ok(selector) => peers.push(Peer::Endpoints(rekey(selector, sourced_key))),
                 Err(error) => {
-                    problems.insert(format!("{policy}: fromEndpoints {error}; it allows nothing"));
+                    problems.insert(format!(
+                        "{policy}: fromEndpoints {error}; it allows nothing"
+                    ));
                 }
             }
         }

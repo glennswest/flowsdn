@@ -36,13 +36,19 @@ fn node_selector_picks_the_policies_of_this_node() {
         ),
     ];
     let got = select(&objects, &node);
-    assert_eq!(got.names, vec!["/workers".to_owned(), "/sourced".to_owned()]);
+    assert_eq!(
+        got.names,
+        vec!["/workers".to_owned(), "/sourced".to_owned()]
+    );
     assert!(got.enforce_ingress);
     assert!(!got.audit);
     // workers' rule and sourced's empty rule (default deny, allows nothing).
     assert_eq!(got.rules.len(), 2);
     let workers = got.rules.first().expect("rule");
-    assert_eq!(workers.peers, entity("cluster").map(|ids| vec![Peer::Identities(ids)]));
+    assert_eq!(
+        workers.peers,
+        entity("cluster").map(|ids| vec![Peer::Identities(ids)])
+    );
     assert_eq!(
         workers.ports,
         vec![(6, PortRange::from_api(9090, None).expect("range"))]
@@ -58,7 +64,8 @@ fn node_selector_picks_the_policies_of_this_node() {
 #[test]
 fn peers_ports_and_denies() {
     let node = labels(&[("role", "worker")]);
-    let objects = [json!({"metadata":{"name":"fw","annotations":{"policy.flowsdn.io/audit":"true"}},
+    let objects = [
+        json!({"metadata":{"name":"fw","annotations":{"policy.flowsdn.io/audit":"true"}},
         "specs":[{"nodeSelector":{},
             "ingress":[
                 {"fromCIDR":["192.168.31.0/24"],"fromCIDRSet":[{"cidr":"10.0.0.0/8","except":["10.9.0.0/16"]}],
@@ -67,7 +74,8 @@ fn peers_ports_and_denies() {
                 {"fromEndpoints":[{"matchLabels":{"app":"prom","k8s:io.kubernetes.pod.namespace":"mon"}}]}
             ],
             "ingressDeny":[{"fromEntities":["world"],"toPorts":[{"ports":[{"port":"22","protocol":"TCP"}]}]}],
-            "egress":[{"toEntities":["world"]}]}]})];
+            "egress":[{"toEntities":["world"]}]}]}),
+    ];
     let got = select(&objects, &node);
     assert!(got.audit && got.enforce_ingress);
     assert_eq!(got.rules.len(), 4);
@@ -100,11 +108,11 @@ fn unsupported_rules_are_skipped_and_reported() {
     let objects = [policy(
         "odd",
         json!({"nodeSelector":{},"enableDefaultDeny":{"ingress":false},
-            "ingress":[
-                {"fromEntities":["world"],"toPorts":[{"ports":[{"port":"80"}],"rules":{"http":[{}]}}]},
-                {"fromNodes":[{}]},
-                {"fromEntities":["nonsense"],"toPorts":[{"ports":[{"port":"ssh"}]}]}
-            ]}),
+        "ingress":[
+            {"fromEntities":["world"],"toPorts":[{"ports":[{"port":"80"}],"rules":{"http":[{}]}}]},
+            {"fromNodes":[{}]},
+            {"fromEntities":["nonsense"],"toPorts":[{"ports":[{"port":"ssh"}]}]}
+        ]}),
     )];
     let got = select(&objects, &node);
     assert!(!got.enforce_ingress, "enableDefaultDeny.ingress false");

@@ -326,7 +326,10 @@ fn host_firewall_rules_enforcement_and_audit() {
         assert!(keys.contains(&want), "{want:?} not in {keys:?}");
     }
     assert_eq!(keys.len(), 5, "{keys:?}");
-    assert_eq!(desired.host.pointer("/enforcing-on/0"), Some(&json!("eth0")));
+    assert_eq!(
+        desired.host.pointer("/enforcing-on/0"),
+        Some(&json!("eth0"))
+    );
     assert_eq!(desired.host.pointer("/policies/0"), Some(&json!("/fw")));
     assert!(desired.problems.is_empty(), "{:?}", desired.problems);
 
@@ -362,8 +365,8 @@ fn denies_win_over_the_allows_they_cover() {
     .into_iter()
     .collect();
     let denies: BTreeSet<_> = [
-        (0, 6, 22, 16),   // TCP 22 from everyone
-        (302, 6, 8, 13),  // TCP 8-15 from 302
+        (0, 6, 22, 16),  // TCP 22 from everyone
+        (302, 6, 8, 13), // TCP 8-15 from 302
     ]
     .into_iter()
     .collect();

@@ -177,8 +177,9 @@ impl Compiler<'_> {
             ));
             return out;
         };
-        let selected =
-            |p: CidrPrefix| allow.contains_prefix(p) && !except.iter().any(|e| e.contains_prefix(p));
+        let selected = |p: CidrPrefix| {
+            allow.contains_prefix(p) && !except.iter().any(|e| e.contains_prefix(p))
+        };
         out.extend(
             self.cidrs
                 .iter()
@@ -546,7 +547,12 @@ pub fn deny_over_allow(
 }
 
 /// The host endpoint's entries and its uplinks' `flowsdn_policy_ep` rows.
-fn host_firewall(view: &View, compiler: &mut Compiler<'_>, hosts: HostPolicies, desired: &mut Desired) {
+fn host_firewall(
+    view: &View,
+    compiler: &mut Compiler<'_>,
+    hosts: HostPolicies,
+    desired: &mut Desired,
+) {
     let mut allows = BTreeSet::new();
     let mut denies = BTreeSet::new();
     for rule in &hosts.rules {
@@ -556,7 +562,12 @@ fn host_firewall(view: &View, compiler: &mut Compiler<'_>, hosts: HostPolicies, 
             l4.push((0, 0, 0));
         }
         for (protocol, range) in &rule.ports {
-            l4.extend(range.blocks().into_iter().map(|b| (*protocol, b.port, b.prefix)));
+            l4.extend(
+                range
+                    .blocks()
+                    .into_iter()
+                    .map(|b| (*protocol, b.port, b.prefix)),
+            );
         }
         for id in peers {
             for (protocol, port, prefix) in &l4 {
@@ -595,7 +606,10 @@ fn host_firewall(view: &View, compiler: &mut Compiler<'_>, hosts: HostPolicies, 
         // A deny replaces an allow at the same key.
         if desired
             .entries
-            .insert(EndpointPolicyKey::for_endpoint(HOST_ENDPOINT, key).to_bytes(), value)
+            .insert(
+                EndpointPolicyKey::for_endpoint(HOST_ENDPOINT, key).to_bytes(),
+                value,
+            )
             .is_none()
         {
             count = count.saturating_add(1);

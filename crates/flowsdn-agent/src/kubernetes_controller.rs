@@ -1037,9 +1037,7 @@ fn interfaces_with(addresses: &[IpAddr]) -> std::result::Result<BTreeSet<String>
     Ok(interfaces_holding(addresses)?.into_keys().collect())
 }
 /// The interfaces (name -> ifindex) that hold one of `addresses`.
-fn interfaces_holding(
-    addresses: &[IpAddr],
-) -> std::result::Result<BTreeMap<String, u32>, String> {
+fn interfaces_holding(addresses: &[IpAddr]) -> std::result::Result<BTreeMap<String, u32>, String> {
     let connector = Connector::open().map_err(|e| format!("netlink: {e}"))?;
     let mut out = BTreeMap::new();
     for entry in fs::read_dir("/sys/class/net").map_err(|e| format!("/sys/class/net: {e}"))? {

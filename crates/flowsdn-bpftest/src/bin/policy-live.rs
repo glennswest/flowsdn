@@ -15,8 +15,7 @@
 use flowsdn_bpf_abi::{
     IpCacheKey, RemoteEndpointInfo,
     policy::{
-        EndpointPolicyKey, HOST_ENDPOINT, PolicyEndpoint, PolicyEntry, PolicyKey, enforce,
-        verdict,
+        EndpointPolicyKey, HOST_ENDPOINT, PolicyEndpoint, PolicyEntry, PolicyKey, enforce, verdict,
     },
 };
 use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object};
@@ -409,9 +408,20 @@ fn host_verdict(lab: &mut Lab, program: &str, ifindex: u32, frame: &[u8]) -> Res
     let mut ctx_out = [0u8; 192];
     Ok(syscall::run(fd, frame, &mut out, &ctx, &mut ctx_out)?.0)
 }
-fn host_rule(lab: &mut Lab, identity: u32, proto: u8, port: u16, prefix: u8, deny: bool) -> Result<()> {
+fn host_rule(
+    lab: &mut Lab,
+    identity: u32,
+    proto: u8,
+    port: u16,
+    prefix: u8,
+    deny: bool,
+) -> Result<()> {
     let key = PolicyKey::new(identity, false, proto, port, prefix).map_err(|_| "policy key")?;
-    let lpm = if proto == 0 { 0 } else { prefix.saturating_add(8) };
+    let lpm = if proto == 0 {
+        0
+    } else {
+        prefix.saturating_add(8)
+    };
     let precedence = if deny { u32::MAX } else { 0xFFFF_FF01 };
     let entry =
         PolicyEntry::new(0, deny, lpm, 0, false, precedence, 0).map_err(|_| "policy entry")?;
@@ -454,7 +464,13 @@ fn host(lab: &mut Lab) -> Result<()> {
 
     // Learning: no flags, every flow passes and is remembered.
     set(lab, 0)?;
-    check(lab, "learning, admin:8081", "from_netdev", &to_host(ADMIN, 8081), OK)?;
+    check(
+        lab,
+        "learning, admin:8081",
+        "from_netdev",
+        &to_host(ADMIN, 8081),
+        OK,
+    )?;
     if !lab
         .delivery
         .policy()
@@ -464,14 +480,34 @@ fn host(lab: &mut Lab) -> Result<()> {
     {
         return Err("a flow to the host was not learned without flags".into());
     }
-    println!("PASS host firewall learning: unenforced uplink passes and remembers flows to the host");
+    println!(
+        "PASS host firewall learning: unenforced uplink passes and remembers flows to the host"
+    );
 
     set(lab, enforce::INGRESS)?;
     check(lab, "admin:22", "from_netdev", &to_host(ADMIN, 22), OK)?;
     check(lab, "admin:80", "from_netdev", &to_host(ADMIN, 80), SHOT)?;
-    check(lab, "remote node:80", "from_netdev", &to_host(REMOTE_NODE, 80), OK)?;
-    check(lab, "remote node:9100", "from_netdev", &to_host(REMOTE_NODE, 9100), SHOT)?;
-    check(lab, "learned admin:8081", "from_netdev", &to_host(ADMIN, 8081), OK)?;
+    check(
+        lab,
+        "remote node:80",
+        "from_netdev",
+        &to_host(REMOTE_NODE, 80),
+        OK,
+    )?;
+    check(
+        lab,
+        "remote node:9100",
+        "from_netdev",
+        &to_host(REMOTE_NODE, 9100),
+        SHOT,
+    )?;
+    check(
+        lab,
+        "learned admin:8081",
+        "from_netdev",
+        &to_host(ADMIN, 8081),
+        OK,
+    )?;
     check(
         lab,
         "forwarded to a pod",
@@ -509,7 +545,13 @@ fn host(lab: &mut Lab) -> Result<()> {
     println!("PASS host firewall: replies of flows the host started pass; unsolicited ones do not");
 
     set(lab, enforce::INGRESS | enforce::AUDIT)?;
-    check(lab, "audit admin:8080", "from_netdev", &to_host(ADMIN, 8080), OK)?;
+    check(
+        lab,
+        "audit admin:8080",
+        "from_netdev",
+        &to_host(ADMIN, 8080),
+        OK,
+    )?;
     let counts = lab.delivery.policy().policy_verdicts()?;
     let seen = |port: u16, kind: u8| {
         counts.iter().any(|(k, v)| {
@@ -534,7 +576,13 @@ fn host(lab: &mut Lab) -> Result<()> {
         "PASS host firewall audit: a would-be drop passes and is counted; verdict counters hold allowed, denied and audit rows"
     );
     lab.delivery.policy().remove_policy_endpoint(up0)?;
-    check(lab, "removed admin:80", "from_netdev", &to_host(ADMIN, 80), OK)?;
+    check(
+        lab,
+        "removed admin:80",
+        "from_netdev",
+        &to_host(ADMIN, 80),
+        OK,
+    )?;
     println!("PASS host firewall removed: the uplink passes everything");
     Ok(())
 }
