@@ -15,18 +15,28 @@
 //!   (spec 06 §5.2); named ports resolve to the subject's container ports
 //!   (ingress) or the peer Pods' (egress).
 //! - The ipcache maps every Pod IP with an identity, this node's addresses
-//!   (host, 1) and the CIDR prefixes. Remote nodes have no entry: they are
-//!   world, as `ipBlock` sees them.
-use crate::kubernetes::{LocalEndpoint, PodInfo, View};
+//!   (host, 1), other nodes' InternalIPs (remote-node, 6) and the CIDR
+//!   prefixes. An `ipBlock` selects the host and remote nodes whose
+//!   addresses it holds, so node traffic is judged as before they had
+//!   identities.
+//! - The host firewall (#379, [`crate::host_policy`]): with
+//!   `kubernetes.host-firewall` on, the host endpoint ([`HOST_ENDPOINT`]) is
+//!   in `flowsdn_policy_ep` under each uplink's index, tracked always and
+//!   ingress-enforced (or audited) when a host policy selects this node and
+//!   the uplink's learning time is over. Denies win over allows they cover.
+use crate::{
+    host_policy::{self, HostPolicies, Peer as HostPeer, REMOTE_NODE},
+    kubernetes::{HostFirewall, LocalEndpoint, PodInfo, View},
+};
 use flowsdn_bpf_abi::{
     IpCacheKey, MapBytes, RemoteEndpointInfo,
-    policy::{EndpointPolicyKey, PolicyEndpoint, PolicyEntry, PolicyKey, enforce},
+    policy::{EndpointPolicyKey, HOST_ENDPOINT, PolicyEndpoint, PolicyEntry, PolicyKey, enforce},
 };
 use flowsdn_identity::{cidr::CidrPrefix, filter::LabelFilter};
 use flowsdn_policy::{
     k8s::{self, Entry, Peer},
     oracle::Verdict,
-    ports::PortRange,
+    ports::{PortBlock, PortRange},
 };
 use serde_json::{Value, json};
 use std::{
@@ -37,6 +47,10 @@ use std::{
 /// Every allow entry's precedence (spec 06 §3.5.2: allow verdict byte 1;
 /// Kubernetes NetworkPolicy has one tier and no denies).
 pub const ALLOW_PRECEDENCE: u32 = 1;
+/// Host policy precedences (spec 06 §3.5.2, tier Normal priority 0):
+/// `MaxAllowPrecedence` and `MaxPrecedence` (a deny).
+pub const HOST_ALLOW_PRECEDENCE: u32 = 0xFFFF_FF01;
+pub const HOST_DENY_PRECEDENCE: u32 = u32::MAX;
 pub const HOST: u32 = 1;
 /// First local (CIDR) identity: scope 1 in the top byte (spec 03).
 const CIDR_IDENTITY_BASE: u32 = 1 << 24;
@@ -52,6 +66,8 @@ pub struct Desired {
     pub problems: Vec<String>,
     /// Per enforced endpoint: (id, namespace/name, ingress, egress, entries).
     pub enforced: Vec<(u16, String, bool, bool, usize)>,
+    /// The host firewall's state (`null` when it is off).
+    pub host: Value,
 }
 impl Desired {
     pub fn status(&self) -> Value {
@@ -61,6 +77,7 @@ impl Desired {
                 "egress-enforced": egress, "entries": entries,
             })).collect::<Vec<_>>(),
             "ipcache": self.ipcache.len(),
+            "host-firewall": self.host,
             "problems": self.problems,
         })
     }
@@ -95,6 +112,8 @@ struct Compiler<'a> {
     cidrs: BTreeMap<CidrPrefix, u32>,
     /// This node's addresses (the host identity).
     host: Vec<IpAddr>,
+    /// Other nodes' addresses (the remote-node identity).
+    remote_nodes: Vec<IpAddr>,
     problems: BTreeSet<String>,
 }
 
@@ -133,36 +152,70 @@ impl Compiler<'_> {
                     );
                 }
                 Peer::Cidr { cidr, except } => {
-                    let parsed = cidr.parse::<CidrPrefix>().and_then(|allow| {
-                        except
-                            .iter()
-                            .map(|e| e.parse::<CidrPrefix>())
-                            .collect::<Result<Vec<_>, _>>()
-                            .map(|except| (allow, except))
-                    });
-                    let Ok((allow, except)) = parsed else {
-                        self.problems.insert(format!(
-                            "{policy}: ipBlock {cidr} is not a CIDR; it allows nothing"
-                        ));
-                        continue;
-                    };
-                    let selected = |p: CidrPrefix| {
-                        allow.contains_prefix(p) && !except.iter().any(|e| e.contains_prefix(p))
-                    };
-                    out.extend(
-                        self.cidrs
-                            .iter()
-                            .filter(|(p, _)| selected(**p))
-                            .map(|(_, id)| *id),
-                    );
-                    if self
-                        .host
-                        .iter()
-                        .any(|ip| CidrPrefix::new(*ip, host_bits(*ip)).is_ok_and(&selected))
-                    {
-                        out.insert(HOST);
-                    }
+                    out.extend(self.cidr_peer(policy, cidr, except));
                 }
+            }
+        }
+        out
+    }
+
+    /// The identities a CIDR minus its exceptions selects: the local CIDR
+    /// identities inside it, and the host and remote nodes whose addresses
+    /// are.
+    fn cidr_peer(&mut self, policy: &str, cidr: &str, except: &[String]) -> BTreeSet<u32> {
+        let mut out = BTreeSet::new();
+        let parsed = cidr.parse::<CidrPrefix>().and_then(|allow| {
+            except
+                .iter()
+                .map(|e| e.parse::<CidrPrefix>())
+                .collect::<Result<Vec<_>, _>>()
+                .map(|except| (allow, except))
+        });
+        let Ok((allow, except)) = parsed else {
+            self.problems.insert(format!(
+                "{policy}: CIDR {cidr} is not a CIDR; it allows nothing"
+            ));
+            return out;
+        };
+        let selected =
+            |p: CidrPrefix| allow.contains_prefix(p) && !except.iter().any(|e| e.contains_prefix(p));
+        out.extend(
+            self.cidrs
+                .iter()
+                .filter(|(p, _)| selected(**p))
+                .map(|(_, id)| *id),
+        );
+        let holds = |ips: &[IpAddr]| {
+            ips.iter()
+                .any(|ip| CidrPrefix::new(*ip, host_bits(*ip)).is_ok_and(selected))
+        };
+        if holds(&self.host) {
+            out.insert(HOST);
+        }
+        if holds(&self.remote_nodes) {
+            out.insert(REMOTE_NODE);
+        }
+        out
+    }
+
+    /// The identities a host rule's peers select.
+    fn host_peers(&mut self, policy: &str, peers: Option<&[HostPeer]>) -> BTreeSet<u32> {
+        let Some(peers) = peers else {
+            return BTreeSet::from([0]);
+        };
+        let mut out = BTreeSet::new();
+        for peer in peers {
+            match peer {
+                HostPeer::Identities(ids) => out.extend(ids.iter().copied()),
+                HostPeer::Cidr { cidr, except } => {
+                    out.extend(self.cidr_peer(policy, cidr, except));
+                }
+                HostPeer::Endpoints(selector) => out.extend(
+                    self.identities
+                        .iter()
+                        .filter(|(_, labels)| selector.matches(labels))
+                        .map(|(id, _)| *id),
+                ),
             }
         }
         out
@@ -253,8 +306,32 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
                 .into(),
         );
     }
-    // Every CIDR an ipBlock names (and its exceptions) gets a local identity.
+    let hosts = match view.host_firewall {
+        HostFirewall::Off => None,
+        _ => Some(host_policy::select(
+            &view.clusterwide_policies,
+            &view
+                .nodes
+                .iter()
+                .find(|n| n.name == view.local_node)
+                .map(|n| n.labels.clone())
+                .unwrap_or_default(),
+        )),
+    };
+    // Every CIDR an ipBlock or host rule names (and its exceptions) gets a
+    // local identity.
     let mut prefixes = BTreeSet::new();
+    for rule in hosts.iter().flat_map(|h| &h.rules) {
+        for peer in rule.peers.iter().flatten() {
+            if let HostPeer::Cidr { cidr, except } = peer {
+                for text in std::iter::once(cidr).chain(except) {
+                    if let Ok(prefix) = text.parse::<CidrPrefix>() {
+                        prefixes.insert(prefix);
+                    }
+                }
+            }
+        }
+    }
     for (_, entry) in &entries {
         for peer in entry.l3.iter().flatten() {
             if let Peer::Cidr { cidr, except } = peer {
@@ -278,6 +355,13 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
         .flat_map(|n| n.internal_ips.iter().copied())
         .collect();
     host.extend(gateways.iter().copied());
+    let remote_nodes: Vec<IpAddr> = view
+        .nodes
+        .iter()
+        .filter(|n| n.name != view.local_node)
+        .flat_map(|n| n.internal_ips.iter().copied())
+        .filter(|ip| !host.contains(ip))
+        .collect();
     let mut compiler = Compiler {
         view,
         identities: view
@@ -287,6 +371,7 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             .collect(),
         cidrs: cidrs.clone(),
         host: host.clone(),
+        remote_nodes: remote_nodes.clone(),
         problems,
     };
 
@@ -373,6 +458,10 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
         }
     }
 
+    if let Some(hosts) = hosts {
+        host_firewall(view, &mut compiler, hosts, &mut desired);
+    }
+
     let mut identity = |key: Option<[u8; 24]>, id: u32| {
         if let Some(key) = key {
             desired.ipcache.insert(
@@ -400,11 +489,157 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             }
         }
     }
+    for ip in &remote_nodes {
+        identity(ip_key(*ip, host_bits(*ip)), REMOTE_NODE);
+    }
     for ip in &host {
         identity(ip_key(*ip, host_bits(*ip)), HOST);
     }
     desired.problems = compiler.problems.into_iter().collect();
     desired
+}
+
+/// One host rule key before encoding: (identity, protocol, port, port
+/// prefix); protocol 0 is every L4.
+type HostKey = (u32, u8, u16, u8);
+
+/// Whether `outer`'s L4 holds every packet `inner`'s does.
+fn l4_holds(outer: HostKey, inner: HostKey) -> bool {
+    let (_, op, oport, oprefix) = outer;
+    let (_, ip, iport, iprefix) = inner;
+    op == 0
+        || (op == ip
+            && oprefix <= iprefix
+            && PortBlock {
+                port: oport,
+                prefix: oprefix,
+            }
+            .matches(iport))
+}
+
+/// Make the datapath's answer "deny wins" (spec 06 §3.5.3): an allow a deny
+/// of its identity (or of every identity) covers is dropped, and a deny
+/// inside an allow is repeated at the allow's identity, where its longer
+/// prefix wins the LPM lookup. Denies of an aggregate identity need nothing:
+/// the datapath compares them with the specific entry by precedence.
+pub fn deny_over_allow(
+    allows: &BTreeSet<HostKey>,
+    denies: &BTreeSet<HostKey>,
+) -> (BTreeSet<HostKey>, BTreeSet<HostKey>) {
+    let mut kept = BTreeSet::new();
+    let mut out_denies = denies.clone();
+    'allow: for allow in allows {
+        for deny in denies {
+            if deny.0 != allow.0 && deny.0 != 0 {
+                continue;
+            }
+            if l4_holds(*deny, *allow) {
+                continue 'allow;
+            }
+            if l4_holds(*allow, *deny) {
+                out_denies.insert((allow.0, deny.1, deny.2, deny.3));
+            }
+        }
+        kept.insert(*allow);
+    }
+    (kept, out_denies)
+}
+
+/// The host endpoint's entries and its uplinks' `flowsdn_policy_ep` rows.
+fn host_firewall(view: &View, compiler: &mut Compiler<'_>, hosts: HostPolicies, desired: &mut Desired) {
+    let mut allows = BTreeSet::new();
+    let mut denies = BTreeSet::new();
+    for rule in &hosts.rules {
+        let peers = compiler.host_peers(&rule.policy, rule.peers.as_deref());
+        let mut l4: Vec<(u8, u16, u8)> = Vec::new();
+        if rule.ports.is_empty() {
+            l4.push((0, 0, 0));
+        }
+        for (protocol, range) in &rule.ports {
+            l4.extend(range.blocks().into_iter().map(|b| (*protocol, b.port, b.prefix)));
+        }
+        for id in peers {
+            for (protocol, port, prefix) in &l4 {
+                let key = (id, *protocol, *port, *prefix);
+                if rule.deny {
+                    denies.insert(key);
+                } else {
+                    allows.insert(key);
+                }
+            }
+        }
+    }
+    let (allows, denies) = deny_over_allow(&allows, &denies);
+    let mut count = 0usize;
+    for ((id, protocol, port, prefix), deny) in allows
+        .iter()
+        .map(|k| (*k, false))
+        .chain(denies.iter().map(|k| (*k, true)))
+    {
+        let Ok(key) = PolicyKey::new(id, false, protocol, port, prefix) else {
+            continue;
+        };
+        let lpm = if protocol == 0 {
+            0
+        } else {
+            prefix.saturating_add(8)
+        };
+        let precedence = if deny {
+            HOST_DENY_PRECEDENCE
+        } else {
+            HOST_ALLOW_PRECEDENCE
+        };
+        let Ok(value) = PolicyEntry::new(0, deny, lpm, 0, false, precedence, 0) else {
+            continue;
+        };
+        // A deny replaces an allow at the same key.
+        if desired
+            .entries
+            .insert(EndpointPolicyKey::for_endpoint(HOST_ENDPOINT, key).to_bytes(), value)
+            .is_none()
+        {
+            count = count.saturating_add(1);
+        }
+    }
+    let audit = hosts.audit || view.host_firewall == HostFirewall::Audit;
+    let mut enforced = Vec::new();
+    for (name, ifindex) in &view.host_interfaces {
+        let learning = view.host_learning.contains(ifindex);
+        let mut flags = 0;
+        if hosts.enforce_ingress && !learning {
+            flags = enforce::INGRESS;
+            if audit {
+                flags |= enforce::AUDIT;
+            }
+            enforced.push(name.clone());
+        }
+        desired.endpoints.insert(
+            *ifindex,
+            PolicyEndpoint {
+                endpoint: HOST_ENDPOINT,
+                flags,
+            },
+        );
+    }
+    compiler
+        .problems
+        .extend(hosts.problems.iter().map(|p| format!("host firewall: {p}")));
+    desired.host = json!({
+        "mode": match view.host_firewall {
+            HostFirewall::Off => "off",
+            HostFirewall::Audit => "audit",
+            HostFirewall::Enforce => "enforce",
+        },
+        "policies": hosts.names,
+        "ingress-enforced": hosts.enforce_ingress,
+        "audit": audit,
+        "interfaces": view.host_interfaces.keys().collect::<Vec<_>>(),
+        "learning": view.host_interfaces.iter()
+            .filter(|(_, i)| view.host_learning.contains(i))
+            .map(|(n, _)| n).collect::<Vec<_>>(),
+        "enforcing-on": enforced,
+        "entries": count,
+    });
 }
 
 /// The LPM keys (with each entry's L4 prefix length) for one allowed

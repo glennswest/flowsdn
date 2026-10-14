@@ -6,22 +6,26 @@
 //! identity comes from `flowsdn_ipcache` (a miss is world). Allowed flows are
 //! remembered in `flowsdn_policy_ct`, keyed by the flow and the direction it
 //! was allowed in, so a reply in the other direction passes without a policy
-//! lookup. Not implemented: authentication (an entry that requires it
-//! drops), proxy redirects, audit mode, verdict events, ICMP error
-//! classification as related, and fragments other than the first (dropped
-//! where enforced).
+//! lookup. The host is an endpoint too (#379): `from_netdev` and
+//! `to_netdev` run this on the uplinks for traffic to and from this node's
+//! own addresses only ([`SCOPE_HOST`]). An endpoint in audit mode passes
+//! what its policy would drop. Each decision is counted in
+//! `flowsdn_policy_verdicts` (remembered flows are not). Not implemented:
+//! authentication (an entry that requires it drops), proxy redirects,
+//! verdict events, ICMP error classification as related, and fragments
+//! other than the first (dropped where enforced).
 use aya_ebpf::{
     bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, TC_ACT_SHOT},
     helpers::bpf_ktime_get_ns,
     macros::map,
-    maps::{HashMap, LpmTrie, LruHashMap, lpm_trie::Key},
+    maps::{HashMap, LpmTrie, LruHashMap, LruPerCpuHashMap, lpm_trie::Key},
     programs::TcContext,
 };
 use flowsdn_bpf_abi::{
     Be16, FAMILY_V4, FAMILY_V6, RemoteEndpointInfo,
     policy::{
         ENDPOINT_POLICY_FULL_PREFIX, POLICY_CT_CLOSING, PolicyCtKey, PolicyCtValue,
-        PolicyEndpoint, PolicyEntry, enforce,
+        PolicyEndpoint, PolicyEntry, PolicyStatsValue, PolicyVerdictKey, enforce, verdict,
     },
 };
 
@@ -55,6 +59,17 @@ static IPCACHE: LpmTrie<IpcacheData, RemoteEndpointInfo> = LpmTrie::with_max_ent
 
 #[map(name = "flowsdn_policy_ct")]
 static POLICY_CT: LruHashMap<PolicyCtKey, PolicyCtValue> = LruHashMap::with_max_entries(65536, 0);
+
+/// Policy decisions per endpoint, direction, verdict, protocol and port.
+#[map(name = "flowsdn_policy_verdicts")]
+static VERDICTS: LruPerCpuHashMap<PolicyVerdictKey, PolicyStatsValue> =
+    LruPerCpuHashMap::with_max_entries(16384, 0);
+
+/// [`enforce`] for the endpoint behind a host veth.
+pub const SCOPE_ENDPOINT: u8 = 0;
+/// [`enforce`] on an uplink for the host endpoint: only packets to (ingress)
+/// or from (egress) this node's own addresses; forwarded traffic passes.
+pub const SCOPE_HOST: u8 = 1;
 
 /// This cluster's ID (0 without cluster mesh) for the aggregate identity.
 // SAFETY: unique immutable symbol in the loader configuration datasec.
@@ -380,10 +395,50 @@ fn tracked(key: &PolicyCtKey, flow: &Flow, now: u64) -> bool {
     true
 }
 
+/// Count one decision.
+#[inline(always)]
+fn count(ctx: &TcContext, endpoint: u32, egress: u8, flow: &Flow, kind: u8) {
+    let key = PolicyVerdictKey {
+        endpoint,
+        dport: Be16(flow.port),
+        protocol: flow.key.protocol,
+        egress,
+        verdict: kind,
+        pad: [0; 3],
+    };
+    let bytes = u64::from(ctx.len());
+    match VERDICTS.get_ptr_mut(&key) {
+        // SAFETY: this CPU's slot of a per-CPU value, valid for this run.
+        Some(value) => unsafe {
+            (*value).packets = (*value).packets.wrapping_add(1);
+            (*value).bytes = (*value).bytes.wrapping_add(bytes);
+        },
+        None => {
+            let value = PolicyStatsValue { packets: 1, bytes };
+            // A full table or a racing insert only loses this count.
+            let _ = VERDICTS.insert(&key, &value, 0);
+        }
+    }
+}
+
+/// A packet the endpoint's policy refuses: dropped, or in audit mode
+/// counted as such and passed.
+#[inline(always)]
+fn refuse(ctx: &TcContext, endpoint: &PolicyEndpoint, egress: u8, flow: &Flow) -> i32 {
+    if endpoint.flags & enforce::AUDIT != 0 {
+        count(ctx, endpoint.endpoint, egress, flow, verdict::AUDIT);
+        TC_ACT_OK
+    } else {
+        count(ctx, endpoint.endpoint, egress, flow, verdict::DENIED);
+        TC_ACT_SHOT
+    }
+}
+
 /// Enforce the endpoint behind this interface for one packet in `egress`
 /// (1: leaving the endpoint) or ingress (0). TC_ACT_OK lets it continue.
+/// `scope` is [`SCOPE_ENDPOINT`] or [`SCOPE_HOST`].
 #[inline(always)]
-pub fn enforce(ctx: &TcContext, egress: u8) -> i32 {
+pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
     // SAFETY: NO_PREALLOC hash; the value is copied at once.
     let Some(endpoint) = (unsafe { POLICY_EP.get(ifindex(ctx)).copied() }) else {
         return TC_ACT_OK;
@@ -404,12 +459,33 @@ pub fn enforce(ctx: &TcContext, egress: u8) -> i32 {
     match parse(ctx, &mut flow) {
         Some(Parsed::Pass) => return TC_ACT_OK,
         Some(Parsed::Flow) => {}
+        // On an uplink a frame the parser cannot read is not known to be
+        // the host's: pass it.
+        Some(Parsed::Malformed) | None if scope == SCOPE_HOST => return TC_ACT_OK,
         Some(Parsed::Malformed) | None => {
-            return if enforced { TC_ACT_SHOT } else { TC_ACT_OK };
+            return if enforced {
+                refuse(ctx, &endpoint, egress, &flow)
+            } else {
+                TC_ACT_OK
+            };
+        }
+    }
+    if scope == SCOPE_HOST {
+        let local = if egress != 0 {
+            flow.key.saddr
+        } else {
+            flow.key.daddr
+        };
+        if identity(flow.key.family, local) != HOST {
+            return TC_ACT_OK;
         }
     }
     if flow.fragment {
-        return if enforced { TC_ACT_SHOT } else { TC_ACT_OK };
+        return if enforced {
+            refuse(ctx, &endpoint, egress, &flow)
+        } else {
+            TC_ACT_OK
+        };
     }
     let now = now();
     flow.key.egress = egress;
@@ -432,8 +508,15 @@ pub fn enforce(ctx: &TcContext, egress: u8) -> i32 {
             identity(flow.key.family, flow.key.saddr)
         };
         // The node itself (kubelet probes) always reaches its pods.
-        if !(egress == 0 && remote == HOST) && !allowed(endpoint.endpoint, remote, egress, &flow) {
-            return TC_ACT_SHOT;
+        if !(egress == 0 && remote == HOST) {
+            if !allowed(endpoint.endpoint, remote, egress, &flow) {
+                let verdict = refuse(ctx, &endpoint, egress, &flow);
+                if verdict != TC_ACT_OK {
+                    return verdict;
+                }
+            } else {
+                count(ctx, endpoint.endpoint, egress, &flow, verdict::ALLOWED);
+            }
         }
     }
     let value = PolicyCtValue {

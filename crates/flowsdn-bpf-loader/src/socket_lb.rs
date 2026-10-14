@@ -271,10 +271,11 @@ impl SocketLb {
             if program.fd().is_err() {
                 program.load()?;
             }
+            // First: the host firewall (#379) must see translated traffic.
             let id = program.attach_with_options(
                 interface,
                 direction,
-                TcAttachOptions::TcxOrder(LinkOrder::default()),
+                TcAttachOptions::TcxOrder(LinkOrder::first()),
             )?;
             links.push(program.take_link(id)?);
         }

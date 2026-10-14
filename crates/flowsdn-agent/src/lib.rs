@@ -3,6 +3,7 @@
 pub mod api;
 pub mod endpoints;
 pub mod events;
+pub mod host_policy;
 pub mod identity;
 pub mod kubernetes;
 pub mod policy;

@@ -245,6 +245,37 @@ impl Manager {
     pub fn share_policy(&self) -> Result<PolicyMaps> {
         kernel(self.driver.share_policy())
     }
+    /// Put the host firewall (#379) on exactly the uplinks in `want`;
+    /// returns what failed, one line per interface.
+    pub fn sync_host_firewall(&mut self, want: &BTreeSet<String>) -> Vec<String> {
+        let stale: Vec<String> = self
+            .driver
+            .host_interfaces()
+            .filter(|name| !want.contains(*name))
+            .map(str::to_owned)
+            .collect();
+        for name in stale {
+            self.driver.detach_host(&name);
+        }
+        let mut failed = Vec::new();
+        for name in want {
+            if let Err(error) = self.driver.attach_host(name) {
+                failed.push(format!("attach the host firewall to {name}: {error}"));
+            }
+        }
+        failed
+    }
+    /// The policy decisions counted so far (#379), summed over CPUs.
+    pub fn policy_verdicts(
+        &mut self,
+    ) -> Result<
+        Vec<(
+            flowsdn_bpf_abi::policy::PolicyVerdictKey,
+            flowsdn_bpf_abi::policy::PolicyStatsValue,
+        )>,
+    > {
+        kernel(self.driver.policy().policy_verdicts())
+    }
     pub fn records(&self) -> impl Iterator<Item = &Record> {
         self.records.values()
     }

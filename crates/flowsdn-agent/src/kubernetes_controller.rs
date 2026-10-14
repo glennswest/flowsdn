@@ -5,7 +5,9 @@
 //! socket-LB maps (spec 05 §3.4, §3.8); and an identities thread that holds
 //! a FlowsdnIdentity for each local Pod's labels (spec 03 §3.3), fed by
 //! Namespace and FlowsdnIdentity watches; and a policy thread that keeps the
-//! endpoint policy maps from the NetworkPolicy watch (#292, ADR-0021).
+//! endpoint policy maps from the NetworkPolicy watch (#292, ADR-0021) and,
+//! with the host firewall on, the FlowsdnClusterwideNetworkPolicy watch
+//! (#379).
 use super::*;
 use crate::events::Type::Warning;
 use crate::identity::{self, Allocator, Outcome};
@@ -38,6 +40,10 @@ const IDENTITY_INTERVAL: Duration = Duration::from_secs(1);
 const POLICY_INTERVAL: Duration = Duration::from_secs(1);
 /// The policy maps are compared with the kernel at least this often.
 const POLICY_RESYNC: Duration = Duration::from_secs(60);
+/// The host firewall only remembers flows on a new uplink for this long
+/// before it enforces there (#379), so connections the node already has
+/// (kubelet, the API server, sessions) are known and keep their replies.
+const HOST_LEARNING: Duration = Duration::from_secs(60);
 
 pub struct Controller {
     runtime: tokio::runtime::Runtime,
@@ -123,10 +129,14 @@ impl Controller {
             service_lb: self.settings.service_lb,
             identity: self.settings.identity_allocation,
             network_policy: self.settings.network_policy,
+            host_firewall: self.settings.host_firewall,
             cluster_name: self.settings.cluster_name.clone(),
             ..View::default()
         }));
-        if let Some((mut maps, gateways)) = policy.filter(|_| self.settings.network_policy) {
+        let host_firewall = self.settings.host_firewall != HostFirewall::Off;
+        if let Some((mut maps, gateways)) =
+            policy.filter(|_| self.settings.network_policy || host_firewall)
+        {
             let policy_view = Arc::clone(&view);
             std::thread::Builder::new()
                 .name("flowsdn-policy".into())
@@ -262,7 +272,8 @@ impl Controller {
                     view.pods_synced = true;
                 });
                 let mut parts = vec![nodes.boxed_local(), pods.boxed_local()];
-                if settings.identity_allocation || settings.network_policy {
+                let host_firewall = settings.host_firewall != HostFirewall::Off;
+                if settings.identity_allocation || settings.network_policy || host_firewall {
                     let ns_view = Arc::clone(&watch_view);
                     parts.push(
                         watch_forever(
@@ -293,6 +304,24 @@ impl Controller {
                                 let mut view = lock(&np_view);
                                 view.network_policies = rows;
                                 view.policies_synced = true;
+                            },
+                        )
+                        .boxed_local(),
+                    );
+                }
+                if host_firewall {
+                    let cw_view = Arc::clone(&watch_view);
+                    parts.push(
+                        watch_forever(
+                            &client,
+                            Scope::ClusterwidePolicies,
+                            "host-policies",
+                            &watch_view,
+                            move |state| {
+                                let rows = clusterwide_rows(state);
+                                let mut view = lock(&cw_view);
+                                view.clusterwide_policies = rows;
+                                view.clusterwide_synced = true;
                             },
                         )
                         .boxed_local(),
@@ -587,6 +616,7 @@ fn node_info(node: &flowsdn_k8s::watch::Node) -> NodeInfo {
         name: node.metadata.name.clone(),
         pod_cidrs: node.pod_cidrs.clone(),
         internal_ips: node.internal_ips.clone(),
+        labels: node.labels.clone(),
     }
 }
 fn node_rows(state: &WatchState) -> Vec<NodeInfo> {
@@ -651,6 +681,16 @@ fn namespace_rows(state: &WatchState) -> BTreeMap<String, BTreeMap<String, Strin
         })
         .collect()
 }
+fn clusterwide_rows(state: &WatchState) -> Vec<Value> {
+    state
+        .snapshot()
+        .all()
+        .filter_map(|(row, _)| match &*row {
+            Resource::ClusterwidePolicy(p) => Some(p.object.clone()),
+            _ => None,
+        })
+        .collect()
+}
 fn policy_rows(state: &WatchState) -> Vec<Value> {
     state
         .snapshot()
@@ -670,11 +710,48 @@ fn policy_rows(state: &WatchState) -> Vec<Value> {
 /// enforcement, then stale entries).
 fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
     let mut applied: Option<(crate::policy::Desired, Instant)> = None;
+    // When the host firewall first wanted each uplink (#379): it only
+    // learns flows for HOST_LEARNING before enforcing there.
+    let mut wanted: BTreeMap<u32, Instant> = BTreeMap::new();
     loop {
         std::thread::sleep(POLICY_INTERVAL);
+        let host_firewall = lock(view).host_firewall != HostFirewall::Off;
+        let uplinks = if host_firewall {
+            let addresses: Vec<IpAddr> = {
+                let view = lock(view);
+                view.nodes
+                    .iter()
+                    .filter(|n| n.name == view.local_node)
+                    .flat_map(|n| n.internal_ips.iter().copied())
+                    .collect()
+            };
+            match interfaces_holding(&addresses) {
+                Ok(found) => {
+                    lock(view).errors.remove("host-firewall");
+                    found
+                }
+                Err(error) => {
+                    lock(view).errors.insert("host-firewall".into(), error);
+                    BTreeMap::new()
+                }
+            }
+        } else {
+            BTreeMap::new()
+        };
+        wanted.retain(|index, _| uplinks.values().any(|i| i == index));
+        for index in uplinks.values() {
+            wanted.entry(*index).or_insert_with(Instant::now);
+        }
         let desired = {
-            let view = lock(view);
-            if !(view.policies_synced
+            let mut view = lock(view);
+            view.host_interfaces = uplinks;
+            view.host_learning = wanted
+                .iter()
+                .filter(|(_, since)| since.elapsed() < HOST_LEARNING)
+                .map(|(index, _)| *index)
+                .collect();
+            if !((!view.network_policy || view.policies_synced)
+                && (!host_firewall || view.clusterwide_synced)
                 && view.pods_synced
                 && view.nodes_synced
                 && view.namespaces_synced
@@ -957,8 +1034,14 @@ fn service_loop(
 
 /// The interfaces holding any of `addresses`, by name (`/sys/class/net`).
 fn interfaces_with(addresses: &[IpAddr]) -> std::result::Result<BTreeSet<String>, String> {
+    Ok(interfaces_holding(addresses)?.into_keys().collect())
+}
+/// The interfaces (name -> ifindex) that hold one of `addresses`.
+fn interfaces_holding(
+    addresses: &[IpAddr],
+) -> std::result::Result<BTreeMap<String, u32>, String> {
     let connector = Connector::open().map_err(|e| format!("netlink: {e}"))?;
-    let mut out = BTreeSet::new();
+    let mut out = BTreeMap::new();
     for entry in fs::read_dir("/sys/class/net").map_err(|e| format!("/sys/class/net: {e}"))? {
         let Ok(entry) = entry else { continue };
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -972,7 +1055,7 @@ fn interfaces_with(addresses: &[IpAddr]) -> std::result::Result<BTreeSet<String>
             .addresses(index)
             .is_ok_and(|held| held.iter().any(|ip| addresses.contains(ip)))
         {
-            out.insert(name);
+            out.insert(name, index);
         }
     }
     Ok(out)

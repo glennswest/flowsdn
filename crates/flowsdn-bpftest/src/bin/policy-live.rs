@@ -7,10 +7,17 @@
 //! discovery and ARP, identity + protocol + port and port-range (LPM) allows,
 //! the aggregate cluster identity and the wildcard identity, a top-precedence
 //! deny, replies of allowed flows in the other direction (conntrack), ICMP
-//! echo, IPv6, fragments, and removing enforcement.
+//! echo, IPv6, fragments, and removing enforcement. The host firewall
+//! (#379): `from_netdev`/`to_netdev` as if on an uplink, for the host
+//! endpoint: only traffic to the host's own address is judged, remote-node,
+//! world and port rules, a deny over an allow, replies of flows the host
+//! started, audit mode, learning (no flags), and the verdict counters.
 use flowsdn_bpf_abi::{
     IpCacheKey, RemoteEndpointInfo,
-    policy::{EndpointPolicyKey, PolicyEndpoint, PolicyEntry, PolicyKey, enforce},
+    policy::{
+        EndpointPolicyKey, HOST_ENDPOINT, PolicyEndpoint, PolicyEntry, PolicyKey, enforce,
+        verdict,
+    },
 };
 use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object};
 use nix::sched::{CloneFlags, unshare};
@@ -379,6 +386,156 @@ fn run(object: &[u8]) -> Result<()> {
         OK,
     )?;
     println!("PASS maps read back as written; removing the policy endpoint stops enforcement");
+    host(&mut lab)
+}
+
+const HOST_ADDR: [u8; 4] = [192, 0, 2, 20];
+const REMOTE_NODE: [u8; 4] = [192, 0, 2, 30];
+const ADMIN: [u8; 4] = [198, 51, 100, 9];
+
+/// Test-run a host firewall program on `frame` as if on uplink `ifindex`.
+fn host_verdict(lab: &mut Lab, program: &str, ifindex: u32, frame: &[u8]) -> Result<u32> {
+    let fd = lab
+        .delivery
+        .host_program(program)?
+        .fd()?
+        .as_fd()
+        .as_raw_fd();
+    let mut ctx = [0u8; 192];
+    ctx.get_mut(40..44)
+        .ok_or("ctx")?
+        .copy_from_slice(&ifindex.to_ne_bytes());
+    let mut out = vec![0u8; 512];
+    let mut ctx_out = [0u8; 192];
+    Ok(syscall::run(fd, frame, &mut out, &ctx, &mut ctx_out)?.0)
+}
+fn host_rule(lab: &mut Lab, identity: u32, proto: u8, port: u16, prefix: u8, deny: bool) -> Result<()> {
+    let key = PolicyKey::new(identity, false, proto, port, prefix).map_err(|_| "policy key")?;
+    let lpm = if proto == 0 { 0 } else { prefix.saturating_add(8) };
+    let precedence = if deny { u32::MAX } else { 0xFFFF_FF01 };
+    let entry =
+        PolicyEntry::new(0, deny, lpm, 0, false, precedence, 0).map_err(|_| "policy entry")?;
+    lab.delivery
+        .policy()
+        .upsert_policy(EndpointPolicyKey::for_endpoint(HOST_ENDPOINT, key), entry)
+}
+
+/// The host firewall on uplink `up0` (#379).
+fn host(lab: &mut Lab) -> Result<()> {
+    ip(&["link", "add", "up0", "type", "dummy"])?;
+    ip(&["link", "set", "up0", "up"])?;
+    let up0 = ifindex("up0")?;
+    lab.identity(IpAddr::V4(Ipv4Addr::from(HOST_ADDR)), 1)?;
+    lab.identity(IpAddr::V4(Ipv4Addr::from(REMOTE_NODE)), 6)?;
+    // Remote nodes: anything but 9100 (the deny repeated at their identity,
+    // as the agent writes it); world: TCP 22 only; everyone: not 9100.
+    host_rule(lab, 6, 0, 0, 0, false)?;
+    host_rule(lab, 6, TCP, 9100, 16, true)?;
+    host_rule(lab, 2, TCP, 22, 16, false)?;
+    host_rule(lab, 0, TCP, 9100, 16, true)?;
+    let set = |lab: &mut Lab, flags| {
+        lab.delivery.policy().set_policy_endpoint(
+            up0,
+            PolicyEndpoint {
+                endpoint: HOST_ENDPOINT,
+                flags,
+            },
+        )
+    };
+    let to_host = |src, dport| v4(TCP, src, HOST_ADDR, 0, &tcp(40000, dport, SYN));
+    let check = |lab: &mut Lab, what: &str, program: &str, frame: &[u8], want| -> Result<()> {
+        let got = host_verdict(lab, program, up0, frame)?;
+        if got != want {
+            let name = |v| if v == OK { "pass" } else { "drop" };
+            return Err(format!("host {what}: {} instead of {}", name(got), name(want)).into());
+        }
+        Ok(())
+    };
+
+    // Learning: no flags, every flow passes and is remembered.
+    set(lab, 0)?;
+    check(lab, "learning, admin:8081", "from_netdev", &to_host(ADMIN, 8081), OK)?;
+    if !lab
+        .delivery
+        .policy()
+        .policy_flows()?
+        .iter()
+        .any(|(k, _)| k.daddr.get(..4) == Some(HOST_ADDR.as_slice()) && k.dport.get() == 8081)
+    {
+        return Err("a flow to the host was not learned without flags".into());
+    }
+    println!("PASS host firewall learning: unenforced uplink passes and remembers flows to the host");
+
+    set(lab, enforce::INGRESS)?;
+    check(lab, "admin:22", "from_netdev", &to_host(ADMIN, 22), OK)?;
+    check(lab, "admin:80", "from_netdev", &to_host(ADMIN, 80), SHOT)?;
+    check(lab, "remote node:80", "from_netdev", &to_host(REMOTE_NODE, 80), OK)?;
+    check(lab, "remote node:9100", "from_netdev", &to_host(REMOTE_NODE, 9100), SHOT)?;
+    check(lab, "learned admin:8081", "from_netdev", &to_host(ADMIN, 8081), OK)?;
+    check(
+        lab,
+        "forwarded to a pod",
+        "from_netdev",
+        &v4(TCP, ADMIN, POD, 0, &tcp(40000, 80, SYN)),
+        OK,
+    )?;
+    check(lab, "ARP", "from_netdev", &ether([0x08, 0x06]), OK)?;
+    println!(
+        "PASS host firewall enforce: world TCP 22 allowed, port 80 dropped; remote node allowed except 9100 (deny over allow); learned flows and forwarded traffic pass; ARP passes"
+    );
+
+    // A flow the host starts: remembered on the way out, its reply passes.
+    check(
+        lab,
+        "host to admin:443",
+        "to_netdev",
+        &v4(TCP, HOST_ADDR, ADMIN, 0, &tcp(41000, 443, SYN)),
+        OK,
+    )?;
+    check(
+        lab,
+        "reply admin:443",
+        "from_netdev",
+        &v4(TCP, ADMIN, HOST_ADDR, 0, &tcp(443, 41000, SYN | ACK)),
+        OK,
+    )?;
+    check(
+        lab,
+        "unsolicited admin:443",
+        "from_netdev",
+        &v4(TCP, ADMIN, HOST_ADDR, 0, &tcp(443, 41001, SYN | ACK)),
+        SHOT,
+    )?;
+    println!("PASS host firewall: replies of flows the host started pass; unsolicited ones do not");
+
+    set(lab, enforce::INGRESS | enforce::AUDIT)?;
+    check(lab, "audit admin:8080", "from_netdev", &to_host(ADMIN, 8080), OK)?;
+    let counts = lab.delivery.policy().policy_verdicts()?;
+    let seen = |port: u16, kind: u8| {
+        counts.iter().any(|(k, v)| {
+            k.endpoint == HOST_ENDPOINT
+                && k.egress == 0
+                && k.dport.get() == port
+                && k.verdict == kind
+                && v.packets >= 1
+        })
+    };
+    for (port, kind, what) in [
+        (22, verdict::ALLOWED, "allowed 22"),
+        (80, verdict::DENIED, "denied 80"),
+        (9100, verdict::DENIED, "denied 9100"),
+        (8080, verdict::AUDIT, "audit 8080"),
+    ] {
+        if !seen(port, kind) {
+            return Err(format!("verdict counters lack {what}: {counts:?}").into());
+        }
+    }
+    println!(
+        "PASS host firewall audit: a would-be drop passes and is counted; verdict counters hold allowed, denied and audit rows"
+    );
+    lab.delivery.policy().remove_policy_endpoint(up0)?;
+    check(lab, "removed admin:80", "from_netdev", &to_host(ADMIN, 80), OK)?;
+    println!("PASS host firewall removed: the uplink passes everything");
     Ok(())
 }
 

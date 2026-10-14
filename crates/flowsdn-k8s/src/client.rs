@@ -78,6 +78,7 @@ pub fn request_uri(scope: &Scope, query: &Query<'_>) -> Result<String, Error> {
         Scope::Namespaces => "/api/v1/namespaces",
         Scope::Identities => IDENTITIES_PATH,
         Scope::NetworkPolicies => "/apis/networking.k8s.io/v1/networkpolicies",
+        Scope::ClusterwidePolicies => CLUSTERWIDE_POLICIES_PATH,
     };
     let mut params = Vec::new();
     if let Some(selector) = scope.field_selector() {
@@ -124,6 +125,9 @@ fn encode(value: &str) -> String {
 
 /// The FlowsdnIdentity collection; an object is `<path>/<id>`.
 pub const IDENTITIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnidentities";
+/// `flowsdn.io/v1alpha1` FlowsdnClusterwideNetworkPolicy (host firewall, #379).
+pub const CLUSTERWIDE_POLICIES_PATH: &str =
+    "/apis/flowsdn.io/v1alpha1/flowsdnclusterwidenetworkpolicies";
 
 pub struct JsonClient {
     client: Client,

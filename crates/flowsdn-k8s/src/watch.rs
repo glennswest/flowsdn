@@ -23,6 +23,8 @@ pub struct Node {
     pub metadata: Metadata,
     pub pod_cidrs: Vec<(IpAddr, u8)>,
     pub internal_ips: Vec<IpAddr>,
+    /// `metadata.labels` (host policy `nodeSelector`, #379).
+    pub labels: BTreeMap<String, String>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Pod {
@@ -166,6 +168,8 @@ pub enum Resource {
     Namespace(Namespace),
     Identity(Identity),
     NetworkPolicy(NetworkPolicy),
+    /// A `flowsdn.io/v1alpha1` FlowsdnClusterwideNetworkPolicy, kept whole.
+    ClusterwidePolicy(NetworkPolicy),
 }
 impl Resource {
     pub fn metadata(&self) -> &Metadata {
@@ -176,7 +180,7 @@ impl Resource {
             Self::EndpointSlice(e) => &e.metadata,
             Self::Namespace(n) => &n.metadata,
             Self::Identity(i) => &i.metadata,
-            Self::NetworkPolicy(p) => &p.metadata,
+            Self::NetworkPolicy(p) | Self::ClusterwidePolicy(p) => &p.metadata,
         }
     }
 }
@@ -204,6 +208,9 @@ pub enum Scope {
     Identities,
     /// Every `networking.k8s.io/v1` NetworkPolicy (policy enforcement).
     NetworkPolicies,
+    /// Every `flowsdn.io/v1alpha1` FlowsdnClusterwideNetworkPolicy (the host
+    /// firewall, #379).
+    ClusterwidePolicies,
 }
 impl Scope {
     pub fn field_selector(&self) -> Option<String> {
@@ -213,7 +220,10 @@ impl Scope {
         }
     }
     pub fn namespaced(&self) -> bool {
-        !matches!(self, Self::Nodes | Self::Namespaces | Self::Identities)
+        !matches!(
+            self,
+            Self::Nodes | Self::Namespaces | Self::Identities | Self::ClusterwidePolicies
+        )
     }
     pub fn parse(&self, value: &Value) -> Result<Resource, Error> {
         let namespaced = self.namespaced();
@@ -226,6 +236,7 @@ impl Scope {
                 Self::Namespaces => "Namespace",
                 Self::Identities => "FlowsdnIdentity",
                 Self::NetworkPolicies => "NetworkPolicy",
+                Self::ClusterwidePolicies => "FlowsdnClusterwideNetworkPolicy",
             };
             if text(kind)? != expected {
                 return Err(error("unexpected resource kind"));
@@ -253,6 +264,7 @@ impl Scope {
                     }
                 }
                 Ok(Resource::Node(Node {
+                    labels: labels(value)?,
                     metadata,
                     pod_cidrs: cidrs,
                     internal_ips: ips,
@@ -311,6 +323,10 @@ impl Scope {
             })),
             Self::Identities => parse_identity(value, metadata).map(Resource::Identity),
             Self::NetworkPolicies => Ok(Resource::NetworkPolicy(NetworkPolicy {
+                metadata,
+                object: value.clone(),
+            })),
+            Self::ClusterwidePolicies => Ok(Resource::ClusterwidePolicy(NetworkPolicy {
                 metadata,
                 object: value.clone(),
             })),

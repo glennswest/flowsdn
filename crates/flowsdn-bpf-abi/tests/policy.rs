@@ -139,3 +139,23 @@ fn policy_endpoint_and_flow_round_trip() {
     };
     assert_eq!(PolicyCtValue::from_bytes(value.to_bytes()), value);
 }
+
+#[test]
+fn verdict_key_layout_and_host_endpoint() {
+    let key = PolicyVerdictKey {
+        endpoint: HOST_ENDPOINT,
+        dport: flowsdn_bpf_abi::Be16::new(22),
+        protocol: 6,
+        egress: 0,
+        verdict: verdict::AUDIT,
+        pad: [0; 3],
+    };
+    let bytes = key.to_bytes();
+    assert_eq!(bytes, [0, 0, 1, 0, 0, 22, 6, 0, 3, 0, 0, 0]);
+    assert_eq!(PolicyVerdictKey::from_bytes(bytes), key);
+    assert!(HOST_ENDPOINT > u32::from(u16::MAX));
+    assert_eq!(
+        enforce::AUDIT & (enforce::INGRESS | enforce::EGRESS),
+        0
+    );
+}

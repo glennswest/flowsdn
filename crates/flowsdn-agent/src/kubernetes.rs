@@ -58,6 +58,18 @@ pub struct Settings {
     /// ADR-0021), default on: watch NetworkPolicies (and Namespaces) and keep
     /// the endpoint policy maps.
     pub network_policy: bool,
+    /// The host firewall (#379): `off` (default), `audit` or `enforce`.
+    pub host_firewall: HostFirewall,
+}
+/// `kubernetes.host-firewall`: whether the agent filters traffic to the
+/// node itself from FlowsdnClusterwideNetworkPolicy host rules, and whether
+/// it drops (`enforce`) or only counts (`audit`) what they refuse.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum HostFirewall {
+    #[default]
+    Off,
+    Audit,
+    Enforce,
 }
 /// Where a DaemonSet mounts the host's cgroup v2 root.
 pub const DEFAULT_CGROUP_ROOT: &str = "/sys/fs/cgroup";
@@ -110,6 +122,12 @@ impl Settings {
             "maglev" => true,
             _ => return Err("kubernetes.lb-algorithm must be random or maglev".into()),
         };
+        let host_firewall = match text("host-firewall")?.as_str() {
+            "" | "off" => HostFirewall::Off,
+            "audit" => HostFirewall::Audit,
+            "enforce" => HostFirewall::Enforce,
+            _ => return Err("kubernetes.host-firewall must be off, audit or enforce".into()),
+        };
         let kubeconfig = text("kubeconfig")?;
         let cgroup_root = text("cgroup-root")?;
         let cgroup_root = if cgroup_root.is_empty() {
@@ -144,6 +162,7 @@ impl Settings {
             maglev,
             identity_allocation: flag("identity-allocation", true)?,
             network_policy: flag("network-policy", true)?,
+            host_firewall,
             cluster_name,
             cgroup_root,
         }))
@@ -155,6 +174,8 @@ pub struct NodeInfo {
     pub name: String,
     pub pod_cidrs: Vec<(IpAddr, u8)>,
     pub internal_ips: Vec<IpAddr>,
+    /// The Node's labels (host policy `nodeSelector`).
+    pub labels: BTreeMap<String, String>,
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PodInfo {
@@ -525,6 +546,14 @@ pub struct View {
     pub network_policies: Vec<Value>,
     pub policies_synced: bool,
     pub policy_status: Value,
+    /// The host firewall (#379): its mode, the FlowsdnClusterwideNetworkPolicy
+    /// objects, the uplinks (name -> ifindex) the policy thread wants it on
+    /// (the API thread attaches it), and those still learning flows.
+    pub host_firewall: HostFirewall,
+    pub clusterwide_policies: Vec<Value>,
+    pub clusterwide_synced: bool,
+    pub host_interfaces: BTreeMap<String, u32>,
+    pub host_learning: BTreeSet<u32>,
     /// The latest failure of each controller part (`nodes`, `pods`, `routes`).
     pub errors: BTreeMap<String, String>,
 }

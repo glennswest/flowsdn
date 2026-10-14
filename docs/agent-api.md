@@ -67,7 +67,14 @@ error (`msg` then lists `<part>: <error>`, for example `annotations`,
 `services`, `node-port`, `policy`), otherwise `Ok` with node, pod and frontend
 counts. `policy` is what the policy thread last programmed (#292):
 `{endpoints: [{id, pod, ingress-enforced, egress-enforced, entries}], ipcache,
-problems}`, `null` before its first pass. (Before #298 the member was named after the reference project;
+host-firewall, problems}`, `null` before its first pass. `host-firewall` (#379)
+is `null` with `kubernetes.host-firewall: off`, else `{mode, policies,
+ingress-enforced, audit, interfaces, learning, enforcing-on, entries}`: the
+selecting FlowsdnClusterwideNetworkPolicy names, the uplinks it is on, those
+still in their first 60 s (flows learned, nothing enforced) and those
+enforcing (or auditing). Its unsupported rules are among `problems`; an uplink
+that cannot be found or attached is the `host-firewall` /
+`host-firewall-attach` part error. (Before #298 the member was named after the reference project;
 it is `agent` now.)
 
 `GET /v1/health/modules` reports component details, including the degraded
@@ -103,6 +110,7 @@ on recognized endpoint detail/IPAM address routes return HTTP 405.
 | `GET /v1/identity` | Kubernetes mode (reference `Identity` list): `[{id, labels}]` sorted by id, every FlowsdnIdentity object (labels as `<source>:<key>=<value>`) plus the well-known identities Pods resolve to. Empty with `identity-allocation: false`, before the Namespace and FlowsdnIdentity lists are complete, or when the FlowsdnIdentity CRD is not installed. 404 when Kubernetes mode is off. |
 | `GET /v1/service` | Kubernetes mode with `service-lb` (reference `Service` model): one row per frontend, `spec{id, frontend-address{ip,port,protocol,scope}, backend-addresses[{ip,port,protocol,state}], flags{type, name, namespace, port-name, service-type}}`; `type` is `ClusterIP`, `ExternalIPs`, `LoadBalancer` or `NodePort`, `session-affinity-timeout` (seconds) is present for `sessionAffinity: ClientIP`, and `lb-algorithm: maglev` on a node-local frontend that picks backends by Maglev (#292). `frontend-address.scope` is `external` for the cluster view and `node-local` for the copy that serves traffic from outside the cluster on this node's uplink (every backend, other nodes' through SNAT; this node's only with `externalTrafficPolicy: Local`). `id` is the service ID (`rev_nat_index`) the socket-LB maps hold, 0 until programmed; `status.realized` repeats `spec` once it is. Empty until both the Service and EndpointSlice lists are complete. 404 when Kubernetes mode is off. |
 | `GET /v1/node/routes` | Kubernetes mode (flowsdn): the direct node routes, `{destination, gateway, node, state}` with state `installed`, `skipped: …` or `error: …`. Empty before the first Node list or with `auto-direct-node-routes: false`. 404 when Kubernetes mode is off. |
+| `GET /v1/policy/verdicts` | flowsdn (#379): the policy decisions the endpoint programs counted, one row per `{endpoint, direction, verdict, protocol, port}` with `packets` and `bytes` summed over CPUs. `endpoint` is the Pod endpoint ID or `host` (the host firewall); `verdict` is `allowed` (a rule allowed a new flow), `denied` (dropped) or `audit` (audit mode: would have been dropped, passed); `port` is the destination port (0 without one). Packets of a remembered flow are not counted. LRU, 16384 rows; counters reset when the agent's object is reloaded. Read-only, also on the TCP listener. |
 
 List, detail and pool summary reads perform no allocation or endpoint mutation.
 As with existing API requests, expired pending IP leases are processed first.

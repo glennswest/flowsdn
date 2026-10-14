@@ -1,6 +1,7 @@
 //! Endpoint programs: `local_delivery` on each endpoint's host veth ingress
 //! (pod egress: policy, then delivery or the host stack) and `to_container`
-//! on its egress (pod ingress: policy). See `local-delivery/policy.rs`.
+//! on its egress (pod ingress: policy); `from_netdev`/`to_netdev` on the
+//! uplinks are the host firewall (#379). See `local-delivery/policy.rs`.
 #![no_std]
 #![no_main]
 
@@ -35,7 +36,7 @@ static __config_stack_egress: u32 = 0;
 
 #[classifier]
 pub fn local_delivery(ctx: TcContext) -> i32 {
-    if policy::enforce(&ctx, 1) != TC_ACT_OK {
+    if policy::enforce(&ctx, 1, policy::SCOPE_ENDPOINT) != TC_ACT_OK {
         return TC_ACT_SHOT;
     }
     // SAFETY: valid immutable global; volatile prevents constant folding so
@@ -59,7 +60,23 @@ pub fn local_delivery(ctx: TcContext) -> i32 {
 /// ingress policy. Delivery itself is the stack's or `local_delivery`'s.
 #[classifier]
 pub fn to_container(ctx: TcContext) -> i32 {
-    policy::enforce(&ctx, 0)
+    policy::enforce(&ctx, 0, policy::SCOPE_ENDPOINT)
+}
+
+/// The host firewall (#379) on an uplink's ingress: the host endpoint's
+/// ingress policy for packets to this node's own addresses. Forwarded
+/// traffic (to pods, after NodePort translation) passes untouched.
+#[classifier]
+pub fn from_netdev(ctx: TcContext) -> i32 {
+    policy::enforce(&ctx, 0, policy::SCOPE_HOST)
+}
+
+/// The host firewall on an uplink's egress: flows this node starts are
+/// remembered, so their replies pass `from_netdev`. Host egress policy is
+/// not enforced.
+#[classifier]
+pub fn to_netdev(ctx: TcContext) -> i32 {
+    policy::enforce(&ctx, 1, policy::SCOPE_HOST)
 }
 
 /// Bounded native-device ingress: leave host/discovery/remote traffic to the

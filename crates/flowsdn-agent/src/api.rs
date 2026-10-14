@@ -10,7 +10,7 @@ use flowsdn_ipam::{HostScope, Ipam};
 use nix::sys::socket::{AddressFamily, SockFlag, SockType, UnixAddr, connect, socket};
 use serde_json::{Value, json};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt,
     fs::{self, File},
     io::{self, Read, Write},
@@ -320,7 +320,7 @@ struct Lease {
 /// Every route the agent serves, as the first column of docs/agent-api.md's
 /// "Supported methods" table; a test keeps the two equal (#298: the API is a
 /// supported boundary for `sc net` and the console plugin).
-pub const ROUTES: [&str; 17] = [
+pub const ROUTES: [&str; 18] = [
     "`GET /v1/config`",
     "`GET /v1/healthz`",
     "`GET /v1/health/modules`",
@@ -338,14 +338,45 @@ pub const ROUTES: [&str; 17] = [
     "`GET /v1/identity`",
     "`GET /v1/service`",
     "`GET /v1/node/routes`",
+    "`GET /v1/policy/verdicts`",
 ];
 struct Api {
     config: Config,
     manager: Manager,
     leases: BTreeMap<IpAddr, Lease>,
     kubernetes: Option<crate::kubernetes::Shared>,
+    /// When the host firewall's uplinks were last brought to the view's.
+    host_synced: Option<Instant>,
 }
 impl Api {
+    /// Once a second: attach the host firewall (#379) to the uplinks the
+    /// policy thread wants and detach it from the rest; this thread owns
+    /// the programs.
+    fn sync_host_firewall(&mut self) {
+        if self
+            .host_synced
+            .is_some_and(|at| at.elapsed() < Duration::from_secs(1))
+        {
+            return;
+        }
+        self.host_synced = Some(Instant::now());
+        let Some(view) = &self.kubernetes else {
+            return;
+        };
+        let want: BTreeSet<String> = crate::kubernetes::lock(view)
+            .host_interfaces
+            .keys()
+            .cloned()
+            .collect();
+        let failed = self.manager.sync_host_firewall(&want);
+        let mut view = crate::kubernetes::lock(view);
+        if failed.is_empty() {
+            view.errors.remove("host-firewall-attach");
+        } else {
+            view.errors
+                .insert("host-firewall-attach".into(), failed.join("; "));
+        }
+    }
     fn expire(&mut self) {
         let now = Instant::now();
         let expired: Vec<_> = self
@@ -449,6 +480,9 @@ impl Api {
                         _ => view.route_list(),
                     },
                 ));
+            }
+            ("GET", "/v1/policy/verdicts") => {
+                return Ok((200, verdict_list(&self.manager.policy_verdicts()?)));
             }
             ("GET", "/v1/endpoint") => {
                 let view = self.kubernetes.as_ref().map(crate::kubernetes::lock);
@@ -956,6 +990,39 @@ impl Connection for TcpStream {
 
 /// Whether the read-only TCP listener serves a request: reads, and the
 /// read-only statedb query, which the reference also takes as POST.
+/// `GET /v1/policy/verdicts`: the policy decisions counted per endpoint
+/// (`host` for the host firewall), direction, verdict, protocol and port.
+pub fn verdict_list(
+    rows: &[(
+        flowsdn_bpf_abi::policy::PolicyVerdictKey,
+        flowsdn_bpf_abi::policy::PolicyStatsValue,
+    )],
+) -> Value {
+    use flowsdn_bpf_abi::policy::{HOST_ENDPOINT, verdict};
+    let mut rows: Vec<Value> = rows
+        .iter()
+        .map(|(key, value)| {
+            let endpoint = if key.endpoint == HOST_ENDPOINT {
+                json!("host")
+            } else {
+                json!(key.endpoint)
+            };
+            let kind = match key.verdict {
+                verdict::ALLOWED => "allowed",
+                verdict::DENIED => "denied",
+                verdict::AUDIT => "audit",
+                _ => "unknown",
+            };
+            json!({"endpoint":endpoint,
+                "direction": if key.egress != 0 { "egress" } else { "ingress" },
+                "verdict":kind,"protocol":key.protocol,"port":key.dport.get(),
+                "packets":value.packets,"bytes":value.bytes})
+        })
+        .collect();
+    rows.sort_by_key(|r| r.to_string());
+    Value::Array(rows)
+}
+
 fn read_only(method: &str, target: &str) -> bool {
     let path = target.split_once('?').map_or(target, |(path, _)| path);
     method == "GET" || (method == "POST" && matches!(path, "/statedb/query" | "/v1/statedb/query"))
@@ -1290,6 +1357,7 @@ pub fn run(config_path: &Path) -> Result<()> {
         manager,
         leases: BTreeMap::new(),
         kubernetes,
+        host_synced: None,
     };
     // Without endpoint GC, never advertise readiness after skipping a deletion.
     // Preserve failed entries and fail startup so a supervisor can retry safely.
@@ -1341,6 +1409,7 @@ pub fn run(config_path: &Path) -> Result<()> {
     };
     loop {
         api.expire();
+        api.sync_host_firewall();
         // Accepted streams are blocking; each is bounded by REQUEST_BUDGET.
         let mut idle = true;
         match listener.accept() {

@@ -40,6 +40,9 @@ pub struct LocalDelivery {
     endpoints: HashMap<MapData, [u8; 20], [u8; 48]>,
     policy: PolicyMaps,
     interfaces: BTreeMap<String, Attached>,
+    /// The host firewall's links on uplinks (#379), by interface: never
+    /// pinned, they detach when this owner drops.
+    hosts: BTreeMap<String, [SchedClassifierLink; 2]>,
     pin_root: Option<PathBuf>,
     map_id: u32,
 }
@@ -174,6 +177,7 @@ impl LocalDelivery {
             endpoints,
             policy,
             interfaces: BTreeMap::new(),
+            hosts: BTreeMap::new(),
             pin_root,
             map_id,
         })
@@ -325,6 +329,61 @@ impl LocalDelivery {
             let id = program.attach(interface, direction.attach_type())?;
             OwnedLink::Ephemeral(program.take_link(id)?)
         })
+    }
+
+    /// The host firewall (#379) on uplink `interface`: `from_netdev` last on
+    /// its TCX ingress (after the NodePort program, so translated traffic is
+    /// judged as the pod's) and `to_netdev` on its egress. Already attached
+    /// is fine.
+    pub fn attach_host(&mut self, interface: &str) -> KernelResult<()> {
+        valid_interface(interface)?;
+        if self.hosts.contains_key(interface) {
+            return Ok(());
+        }
+        let mut links = Vec::new();
+        for (name, direction) in [
+            ("from_netdev", TcAttachType::Ingress),
+            ("to_netdev", TcAttachType::Egress),
+        ] {
+            let program: &mut SchedClassifier = self
+                .bpf
+                .program_mut(name)
+                .ok_or_else(|| format!("local-delivery object has no program {name}"))?
+                .try_into()?;
+            if program.fd().is_err() {
+                program.load()?;
+            }
+            let id = program.attach_with_options(
+                interface,
+                direction,
+                TcAttachOptions::TcxOrder(LinkOrder::last()),
+            )?;
+            links.push(program.take_link(id)?);
+        }
+        let links: [SchedClassifierLink; 2] = links.try_into().map_err(|_| "host links")?;
+        self.hosts.insert(interface.to_owned(), links);
+        Ok(())
+    }
+    /// Detach the host firewall from `interface`.
+    pub fn detach_host(&mut self, interface: &str) {
+        self.hosts.remove(interface);
+    }
+    /// The uplinks the host firewall is attached to.
+    pub fn host_interfaces(&self) -> impl Iterator<Item = &str> {
+        self.hosts.keys().map(String::as_str)
+    }
+    /// A host firewall program (`from_netdev`, `to_netdev`), loaded, for
+    /// BPF_PROG_TEST_RUN by the kernel fixtures.
+    pub fn host_program(&mut self, name: &str) -> KernelResult<&SchedClassifier> {
+        let program: &mut SchedClassifier = self
+            .bpf
+            .program_mut(name)
+            .ok_or_else(|| format!("local-delivery object has no program {name}"))?
+            .try_into()?;
+        if program.fd().is_err() {
+            program.load()?;
+        }
+        Ok(program)
     }
 
     /// Remove the owned attachments; retrying an already detached name succeeds.

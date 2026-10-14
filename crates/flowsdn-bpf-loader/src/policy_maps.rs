@@ -1,15 +1,19 @@
 //! The endpoint policy maps of the local-delivery object (ADR-0021):
 //! `flowsdn_policy_ep`, `flowsdn_policy`, `flowsdn_ipcache` and the
-//! read-only view of `flowsdn_policy_ct`. Contents are the agent's.
+//! read-only views of `flowsdn_policy_ct` and `flowsdn_policy_verdicts`.
+//! Contents are the agent's.
 use super::{KernelResult, LocalDelivery};
 use aya::{
     Ebpf,
-    maps::{HashMap, IterableMap, LpmTrie, Map, MapData, MapError, lpm_trie::Key},
+    maps::{HashMap, IterableMap, LpmTrie, Map, MapData, MapError, PerCpuHashMap, lpm_trie::Key},
     programs::SchedClassifier,
 };
 use flowsdn_bpf_abi::{
     IpCacheKey, MapBytes, RemoteEndpointInfo,
-    policy::{EndpointPolicyKey, PolicyCtKey, PolicyCtValue, PolicyEndpoint, PolicyEntry},
+    policy::{
+        EndpointPolicyKey, PolicyCtKey, PolicyCtValue, PolicyEndpoint, PolicyEntry,
+        PolicyStatsValue, PolicyVerdictKey,
+    },
 };
 
 fn missing(error: &MapError) -> bool {
@@ -48,12 +52,14 @@ pub struct PolicyMaps {
     policy: LpmTrie<MapData, [u8; 12], [u8; 12]>,
     ipcache: LpmTrie<MapData, [u8; 20], [u8; 24]>,
     flows: HashMap<MapData, [u8; 40], [u8; 16]>,
+    verdicts: PerCpuHashMap<MapData, [u8; 12], [u8; 16]>,
 }
-const NAMES: [&str; 4] = [
+const NAMES: [&str; 5] = [
     "flowsdn_policy_ep",
     "flowsdn_policy",
     "flowsdn_ipcache",
     "flowsdn_policy_ct",
+    "flowsdn_policy_verdicts",
 ];
 impl PolicyMaps {
     pub(super) fn take(bpf: &mut Ebpf) -> KernelResult<Self> {
@@ -64,23 +70,25 @@ impl PolicyMaps {
         Self::from_maps(maps)
     }
     fn from_maps(maps: Vec<Map>) -> KernelResult<Self> {
-        let [endpoints, policy, ipcache, flows]: [Map; 4] =
+        let [endpoints, policy, ipcache, flows, verdicts]: [Map; 5] =
             maps.try_into().map_err(|_| "policy map count")?;
         Ok(Self {
             endpoints: HashMap::try_from(endpoints)?,
             policy: LpmTrie::try_from(policy)?,
             ipcache: LpmTrie::try_from(ipcache)?,
             flows: HashMap::try_from(flows)?,
+            verdicts: PerCpuHashMap::try_from(verdicts)?,
         })
     }
-    fn ids(&self) -> KernelResult<[u32; 4]> {
-        let data: [&MapData; 4] = [
+    fn ids(&self) -> KernelResult<[u32; 5]> {
+        let data: [&MapData; 5] = [
             IterableMap::map(&self.endpoints),
             IterableMap::map(&self.policy),
             IterableMap::map(&self.ipcache),
             IterableMap::map(&self.flows),
+            IterableMap::map(&self.verdicts),
         ];
-        let mut ids = [0; 4];
+        let mut ids = [0; 5];
         for (id, map) in ids.iter_mut().zip(data) {
             *id = map.info()?.id();
         }
@@ -200,6 +208,22 @@ impl PolicyMaps {
             let (key, value) = item?;
             let key = IpCacheKey::from_bytes(join(key.prefix_len(), key.data()));
             out.push((key, RemoteEndpointInfo::from_bytes(value)));
+        }
+        Ok(out)
+    }
+
+    /// The policy decisions counted so far, summed over CPUs.
+    pub fn policy_verdicts(&self) -> KernelResult<Vec<(PolicyVerdictKey, PolicyStatsValue)>> {
+        let mut out = Vec::new();
+        for item in self.verdicts.iter() {
+            let (key, values) = item?;
+            let mut total = PolicyStatsValue::default();
+            for value in values.iter() {
+                let value = PolicyStatsValue::from_bytes(*value);
+                total.packets = total.packets.saturating_add(value.packets);
+                total.bytes = total.bytes.saturating_add(value.bytes);
+            }
+            out.push((PolicyVerdictKey::from_bytes(key), total));
         }
         Ok(out)
     }

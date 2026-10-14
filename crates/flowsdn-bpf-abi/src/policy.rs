@@ -205,9 +205,13 @@ pub struct EndpointPolicyKey {
 pub const ENDPOINT_POLICY_FULL_PREFIX: u32 = 96;
 impl EndpointPolicyKey {
     pub fn new(endpoint: u16, key: PolicyKey) -> Self {
+        Self::for_endpoint(u32::from(endpoint), key)
+    }
+    /// [`Self::new`] for any endpoint ID, the host's ([`HOST_ENDPOINT`]) too.
+    pub fn for_endpoint(endpoint: u32, key: PolicyKey) -> Self {
         Self {
             prefixlen: key.prefixlen.saturating_add(32),
-            endpoint: u32::from(endpoint),
+            endpoint,
             sec_label: key.sec_label,
             egress: key.egress,
             protocol: key.protocol,
@@ -251,6 +255,54 @@ impl MapBytes<16> for EndpointPolicyKey {
 pub mod enforce {
     pub const INGRESS: u32 = 1;
     pub const EGRESS: u32 = 2;
+    /// Audit: a packet the policy would drop is counted and passed.
+    pub const AUDIT: u32 = 4;
+}
+/// The host's endpoint ID in the policy maps (#379): above every Pod
+/// endpoint ID (16 bits), so it never collides with one.
+pub const HOST_ENDPOINT: u32 = 0x1_0000;
+
+/// `flowsdn_policy_verdicts` verdicts: allowed by a rule, dropped, and
+/// would have been dropped (audit).
+pub mod verdict {
+    pub const ALLOWED: u8 = 1;
+    pub const DENIED: u8 = 2;
+    pub const AUDIT: u8 = 3;
+}
+/// `flowsdn_policy_verdicts` key: one policy decision class of an endpoint
+/// (decisions only; packets of a remembered flow are not counted). The
+/// value is a [`PolicyStatsValue`] per CPU.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PolicyVerdictKey {
+    pub endpoint: u32,
+    /// The L4 destination port (network order), 0 without one.
+    pub dport: Be16,
+    pub protocol: u8,
+    /// 1: leaving the endpoint.
+    pub egress: u8,
+    pub verdict: u8,
+    pub pad: [u8; 3],
+}
+impl MapBytes<12> for PolicyVerdictKey {
+    fn to_bytes(self) -> [u8; 12] {
+        let mut out = [0; 12];
+        put(&mut out, 0, self.endpoint.to_le_bytes());
+        put(&mut out, 4, self.dport.0);
+        put(&mut out, 6, [self.protocol, self.egress, self.verdict]);
+        put(&mut out, 9, self.pad);
+        out
+    }
+    fn from_bytes(b: [u8; 12]) -> Self {
+        Self {
+            endpoint: u32::from_le_bytes(take(&b, 0)),
+            dport: Be16(take(&b, 4)),
+            protocol: take::<1, 12>(&b, 6)[0],
+            egress: take::<1, 12>(&b, 7)[0],
+            verdict: take::<1, 12>(&b, 8)[0],
+            pad: take(&b, 9),
+        }
+    }
 }
 /// `flowsdn_policy_ep` value, keyed by the endpoint's host-side interface
 /// index (u32). An endpoint without an entry has no policy and no tracking.
@@ -385,4 +437,7 @@ const _: () = {
     assert!(offset_of!(PolicyCtKey, protocol) == 36);
     assert!(offset_of!(PolicyCtKey, egress) == 38);
     assert!(size_of::<PolicyCtValue>() == 16);
+    assert!(size_of::<PolicyVerdictKey>() == 12);
+    assert!(offset_of!(PolicyVerdictKey, dport) == 4);
+    assert!(offset_of!(PolicyVerdictKey, verdict) == 8);
 };

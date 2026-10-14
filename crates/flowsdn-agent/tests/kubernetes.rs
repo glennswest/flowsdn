@@ -266,6 +266,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         cgroup_root: PathBuf::from("/sys/fs/cgroup"),
         node_port: false,
         maglev: false,
+        host_firewall: flowsdn_agent::kubernetes::HostFirewall::Off,
         identity_allocation: true,
         network_policy: false,
         cluster_name: "default".into(),

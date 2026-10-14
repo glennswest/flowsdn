@@ -14,6 +14,7 @@ fn node(name: &str, cidrs: &[(&str, u8)], ips: &[&str]) -> NodeInfo {
         name: name.into(),
         pod_cidrs: cidrs.iter().map(|(a, p)| (ip(a), *p)).collect(),
         internal_ips: ips.iter().map(|a| ip(a)).collect(),
+        labels: BTreeMap::new(),
     }
 }
 
@@ -36,12 +37,14 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(parsed.service_lb);
     assert!(parsed.node_port);
     assert!(!parsed.maglev);
+    assert_eq!(parsed.host_firewall, HostFirewall::Off);
     assert_eq!(parsed.cgroup_root, PathBuf::from(DEFAULT_CGROUP_ROOT));
     let parsed = Settings::parse(
         Some(
             &json!({"node-name":"n1","kubeconfig":"/k","auto-direct-node-routes":false,
             "direct-routing-skip-unreachable":true,"service-lb":false,"node-port":false,
-            "cgroup-root":"/run/flowsdn/cgroupv2","lb-algorithm":"maglev"}),
+            "cgroup-root":"/run/flowsdn/cgroupv2","lb-algorithm":"maglev",
+            "host-firewall":"audit"}),
         ),
         &env(&[("K8S_NODE_NAME", "a")]),
     )
@@ -53,6 +56,14 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(!parsed.service_lb);
     assert!(!parsed.node_port);
     assert!(parsed.maglev);
+    assert_eq!(parsed.host_firewall, HostFirewall::Audit);
+    assert!(
+        Settings::parse(
+            Some(&json!({"node-name":"n1","host-firewall":"on"})),
+            &env(&[])
+        )
+        .is_err()
+    );
     assert_eq!(parsed.cgroup_root, PathBuf::from("/run/flowsdn/cgroupv2"));
     assert!(
         Settings::parse(

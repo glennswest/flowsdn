@@ -112,9 +112,11 @@ fn without_policies_nothing_is_enforced_and_the_ipcache_has_pods_and_host() {
                 *counts.entry(info.sec_identity).or_default() += 1;
                 counts
             });
-    // Three Pods, and the host's InternalIP and gateway; n2 is world.
+    // Three Pods, the host's InternalIP and gateway, and n2 (remote node).
     assert_eq!(ipcache.get(&HOST), Some(&2));
-    assert_eq!(desired.ipcache.len(), 5);
+    assert_eq!(ipcache.get(&REMOTE_NODE), Some(&1));
+    assert_eq!(desired.ipcache.len(), 6);
+    assert!(desired.host.is_null());
     assert!(desired.problems.is_empty());
 }
 
@@ -236,4 +238,143 @@ fn a_policy_that_cannot_be_read_is_reported() {
         "{:?}",
         desired.problems
     );
+}
+
+#[test]
+fn an_ip_block_still_selects_remote_nodes() {
+    let view = view(vec![policy(json!({
+        "podSelector":{"matchLabels":{"app":"web"}},
+        "ingress":[{"from":[{"ipBlock":{"cidr":"192.0.2.0/24"}}]}]
+    }))]);
+    let desired = compile(&view, &[]);
+    let identities: BTreeSet<u32> = keys_of(&desired).iter().map(|k| k.0).collect();
+    assert!(identities.contains(&REMOTE_NODE), "{identities:?}");
+    assert!(identities.contains(&HOST));
+}
+
+fn host_view(mode: HostFirewall, learning: bool) -> View {
+    let mut view = view(Vec::new());
+    view.host_firewall = mode;
+    if let Some(n1) = view.nodes.iter_mut().find(|n| n.name == "n1") {
+        n1.labels.insert("role".into(), "worker".into());
+    }
+    view.clusterwide_policies = vec![json!({"metadata":{"name":"fw"},"spec":{
+        "nodeSelector":{"matchLabels":{"role":"worker"}},
+        "ingress":[
+            {"fromEntities":["remote-node"]},
+            {"fromCIDR":["198.51.100.0/24"],"toPorts":[{"ports":[{"port":"22","protocol":"TCP"}]}]},
+            {"fromEndpoints":[{"matchLabels":{"app":"client"}}],"toPorts":[{"ports":[{"port":"9090","protocol":"TCP"}]}]}
+        ],
+        "ingressDeny":[{"fromEntities":["all"],"toPorts":[{"ports":[{"port":"9100","protocol":"TCP"}]}]}]
+    }})];
+    view.clusterwide_synced = true;
+    view.host_interfaces = [("eth0".to_owned(), 5u32)].into_iter().collect();
+    if learning {
+        view.host_learning.insert(5);
+    }
+    view
+}
+/// (identity, protocol, port, port prefix, deny) of every host entry.
+fn host_keys(desired: &Desired) -> BTreeSet<(u32, u8, u16, u32, bool)> {
+    desired
+        .entries
+        .iter()
+        .map(|(k, v)| (EndpointPolicyKey::from_bytes(*k), *v))
+        .filter(|(k, _)| k.endpoint == HOST_ENDPOINT)
+        .map(|(k, v)| {
+            assert_eq!(k.egress, 0, "host rules are ingress");
+            (
+                k.sec_label,
+                k.protocol,
+                k.dport.get(),
+                k.prefixlen.saturating_sub(80),
+                v.denies(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn host_firewall_rules_enforcement_and_audit() {
+    let view = host_view(HostFirewall::Enforce, false);
+    let desired = compile(&view, &[]);
+    assert_eq!(
+        desired.endpoints.get(&5),
+        Some(&PolicyEndpoint {
+            endpoint: HOST_ENDPOINT,
+            flags: enforce::INGRESS
+        })
+    );
+    let keys = host_keys(&desired);
+    let cidr = desired
+        .ipcache
+        .iter()
+        .map(|(k, v)| (IpCacheKey::from_bytes(*k), v.sec_identity))
+        .find(|(k, _)| k.prefixlen == 64 - 8)
+        .map(|(_, id)| id)
+        .expect("198.51.100.0/24 has a CIDR identity");
+    let client = identity_of(&view, "client");
+    let tcp = |port| (6u8, port, 16u32);
+    for want in [
+        // remote-node: every L4, with the wildcard deny repeated at it.
+        (REMOTE_NODE, 0, 0, 0, false),
+        (REMOTE_NODE, tcp(9100).0, 9100, 16, true),
+        (cidr, tcp(22).0, 22, 16, false),
+        (client, tcp(9090).0, 9090, 16, false),
+        (0, 6, 9100, 16, true),
+    ] {
+        assert!(keys.contains(&want), "{want:?} not in {keys:?}");
+    }
+    assert_eq!(keys.len(), 5, "{keys:?}");
+    assert_eq!(desired.host.pointer("/enforcing-on/0"), Some(&json!("eth0")));
+    assert_eq!(desired.host.pointer("/policies/0"), Some(&json!("/fw")));
+    assert!(desired.problems.is_empty(), "{:?}", desired.problems);
+
+    let audit = compile(&host_view(HostFirewall::Audit, false), &[]);
+    assert_eq!(
+        audit.endpoints.get(&5).map(|e| e.flags),
+        Some(enforce::INGRESS | enforce::AUDIT)
+    );
+    let learning = compile(&host_view(HostFirewall::Enforce, true), &[]);
+    assert_eq!(learning.endpoints.get(&5).map(|e| e.flags), Some(0));
+    assert_eq!(learning.host.pointer("/learning/0"), Some(&json!("eth0")));
+    // Off: nothing of the host, whatever the policies say.
+    let off = compile(&host_view(HostFirewall::Off, false), &[]);
+    assert!(off.endpoints.is_empty() && host_keys(&off).is_empty());
+    // Not selected: tracked only.
+    let mut other = host_view(HostFirewall::Enforce, false);
+    for node in &mut other.nodes {
+        node.labels.clear();
+    }
+    let other = compile(&other, &[]);
+    assert_eq!(other.endpoints.get(&5).map(|e| e.flags), Some(0));
+    assert!(host_keys(&other).is_empty());
+}
+
+#[test]
+fn denies_win_over_the_allows_they_cover() {
+    let allows: BTreeSet<_> = [
+        (300, 0, 0, 0),    // everything from 300
+        (301, 6, 22, 16),  // TCP 22 from 301
+        (302, 6, 0, 0),    // all TCP from 302
+        (303, 17, 53, 16), // UDP 53 from 303
+    ]
+    .into_iter()
+    .collect();
+    let denies: BTreeSet<_> = [
+        (0, 6, 22, 16),   // TCP 22 from everyone
+        (302, 6, 8, 13),  // TCP 8-15 from 302
+    ]
+    .into_iter()
+    .collect();
+    let (kept, denies) = deny_over_allow(&allows, &denies);
+    // 301's allow is inside the wildcard deny: gone.
+    assert!(!kept.contains(&(301, 6, 22, 16)));
+    assert!(kept.contains(&(300, 0, 0, 0)) && kept.contains(&(302, 6, 0, 0)));
+    assert!(kept.contains(&(303, 17, 53, 16)));
+    // The wildcard deny is repeated at 300 and 302, whose allows hold it.
+    assert!(denies.contains(&(300, 6, 22, 16)));
+    assert!(denies.contains(&(302, 6, 22, 16)));
+    assert!(denies.contains(&(302, 6, 8, 13)));
+    assert!(!denies.contains(&(303, 6, 22, 16)));
 }
