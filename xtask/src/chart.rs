@@ -28,9 +28,7 @@ pub fn workspace_version(cargo_toml: &str) -> Option<String> {
             in_package = line == "[workspace.package]";
             continue;
         }
-        if in_package
-            && let Some(value) = line.strip_prefix("version = ")
-        {
+        if in_package && let Some(value) = line.strip_prefix("version = ") {
             return Some(value.trim_matches('"').to_owned());
         }
     }
@@ -153,7 +151,10 @@ pub fn run(root: &Path) -> Result<()> {
             &["--set", IMAGE, "--set", "agent.ipv4Pool=10.244.0.0/16"],
         ),
         ("no pool", &["--set", IMAGE, "--set", "agent.ipv4Pool="]),
-        ("bad egress", &["--set", IMAGE, "--set", "agent.egress=tunnel"]),
+        (
+            "bad egress",
+            &["--set", IMAGE, "--set", "agent.egress=tunnel"],
+        ),
     ];
     for (why, extra) in guards {
         let mut args = vec!["template", "flowsdn", chart];
@@ -199,10 +200,7 @@ mod tests {
     #[test]
     fn cilium_is_found_in_any_case_with_line_numbers() {
         let render = "kind: ConfigMap\n  name: flowsdn\n  image: quay.io/Cilium/x\n";
-        assert_eq!(
-            cilium_lines(render),
-            vec![(3, "  image: quay.io/Cilium/x")]
-        );
+        assert_eq!(cilium_lines(render), vec![(3, "  image: quay.io/Cilium/x")]);
         assert!(cilium_lines("kind: DaemonSet\n").is_empty());
     }
 
@@ -214,10 +212,7 @@ mod tests {
         }
         assert_eq!(check_render(&render), Ok(()));
         let short = render.replacen("kind: CustomResourceDefinition\n", "", 1);
-        assert_eq!(
-            check_render(&short),
-            Err("21 CRDs rendered, not 22".into())
-        );
+        assert_eq!(check_render(&short), Err("21 CRDs rendered, not 22".into()));
         let no_daemonset = render.replace("kind: DaemonSet\n", "");
         assert_eq!(
             check_render(&no_daemonset),
