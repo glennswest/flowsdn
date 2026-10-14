@@ -86,8 +86,10 @@ reference's two-round mix; sport 0 with affinity), else random slot. Agent: `kub
 - [x] Docs (spec 05/02 notes, runtime, agent-api, implementation-status, milestones, README), changelog (c096990).
       Object + lock from sc-build at 21b7d3a (21ce52d). sc-build at fb44da4: fmt, Clippy x2, 877 tests (0 failed,
       1 ignored), test/build.sh (lock matches, no-cilium). Catalogue provenance lines remapped (#358 fragility).
-- [ ] Medium 17f361a64f at fb44da4 on pvetest2 (C2NR0Q2 refuses: 12.21 install failed); pvetest2 may still be
-      stuck on stormcentral#846. `stormcentral test show 17f361a64f`; then stage the golden.
+- [ ] Medium 17f361a64f at fb44da4 errored: pvetest2 did not come up (stormcentral#846, commented); C2NR0Q2 refuses
+      (12.21 install failed). Status comment 6171634972; #292 proposed after stormcentral#846. When a machine runs:
+      `stormcentral test run flowsdn medium --tag pvetest2`; if socket-lb-live passes (Maglev step), stage the golden
+      (`stormcentral component stage flowsdn`); then the perf run (live policy + ClusterIP).
 - [ ] Medium on a 7.2 machine (socket-lb-live Maglev step), then stage.
 
 ### UDP socket termination — #292 (P0), 2026-10-13
