@@ -69,6 +69,18 @@ std::process), check.sh deleted, deploy/release/build.sh calls it.
       -D warnings, 16 xtask tests, `cargo xtask chart-check` passes (lint, 22 CRDs, 4 guards refuse); at f1b4c1e a wrong
       Chart.yaml version makes it fail. #375 closed. Build-only scripts (tools/, test/build.sh, release/image build.sh) remain.
 
+### Test image lock check fails at 3c470aa — #292 (P0), 2026-11-03
+
+stormcentral#846 closed 2026-10-19, but every test image at 3c470aa failed `test/build.sh`'s lock check (db5d9fc564,
+52ddea67d7): local-delivery's stack offsets depended on the checkout path (flowsdn-bpf-abi is outside the
+flowsdn-bpf workspace, so cargo hashes its absolute path into -C metadata). pvetest1/2 refuse runs (stormcos#271:
+their sbregistry takes no forge test images); C2NR0Q2 accepts.
+
+- [x] Wrapper replaces -C metadata of flowsdn's crates with a path-free hash (e161dd7). sc-build: three paths, identical
+      code = committed lock; fmt, Clippy x2, 808 tests, test/build.sh. #389 was my diagnostic's bare `diff` (closed).
+- [ ] Medium c7a3d99110 at e161dd7 on C2NR0Q2 (policy-live host steps for #379, socket-lb-live Maglev for #292).
+      Pass -> `stormcentral component stage flowsdn`; live perf (policy + ClusterIP) when pvetest2 takes runs (stormcos#271).
+
 ### Host firewall (host-policy plugin) — #379 (P2), 2026-10-14
 
 stormcos#558 (stormfw): HostFirewallPolicy -> Cilium host firewall (CCNP + nodeSelector) or flowsdn. Input here is
