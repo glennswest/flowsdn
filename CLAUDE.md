@@ -78,8 +78,9 @@ their sbregistry takes no forge test images); C2NR0Q2 accepts.
 
 - [x] Wrapper replaces -C metadata of flowsdn's crates with a path-free hash (e161dd7). sc-build: three paths, identical
       code = committed lock; fmt, Clippy x2, 808 tests, test/build.sh. #389 was my diagnostic's bare `diff` (closed).
-- [ ] Medium c7a3d99110 at e161dd7 on C2NR0Q2 (policy-live host steps for #379, socket-lb-live Maglev for #292).
-      Pass -> `stormcentral component stage flowsdn`; live perf (policy + ClusterIP) when pvetest2 takes runs (stormcos#271).
+- [ ] Medium c7a3d99110 at e161dd7 on C2NR0Q2 skipped: a pve pass comes first (#791), and pvetest1/2 refuse runs until a
+      release carries stormcos#271 (shipped there). Status 6613574893; #292 proposed after stormcos#271. Then
+      `stormcentral test run flowsdn medium --tag pvetest2` (Maglev step; #379 host steps); pass -> stage; then perf.
 
 ### Host firewall (host-policy plugin) — #379 (P2), 2026-10-14
 
