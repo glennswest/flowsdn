@@ -69,7 +69,10 @@ impl Scrubber {
         let mut err = None;
         let out = rule.re.replace_all(text, |caps: &regex::Captures<'_>| {
             let (Some(whole), Some(value)) = (caps.get(0), caps.get(rule.group)) else {
-                return caps.get(0).map(|m| m.as_str().to_string()).unwrap_or_default();
+                return caps
+                    .get(0)
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_default();
             };
             if is_placeholder(rule.form, value.as_str()) {
                 return whole.as_str().to_string();
@@ -272,11 +275,17 @@ pub(crate) mod tests {
     #[test]
     fn every_sample_is_found_raw_and_clean_after_scrubbing() {
         for (what, raw) in raw_samples() {
-            assert!(!scan::scan_text(&raw).is_empty(), "scan misses raw {what}: {raw}");
+            assert!(
+                !scan::scan_text(&raw).is_empty(),
+                "scan misses raw {what}: {raw}"
+            );
             let scrubbed = Scrubber::new().text(&raw).expect("scrub");
             assert_ne!(scrubbed, raw, "{what} not scrubbed");
             let left = scan::scan_text(&scrubbed);
-            assert!(left.is_empty(), "{what} after scrubbing: {scrubbed} -> {left:?}");
+            assert!(
+                left.is_empty(),
+                "{what} after scrubbing: {scrubbed} -> {left:?}"
+            );
             let again = Scrubber::new().text(&scrubbed).expect("rescrub");
             assert_eq!(again, scrubbed, "{what}: scrubbing is not idempotent");
         }
@@ -285,8 +294,12 @@ pub(crate) mod tests {
     #[test]
     fn consistent_within_a_scenario_and_revealable() {
         let mut s = Scrubber::new();
-        let a = s.text("eni-0a1b2c3d4e5f60718 in subnet-0123abcd").expect("scrub");
-        let b = s.text(r#"{"NetworkInterfaceId":"eni-0a1b2c3d4e5f60718"}"#).expect("scrub");
+        let a = s
+            .text("eni-0a1b2c3d4e5f60718 in subnet-0123abcd")
+            .expect("scrub");
+        let b = s
+            .text(r#"{"NetworkInterfaceId":"eni-0a1b2c3d4e5f60718"}"#)
+            .expect("scrub");
         // One counter per class: the subnet is the second AWS id.
         assert_eq!(a, "eni-5c7b0000000000001 in subnet-5c7b0002");
         assert_eq!(b, r#"{"NetworkInterfaceId":"eni-5c7b0000000000001"}"#);
@@ -314,7 +327,10 @@ pub(crate) mod tests {
         let v6 = s
             .text("2600:1f18:abc:de00::/56 2600:1f18:abc:de00::5 2a05:d014::1 fd00::1")
             .expect("scrub");
-        assert_eq!(v6, "2001:db8:abc:de00::/56 2001:db8:abc:de00::5 3fff:1::1 fd00::1");
+        assert_eq!(
+            v6,
+            "2001:db8:abc:de00::/56 2001:db8:abc:de00::5 3fff:1::1 fd00::1"
+        );
     }
 
     #[test]
@@ -322,9 +338,13 @@ pub(crate) mod tests {
         let mut headers = BTreeMap::new();
         headers.insert(
             "Authorization".to_string(),
-            "AWS4-HMAC-SHA256 Credential=x/20261103/us-east-1/ec2/aws4_request, Signature=ab".to_string(),
+            "AWS4-HMAC-SHA256 Credential=x/20261103/us-east-1/ec2/aws4_request, Signature=ab"
+                .to_string(),
         );
-        headers.insert("Content-Type".to_string(), "application/x-www-form-urlencoded".to_string());
+        headers.insert(
+            "Content-Type".to_string(),
+            "application/x-www-form-urlencoded".to_string(),
+        );
         let i = Interaction {
             operation: "describe-instances".to_string(),
             request: Request {
@@ -340,12 +360,18 @@ pub(crate) mod tests {
             },
         };
         let out = Scrubber::new().interaction(&i).expect("scrub");
-        assert_eq!(out.request.headers.get("authorization").map(String::as_str), Some("scrubbed"));
+        assert_eq!(
+            out.request.headers.get("authorization").map(String::as_str),
+            Some("scrubbed")
+        );
         assert_eq!(
             out.request.headers.get("content-type").map(String::as_str),
             Some("application/x-www-form-urlencoded")
         );
         assert_eq!(out.request.body, i.request.body);
-        assert_eq!(out.response.body, "<instanceId>i-5c7b0000000000001</instanceId>");
+        assert_eq!(
+            out.response.body,
+            "<instanceId>i-5c7b0000000000001</instanceId>"
+        );
     }
 }

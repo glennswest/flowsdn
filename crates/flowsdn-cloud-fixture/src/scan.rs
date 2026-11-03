@@ -54,7 +54,10 @@ pub fn scan_text(text: &str) -> Vec<(usize, usize, Class)> {
         }
     }
     for m in IPV4.find_iter(text) {
-        if m.as_str().parse::<Ipv4Addr>().is_ok_and(rules::is_public_v4) {
+        if m.as_str()
+            .parse::<Ipv4Addr>()
+            .is_ok_and(rules::is_public_v4)
+        {
             let (line, column) = position(text, m.start());
             hits.push((line, column, Class::PublicIp));
         }
@@ -90,14 +93,16 @@ pub fn scan_dir(root: &Path) -> std::io::Result<Vec<Finding>> {
             }
             let bytes = std::fs::read(&path)?;
             match String::from_utf8(bytes) {
-                Ok(text) => findings.extend(scan_text(&text).into_iter().map(
-                    |(line, column, class)| Finding {
-                        path: path.clone(),
-                        line,
-                        column,
-                        class,
-                    },
-                )),
+                Ok(text) => {
+                    findings.extend(scan_text(&text).into_iter().map(|(line, column, class)| {
+                        Finding {
+                            path: path.clone(),
+                            line,
+                            column,
+                            class,
+                        }
+                    }))
+                }
                 Err(_) => findings.push(Finding {
                     path: path.clone(),
                     line: 0,
@@ -127,7 +132,10 @@ mod tests {
             class: Class::PublicIp,
         };
         let shown = f.to_string();
-        assert_eq!(shown, "tests/cloud/aws/s/001-x.json:3:10: unscrubbed public IP address");
+        assert_eq!(
+            shown,
+            "tests/cloud/aws/s/001-x.json:3:10: unscrubbed public IP address"
+        );
         assert!(!shown.contains("54.12"));
     }
 

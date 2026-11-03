@@ -60,9 +60,14 @@ impl Provider {
     }
 
     pub fn parse(s: &str) -> Option<Self> {
-        [Provider::Aws, Provider::Azure, Provider::Alibaba, Provider::Gke]
-            .into_iter()
-            .find(|p| p.name() == s)
+        [
+            Provider::Aws,
+            Provider::Azure,
+            Provider::Alibaba,
+            Provider::Gke,
+        ]
+        .into_iter()
+        .find(|p| p.name() == s)
     }
 }
 
@@ -152,7 +157,9 @@ impl Interaction {
 
     pub fn from_json(operation: &str, v: &Value) -> Result<Self, String> {
         let obj = |v: &Value, what: &str| -> Result<Map<String, Value>, String> {
-            v.as_object().cloned().ok_or_else(|| format!("{what} is not an object"))
+            v.as_object()
+                .cloned()
+                .ok_or_else(|| format!("{what} is not an object"))
         };
         let string = |m: &Map<String, Value>, k: &str| -> Result<String, String> {
             m.get(k)
@@ -237,7 +244,11 @@ impl Meta {
             .and_then(toml::Value::as_array)
             .ok_or("missing array operations")?
             .iter()
-            .map(|o| o.as_str().map(str::to_string).ok_or("operations must be strings"))
+            .map(|o| {
+                o.as_str()
+                    .map(str::to_string)
+                    .ok_or("operations must be strings")
+            })
             .collect::<Result<Vec<_>, _>>()?;
         if !is_name(&name) {
             return Err(format!("scenario name {name:?} is not [a-z0-9-]+"));
@@ -302,7 +313,11 @@ pub fn load(dir: &Path) -> Result<Scenario, Error> {
     let mut files = Vec::new();
     for entry in std::fs::read_dir(dir).map_err(io)? {
         let path = entry.map_err(io)?.path();
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_string();
         if name == "scenario.toml" {
             continue;
         }
@@ -415,7 +430,8 @@ pub(crate) mod tests {
     }
 
     fn temp_root(tag: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("flowsdn-fixture-{tag}-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("flowsdn-fixture-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         root
     }

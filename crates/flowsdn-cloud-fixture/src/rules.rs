@@ -236,9 +236,8 @@ pub(crate) static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
     ]
 });
 
-pub(crate) static IPV4: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b").expect("ipv4 regex")
-});
+pub(crate) static IPV4: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b").expect("ipv4 regex"));
 pub(crate) static IPV6: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[0-9A-Fa-f:]{2,39}").expect("ipv6 regex"));
 
@@ -273,7 +272,10 @@ pub(crate) fn placeholder(form: Form, original: &str, n: u32) -> Option<String> 
             let width = original.len().checked_sub(4)?;
             fixed(format!("{n:0width$}"), width).map(|d| format!("5c7b{d}"))
         }
-        Form::Digits => fixed(format!("{n:0width$}", width = original.len()), original.len()),
+        Form::Digits => fixed(
+            format!("{n:0width$}", width = original.len()),
+            original.len(),
+        ),
         Form::Guid => fixed(format!("{n:012}"), 12).map(|d| format!("{GUID_PREFIX}{d}")),
         Form::Named(prefix) => Some(format!("{prefix}{n}")),
         Form::Dns => Some(format!("host-{n}.scrubbed.invalid")),

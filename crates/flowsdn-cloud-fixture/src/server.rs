@@ -31,11 +31,16 @@ fn invalid(msg: impl Into<String>) -> io::Error {
 
 fn read_line(r: &mut impl BufRead, budget: &mut usize) -> io::Result<Option<String>> {
     let mut line = Vec::new();
-    let n = r.by_ref().take(u64::try_from(*budget).unwrap_or(u64::MAX)).read_until(b'\n', &mut line)?;
+    let n = r
+        .by_ref()
+        .take(u64::try_from(*budget).unwrap_or(u64::MAX))
+        .read_until(b'\n', &mut line)?;
     if n == 0 {
         return Ok(None);
     }
-    *budget = budget.checked_sub(n).ok_or_else(|| invalid("request head too large"))?;
+    *budget = budget
+        .checked_sub(n)
+        .ok_or_else(|| invalid("request head too large"))?;
     if line.last() != Some(&b'\n') {
         return Err(invalid("request head too large or truncated"));
     }
@@ -71,7 +76,9 @@ fn read_request(r: &mut impl BufRead) -> io::Result<Option<(Request, bool)>> {
         if line.is_empty() {
             break;
         }
-        let (name, value) = line.split_once(':').ok_or_else(|| invalid("malformed header"))?;
+        let (name, value) = line
+            .split_once(':')
+            .ok_or_else(|| invalid("malformed header"))?;
         let name = name.trim().to_ascii_lowercase();
         let value = value.trim().to_string();
         headers
@@ -143,7 +150,10 @@ fn reason(status: u16) -> &'static str {
 fn write_response(w: &mut impl Write, resp: &Response, close: bool) -> io::Result<()> {
     let mut head = format!("HTTP/1.1 {} {}\r\n", resp.status, reason(resp.status));
     for (k, v) in &resp.headers {
-        if !matches!(k.as_str(), "content-length" | "transfer-encoding" | "connection") {
+        if !matches!(
+            k.as_str(),
+            "content-length" | "transfer-encoding" | "connection"
+        ) {
             head.push_str(&format!("{k}: {v}\r\n"));
         }
     }
@@ -193,7 +203,12 @@ fn serve(stream: TcpStream, state: &Mutex<Replayer>) {
             }
             Ok(None) => return,
             // An idle keep-alive connection timing out is not a failure.
-            Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut) => {
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) =>
+            {
                 return;
             }
             Err(e) => {

@@ -144,11 +144,15 @@ mod tests {
     fn in_order_with_canonical_bodies() {
         let mut r = Replayer::new(scenario().interactions);
         let first = r
-            .respond(&request("Version=2016-11-15&Action=DescribeInstances&Signature=fresh"))
+            .respond(&request(
+                "Version=2016-11-15&Action=DescribeInstances&Signature=fresh",
+            ))
             .expect("first matches");
         assert!(first.body.contains("i-5c7b"));
         let second = r
-            .respond(&request("SubnetId=subnet-5c7b0002&Action=CreateNetworkInterface"))
+            .respond(&request(
+                "SubnetId=subnet-5c7b0002&Action=CreateNetworkInterface",
+            ))
             .expect("second matches");
         assert!(second.body.contains("eni-5c7b"));
         assert_eq!(r.finish(true), Ok(()));
@@ -158,9 +162,14 @@ mod tests {
     fn out_of_order_reports_the_closest() {
         let mut r = Replayer::new(scenario().interactions);
         let err = r
-            .respond(&request("Action=CreateNetworkInterface&SubnetId=subnet-5c7b0002"))
+            .respond(&request(
+                "Action=CreateNetworkInterface&SubnetId=subnet-5c7b0002",
+            ))
             .expect_err("second sent first");
-        assert!(err.contains("request 1 matches no recorded interaction"), "{err}");
+        assert!(
+            err.contains("request 1 matches no recorded interaction"),
+            "{err}"
+        );
         assert!(err.contains("closest: 001-describe-instances"), "{err}");
         let finish = r.finish(false).expect_err("a failure was recorded");
         assert!(finish.contains("request 1"), "{finish}");
@@ -173,9 +182,14 @@ mod tests {
             .expect("first");
         assert_eq!(r.finish(false), Ok(()));
         let strict = r.finish(true).expect_err("strict");
-        assert!(strict.contains("never used: 002-create-network-interface"), "{strict}");
-        r.respond(&request("Action=CreateNetworkInterface&SubnetId=subnet-5c7b0002"))
-            .expect("second");
+        assert!(
+            strict.contains("never used: 002-create-network-interface"),
+            "{strict}"
+        );
+        r.respond(&request(
+            "Action=CreateNetworkInterface&SubnetId=subnet-5c7b0002",
+        ))
+        .expect("second");
         let err = r
             .respond(&request("Action=DescribeInstances&Version=2016-11-15"))
             .expect_err("nothing left");

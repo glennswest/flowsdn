@@ -7,8 +7,8 @@
 //! sends requests and a throwaway account; neither exists yet (#391, #293).
 pub mod canon;
 pub mod fixture;
-mod rules;
 pub mod replay;
+mod rules;
 pub mod scan;
 pub mod scrub;
 pub mod server;
@@ -37,7 +37,10 @@ pub fn load_all(root: &std::path::Path) -> Result<Vec<Scenario>, Error> {
     for provider in std::fs::read_dir(root).map_err(io)? {
         let provider = provider.map_err(io)?.path();
         if !provider.is_dir() {
-            return Err(Error::Format(provider, "only provider directories belong here".into()));
+            return Err(Error::Format(
+                provider,
+                "only provider directories belong here".into(),
+            ));
         }
         for scenario in std::fs::read_dir(&provider).map_err(io)? {
             dirs.push(scenario.map_err(io)?.path());

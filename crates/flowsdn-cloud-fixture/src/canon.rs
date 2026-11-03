@@ -13,7 +13,9 @@ fn volatile(name: &str) -> bool {
 }
 
 fn hex(b: u8) -> Option<u8> {
-    char::from(b).to_digit(16).and_then(|d| u8::try_from(d).ok())
+    char::from(b)
+        .to_digit(16)
+        .and_then(|d| u8::try_from(d).ok())
 }
 
 /// Percent-decodes, with `+` as a space; an invalid escape stays literal.
@@ -65,7 +67,9 @@ pub fn target(target: &str) -> String {
     let origin = ["http://", "https://"]
         .iter()
         .find_map(|scheme| target.strip_prefix(scheme))
-        .map_or(target, |rest| rest.find('/').and_then(|i| rest.get(i..)).unwrap_or("/"));
+        .map_or(target, |rest| {
+            rest.find('/').and_then(|i| rest.get(i..)).unwrap_or("/")
+        });
     match origin.split_once('?') {
         Some((path, query)) => {
             let q = pairs(query);
