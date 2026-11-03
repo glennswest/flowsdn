@@ -69,6 +69,22 @@ std::process), check.sh deleted, deploy/release/build.sh calls it.
       -D warnings, 16 xtask tests, `cargo xtask chart-check` passes (lint, 22 CRDs, 4 guards refuse); at f1b4c1e a wrong
       Chart.yaml version makes it fail. #375 closed. Build-only scripts (tools/, test/build.sh, release/image build.sh) remain.
 
+### Cloud fixture machinery — #391 (P3), 2026-11-03
+
+ADR-0007 §1-3 / spec 07 §9.1, the provider-independent half (capture and scenarios need a provider client that
+sends requests, #293, and an account). New crate `flowsdn-cloud-fixture`: fixture model (`NNN-<op>.json`
+{request{method,path,headers,body}, response{status,headers,body}}, `scenario.toml`), loader that scans first;
+`scrub` (deterministic placeholders per scenario in reserved forms: AWS ids `<p>-5c7b…`, account `0000000000NN`,
+GUIDs `00000000-0000-4000-8000-…`, public IPs 203.0.113.0/24 / 2001:db8::/32, hosts `host-N.scrubbed.invalid`;
+credential headers, signature params and token JSON keys -> `scrubbed`); `scan` (same classes in real form);
+`replay` (in-order match on method, path + canonical query, canonical JSON/form body without volatile signing
+params; closest-interaction report; strict unused check); `server` (loopback HTTP/1.1, Content-Length + chunked,
+never proxies). `cargo xtask cloud-scan` over tests/cloud.
+
+- [ ] Crate + unit tests; xtask cloud-scan; Cargo.lock by hand.
+- [ ] Docs (crate README, spec 07 §9.1 note, ADR-0007 status note, build-and-test), changelog; sc-build fmt, Clippy, tests.
+- [ ] Comment #391 (machinery done; capture + scenarios after #293), propose after #293.
+
 ### Cloud drift job — #260 (P3), 2026-11-03
 
 - [x] Blocked on code: no recorder xtask, tests/cloud fixtures, replay, or provider that sends requests (Azure crate is a
