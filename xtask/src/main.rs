@@ -1,6 +1,7 @@
 //! Initial Linux build driver. Packaging and BPF commands arrive with their crates.
 mod changed;
 mod chart;
+mod cloud;
 mod corpus;
 
 use std::{env, error::Error, path::Path, process::Command};
@@ -18,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let command = args.first().map(String::as_str).unwrap_or("help");
     if command == "help" || command == "--help" {
         println!(
-            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|ci-plan|check-changed> BASE\ncargo xtask audit-corpus [--check]\ncargo xtask chart-check\nRun build tasks on Linux; see README.md."
+            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|ci-plan|check-changed> BASE\ncargo xtask audit-corpus [--check]\ncargo xtask chart-check\ncargo xtask cloud-scan\nRun build tasks on Linux; see README.md."
         );
         return Ok(());
     }
@@ -30,6 +31,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             .parent()
             .ok_or("workspace")?;
         return chart::run(root);
+    }
+    if command == "cloud-scan" {
+        if args.len() != 1 {
+            return Err("expected cloud-scan".into());
+        }
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .ok_or("workspace")?;
+        return cloud::scan(root);
     }
     if command == "audit-corpus" {
         if args.len() > 2 || args.get(1).is_some_and(|s| s != "--check") {

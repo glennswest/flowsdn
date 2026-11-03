@@ -449,6 +449,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-cloud-fixture"
+version = "0.14.0"
+dependencies = [
+ "regex",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "flowsdn-clustermesh"
 version = "0.14.0"
 dependencies = [
@@ -2411,6 +2420,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 name = "xtask"
 version = "0.14.0"
 dependencies = [
+ "flowsdn-cloud-fixture",
  "flowsdn-config",
  "flowsdn-scripttest",
  "regex",

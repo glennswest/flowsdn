@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 serde_json.workspace = true
 regex.workspace = true
+flowsdn-cloud-fixture = { path = "../crates/flowsdn-cloud-fixture", version = "=0.14.0" }
 flowsdn-config = { path = "../crates/flowsdn-config", version = "=0.14.0" }
 flowsdn-scripttest = { path = "../crates/flowsdn-scripttest", version = "=0.14.0" }
 
