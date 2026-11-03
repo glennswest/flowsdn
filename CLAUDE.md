@@ -486,6 +486,7 @@ weekly for kfunc relocation and switch to bpf_sock_destroy when it lands. GitHub
       a6c6c1a: missing everywhere. aya 0.16.0 resolves .ksyms; bpf-linker 0.13.0 (#317) keeps a declaration in .ksyms
       only with section + debug info rustc doesn't emit. An LLVM IR shim (as bpf-linker's test does) is the only way
       today; not tried (auto-mode denied the ad-hoc run of an unpinned linker) and it is not Rust (project rule).
+      Filed stormcentral#1163 (schedule never set); #315 proposed after it. Tool fmt + Clippy at 4f22330.
 - [ ] When the watch exits 3: bump aya, declare bpf_sock_destroy into `.ksyms`, eBPF termination with SOCK_DESTROY fallback, a test per path.
 
 ### Services for the flowsdn edition — #292 (P0 via stormcos#265), 2026-10-05
