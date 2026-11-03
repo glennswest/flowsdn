@@ -85,8 +85,9 @@ never proxies). `cargo xtask cloud-scan` over tests/cloud.
       xtask Clippy -D warnings (+ indexing, arithmetic), 21 + 16 tests, `cargo xtask cloud-scan` clean (no tree).
 - [x] Docs (crate README, spec 07 §9.1 note, ADR-0007 status, xtask README, build-and-test, implementation-status),
       changelog; xtask test scans the committed tests/cloud in every build.
-- [ ] Full workspace sc-build.
-- [ ] Comment #391 (machinery done; capture + scenarios after #293), propose after #293.
+- [x] Full workspace sc-build at 90a5bc9: fmt, Clippy x2, 830 tests (0 failed, 1 ignored), cloud-scan clean.
+- [x] Status on #391; proposed after #293. Open: cloud-record capture, 14 scenarios/provider, `--check` (#260),
+      smithy replay; need a provider client that sends requests and an account per provider.
 
 ### Cloud drift job — #260 (P3), 2026-11-03
 
