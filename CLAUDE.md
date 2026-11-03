@@ -69,6 +69,12 @@ std::process), check.sh deleted, deploy/release/build.sh calls it.
       -D warnings, 16 xtask tests, `cargo xtask chart-check` passes (lint, 22 CRDs, 4 guards refuse); at f1b4c1e a wrong
       Chart.yaml version makes it fail. #375 closed. Build-only scripts (tools/, test/build.sh, release/image build.sh) remain.
 
+### Cloud drift job — #260 (P3), 2026-11-03
+
+- [x] Blocked on code: no recorder xtask, tests/cloud fixtures, replay, or provider that sends requests (Azure crate is a
+      planner; spec 07 is milestone 3). Filed #391 (ADR-0007 §1-4 + `--check`); #260 proposed after it. Runner exists
+      (stormcentral#384 schedules + secrets). Owner provides accounts/read-only creds once #391 exists.
+
 ### Test image lock check fails at 3c470aa — #292 (P0), 2026-11-03
 
 stormcentral#846 closed 2026-10-19, but every test image at 3c470aa failed `test/build.sh`'s lock check (db5d9fc564,
