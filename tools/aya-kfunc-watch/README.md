@@ -6,13 +6,17 @@ Until then, policy-driven socket termination (milestone 3) uses netlink
 `SOCK_DIAG` `SOCK_DESTROY`. That was the owner's decision on #3. The switch
 needs two things upstream:
 
-- **aya** must relocate kfunc calls. aya main has done this since
-  [aya-rs/aya#1372](https://github.com/aya-rs/aya/pull/1372) (merged
-  2026-07-09), for externs listed in the object's `.ksyms` BTF datasec. No
-  release has it yet: 0.14.0, the latest, fails with `UnknownFunction`.
+- **aya** must relocate kfunc calls. Done upstream:
+  [aya-rs/aya#1372](https://github.com/aya-rs/aya/pull/1372) resolves externs
+  listed in the object's `.ksyms` BTF datasec, released in aya 0.16.0.
 - **The object** must list the kfunc in `.ksyms`. C's `__ksym` does this. A
-  Rust `extern "C"` declaration built with bpf-linker 0.11.1 does not: the
-  extern is not in the object's BTF, so aya main fails with `ExternNotFound`.
+  Rust `extern "C"` declaration does not, even with bpf-linker 0.13.0: that
+  release keeps an extern declaration's linkage and BTF
+  ([aya-rs/bpf-linker#317](https://github.com/aya-rs/bpf-linker/pull/317)), but
+  only for a declaration carrying `section ".ksyms"` and declaration debug
+  info, which rustc does not emit. bpf-linker's own test supplies both from a
+  hand-written LLVM IR file (`tests/assembly/auxiliary/extern.ll`). So every
+  aya fails with `ExternNotFound` on a Rust object. This is the gap now.
 
 ## Running it
 
@@ -50,12 +54,18 @@ On 2026-10-05 the result (sc-build, unprivileged) was `missing` for every
 combination: 0.14.0 failed with `UnknownFunction`, and main at `1668342`
 failed with `ExternNotFound`.
 
+On 2026-11-03 (sc-build at a6c6c1a, `pinned release main`) it was `missing`
+everywhere: pinned aya 0.14.0 failed with `UnknownFunction`; aya 0.16.0 and
+main at `f7f0f05` failed with `ExternNotFound` with both bpf-linker 0.11.1
+and 0.13.0.
+
 ## The switch (#315)
 
 When the watch exits 3:
 
 1. Bump aya.
-2. Declare `bpf_sock_destroy` so that it lands in `.ksyms`.
+2. Declare `bpf_sock_destroy` so that it lands in `.ksyms` (from Rust, once
+   rustc or aya-ebpf can emit it there).
 3. Use it from eBPF for policy-driven socket termination.
 4. Keep `SOCK_DESTROY` as the fallback for kernels without the kfunc.
 5. Add a test for each path.

@@ -1431,3 +1431,8 @@ release and aya main, using the pinned and latest bpf-linker. On 2026-10-05,
 0.14.0 failed with `UnknownFunction`. aya main (`1668342`, with aya-rs/aya#1372)
 failed with `ExternNotFound`: it resolves externs in the `.ksyms` BTF datasec,
 and the Rust object lists none.
+On 2026-11-03 aya 0.16.0 (released with #1372) and bpf-linker 0.13.0 (with
+aya-rs/bpf-linker#317) still gave `ExternNotFound`. bpf-linker now keeps an
+extern declaration in `.ksyms` only when the declaration carries
+`section ".ksyms"` and debug info, and rustc emits neither for an
+`extern "C"` function. The remaining gap is on the Rust side.

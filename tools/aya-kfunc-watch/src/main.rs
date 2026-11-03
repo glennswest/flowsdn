@@ -35,10 +35,11 @@ fn main() -> ExitCode {
         Err(e) if format!("{e:?}").contains("UnknownFunction") => {
             return outcome(MISSING, &format!("aya has no extern relocation: {e:?}"));
         }
-        // aya main since aya-rs/aya#1372 (2026-07-09) resolves externs listed
-        // in the object's `.ksyms` BTF datasec, as C's `__ksym` emits them.
-        // bpf-linker (0.11.1) drops a Rust `extern "C"` function from BTF, so
-        // the object lists none: the gap is now on the object side.
+        // aya since aya-rs/aya#1372 (released in 0.16.0) resolves externs
+        // listed in the object's `.ksyms` BTF datasec, as C's `__ksym` emits
+        // them. bpf-linker 0.13.0 keeps a declaration in `.ksyms` only with
+        // `section ".ksyms"` and debug info, which rustc does not emit for an
+        // `extern "C"` function: the gap is on the object side.
         Err(e) if format!("{e:?}").contains("ExternNotFound") => {
             return outcome(
                 MISSING,

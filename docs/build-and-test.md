@@ -58,8 +58,9 @@ establish multi-node Kubernetes acceptance.
 `tools/aya-kfunc-watch.sh` checks whether the latest aya release, aya main or
 the latest bpf-linker can now relocate the `bpf_sock_destroy` kfunc. It exits 0
 while they can't, 3 once one can, and 1 if the check itself breaks. It is meant
-to run weekly through stormcentral
-([stormcentral#384](https://github.com/glennswest/stormcentral/issues/384)).
+to run weekly as a stormcentral scheduled job
+([stormcentral#384](https://github.com/glennswest/stormcentral/issues/384)),
+which files the P1 switch issue on exit 3.
 See [its README](../tools/aya-kfunc-watch/README.md) and
 [#315](https://github.com/glennswest/flowsdn/issues/315).
 
