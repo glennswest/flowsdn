@@ -15,3 +15,17 @@ pub fn scan(root: &Path) -> Result<(), Box<dyn Error>> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    /// Every build's `cargo test` scans the committed fixtures.
+    #[test]
+    fn committed_cloud_fixtures_are_clean() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("workspace");
+        if let Err(e) = super::scan(root) {
+            panic!("{e}");
+        }
+    }
+}

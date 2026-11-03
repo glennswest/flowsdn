@@ -15,6 +15,12 @@ Cargo retains its usual per-package incremental cache when the caller retains
 its target directory. This selector does not provision CI runners or implement
 remote cache storage. `cargo xtask deny` remains a separate whole-workspace gate.
 
+`cargo xtask cloud-scan` is ADR-0007's `cloud-fixture-scan`. It scans
+`tests/cloud/**` for unscrubbed credentials, account and resource
+identifiers, signatures and public addresses, then loads every scenario
+(`crates/flowsdn-cloud-fixture`). A missing tree is clean. The xtask's unit
+test runs it, so `cargo test` gates the committed fixtures.
+
 `cargo xtask chart-check` checks the Helm chart (`install/kubernetes/flowsdn`,
 #294; Rust since #375, which removed `install/kubernetes/check.sh`): the chart
 version and appVersion equal the workspace version, `helm lint --strict`, a

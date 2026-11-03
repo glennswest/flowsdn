@@ -1567,6 +1567,13 @@ unmatched request fails the test and prints it beside the closest recorded
 interaction; strict mode (the CI default) additionally fails on recorded
 interactions never used, so a fixture set cannot silently rot.
 
+**Implementation note (2026-11-03, #391).** `crates/flowsdn-cloud-fixture`
+implements the layout and loader (scan first), the scrubber, the scan
+(`cargo xtask cloud-scan`, also run by the xtask's unit test), the in-order
+matcher (canonical query/form pairs without signing parameters, timestamps
+and `ClientToken`; sorted JSON) and the shared loopback replay server. Capture
+and the scenarios below wait for a provider client that sends requests.
+
 **Scenarios every provider MUST carry** (ADR-0007 §4): happy-path node
 bring-up; pre-allocation watermark growth (5.1); excess-IP release (3.13);
 ENI creation, attach and tag; subnet selection with several candidates (5.8);

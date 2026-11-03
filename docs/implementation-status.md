@@ -91,6 +91,16 @@ pinning or subsystem libraries are absent are **not current status**.
   termination, CRD controllers or registration, an operator process, Hubble
   observer/relay.
 
+### Cloud fixtures (ADR-0007)
+
+- `flowsdn-cloud-fixture` (#391): the fixture layout and loader (scan first),
+  the capture-side scrubber, the `tests/cloud/**` scan (`cargo xtask
+  cloud-scan`, run by the xtask's unit test in every build), in-order replay
+  matching and a loopback HTTP replay server, with unit tests on synthetic
+  traffic. No recorded fixtures exist: capture needs a cloud IPAM client that
+  sends requests (#293) and a throwaway account, and drift detection (#260)
+  waits on capture.
+
 ### Libraries
 
 - `flowsdn-k8s`: bounded watch client over Fedora OpenSSL; `flowsdn_k8s::crd`

@@ -55,6 +55,11 @@ dc492b2815; #303 closed); `perf` and the two-node runs still wait for machines
 (#321, #291). Unit tests, cross-compilation and namespace fixtures alone do not
 establish multi-node Kubernetes acceptance.
 
+`cargo xtask cloud-scan` scans the recorded cloud fixtures under
+`tests/cloud/**` for unscrubbed credentials and identifiers (ADR-0007 §2) and
+loads each scenario. The xtask's unit test runs the same scan, so every
+`sc-build` gates them. No build holds cloud credentials.
+
 `tools/aya-kfunc-watch.sh` checks whether the latest aya release, aya main or
 the latest bpf-linker can now relocate the `bpf_sock_destroy` kfunc. It exits 0
 while they can't, 3 once one can, and 1 if the check itself breaks. It is meant

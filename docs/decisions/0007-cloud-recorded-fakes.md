@@ -72,6 +72,15 @@ issue on a difference. It gates nothing. This is the only job that needs cloud
 credentials, it runs on a schedule rather than on a pull request, and its
 credentials are read-only where the provider supports that.
 
+## Implementation status
+
+2026-11-03 (#391): the scrubber, the `tests/cloud/**` scan, the fixture
+layout and loader, in-order replay matching and a loopback HTTP replay
+server are in `crates/flowsdn-cloud-fixture`; `cargo xtask cloud-scan` runs
+the scan, and the xtask's unit test runs it in every build. Capture (§1),
+the scenarios (§4) and drift detection (§5, #260) wait for a cloud IPAM
+client that sends requests (#293) and a throwaway account per provider.
+
 ## Consequences
 
 - Cloud IPAM becomes a pull-request gate rather than an untested surface, at

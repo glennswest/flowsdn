@@ -81,8 +81,11 @@ credential headers, signature params and token JSON keys -> `scrubbed`); `scan` 
 params; closest-interaction report; strict unused check); `server` (loopback HTTP/1.1, Content-Length + chunked,
 never proxies). `cargo xtask cloud-scan` over tests/cloud.
 
-- [ ] Crate + unit tests; xtask cloud-scan; Cargo.lock by hand.
-- [ ] Docs (crate README, spec 07 §9.1 note, ADR-0007 status note, build-and-test), changelog; sc-build fmt, Clippy, tests.
+- [x] Crate + unit tests; xtask cloud-scan; Cargo.lock by hand (6683890, fmt 27bcbb7). sc-build at 6683890: crate +
+      xtask Clippy -D warnings (+ indexing, arithmetic), 21 + 16 tests, `cargo xtask cloud-scan` clean (no tree).
+- [x] Docs (crate README, spec 07 §9.1 note, ADR-0007 status, xtask README, build-and-test, implementation-status),
+      changelog; xtask test scans the committed tests/cloud in every build.
+- [ ] Full workspace sc-build.
 - [ ] Comment #391 (machinery done; capture + scenarios after #293), propose after #293.
 
 ### Cloud drift job — #260 (P3), 2026-11-03
