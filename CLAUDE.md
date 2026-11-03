@@ -108,6 +108,8 @@ keeps selecting them (as the host). Not covered: host egress policy, pod-to-host
 - [ ] Medium 71c495971d at 12ec054 queued on pvetest2 (stormcentral#846: pvetest2 does not come up; C2NR0Q2 refuses).
       `stormcentral test show 71c495971d`: policy-live host steps (+ socket-lb-live Maglev for #292). Pass -> stage
       the golden (`stormcentral component stage flowsdn`), close #379 with the run.
+- [ ] 2026-11-03: 71c495971d errored (apiserver /readyz); later images failed the lock check (fixed e161dd7, #292).
+      pvetest1/2 refuse runs (stormcos#271); status 6613909301; #379 proposed after stormcos#271.
 
 ### Maglev on the uplink NodePort path — #292 (P0), 2026-10-14
 
