@@ -197,6 +197,8 @@ Use Linux and the Rust toolchain pinned in `rust-toolchain.toml`:
 cargo xtask check
 cargo test --workspace --all-features --release --locked
 cargo xtask deny
+cargo xtask chart-check   # Helm chart checks (needs helm)
+cargo xtask cloud-scan    # scan tests/cloud fixtures for unscrubbed data (#391)
 ```
 
 `check` runs formatting, Clippy, tests and compile checks for x86-64/arm64 Linux

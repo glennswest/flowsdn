@@ -719,7 +719,7 @@ configuration was changed; UID mapping needs owner investigation.
 
 The active implementation plan is `docs/milestones.md`, tracked by #291–#294.
 The inventory/specification phases are historical; source and validation records
-now cover 31 crates plus Rust tools, while live integration remains unfinished.
+now cover 32 crates plus Rust tools, while live integration remains unfinished.
 Resolve implementation and measurement obligations independently of closed
 design issues. Preserve compact work-item records in `docs/velocity/ledger.json`
 and its README, with unknown telemetry recorded as null.

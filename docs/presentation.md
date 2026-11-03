@@ -20,7 +20,7 @@ paginate: true
   checked on every build by `tools/check-no-cilium.sh`).
 - Rust userspace and **aya** eBPF datapath: no C datapath, no iptables dependency.
 
-Repo: `glennswest/flowsdn` · version 0.14.0 · 31 crates
+Repo: `glennswest/flowsdn` · version 0.14.0 · 32 crates
 
 ---
 
