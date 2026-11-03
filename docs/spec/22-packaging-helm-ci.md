@@ -992,6 +992,13 @@ binaries, layers and image digests.** Method:
    the same commit gave two `local-delivery` objects from two directories
    (test image 3937417bc1). Item 2's RUSTFLAGS remaps have the same effect on
    the release binaries.
+   Amendment (2026-11-03, #292): cargo also hashes the absolute path of a path
+   dependency outside the workspace into its `-C metadata`; `flowsdn-bpf-abi`
+   is outside the `crates/flowsdn-bpf` workspace, so its hash (and every BPF
+   binary's) followed the checkout, and `local-delivery`'s stack-slot layout
+   with it (test images db5d9fc564, 52ddea67d7). The wrapper replaces the
+   `-C metadata` of crates under the checkout (`FLOWSDN_BPF_ROOT`) with a hash
+   of their path-free unit inputs; three checkout paths give identical code.
 
 Verification remains a packaging acceptance requirement: build the same pushed
 release revision in two separately recorded clean environments with matching
