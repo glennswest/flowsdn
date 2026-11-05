@@ -550,6 +550,46 @@ fn rbac_matches_the_crd_set() {
     );
 }
 
+/// stormcos's applier leaves an unmarked object alone once it exists and never
+/// prunes it (#388, stormcos#668). Each object says Reconcile in both places:
+/// the label is upstream's, the annotation is what appliers before rustkube#299 read.
+#[test]
+fn stormcos_manifests_are_reconciled() {
+    const MODE: &str = "addonmanager.kubernetes.io/mode";
+    for set in ["manifests", "manifests-kubernetes"] {
+        let dir = repo_dir().join("deploy/stormcos").join(set);
+        let mut objects = 0_usize;
+        for entry in std::fs::read_dir(&dir).expect("manifest directory") {
+            let path = entry.expect("entry").path();
+            if path.extension().is_none_or(|e| e != "yaml") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("manifest");
+            for doc in yaml_documents(&text).expect("manifest YAML") {
+                if doc.is_null() {
+                    continue;
+                }
+                objects = objects.saturating_add(1);
+                for field in ["labels", "annotations"] {
+                    let mode = doc
+                        .get("metadata")
+                        .and_then(|m| m.get(field))
+                        .and_then(|f| f.get(MODE))
+                        .and_then(Value::as_str);
+                    assert_eq!(
+                        mode,
+                        Some("Reconcile"),
+                        "{}: {:?} {field}",
+                        path.display(),
+                        doc.get("kind")
+                    );
+                }
+            }
+        }
+        assert!(objects >= 5, "{set}: {objects} objects");
+    }
+}
+
 /// The owner's rule (#294): no Cilium in flowsdn's manifests or chart: object
 /// names, labels, config keys, paths, CNI types or text.
 #[test]

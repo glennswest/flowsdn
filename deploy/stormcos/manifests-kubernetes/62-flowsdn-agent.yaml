@@ -25,7 +25,8 @@ kind: DaemonSet
 metadata:
   name: flowsdn
   namespace: kube-system
-  labels: { k8s-app: flowsdn, app.kubernetes.io/name: flowsdn-agent, app.kubernetes.io/part-of: flowsdn }
+  labels: { k8s-app: flowsdn, app.kubernetes.io/name: flowsdn-agent, app.kubernetes.io/part-of: flowsdn, addonmanager.kubernetes.io/mode: Reconcile }
+  annotations: { addonmanager.kubernetes.io/mode: Reconcile }
 spec:
   selector:
     matchLabels: { k8s-app: flowsdn }

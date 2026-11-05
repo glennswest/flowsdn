@@ -9,13 +9,15 @@ kind: ServiceAccount
 metadata:
   name: flowsdn
   namespace: kube-system
-  labels: { app.kubernetes.io/name: flowsdn-agent, app.kubernetes.io/part-of: flowsdn }
+  labels: { app.kubernetes.io/name: flowsdn-agent, app.kubernetes.io/part-of: flowsdn, addonmanager.kubernetes.io/mode: Reconcile }
+  annotations: { addonmanager.kubernetes.io/mode: Reconcile }
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: flowsdn
-  labels: { app.kubernetes.io/part-of: flowsdn }
+  labels: { app.kubernetes.io/part-of: flowsdn, addonmanager.kubernetes.io/mode: Reconcile }
+  annotations: { addonmanager.kubernetes.io/mode: Reconcile }
 rules:
   - apiGroups: [""]
     resources: [nodes, pods, namespaces]
@@ -25,7 +27,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: flowsdn
-  labels: { app.kubernetes.io/part-of: flowsdn }
+  labels: { app.kubernetes.io/part-of: flowsdn, addonmanager.kubernetes.io/mode: Reconcile }
+  annotations: { addonmanager.kubernetes.io/mode: Reconcile }
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

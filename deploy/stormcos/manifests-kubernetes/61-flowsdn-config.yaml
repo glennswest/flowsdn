@@ -31,7 +31,8 @@ kind: ConfigMap
 metadata:
   name: flowsdn-config
   namespace: kube-system
-  labels: { app.kubernetes.io/part-of: flowsdn }
+  labels: { app.kubernetes.io/part-of: flowsdn, addonmanager.kubernetes.io/mode: Reconcile }
+  annotations: { addonmanager.kubernetes.io/mode: Reconcile }
 data:
   agent.json: |
     {

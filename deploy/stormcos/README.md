@@ -24,6 +24,17 @@ Kubernetes-mode agent and its runtime, and the edition ships this set with it
   the node included, goes to the node's stack, and each pod gets a host
   route, so the node's routing and netfilter see every pod flow.
 
+- **Reconciled (#388, stormcos#668).** Every object in both sets carries
+  `addonmanager.kubernetes.io/mode: Reconcile`, as a label (upstream's place)
+  and an annotation (appliers before rustkube#299 read only that). On a node
+  whose datastore survives an install, the apiserver's applier overwrites each
+  object with the release's copy at start, and deletes it once its manifest
+  has left `manifests.d` (flowsdn → cilium, rustkube#236). So a live edit does
+  not last, `flowsdn-config` included: the applier restores the release's copy
+  at its next start. A setting that must stay belongs in the manifest here.
+  `crds/` is not in the golden's `manifests/flowsdn.yaml` and carries no mode;
+  whoever applies it (stormcos#303) chooses.
+
 What the node must provide besides the manifests:
 
 - **Services.** Not with these manifests. The owner chose flowsdn's own
@@ -124,7 +135,8 @@ configuration. The differences:
   ports. Traffic from the node to its Pods (kubelet probes) always passes.
   `podSelector`/`namespaceSelector` peers need `identity-allocation`. In
   golden-flowsdn-760c3a2e89d6 ([runtime](../../docs/runtime.md#networkpolicy-enforcement-292)).
-- `host-firewall` (#379, default `off`; not set in the ConfigMap): with
+- `host-firewall` (#379, default `off`; not set in the ConfigMap, and an edit
+  there lasts only until the applier's next start, #388): with
   `audit` or `enforce`, FlowsdnClusterwideNetworkPolicy specs whose
   `nodeSelector` matches the Node filter traffic to the node on its uplinks
   (the flowsdn backend of stormfw, stormcos#558). The agent RBAC already
