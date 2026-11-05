@@ -56,6 +56,15 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Manifests carry addonmanager Reconcile — #388 (P1), 2026-11-04
+
+stormcos#668: the applier defaults to EnsureExists, so flowsdn's objects never update over kept data and can never be
+pruned on a flavour switch (rustkube#236 prunes only Reconcile). Golden ships `manifests-kubernetes/*.yaml` (top level; `manifests/`
+without the Kubernetes agent), so both sets get `addonmanager.kubernetes.io/mode: Reconcile` as label and annotation (the annotation for
+appliers before rustkube#299), with a test. `crds/` is not in the golden (stormcos#303 open) and stays unmarked.
+
+- [ ] Label + annotation on every object in both sets; test; README, changelog; sc-build; golden via stage.
+
 ### Install check to Rust — #375 (P3), 2026-10-13
 
 Owner: "is the shell not rustable?" flowsdn's install check is `install/kubernetes/check.sh` (the chart check:
