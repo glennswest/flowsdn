@@ -63,7 +63,10 @@ pruned on a flavour switch (rustkube#236 prunes only Reconcile). Golden ships `m
 without the Kubernetes agent), so both sets get `addonmanager.kubernetes.io/mode: Reconcile` as label and annotation (the annotation for
 appliers before rustkube#299), with a test. `crds/` is not in the golden (stormcos#303 open) and stays unmarked.
 
-- [ ] Label + annotation on every object in both sets; test; README, changelog; sc-build; golden via stage.
+- [x] Label + annotation on every object in both sets; test; README, changelog (0072c3a). sc-build at 0072c3a: fmt, workspace Clippy
+      -D warnings, 831 tests (0 failed, 1 ignored), chart-check; removing one annotation fails the new test (expect-fail run).
+- [x] Golden requested (`component stage flowsdn --no-wait`). Not run on a node: a flavour switch on server1 is stormcos#668's acceptance.
+      A node already holding unmarked flowsdn objects under a cilium release (server1) is not pruned: they are in no inventory (told stormcos#668).
 
 ### Install check to Rust — #375 (P3), 2026-10-13
 
