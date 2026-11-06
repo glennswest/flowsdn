@@ -269,6 +269,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         host_firewall: flowsdn_agent::kubernetes::HostFirewall::Off,
         identity_allocation: true,
         network_policy: false,
+        flowsdn_policy: false,
         cluster_name: "default".into(),
     };
     let controller = Controller::connect(settings, &dir).expect("connect");
