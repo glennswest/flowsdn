@@ -347,7 +347,8 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
     };
     problems.extend(pod_problems);
     desired.pod_policies = pod_policies.iter().map(|p| p.name.clone()).collect();
-    if !view.identity && !(entries.is_empty() && pod_policies.is_empty()) {
+    let has_policies = !entries.is_empty() || !pod_policies.is_empty();
+    if !view.identity && has_policies {
         problems.insert(
             "identity allocation is off: selector peers match no identity, so they allow nothing"
                 .into(),

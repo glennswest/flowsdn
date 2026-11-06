@@ -404,8 +404,10 @@ fn relabel(view: &mut View) {
 fn flowsdn_view(view: View, spec: Value) -> View {
     let mut view = view;
     view.flowsdn_policy = true;
-    view.pod_policies = vec![json!({"apiVersion":"flowsdn.io/v1alpha1","kind":"FlowsdnNetworkPolicy",
-        "metadata":{"name":"fp","namespace":"shop"},"spec":spec})];
+    view.pod_policies = vec![
+        json!({"apiVersion":"flowsdn.io/v1alpha1","kind":"FlowsdnNetworkPolicy",
+        "metadata":{"name":"fp","namespace":"shop"},"spec":spec}),
+    ];
     view
 }
 const WEB: &str = "web";

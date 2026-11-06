@@ -283,7 +283,14 @@ fn inject(mut selector: LabelSelector, namespace: Option<&str>, cluster: &str) -
 /// The reference's combination matrix (spec 06 §3.2.1): the first pair of a
 /// rule's L3 members that may not be combined.
 fn bad_combination(value: &Value, prefix: &str) -> Option<String> {
-    const MEMBERS: [&str; 6] = ["Endpoints", "CIDR", "CIDRSet", "Entities", "Nodes", "Groups"];
+    const MEMBERS: [&str; 6] = [
+        "Endpoints",
+        "CIDR",
+        "CIDRSet",
+        "Entities",
+        "Nodes",
+        "Groups",
+    ];
     let present: Vec<&str> = MEMBERS
         .iter()
         .copied()
@@ -412,14 +419,11 @@ fn rule(
         }
     }
     let ports = ports(value, policy, problems, side.pods.is_some())?;
+    let no_ports = ports.ranges.is_empty() && ports.named.is_empty();
     Some(Rule {
         policy: policy.to_owned(),
         deny,
-        peers: if !any_l3 && !(ports.ranges.is_empty() && ports.named.is_empty()) {
-            None
-        } else {
-            Some(peers)
-        },
+        peers: if any_l3 || no_ports { Some(peers) } else { None },
         ports: ports.ranges,
         named: ports.named,
     })
@@ -458,7 +462,12 @@ fn pod_direction(
     let (allow, deny, prefix, switch) = if egress {
         ("egress", "egressDeny", "to", "/enableDefaultDeny/egress")
     } else {
-        ("ingress", "ingressDeny", "from", "/enableDefaultDeny/ingress")
+        (
+            "ingress",
+            "ingressDeny",
+            "from",
+            "/enableDefaultDeny/ingress",
+        )
     };
     let side = Side {
         prefix,

@@ -775,9 +775,7 @@ impl View {
             && (!self.identity || (self.namespaces_synced && self.identities_synced))
             && (!self.network_policy || (self.namespaces_synced && self.policies_synced))
             && (!self.flowsdn_policy
-                || (self.namespaces_synced
-                    && self.pod_policies_synced
-                    && self.clusterwide_synced));
+                || (self.namespaces_synced && self.pod_policies_synced && self.clusterwide_synced));
         let (state, msg) = match (errors.is_empty(), synced) {
             (false, _) => ("Warning", errors.join("; ")),
             (true, false) => ("Warning", "waiting for the initial Kubernetes lists".into()),

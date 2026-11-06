@@ -135,11 +135,9 @@ impl Controller {
             ..View::default()
         }));
         let host_firewall = self.settings.host_firewall != HostFirewall::Off;
-        if let Some((mut maps, gateways)) =
-            policy.filter(|_| {
-                self.settings.network_policy || self.settings.flowsdn_policy || host_firewall
-            })
-        {
+        if let Some((mut maps, gateways)) = policy.filter(|_| {
+            self.settings.network_policy || self.settings.flowsdn_policy || host_firewall
+        }) {
             let policy_view = Arc::clone(&view);
             std::thread::Builder::new()
                 .name("flowsdn-policy".into())
