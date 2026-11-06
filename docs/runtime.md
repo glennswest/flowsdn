@@ -545,7 +545,9 @@ reference's host firewall ([ADR-0022](decisions/0022-host-firewall.md)), so one
 policy works on both stormcos flavours: stormfw (stormcos#558) translates its
 `HostFirewallPolicy` into a `FlowsdnClusterwideNetworkPolicy` here as it does
 into a `CiliumClusterwideNetworkPolicy` there. Off by default
-(`kubernetes.host-firewall`).
+(`kubernetes.host-firewall`). Do not turn it on before the flowsdn.io CRDs are applied
+(stormcos#303 is open): the policy thread waits for the
+FlowsdnClusterwideNetworkPolicy list, so NetworkPolicy updates would stall too.
 
 - **Policies.** Every FlowsdnClusterwideNetworkPolicy spec (`spec` or
   `specs[]`) with a `nodeSelector` that matches this Node's labels.

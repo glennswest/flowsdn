@@ -192,8 +192,9 @@ keeps selecting them (as the host). Not covered: host egress policy, pod-to-host
 - [ ] Medium 71c495971d at 12ec054 queued on pvetest2 (stormcentral#846: pvetest2 does not come up; C2NR0Q2 refuses).
       `stormcentral test show 71c495971d`: policy-live host steps (+ socket-lb-live Maglev for #292). Pass -> stage
       the golden (`stormcentral component stage flowsdn`), close #379 with the run.
-- [ ] 2026-11-03: 71c495971d errored (apiserver /readyz); later images failed the lock check (fixed e161dd7, #292).
-      pvetest1/2 refuse runs (stormcos#271); status 6613909301; #379 proposed after stormcos#271.
+- [x] 2026-11-03: 71c495971d errored (apiserver /readyz); later images failed the lock check (fixed e161dd7, #292).
+- [x] 2026-11-06: policy-live 13 PASS incl. 5 host steps, kernel-check at 9ad4b2b on 7.2.11 (same object as golden-flowsdn-e23d9621fbd6 at 9fe5661). `shipped`. Hardware medium runs with #292;
+      a live firewall on a real uplink needs stormcos#303 and is on #384. stormfw exists but is empty and paused (stormfw#1).
 
 ### Maglev on the uplink NodePort path — #292 (P0), 2026-10-14
 

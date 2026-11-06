@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-11-06
+- **docs:** Host firewall (#379): done from flowsdn's side and in golden-flowsdn-e23d9621fbd6. `kubernetes.host-firewall` must stay off until the flowsdn.io CRDs are applied (stormcos#303), since the policy thread waits for that list and NetworkPolicy updates would stall.
 - **docs:** A stage builds main's head when its turn comes (docs/build-and-test.md): golden-flowsdn-5ec614dc2136 took 07c64f2, mid-DSR, with the object without DSR and `lb-mode` inert. A later stage replaces it.
 - **feat:** Direct server return on the uplink NodePort path, IPv4 and IPv6, IP option dispatch (#292, spec 05 §3.12, spec 02 §2.5). `kubernetes.lb-mode: snat|dsr|hybrid` (default `snat`) and a Service's `service.flowsdn.io/forwarding-mode: dsr|snat`. Kernel test runs only; IPIP, Geneve and DSR ICMP errors not implemented.
 - **feat:** `cargo xtask kernel-check [SUITE]`: the commit's test suite on a real kernel inside a build VM's qemu, no root on the build machine (#370, #292). Rust newc initramfs of `test/.stage`, `ip`, `nft`, `kmod` and the network modules; `/test` as PID 1 (`test/src/vm_init.rs`). Passing it is now the written precondition of staging a golden (docs/build-and-test.md).
