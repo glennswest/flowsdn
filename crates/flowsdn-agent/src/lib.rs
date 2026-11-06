@@ -7,6 +7,7 @@ pub mod events;
 pub mod host_policy;
 pub mod identity;
 pub mod kubernetes;
+pub mod log;
 pub mod policy;
 pub mod services;
 pub mod state;

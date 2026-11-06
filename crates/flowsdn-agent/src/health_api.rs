@@ -95,25 +95,14 @@ fn wire_status(status: &HealthStatus) -> Result<Value> {
         "Updated":timestamp(Some(status.updated))?,"Stopped":timestamp(status.stopped)?,
         "Final":status.final_message,"Count":status.count}))
 }
-#[allow(unsafe_code)]
 fn timestamp(value: Option<SystemTime>) -> Result<String> {
     let Some(value) = value else {
         return Ok("0001-01-01T00:00:00Z".into());
     };
     let duration = value.duration_since(UNIX_EPOCH)?;
-    let seconds: nix::libc::time_t = duration.as_secs().try_into()?;
-    let mut utc = std::mem::MaybeUninit::<nix::libc::tm>::uninit();
-    // SAFETY: both pointers are valid for their types; gmtime_r initializes
-    // the complete tm on success, which is checked before assume_init.
-    if unsafe { nix::libc::gmtime_r(&seconds, utc.as_mut_ptr()) }.is_null() {
-        return Err("health timestamp is out of range".into());
-    }
-    let utc = unsafe { utc.assume_init() };
-    let year = utc.tm_year.checked_add(1900).ok_or("year overflow")?;
-    if !(1..=9999).contains(&year) {
+    if duration.as_secs() > crate::log::LAST_SECOND {
         return Err("health timestamp year is out of range".into());
     }
-    let month = utc.tm_mon.checked_add(1).ok_or("month overflow")?;
     let fraction = if duration.subsec_nanos() == 0 {
         String::new()
     } else {
@@ -122,8 +111,8 @@ fn timestamp(value: Option<SystemTime>) -> Result<String> {
             .to_owned()
     };
     Ok(format!(
-        "{year:04}-{month:02}-{:02}T{:02}:{:02}:{:02}{fraction}Z",
-        utc.tm_mday, utc.tm_hour, utc.tm_min, utc.tm_sec
+        "{}{fraction}Z",
+        crate::log::civil(duration.as_secs())
     ))
 }
 fn decode_key(encoded: &str) -> Result<Vec<u8>> {

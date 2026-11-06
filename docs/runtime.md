@@ -153,6 +153,10 @@ from the Node at startup.
 
 ## Runtime behavior and shipping
 
+Every line of the agent's log starts with its UTC time in milliseconds. `ready: serving
+CNI requests <n> ms after start` marks when the endpoint API answers, after the BPF object
+is loaded, endpoints are restored and, in Kubernetes mode, the pod pools are known.
+
 The agent and CNI implement native veth attachment, local IPv4/IPv6 allocation,
 endpoint persistence, teardown and offline deletion replay. Configured bpffs
 pins retain endpoint maps and TCX ownership across process absence and allow
@@ -194,7 +198,9 @@ With the `kubernetes` feature and section the agent:
   in health, not fatal;
 - lists and watches Nodes and all Pods on its own thread (pages of 500; a watch
   the server ends resumes from its resourceVersion; any other failure relists
-  after 1 s doubling to 30 s, keeping the last good snapshot);
+  after 1 s doubling to 30 s, keeping the last good snapshot; a 404, as for a CRD
+  not served yet at boot, stays at 1 s for the watch's first minute and logs once,
+  and a recovery logs `kubernetes <part>: listed`);
 - with `auto-direct-node-routes`, owns `<podCIDR> via <InternalIP> proto
   kernel` routes in the main table for every other node's pod CIDRs, using the
   node's first InternalIP of the family. A node's pod CIDRs are its

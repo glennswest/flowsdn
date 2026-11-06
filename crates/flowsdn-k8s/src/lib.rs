@@ -25,3 +25,15 @@ impl std::fmt::Display for Error {
     }
 }
 impl std::error::Error for Error {}
+#[test]
+fn not_found_is_only_a_404() {
+    assert!(Error("Kubernetes HTTP 404; relist required".into()).is_not_found());
+    assert!(!Error("Kubernetes HTTP 410; relist required".into()).is_not_found());
+    assert!(!Error("Kubernetes list timeout; relist required".into()).is_not_found());
+}
+impl Error {
+    /// The server answered 404: for a CRD's kind, not served yet.
+    pub fn is_not_found(&self) -> bool {
+        self.0.starts_with("Kubernetes HTTP 404;")
+    }
+}

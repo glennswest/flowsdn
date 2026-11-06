@@ -395,7 +395,7 @@ impl Api {
                 Ok(()) => {
                     self.leases.remove(&ip);
                 }
-                Err(error) => eprintln!("IPAM expiration failed: {error}"),
+                Err(error) => crate::log::logln!("IPAM expiration failed: {error}"),
             }
         }
     }
@@ -531,7 +531,7 @@ impl Api {
                 for attachment in attachments {
                     if let Err(error) = self.manager.delete(&attachment) {
                         failures = failures.saturating_add(1);
-                        eprintln!("endpoint deletion failed: {error}");
+                        crate::log::logln!("endpoint deletion failed: {error}");
                     }
                 }
                 return Ok(if failures == 0 {
@@ -1260,7 +1260,7 @@ fn replay_pending(
     for entry in guard.entries()? {
         match &entry.request {
             Ok(request) => delete(request)?,
-            Err(error) => eprintln!("discarding malformed deletion entry: {error}"),
+            Err(error) => crate::log::logln!("discarding malformed deletion entry: {error}"),
         }
         guard.remove(&entry)?;
     }
@@ -1287,7 +1287,7 @@ fn connect_kubernetes(config: &mut Config) -> Result<Option<Kubernetes>> {
     if config.auto4 || config.auto6 {
         let (pool4, pool6) = controller.wait_for_pools(config.auto4, config.auto6)?;
         config.resolve_auto(pool4, pool6)?;
-        eprintln!("pod CIDRs from the Node: {}", config.addressing());
+        crate::log::logln!("pod CIDRs from the Node: {}", config.addressing());
         events::node(
             events::Type::Normal,
             "PodCIDRSelected",
@@ -1326,6 +1326,7 @@ fn spawn_kubernetes(
 }
 
 pub fn run(config_path: &Path) -> Result<()> {
+    let started = Instant::now();
     let mut config = Config::read(config_path)?;
     let kubernetes = connect_kubernetes(&mut config)?;
     // The manager's exclusive state lock is acquired before inspecting or
@@ -1356,7 +1357,7 @@ pub fn run(config_path: &Path) -> Result<()> {
                         .collect(),
                 )),
                 Err(error) => {
-                    eprintln!("policy maps unavailable, NetworkPolicy is not enforced: {error}");
+                    crate::log::logln!("policy maps unavailable, NetworkPolicy is not enforced: {error}");
                     None
                 }
             };
@@ -1413,7 +1414,7 @@ pub fn run(config_path: &Path) -> Result<()> {
     // shared lock, so they cannot enqueue a deletion missed by this replay.
     drop(replay);
     let health = health_api::ModuleHealth::new(enabled)?;
-    eprintln!(
+    crate::log::logln!(
         "initial endpoint API listening; Kubernetes node discovery {}",
         if enabled { "enabled" } else { "not enabled" }
     );
@@ -1421,11 +1422,15 @@ pub fn run(config_path: &Path) -> Result<()> {
         Some(address) => {
             let listener = TcpListener::bind(address)?;
             listener.set_nonblocking(true)?;
-            eprintln!("read-only API listening on http://{address}");
+            crate::log::logln!("read-only API listening on http://{address}");
             Some(listener)
         }
         None => None,
     };
+    crate::log::logln!(
+        "ready: serving CNI requests {} ms after start",
+        started.elapsed().as_millis()
+    );
     loop {
         api.expire();
         api.sync_host_firewall();
@@ -1456,7 +1461,7 @@ pub fn run(config_path: &Path) -> Result<()> {
                     ) => {}
                 // A TCP accept failure (such as EMFILE) must not stop the
                 // endpoint API the CNI depends on.
-                Err(error) => eprintln!("read-only API accept failed: {error}"),
+                Err(error) => crate::log::logln!("read-only API accept failed: {error}"),
             }
         }
         if idle {
@@ -1517,7 +1522,7 @@ fn serve(
         }
     };
     if let Err(error) = write_response(stream, status, body) {
-        eprintln!("API response failed: {error}");
+        crate::log::logln!("API response failed: {error}");
     }
     Ok(())
 }

@@ -32,6 +32,8 @@ type Key = (IpAddr, u8, IpAddr);
 
 const LIST_PAGE: u32 = 500;
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
+/// How long a 404 keeps a watch retrying every second.
+const NOT_FOUND_FLAT: Duration = Duration::from_secs(60);
 const RECONCILE_INTERVAL: Duration = Duration::from_secs(30);
 const ROUTES_FILE: &str = "direct-routes.json";
 const ANNOTATE_INTERVAL: Duration = Duration::from_secs(2);
@@ -97,7 +99,7 @@ impl Controller {
                 Err(error) => error.to_string(),
             };
             if logged.is_none_or(|at| at.elapsed() >= Duration::from_secs(5)) {
-                eprintln!(
+                crate::log::logln!(
                     "waiting for Node {} pod CIDRs: {reason}",
                     self.settings.node_name
                 );
@@ -177,7 +179,7 @@ impl Controller {
                     Some(sender)
                 }
                 Err(error) => {
-                    eprintln!("socket LB unavailable: {error}");
+                    crate::log::logln!("socket LB unavailable: {error}");
                     crate::events::node(
                         Warning,
                         "ServiceLBUnavailable",
@@ -628,7 +630,7 @@ fn apply_sysctls(root: &Path, ipv6: bool) -> Vec<String> {
     for key in keys {
         let value = if key.ends_with("rp_filter") { "0" } else { "1" };
         if let Err(error) = fs::write(root.join(key), value) {
-            eprintln!("cannot set {key}={value}: {error}");
+            crate::log::logln!("cannot set {key}={value}: {error}");
             failed.push(format!("{}={value}: {error}", key.replace('/', ".")));
         }
     }
@@ -816,7 +818,7 @@ fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
             Err(error) => {
                 view.errors.insert("policy".into(), error.clone());
                 drop(view);
-                eprintln!("policy maps: {error}");
+                crate::log::logln!("policy maps: {error}");
                 continue;
             }
         }
@@ -1038,7 +1040,7 @@ fn service_loop(
                                 view.errors.remove("socket-termination");
                             }
                             Err(error) => {
-                                eprintln!("socket termination: {error}");
+                                crate::log::logln!("socket termination: {error}");
                                 view.errors.insert("socket-termination".into(), error);
                             }
                         }
@@ -1053,7 +1055,7 @@ fn service_loop(
                     view.errors.remove("services");
                 }
                 Err(error) => {
-                    eprintln!("socket LB: {error}");
+                    crate::log::logln!("socket LB: {error}");
                     view.errors.insert("services".into(), error);
                 }
             }
@@ -1249,8 +1251,18 @@ async fn relist(
 
 /// List, then watch from the list's resourceVersion. A watch the server ends
 /// (its 60 s timeout) resumes from the last resourceVersion; any other failure
-/// relists after a backoff (1 s doubling to 30 s). Forwarding consumers keep
-/// the last good snapshot meanwhile.
+/// relists after [`next_wait`]. Forwarding consumers keep the last good
+/// snapshot meanwhile.
+/// How long to wait after a failure, and the backoff after that: 1 s doubling to
+/// 30 s, but a 404 stays at 1 s for a watch's first minute. A CRD is not served
+/// at the start of a boot (the apiserver applies its manifests as it starts), and
+/// doubling would sleep through its arrival (#397).
+fn next_wait(not_found: bool, since_start: Duration, backoff: Duration) -> (Duration, Duration) {
+    if not_found && since_start < NOT_FOUND_FLAT {
+        return (Duration::from_secs(1), Duration::from_secs(1));
+    }
+    (backoff, backoff.saturating_mul(2).min(MAX_BACKOFF))
+}
 async fn watch_forever(
     client: &JsonClient,
     scope: Scope,
@@ -1266,15 +1278,25 @@ async fn watch_forever(
         }
     };
     let mut backoff = Duration::from_secs(1);
+    let started = Instant::now();
+    let mut last_error = String::new();
     loop {
         match cycle(client, &scope, &mut state, &mut publish, view, part).await {
             Ok(()) => backoff = Duration::from_secs(1),
             Err(error) => {
                 state.failed();
-                eprintln!("kubernetes {part}: {error}; relisting in {backoff:?}");
-                lock(view).errors.insert(part.into(), error.to_string());
-                tokio::time::sleep(backoff).await;
-                backoff = backoff.saturating_mul(2).min(MAX_BACKOFF);
+                let since = started.elapsed();
+                let (wait, next) = next_wait(error.is_not_found(), since, backoff);
+                let text = error.to_string();
+                // A kind not served yet retries every second: say so once.
+                let flat = error.is_not_found() && since < NOT_FOUND_FLAT;
+                if !(flat && text == last_error) {
+                    crate::log::logln!("kubernetes {part}: {error}; relisting in {wait:?}");
+                }
+                lock(view).errors.insert(part.into(), text.clone());
+                last_error = text;
+                tokio::time::sleep(wait).await;
+                backoff = next;
             }
         }
     }
@@ -1290,7 +1312,9 @@ async fn cycle(
     if state.needs_relist() {
         relist(client, scope, state).await?;
         publish(state);
-        lock(view).errors.remove(part);
+        if lock(view).errors.remove(part).is_some() {
+            crate::log::logln!("kubernetes {part}: listed");
+        }
     }
     let version = state.resource_version().map(str::to_owned);
     let query = Query {
@@ -1338,7 +1362,7 @@ fn route_loop(
     let mut installed = match load_routes(file) {
         Ok(routes) => routes,
         Err(error) => {
-            eprintln!("ignoring unreadable {}: {error}", file.display());
+            crate::log::logln!("ignoring unreadable {}: {error}", file.display());
             BTreeSet::new()
         }
     };
@@ -1491,6 +1515,18 @@ fn save_routes(file: &Path, routes: &BTreeSet<Key>) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_404_retries_every_second_for_a_minute_then_backs_off() {
+        let s = Duration::from_secs;
+        assert_eq!(next_wait(true, s(0), s(1)), (s(1), s(1)));
+        assert_eq!(next_wait(true, s(59), s(1)), (s(1), s(1)));
+        assert_eq!(next_wait(true, s(60), s(1)), (s(1), s(2)));
+        assert_eq!(next_wait(true, s(90), s(16)), (s(16), s(30)));
+        // Any other failure doubles from the start, to 30 s.
+        assert_eq!(next_wait(false, s(0), s(1)), (s(1), s(2)));
+        assert_eq!(next_wait(false, s(5), s(30)), (s(30), s(30)));
+    }
+
     use super::*;
 
     #[test]

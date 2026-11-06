@@ -127,7 +127,7 @@ mod recorder {
                 {
                     Ok(runtime) => runtime,
                     Err(error) => {
-                        eprintln!("events: no runtime: {error}");
+                        crate::log::logln!("events: no runtime: {error}");
                         return;
                     }
                 };
@@ -137,7 +137,7 @@ mod recorder {
                 )) {
                     Ok(client) => client,
                     Err(error) => {
-                        eprintln!("events: no Kubernetes client: {error}");
+                        crate::log::logln!("events: no Kubernetes client: {error}");
                         return;
                     }
                 };
@@ -297,11 +297,11 @@ mod recorder {
                     .and_then(Value::as_str)
                     .map(str::to_owned),
                 Ok((status, _)) => {
-                    eprintln!("events: GET {path}: HTTP {status}");
+                    crate::log::logln!("events: GET {path}: HTTP {status}");
                     None
                 }
                 Err(error) => {
-                    eprintln!("events: GET {path}: {error}");
+                    crate::log::logln!("events: GET {path}: {error}");
                     None
                 }
             }
@@ -348,11 +348,11 @@ mod recorder {
                             .get("message")
                             .and_then(Value::as_str)
                             .unwrap_or("");
-                        eprintln!("events: {path}: HTTP {status} {message}");
+                        crate::log::logln!("events: {path}: HTTP {status} {message}");
                         false
                     }
                     Err(error) => {
-                        eprintln!("events: {path}: {error}");
+                        crate::log::logln!("events: {path}: {error}");
                         false
                     }
                 };
@@ -399,31 +399,12 @@ mod recorder {
     }
 
     /// UTC `YYYY-MM-DDTHH:MM:SSZ` (Gregorian, through year 9999).
-    #[allow(clippy::arithmetic_side_effects)] // Bounded below: every intermediate fits i64.
     pub fn rfc3339(time: SystemTime) -> String {
         let seconds = time
             .duration_since(SystemTime::UNIX_EPOCH)
             .map(|d| d.as_secs())
-            .unwrap_or(0)
-            .min(253_402_300_799);
-        let seconds = i64::try_from(seconds).unwrap_or(0);
-        let days = seconds / 86400 + 719_468;
-        let era = days / 146_097;
-        let day_of_era = days - era * 146_097;
-        let year_of_era =
-            (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146_096) / 365;
-        let mut year = year_of_era + era * 400;
-        let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-        let month_index = (5 * day_of_year + 2) / 153;
-        let day = day_of_year - (153 * month_index + 2) / 5 + 1;
-        let month = month_index + if month_index < 10 { 3 } else { -9 };
-        year += i64::from(month <= 2);
-        format!(
-            "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
-            seconds / 3600 % 24,
-            seconds / 60 % 60,
-            seconds % 60
-        )
+            .unwrap_or(0);
+        format!("{}Z", crate::log::civil(seconds))
     }
 
     #[cfg(test)]

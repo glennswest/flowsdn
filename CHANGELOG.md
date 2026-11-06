@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### 2026-11-06
+- **feat:** Agent start can be read from its log (#397, stormcos#804): UTC time with milliseconds on every line, `ready: serving CNI requests <n> ms after start`, `kubernetes <part>: listed` when a watch recovers. A 404 retries at 1 s flat for a watch's first minute instead of doubling to 16 s, and logs once. Late identities do not hold NetworkPolicy back.
+- **fix:** Dates need no libc, so the musl build's `time_t` warning is gone, and `test/build.sh` now fails the musl build on a warning (#373).
 - **fix:** CNI ADD 125 -> 46 ms on kernel-check's VM (#396, stormcos#804). The agent's idle loop slept 20 ms, so each of an ADD's four requests waited it out: it now polls its listeners. Endpoint state syncs only the file's contents, not directory entries (spec 08 note): a record lost to a power cut describes links and maps that did not survive the reboot either.
 - **feat:** `GET /v1/cni/timing`: each ADD step's p50/p99/max, from the plugin's report (`POST /v1/cni/timing`) and the agent's own steps (#396). Medium test `cni-add-timing`: 30 warm ADDs with the disk's fsync p50 beside the steps, failing when a trivial request takes 10 ms. `cargo xtask kernel-check` gives the guest an ext4 disk for /tmp, so synced writes reach one.
 - **docs:** `cni-ready-after-boot` names its source: `boot_phase_network_ms` / `reboot_phase_network_ms` in stormcentral's install records (#321, stormcentral#365). Perf fad9ef6c97 on pvetest2 (12.61-flowsdn) stopped at the known `no ready golden` pull (stormblock-registry#150, fixed but in no live release): still no perf result.
