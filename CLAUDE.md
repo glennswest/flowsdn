@@ -61,16 +61,18 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 stormcos#271 closed today (pvetest1/2 on 12.61 take forge test images): medium b2db11018c at 0fbbb1c queued on pvetest2
 (socket-lb-live Maglev for #292, policy-live host steps for #379). Pass -> stage golden, then perf (live NetworkPolicy + ClusterIP).
 Meanwhile the next row, agent only (no BPF object change): FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy
-`endpointSelector` specs to the endpoint policy maps (#331 leaves the agent watch to #292). `kubernetes.flowsdn-policy` off|on,
-default off (stormcos#303: CRDs are not applied, and the policy thread waits for this list). Rules: ingress/ingressDeny/egress/egressDeny,
+`endpointSelector` specs to the endpoint policy maps (#331 leaves the agent watch to #292). `kubernetes.flowsdn-policy` bool,
+default false (stormcos#303: CRDs are not applied, and the policy thread waits for this list). Rules: ingress/ingressDeny/egress/egressDeny,
 from/to Entities, CIDR, CIDRSet, Endpoints (spec 06 §3.2.9 namespace + cluster injection), toPorts with named ports; `enableDefaultDeny`
 (§3.2.8: true iff the direction has rules; false adds a wildcard allow, §3.6); denies win over allows, also NetworkPolicy's.
 §3.2.1 combination matrix fails the whole resource. Skipped + reported: L7, ICMP, FQDN, toServices, groups, nodes, reserved selectors.
 `ingress: [{}]` allows nothing (as the host firewall, ADR-0022), though spec 06 §3.2.1 reads it as wildcard (noted there).
 
-- [ ] flowsdn-k8s scope; host_policy parser both directions + pod specs; policy compiler merge; setting; tests.
-- [ ] Docs (runtime, agent-api, implementation-status, milestones, deploy README, spec 06 note), changelog; sc-build.
-- [ ] Medium b2db11018c result on #292; stage if it passes; perf on pvetest2 and pvetest1.
+- [x] flowsdn-k8s scope; host_policy parser both directions + pod specs; policy compiler merge; setting; tests (d867024).
+- [x] Docs (runtime, agent-api, implementation-status, milestones, deploy README, spec 06 note), changelog.
+- [ ] Full sc-build. Medium b2db11018c errored: stormblock-registry#150 (by-digest forge fetch, tag 404; every fetched run on the
+      pve pair since 12.61, evidence on the issue, master told). When fixed: `stormcentral test run flowsdn medium --tag pvetest2`; pass ->
+      stage the golden; perf on pvetest2 and pvetest1. New BPF rows (DSR, NAT46/64) wait: Maglev and host-firewall objects are still unverified on 7.2.
 
 ### Manifests carry addonmanager Reconcile — #388 (P1), 2026-11-04
 

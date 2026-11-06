@@ -59,15 +59,16 @@ path and restart an otherwise running daemon.
 
 The body is `{"agent":{"state":"Ok","msg":…}}`, plus a `kubernetes` member in
 Kubernetes mode: `{state, msg, node-name, auto-direct-node-routes, service-lb,
-identity-allocation, network-policy, policy}`, `state` `Warning` until the
+identity-allocation, network-policy, flowsdn-policy, policy}`, `state` `Warning` until the
 initial Node and Pod lists (and, with `service-lb`, Service and EndpointSlice
 lists; with `identity-allocation` or `network-policy`, Namespaces and
-FlowsdnIdentity or NetworkPolicy lists) are complete or while a part has an
+FlowsdnIdentity or NetworkPolicy lists; with `flowsdn-policy`, Namespaces and both
+flowsdn policy lists) are complete or while a part has an
 error (`msg` then lists `<part>: <error>`, for example `annotations`,
 `services`, `node-port`, `policy`), otherwise `Ok` with node, pod and frontend
 counts. `policy` is what the policy thread last programmed (#292):
 `{endpoints: [{id, pod, ingress-enforced, egress-enforced, entries}], ipcache,
-host-firewall, problems}`, `null` before its first pass. `host-firewall` (#379)
+host-firewall, flowsdn-policies, problems}`, `null` before its first pass. `host-firewall` (#379)
 is `null` with `kubernetes.host-firewall: off`, else `{mode, policies,
 ingress-enforced, audit, interfaces, learning, enforcing-on, entries}`: the
 selecting FlowsdnClusterwideNetworkPolicy names, the uplinks it is on, those

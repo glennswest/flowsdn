@@ -85,8 +85,13 @@ pinning or subsystem libraries are absent are **not current status**.
   `service.flowsdn.io/lb-algorithm` annotation): per-frontend tables in
   `flowsdn_lb{4,6}_maglev`, planner unit-tested; the kernel's picks are
   checked against the tables by `socket-lb-live`; not on a cluster yet.
-- Not implemented: operator identity GC (#332), CiliumNetworkPolicy-style
-  rules for Pods (deny, L7, entities, FQDN), host egress policy, policy verdict events,
+- Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy
+  (`kubernetes.flowsdn-policy`, default off; entities, CIDRs, endpoints, ports,
+  denies, `enableDefaultDeny`, both directions): compiler unit-tested on the
+  existing programs; not on a cluster, and stormcos does not apply the CRDs yet
+  (stormcos#303).
+- Not implemented: operator identity GC (#332), L7, FQDN, ICMP, node and group
+  peers in policy rules, host egress policy, policy verdict events,
   masquerade (the node provides it), Maglev in the socket LB, DSR, NAT46/64, TCP socket
   termination, CRD controllers or registration, an operator process, Hubble
   observer/relay.

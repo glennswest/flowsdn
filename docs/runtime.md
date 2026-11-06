@@ -47,6 +47,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.lb-algorithm` | `random` | `random` or `maglev`: how the uplink programs pick a backend for a new flow from outside the cluster ([Maglev](#clusterip-socket-lb-292)). A Service's `service.flowsdn.io/lb-algorithm` annotation (`random` or `maglev`) overrides it. |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
+| `kubernetes.flowsdn-policy` | `false` | Enforce the Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy ([Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292)). The CRDs must exist: the policy thread waits for both lists, NetworkPolicy enforcement included. |
 | `kubernetes.host-firewall` | `off` | `off`, `audit` or `enforce`: filter traffic to the node itself from FlowsdnClusterwideNetworkPolicy host rules ([host firewall](#host-firewall-379)); `audit` counts would-be drops and passes them. |
 | `kubernetes.cluster-name` | `default` | The cluster label on every Pod identity (`io.flowsdn.k8s.policy.cluster`); a DNS label of at most 32 bytes. |
 
@@ -482,6 +483,41 @@ flows already open when a policy first selects a Pod (their replies are
 judged as new flows). `policy-live` (medium test suite) checks the programs
 on a kernel through `BPF_PROG_TEST_RUN`; no cluster run yet.
 
+### Pod rules of the flowsdn policy kinds (#292)
+
+With `kubernetes.flowsdn-policy: true`, the `endpointSelector` specs (`spec` or
+`specs[]`) of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy go into
+the same endpoint maps as NetworkPolicy. No program changes. Off by default:
+stormcos does not apply the CRDs yet (stormcos#303).
+
+- **Subjects and peers (spec 06 §3.2.9).** A FlowsdnNetworkPolicy selects Pods
+  of its own namespace. `from/toEndpoints` without a namespace label mean that
+  namespace (the clusterwide kind: every namespace, so `{}` is every Pod, not
+  host or world), limited to this cluster.
+- **Rules.** `ingress`, `ingressDeny`, `egress`, `egressDeny` with
+  `from/toEntities`, `from/toCIDR`, `from/toCIDRSet` (`cidr`, `except`),
+  `from/toEndpoints` and `toPorts` (`port`, `endPort`, `protocol`, named ports:
+  the destination's container ports).
+- **Default deny (§3.2.8, §3.6).** A direction with rules is default deny,
+  deny-only specs included, unless `enableDefaultDeny` turns it off. If every
+  spec selecting a Pod turns it off and no NetworkPolicy selects it in that
+  direction, its rules add to a wildcard allow.
+- **Denies** win over the allows they cover, NetworkPolicy's too.
+- **`ingress: [{}]`** turns on default deny and allows nothing, as for the host
+  firewall. An L4-only rule allows every peer on those ports.
+- **Refused.** A spec the reference's validation refuses fails its whole object,
+  which then enforces nothing: L3 members that may not be combined (only
+  Endpoints + Entities and CIDR + CIDRSet may), no selector, or both.
+- **Skipped and reported** in `policy` problems: L7 rules, ICMP rules, FQDN,
+  `toServices`, `from/toRequires`, `from/toNodes`, `from/toGroups`,
+  `cidrGroupRef`, authentication, and `reserved:` labels in a selector. A skipped
+  allow still leaves the direction enforced, so it fails closed. **A skipped deny
+  denies nothing**, so read the problems.
+- **Status.** `kubernetes.policy.flowsdn-policies` in `GET /v1/healthz` names the
+  objects with Pod rules.
+
+Compiler unit-tested; not on a cluster.
+
 ### Host firewall (#379)
 
 Traffic to the node itself, filtered in eBPF from the same rule model as the
@@ -502,8 +538,9 @@ into a `CiliumClusterwideNetworkPolicy` there. Off by default
   every source; `ingress: [{}]` turns on default deny and allows nothing.
   Denies win over the allows they cover. Reported in `policy` problems and
   not enforced: host egress rules, L7 rules, ICMP rules, `fromRequires`,
-  `fromNodes`, `fromGroups`, `cidrGroupRef`, authentication, named ports, and
-  `endpointSelector` specs (Pod rules of this kind).
+  `fromNodes`, `fromGroups`, `cidrGroupRef`, authentication and named ports.
+  `endpointSelector` specs are [Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292);
+  they are reported here too unless `kubernetes.flowsdn-policy` is on.
 - **Where.** The `from_netdev` program on the TCX ingress of every interface
   holding one of this node's InternalIPs (after the NodePort program, so
   NodePort traffic is judged as the Pod's after translation), and `to_netdev`

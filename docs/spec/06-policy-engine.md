@@ -429,6 +429,14 @@ entry; the reference's cookie allocator (§5.13) is present but **not wired**
 at 1.20.1, so every map entry carries `cookie = 0` and the verdict event's
 `cookie` is 0. flowsdn MUST keep cookie zero for the reference-compatible verdict contract (#99).
 
+> **Implementation note (flowsdn, #292):** the agent's Pod rules
+> (`kubernetes.flowsdn-policy`, `host_policy::pod_policies`) implement the
+> §3.2.1 combination matrix, §3.2.8 with `enable-non-default-deny-policies` on
+> and §3.2.9 steps 1, 2 and 6. Unlike the wildcard reading of §3.2.1, a rule
+> with no peers and no ports (`ingress: [{}]`) allows nothing: that is the
+> default-deny idiom, as for the host firewall (ADR-0022), and it fails closed.
+> Confirm against the reference before relying on either reading.
+
 #### 3.2.9 CRD → rule: namespace and cluster injection (`ParseToCiliumRule`)
 
 Given a CNP in namespace `ns` (empty for CCNP), cluster name `c`

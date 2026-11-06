@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-06
+- **feat:** Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy in the endpoint policy maps (#292, `kubernetes.flowsdn-policy`, default false because stormcos does not apply the CRDs yet, stormcos#303). `ingress`, `ingressDeny`, `egress`, `egressDeny` with entities, CIDRs, CIDR sets, endpoint selectors (spec 06 §3.2.9 namespace and cluster injection) and ports including named ports; `enableDefaultDeny` (§3.2.8, wildcard allow when off); denies win over allows, NetworkPolicy's too; the §3.2.1 combination matrix fails the whole object. L7, ICMP, FQDN, `toServices`, node and group peers, `cidrGroupRef`, authentication and `reserved:` selectors are skipped and reported. `kubernetes.policy.flowsdn-policies` in healthz names the objects. No BPF object change. Compiler unit-tested; not on a cluster.
+- **docs:** Medium b2db11018c on pvetest2 errored before the suite started: stormblock-registry#150 (a by-digest forge fetch, then the tag answers `no ready golden`), which reaches every fetched test run on the pve pair since 12.61 carried stormcos#271.
+
 ### 2026-11-04
 - **fix:** Every object in `deploy/stormcos/manifests/` and `manifests-kubernetes/` carries `addonmanager.kubernetes.io/mode: Reconcile` as a label and an annotation (#388, stormcos#668). Unmarked, the apiserver's applier treated them as `EnsureExists`: over kept data a new release's DaemonSet, RBAC and config never landed, and a flowsdn → cilium switch could never prune them (rustkube#236 prunes only `Reconcile`). Live edits to these objects, `flowsdn-config` included, now last only until the applier's next start. A test checks both sets; `crds/` is not in the golden and stays unmarked. Docs: deploy/stormcos README.
 

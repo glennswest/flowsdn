@@ -135,6 +135,11 @@ configuration. The differences:
   ports. Traffic from the node to its Pods (kubelet probes) always passes.
   `podSelector`/`namespaceSelector` peers need `identity-allocation`. In
   golden-flowsdn-760c3a2e89d6 ([runtime](../../docs/runtime.md#networkpolicy-enforcement-292)).
+- `flowsdn-policy` (#292, default `false`; not set in the ConfigMap): Pod rules
+  of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy. Needs the CRDs
+  (`crds/`, stormcos#303): the policy thread, NetworkPolicy included, waits for
+  both lists. RBAC is already there
+  ([runtime](../../docs/runtime.md#pod-rules-of-the-flowsdn-policy-kinds-292)).
 - `host-firewall` (#379, default `off`; not set in the ConfigMap, and an edit
   there lasts only until the applier's next start, #388): with
   `audit` or `enforce`, FlowsdnClusterwideNetworkPolicy specs whose
