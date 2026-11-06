@@ -229,8 +229,10 @@ fn build_initramfs(
     cpio.symlink("usr/sbin/modprobe", "kmod")?;
     for library in libraries {
         // The guest resolves the same path; /lib64 is its symlink to usr/lib64.
-        let name = library.trim_start_matches('/').replacen("lib64/", "usr/lib64/", 1);
-        let name = name.replacen("usr/usr/", "usr/", 1);
+        let name = library.trim_start_matches('/');
+        let name = name
+            .strip_prefix("lib64/")
+            .map_or_else(|| name.to_owned(), |file| format!("usr/lib64/{file}"));
         add_file(&mut cpio, &name, Path::new(&library))?;
     }
     let guest_modules = format!("usr/lib/modules/{release}");

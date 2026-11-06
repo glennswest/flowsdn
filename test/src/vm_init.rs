@@ -57,7 +57,7 @@ fn wait_for(suite: Pid) -> i32 {
         match waitpid(Pid::from_raw(-1), Some(WaitPidFlag::__WALL)) {
             Ok(WaitStatus::Exited(pid, code)) if pid == suite => return code,
             Ok(WaitStatus::Signaled(pid, signal, _)) if pid == suite => {
-                println!("vm-init: the suite died of {signal}");
+                println!("vm-init: the suite died of {signal:?}");
                 return 2;
             }
             Ok(_) => {}
