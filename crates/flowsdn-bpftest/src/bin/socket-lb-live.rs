@@ -469,7 +469,7 @@ fn ack(mut frame: Vec<u8>, l4: usize) -> Result<Vec<u8>> {
 /// the client's source and adds the frontend as an option; the backend's node
 /// learns the frontend from it and rewrites the reply's source.
 fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
-    let up0 = node()?;
+    let up0 = ifindex("up0")?;
     let (front, client, remote) = ([192, 0, 2, 20], [198, 51, 100, 9], [10, 9, 1, 5]);
     let (front6, client6, remote6) = (
         ip6("2001:db8:2::20")?,
