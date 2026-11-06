@@ -99,6 +99,14 @@ themselves don't fail a run: comparing them is stormcentral's side-by-side view.
 Run it on the same machines with each flavor installed: pvetest1+pvetest2
 as a pair, then the Dell and a blade.
 
+## `cni-add-timing` (medium, #396)
+
+30 warm CNI ADDs one after another on the commit's agent, then each step's p50/p99 from
+`GET /v1/cni/timing`, the plugin's wall time, the filesystem under the state directory and
+that disk's fsync p50 right now. Read `agent-state` against the fsync number: a build VM's
+disk is shared, and the same code measured 18 and 106 ms depending on what else ran. Only a
+failed ADD, or a trivial request taking 10 ms at p50 (a wait in the agent's loop), fails it.
+
 ## `perf-scale`: how far each flavor goes (#321)
 
 The owner asked for "a set of tests with both, in 100 unit (containers), and see

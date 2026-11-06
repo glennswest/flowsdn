@@ -84,6 +84,10 @@ or a summary with no pass all fail it.
 sc-build 'test/build.sh && cargo xtask kernel-check'
 ```
 
+The guest's /tmp is an ext4 image on a virtio disk when `mkfs.ext4` is there, so what the
+agent syncs reaches a disk. Timings from it are not a node's: read `cni-add-timing` with
+the fsync number it prints, and don't run another build beside one you mean to compare.
+
 **Before `component stage flowsdn`, this must pass at the commit (or one with
 the same `bpf-objects.lock`), and the stage's comment names it.** It catches what
 the lock cannot: the lock proves the committed bytes match a rebuild, not that

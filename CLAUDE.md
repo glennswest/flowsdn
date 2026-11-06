@@ -61,8 +61,10 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 stormcos#804: warm plain-pod ADD 130 ms (85 on the previous release, busier host) against Cilium's 76 ms; target < 50 ms on a VM, < 100 ms on an HDD server. Issue's guess: object load per endpoint. Code says not (one object per agent; tcx attach per veth). First suspect: 4 fsyncs per endpoint in the agent's state store on a disk-backed /var/lib/flowsdn. Measure first.
 Plan: plugin times its steps and POSTs them; agent times PUT's steps; `GET /v1/cni/timing` gives p50/p99 by step; medium test `cni-add-timing` (warm ADDs, state on a real ext4 disk in kernel-check, which boots with a virtio disk). Then cut the largest.
 
-- [ ] Timing, test, kernel-check numbers.
-- [ ] Cut the largest step, numbers before and after; docs, changelog.
+- [x] Timing, test, kernel-check numbers. Before, on ext4 in kernel-check (p50 us): total 124970: endpoint 55908 (agent-state 34292, agent-install 12044), lookup 20489, allocate 19911, config 17635, link 10623. The issue's object-load guess is wrong (one load per agent).
+- [x] Largest: the API loop's `sleep(20 ms)`, about 58 ms over the three trivial requests, plus up to 9 in the PUT. Polls now: total 66-76 ms. Then state syncs contents only: at 7079995, two runs alone: total 45346 / 46136, wall 48035 / 48175, agent-state 19607 / 17622 at fsync 22184 / 24641. The same commit beside my full build: agent-state 106 ms, so never compare across a parallel build.
+- [x] Docs (agent-api, spec 08 note, test README, build-and-test), changelog. #399 was my fake agent refusing the report (closed by a pass). #400 filed: stale <id>_next can stop ADDs.
+- [ ] Node number (kubelet sandbox/cni in stormcos docs/SPEED.md) with a release; bursts unmeasured.
 
 ### Service NAT46/64 on the uplink — #292 (P0), 2026-11-06
 
