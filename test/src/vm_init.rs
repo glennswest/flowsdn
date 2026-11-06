@@ -103,6 +103,13 @@ pub fn run() -> ! {
             "{}",
             fs::read_to_string("/proc/modules").unwrap_or_default()
         );
+        println!(
+            "kernel.modprobe = {}",
+            fs::read_to_string("/proc/sys/kernel/modprobe").unwrap_or_default()
+        );
+        let _ = Command::new("/usr/sbin/modprobe")
+            .args(["-v", "nf_tables"])
+            .status();
     }
     println!("@@FLOWSDN-EXIT {code}");
     // Give the serial port's buffer a moment before the machine is gone.
