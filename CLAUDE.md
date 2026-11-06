@@ -56,6 +56,16 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Service NAT46/64 on the uplink — #292 (P0), 2026-11-06
+
+Queue released #292 (12.62 carries registry 9912c98), but 12.62-flowsdn is still composing and pvetest2 is on 12.61-flowsdn: medium and perf wait for the install. Next row meanwhile (ADR-0011 #79; RFC 6052 gateway stays milestone 3).
+`kubernetes.nat46x64` bool, default false. A scope-1 frontend with no backends of its own family and some of the other family on other nodes gets `SVC_FLAG_NAT_46X64` and those backends. `nodeport_ingress` translates (bpf_skb_change_proto), always SNATs to this node's address of the backend's family on a port in 61000-65535, redirects by the FIB; the backend's reply is translated back at uplink ingress.
+Local backends are excluded: a pod's reply to the node's address is local input and never reaches the uplink. Refused, passing untouched: IPv4 options, fragments, zero UDP checksum, a packet that outgrows the MTU. Socket LB untranslated (an AF_INET socket cannot reach IPv6).
+Maps: `flowsdn_nodeport4_xlate` (v4 key -> v6-sized value), reply/forward on the v6 side stay in `flowsdn_nodeport6_nat` with FLOW_XLATE and v4-mapped addresses; a NAT64 port is reserved in `flowsdn_nodeport4_nat`.
+
+- [ ] BPF, planner flag, agent setting, loader maps, socket-lb-live NAT46/64 step, object + lock, docs (spec 04/05 notes), changelog; kernel-check; sc-build.
+- [ ] Then: medium on pvetest2 once it runs 12.62-flowsdn; perf on pvetest2 and pvetest1.
+
 ### Kernel check in a build VM — #292 (P0), #370, 2026-11-06
 
 stormblock-registry#150 is fixed (v0.55.1) but reaches pvetest1/2 only with a release, so main's Maglev + host-firewall objects stay unloaded on 7.2.
