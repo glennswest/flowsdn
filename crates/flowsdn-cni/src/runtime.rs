@@ -580,7 +580,11 @@ fn report_steps(client: &Client, steps: &[(&'static str, u64)]) {
         .iter()
         .map(|(step, took)| ((*step).to_owned(), json!(took)))
         .collect();
-    let _ = client.request(Method::Post, "/v1/cni/timing", Some(&json!({"steps":steps})));
+    let _ = client.request(
+        Method::Post,
+        "/v1/cni/timing",
+        Some(&json!({"steps":steps})),
+    );
 }
 /// [`Platform`], timing the steps of an ADD. A rollback's steps are not timed.
 struct Timed<'a> {

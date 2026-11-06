@@ -7,7 +7,14 @@ use std::collections::{BTreeMap, VecDeque};
 /// The steps the plugin may report, in the order of an ADD. Only these are
 /// kept, so what a client posts cannot grow the agent's memory.
 pub const PLUGIN_STEPS: [&str; 8] = [
-    "config", "lookup", "allocate", "link", "configure", "endpoint", "finalize", "total",
+    "config",
+    "lookup",
+    "allocate",
+    "link",
+    "configure",
+    "endpoint",
+    "finalize",
+    "total",
 ];
 /// Samples kept per step.
 const KEPT: usize = 256;

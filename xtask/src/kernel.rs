@@ -352,12 +352,7 @@ fn boot(
     let cmdline = format!(
         "console=ttyS0 rdinit=/test panic=-1 loglevel=3 selinux=0 audit=0 flowsdn.suite={suite}"
     );
-    let drive = disk.map(|path| {
-        format!(
-            "file={},format=raw,if=virtio,cache=none",
-            path.display()
-        )
-    });
+    let drive = disk.map(|path| format!("file={},format=raw,if=virtio,cache=none", path.display()));
     let mut qemu = Command::new(on_path("qemu-system-x86_64")?);
     if let Some(drive) = &drive {
         qemu.args(["-drive", drive]);
