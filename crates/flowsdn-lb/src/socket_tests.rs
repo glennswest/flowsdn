@@ -421,7 +421,10 @@ fn nat46x64_frontend_takes_the_other_familys_backends_only() {
     let services = [
         Service {
             frontend: addr("192.0.2.20", 30096, PROTO_TCP),
-            backends: vec![addr("fd00::5", 8080, PROTO_TCP), addr("10.9.0.5", 8080, PROTO_TCP)],
+            backends: vec![
+                addr("fd00::5", 8080, PROTO_TCP),
+                addr("10.9.0.5", 8080, PROTO_TCP),
+            ],
             affinity: None,
             scope: SCOPE_NODE_LOCAL,
             maglev: true,
@@ -430,7 +433,10 @@ fn nat46x64_frontend_takes_the_other_familys_backends_only() {
         },
         Service {
             frontend: addr("2001:db8::20", 30096, PROTO_UDP),
-            backends: vec![addr("10.9.1.5", 8080, PROTO_UDP), addr("fd00::6", 8080, PROTO_UDP)],
+            backends: vec![
+                addr("10.9.1.5", 8080, PROTO_UDP),
+                addr("fd00::6", 8080, PROTO_UDP),
+            ],
             affinity: None,
             scope: SCOPE_NODE_LOCAL,
             maglev: false,
@@ -439,20 +445,45 @@ fn nat46x64_frontend_takes_the_other_familys_backends_only() {
         },
     ];
     let want = desired(&Maps::default(), &services).expect("desired");
-    let master4 = want.maps.services4.values().map(|v| LbService::from_bytes(*v)).find(|v| v.count == 1);
-    let master6 = want.maps.services6.values().map(|v| LbService::from_bytes(*v)).find(|v| v.count == 1);
+    let master4 = want
+        .maps
+        .services4
+        .values()
+        .map(|v| LbService::from_bytes(*v))
+        .find(|v| v.count == 1);
+    let master6 = want
+        .maps
+        .services6
+        .values()
+        .map(|v| LbService::from_bytes(*v))
+        .find(|v| v.count == 1);
     for master in [master4.expect("master4"), master6.expect("master6")] {
         assert_ne!(master.service_flags() & service_flags::NAT46X64, 0);
     }
     assert_eq!(want.maps.backends6.len(), 1);
     assert_eq!(want.maps.backends4.len(), 1);
-    assert_eq!(backend6(*want.maps.backends6.values().next().expect("v6")).port, 8080);
-    assert_eq!(want.maps.maglev4.len(), 1, "the IPv4 frontend's table names IPv6 backends");
+    assert_eq!(
+        backend6(*want.maps.backends6.values().next().expect("v6")).port,
+        8080
+    );
+    assert_eq!(
+        want.maps.maglev4.len(),
+        1,
+        "the IPv4 frontend's table names IPv6 backends"
+    );
     // Not translated: the other family is still ignored.
     let mut plain = services[0].clone();
     plain.nat46x64 = false;
     let want = desired(&Maps::default(), &[plain]).expect("desired");
     assert!(want.maps.backends6.is_empty());
-    let master = want.maps.services4.values().map(|v| LbService::from_bytes(*v)).find(|v| v.count == 1);
-    assert_eq!(master.expect("master").service_flags() & service_flags::NAT46X64, 0);
+    let master = want
+        .maps
+        .services4
+        .values()
+        .map(|v| LbService::from_bytes(*v))
+        .find(|v| v.count == 1);
+    assert_eq!(
+        master.expect("master").service_flags() & service_flags::NAT46X64,
+        0
+    );
 }

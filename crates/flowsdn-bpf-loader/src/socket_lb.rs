@@ -50,7 +50,14 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 14] = [
     ("flowsdn_lb_affinity_match", MapType::Hash, 8, 1, 65536, 1),
     ("flowsdn_nodeport4_nat", MapType::LruHash, 16, 16, 65536, 0),
     ("flowsdn_nodeport6_nat", MapType::LruHash, 40, 40, 65536, 0),
-    ("flowsdn_nodeport4_xlate", MapType::LruHash, 16, 40, 65536, 0),
+    (
+        "flowsdn_nodeport4_xlate",
+        MapType::LruHash,
+        16,
+        40,
+        65536,
+        0,
+    ),
     ("flowsdn_lb4_maglev", MapType::HashOfMaps, 2, 4, 65536, 0),
     ("flowsdn_lb6_maglev", MapType::HashOfMaps, 2, 4, 65536, 0),
 ];

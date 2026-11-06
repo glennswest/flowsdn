@@ -148,7 +148,10 @@ fn nat46x64_translates_a_node_local_frontend_with_no_backend_of_its_family() {
     // IPv4 on the uplink: only the other node's IPv6 backend, never DSR.
     let v4 = find(&out, "192.0.2.1", SCOPE_NODE_LOCAL);
     assert!(v4.nat46x64 && !v4.dsr);
-    assert_eq!(v4.backends.iter().map(|b| b.ip).collect::<Vec<_>>(), [ip("fd00:2::5")]);
+    assert_eq!(
+        v4.backends.iter().map(|b| b.ip).collect::<Vec<_>>(),
+        [ip("fd00:2::5")]
+    );
     // Its own family has backends, or it is not the uplink's: not translated.
     let v6 = find(&out, "2001:db8::1", SCOPE_NODE_LOCAL);
     assert!(!v6.nat46x64 && v6.dsr);
@@ -158,7 +161,10 @@ fn nat46x64_translates_a_node_local_frontend_with_no_backend_of_its_family() {
     // The API says so.
     let list = service_list(&out, &BTreeMap::new());
     let rows = list.as_array().expect("rows");
-    let policies: Vec<_> = rows.iter().filter_map(|r| r.pointer("/spec/flags/nat-policy")?.as_str()).collect();
+    let policies: Vec<_> = rows
+        .iter()
+        .filter_map(|r| r.pointer("/spec/flags/nat-policy")?.as_str())
+        .collect();
     assert_eq!(policies, ["Nat46"]);
 
     // Only local backends, the setting off, or a Local policy: not translated.
@@ -168,10 +174,16 @@ fn nat46x64_translates_a_node_local_frontend_with_no_backend_of_its_family() {
     }];
     let out = frontends(std::slice::from_ref(&service), &local_only, "n1", &nodes);
     assert!(!find(&out, "192.0.2.1", SCOPE_NODE_LOCAL).nat46x64);
-    let off = ServiceInfo { nat46x64: false, ..service.clone() };
+    let off = ServiceInfo {
+        nat46x64: false,
+        ..service.clone()
+    };
     let out = frontends(&[off], &slices, "n1", &nodes);
     assert!(!find(&out, "192.0.2.1", SCOPE_NODE_LOCAL).nat46x64);
-    let etp_local = ServiceInfo { external_local: true, ..service };
+    let etp_local = ServiceInfo {
+        external_local: true,
+        ..service
+    };
     let out = frontends(&[etp_local], &slices, "n1", &nodes);
     assert!(!find(&out, "192.0.2.1", SCOPE_NODE_LOCAL).nat46x64);
 }
