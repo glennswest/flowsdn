@@ -70,7 +70,9 @@ from/to Entities, CIDR, CIDRSet, Endpoints (spec 06 §3.2.9 namespace + cluster 
 
 - [x] flowsdn-k8s scope; host_policy parser both directions + pod specs; policy compiler merge; setting; tests (d867024).
 - [x] Docs (runtime, agent-api, implementation-status, milestones, deploy README, spec 06 note), changelog.
-- [ ] Full sc-build. Medium b2db11018c errored: stormblock-registry#150 (by-digest forge fetch, tag 404; every fetched run on the
+- [x] sc-build at 7805ca8: fmt, workspace + kubernetes Clippy -D warnings (+ indexing, arithmetic), workspace + kubernetes agent tests:
+      931 passed, 0 failed, 1 ignored, incl. 9 new compiler tests. No object change, so test/build.sh not rerun.
+- [ ] Medium b2db11018c errored: stormblock-registry#150 (by-digest forge fetch, tag 404; every fetched run on the
       pve pair since 12.61, evidence on the issue, master told). When fixed: `stormcentral test run flowsdn medium --tag pvetest2`; pass ->
       stage the golden; perf on pvetest2 and pvetest1. New BPF rows (DSR, NAT46/64) wait: Maglev and host-firewall objects are still unverified on 7.2.
 
