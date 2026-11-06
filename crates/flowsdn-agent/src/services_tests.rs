@@ -158,7 +158,7 @@ fn nat46x64_translates_a_node_local_frontend_with_no_backend_of_its_family() {
     // The API says so.
     let list = service_list(&out, &BTreeMap::new());
     let rows = list.as_array().expect("rows");
-    let policies: Vec<_> = rows.iter().filter_map(|r| r["spec"]["flags"]["nat-policy"].as_str()).collect();
+    let policies: Vec<_> = rows.iter().filter_map(|r| r.pointer("/spec/flags/nat-policy")?.as_str()).collect();
     assert_eq!(policies, ["Nat46"]);
 
     // Only local backends, the setting off, or a Local policy: not translated.
