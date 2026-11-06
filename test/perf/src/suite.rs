@@ -166,7 +166,7 @@ impl Suite {
         self.readiness();
         self.report.skip(
             "cni-ready-after-boot",
-            "node boot to CNI ready is the network phase of stormcentral's boot breakdown (stormcentral#365), not measurable from a pod",
+            "node boot to CNI ready is `boot_phase_network_ms` and `reboot_phase_network_ms` in stormcentral's install records (stormcentral#365), not measurable from a pod",
         );
         let node = self.node.clone();
         let same = self.server("perf-server-same", &node);

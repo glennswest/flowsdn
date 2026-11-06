@@ -38,7 +38,7 @@ were last refreshed from code on 2026-10-09 (`git log --since=2026-10-02`).
 The stormcos flowsdn edition carries the agent (static musl and GNU Kubernetes
 mode) and CNI in the `flowsdn` golden; `deploy/stormcos/manifests-kubernetes/` runs it
 as `image: flowsdn` with a CNI-install init container (stormcos#261 applies
-them). Latest golden: golden-flowsdn-760c3a2e89d6 at 9732b71 (NetworkPolicy enforcement, #292; stormcos#528). Before it: golden-flowsdn-a690ebee2ba7 at 4447eeb (IPv6 NodePort, identity allocation, network-status; stormcos#494). Goldens before golden-flowsdn-4b40a980ad16 carry a socket LB that cannot attach on 7.2 (cda5799). Source pushes do not update nodes until a new golden is composed into
+them). Latest golden: golden-flowsdn-de1d63ada483 at 1254993 (DSR, Maglev, host firewall, flowsdn policy kinds, NAT46/64; features off by default, kernel test runs only). Earlier: golden-flowsdn-760c3a2e89d6 at 9732b71 (NetworkPolicy enforcement, #292; stormcos#528). Before it: golden-flowsdn-a690ebee2ba7 at 4447eeb (IPv6 NodePort, identity allocation, network-status; stormcos#494). Goldens before golden-flowsdn-4b40a980ad16 carry a socket LB that cannot attach on 7.2 (cda5799). Source pushes do not update nodes until a new golden is composed into
 a release. Authority:
 [stormcos/docs/goldens.md](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 After validated implementation work, flowsdn uses the special-component
@@ -452,6 +452,7 @@ Kubernetes API, and measures with Rust clients. JSON lines per metric with `flav
 - [x] `/test perf` dispatch; requires.toml `[perf]`; Containerfile/build.sh; docs (test/README metric table), changelog.
 - [x] sc-build at e397e16: fmt, Clippy, 705 tests, test/build.sh, podman build; `/test perf` execs flowsdn-perf in the image. Status on #321; format on stormcentral#412.
 - [x] `perf-scale` ramp (steps of 100 pods until a step fails; owner request) at 5dc4de3: Clippy clean, tests pass, test/build.sh.
+- [ ] 2026-11-06 later: 12.62 carried registry 9912c98, but it did not boot clean on pvetest1 and is tombstoned with 12.62-flowsdn. pvetest1 refuses runs (its last install, 12.62, failed: "runs no known release"); perf fad9ef6c97 on pvetest2 (12.61-flowsdn) stopped at the same `no ready golden` pull. No perf number yet. `cni-ready-after-boot`: answered, it is `boot_phase_network_ms` in the install records (stormcentral#365), so the suite keeps skipping it and the table takes it from there. #321 proposed --after-release flowsdn>=5167d1f (golden-flowsdn-de1d63ada483 at 1254993). Then perf on pvetest2 and pvetest1, table, perf-scale at night; the first run will likely need fixes.
 - [ ] 2026-11-06: stormcos#271 is shipped; runs now stop at ImagePullBackOff (stormblock-registry#150, every component's run on the pair). Fixed in registry v0.55.1 (9912c98), not in a release yet. #321 proposed
       `--after-release registry>=9912c98`. Then perf on pvetest2 (flowsdn) and pvetest1 (Cilium), table here, perf-scale at night. Suite has never completed on a cluster; expect fixes on first run. `cni-ready-after-boot` still skips (stormcentral#365 closed: check whether its boot-progress records give the number).
 - [ ] 2026-11-03: pvetest1 and pvetest2 refuse runs (stormcos#271: sbregistry takes no forge test images; shipped

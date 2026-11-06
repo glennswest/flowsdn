@@ -77,7 +77,7 @@ process name (`flowsdn-agent` or `cilium-agent`), which gives the flavor
 | `perf-setup` | flavor, ready nodes, the cross-node peer |
 | `agent-cost-idle`, `agent-cost-load` | agent CPU (% of one core) and RSS, idle and during the same-node 8-stream run |
 | `pod-network-ready` | 10 pods created together on the node: create to Running with a pod IP, p50/p99/max ms |
-| `cni-ready-after-boot` | skip: the network phase of stormcentral's boot breakdown (stormcentral#365) |
+| `cni-ready-after-boot` | skip: a pod cannot measure it. The number is `boot_phase_network_ms` / `reboot_phase_network_ms` (CNI agent and coredns Ready) in each install's record, on stormcentral's Releases → Performance (stormcentral#365) |
 | `perf-server-same`, `perf-server-cross` | server pod placement and reachability |
 | `pod-tcp-rr-*`, `pod-udp-rr-*` | 1-byte request/response latency p50/p90/p99/max and transactions/s (netperf TCP_RR/UDP_RR equivalents), `same-node` and `cross-node` |
 | `pod-tcp-stream-1-*`, `pod-tcp-stream-8-*` | throughput in Gbit/s of what the server received, 1 and 8 streams (iperf3 equivalent) |
