@@ -55,7 +55,7 @@ compatibility rows.
 BPF maps are `flowsdn_lxc` and `flowsdn_lb{4,6}_{services,backends,reverse_sk}`;
 maps added since use the same prefix (`flowsdn_lb{4,6}_affinity`,
 `flowsdn_lb_affinity_match`, `flowsdn_nodeport{4,6}_nat`, `flowsdn_nodeport6_fib`,
-`flowsdn_nodeport6_scratch`).
+`flowsdn_nodeport6_scratch`, `flowsdn_nodeport4_xlate`, `flowsdn_nodeport4_xlate_scratch`).
 A node upgraded from an earlier flowsdn needs no pin migration: stormcos
 releases reboot the node and bpffs pins do not survive a reboot. An agent
 restarted in place on old pins creates new maps beside them and reprograms its

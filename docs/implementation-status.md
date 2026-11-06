@@ -52,7 +52,8 @@ pinning or subsystem libraries are absent are **not current status**.
   `externalTrafficPolicy: Cluster`, remote backends are SNATed to the FIB
   source address (ports 61000–65535) and FIB-redirected, replies reverse-NATed
   at uplink ingress. IPv4 (`flowsdn_nodeport4_nat`) and IPv6
-  (`flowsdn_nodeport6_nat`, `53bffc7`).
+  (`flowsdn_nodeport6_nat`, `53bffc7`). Service NAT46/64 (`kubernetes.nat46x64`,
+  default off) on the uplink to other nodes' backends: kernel test-run only.
 - Kubernetes Events on Pods and the Node, aggregated and non-blocking (#298);
   the `flowsdn.io/pod-networks` annotation on local Pods (and flowsdn's entry in
   the Multus `network-status`, #371) and pod/container/
@@ -94,7 +95,7 @@ pinning or subsystem libraries are absent are **not current status**.
   (stormcos#303).
 - Not implemented: operator identity GC (#332), L7, FQDN, ICMP, node and group
   peers in policy rules, host egress policy, policy verdict events,
-  masquerade (the node provides it), Maglev in the socket LB, DSR by IPIP or Geneve, DSR ICMP errors, NAT46/64, TCP socket
+  masquerade (the node provides it), Maglev in the socket LB, DSR by IPIP or Geneve, DSR ICMP errors, NAT46/64 to local backends or in the socket LB, the RFC 6052 gateway, TCP socket
   termination, CRD controllers or registration, an operator process, Hubble
   observer/relay.
 

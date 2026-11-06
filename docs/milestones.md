@@ -34,8 +34,8 @@ The baseline above describes v0.14.0 only. Main (through `eed1aca`) has:
   endpoint programs (identity and CIDR L3/L4, ADR-0021; golden-flowsdn-760c3a2e89d6,
   kernel test-run only). Maglev for traffic from outside the cluster (uplink
   programs, kernel test-run only). UDP socket termination. Open: live ClusterIP and policy acceptance on a node,
-  NAT46/64, DSR by IPIP or Geneve, TCP socket termination. DSR by IP option
-  (uplink programs, off by default): kernel test-run only. Pod rules of the flowsdn policy kinds
+  DSR by IPIP or Geneve, TCP socket termination. DSR by IP option and service
+  NAT46/64 to other nodes' backends (uplink programs, off by default): kernel test-run only. Pod rules of the flowsdn policy kinds
   (L3/L4, deny): compiler unit-tested, off by default. Host firewall (ingress,
   #379, ADR-0022): kernel test-run only.
 - **Milestone 3 (#293):** primitives only; nothing wired into the agent.

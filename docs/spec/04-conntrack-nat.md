@@ -1109,3 +1109,26 @@ timestamp**. Do not fabricate a creation time or silently extend its ABI.
 Map-ID equality plus unchanged quiesced key/value observations can detect some
 replacements, but cannot prove the same entry generation after delete/reinsert.
 Use those limited assertions for restore tests; see spec 19's reuse contract.
+
+### Note on §3.15 (#292): service NAT46/64 as implemented
+
+Appended here because the catalogue's provenance cites this spec by line number
+(#358). flowsdn's service translation is on the uplink program, not the reference's
+recirculation, and uses no `::ffff:` source on the wire, since a kernel drops an IPv6
+packet with an IPv4-mapped source (`ip6_rcv_core`):
+
+- **Selection.** `kubernetes.nat46x64` and a scope-1 frontend with no backend of its
+  family and backends of the other on other nodes. The master carries
+  `SVC_FLAG_NAT_46X64` and its slots name IDs in the other family's backend map.
+- **Forward.** New flow: backend by Maglev or random slot; a route out of the uplink it
+  arrived on, else untranslated. Port claimed from 61000-65535 at the FIB's source
+  address of the backend's family (a NAT64 flow also reserves it in
+  `flowsdn_nodeport4_nat`). Header replaced: TOS and traffic class copied, TTL and hop
+  limit carried and decremented, flow label 0, IPv4 ID 0 with DF. The L4 checksum takes
+  the difference of the addresses (length and protocol sum alike in both pseudo-headers)
+  and of the ports.
+- **Reply.** Same translation with the frontend as source and the client as destination.
+- **State.** `flowsdn_nodeport6_nat` for IPv6-keyed directions (FLOW_XLATE, IPv4-mapped
+  addresses for the IPv4 side), `flowsdn_nodeport4_xlate` for IPv4-keyed ones.
+- **Refused before any change, passing untouched:** see docs/runtime.md. A helper failing
+  after the header began to change drops the packet.

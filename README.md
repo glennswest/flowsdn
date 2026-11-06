@@ -70,8 +70,8 @@ two-node acceptance (#291) and live NetworkPolicy acceptance on a cluster
 
 The Kubernetes-mode agent also allocates cluster identities for its Pods
 (FlowsdnIdentity objects, #291). Not implemented in the agent:
-L7, FQDN and ICMP policy rules, host egress policy, flowsdn's own masquerade, DSR,
-NAT46/64, TCP socket termination, CRD controllers, an operator process and the
+L7, FQDN and ICMP policy rules, host egress policy, flowsdn's own masquerade, DSR by IPIP or Geneve,
+NAT46/64 to local backends or in the socket LB, TCP socket termination, CRD controllers, an operator process and the
 Hubble observer/relay. Libraries also implement configuration resolution,
 identity and map layouts, a Kubernetes NetworkPolicy importer and policy
 simulator, Maglev tables, BGP codecs/session state, encryption and egress

@@ -115,7 +115,8 @@ configuration. The differences:
   `service.flowsdn.io/lb-algorithm: maglev` annotation (every node then
   sends a flow to the same backend). Direct server return comes with
   `kubernetes.lb-mode: dsr|hybrid` or a Service's
-  `service.flowsdn.io/forwarding-mode: dsr` annotation (off by default). IPv4 is in goldens (local backends from
+  `service.flowsdn.io/forwarding-mode: dsr` annotation (off by default). Service
+  NAT46/64 to other nodes' backends comes with `kubernetes.nat46x64: true` (off by default). IPv4 is in goldens (local backends from
   `golden-flowsdn-4a0daa7c4bfc`, SNAT from `golden-flowsdn-cc0835c8a1db`); IPv6 from
   `golden-flowsdn-a690ebee2ba7` (test-run on 7.2 by `fixture-socket-lb-live`). A
   ClusterIP:port with no ready backend fails `connect` with EPERM. Without a pin root the programs detach when the agent exits,

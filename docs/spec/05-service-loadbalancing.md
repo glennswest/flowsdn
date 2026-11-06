@@ -1272,3 +1272,9 @@ flowsdn's forwarding mode is `kubernetes.lb-mode` and the Service annotation
 `service.flowsdn.io/forwarding-mode`, which is always honored. Only `opt` dispatch
 exists, on the uplink programs. This note is at the end of the file because the
 catalogue's provenance cites this spec by line number (#358).
+
+### Note on §3.1 NatPolicy (#292)
+
+`NatPolicy` is not read from a Service field: `kubernetes.nat46x64` derives it per
+node-local frontend (spec 04's note on §3.15), and `GET /v1/service` reports it as
+`nat-policy`.
