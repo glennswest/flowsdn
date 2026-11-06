@@ -63,8 +63,11 @@ Build VMs have /dev/kvm (0666), qemu and a readable /lib/modules/<release>/vmlin
 packs test/.stage + ip, nft, kmod (+ libs) + kernel/net modules into an initramfs (Rust newc writer), boots the build VM's own kernel in qemu with /test
 as PID 1 (`rdinit=/test`, flowsdn.suite=medium), reads the JSON lines on the serial port. Not a hardware pass: it does not replace the pve medium, perf or live acceptance.
 
-- [ ] xtask `kernel` module + tests; /test PID 1 mode (test/src/vm_init.rs); sc-build `test/build.sh && cargo xtask kernel-check`.
-- [ ] Fix what it finds; docs (build-and-test, test/README, xtask README), changelog; stage precondition for #370.
+- [x] xtask `kernel` module + tests; /test PID 1 mode (test/src/vm_init.rs).
+- [x] First runs found socket-lb unloadable on 7.2 since 38f1c27 (Maglev index, `R0 unbounded memory access`); fixed with a volatile read, object + lock rebuilt.
+      Run with the fix on 7.2.11-200.fc44: 18 pass, 0 fail, 2 skip (node probes), socket-lb-live 23 PASS, policy-live 13 PASS.
+- [x] Docs (build-and-test, test/README, xtask README), changelog; stage precondition for #370.
+- [ ] Full sc-build, stage the golden, close #370. Then the next #292 row.
 
 ### Pod rules of the flowsdn policy kinds — #292 (P0), 2026-11-06
 

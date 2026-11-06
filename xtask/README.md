@@ -29,3 +29,8 @@ ClusterRole, ClusterRoleBinding, ConfigMap and DaemonSet) and a fixed-pool
 render that name no Cilium, and four guards that must refuse to render (no
 image, a fixed pool without a gateway, no pool, egress `tunnel`). Needs `helm`
 on PATH; `deploy/release/build.sh` runs it before `helm package`.
+
+`cargo xtask kernel-check [SUITE]` (#370, #292) boots this machine's kernel in
+qemu with `test/.stage` as an initramfs and `/test` as PID 1, and runs the suite
+as root inside the guest, so no root is needed on the build machine. Run
+`test/build.sh` first. See [docs/build-and-test.md](../docs/build-and-test.md).

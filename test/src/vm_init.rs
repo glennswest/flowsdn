@@ -95,17 +95,14 @@ pub fn run() -> ! {
             2
         }
     };
+    // The record of what each fixture proved; a passing suite says only counts.
+    dump_logs(Path::new("/results"));
     if code != 0 {
-        dump_logs(Path::new("/results"));
         // A module that did not load is the usual cause of a failed setup.
         println!("@@FLOWSDN-LOG /proc/modules");
         println!(
             "{}",
             fs::read_to_string("/proc/modules").unwrap_or_default()
-        );
-        println!(
-            "kernel.modprobe = {}",
-            fs::read_to_string("/proc/sys/kernel/modprobe").unwrap_or_default()
         );
         let _ = Command::new("/usr/bin/modprobe")
             .args(["-v", "nf_tables"])

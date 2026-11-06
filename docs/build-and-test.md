@@ -69,6 +69,32 @@ which files the P1 switch issue on exit 3.
 See [its README](../tools/aya-kfunc-watch/README.md) and
 [#315](https://github.com/glennswest/flowsdn/issues/315).
 
+## Kernel check in a build VM
+
+`cargo xtask kernel-check [SUITE]` (default `medium`) runs the commit's test
+suite on a real kernel without root (#370, #292). A build job cannot load a BPF
+object, but a build VM has `/dev/kvm`, qemu and a readable kernel, so the check
+boots `/lib/modules/$(uname -r)/vmlinuz` with an initramfs of `test/.stage`,
+`ip`, `nft`, `kmod` and the network modules, with `/test` as PID 1
+(`test/src/vm_init.rs`), and reads the suite's JSON lines and every fixture's
+log off the serial port. A guest that ends without a result, a skipped datapath
+or a summary with no pass all fail it.
+
+```bash
+sc-build 'test/build.sh && cargo xtask kernel-check'
+```
+
+**Before `component stage flowsdn`, this must pass at the commit (or one with
+the same `bpf-objects.lock`), and the stage's comment names it.** It catches what
+the lock cannot: the lock proves the committed bytes match a rebuild, not that
+the kernel accepts them. Its first run refused `socket-lb`, which had passed
+sc-build and sat on main for three weeks with no machine to run it on: `R0
+unbounded memory access` on the Maglev table index.
+
+It does not replace a hardware run: the kernel is the build VM's Fedora kernel
+rather than a stormcos release's, there is no node, cluster or real NIC, and the
+node probes skip. Fixtures that need a live cluster (`perf`) cannot run in it.
+
 ## Goldens and release artifacts
 
 After an implementation is pushed and verified, request the flowsdn golden once:
