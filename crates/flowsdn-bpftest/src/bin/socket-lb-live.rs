@@ -349,7 +349,8 @@ fn run_on(
     ctx.get_mut(40..44)
         .ok_or("ctx")?
         .copy_from_slice(&ifindex.to_ne_bytes());
-    let mut out = vec![0u8; 512];
+    // Room for the largest frame (the too-big DSR step) and an option.
+    let mut out = vec![0u8; 2048];
     let mut ctx_out = [0u8; 256];
     let (got, size) = syscall::run(fd, frame, &mut out, &ctx, &mut ctx_out)?;
     if got != verdict {
