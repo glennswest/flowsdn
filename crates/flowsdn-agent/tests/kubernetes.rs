@@ -87,6 +87,7 @@ fn server(
     cert: X509,
     watches: Arc<AtomicUsize>,
     created: Arc<Mutex<Vec<serde_json::Value>>>,
+    crd_served_at: Instant,
 ) -> u16 {
     let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).expect("acceptor");
     acceptor.set_private_key(&key).expect("key");
@@ -121,6 +122,15 @@ fn server(
                     String::from_utf8_lossy(&request).contains("Bearer test-token"),
                     "credentials from the kubeconfig"
                 );
+                // At the start of a boot the kind is not served yet (#397).
+                if line.starts_with("GET /apis/flowsdn.io/v1alpha1/flowsdnidentities")
+                    && Instant::now() < crd_served_at
+                {
+                    let _ = stream.write_all(
+                        b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    );
+                    return;
+                }
                 if line.starts_with("POST /apis/flowsdn.io/v1alpha1/flowsdnidentities ") {
                     let text = String::from_utf8_lossy(&request).into_owned();
                     let length: usize = text
@@ -247,7 +257,18 @@ fn controller_lists_watches_and_derives_the_pool() {
     std::fs::write(&ca, cert.to_pem().expect("PEM")).expect("CA file");
     let watches = Arc::new(AtomicUsize::new(0));
     let created = Arc::new(Mutex::new(Vec::new()));
-    let port = server(key, cert, Arc::clone(&watches), Arc::clone(&created));
+    // Late enough that doubling from 1 s (retries at 0, 1, 3, 7, 15 s) would be 7 s
+    // late; #397's target is within 2 s.
+    let crd_served_at = Instant::now()
+        .checked_add(Duration::from_secs(8))
+        .expect("CRD time");
+    let port = server(
+        key,
+        cert,
+        Arc::clone(&watches),
+        Arc::clone(&created),
+        crd_served_at,
+    );
     let kubeconfig = dir.join("kubeconfig");
     std::fs::write(
         &kubeconfig,
@@ -283,11 +304,20 @@ fn controller_lists_watches_and_derives_the_pool() {
     // is attached (that needs CAP_BPF and a cgroup).
     let view = controller.spawn(false, None, None, None).expect("spawn");
     let deadline = Instant::now()
-        .checked_add(Duration::from_secs(20))
+        .checked_add(Duration::from_secs(30))
         .expect("deadline");
+    let mut identities_at = None;
     loop {
         {
             let view = lock(&view);
+            if view.identities_synced && identities_at.is_none() {
+                let late = Instant::now().saturating_duration_since(crd_served_at);
+                assert!(
+                    late < Duration::from_secs(2),
+                    "identities listed {late:?} after the CRD was served"
+                );
+                identities_at = Some(late);
+            }
             let peer_v6 = view
                 .nodes
                 .iter()

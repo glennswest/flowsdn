@@ -60,7 +60,8 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 stormcos#804 fix 16. Timestamps on every agent line (health_api's gmtime_r + ms), a `ready` line with time since start, a 404 retried at 1 s flat for a watch's first minute, a line when a watch recovers. Late identities do not hold NetworkPolicy back (policy.rs computes labels from Pod + Namespace; the policy loop's gates have no identities_synced); say so on the issue. Fixes #373's time_t warning on the way (the stamp reuses that code).
 
-- [ ] Code + tests, docs, changelog; sc-build (fmt, Clippy, tests, musl build without the warning); kernel-check prints ready's time.
+- [x] Code + tests, docs, changelog (cd1ab4c, fmt e6719bb). sc-build at e6719bb: fmt, Clippy x2 (+ indexing, arithmetic), 852 + 97 tests. kernel-check there: 19 pass, 0 fail, 2 skip, musl build under -D warnings; ready 62-122 ms in six lab agents (no Kubernetes).
+- [ ] Loopback test: identities 404 for 8 s, then listed within 2 s. Then stage; node numbers (Kubernetes mode, real CRD) come with a release.
 
 ### CNI ADD timing — #396, 2026-11-06
 
