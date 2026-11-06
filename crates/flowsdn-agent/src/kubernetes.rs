@@ -64,6 +64,10 @@ pub struct Settings {
     /// `service.flowsdn.io/forwarding-mode` annotation overrides: how traffic
     /// from outside reaches a backend on another node.
     pub lb_mode: LbMode,
+    /// `nat46x64` (default off; spec 04 §3.15): traffic from outside reaches a
+    /// frontend with no backend of its family through the other family's
+    /// backends on other nodes.
+    pub nat46x64: bool,
     /// Cluster identity allocation (spec 03 §3.3, #291), default on: watch
     /// Namespaces and FlowsdnIdentity objects and hold an identity for each
     /// local Pod's labels.
@@ -186,6 +190,7 @@ impl Settings {
             node_port: flag("node-port", true)?,
             maglev,
             lb_mode,
+            nat46x64: flag("nat46x64", false)?,
             identity_allocation: flag("identity-allocation", true)?,
             network_policy: flag("network-policy", true)?,
             flowsdn_policy: flag("flowsdn-policy", false)?,

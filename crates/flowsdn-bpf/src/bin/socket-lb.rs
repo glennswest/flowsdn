@@ -21,10 +21,11 @@
 
 use aya_ebpf::{
     EbpfContext,
-    bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, __sk_buff, bpf_fib_lookup, bpf_sock_addr},
+    bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, TC_ACT_SHOT, __sk_buff, bpf_fib_lookup, bpf_sock_addr},
     helpers::{
-        bpf_check_mtu, bpf_fib_lookup as fib_lookup, bpf_get_netns_cookie, bpf_get_prandom_u32,
-        bpf_get_socket_cookie, bpf_ktime_get_ns, bpf_redirect, bpf_redirect_neigh,
+        bpf_check_mtu, bpf_csum_diff, bpf_fib_lookup as fib_lookup, bpf_get_netns_cookie,
+        bpf_get_prandom_u32, bpf_get_socket_cookie, bpf_ktime_get_ns, bpf_redirect,
+        bpf_redirect_neigh, bpf_skb_change_proto,
     },
     btf_maps::{Array as BtfArray, HashOfMaps},
     macros::{btf_map, cgroup_sock_addr, classifier, map},
@@ -621,9 +622,12 @@ pub fn sock6_getpeername(ctx: SockAddrContext) -> i32 {
 // reply's source to the frontend, so replies skip this node. A too-big UDP
 // packet goes without the option: DSR ICMP errors are not implemented.
 //
+// A frontend whose master carries `NAT46X64` (spec 04 §3.15, spec 05 §3.1) has
+// backends of the other family, on other nodes: see "Service NAT46/64" below.
+//
 // Every direction of a flow is remembered in one LRU map, so a connection
-// keeps its backend and NAT port. Neither program ever drops a packet:
-// anything it does not handle passes untouched.
+// keeps its backend and NAT port. Neither program drops a packet it has not
+// begun to translate: anything it does not handle passes untouched.
 
 /// One direction of a translated flow: `a:ap -> b:bp`.
 #[repr(C)]
@@ -649,6 +653,8 @@ const SNAT_REPLY: u8 = 2;
 const FLOW_SNAT: u8 = 1;
 /// A forward flow to a backend on another node, keeping the client's source.
 const FLOW_DSR: u8 = 2;
+/// A flow translated between IPv4 and IPv6.
+const FLOW_XLATE: u8 = 4;
 /// The IPv4 DSR option's type (`IPOPT_COPY | 0x1a`) and length.
 const DSR_OPT4: [u8; 2] = [0x9a, 8];
 /// The IPv6 DSR Destination Options header's length and its option's type and
@@ -1079,6 +1085,10 @@ fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
     };
     // SAFETY: LRU value copied at once, never written through.
     if let Some(flow) = unsafe { NODEPORT4.get(&key).copied() } {
+        // A NAT64 flow's port reservation: its reply entry is in XLATE4.
+        if flow.flags & FLOW_XLATE != 0 {
+            return None;
+        }
         return snat_reply4(ctx, tuple, flow);
     }
     key.direction = FORWARD;
@@ -1457,6 +1467,9 @@ const STEP_PASS: i32 = 0;
 const STEP_REPLY: i32 = 1;
 const STEP_NEW: i32 = 2;
 const STEP_FORWARD: i32 = 3;
+/// A translated flow's reply and, on the IPv6 side, its forward packet.
+const STEP_XLATE_REPLY: i32 = 4;
+const STEP_XLATE_FORWARD: i32 = 5;
 
 /// [`dsr_backend4`] for IPv6: the option is a Destination Options header right
 /// after the fixed one, its next header the L4 protocol.
@@ -1533,6 +1546,11 @@ fn classify6(ctx: &TcContext) -> Option<i32> {
                 },
             ),
         }
+    };
+    let step = match step {
+        STEP_REPLY if flow.flags & FLOW_XLATE != 0 => STEP_XLATE_REPLY,
+        STEP_FORWARD if flow.flags & FLOW_XLATE != 0 => STEP_XLATE_FORWARD,
+        other => other,
     };
     // SAFETY: this CPU's slot, valid for the whole invocation and used by
     // nothing else meanwhile (see fib6).
@@ -1676,7 +1694,7 @@ fn local6(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Option<()> 
 /// A new IPv6 flow to a node-local frontend: pick a backend and, for one on
 /// another node, a NAT port; record both directions in [`NODEPORT6`] and
 /// leave the forward entry in the [`INGRESS6`] slot. 0 when the frame is not
-/// ours.
+/// ours, [`NEW_NAT64`] when its frontend's backends are IPv4.
 #[inline(never)]
 fn new_flow6(skb: *mut __sk_buff) -> i32 {
     let ctx = TcContext::new(skb);
@@ -1686,13 +1704,10 @@ fn new_flow6(skb: *mut __sk_buff) -> i32 {
     // SAFETY: the slot ingress6 filled in this invocation; nothing else
     // refers to it while this function runs.
     let state = unsafe { &mut *state };
-    match new_flow6_in(&ctx, &state.tuple, &mut state.flow) {
-        Some(()) => 1,
-        None => 0,
-    }
+    new_flow6_in(&ctx, &state.tuple, &mut state.flow).unwrap_or(0)
 }
 #[inline(always)]
-fn new_flow6_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> Option<()> {
+fn new_flow6_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> Option<i32> {
     let (proto, client, front, client_port, front_port) = *tuple;
     let mut service_key = Lb6Key {
         address: front,
@@ -1704,6 +1719,9 @@ fn new_flow6_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> O
     };
     // SAFETY: see lookup6.
     let service = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
+    if service.service_flags() & service_flags::NAT46X64 != 0 {
+        return Some(NEW_NAT64);
+    }
     let id = match maglev6(&service, client, client_port, front_port, proto) {
         Some(id) => id,
         None => {
@@ -1773,7 +1791,7 @@ fn new_flow6_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> O
         NODEPORT6.insert(&reverse, &other, 0).ok()?;
     }
     NODEPORT6.insert(&key, flow, 0).ok()?;
-    Some(())
+    Some(1)
 }
 
 /// [`nodeport4_out`] for IPv6.
@@ -1801,6 +1819,544 @@ fn nodeport6_out(ctx: &TcContext) -> Option<()> {
     )
 }
 
+// Service NAT46/64 (spec 04 §3.15; ADR-0011 #79; the RFC 6052 gateway is
+// milestone 3). A frontend's master with `NAT46X64` means its backend IDs are
+// in the other family's backend map. Its flows are always source-NATed to this
+// node's address of the backend's family on a NAT port, and leave by the FIB:
+// the backend must be on another node, since a local pod's reply to this node's
+// address is local input and never reaches the uplink. The agent gives such a
+// frontend only other nodes' backends; a route that turns out local passes
+// untouched. Never DSR, and only TCP/UDP with a bare header: IPv4 options,
+// fragments and UDP without a checksum (IPv6 requires one) pass untouched, as
+// does a packet too big for the device once translated.
+//
+// Entries, one per direction, keyed by the tuple on the wire. IPv6-keyed ones
+// are in NODEPORT6 with FLOW_XLATE and IPv4-mapped addresses for the IPv4 side;
+// IPv4-keyed ones need room for IPv6 addresses, so they are in XLATE4:
+//   NAT46 forward  XLATE4     client4, front4        -> backend6, nat6:port
+//   NAT46 reply    NODEPORT6  backend6, nat6:port    -> front4, client4
+//   NAT64 forward  NODEPORT6  client6, front6        -> backend4, nat4:port
+//   NAT64 reply    XLATE4     backend4, nat4:port    -> front6, client6
+// NAT64 also reserves its port in NODEPORT4, so plain SNAT flows do not take it.
+
+/// See above: IPv4-keyed entries of translated flows.
+#[map(name = "flowsdn_nodeport4_xlate")]
+static XLATE4: LruHashMap<Nodeport4Key, Nodeport6Value> = LruHashMap::with_max_entries(65536, 0);
+
+/// [`new_flow6`]'s answer for a NAT64 frontend.
+const NEW_NAT64: i32 = 2;
+/// The bytes an IPv6 header adds to an IPv4 one.
+const XLATE_GROWTH: i32 = 20;
+/// Offsets of the L4 ports and checksums once the frame is IPv4 (bare header).
+const IP4_L4: usize = 34;
+const IP4_UDP_CHECK: usize = 40;
+const IP4_TCP_CHECK: usize = 50;
+
+/// The IPv4 side's state between its BPF functions, as [`Ingress6`] is IPv6's.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Xlate4 {
+    src: [u8; 4],
+    dst: [u8; 4],
+    sport: [u8; 2],
+    dport: [u8; 2],
+    proto: u8,
+    pad: [u8; 3],
+    flow: Nodeport6Value,
+}
+/// The [`Xlate4`] slot: per CPU for the reason [`FIB6`] is.
+#[map(name = "flowsdn_nodeport4_xlate_scratch")]
+static XLATE4_SLOT: PerCpuArray<Xlate4> = PerCpuArray::with_max_entries(1, 0);
+
+#[inline(always)]
+fn mapped6(address: [u8; 4]) -> [u8; 16] {
+    ip6_bytes([0, 0, MAPPED, u32::from_ne_bytes(address)])
+}
+#[inline(always)]
+fn unmapped(address: [u8; 16]) -> [u8; 4] {
+    let [_, _, _, word] = ip6_words(address);
+    word.to_ne_bytes()
+}
+/// The checksum's offset and the replace flags of `proto`.
+#[inline(always)]
+fn check_of(proto: u8, tcp: usize, udp: usize) -> (usize, u64) {
+    if proto == 6 {
+        (tcp, 0)
+    } else {
+        (udp, BPF_F_MARK_MANGLED_0)
+    }
+}
+/// A difference of the pseudo-header's addresses, for `l4_csum_replace` with no
+/// size. Length and protocol sum alike in both families' pseudo-headers. `None`
+/// on a helper error.
+#[inline(always)]
+fn address_diff(old: &[u32], new: &[u32]) -> Option<u64> {
+    // SAFETY: both are live buffers of the sizes given; the helper only reads
+    // them and keeps no pointer.
+    let diff = unsafe {
+        bpf_csum_diff(
+            old.as_ptr().cast_mut(),
+            u32::try_from(old.len().checked_mul(4)?).ok()?,
+            new.as_ptr().cast_mut(),
+            u32::try_from(new.len().checked_mul(4)?).ok()?,
+            0,
+        )
+    };
+    u64::try_from(diff).ok()
+}
+/// Change the frame's L3 protocol. The kernel moves what follows the Ethernet
+/// header and leaves the new network header for the program to write.
+#[inline(always)]
+fn change_proto(ctx: &TcContext, ethertype: [u8; 2]) -> Option<()> {
+    // SAFETY: a live skb; the proto is in network order, as the helper wants.
+    let result = unsafe { bpf_skb_change_proto(ctx.skb.skb, u16::from_ne_bytes(ethertype), 0) };
+    (result == 0).then_some(())
+}
+/// Replace the L4 ports and write them, once the L3 header is the new one.
+#[inline(always)]
+fn set_ports(
+    ctx: &TcContext,
+    at: usize,
+    check: (usize, u64),
+    diff: u64,
+    old: [[u8; 2]; 2],
+    new: [[u8; 2]; 2],
+) -> Option<()> {
+    let (offset, mangled) = check;
+    let [old_s, old_d] = old;
+    let [new_s, new_d] = new;
+    let [a, b] = old_s;
+    let [c, d] = old_d;
+    let old_ports = u32::from_ne_bytes([a, b, c, d]);
+    let [a, b] = new_s;
+    let [c, d] = new_d;
+    let new_ports = [a, b, c, d];
+    ctx.l4_csum_replace(offset, 0, diff, BPF_F_PSEUDO_HDR | mangled)
+        .ok()?;
+    ctx.l4_csum_replace(
+        offset,
+        u64::from(old_ports),
+        u64::from(u32::from_ne_bytes(new_ports)),
+        mangled | 4,
+    )
+    .ok()?;
+    ctx.store(at, &new_ports, 0).ok()
+}
+
+/// The IPv4 path's first step, before [`ingress4`]: a reply of a NAT64 flow, or
+/// a packet to a NAT46 frontend. Fills [`XLATE4_SLOT`]; anything else is
+/// [`STEP_PASS`], at the cost of one service lookup.
+#[inline(never)]
+fn xlate4(skb: *mut __sk_buff) -> i32 {
+    classify4(&TcContext::new(skb)).unwrap_or(STEP_PASS)
+}
+#[inline(always)]
+fn classify4(ctx: &TcContext) -> Option<i32> {
+    let state = XLATE4_SLOT.get_ptr_mut(0)?;
+    let (l4, proto, src, dst, sport, dport) = tuple4(ctx)?;
+    if l4 != IP4_L4 {
+        return None;
+    }
+    let mut key = Nodeport4Key {
+        a: src,
+        b: dst,
+        ap: sport,
+        bp: dport,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    let reply = if u32::from(u16::from_be_bytes(dport)) >= NAT_PORT_MIN {
+        // SAFETY: LRU value copied at once, never written through.
+        unsafe { XLATE4.get(&key).copied() }
+    } else {
+        None
+    };
+    let (step, flow) = match reply {
+        Some(flow) => (STEP_XLATE_REPLY, flow),
+        None => {
+            let service_key = Lb4Key {
+                address: Be32(dst),
+                dport: Be16(dport),
+                backend_slot: 0,
+                proto,
+                scope: 1,
+                pad: [0; 2],
+            };
+            // SAFETY: see lookup4.
+            let service = unsafe { LB4_SERVICES.get(&service_key).copied() }?;
+            if service.service_flags() & service_flags::NAT46X64 == 0 {
+                return None;
+            }
+            key.direction = FORWARD;
+            // SAFETY: LRU value copied at once, never written through.
+            match unsafe { XLATE4.get(&key).copied() } {
+                Some(known) => (STEP_FORWARD, known),
+                None => (
+                    STEP_NEW,
+                    Nodeport6Value {
+                        address: [0; 16],
+                        port: [0; 2],
+                        flags: 0,
+                        pad: 0,
+                        other: [0; 16],
+                        other_port: [0; 2],
+                        pad2: [0; 2],
+                    },
+                ),
+            }
+        }
+    };
+    let slot = Xlate4 {
+        src,
+        dst,
+        sport,
+        dport,
+        proto,
+        pad: [0; 3],
+        flow,
+    };
+    // SAFETY: this CPU's slot, valid for the whole invocation and used by
+    // nothing else meanwhile (see fib6).
+    unsafe { state.write(slot) };
+    Some(step)
+}
+
+/// A new flow to a NAT46 frontend: pick an IPv6 backend, claim a NAT port and
+/// record both directions. 0 when the frame is not to be translated.
+#[inline(never)]
+fn new_flow46(skb: *mut __sk_buff) -> i32 {
+    let ctx = TcContext::new(skb);
+    let Some(state) = XLATE4_SLOT.get_ptr_mut(0) else {
+        return 0;
+    };
+    // SAFETY: the slot xlate4 filled in this invocation; nothing else refers
+    // to it while this function runs.
+    let state = unsafe { &mut *state };
+    match new_flow46_in(&ctx, state) {
+        Some(()) => 1,
+        None => 0,
+    }
+}
+#[inline(always)]
+fn new_flow46_in(ctx: &TcContext, state: &mut Xlate4) -> Option<()> {
+    let (proto, client, front, client_port, front_port) =
+        (state.proto, state.src, state.dst, state.sport, state.dport);
+    let mut service_key = Lb4Key {
+        address: Be32(front),
+        dport: Be16(front_port),
+        backend_slot: 0,
+        proto,
+        scope: 1,
+        pad: [0; 2],
+    };
+    // SAFETY: see lookup4.
+    let service = unsafe { LB4_SERVICES.get(&service_key).copied() }?;
+    let id = match maglev4(&service, client, client_port, front_port, proto) {
+        Some(id) => id,
+        None => {
+            service_key.backend_slot = slot(service.count)?;
+            // SAFETY: see lookup4.
+            let entry = unsafe { LB4_SERVICES.get(&service_key).copied() }?;
+            entry.backend_id()
+        }
+    };
+    // SAFETY: see lookup6.
+    let chosen = unsafe { LB6_BACKENDS.get(&id).copied() }?;
+    let (result, source) = fib6(ctx, proto, [0; 16], chosen.address, BPF_FIB_LOOKUP_SRC)?;
+    // SAFETY: the per-CPU slot just filled; plain field reads, the source
+    // being the active member after an IPv6 lookup.
+    let (device, nat) = unsafe { ((*source).ifindex, (*source).__bindgen_anon_3.ipv6_src) };
+    if !forwarded(result) || device != uplink(ctx) {
+        return None;
+    }
+    let nat = ip6_bytes(nat);
+    let reply = Nodeport6Value {
+        address: mapped6(front),
+        port: front_port,
+        flags: FLOW_XLATE,
+        pad: 0,
+        other: mapped6(client),
+        other_port: client_port,
+        pad2: [0; 2],
+    };
+    // The reply entry first: a reply must never find a flow it cannot undo.
+    let nat_port = claim_port6((chosen.address, chosen.port.0), nat, proto, &reply)?;
+    state.flow = Nodeport6Value {
+        address: chosen.address,
+        port: chosen.port.0,
+        flags: FLOW_XLATE,
+        pad: 0,
+        other: nat,
+        other_port: nat_port,
+        pad2: [0; 2],
+    };
+    let key = Nodeport4Key {
+        a: client,
+        b: front,
+        ap: client_port,
+        bp: front_port,
+        proto,
+        direction: FORWARD,
+        pad: [0; 2],
+    };
+    XLATE4.insert(&key, &state.flow, 0).ok()
+}
+
+/// [`new_flow46`] for a NAT64 frontend, on the [`INGRESS6`] slot.
+#[inline(never)]
+fn new_flow64(skb: *mut __sk_buff) -> i32 {
+    let ctx = TcContext::new(skb);
+    let Some(state) = INGRESS6.get_ptr_mut(0) else {
+        return 0;
+    };
+    // SAFETY: the slot ingress6 filled in this invocation; nothing else refers
+    // to it while this function runs.
+    let state = unsafe { &mut *state };
+    match new_flow64_in(&ctx, &state.tuple, &mut state.flow) {
+        Some(()) => 1,
+        None => 0,
+    }
+}
+#[inline(always)]
+fn new_flow64_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> Option<()> {
+    let (proto, client, front, client_port, front_port) = *tuple;
+    let mut service_key = Lb6Key {
+        address: front,
+        dport: Be16(front_port),
+        backend_slot: 0,
+        proto,
+        scope: 1,
+        pad: [0; 2],
+    };
+    // SAFETY: see lookup6.
+    let service = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
+    let id = match maglev6(&service, client, client_port, front_port, proto) {
+        Some(id) => id,
+        None => {
+            service_key.backend_slot = slot(service.count)?;
+            // SAFETY: see lookup6.
+            let entry = unsafe { LB6_SERVICES.get(&service_key).copied() }?;
+            entry.backend_id()
+        }
+    };
+    // SAFETY: see lookup4.
+    let chosen = unsafe { LB4_BACKENDS.get(&id).copied() }?;
+    let backend = (chosen.address.0, chosen.port.0);
+    let (result, fib) = fib4(ctx, proto, [0; 4], backend.0, BPF_FIB_LOOKUP_SRC);
+    if !forwarded(result) || fib.ifindex != uplink(ctx) {
+        return None;
+    }
+    // SAFETY: the active member after an IPv4 lookup.
+    let nat = unsafe { fib.__bindgen_anon_3.ipv4_src }.to_ne_bytes();
+    let reservation = Nodeport4Value {
+        address: [0; 4],
+        port: [0; 2],
+        flags: FLOW_XLATE,
+        pad: 0,
+        other: [0; 4],
+        other_port: [0; 2],
+        pad2: [0; 2],
+    };
+    let nat_port = claim_port(backend, nat, proto, &reservation)?;
+    let reply_key = Nodeport4Key {
+        a: backend.0,
+        b: nat,
+        ap: backend.1,
+        bp: nat_port,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    let reply = Nodeport6Value {
+        address: front,
+        port: front_port,
+        flags: FLOW_XLATE,
+        pad: 0,
+        other: client,
+        other_port: client_port,
+        pad2: [0; 2],
+    };
+    // The reply entry first: a reply must never find a flow it cannot undo.
+    XLATE4.insert(&reply_key, &reply, 0).ok()?;
+    flow.address = mapped6(backend.0);
+    flow.port = backend.1;
+    flow.flags = FLOW_XLATE;
+    flow.other = mapped6(nat);
+    flow.other_port = nat_port;
+    let key = Nodeport6Key {
+        a: client,
+        b: front,
+        ap: client_port,
+        bp: front_port,
+        proto,
+        direction: FORWARD,
+        pad: [0; 2],
+    };
+    NODEPORT6.insert(&key, flow, 0).ok()
+}
+
+/// The [`XLATE4_SLOT`] frame as IPv6: a NAT46 flow's packet to its backend, or
+/// (`reply`) a NAT64 flow's reply to its client.
+#[inline(never)]
+fn to_v6(skb: *mut __sk_buff, reply: bool) -> i32 {
+    let ctx = TcContext::new(skb);
+    let Some(state) = XLATE4_SLOT.get_ptr_mut(0) else {
+        return TC_ACT_OK;
+    };
+    // SAFETY: the slot xlate4 (and new_flow46) filled; read only.
+    let state = unsafe { &*state };
+    let flow = &state.flow;
+    let (src, dst) = if reply {
+        ((flow.address, flow.port), (flow.other, flow.other_port))
+    } else {
+        ((flow.other, flow.other_port), (flow.address, flow.port))
+    };
+    to_v6_in(&ctx, state, src, dst).unwrap_or(TC_ACT_OK)
+}
+/// `None` before anything is changed, so the frame passes untouched. A helper
+/// that fails once the frame has begun to change drops it (spec 04 §3.15).
+#[inline(always)]
+fn to_v6_in(
+    ctx: &TcContext,
+    state: &Xlate4,
+    src: ([u8; 16], [u8; 2]),
+    dst: ([u8; 16], [u8; 2]),
+) -> Option<i32> {
+    let proto = state.proto;
+    let (check_old, mangled) = check_of(proto, IP4_TCP_CHECK, IP4_UDP_CHECK);
+    let fragment = u16::from_be_bytes(ctx.load::<[u8; 2]>(20).ok()?);
+    if fragment & 0x3fff != 0 || (proto == 17 && ctx.load::<u16>(check_old).ok()? == 0) {
+        return None;
+    }
+    ttl_ok(ctx)?;
+    let (result, fib) = fib6(ctx, proto, src.0, dst.0, 0)?;
+    if !forwarded(result) {
+        return None;
+    }
+    // SAFETY: the per-CPU slot fib6 just filled; a plain field read.
+    let device = unsafe { (*fib).ifindex };
+    let mut mtu: u32 = 0;
+    // SAFETY: a live skb; `mtu` is a local the helper writes.
+    let fits = unsafe { bpf_check_mtu(ctx.skb.skb.cast(), device, &mut mtu, XLATE_GROWTH, 0) };
+    if fits != 0 {
+        return None;
+    }
+    let [_, tos] = ctx.load::<[u8; 2]>(14).ok()?;
+    let total = u16::from_be_bytes(ctx.load::<[u8; 2]>(16).ok()?);
+    let ttl = ctx.load::<u8>(22).ok()?;
+    let [p0, p1] = total.checked_sub(20)?.to_be_bytes();
+    let old = [u32::from_ne_bytes(state.src), u32::from_ne_bytes(state.dst)];
+    let [s0, s1, s2, s3] = ip6_words(src.0);
+    let [d0, d1, d2, d3] = ip6_words(dst.0);
+    let diff = address_diff(&old, &[s0, s1, s2, s3, d0, d1, d2, d3])?;
+    let head = [0x60 | (tos >> 4), tos << 4, 0, 0, p0, p1, proto, ttl];
+    let done = (|| {
+        change_proto(ctx, ETH_P_IPV6)?;
+        ctx.store(12, &ETH_P_IPV6, 0).ok()?;
+        ctx.store(14, &head, 0).ok()?;
+        ctx.store(IP6_SRC, &src.0, 0).ok()?;
+        ctx.store(IP6_DST, &dst.0, 0).ok()?;
+        set_ports(
+            ctx,
+            IP6_SPORT,
+            (check_of(proto, IP6_TCP_CHECK, IP6_UDP_CHECK).0, mangled),
+            diff,
+            [state.sport, state.dport],
+            [src.1, dst.1],
+        )?;
+        redirect6(ctx, result, fib)
+    })();
+    Some(done.unwrap_or(TC_ACT_SHOT))
+}
+
+/// The [`INGRESS6`] slot's frame as IPv4: a NAT64 flow's packet to its backend,
+/// or (`reply`) a NAT46 flow's reply to its client.
+#[inline(never)]
+fn to_v4(skb: *mut __sk_buff, reply: bool) -> i32 {
+    let ctx = TcContext::new(skb);
+    let Some(state) = INGRESS6.get_ptr_mut(0) else {
+        return TC_ACT_OK;
+    };
+    // SAFETY: the slot ingress6 (and new_flow64) filled; read only.
+    let state = unsafe { &*state };
+    let flow = &state.flow;
+    let (src, dst) = if reply {
+        (
+            (unmapped(flow.address), flow.port),
+            (unmapped(flow.other), flow.other_port),
+        )
+    } else {
+        (
+            (unmapped(flow.other), flow.other_port),
+            (unmapped(flow.address), flow.port),
+        )
+    };
+    to_v4_in(&ctx, &state.tuple, src, dst).unwrap_or(TC_ACT_OK)
+}
+/// See [`to_v6_in`]. The IPv4 header says don't fragment, as IPv6 forwarding
+/// never would; its checksum is computed here and adjusted by [`redirect`].
+#[inline(always)]
+fn to_v4_in(
+    ctx: &TcContext,
+    tuple: &Tuple6,
+    src: ([u8; 4], [u8; 2]),
+    dst: ([u8; 4], [u8; 2]),
+) -> Option<i32> {
+    let (proto, old_src, old_dst, old_sport, old_dport) = *tuple;
+    let (old_check, mangled) = check_of(proto, IP6_TCP_CHECK, IP6_UDP_CHECK);
+    if proto == 17 && ctx.load::<u16>(old_check).ok()? == 0 {
+        return None;
+    }
+    hops_ok(ctx)?;
+    let (result, fib) = fib4(ctx, proto, src.0, dst.0, 0);
+    if !forwarded(result) {
+        return None;
+    }
+    let [b0, b1] = ctx.load::<[u8; 2]>(14).ok()?;
+    let tos = ((b0 & 15) << 4) | (b1 >> 4);
+    let payload = u16::from_be_bytes(ctx.load::<[u8; 2]>(IP6_PAYLOAD).ok()?);
+    let total = payload.checked_add(20)?;
+    let hops = ctx.load::<u8>(IP6_HOPS).ok()?;
+    let [o0, o1, o2, o3] = ip6_words(old_src);
+    let [o4, o5, o6, o7] = ip6_words(old_dst);
+    let new = [u32::from_ne_bytes(src.0), u32::from_ne_bytes(dst.0)];
+    let diff = address_diff(&[o0, o1, o2, o3, o4, o5, o6, o7], &new)?;
+    let (src_word, dst_word) = (u32::from_be_bytes(src.0), u32::from_be_bytes(dst.0));
+    let sum = 0x4500u32
+        .wrapping_add(u32::from(tos))
+        .wrapping_add(u32::from(total))
+        .wrapping_add(0x4000)
+        .wrapping_add((u32::from(hops) << 8) | u32::from(proto))
+        .wrapping_add(src_word >> 16)
+        .wrapping_add(src_word & 0xffff)
+        .wrapping_add(dst_word >> 16)
+        .wrapping_add(dst_word & 0xffff);
+    let sum = (sum & 0xffff).wrapping_add(sum >> 16);
+    let sum = (sum & 0xffff).wrapping_add(sum >> 16);
+    let check = (!(sum as u16)).to_be_bytes();
+    let [t0, t1] = total.to_be_bytes();
+    let [c0, c1] = check;
+    let head = [0x45, tos, t0, t1, 0, 0, 0x40, 0, hops, proto, c0, c1];
+    let done = (|| {
+        change_proto(ctx, ETH_P_IPV4)?;
+        ctx.store(12, &ETH_P_IPV4, 0).ok()?;
+        ctx.store(14, &head, 0).ok()?;
+        ctx.store(26, &src.0, 0).ok()?;
+        ctx.store(30, &dst.0, 0).ok()?;
+        set_ports(
+            ctx,
+            IP4_L4,
+            (check_of(proto, IP4_TCP_CHECK, IP4_UDP_CHECK).0, mangled),
+            diff,
+            [old_sport, old_dport],
+            [src.1, dst.1],
+        )?;
+        redirect(ctx, result, &fib)
+    })();
+    Some(done.unwrap_or(TC_ACT_SHOT))
+}
+
 // Each family's path is its own BPF function (a BPF-to-BPF call), so each
 // gets its own stack frame: inlined together they exceed the 512-byte stack.
 #[inline(never)]
@@ -1824,11 +2380,24 @@ pub fn nodeport_ingress(ctx: TcContext) -> i32 {
     match ctx.load::<[u8; 2]>(12) {
         Ok(ETH_P_IPV6) => match ingress6(skb) {
             STEP_REPLY => snat_reply6(skb),
-            STEP_NEW if new_flow6(skb) != 0 => nodeport_forward6(skb),
+            STEP_NEW => match new_flow6(skb) {
+                0 => TC_ACT_OK,
+                NEW_NAT64 if new_flow64(skb) != 0 => to_v4(skb, false),
+                NEW_NAT64 => TC_ACT_OK,
+                _ => nodeport_forward6(skb),
+            },
             STEP_FORWARD => nodeport_forward6(skb),
+            STEP_XLATE_REPLY => to_v4(skb, true),
+            STEP_XLATE_FORWARD => to_v4(skb, false),
             _ => TC_ACT_OK,
         },
-        _ => ingress4(skb),
+        _ => match xlate4(skb) {
+            STEP_XLATE_REPLY => to_v6(skb, true),
+            STEP_NEW if new_flow46(skb) != 0 => to_v6(skb, false),
+            STEP_NEW => TC_ACT_OK,
+            STEP_FORWARD => to_v6(skb, false),
+            _ => ingress4(skb),
+        },
     }
 }
 #[classifier]

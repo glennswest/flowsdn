@@ -52,7 +52,8 @@ impl std::fmt::Display for Address {
 }
 
 /// One frontend and the backends it balances over. Backends of the other
-/// family are ignored; duplicates collapse.
+/// family are ignored, and with `nat46x64` those of the same family; duplicates
+/// collapse.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Service {
     pub frontend: Address,
@@ -69,6 +70,10 @@ pub struct Service {
     /// Direct server return (spec 05 §3.12): the master carries `FWD_MODE_DSR`.
     /// Only the uplink NodePort programs (scope 1) read it.
     pub dsr: bool,
+    /// Service NAT46/64 (spec 04 §3.15): the backends are the other family's
+    /// and the master carries `NAT46X64`. Only the uplink NodePort programs
+    /// (scope 1) read it.
+    pub nat46x64: bool,
 }
 
 /// The four maps' contents as raw map bytes, keyed as the kernel keys them.
@@ -284,7 +289,7 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
         let backends: BTreeSet<Address> = service
             .backends
             .iter()
-            .filter(|b| b.ip.is_ipv4() == frontend.ip.is_ipv4())
+            .filter(|b| (b.ip.is_ipv4() == frontend.ip.is_ipv4()) != service.nat46x64)
             .copied()
             .collect();
         let count = u16::try_from(backends.len())
@@ -307,11 +312,14 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
         } else {
             Algorithm::Random
         };
-        let routable = if service.dsr {
+        let mut routable = if service.dsr {
             service_flags::ROUTABLE | service_flags::FWD_MODE_DSR
         } else {
             service_flags::ROUTABLE
         };
+        if service.nat46x64 {
+            routable |= service_flags::NAT46X64;
+        }
         match service.affinity {
             Some(seconds) => {
                 master.set_service_flags(routable | service_flags::SESSION_AFFINITY);

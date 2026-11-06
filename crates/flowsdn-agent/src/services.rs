@@ -49,6 +49,10 @@ pub struct ServiceInfo {
     /// (`lb-mode: hybrid` differs), for traffic from outside the cluster.
     pub dsr_tcp: bool,
     pub dsr_other: bool,
+    /// Service NAT46/64 (`kubernetes.nat46x64`): a node-local frontend with no
+    /// backend of its own family balances over the other family's backends on
+    /// other nodes.
+    pub nat46x64: bool,
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Endpoint {
@@ -105,13 +109,14 @@ fn protocol(name: &str) -> Option<u8> {
 }
 
 /// The backends of `service`'s `port` in `family` (true: IPv6), limited to
-/// endpoints on node `only` when given.
+/// endpoints on node `only` when given and not on node `not_on` when given.
 fn backends(
     port: &ServicePort,
     proto: u8,
     v6: bool,
     slices: &[&SliceInfo],
     only: Option<&str>,
+    not_on: Option<&str>,
 ) -> Vec<Address> {
     let family = if v6 { "IPv6" } else { "IPv4" };
     let mut ready = BTreeSet::new();
@@ -126,7 +131,9 @@ fn backends(
             continue;
         };
         for endpoint in &slice.endpoints {
-            if only.is_some_and(|node| endpoint.node_name != node) {
+            if only.is_some_and(|node| endpoint.node_name != node)
+                || not_on.is_some_and(|node| endpoint.node_name == node)
+            {
                 continue;
             }
             let set = if endpoint.ready {
@@ -219,6 +226,20 @@ pub fn frontends(
                     } else {
                         only
                     };
+                    let same = backends(port, proto, ip.is_ipv6(), slices, only, None);
+                    // Translated backends must be on other nodes: a local pod's
+                    // reply to this node's address never reaches the uplink. So
+                    // `externalTrafficPolicy: Local` never translates.
+                    let translated = if service.nat46x64
+                        && scope == SCOPE_NODE_LOCAL
+                        && same.is_empty()
+                        && !service.external_local
+                    {
+                        backends(port, proto, !ip.is_ipv6(), slices, None, Some(local))
+                    } else {
+                        Vec::new()
+                    };
+                    let nat46x64 = !translated.is_empty();
                     // An address can front one Service port; the first one wins.
                     out.entry((frontend, scope)).or_insert_with(|| Frontend {
                         namespace: service.namespace.clone(),
@@ -228,16 +249,18 @@ pub fn frontends(
                         kind,
                         service: Service {
                             frontend,
-                            backends: backends(port, proto, ip.is_ipv6(), slices, only),
+                            backends: if nat46x64 { translated } else { same },
                             affinity: service.affinity,
                             scope,
                             maglev: service.maglev && scope == SCOPE_NODE_LOCAL,
                             dsr: scope == SCOPE_NODE_LOCAL
+                                && !nat46x64
                                 && if proto == PROTO_TCP {
                                     service.dsr_tcp
                                 } else {
                                     service.dsr_other
                                 },
+                            nat46x64,
                         },
                     });
                 }
@@ -302,6 +325,14 @@ pub fn service_list(frontends: &[Frontend], ids: &BTreeMap<(Address, u8), u16>) 
                 }
                 if let (true, Some(object)) = (f.service.dsr, flags.as_object_mut()) {
                     object.insert("forwarding-mode".into(), json!("dsr"));
+                }
+                if let (true, Some(object)) = (f.service.nat46x64, flags.as_object_mut()) {
+                    let policy = if f.service.frontend.ip.is_ipv4() {
+                        "Nat46"
+                    } else {
+                        "Nat64"
+                    };
+                    object.insert("nat-policy".into(), json!(policy));
                 }
                 let spec = json!({"id":id,"frontend-address":front,"backend-addresses":backends,
                     "flags":flags});

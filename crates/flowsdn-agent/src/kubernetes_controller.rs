@@ -370,7 +370,8 @@ impl Controller {
                 }
                 if settings.service_lb {
                     let (svc_view, svc_lb) = (Arc::clone(&watch_view), lb.clone());
-                    let (maglev, lb_mode) = (settings.maglev, settings.lb_mode);
+                    let (maglev, lb_mode, nat46x64) =
+                        (settings.maglev, settings.lb_mode, settings.nat46x64);
                     parts.push(
                         watch_forever(
                             &client,
@@ -378,7 +379,7 @@ impl Controller {
                             "services-watch",
                             &watch_view,
                             move |state| {
-                                let rows = service_rows(state, maglev, lb_mode);
+                                let rows = service_rows(state, maglev, lb_mode, nat46x64);
                                 let frontends = {
                                     let mut view = lock(&svc_view);
                                     view.services = rows;
@@ -894,7 +895,12 @@ fn identity_rows(state: &WatchState) -> Vec<identity::Object> {
 }
 /// The Services; `maglev` is the `lb-algorithm` default a Service's
 /// annotation overrides, as its annotation does `lb_mode`.
-fn service_rows(state: &WatchState, maglev: bool, lb_mode: LbMode) -> Vec<ServiceInfo> {
+fn service_rows(
+    state: &WatchState,
+    maglev: bool,
+    lb_mode: LbMode,
+    nat46x64: bool,
+) -> Vec<ServiceInfo> {
     state
         .snapshot()
         .all()
@@ -932,6 +938,7 @@ fn service_rows(state: &WatchState, maglev: bool, lb_mode: LbMode) -> Vec<Servic
                     Some(mode) => mode == "dsr",
                     None => lb_mode == LbMode::Dsr,
                 },
+                nat46x64,
             }),
             _ => None,
         })

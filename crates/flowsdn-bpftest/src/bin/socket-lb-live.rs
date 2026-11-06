@@ -9,7 +9,7 @@
 //! node-local backend and the reply's source rewrite, checksums checked; and
 //! SNAT to a backend on another node with the FIB redirect, run as arriving
 //! on a dummy uplink in this netns; IPv4 and IPv6; Maglev backend selection
-//! checked against the planner's tables; and UDP socket termination
+//! checked against the planner's tables; service NAT46/64; and UDP socket termination
 //! through SOCK_DIAG when a backend leaves.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
@@ -53,6 +53,7 @@ fn service(frontend: &str, proto: u8, backends: &[&str]) -> Result<Service> {
         scope: socket::SCOPE_CLUSTER,
         maglev: false,
         dsr: false,
+        nat46x64: false,
     })
 }
 /// Plan from the kernel's maps and apply, as the agent's services thread does.
@@ -391,6 +392,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             scope: SCOPE_NODE_LOCAL,
             maglev: false,
             dsr: false,
+            nat46x64: false,
         });
     }
     program(lb, services)?;
@@ -440,8 +442,162 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     snat(lb, services)?;
     maglev(lb, services)?;
     dsr(lb, services)?;
+    nat46x64(lb, services)?;
     services.retain(|s| s.scope != SCOPE_NODE_LOCAL);
     Ok(())
+}
+
+/// Service NAT46/64 (spec 04 §3.15): a client of one family reaches a backend
+/// of the other on another node, source-NATed to this node's address there; the
+/// reply comes back in the client's family from the frontend.
+fn nat46x64(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
+    let up0 = ifindex("up0")?;
+    let (front, client, remote) = ([192, 0, 2, 20], [198, 51, 100, 9], [10, 9, 1, 5]);
+    let (front6, client6, remote6) = (
+        ip6("2001:db8:2::20")?,
+        ip6("2001:db8:64::9")?,
+        ip6("fd00:9:1::5")?,
+    );
+    for proto in [PROTO_TCP, PROTO_UDP] {
+        for (frontend, backend) in [
+            ("192.0.2.20:30096", "[fd00:9:1::5]:8080"),
+            ("[2001:db8:2::20]:30096", "10.9.1.5:8080"),
+        ] {
+            services.push(Service {
+                frontend: address(frontend, proto)?,
+                backends: vec![address(backend, proto)?],
+                affinity: None,
+                scope: SCOPE_NODE_LOCAL,
+                maglev: false,
+                dsr: false,
+                nat46x64: true,
+            });
+        }
+    }
+    program(lb, services)?;
+    for (proto, sport) in [(6u8, 42000u16), (17, 42001)] {
+        // NAT46; the second packet of the flow keeps the first one's NAT port.
+        let request = frame4(proto, client, front, sport, 30096, false);
+        let mut nat_port = None;
+        for _ in 0..2 {
+            let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+            let (src, dst, s, d, hops, l4_ok) = parse6(&out)?;
+            let length = u16::from_be_bytes(out.get(18..20).ok_or("ip")?.try_into()?);
+            if out.get(12..14) != Some(&[0x86, 0xdd][..])
+                || out.get(14).map(|b| b >> 4) != Some(6)
+                || out.get(20) != Some(&proto)
+                || (src, dst, d) != (front6, remote6, 8080)
+                || !(61000..=65535).contains(&s)
+                || nat_port.is_some_and(|p| p != s)
+                || hops != 63
+                || !l4_ok
+                || usize::from(length) != out.len().saturating_sub(54)
+            {
+                return Err(format!(
+                    "NAT46 forward proto {proto}: {src:?}:{s} -> {dst:?}:{d}, hops {hops}, checksum {l4_ok}, length {length}, {} bytes",
+                    out.len()
+                )
+                .into());
+            }
+            nat_port = Some(s);
+        }
+        let nat_port = nat_port.ok_or("no NAT port")?;
+        let reply = frame6(proto, remote6, front6, 8080, nat_port, false);
+        let out = run_on(lb, "nodeport_ingress", &reply, up0, TC_ACT_REDIRECT)?;
+        let (src, dst, s, d, ip_ok, l4_ok) = parse4(&out)?;
+        if out.get(12..14) != Some(&[0x08, 0x00][..])
+            || out.get(14) != Some(&0x45)
+            || (src, dst, s, d) != (front, client, 30096, sport)
+            || !ip_ok
+            || !l4_ok
+            || out.get(22) != Some(&63)
+        {
+            return Err(format!(
+                "NAT46 reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}, ip {ip_ok} l4 {l4_ok}, ttl {:?}",
+                out.get(22)
+            )
+            .into());
+        }
+
+        // NAT64.
+        let request = frame6(proto, client6, front6, sport, 30096, false);
+        let mut nat_port = None;
+        for _ in 0..2 {
+            let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+            let (src, dst, s, d, ip_ok, l4_ok) = parse4(&out)?;
+            let length = u16::from_be_bytes(out.get(16..18).ok_or("ip")?.try_into()?);
+            if out.get(12..14) != Some(&[0x08, 0x00][..])
+                || out.get(14) != Some(&0x45)
+                || out.get(23) != Some(&proto)
+                || (src, dst, d) != (front, remote, 8080)
+                || !(61000..=65535).contains(&s)
+                || nat_port.is_some_and(|p| p != s)
+                || out.get(22) != Some(&63)
+                || !ip_ok
+                || !l4_ok
+                || usize::from(length) != out.len().saturating_sub(14)
+            {
+                return Err(format!(
+                    "NAT64 forward proto {proto}: {src:?}:{s} -> {dst:?}:{d}, ip {ip_ok} l4 {l4_ok}, length {length}, {} bytes",
+                    out.len()
+                )
+                .into());
+            }
+            nat_port = Some(s);
+        }
+        let nat_port = nat_port.ok_or("no NAT port")?;
+        let reply = frame4(proto, remote, front, 8080, nat_port, false);
+        let out = run_on(lb, "nodeport_ingress", &reply, up0, TC_ACT_REDIRECT)?;
+        let (src, dst, s, d, hops, l4_ok) = parse6(&out)?;
+        if out.get(12..14) != Some(&[0x86, 0xdd][..])
+            || (src, dst, s, d) != (front6, client6, 30096, sport)
+            || hops != 63
+            || !l4_ok
+        {
+            return Err(format!(
+                "NAT64 reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}, hops {hops}, checksum {l4_ok}"
+            )
+            .into());
+        }
+    }
+    // Untranslatable: passes untouched. UDP without a checksum (IPv6 requires
+    // one), a first fragment, TTL 1, and a UDP packet too big once translated.
+    let no_checksum = frame4(17, client, front, 42100, 30096, true);
+    let mut fragment = frame4(6, client, front, 42101, 30096, false);
+    fragment.splice(20..22, [0x20, 0]);
+    let check = refreshed_ip_check(&fragment)?;
+    fragment.splice(24..26, check);
+    let mut expiring = frame4(6, client, front, 42102, 30096, false);
+    expiring.splice(22..23, [1]);
+    let check = refreshed_ip_check(&expiring)?;
+    expiring.splice(24..26, check);
+    let mut big = frame4(17, client, front, 42103, 30096, false);
+    big.resize(1514, 0);
+    big.splice(16..18, 1500u16.to_be_bytes());
+    big.splice(38..40, 1480u16.to_be_bytes());
+    let check = refreshed_ip_check(&big)?;
+    big.splice(24..26, check);
+    for (name, frame) in [
+        ("zero UDP checksum", no_checksum),
+        ("first fragment", fragment),
+        ("TTL 1", expiring),
+        ("too big", big),
+    ] {
+        if run_on(lb, "nodeport_ingress", &frame, up0, TC_ACT_OK)? != frame {
+            return Err(format!("NAT46 changed a frame it must refuse: {name}").into());
+        }
+    }
+    println!(
+        "PASS NAT46/64: TCP and UDP from an IPv4 client to an IPv6 backend and from an IPv6 client to an IPv4 backend on another node, source-NATed to the node's address of the backend's family on a port in 61000-65535 (kept per flow), hop limit and TTL 63, checksums valid; replies translated back from the frontend; zero UDP checksum, first fragment, TTL 1 and a packet too big once translated untouched"
+    );
+    Ok(())
+}
+
+/// The IPv4 header checksum of a frame after a change to its header.
+fn refreshed_ip_check(frame: &[u8]) -> Result<[u8; 2]> {
+    let mut header = frame.get(14..34).ok_or("ip")?.to_vec();
+    header.splice(10..12, [0, 0]);
+    Ok((!(sum(&header, 0) as u16)).to_be_bytes())
 }
 
 /// TCP checksum of a frame whose L4 starts at `l4`, after a change of flags.
@@ -489,6 +645,7 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
                 scope: SCOPE_NODE_LOCAL,
                 maglev: false,
                 dsr: true,
+                nat46x64: false,
             });
         }
     }
@@ -637,6 +794,7 @@ fn maglev(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         scope: SCOPE_NODE_LOCAL,
         maglev: true,
         dsr: false,
+        nat46x64: false,
     });
     services.push(Service {
         frontend: address("[2001:db8:2::20]:30070", PROTO_UDP)?,
@@ -648,6 +806,7 @@ fn maglev(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         scope: SCOPE_NODE_LOCAL,
         maglev: true,
         dsr: false,
+        nat46x64: false,
     });
     program(lb, services)?;
     let maps = lb.dump()?;
@@ -725,6 +884,7 @@ fn nodeport6(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             scope: SCOPE_NODE_LOCAL,
             maglev: false,
             dsr: false,
+            nat46x64: false,
         });
     }
     program(lb, services)?;
@@ -789,6 +949,7 @@ fn snat(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             scope: SCOPE_NODE_LOCAL,
             maglev: false,
             dsr: false,
+            nat46x64: false,
         });
     }
     program(lb, services)?;
@@ -917,6 +1078,7 @@ fn snat6(
             scope: SCOPE_NODE_LOCAL,
             maglev: false,
             dsr: false,
+            nat46x64: false,
         });
     }
     program(lb, services)?;

@@ -100,6 +100,83 @@ fn dsr_applies_to_node_local_frontends_of_the_port_protocol() {
 }
 
 #[test]
+fn nat46x64_translates_a_node_local_frontend_with_no_backend_of_its_family() {
+    let service = ServiceInfo {
+        namespace: "default".into(),
+        name: "web".into(),
+        service_type: "NodePort".into(),
+        cluster_ips: vec![ip("fd00:96::5")],
+        ports: vec![ServicePort {
+            node_port: Some(30080),
+            ..port("http", "TCP", 80)
+        }],
+        dsr_tcp: true,
+        nat46x64: true,
+        ..ServiceInfo::default()
+    };
+    let endpoint = |address: &str, node: &str| Endpoint {
+        addresses: vec![ip(address)],
+        ready: true,
+        serving: true,
+        terminating: false,
+        node_name: node.into(),
+    };
+    let slices = [SliceInfo {
+        namespace: "default".into(),
+        name: "web-v6".into(),
+        service: "web".into(),
+        address_type: "IPv6".into(),
+        endpoints: vec![endpoint("fd00:1::5", "n1"), endpoint("fd00:2::5", "n2")],
+        ports: vec![SlicePort {
+            name: "http".into(),
+            protocol: "TCP".into(),
+            port: Some(8080),
+        }],
+    }];
+    let nodes = [NodeAddresses {
+        name: "n1".into(),
+        ips: vec![ip("192.0.2.1"), ip("2001:db8::1")],
+    }];
+    let find = |out: &[Frontend], at: &str, scope: u8| {
+        out.iter()
+            .find(|f| f.service.frontend.ip == ip(at) && f.service.scope == scope)
+            .expect("frontend")
+            .service
+            .clone()
+    };
+    let out = frontends(std::slice::from_ref(&service), &slices, "n1", &nodes);
+    // IPv4 on the uplink: only the other node's IPv6 backend, never DSR.
+    let v4 = find(&out, "192.0.2.1", SCOPE_NODE_LOCAL);
+    assert!(v4.nat46x64 && !v4.dsr);
+    assert_eq!(v4.backends.iter().map(|b| b.ip).collect::<Vec<_>>(), [ip("fd00:2::5")]);
+    // Its own family has backends, or it is not the uplink's: not translated.
+    let v6 = find(&out, "2001:db8::1", SCOPE_NODE_LOCAL);
+    assert!(!v6.nat46x64 && v6.dsr);
+    assert_eq!(v6.backends.len(), 2);
+    let socket = find(&out, "192.0.2.1", SCOPE_CLUSTER);
+    assert!(!socket.nat46x64 && socket.backends.is_empty());
+    // The API says so.
+    let list = service_list(&out, &BTreeMap::new());
+    let rows = list.as_array().expect("rows");
+    let policies: Vec<_> = rows.iter().filter_map(|r| r["spec"]["flags"]["nat-policy"].as_str()).collect();
+    assert_eq!(policies, ["Nat46"]);
+
+    // Only local backends, the setting off, or a Local policy: not translated.
+    let local_only = [SliceInfo {
+        endpoints: vec![endpoint("fd00:1::5", "n1")],
+        ..slices[0].clone()
+    }];
+    let out = frontends(std::slice::from_ref(&service), &local_only, "n1", &nodes);
+    assert!(!find(&out, "192.0.2.1", SCOPE_NODE_LOCAL).nat46x64);
+    let off = ServiceInfo { nat46x64: false, ..service.clone() };
+    let out = frontends(&[off], &slices, "n1", &nodes);
+    assert!(!find(&out, "192.0.2.1", SCOPE_NODE_LOCAL).nat46x64);
+    let etp_local = ServiceInfo { external_local: true, ..service };
+    let out = frontends(&[etp_local], &slices, "n1", &nodes);
+    assert!(!find(&out, "192.0.2.1", SCOPE_NODE_LOCAL).nat46x64);
+}
+
+#[test]
 fn kube_dns_and_kubernetes_services() {
     let kubernetes = ServiceInfo {
         namespace: "default".into(),

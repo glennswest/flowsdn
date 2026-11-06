@@ -259,6 +259,7 @@ fn controller_lists_watches_and_derives_the_pool() {
     .expect("kubeconfig");
     let settings = Settings {
         lb_mode: Default::default(),
+        nat46x64: false,
         node_name: "local".into(),
         kubeconfig: Some(PathBuf::from(&kubeconfig)),
         auto_direct_node_routes: false,
