@@ -63,7 +63,8 @@ Queue released #292 (12.62 carries registry 9912c98), but 12.62-flowsdn is still
 Local backends are excluded: a pod's reply to the node's address is local input and never reaches the uplink. Refused, passing untouched: IPv4 options, fragments, zero UDP checksum, a packet that outgrows the MTU. Socket LB untranslated (an AF_INET socket cannot reach IPv6).
 Maps: `flowsdn_nodeport4_xlate` (v4 key -> v6-sized value), reply/forward on the v6 side stay in `flowsdn_nodeport6_nat` with FLOW_XLATE and v4-mapped addresses; a NAT64 port is reserved in `flowsdn_nodeport4_nat`.
 
-- [ ] BPF, planner flag, agent setting, loader maps, socket-lb-live NAT46/64 step, object + lock, docs (spec 04/05 notes), changelog; kernel-check; sc-build.
+- [x] BPF, planner flag, agent setting, loader maps, socket-lb-live NAT46/64 step, object + lock, docs (spec 04/05 notes), changelog. kernel-check at 512a2ca on 7.2.11-200.fc44: 18 pass, 0 fail, 2 skip; socket-lb-live 25 PASS incl. NAT46/64 (first run). HEAD has the same lock.
+- [x] sc-build at 51794d9: fmt, workspace + kubernetes Clippy -D warnings (+ indexing, arithmetic), 848 workspace + 93 kubernetes agent tests (0 failed, 1 ignored), chart-check.
 - [ ] Then: medium on pvetest2 once it runs 12.62-flowsdn; perf on pvetest2 and pvetest1.
 
 ### Kernel check in a build VM — #292 (P0), #370, 2026-11-06
