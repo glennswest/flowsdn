@@ -56,6 +56,22 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Pod rules of the flowsdn policy kinds — #292 (P0), 2026-11-06
+
+stormcos#271 closed today (pvetest1/2 on 12.61 take forge test images): medium b2db11018c at 0fbbb1c queued on pvetest2
+(socket-lb-live Maglev for #292, policy-live host steps for #379). Pass -> stage golden, then perf (live NetworkPolicy + ClusterIP).
+Meanwhile the next row, agent only (no BPF object change): FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy
+`endpointSelector` specs to the endpoint policy maps (#331 leaves the agent watch to #292). `kubernetes.flowsdn-policy` off|on,
+default off (stormcos#303: CRDs are not applied, and the policy thread waits for this list). Rules: ingress/ingressDeny/egress/egressDeny,
+from/to Entities, CIDR, CIDRSet, Endpoints (spec 06 §3.2.9 namespace + cluster injection), toPorts with named ports; `enableDefaultDeny`
+(§3.2.8: true iff the direction has rules; false adds a wildcard allow, §3.6); denies win over allows, also NetworkPolicy's.
+§3.2.1 combination matrix fails the whole resource. Skipped + reported: L7, ICMP, FQDN, toServices, groups, nodes, reserved selectors.
+`ingress: [{}]` allows nothing (as the host firewall, ADR-0022), though spec 06 §3.2.1 reads it as wildcard (noted there).
+
+- [ ] flowsdn-k8s scope; host_policy parser both directions + pod specs; policy compiler merge; setting; tests.
+- [ ] Docs (runtime, agent-api, implementation-status, milestones, deploy README, spec 06 note), changelog; sc-build.
+- [ ] Medium b2db11018c result on #292; stage if it passes; perf on pvetest2 and pvetest1.
+
 ### Manifests carry addonmanager Reconcile — #388 (P1), 2026-11-04
 
 stormcos#668: the applier defaults to EnsureExists, so flowsdn's objects never update over kept data and can never be
