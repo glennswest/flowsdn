@@ -56,6 +56,16 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Kernel check in a build VM — #292 (P0), #370, 2026-11-06
+
+stormblock-registry#150 is fixed (v0.55.1) but reaches pvetest1/2 only with a release, so main's Maglev + host-firewall objects stay unloaded on 7.2.
+Build VMs have /dev/kvm (0666), qemu and a readable /lib/modules/<release>/vmlinuz (7.2.11-200.fc44), so no root is needed: `cargo xtask kernel-check`
+packs test/.stage + ip, nft, kmod (+ libs) + kernel/net modules into an initramfs (Rust newc writer), boots the build VM's own kernel in qemu with /test
+as PID 1 (`rdinit=/test`, flowsdn.suite=medium), reads the JSON lines on the serial port. Not a hardware pass: it does not replace the pve medium, perf or live acceptance.
+
+- [ ] xtask `kernel` module + tests; /test PID 1 mode (test/src/vm_init.rs); sc-build `test/build.sh && cargo xtask kernel-check`.
+- [ ] Fix what it finds; docs (build-and-test, test/README, xtask README), changelog; stage precondition for #370.
+
 ### Pod rules of the flowsdn policy kinds — #292 (P0), 2026-11-06
 
 stormcos#271 closed today (pvetest1/2 on 12.61 take forge test images): medium b2db11018c at 0fbbb1c queued on pvetest2
