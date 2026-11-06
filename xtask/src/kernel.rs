@@ -27,6 +27,7 @@ const EXIT_MARK: &str = "@@FLOWSDN-EXIT ";
 /// Userspace the suite's fixtures run (`ip`, `nft`) and the kernel's module
 /// loader, found on PATH with their libraries.
 const TOOLS: [&str; 3] = ["ip", "nft", "kmod"];
+const DLOPENED: [&str; 3] = ["liblzma.so.5", "libzstd.so.1", "libz.so.1"];
 /// What modprobe reads, then the module trees a veth, dummy or nft test needs.
 const MODULE_INDEXES: [&str; 8] = [
     "modules.alias.bin",
@@ -72,7 +73,10 @@ impl<W: Write> Cpio<W> {
         Ok(())
     }
     fn pad(&mut self) -> std::io::Result<()> {
-        let padding = self.written.next_multiple_of(4).saturating_sub(self.written);
+        let padding = self
+            .written
+            .next_multiple_of(4)
+            .saturating_sub(self.written);
         for _ in 0..padding {
             self.raw(&[0])?;
         }
@@ -227,6 +231,13 @@ fn build_initramfs(
         libraries.extend(ldd_paths(&String::from_utf8_lossy(&ldd.stdout)));
     }
     cpio.symlink("usr/sbin/modprobe", "kmod")?;
+    // kmod opens its decompressors with dlopen, so ldd does not name them.
+    libraries.extend(
+        DLOPENED
+            .iter()
+            .map(|library| format!("/usr/lib64/{library}"))
+            .filter(|path| Path::new(path).is_file()),
+    );
     for library in libraries {
         // The guest resolves the same path; /lib64 is its symlink to usr/lib64.
         let name = library.trim_start_matches('/');
@@ -336,7 +347,10 @@ fn boot(kernel: &Path, initramfs: &Path, suite: &str) -> Result<Outcome, Box<dyn
     let (lines, console) = mpsc::channel();
     thread::spawn(move || {
         for line in BufReader::new(stdout).split(b'\n').map_while(Result::ok) {
-            if lines.send(String::from_utf8_lossy(&line).into_owned()).is_err() {
+            if lines
+                .send(String::from_utf8_lossy(&line).into_owned())
+                .is_err()
+            {
                 return;
             }
         }
@@ -401,12 +415,12 @@ mod tests {
     }
 
     #[test]
-    fn newc_entries_are_aligned_and_end_in_the_trailer() {
+    fn newc_entries_are_aligned_and_end_in_the_trailer() -> std::io::Result<()> {
         let mut bytes = Vec::new();
         let mut cpio = Cpio::new(&mut bytes);
-        cpio.file("a/b", 0o755, b"hello").unwrap();
-        cpio.char_device("dev/console", (5, 1)).unwrap();
-        cpio.finish().unwrap();
+        cpio.file("a/b", 0o755, b"hello")?;
+        cpio.char_device("dev/console", (5, 1))?;
+        cpio.finish()?;
         let text = String::from_utf8_lossy(&bytes).into_owned();
         // The directory, the file, /dev, the device and the trailer.
         assert_eq!(text.matches("070701").count(), 5);
@@ -419,19 +433,20 @@ mod tests {
         }
         // Mode (regular, 0755) and size of the file.
         assert!(text.contains(&format!("{:08X}", 0o100_755)));
+        Ok(())
     }
 
     #[test]
-    fn device_nodes_carry_their_numbers() {
+    fn device_nodes_carry_their_numbers() -> std::io::Result<()> {
         let mut bytes = Vec::new();
         let mut cpio = Cpio::new(&mut bytes);
-        cpio.char_device("console", (5, 1)).unwrap();
-        cpio.finish().unwrap();
+        cpio.char_device("console", (5, 1))?;
+        cpio.finish()?;
         let text = String::from_utf8_lossy(&bytes).into_owned();
-        let header = text.get(..110).unwrap();
-        assert_eq!(header.get(14..22), Some("00002180"), "mode");
-        assert_eq!(header.get(78..86), Some("00000005"), "rdevmajor");
-        assert_eq!(header.get(86..94), Some("00000001"), "rdevminor");
+        assert_eq!(text.get(14..22), Some("00002180"), "mode");
+        assert_eq!(text.get(78..86), Some("00000005"), "rdevmajor");
+        assert_eq!(text.get(86..94), Some("00000001"), "rdevminor");
+        Ok(())
     }
 
     #[test]
@@ -462,9 +477,12 @@ mod tests {
             "a guest that died before its result"
         );
         assert!(
-            outcome(&[r#"{"summary":{"pass":3,"fail":1,"skip":0}}"#, "@@FLOWSDN-EXIT 1"])
-                .verdict()
-                .is_err()
+            outcome(&[
+                r#"{"summary":{"pass":3,"fail":1,"skip":0}}"#,
+                "@@FLOWSDN-EXIT 1"
+            ])
+            .verdict()
+            .is_err()
         );
         // Exit 0 with nothing loaded is not a pass: the kernel lacked TCX or BTF.
         assert!(
@@ -477,9 +495,12 @@ mod tests {
             .is_err()
         );
         assert!(
-            outcome(&[r#"{"summary":{"pass":0,"fail":0,"skip":0}}"#, "@@FLOWSDN-EXIT 0"])
-                .verdict()
-                .is_err()
+            outcome(&[
+                r#"{"summary":{"pass":0,"fail":0,"skip":0}}"#,
+                "@@FLOWSDN-EXIT 0"
+            ])
+            .verdict()
+            .is_err()
         );
     }
 }

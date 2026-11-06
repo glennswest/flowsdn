@@ -97,6 +97,12 @@ pub fn run() -> ! {
     };
     if code != 0 {
         dump_logs(Path::new("/results"));
+        // A module that did not load is the usual cause of a failed setup.
+        println!("@@FLOWSDN-LOG /proc/modules");
+        println!(
+            "{}",
+            fs::read_to_string("/proc/modules").unwrap_or_default()
+        );
     }
     println!("@@FLOWSDN-EXIT {code}");
     // Give the serial port's buffer a moment before the machine is gone.
