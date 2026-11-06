@@ -423,7 +423,11 @@ fn rule(
     Some(Rule {
         policy: policy.to_owned(),
         deny,
-        peers: if any_l3 || no_ports { Some(peers) } else { None },
+        peers: if any_l3 || no_ports {
+            Some(peers)
+        } else {
+            None
+        },
         ports: ports.ranges,
         named: ports.named,
     })
