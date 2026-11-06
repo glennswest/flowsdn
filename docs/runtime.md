@@ -488,6 +488,8 @@ carried traffic between two nodes.
 
 ### NetworkPolicy enforcement (#292)
 
+Until the FlowsdnIdentity list first succeeds, `podSelector` peers allow nothing while isolation already applies, so traffic a policy allows from a selected peer is dropped (#401). `ipBlock` peers and policies with no peers are not affected.
+
 Kubernetes `networking.k8s.io/v1` NetworkPolicy, enforced in the datapath
 ([ADR-0021](decisions/0021-endpoint-policy-datapath.md)). The `local-delivery`
 object has two programs on each endpoint's host-side veth: `local_delivery` on

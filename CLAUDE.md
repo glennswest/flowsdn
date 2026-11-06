@@ -58,10 +58,11 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ### Agent start log — #397, 2026-11-06
 
-stormcos#804 fix 16. Timestamps on every agent line (health_api's gmtime_r + ms), a `ready` line with time since start, a 404 retried at 1 s flat for a watch's first minute, a line when a watch recovers. Late identities do not hold NetworkPolicy back (policy.rs computes labels from Pod + Namespace; the policy loop's gates have no identities_synced); say so on the issue. Fixes #373's time_t warning on the way (the stamp reuses that code).
+stormcos#804 fix 16. Timestamps on every agent line (health_api's gmtime_r + ms), a `ready` line with time since start, a 404 retried at 1 s flat for a watch's first minute, a line when a watch recovers. Late identities: isolation does not wait for them, but `podSelector` peers allow nothing until the list succeeds (policy.rs peers(); #401). Fixes #373's time_t warning on the way (the stamp reuses that code).
 
 - [x] Code + tests, docs, changelog (cd1ab4c, fmt e6719bb). sc-build at e6719bb: fmt, Clippy x2 (+ indexing, arithmetic), 852 + 97 tests. kernel-check there: 19 pass, 0 fail, 2 skip, musl build under -D warnings; ready 62-122 ms in six lab agents (no Kubernetes).
-- [ ] Loopback test: identities 404 for 8 s, then listed within 2 s. Then stage; node numbers (Kubernetes mode, real CRD) come with a release.
+- [x] Loopback test at 4ef892c: identities 404 until 8 s, one 404 line, `listed` at 8.4 s; fmt, kubernetes Clippy, test passes.
+- [ ] Stage; node numbers (Kubernetes mode, real CRD) come with a release.
 
 ### CNI ADD timing — #396, 2026-11-06
 
