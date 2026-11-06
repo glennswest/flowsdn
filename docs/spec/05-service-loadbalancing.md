@@ -626,9 +626,6 @@ else global mode resolved per protocol; `dsr` → flag bit 15.
 tunnel device without MTU adaptation. Test `hybrid-dsr`,
 `svc-forwarding-mode-annotation`.
 
-flowsdn (#292): `kubernetes.lb-mode` and `service.flowsdn.io/forwarding-mode`, the
-annotation always honored; `opt` dispatch only, on the uplink programs.
-
 ### 3.13 Algorithm selection and Maglev provisioning
 
 Per-service algorithm = annotation (`bpf-lb-algorithm-annotation` on) else
@@ -1268,3 +1265,10 @@ Reference consumers `operator/pkg/lbipam/pool.go` and `lbipam.go` select free
 ranges via map iteration; no ordering guarantee exists to retain. This audit
 cannot promise undocumented third-party behavior. The stable order is an
 explicit deviation for new allocations, covered by `ordered_pools` tests.
+
+### Note on §3.12 (#292)
+
+flowsdn's forwarding mode is `kubernetes.lb-mode` and the Service annotation
+`service.flowsdn.io/forwarding-mode`, which is always honored. Only `opt` dispatch
+exists, on the uplink programs. This note is at the end of the file because the
+catalogue's provenance cites this spec by line number (#358).
