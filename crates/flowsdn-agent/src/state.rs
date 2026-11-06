@@ -147,11 +147,13 @@ impl Store {
             .mode(0o600)
             .open(staged.path.join("ep_config.json"))?;
         file.write_all(&serde_json::to_vec(&record.document)?)?;
+        // Only the contents are synced, so a published record is never torn: a
+        // restore refuses one it cannot parse. The directory entries need no
+        // barrier (each is a journal commit an ADD waits for, #396). A record
+        // lost to a power cut went with what it describes: the endpoint's links
+        // and pinned maps do not survive the reboot, and restore drops a record
+        // whose link is gone. An agent restart keeps the page cache.
         file.sync_all()?;
-        File::open(&staged.path)?.sync_all()?;
-        // The parent is synced by publish, after the rename: until then this
-        // directory's name means nothing to a restore, so that one barrier
-        // covers both, and each costs an ADD a journal commit (#396).
         Ok(staged)
     }
     /// Remove published state after datapath teardown. Only our known file is
@@ -198,7 +200,6 @@ impl Staged<'_> {
         }
         fs::rename(&self.path, &self.destination)?;
         self.published = true;
-        File::open(self.destination.parent().ok_or("missing state parent")?)?.sync_all()?;
         Ok(())
     }
 }

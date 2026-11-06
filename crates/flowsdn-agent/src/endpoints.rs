@@ -362,8 +362,7 @@ impl Manager {
                 }
             }
             // Publish recoverable intent before any persistent forwarding.
-            // Register ownership before publish: a directory rename may succeed
-            // even when the following durability barrier reports failure.
+            // Register ownership before publish, which can fail after its rename.
             step("agent-check");
             let staged = self.store.stage(&record)?;
             for ip in &ips {

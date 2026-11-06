@@ -1776,3 +1776,11 @@ cancellation retain the old realized policy and roll back unpublished resources.
 Reconnect requires fresh ACKs. The `flowsdn-proxy::ack` barrier grants a one-shot
 permit for the matching attempt/revision; real xDS transport and regeneration
 integration remain #292, and a helper permit alone does not publish BPF state.
+
+### Note on §3.6 (#396): what endpoint state must survive
+
+An endpoint record must survive an agent restart, which keeps the page cache. Its
+links and pinned maps do not survive a reboot, and restore drops a record whose link is
+gone, so a record lost to a power cut loses nothing. The store therefore syncs only the
+file's contents, so a published record is never torn, and puts no barrier on directory
+entries. Appended here because the catalogue cites specs by line number (#358).

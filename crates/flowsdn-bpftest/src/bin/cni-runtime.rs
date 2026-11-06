@@ -395,6 +395,10 @@ impl State {
                 ));
             }
         }
+        // The plugin's step timings after an ADD (#396): nothing to keep here.
+        if method == "POST" && path == "/v1/cni/timing" {
+            return Ok((200, json!({})));
+        }
         if method == "DELETE" && path == "/v1/endpoint" {
             return self.delete(&format!(
                 "cni-attachment-id:{}:eth0",
