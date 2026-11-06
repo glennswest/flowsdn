@@ -56,6 +56,12 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Agent start log — #397, 2026-11-06
+
+stormcos#804 fix 16. Timestamps on every agent line (health_api's gmtime_r + ms), a `ready` line with time since start, a 404 retried at 1 s flat for a watch's first minute, a line when a watch recovers. Late identities do not hold NetworkPolicy back (policy.rs computes labels from Pod + Namespace; the policy loop's gates have no identities_synced); say so on the issue. Fixes #373's time_t warning on the way (the stamp reuses that code).
+
+- [ ] Code + tests, docs, changelog; sc-build (fmt, Clippy, tests, musl build without the warning); kernel-check prints ready's time.
+
 ### CNI ADD timing — #396, 2026-11-06
 
 stormcos#804: warm plain-pod ADD 130 ms (85 on the previous release, busier host) against Cilium's 76 ms; target < 50 ms on a VM, < 100 ms on an HDD server. Issue's guess: object load per endpoint. Code says not (one object per agent; tcx attach per veth). First suspect: 4 fsyncs per endpoint in the agent's state store on a disk-backed /var/lib/flowsdn. Measure first.
