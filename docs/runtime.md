@@ -45,6 +45,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.cgroup-root` | `/sys/fs/cgroup` | Absolute path of the cgroup v2 directory the socket-LB programs attach to (the manifests mount the host's root at `/run/flowsdn/cgroupv2`). |
 | `kubernetes.node-port` | `true` | Attach the NodePort programs to the uplinks (traffic from outside the cluster). Takes effect only with `service-lb`. |
 | `kubernetes.lb-algorithm` | `random` | `random` or `maglev`: how the uplink programs pick a backend for a new flow from outside the cluster ([Maglev](#clusterip-socket-lb-292)). A Service's `service.flowsdn.io/lb-algorithm` annotation (`random` or `maglev`) overrides it. |
+| `kubernetes.lb-mode` | `snat` | `snat`, `dsr` or `hybrid` (DSR for TCP, SNAT otherwise): how traffic from outside the cluster reaches a backend on another node ([DSR](#direct-server-return)). A Service's `service.flowsdn.io/forwarding-mode: dsr\|snat` annotation overrides it. |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
 | `kubernetes.flowsdn-policy` | `false` | Enforce the Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy ([Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292)). The CRDs must exist: the policy thread waits for both lists, NetworkPolicy enforcement included. |
@@ -424,6 +425,25 @@ plans use flowsdn's own `flowsdn.io/v1alpha1` group with `Flowsdn*` kinds
 schemas are read only by the explicit migration projection. The agent does not
 register or reconcile CRDs. Compatibility with Cilium formats is an integration
 goal, not a claim that all Cilium APIs, CRDs, CLIs or networking features work today.
+
+### Direct server return
+
+With `kubernetes.lb-mode: dsr` or `hybrid`, or a Service's
+`service.flowsdn.io/forwarding-mode: dsr` annotation (spec 05 §3.12), a backend
+on another node sees the client's own address and answers it directly. The
+uplink's `nodeport_ingress` DNATs the packet, keeps its source, and on a TCP SYN
+or a UDP packet adds the frontend as an option (spec 02 §2.5: IPv4 option `0x9a`,
+IPv6 24-byte Destination Options type `0x1B`), then redirects it by the FIB. On
+the backend's node `nodeport_ingress` records the frontend from the option, and
+`nodeport_egress` rewrites the reply's source to it. `GET /v1/service` shows
+`forwarding-mode: dsr`.
+
+Every node on the path must run these programs and the network must carry a
+reply whose source is the frontend. Only option dispatch exists (no IPIP or
+Geneve). A UDP packet the option would push over the device's MTU is sent without
+it, and no ICMP error is produced: if it opens the flow, the reply keeps the
+backend's source. Verified by kernel test runs only (`socket-lb-live`); it has not
+carried traffic between two nodes.
 
 ### NetworkPolicy enforcement (#292)
 

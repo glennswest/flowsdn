@@ -92,7 +92,7 @@ pinning or subsystem libraries are absent are **not current status**.
   (stormcos#303).
 - Not implemented: operator identity GC (#332), L7, FQDN, ICMP, node and group
   peers in policy rules, host egress policy, policy verdict events,
-  masquerade (the node provides it), Maglev in the socket LB, DSR, NAT46/64, TCP socket
+  masquerade (the node provides it), Maglev in the socket LB, DSR by IPIP or Geneve, DSR ICMP errors, NAT46/64, TCP socket
   termination, CRD controllers or registration, an operator process, Hubble
   observer/relay.
 

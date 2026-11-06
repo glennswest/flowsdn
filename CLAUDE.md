@@ -77,7 +77,8 @@ another node: `nodeport_ingress` keeps the client source, DNATs, adds the IPv4 o
 packet that fits the MTU (too big: no option, DSR ICMP errors not done), FIB-redirects. Backend node's `nodeport_ingress` records the REPLY entry from the option; `nodeport_egress` already rewrites the reply's source.
 `kubernetes.lb-mode: snat|dsr|hybrid` (default snat), annotation `service.flowsdn.io/forwarding-mode: dsr|snat`. ipip/geneve dispatch: not done.
 
-- [ ] BPF, planner flag, agent setting + annotation, socket-lb-live DSR step, object + lock, docs, changelog.
+- [x] BPF, planner flag, agent setting + annotation, socket-lb-live DSR step, object + lock, docs, changelog. kernel-check at 2e886e4 on 7.2.11: 18 pass, 0 fail, 2 skip; DSR PASS.
+- [ ] Full sc-build, stage. Next #292 row: NAT46/64 (ADR-0011 #79).
 
 ### Pod rules of the flowsdn policy kinds — #292 (P0), 2026-11-06
 

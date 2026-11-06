@@ -626,6 +626,9 @@ else global mode resolved per protocol; `dsr` → flag bit 15.
 tunnel device without MTU adaptation. Test `hybrid-dsr`,
 `svc-forwarding-mode-annotation`.
 
+flowsdn (#292): `kubernetes.lb-mode` and `service.flowsdn.io/forwarding-mode`, the
+annotation always honored; `opt` dispatch only, on the uplink programs.
+
 ### 3.13 Algorithm selection and Maglev provisioning
 
 Per-service algorithm = annotation (`bpf-lb-algorithm-annotation` on) else
