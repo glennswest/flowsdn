@@ -42,6 +42,6 @@ code-sha256 = "ff869ec94c3d0934788c2d51656e3eaaff20d8d3f733b6b229b5252821998f48"
 name = "socket-lb"
 variant = "default"
 features = []
-code-sha256 = "6b361cc7c90407147671d9304a7d605c8c10024e7975010d38d1a4b0722e3c4e"
+code-sha256 = "105266285be293d9ab4b1ef5c2ebc606dc1ac411bf9b6a18d7e5d5b555dec681"
 embedded = "crates/flowsdn-agent/bpf/socket-lb"
 sha256 = "e68b8f5b522214d6013c05f5a04fc15ae68178f556ce942894861911d7d82263"
