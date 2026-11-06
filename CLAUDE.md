@@ -440,7 +440,7 @@ Kubernetes API, and measures with Rust clients. JSON lines per metric with `flav
 - [x] sc-build at e397e16: fmt, Clippy, 705 tests, test/build.sh, podman build; `/test perf` execs flowsdn-perf in the image. Status on #321; format on stormcentral#412.
 - [x] `perf-scale` ramp (steps of 100 pods until a step fails; owner request) at 5dc4de3: Clippy clean, tests pass, test/build.sh.
 - [ ] 2026-11-06: stormcos#271 is shipped; runs now stop at ImagePullBackOff (stormblock-registry#150, every component's run on the pair). Fixed in registry v0.55.1 (9912c98), not in a release yet. #321 proposed
-      `--after-release registry>=9912c98`. Then perf on pvetest2 (flowsdn) and pvetest1 (Cilium), table here, perf-scale at night. Suite has never completed on a cluster; expect fixes on first run. `cni-ready-after-boot` still skips.
+      `--after-release registry>=9912c98`. Then perf on pvetest2 (flowsdn) and pvetest1 (Cilium), table here, perf-scale at night. Suite has never completed on a cluster; expect fixes on first run. `cni-ready-after-boot` still skips (stormcentral#365 closed: check whether its boot-progress records give the number).
 - [ ] 2026-11-03: pvetest1 and pvetest2 refuse runs (stormcos#271: sbregistry takes no forge test images; shipped
       there, waits for a release). stormpump#102 and stormcentral#846 are fixed. Suite builds and tests pass at e161dd7
       (test/build.sh). Status 6613654069; #321 proposed after stormcos#271. Then perf on pvetest2 + pvetest1, table, perf-scale.
