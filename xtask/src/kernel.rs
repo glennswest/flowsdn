@@ -205,11 +205,13 @@ fn build_initramfs(
     path: &Path,
 ) -> Result<(), Box<dyn Error>> {
     let mut cpio = Cpio::new(BufWriter::new(fs::File::create(path)?));
-    // Fedora's merged /usr: the loader's path and the kernel's /sbin/modprobe.
+    // Fedora's merged /usr: the loader's path, and CONFIG_MODPROBE_PATH, which
+    // is /usr/bin/modprobe since /usr/sbin became a link to bin.
     cpio.char_device("dev/console", (5, 1))?;
     for (link, target) in [
         ("bin", "usr/bin"),
-        ("sbin", "usr/sbin"),
+        ("sbin", "usr/bin"),
+        ("usr/sbin", "bin"),
         ("lib", "usr/lib"),
         ("lib64", "usr/lib64"),
     ] {
@@ -226,11 +228,11 @@ fn build_initramfs(
     let mut libraries = BTreeSet::new();
     for tool in TOOLS {
         let binary = on_path(tool)?;
-        add_file(&mut cpio, &format!("usr/sbin/{tool}"), &binary)?;
+        add_file(&mut cpio, &format!("usr/bin/{tool}"), &binary)?;
         let ldd = Command::new("ldd").arg(&binary).output()?;
         libraries.extend(ldd_paths(&String::from_utf8_lossy(&ldd.stdout)));
     }
-    cpio.symlink("usr/sbin/modprobe", "kmod")?;
+    cpio.symlink("usr/bin/modprobe", "kmod")?;
     // kmod opens its decompressors with dlopen, so ldd does not name them.
     libraries.extend(
         DLOPENED

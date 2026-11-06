@@ -82,7 +82,7 @@ pub fn run() -> ! {
     let suite = suite_of(&cmdline);
     let code = match Command::new("/test")
         .arg(suite)
-        .env("PATH", "/usr/sbin:/usr/bin")
+        .env("PATH", "/usr/bin")
         .env("TMPDIR", "/tmp")
         .spawn()
     {
@@ -107,7 +107,7 @@ pub fn run() -> ! {
             "kernel.modprobe = {}",
             fs::read_to_string("/proc/sys/kernel/modprobe").unwrap_or_default()
         );
-        let _ = Command::new("/usr/sbin/modprobe")
+        let _ = Command::new("/usr/bin/modprobe")
             .args(["-v", "nf_tables"])
             .status();
     }
