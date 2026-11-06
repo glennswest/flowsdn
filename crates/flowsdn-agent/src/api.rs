@@ -1357,7 +1357,9 @@ pub fn run(config_path: &Path) -> Result<()> {
                         .collect(),
                 )),
                 Err(error) => {
-                    crate::log::logln!("policy maps unavailable, NetworkPolicy is not enforced: {error}");
+                    crate::log::logln!(
+                        "policy maps unavailable, NetworkPolicy is not enforced: {error}"
+                    );
                     None
                 }
             };
