@@ -1253,9 +1253,8 @@ const ETH_P_IPV6: [u8; 2] = [0x86, 0xdd];
 /// the L4 source port, destination port and UDP/TCP checksum.
 const IP6_NEXT: usize = 20;
 const IP6_HOPS: usize = 21;
-/// The next-header and payload-length fields, and where an extension header
-/// after the fixed header starts.
-const IP6_NEXT: usize = 20;
+/// The payload-length field, and where an extension header after the fixed
+/// header starts.
 const IP6_PAYLOAD: usize = 18;
 const IP6_OPT: usize = 54;
 const IP6_SRC: usize = 22;

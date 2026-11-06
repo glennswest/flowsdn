@@ -445,7 +445,11 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
 
 /// TCP checksum of a frame whose L4 starts at `l4`, after a change of flags.
 fn ack(mut frame: Vec<u8>, l4: usize) -> Result<Vec<u8>> {
-    let (src, dst) = if l4 == 34 { (26..30, 30..34) } else { (22..38, 38..54) };
+    let (src, dst) = if l4 == 34 {
+        (26..30, 30..34)
+    } else {
+        (22..38, 38..54)
+    };
     *frame.get_mut(l4.saturating_add(13)).ok_or("tcp")? = 0x10;
     frame.splice(l4.saturating_add(16)..l4.saturating_add(18), [0, 0]);
     let check = !(l4_sum(
@@ -454,7 +458,10 @@ fn ack(mut frame: Vec<u8>, l4: usize) -> Result<Vec<u8>> {
         frame.get(dst).ok_or("ip")?,
         frame.get(l4..).ok_or("l4")?,
     ) as u16);
-    frame.splice(l4.saturating_add(16)..l4.saturating_add(18), check.to_be_bytes());
+    frame.splice(
+        l4.saturating_add(16)..l4.saturating_add(18),
+        check.to_be_bytes(),
+    );
     Ok(frame)
 }
 
@@ -488,7 +495,11 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     let port = 30095u16.to_be_bytes();
     let [p0, p1] = port;
     let option4 = [0x9a, 8, p0, p1, 192, 0, 2, 20];
-    for (proto, udp_zero, sport) in [(6u8, false, 41000u16), (17, false, 41001), (17, true, 41002)] {
+    for (proto, udp_zero, sport) in [
+        (6u8, false, 41000u16),
+        (17, false, 41001),
+        (17, true, 41002),
+    ] {
         let request = frame4(proto, client, front, sport, 30095, udp_zero);
         let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
         // The option moves L4 by 8 bytes; without it the frame parses as usual.
@@ -515,12 +526,15 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         // reply leaves with the frontend as its source.
         let reply = frame4(proto, remote, client, 8080, sport, udp_zero);
         if run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)? != reply {
-            return Err(format!("DSR proto {proto}: a reply was rewritten before its option").into());
+            return Err(
+                format!("DSR proto {proto}: a reply was rewritten before its option").into(),
+            );
         }
         if run_on(lb, "nodeport_ingress", &out, up0, TC_ACT_OK)? != out {
             return Err(format!("DSR proto {proto}: the backend's node changed the packet").into());
         }
-        let (src, dst, s, d, ip_ok, l4_ok) = parse4(&run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)?)?;
+        let (src, dst, s, d, ip_ok, l4_ok) =
+            parse4(&run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)?)?;
         if (src, dst, s, d) != (front, client, 30095, sport) || !ip_ok || !l4_ok {
             return Err(format!(
                 "DSR reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}, ip {ip_ok} l4 {l4_ok}"
@@ -533,7 +547,11 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     let out = run_on(lb, "nodeport_ingress", &later, up0, TC_ACT_REDIRECT)?;
     let (src, dst, _, d, ip_ok, l4_ok) = parse4(&out)?;
     if out.get(14) != Some(&0x45) || (src, dst, d) != (client, remote, 8080) || !ip_ok || !l4_ok {
-        return Err(format!("DSR later segment: {src:?} -> {dst:?}:{d}, {:?}", out.get(14)).into());
+        return Err(format!(
+            "DSR later segment: {src:?} -> {dst:?}:{d}, {:?}",
+            out.get(14)
+        )
+        .into());
     }
     // A UDP packet the option would push over the MTU goes without it.
     let mut big = frame4(17, client, front, 41003, 30095, true);
@@ -576,12 +594,17 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         }
         let reply = frame6(proto, remote6, client6, 8080, sport, false);
         if run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)? != reply {
-            return Err(format!("DSR IPv6 proto {proto}: a reply was rewritten before its option").into());
+            return Err(
+                format!("DSR IPv6 proto {proto}: a reply was rewritten before its option").into(),
+            );
         }
         if run_on(lb, "nodeport_ingress", &out, up0, TC_ACT_OK)? != out {
-            return Err(format!("DSR IPv6 proto {proto}: the backend's node changed the packet").into());
+            return Err(
+                format!("DSR IPv6 proto {proto}: the backend's node changed the packet").into(),
+            );
         }
-        let (src, dst, s, d, _, l4_ok) = parse6(&run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)?)?;
+        let (src, dst, s, d, _, l4_ok) =
+            parse6(&run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)?)?;
         if (src, dst, s, d) != (front6, client6, 30095, sport) || !l4_ok {
             return Err(format!("DSR IPv6 reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}").into());
         }
