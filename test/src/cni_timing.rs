@@ -10,7 +10,10 @@ use crate::{
 };
 use flowsdn_api_client::Method;
 use serde_json::Value;
-use std::time::Duration;
+use std::{
+    io::Write,
+    time::{Duration, Instant},
+};
 
 /// ADDs measured, after [`WARMUP`] that are not.
 const ADDS: usize = 30;
@@ -30,6 +33,25 @@ fn filesystem() -> String {
         .filter(|(mount, _)| dir.starts_with(mount))
         .max_by_key(|(mount, _)| mount.len())
         .map_or_else(|| "unknown".to_owned(), |(_, kind)| kind.to_owned())
+}
+
+/// p50 of a small new file's write and fsync on the state's filesystem: the
+/// disk's speed right now, which `agent-state` should be read against. A build
+/// VM's disk is shared, and busy neighbours change it several times over.
+fn fsync_p50_us() -> Result<u128, String> {
+    let dir = std::env::temp_dir();
+    let mut took = Vec::new();
+    for round in 0..20 {
+        let path = dir.join(format!("flowsdn-fsync-{}-{round}", std::process::id()));
+        let start = Instant::now();
+        let mut file = std::fs::File::create(&path).map_err(|e| e.to_string())?;
+        file.write_all(&[0; 2048]).map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+        took.push(start.elapsed().as_micros());
+        let _ = std::fs::remove_file(&path);
+    }
+    took.sort_unstable();
+    Ok(took.get(took.len() / 2).copied().unwrap_or(0))
 }
 
 fn steps(value: &Value) -> String {
@@ -81,8 +103,9 @@ pub fn run(report: &mut Report, env: &Env) {
             .and_then(Value::as_u64)
             .unwrap_or(u64::MAX);
         let detail = format!(
-            "{ADDS} warm ADDs, state on {}: wall p50 {} us, p99 {} us; steps p50/p99 us: {}",
+            "{ADDS} warm ADDs, state on {}, fsync p50 {} us: wall p50 {} us, p99 {} us; steps p50/p99 us: {}",
             filesystem(),
+            fsync_p50_us()?,
             at(50),
             at(99),
             steps(&timing)
