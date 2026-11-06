@@ -3,6 +3,7 @@ mod changed;
 mod chart;
 mod cloud;
 mod corpus;
+mod kernel;
 
 use std::{env, error::Error, path::Path, process::Command};
 
@@ -19,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let command = args.first().map(String::as_str).unwrap_or("help");
     if command == "help" || command == "--help" {
         println!(
-            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|ci-plan|check-changed> BASE\ncargo xtask audit-corpus [--check]\ncargo xtask chart-check\ncargo xtask cloud-scan\nRun build tasks on Linux; see README.md."
+            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|ci-plan|check-changed> BASE\ncargo xtask audit-corpus [--check]\ncargo xtask chart-check\ncargo xtask cloud-scan\ncargo xtask kernel-check [SUITE]\nRun build tasks on Linux; see README.md."
         );
         return Ok(());
     }
@@ -40,6 +41,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             .parent()
             .ok_or("workspace")?;
         return cloud::scan(root);
+    }
+    if command == "kernel-check" {
+        if args.len() > 2 {
+            return Err("expected kernel-check [SUITE]".into());
+        }
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .ok_or("workspace")?;
+        let suite = args.get(1).map_or("medium", String::as_str);
+        return kernel::run(root, suite);
     }
     if command == "audit-corpus" {
         if args.len() > 2 || args.get(1).is_some_and(|s| s != "--check") {

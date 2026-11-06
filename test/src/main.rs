@@ -15,6 +15,7 @@ mod preflight;
 mod report;
 mod services;
 mod short;
+mod vm_init;
 mod waves;
 
 use preflight::Preflight;
@@ -22,6 +23,10 @@ use report::Report;
 use std::{process::ExitCode, time::Duration};
 
 fn main() -> ExitCode {
+    // `cargo xtask kernel-check` boots this binary as the guest's init.
+    if std::process::id() == 1 {
+        vm_init::run();
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.as_slice() {
         [mode] if mode == "--endpoint" => lab::endpoint_worker(),
