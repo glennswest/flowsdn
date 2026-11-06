@@ -145,6 +145,17 @@ fn maglev_port(service: &LbService, client_port: [u8; 2]) -> u16 {
         u16::from_be_bytes(client_port)
     }
 }
+/// A flow hash's entry of a Maglev table. `% TABLE_SIZE` compiles to a multiply
+/// and shifts whose range the verifier cannot follow, and LLVM drops a bounds
+/// check it can prove true ("R0 unbounded memory access"). The volatile read
+/// hides the proof, so the check stays and is what the verifier sees.
+#[inline(always)]
+fn table_entry(table: &[u32; TABLE_LEN], hash: u32) -> Option<u32> {
+    let reduced = maglev::entry(hash);
+    // SAFETY: a read of a local.
+    let index = unsafe { core::ptr::read_volatile(&reduced) };
+    table.get(usize::try_from(index).ok()?).copied()
+}
 /// The backend ID a Maglev frontend's table gives a new flow; `None` when
 /// the master is not Maglev or has no table (the caller picks at random).
 #[inline(always)]
@@ -164,10 +175,9 @@ fn maglev4(
         u16::from_be_bytes(front_port),
         proto,
     );
-    let index = usize::try_from(maglev::entry(hash)).ok()?;
     // SAFETY: read once; the agent never writes into a published table.
     let table = unsafe { LB4_MAGLEV.get_value(&service.rev_nat_index, &0) }?;
-    table.get(index).copied()
+    table_entry(table, hash)
 }
 /// [`maglev4`] for IPv6.
 #[inline(always)]
@@ -187,10 +197,9 @@ fn maglev6(
         u16::from_be_bytes(front_port),
         proto,
     );
-    let index = usize::try_from(maglev::entry(hash)).ok()?;
     // SAFETY: as in maglev4.
     let table = unsafe { LB6_MAGLEV.get_value(&service.rev_nat_index, &0) }?;
-    table.get(index).copied()
+    table_entry(table, hash)
 }
 
 #[inline(always)]
