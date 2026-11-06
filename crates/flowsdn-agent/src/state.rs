@@ -149,7 +149,9 @@ impl Store {
         file.write_all(&serde_json::to_vec(&record.document)?)?;
         file.sync_all()?;
         File::open(&staged.path)?.sync_all()?;
-        File::open(&self.path)?.sync_all()?;
+        // The parent is synced by publish, after the rename: until then this
+        // directory's name means nothing to a restore, so that one barrier
+        // covers both, and each costs an ADD a journal commit (#396).
         Ok(staged)
     }
     /// Remove published state after datapath teardown. Only our known file is

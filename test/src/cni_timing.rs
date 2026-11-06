@@ -1,6 +1,6 @@
 //! `cni-add-timing` (#396): warm CNI ADDs one after another, and where each one's
 //! time goes, from the agent's `GET /v1/cni/timing`. The numbers are the result;
-//! only an ADD that fails fails the test. Nothing here may be compared with a
+//! only an ADD that fails, or a trivial request that waits, fails the test. Nothing here may be compared with a
 //! node's numbers unless the state directory is on a similar disk, so the detail
 //! names its filesystem.
 use crate::{
@@ -15,6 +15,8 @@ use std::time::Duration;
 /// ADDs measured, after [`WARMUP`] that are not.
 const ADDS: usize = 30;
 const WARMUP: usize = 3;
+/// Above this a request is waiting for something, not working.
+const CONFIG_LIMIT_US: u64 = 10_000;
 
 fn filesystem() -> String {
     let mounts = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
@@ -72,6 +74,12 @@ pub fn run(report: &mut Report, env: &Env) {
             .request(Method::Get, "/v1/cni/timing", None)
             .map_err(|e| e.to_string())?;
         let timing = timing.json.unwrap_or_default();
+        // A request that does nothing costs microseconds. A wait in the agent's
+        // loop shows here: a 20 ms sleep made this 17 ms, four times per ADD.
+        let config = timing
+            .pointer("/config/p50-us")
+            .and_then(Value::as_u64)
+            .unwrap_or(u64::MAX);
         let detail = format!(
             "{ADDS} warm ADDs, state on {}: wall p50 {} us, p99 {} us; steps p50/p99 us: {}",
             filesystem(),
@@ -81,6 +89,11 @@ pub fn run(report: &mut Report, env: &Env) {
         );
         for endpoint in &endpoints {
             lab.del(endpoint)?;
+        }
+        if config >= CONFIG_LIMIT_US {
+            return Err(format!(
+                "a GET of the agent's config took {config} us at p50: {detail}"
+            ));
         }
         Ok(((), detail))
     });

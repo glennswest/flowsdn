@@ -7,7 +7,10 @@ use crate::{endpoints::Manager, events, state::Result, tagging};
 use flowsdn_bpf_loader::kernel::{Egress, Object};
 use flowsdn_cni::queue::{Queue, ReplayRequest};
 use flowsdn_ipam::{HostScope, Ipam};
-use nix::sys::socket::{AddressFamily, SockFlag, SockType, UnixAddr, connect, socket};
+use nix::{
+    poll::{PollFd, PollFlags, PollTimeout, poll},
+    sys::socket::{AddressFamily, SockFlag, SockType, UnixAddr, connect, socket},
+};
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -16,7 +19,7 @@ use std::{
     io::{self, Read, Write},
     net::{IpAddr, SocketAddr, TcpListener, TcpStream},
     os::{
-        fd::AsRawFd,
+        fd::{AsFd, AsRawFd},
         unix::{
             fs::{FileTypeExt, MetadataExt, PermissionsExt},
             net::{UnixListener, UnixStream},
@@ -1457,8 +1460,23 @@ pub fn run(config_path: &Path) -> Result<()> {
             }
         }
         if idle {
-            std::thread::sleep(Duration::from_millis(20));
+            wait_for_request(&listener, http.as_ref());
         }
+    }
+}
+
+/// Until a request is waiting, or the 20 ms after which the loop's periodic
+/// work is due. Never a plain sleep: every CNI request would wait it out, 20 ms
+/// each and four per ADD (#396).
+fn wait_for_request(listener: &UnixListener, http: Option<&TcpListener>) {
+    let mut fds = vec![PollFd::new(listener.as_fd(), PollFlags::POLLIN)];
+    if let Some(http) = http {
+        fds.push(PollFd::new(http.as_fd(), PollFlags::POLLIN));
+    }
+    // An error (EINTR is the expected one) only means the loop looks again, but
+    // a persistent one must not make it spin.
+    if poll(&mut fds, PollTimeout::from(20u8)).is_err() {
+        std::thread::sleep(Duration::from_millis(20));
     }
 }
 
