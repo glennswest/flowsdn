@@ -65,7 +65,8 @@ Maps: `flowsdn_nodeport4_xlate` (v4 key -> v6-sized value), reply/forward on the
 
 - [x] BPF, planner flag, agent setting, loader maps, socket-lb-live NAT46/64 step, object + lock, docs (spec 04/05 notes), changelog. kernel-check at 512a2ca on 7.2.11-200.fc44: 18 pass, 0 fail, 2 skip; socket-lb-live 25 PASS incl. NAT46/64 (first run). HEAD has the same lock.
 - [x] sc-build at 51794d9: fmt, workspace + kubernetes Clippy -D warnings (+ indexing, arithmetic), 848 workspace + 93 kubernetes agent tests (0 failed, 1 ignored), chart-check.
-- [ ] Then: medium on pvetest2 once it runs 12.62-flowsdn; perf on pvetest2 and pvetest1.
+- [x] Stage requested at 5167d1f; status on #292. 12.62 and 12.62-flowsdn tombstoned (did not boot clean on pvetest1). #292 proposed --after-release flowsdn>=5167d1f.
+- [ ] Then: medium on pvetest2 once it runs that release; perf on pvetest2 and pvetest1. Next BPF rows (IPIP/Geneve DSR, DSR ICMP errors) wait for that node run. Check GSO/offload on real NICs and two-node traffic for NAT46/64 and DSR.
 
 ### Kernel check in a build VM — #292 (P0), #370, 2026-11-06
 
