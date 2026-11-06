@@ -78,7 +78,9 @@ packet that fits the MTU (too big: no option, DSR ICMP errors not done), FIB-red
 `kubernetes.lb-mode: snat|dsr|hybrid` (default snat), annotation `service.flowsdn.io/forwarding-mode: dsr|snat`. ipip/geneve dispatch: not done.
 
 - [x] BPF, planner flag, agent setting + annotation, socket-lb-live DSR step, object + lock, docs, changelog. kernel-check at 2e886e4 on 7.2.11: 18 pass, 0 fail, 2 skip; DSR PASS.
-- [ ] Full sc-build, stage. Next #292 row: NAT46/64 (ADR-0011 #79).
+- [x] kernel-check at 9ad4b2b (18 pass, 0 fail, 2 skip; same lock as HEAD). sc-build at 2e8cb60: fmt, Clippy x2 -D warnings, 846 workspace + 92 kubernetes agent tests (0 failed, 1 ignored), chart-check.
+- [x] Golden golden-flowsdn-5ec614dc2136 is at 07c64f2, mid-DSR (pushed while its stage waited): object without DSR, `lb-mode` inert. Staged again after this line.
+- [ ] Item proposed after stormblock-registry>=9912c98 in a release: `stormcentral test run flowsdn medium --tag pvetest2`, then perf on pvetest2 and pvetest1. Then NAT46/64 (ADR-0011 #79, not started), IPIP/Geneve DSR, DSR ICMP errors, two-node DSR traffic.
 
 ### Pod rules of the flowsdn policy kinds — #292 (P0), 2026-11-06
 

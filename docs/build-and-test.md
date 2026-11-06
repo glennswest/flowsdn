@@ -91,6 +91,10 @@ the kernel accepts them. Its first run refused `socket-lb`, which had passed
 sc-build and sat on main for three weeks with no machine to run it on: `R0
 unbounded memory access` on the Maglev table index.
 
+A stage builds main's head when its turn comes, not the commit you checked, so
+push nothing that changes code or objects until the stage has started. Stage
+`5ec614dc2136` took 07c64f2, a commit in the middle of the DSR work.
+
 It does not replace a hardware run: the kernel is the build VM's Fedora kernel
 rather than a stormcos release's, there is no node, cluster or real NIC, and the
 node probes skip. Fixtures that need a live cluster (`perf`) cannot run in it.
