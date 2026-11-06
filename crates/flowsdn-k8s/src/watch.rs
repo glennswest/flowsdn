@@ -170,6 +170,8 @@ pub enum Resource {
     NetworkPolicy(NetworkPolicy),
     /// A `flowsdn.io/v1alpha1` FlowsdnClusterwideNetworkPolicy, kept whole.
     ClusterwidePolicy(NetworkPolicy),
+    /// A `flowsdn.io/v1alpha1` FlowsdnNetworkPolicy, kept whole.
+    PodPolicy(NetworkPolicy),
 }
 impl Resource {
     pub fn metadata(&self) -> &Metadata {
@@ -180,7 +182,7 @@ impl Resource {
             Self::EndpointSlice(e) => &e.metadata,
             Self::Namespace(n) => &n.metadata,
             Self::Identity(i) => &i.metadata,
-            Self::NetworkPolicy(p) | Self::ClusterwidePolicy(p) => &p.metadata,
+            Self::NetworkPolicy(p) | Self::ClusterwidePolicy(p) | Self::PodPolicy(p) => &p.metadata,
         }
     }
 }
@@ -209,8 +211,10 @@ pub enum Scope {
     /// Every `networking.k8s.io/v1` NetworkPolicy (policy enforcement).
     NetworkPolicies,
     /// Every `flowsdn.io/v1alpha1` FlowsdnClusterwideNetworkPolicy (the host
-    /// firewall, #379).
+    /// firewall, #379, and Pod rules, #292).
     ClusterwidePolicies,
+    /// Every `flowsdn.io/v1alpha1` FlowsdnNetworkPolicy (Pod rules, #292).
+    PodPolicies,
 }
 impl Scope {
     pub fn field_selector(&self) -> Option<String> {
@@ -237,6 +241,7 @@ impl Scope {
                 Self::Identities => "FlowsdnIdentity",
                 Self::NetworkPolicies => "NetworkPolicy",
                 Self::ClusterwidePolicies => "FlowsdnClusterwideNetworkPolicy",
+                Self::PodPolicies => "FlowsdnNetworkPolicy",
             };
             if text(kind)? != expected {
                 return Err(error("unexpected resource kind"));
@@ -327,6 +332,10 @@ impl Scope {
                 object: value.clone(),
             })),
             Self::ClusterwidePolicies => Ok(Resource::ClusterwidePolicy(NetworkPolicy {
+                metadata,
+                object: value.clone(),
+            })),
+            Self::PodPolicies => Ok(Resource::PodPolicy(NetworkPolicy {
                 metadata,
                 object: value.clone(),
             })),

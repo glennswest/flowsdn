@@ -129,13 +129,16 @@ impl Controller {
             service_lb: self.settings.service_lb,
             identity: self.settings.identity_allocation,
             network_policy: self.settings.network_policy,
+            flowsdn_policy: self.settings.flowsdn_policy,
             host_firewall: self.settings.host_firewall,
             cluster_name: self.settings.cluster_name.clone(),
             ..View::default()
         }));
         let host_firewall = self.settings.host_firewall != HostFirewall::Off;
         if let Some((mut maps, gateways)) =
-            policy.filter(|_| self.settings.network_policy || host_firewall)
+            policy.filter(|_| {
+                self.settings.network_policy || self.settings.flowsdn_policy || host_firewall
+            })
         {
             let policy_view = Arc::clone(&view);
             std::thread::Builder::new()
@@ -273,7 +276,11 @@ impl Controller {
                 });
                 let mut parts = vec![nodes.boxed_local(), pods.boxed_local()];
                 let host_firewall = settings.host_firewall != HostFirewall::Off;
-                if settings.identity_allocation || settings.network_policy || host_firewall {
+                if settings.identity_allocation
+                    || settings.network_policy
+                    || settings.flowsdn_policy
+                    || host_firewall
+                {
                     let ns_view = Arc::clone(&watch_view);
                     parts.push(
                         watch_forever(
@@ -309,7 +316,25 @@ impl Controller {
                         .boxed_local(),
                     );
                 }
-                if host_firewall {
+                if settings.flowsdn_policy {
+                    let pod_policy_view = Arc::clone(&watch_view);
+                    parts.push(
+                        watch_forever(
+                            &client,
+                            Scope::PodPolicies,
+                            "pod-policies",
+                            &watch_view,
+                            move |state| {
+                                let rows = pod_policy_rows(state);
+                                let mut view = lock(&pod_policy_view);
+                                view.pod_policies = rows;
+                                view.pod_policies_synced = true;
+                            },
+                        )
+                        .boxed_local(),
+                    );
+                }
+                if host_firewall || settings.flowsdn_policy {
                     let cw_view = Arc::clone(&watch_view);
                     parts.push(
                         watch_forever(
@@ -681,6 +706,16 @@ fn namespace_rows(state: &WatchState) -> BTreeMap<String, BTreeMap<String, Strin
         })
         .collect()
 }
+fn pod_policy_rows(state: &WatchState) -> Vec<Value> {
+    state
+        .snapshot()
+        .all()
+        .filter_map(|(row, _)| match &*row {
+            Resource::PodPolicy(p) => Some(p.object.clone()),
+            _ => None,
+        })
+        .collect()
+}
 fn clusterwide_rows(state: &WatchState) -> Vec<Value> {
     state
         .snapshot()
@@ -751,7 +786,8 @@ fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
                 .map(|(index, _)| *index)
                 .collect();
             if !((!view.network_policy || view.policies_synced)
-                && (!host_firewall || view.clusterwide_synced)
+                && (!(host_firewall || view.flowsdn_policy) || view.clusterwide_synced)
+                && (!view.flowsdn_policy || view.pod_policies_synced)
                 && view.pods_synced
                 && view.nodes_synced
                 && view.namespaces_synced

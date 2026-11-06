@@ -35,7 +35,7 @@ fn node_selector_picks_the_policies_of_this_node() {
             json!({"endpointSelector":{},"ingress":[{"fromEntities":["world"]}]}),
         ),
     ];
-    let got = select(&objects, &node);
+    let got = select(&objects, &node, false);
     assert_eq!(
         got.names,
         vec!["/workers".to_owned(), "/sourced".to_owned()]
@@ -76,7 +76,7 @@ fn peers_ports_and_denies() {
             "ingressDeny":[{"fromEntities":["world"],"toPorts":[{"ports":[{"port":"22","protocol":"TCP"}]}]}],
             "egress":[{"toEntities":["world"]}]}]}),
     ];
-    let got = select(&objects, &node);
+    let got = select(&objects, &node, false);
     assert!(got.audit && got.enforce_ingress);
     assert_eq!(got.rules.len(), 4);
     let cidr = got.rules.first().expect("cidr rule");
@@ -114,7 +114,7 @@ fn unsupported_rules_are_skipped_and_reported() {
             {"fromEntities":["nonsense"],"toPorts":[{"ports":[{"port":"ssh"}]}]}
         ]}),
     )];
-    let got = select(&objects, &node);
+    let got = select(&objects, &node, false);
     assert!(!got.enforce_ingress, "enableDefaultDeny.ingress false");
     assert!(got.rules.is_empty());
     for needle in [

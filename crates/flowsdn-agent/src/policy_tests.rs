@@ -381,3 +381,256 @@ fn denies_win_over_the_allows_they_cover() {
     assert!(denies.contains(&(302, 6, 8, 13)));
     assert!(!denies.contains(&(303, 6, 22, 16)));
 }
+
+/// A Pod `other` in namespace `other`, and every Pod's identity again.
+fn with_other_namespace(mut view: View) -> View {
+    let mut other = pod("other", "n2", "10.2.0.8", &[("app", "client")]);
+    other.namespace = "other".into();
+    view.pods.push(other);
+    view.namespaces.insert("other".into(), BTreeMap::new());
+    relabel(&mut view);
+    view
+}
+fn relabel(view: &mut View) {
+    view.identities.clear();
+    view.pod_identities.clear();
+    let filter = LabelFilter::identity(&[]).expect("filter");
+    for ((pod, _, labels), id) in view.pod_label_sets(&filter).into_iter().zip(300u32..) {
+        view.identities
+            .insert(id, crate::identity::label_strings(&labels));
+        view.pod_identities.insert(pod, id);
+    }
+}
+fn flowsdn_view(view: View, spec: Value) -> View {
+    let mut view = view;
+    view.flowsdn_policy = true;
+    view.pod_policies = vec![json!({"apiVersion":"flowsdn.io/v1alpha1","kind":"FlowsdnNetworkPolicy",
+        "metadata":{"name":"fp","namespace":"shop"},"spec":spec})];
+    view
+}
+const WEB: &str = "web";
+fn web_selector() -> Value {
+    json!({"matchLabels":{"app":WEB}})
+}
+/// (identity, egress, protocol, port, port prefix, deny) for endpoint 7.
+fn verdicts(desired: &Desired) -> BTreeSet<(u32, bool, u8, u16, u32, bool)> {
+    desired
+        .entries
+        .iter()
+        .map(|(k, v)| (EndpointPolicyKey::from_bytes(*k), *v))
+        .map(|(k, v)| {
+            assert_eq!(k.endpoint, 7);
+            (
+                k.sec_label,
+                k.egress == 1,
+                k.protocol,
+                k.dport.get(),
+                k.prefixlen.saturating_sub(80),
+                v.denies(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn flowsdn_policy_is_ignored_with_the_setting_off() {
+    let mut view = flowsdn_view(
+        view(Vec::new()),
+        json!({"endpointSelector":web_selector(),"ingress":[{}]}),
+    );
+    view.flowsdn_policy = false;
+    let desired = compile(&view, &[]);
+    assert!(desired.endpoints.is_empty(), "{:?}", desired.endpoints);
+    assert!(desired.pod_policies.is_empty());
+}
+
+#[test]
+fn flowsdn_policy_selects_in_its_namespace_with_named_ports() {
+    let view = flowsdn_view(
+        with_other_namespace(view(Vec::new())),
+        json!({"endpointSelector":web_selector(),"ingress":[{
+            "fromEndpoints":[{"matchLabels":{"app":"client"}}],
+            "toPorts":[{"ports":[{"port":"http","protocol":"TCP"}]}]
+        }]}),
+    );
+    let desired = compile(&view, &[]);
+    assert_eq!(desired.problems, Vec::<String>::new());
+    assert_eq!(
+        desired.endpoints.get(&40),
+        Some(&PolicyEndpoint {
+            endpoint: 7,
+            flags: enforce::INGRESS
+        })
+    );
+    // `client` in shop, not the Pod with the same labels in `other`.
+    let want = BTreeSet::from([(identity_of(&view, "client"), false, 6, 8080, 16, false)]);
+    assert_eq!(verdicts(&desired), want);
+    assert_eq!(
+        desired.status().pointer("/flowsdn-policies/0"),
+        Some(&json!("shop/fp"))
+    );
+}
+
+#[test]
+fn flowsdn_policy_egress_entities_cidrs_and_their_ipcache() {
+    let view = flowsdn_view(
+        view(Vec::new()),
+        json!({"endpointSelector":web_selector(),"egress":[
+            {"toEntities":["world"],"toPorts":[{"ports":[{"port":"443","protocol":"TCP"}]}]},
+            {"toCIDRSet":[{"cidr":"198.51.100.0/24","except":["198.51.100.128/25"]}]},
+            {"toEndpoints":[{"matchLabels":{"app":"db"}}],
+             "toPorts":[{"ports":[{"port":"sql","protocol":"TCP"}]}]}
+        ]}),
+    );
+    let desired = compile(&view, &[]);
+    assert_eq!(desired.problems, Vec::<String>::new());
+    assert_eq!(
+        desired.endpoints.get(&40).map(|e| e.flags),
+        Some(enforce::EGRESS)
+    );
+    let got = verdicts(&desired);
+    let db = identity_of(&view, "db");
+    assert!(got.contains(&(db, true, 6, 5432, 16, false)), "{got:?}");
+    assert!(got.contains(&(host_policy::WORLD, true, 6, 443, 16, false)));
+    assert!(got.contains(&(host_policy::AGGREGATE_WORLD, true, 6, 443, 16, false)));
+    let cidr_ids: Vec<u32> = desired
+        .ipcache
+        .iter()
+        .map(|(k, v)| (IpCacheKey::from_bytes(*k), v.sec_identity))
+        .filter(|(k, _)| k.prefixlen == 64 - 8 || k.prefixlen == 64 - 7)
+        .map(|(_, id)| id)
+        .collect();
+    assert_eq!(cidr_ids.len(), 2, "both prefixes have identities");
+    let allowed: Vec<u32> = got
+        .iter()
+        .filter(|k| cidr_ids.contains(&k.0))
+        .map(|k| k.0)
+        .collect();
+    assert_eq!(allowed.len(), 1, "the exception has no entry: {got:?}");
+}
+
+#[test]
+fn flowsdn_deny_wins_over_a_networkpolicy_allow() {
+    let mut view = view(vec![policy(json!({
+        "podSelector":{"matchLabels":{"app":"web"}},
+        "ingress":[{"from":[{"podSelector":{"matchLabels":{"app":"client"}}}]}]
+    }))]);
+    view = flowsdn_view(
+        view,
+        json!({"endpointSelector":web_selector(),"ingressDeny":[{
+            "fromEndpoints":[{"matchLabels":{"app":"client"}}],
+            "toPorts":[{"ports":[{"port":"9000","protocol":"TCP"}]}]
+        }]}),
+    );
+    let desired = compile(&view, &[]);
+    let client = identity_of(&view, "client");
+    let want = BTreeSet::from([
+        (client, false, 0, 0, 0, false),
+        (client, false, 6, 9000, 16, true),
+    ]);
+    assert_eq!(verdicts(&desired), want);
+    let deny = desired
+        .entries
+        .values()
+        .find(|v| v.denies())
+        .expect("a deny entry");
+    assert_eq!({ deny.precedence }, HOST_DENY_PRECEDENCE);
+}
+
+#[test]
+fn enable_default_deny_false_keeps_a_wildcard_allow() {
+    let view = flowsdn_view(
+        view(Vec::new()),
+        json!({"endpointSelector":web_selector(),
+            "enableDefaultDeny":{"ingress":false},
+            "ingressDeny":[{"fromEntities":["world"]}]}),
+    );
+    let got = verdicts(&compile(&view, &[]));
+    assert!(got.contains(&(0, false, 0, 0, 0, false)), "{got:?}");
+    assert!(got.contains(&(host_policy::WORLD, false, 0, 0, 0, true)));
+}
+
+#[test]
+fn deny_only_spec_is_default_deny_unless_turned_off() {
+    let view = flowsdn_view(
+        view(Vec::new()),
+        json!({"endpointSelector":web_selector(),
+            "ingressDeny":[{"fromEntities":["world"]}]}),
+    );
+    let got = verdicts(&compile(&view, &[]));
+    assert!(!got.contains(&(0, false, 0, 0, 0, false)), "{got:?}");
+}
+
+#[test]
+fn empty_rule_and_skipped_rules_still_enforce_and_allow_nothing() {
+    for rule in [
+        json!({}),
+        json!({"fromEndpoints":[]}),
+        json!({"toPorts":[{"ports":[{"port":"80","protocol":"TCP"}],
+                           "rules":{"http":[{"method":"GET"}]}}]}),
+        json!({"icmps":[{"fields":[{"type":8}]}]}),
+        json!({"fromEndpoints":[{"matchLabels":{"reserved:host":""}}]}),
+    ] {
+        let view = flowsdn_view(
+            view(Vec::new()),
+            json!({"endpointSelector":web_selector(),"ingress":[rule]}),
+        );
+        let desired = compile(&view, &[]);
+        assert_eq!(
+            desired.endpoints.get(&40).map(|e| e.flags),
+            Some(enforce::INGRESS)
+        );
+        assert!(desired.entries.is_empty(), "{:?}", desired.entries);
+    }
+}
+
+#[test]
+fn a_bad_combination_fails_the_whole_resource() {
+    let view = flowsdn_view(
+        view(Vec::new()),
+        json!({"endpointSelector":web_selector(),"ingress":[
+            {"fromEntities":["world"]},
+            {"fromEndpoints":[{}],"fromCIDR":["10.0.0.0/8"]}
+        ]}),
+    );
+    let desired = compile(&view, &[]);
+    assert!(desired.endpoints.is_empty());
+    assert!(desired.entries.is_empty());
+    assert!(
+        desired
+            .problems
+            .iter()
+            .any(|p| p.contains("shop/fp: not enforced, combining fromEndpoints and fromCIDR")),
+        "{:?}",
+        desired.problems
+    );
+}
+
+#[test]
+fn clusterwide_pod_rules_cross_namespaces_and_leave_host_rules_alone() {
+    let mut view = with_other_namespace(view(Vec::new()));
+    view.flowsdn_policy = true;
+    view.clusterwide_policies = vec![
+        json!({"metadata":{"name":"pods"},"spec":{
+            "endpointSelector":web_selector(),
+            "ingress":[{"fromEndpoints":[{}]}]
+        }}),
+        json!({"metadata":{"name":"nodes"},"spec":{
+            "nodeSelector":{"matchLabels":{"role":"none"}},
+            "ingress":[{"fromEntities":["world"]}]
+        }}),
+    ];
+    let desired = compile(&view, &[]);
+    assert_eq!(desired.problems, Vec::<String>::new());
+    let got = verdicts(&desired);
+    // `{}` is every Pod, in every namespace, not host or world.
+    let ids: BTreeSet<u32> = got.iter().map(|k| k.0).collect();
+    let all: BTreeSet<u32> = view.identities.keys().copied().collect();
+    assert_eq!(ids, all);
+    assert!(all.contains(&view.pod_identity("other", "other").expect("identity")));
+    assert_eq!(
+        desired.pod_policies,
+        BTreeSet::from(["/pods".to_owned()]),
+        "the host rule is not a Pod policy"
+    );
+}

@@ -38,6 +38,7 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(parsed.node_port);
     assert!(!parsed.maglev);
     assert_eq!(parsed.host_firewall, HostFirewall::Off);
+    assert!(!parsed.flowsdn_policy);
     assert_eq!(parsed.cgroup_root, PathBuf::from(DEFAULT_CGROUP_ROOT));
     let parsed = Settings::parse(
         Some(

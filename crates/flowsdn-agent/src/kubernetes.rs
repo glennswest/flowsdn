@@ -58,6 +58,9 @@ pub struct Settings {
     /// ADR-0021), default on: watch NetworkPolicies (and Namespaces) and keep
     /// the endpoint policy maps.
     pub network_policy: bool,
+    /// Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy
+    /// (#292; the CRDs must exist, the policy thread waits for their lists).
+    pub flowsdn_policy: bool,
     /// The host firewall (#379): `off` (default), `audit` or `enforce`.
     pub host_firewall: HostFirewall,
 }
@@ -162,6 +165,7 @@ impl Settings {
             maglev,
             identity_allocation: flag("identity-allocation", true)?,
             network_policy: flag("network-policy", true)?,
+            flowsdn_policy: flag("flowsdn-policy", false)?,
             host_firewall,
             cluster_name,
             cgroup_root,
@@ -546,6 +550,11 @@ pub struct View {
     pub network_policies: Vec<Value>,
     pub policies_synced: bool,
     pub policy_status: Value,
+    /// Pod rules of the flowsdn policy kinds (#292): the setting and the
+    /// FlowsdnNetworkPolicy objects (the clusterwide kind is below).
+    pub flowsdn_policy: bool,
+    pub pod_policies: Vec<Value>,
+    pub pod_policies_synced: bool,
     /// The host firewall (#379): its mode, the FlowsdnClusterwideNetworkPolicy
     /// objects, the uplinks (name -> ifindex) the policy thread wants it on
     /// (the API thread attaches it), and those still learning flows.
@@ -764,7 +773,11 @@ impl View {
             && self.pods_synced
             && (!self.service_lb || (self.services_synced && self.slices_synced))
             && (!self.identity || (self.namespaces_synced && self.identities_synced))
-            && (!self.network_policy || (self.namespaces_synced && self.policies_synced));
+            && (!self.network_policy || (self.namespaces_synced && self.policies_synced))
+            && (!self.flowsdn_policy
+                || (self.namespaces_synced
+                    && self.pod_policies_synced
+                    && self.clusterwide_synced));
         let (state, msg) = match (errors.is_empty(), synced) {
             (false, _) => ("Warning", errors.join("; ")),
             (true, false) => ("Warning", "waiting for the initial Kubernetes lists".into()),
@@ -790,7 +803,7 @@ impl View {
         };
         json!({"state":state,"msg":msg,"node-name":self.local_node,
             "auto-direct-node-routes":self.direct_routes,"service-lb":self.service_lb,
-            "identity-allocation":self.identity,"network-policy":self.network_policy,
+            "identity-allocation":self.identity,"network-policy":self.network_policy,"flowsdn-policy":self.flowsdn_policy,
             "policy":self.policy_status})
     }
 }

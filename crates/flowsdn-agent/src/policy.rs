@@ -24,8 +24,13 @@
 //!   in `flowsdn_policy_ep` under each uplink's index, tracked always and
 //!   ingress-enforced (or audited) when a host policy selects this node and
 //!   the uplink's learning time is over. Denies win over allows they cover.
+//! - Pod rules of the flowsdn policy kinds (#292, `kubernetes.flowsdn-policy`,
+//!   [`host_policy::pod_policies`]) join a Pod's NetworkPolicy entries: a
+//!   direction is enforced when either selects it, default deny unless every
+//!   selecting spec turns it off (then a wildcard allow, spec 06 §3.6), and
+//!   denies win over the allows of both.
 use crate::{
-    host_policy::{self, HostPolicies, Peer as HostPeer, REMOTE_NODE},
+    host_policy::{self, HostPolicies, Peer as HostPeer, PodDirection, REMOTE_NODE, Rule},
     kubernetes::{HostFirewall, LocalEndpoint, PodInfo, View},
 };
 use flowsdn_bpf_abi::{
@@ -44,8 +49,8 @@ use std::{
     net::IpAddr,
 };
 
-/// Every allow entry's precedence (spec 06 §3.5.2: allow verdict byte 1;
-/// Kubernetes NetworkPolicy has one tier and no denies).
+/// Every Pod allow entry's precedence (spec 06 §3.5.2: allow verdict byte 1).
+/// Pod denies are [`HOST_DENY_PRECEDENCE`], above every allow.
 pub const ALLOW_PRECEDENCE: u32 = 1;
 /// Host policy precedences (spec 06 §3.5.2, tier Normal priority 0):
 /// `MaxAllowPrecedence` and `MaxPrecedence` (a deny).
@@ -68,6 +73,8 @@ pub struct Desired {
     pub enforced: Vec<(u16, String, bool, bool, usize)>,
     /// The host firewall's state (`null` when it is off).
     pub host: Value,
+    /// Names of the flowsdn policies with Pod rules.
+    pub pod_policies: BTreeSet<String>,
 }
 impl Desired {
     pub fn status(&self) -> Value {
@@ -78,6 +85,7 @@ impl Desired {
             })).collect::<Vec<_>>(),
             "ipcache": self.ipcache.len(),
             "host-firewall": self.host,
+            "flowsdn-policies": self.pod_policies,
             "problems": self.problems,
         })
     }
@@ -222,6 +230,33 @@ impl Compiler<'_> {
         out
     }
 
+    /// The keys of one Pod rule of the flowsdn policy kinds.
+    fn pod_rule(&mut self, rule: &Rule, ingress: bool, subject: &PodInfo) -> Vec<HostKey> {
+        let peers = self.host_peers(&rule.policy, rule.peers.as_deref());
+        let mut out = Vec::new();
+        for id in peers {
+            if rule.ports.is_empty() && rule.named.is_empty() {
+                out.push((id, 0, 0, 0));
+            }
+            for (protocol, range) in &rule.ports {
+                out.extend(l4_keys(id, *protocol, *range));
+            }
+            for (protocol, name) in &rule.named {
+                // The destination's container ports name the port.
+                let named = if ingress {
+                    self.named_ports(&[subject])
+                } else {
+                    self.named_ports(&self.pods_of(id))
+                };
+                let key = (*protocol, name.clone());
+                for port in named.get(&key).into_iter().flatten() {
+                    out.push((id, *protocol, *port, 16));
+                }
+            }
+        }
+        out
+    }
+
     /// Named ports a peer identity's Pods expose: (protocol, name) -> ports.
     fn named_ports(&self, pods: &[&PodInfo]) -> BTreeMap<(u8, String), BTreeSet<u16>> {
         let mut out: BTreeMap<(u8, String), BTreeSet<u16>> = BTreeMap::new();
@@ -301,7 +336,18 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
     let mut problems = BTreeSet::new();
     let entries = import(view, &mut problems);
     let mut desired = Desired::default();
-    if !view.identity && !entries.is_empty() {
+    let (pod_policies, pod_problems) = if view.flowsdn_policy {
+        host_policy::pod_policies(
+            &view.pod_policies,
+            &view.clusterwide_policies,
+            &view.cluster_name,
+        )
+    } else {
+        (Vec::new(), BTreeSet::new())
+    };
+    problems.extend(pod_problems);
+    desired.pod_policies = pod_policies.iter().map(|p| p.name.clone()).collect();
+    if !view.identity && !(entries.is_empty() && pod_policies.is_empty()) {
         problems.insert(
             "identity allocation is off: selector peers match no identity, so they allow nothing"
                 .into(),
@@ -317,12 +363,16 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
                 .find(|n| n.name == view.local_node)
                 .map(|n| n.labels.clone())
                 .unwrap_or_default(),
+            view.flowsdn_policy,
         )),
     };
-    // Every CIDR an ipBlock or host rule names (and its exceptions) gets a
-    // local identity.
+    // Every CIDR an ipBlock, host or Pod rule names (and its exceptions) gets
+    // a local identity.
     let mut prefixes = BTreeSet::new();
-    for rule in hosts.iter().flat_map(|h| &h.rules) {
+    let pod_rules = pod_policies
+        .iter()
+        .flat_map(|p| p.ingress.rules.iter().chain(&p.egress.rules));
+    for rule in hosts.iter().flat_map(|h| &h.rules).chain(pod_rules) {
         for peer in rule.peers.iter().flatten() {
             if let HostPeer::Cidr { cidr, except } = peer {
                 for text in std::iter::once(cidr).chain(except) {
@@ -412,11 +462,19 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
                 .iter()
                 .filter(|(_, e)| e.ingress == ingress && e.subject.matches(labels))
                 .collect();
-            if selected.is_empty() {
+            let directions: Vec<&PodDirection> = pod_policies
+                .iter()
+                .filter(|p| p.subject.matches(labels))
+                .map(|p| if ingress { &p.ingress } else { &p.egress })
+                .filter(|d| d.selects)
+                .collect();
+            if selected.is_empty() && directions.is_empty() {
                 continue;
             }
             flags |= bit;
-            for (policy, entry) in selected {
+            let mut allows = BTreeSet::new();
+            let mut denies = BTreeSet::new();
+            for (policy, entry) in &selected {
                 if entry.verdict != Verdict::Allow {
                     compiler
                         .problems
@@ -424,22 +482,33 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
                     continue;
                 }
                 for (identity, protocol, range) in compiler.rules(policy, entry, pod) {
-                    for (key, lpm) in keys(identity, !ingress, protocol, range) {
-                        let Ok(value) =
-                            PolicyEntry::new(0, false, lpm, 0, false, ALLOW_PRECEDENCE, 0)
-                        else {
-                            continue;
-                        };
-                        if desired
-                            .entries
-                            .insert(EndpointPolicyKey::new(*id, key).to_bytes(), value)
-                            .is_none()
-                        {
-                            count = count.saturating_add(1);
-                        }
+                    allows.extend(l4_keys(identity, protocol, range));
+                }
+            }
+            for direction in &directions {
+                for rule in &direction.rules {
+                    let keys = compiler.pod_rule(rule, ingress, pod);
+                    if rule.deny {
+                        denies.extend(keys);
+                    } else {
+                        allows.extend(keys);
                     }
                 }
             }
+            // Nothing selecting this Pod here asks for default deny: its
+            // rules add to a wildcard allow.
+            if selected.is_empty() && !directions.iter().any(|d| d.default_deny) {
+                allows.insert((0, 0, 0, 0));
+            }
+            let (allows, denies) = deny_over_allow(&allows, &denies);
+            count = count.saturating_add(write_entries(
+                &mut desired.entries,
+                u32::from(*id),
+                !ingress,
+                &allows,
+                &denies,
+                ALLOW_PRECEDENCE,
+            ));
         }
         if flags != 0 && *ifindex != 0 {
             desired.endpoints.insert(
@@ -581,40 +650,14 @@ fn host_firewall(
         }
     }
     let (allows, denies) = deny_over_allow(&allows, &denies);
-    let mut count = 0usize;
-    for ((id, protocol, port, prefix), deny) in allows
-        .iter()
-        .map(|k| (*k, false))
-        .chain(denies.iter().map(|k| (*k, true)))
-    {
-        let Ok(key) = PolicyKey::new(id, false, protocol, port, prefix) else {
-            continue;
-        };
-        let lpm = if protocol == 0 {
-            0
-        } else {
-            prefix.saturating_add(8)
-        };
-        let precedence = if deny {
-            HOST_DENY_PRECEDENCE
-        } else {
-            HOST_ALLOW_PRECEDENCE
-        };
-        let Ok(value) = PolicyEntry::new(0, deny, lpm, 0, false, precedence, 0) else {
-            continue;
-        };
-        // A deny replaces an allow at the same key.
-        if desired
-            .entries
-            .insert(
-                EndpointPolicyKey::for_endpoint(HOST_ENDPOINT, key).to_bytes(),
-                value,
-            )
-            .is_none()
-        {
-            count = count.saturating_add(1);
-        }
-    }
+    let count = write_entries(
+        &mut desired.entries,
+        HOST_ENDPOINT,
+        false,
+        &allows,
+        &denies,
+        HOST_ALLOW_PRECEDENCE,
+    );
     let audit = hosts.audit || view.host_firewall == HostFirewall::Audit;
     let mut enforced = Vec::new();
     for (name, ifindex) in &view.host_interfaces {
@@ -656,22 +699,61 @@ fn host_firewall(
     });
 }
 
-/// The LPM keys (with each entry's L4 prefix length) for one allowed
-/// (identity, protocol, port range): protocol 0 is every L4.
-fn keys(identity: u32, egress: bool, protocol: u8, range: PortRange) -> Vec<(PolicyKey, u8)> {
+/// The keys of one (identity, protocol, port range): protocol 0 is every L4.
+fn l4_keys(identity: u32, protocol: u8, range: PortRange) -> Vec<HostKey> {
     if protocol == 0 {
-        return PolicyKey::new(identity, egress, 0, 0, 0)
-            .map(|k| vec![(k, 0)])
-            .unwrap_or_default();
+        return vec![(identity, 0, 0, 0)];
     }
     range
         .blocks()
         .into_iter()
-        .filter_map(|block| {
-            let key = PolicyKey::new(identity, egress, protocol, block.port, block.prefix).ok()?;
-            Some((key, block.prefix.saturating_add(8)))
-        })
+        .map(|block| (identity, protocol, block.port, block.prefix))
         .collect()
+}
+
+/// One endpoint direction's entries; a deny replaces an allow at the same
+/// key. The number of new entries.
+fn write_entries(
+    entries: &mut BTreeMap<[u8; 16], PolicyEntry>,
+    endpoint: u32,
+    egress: bool,
+    allows: &BTreeSet<HostKey>,
+    denies: &BTreeSet<HostKey>,
+    allow_precedence: u32,
+) -> usize {
+    let mut count = 0usize;
+    for ((id, protocol, port, prefix), deny) in allows
+        .iter()
+        .map(|k| (*k, false))
+        .chain(denies.iter().map(|k| (*k, true)))
+    {
+        let Ok(key) = PolicyKey::new(id, egress, protocol, port, prefix) else {
+            continue;
+        };
+        let lpm = if protocol == 0 {
+            0
+        } else {
+            prefix.saturating_add(8)
+        };
+        let precedence = if deny {
+            HOST_DENY_PRECEDENCE
+        } else {
+            allow_precedence
+        };
+        let Ok(value) = PolicyEntry::new(0, deny, lpm, 0, false, precedence, 0) else {
+            continue;
+        };
+        if entries
+            .insert(
+                EndpointPolicyKey::for_endpoint(endpoint, key).to_bytes(),
+                value,
+            )
+            .is_none()
+        {
+            count = count.saturating_add(1);
+        }
+    }
+    count
 }
 
 #[cfg(test)]
