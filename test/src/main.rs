@@ -7,6 +7,7 @@
 //! test (its agent, CNI and BPF objects, staged in the image) inside anonymous
 //! namespaces of this privileged pod. That needs a kernel with TCX and BTF;
 //! a machine without them reports skip.
+mod cni_timing;
 mod env;
 mod fixtures;
 mod lab;
@@ -81,6 +82,7 @@ fn run(suite: &str) -> ExitCode {
         "short" => short::run(&mut report, &env),
         "medium" => {
             short::run(&mut report, &env);
+            cni_timing::run(&mut report, &env);
             fixtures::run(&mut report, &env);
         }
         _ => waves::run(&mut report, &env),

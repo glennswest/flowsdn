@@ -570,6 +570,80 @@ impl DeleteBackend for Deleter {
     }
 }
 
+fn micros(took: Duration) -> u64 {
+    u64::try_from(took.as_micros()).unwrap_or(u64::MAX)
+}
+/// Tell the agent how an ADD went (#396). The pod has its network by now, so
+/// nothing about this may fail the ADD.
+fn report_steps(client: &Client, steps: &[(&'static str, u64)]) {
+    let steps: serde_json::Map<String, Value> = steps
+        .iter()
+        .map(|(step, took)| ((*step).to_owned(), json!(took)))
+        .collect();
+    let _ = client.request(Method::Post, "/v1/cni/timing", Some(&json!({"steps":steps})));
+}
+/// [`Platform`], timing the steps of an ADD. A rollback's steps are not timed.
+struct Timed<'a> {
+    inner: &'a mut Platform,
+    steps: Vec<(&'static str, u64)>,
+    mark: Instant,
+}
+impl Timed<'_> {
+    fn step(&mut self, name: &'static str) {
+        self.steps.push((name, micros(self.mark.elapsed())));
+        self.mark = Instant::now();
+    }
+}
+impl AddBackend for Timed<'_> {
+    fn allocate(&mut self, request: &AddRequest) -> Result<Vec<Lease>> {
+        let out = self.inner.allocate(request);
+        self.step("allocate");
+        out
+    }
+    fn create_link(&mut self, request: &AddRequest) -> Result<Link> {
+        let out = self.inner.create_link(request);
+        self.step("link");
+        out
+    }
+    fn configure(&mut self, request: &AddRequest, link: &Link, leases: &[Lease]) -> Result<()> {
+        let out = self.inner.configure(request, link, leases);
+        self.step("configure");
+        out
+    }
+    fn create_endpoint(
+        &mut self,
+        request: &AddRequest,
+        link: &Link,
+        leases: &[Lease],
+    ) -> Result<Endpoint> {
+        let out = self.inner.create_endpoint(request, link, leases);
+        self.step("endpoint");
+        out
+    }
+    fn finalize(
+        &mut self,
+        request: &AddRequest,
+        link: &mut Link,
+        endpoint: &Endpoint,
+    ) -> Result<()> {
+        let out = self.inner.finalize(request, link, endpoint);
+        self.step("finalize");
+        out
+    }
+    fn may_release_resources(&self) -> bool {
+        self.inner.may_release_resources()
+    }
+    fn delete_endpoint(&mut self, request: &AddRequest) -> Result<()> {
+        self.inner.delete_endpoint(request)
+    }
+    fn delete_link(&mut self, link: &Link) -> Result<()> {
+        self.inner.delete_link(link)
+    }
+    fn release(&mut self, lease: &Lease) -> Result<()> {
+        self.inner.release(lease)
+    }
+}
+
 pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Result<Option<Value>> {
     if command == "VERSION" {
         return Ok(Some(
@@ -594,8 +668,11 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
     );
     match command {
         "ADD" => {
+            let started = Instant::now();
             let request = AddRequest::parse(input, env)?;
             let (client, conf) = connect(&socket)?;
+            let config_took = micros(started.elapsed());
+            let looked_up = Instant::now();
             let config = field(&conf, "status").clone();
             if text(&config, "datapath-mode") != "veth"
                 || !matches!(text(&config, "ipam-mode"), "kubernetes" | "cluster-pool")
@@ -632,8 +709,22 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
                 }
                 Ok(())
             }))?;
-            match add(&request, platform.route_mtu, &mut platform) {
-                Ok(value) => Ok(Some(value)),
+            let route_mtu = platform.route_mtu;
+            let mut timed = Timed {
+                inner: &mut platform,
+                steps: Vec::new(),
+                mark: looked_up,
+            };
+            timed.step("lookup");
+            let outcome = add(&request, route_mtu, &mut timed);
+            let mut steps = std::mem::take(&mut timed.steps);
+            steps.push(("total", micros(started.elapsed())));
+            steps.insert(0, ("config", config_took));
+            match outcome {
+                Ok(value) => {
+                    report_steps(&platform.client, &steps);
+                    Ok(Some(value))
+                }
                 Err(failure) => {
                     for e in failure.rollback_errors {
                         eprintln!("CNI rollback: {e}");

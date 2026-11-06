@@ -10,6 +10,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     net::IpAddr,
     path::Path,
+    time::Instant,
 };
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -89,6 +90,8 @@ pub struct Manager {
     driver: LocalDelivery,
     ipam: Ipam,
     egress: Egress,
+    /// The last [`Manager::create`]'s steps in microseconds (#396).
+    steps: Vec<(&'static str, u64)>,
 }
 impl Manager {
     /// Restore into a fresh object before the caller exposes its API. Stale or
@@ -157,6 +160,7 @@ impl Manager {
             })?,
             ipam,
             egress,
+            steps: Vec::new(),
         };
         let connector = Connector::open()?;
         // Validate every persisted identity/address before installing any link.
@@ -301,8 +305,21 @@ impl Manager {
         self.records.is_empty()
     }
 
+    /// What the last [`Manager::create`] spent on each step, once.
+    pub fn take_steps(&mut self) -> Vec<(&'static str, u64)> {
+        std::mem::take(&mut self.steps)
+    }
     pub fn create(&mut self, mut document: Value) -> Result<u16> {
         let id = self.ids.allocate()?;
+        let mut mark = Instant::now();
+        let mut steps = Vec::new();
+        let mut step = |name: &'static str| {
+            steps.push((
+                name,
+                u64::try_from(mark.elapsed().as_micros()).unwrap_or(u64::MAX),
+            ));
+            mark = Instant::now();
+        };
         let result = (|| {
             document
                 .as_object_mut()
@@ -347,6 +364,7 @@ impl Manager {
             // Publish recoverable intent before any persistent forwarding.
             // Register ownership before publish: a directory rename may succeed
             // even when the following durability barrier reports failure.
+            step("agent-check");
             let staged = self.store.stage(&record)?;
             for ip in &ips {
                 self.addresses.insert(*ip, record.attachment.clone());
@@ -355,6 +373,7 @@ impl Manager {
                 .insert(record.attachment.clone(), record.clone());
             self.deleting.insert(record.attachment.clone());
             staged.publish()?;
+            step("agent-state");
             if let Err(error) = install(&mut self.driver, &record, self.egress) {
                 // Retain ID, addresses and durable intent on any uncertain
                 // rollback. DEL/restart can then complete recovery safely.
@@ -370,8 +389,10 @@ impl Manager {
                 return Err(error);
             }
             self.deleting.remove(&record.attachment);
+            step("agent-install");
             Ok(id)
         })();
+        self.steps = steps;
         if result.is_err() && !self.records.values().any(|record| record.id == id) {
             self.ids.release(id);
         }

@@ -34,6 +34,36 @@ fn mount_fs(kind: &str, target: &str) {
     }
 }
 
+/// /tmp on kernel-check's disk when it has one, so what the agent syncs takes as
+/// long as on a node's (#396); else tmpfs.
+fn tmp_on_disk() {
+    let _ = fs::create_dir_all("/tmp");
+    for module in ["virtio_blk", "ext4"] {
+        let _ = Command::new("/usr/bin/modprobe").arg(module).status();
+    }
+    for _ in 0..30 {
+        if Path::new("/dev/vda").exists() {
+            match mount(
+                Some("/dev/vda"),
+                "/tmp",
+                Some("ext4"),
+                MsFlags::MS_NOSUID,
+                None::<&str>,
+            ) {
+                Ok(()) => println!("vm-init: /tmp is ext4 on /dev/vda"),
+                Err(e) => {
+                    println!("vm-init: mount /dev/vda: {e}");
+                    mount_fs("tmpfs", "/tmp");
+                }
+            }
+            return;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    println!("vm-init: no /dev/vda, /tmp is tmpfs");
+    mount_fs("tmpfs", "/tmp");
+}
+
 fn dump_logs(results: &Path) {
     let Ok(entries) = fs::read_dir(results) else {
         return;
@@ -76,7 +106,7 @@ pub fn run() -> ! {
     mount_fs("bpf", "/sys/fs/bpf");
     mount_fs("cgroup2", "/sys/fs/cgroup");
     mount_fs("tmpfs", "/run");
-    mount_fs("tmpfs", "/tmp");
+    tmp_on_disk();
     let _ = fs::create_dir_all("/results");
     let cmdline = fs::read_to_string("/proc/cmdline").unwrap_or_default();
     let suite = suite_of(&cmdline);

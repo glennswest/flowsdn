@@ -420,6 +420,14 @@ impl Lab {
         endpoint.configure(&result)?;
         Ok(result)
     }
+    /// [`Lab::add`], returning how long the plugin took.
+    pub fn add_timed(&self, endpoint: &mut Endpoint) -> Result<Duration> {
+        let start = Instant::now();
+        let result = self.cni("ADD", endpoint)?;
+        let took = start.elapsed();
+        endpoint.configure(&result)?;
+        Ok(took)
+    }
     pub fn del(&self, endpoint: &Endpoint) -> Result<()> {
         self.cni("DEL", endpoint).map(drop)
     }

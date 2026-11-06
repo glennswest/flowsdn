@@ -320,7 +320,7 @@ struct Lease {
 /// Every route the agent serves, as the first column of docs/agent-api.md's
 /// "Supported methods" table; a test keeps the two equal (#298: the API is a
 /// supported boundary for `sc net` and the console plugin).
-pub const ROUTES: [&str; 18] = [
+pub const ROUTES: [&str; 20] = [
     "`GET /v1/config`",
     "`GET /v1/healthz`",
     "`GET /v1/health/modules`",
@@ -339,6 +339,8 @@ pub const ROUTES: [&str; 18] = [
     "`GET /v1/service`",
     "`GET /v1/node/routes`",
     "`GET /v1/policy/verdicts`",
+    "`GET /v1/cni/timing`",
+    "`POST /v1/cni/timing`",
 ];
 struct Api {
     config: Config,
@@ -347,6 +349,7 @@ struct Api {
     kubernetes: Option<crate::kubernetes::Shared>,
     /// When the host firewall's uplinks were last brought to the view's.
     host_synced: Option<Instant>,
+    timing: crate::cni_timing::Timing,
 }
 impl Api {
     /// Once a second: attach the host firewall (#379) to the uplinks the
@@ -396,7 +399,7 @@ impl Api {
     /// Every request but a read may change the endpoints: publish them for
     /// the annotation writer afterwards, whatever the outcome.
     fn handle(&mut self, request: Request) -> Result<(u16, Value)> {
-        let changes = request.method != "GET";
+        let changes = request.method != "GET" && !request.target.starts_with("/v1/cni/timing");
         let result = self.route(request);
         if changes {
             self.publish();
@@ -452,6 +455,11 @@ impl Api {
             .unwrap_or((&request.target, ""));
         let query = query_values(query)?;
         match (request.method.as_str(), path) {
+            ("GET", "/v1/cni/timing") => return Ok((200, self.timing.json())),
+            ("POST", "/v1/cni/timing") => {
+                self.timing.record_plugin(&request.body);
+                return Ok((200, json!({})));
+            }
             ("GET", "/v1/config") => {
                 return Ok((
                     200,
@@ -789,7 +797,14 @@ impl Api {
             "K8sPodName":pod,"K8sNamespace":namespace,"K8sUID":optional(body,"k8s-uid")?,
             "DatapathConfiguration":{"require-arp-passthrough":false,"require-egress-prog":false,"external-ipam":false,"require-routing":null,"install-endpoint-route":false,"disable-sip-verification":false},
             "EndpointUID":"","Properties":{},"NetnsCookie":cookie,"RTInfo":0,"CNIHostAddressing":self.config.addressing(),"CNIRouteMTU":self.config.route_mtu});
-        let id = self.manager.create(document.clone())?;
+        let started = Instant::now();
+        let created = self.manager.create(document.clone());
+        let took = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        for (step, micros) in self.manager.take_steps() {
+            self.timing.record(step, micros);
+        }
+        self.timing.record("agent-create", took);
+        let id = created?;
         for ip in ips {
             self.leases.remove(&ip);
         }
@@ -1358,6 +1373,7 @@ pub fn run(config_path: &Path) -> Result<()> {
         leases: BTreeMap::new(),
         kubernetes,
         host_synced: None,
+        timing: crate::cni_timing::Timing::default(),
     };
     // Without endpoint GC, never advertise readiness after skipping a deletion.
     // Preserve failed entries and fail startup so a supervisor can retry safely.

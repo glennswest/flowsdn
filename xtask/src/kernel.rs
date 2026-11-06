@@ -39,7 +39,11 @@ const MODULE_INDEXES: [&str; 8] = [
     "modules.builtin.modinfo",
     "modules.order",
 ];
-const MODULE_TREES: [&str; 5] = [
+const MODULE_TREES: [&str; 9] = [
+    "kernel/fs/ext4",
+    "kernel/fs/jbd2",
+    "kernel/fs/mbcache.ko.xz",
+    "kernel/drivers/block/virtio_blk.ko.xz",
     "kernel/net",
     "kernel/lib",
     "kernel/crypto",
@@ -327,11 +331,38 @@ impl Outcome {
     }
 }
 
-fn boot(kernel: &Path, initramfs: &Path, suite: &str) -> Result<Outcome, Box<dyn Error>> {
+/// A sparse ext4 image for the guest's /tmp, so what the agent syncs reaches a
+/// real disk as on a node (#396). `None` without mkfs.ext4: /tmp is then tmpfs.
+fn scratch_disk(tmp: &Path) -> Result<Option<PathBuf>, Box<dyn Error>> {
+    let Ok(mkfs) = on_path("mkfs.ext4") else {
+        return Ok(None);
+    };
+    let image = tmp.join("kernel-check.ext4");
+    fs::File::create(&image)?.set_len(1 << 30)?;
+    let status = Command::new(mkfs).args(["-q", "-F"]).arg(&image).status()?;
+    Ok(status.success().then_some(image))
+}
+
+fn boot(
+    kernel: &Path,
+    initramfs: &Path,
+    disk: Option<&Path>,
+    suite: &str,
+) -> Result<Outcome, Box<dyn Error>> {
     let cmdline = format!(
         "console=ttyS0 rdinit=/test panic=-1 loglevel=3 selinux=0 audit=0 flowsdn.suite={suite}"
     );
-    let mut child = Command::new(on_path("qemu-system-x86_64")?)
+    let drive = disk.map(|path| {
+        format!(
+            "file={},format=raw,if=virtio,cache=none",
+            path.display()
+        )
+    });
+    let mut qemu = Command::new(on_path("qemu-system-x86_64")?);
+    if let Some(drive) = &drive {
+        qemu.args(["-drive", drive]);
+    }
+    let mut child = qemu
         .args(["-enable-kvm", "-cpu", "host", "-machine", "q35"])
         .args(["-m", "4096", "-smp", "4"])
         .args(["-nodefaults", "-display", "none", "-serial", "stdio"])
@@ -396,8 +427,12 @@ pub fn run(root: &Path, suite: &str) -> Result<(), Box<dyn Error>> {
     build_initramfs(&stage, release, &modules, &initramfs)?;
     let size = fs::metadata(&initramfs)?.len() / (1 << 20);
     println!("kernel-check: {suite} on {release}, initramfs {size} MB");
-    let outcome = boot(&kernel, &initramfs, suite)?;
+    let disk = scratch_disk(&tmp)?;
+    let outcome = boot(&kernel, &initramfs, disk.as_deref(), suite)?;
     let _ = fs::remove_file(&initramfs);
+    if let Some(disk) = &disk {
+        let _ = fs::remove_file(disk);
+    }
     outcome.verdict()?;
     println!(
         "kernel-check: {suite} on {release}: {} pass, 0 fail, {} skip",
