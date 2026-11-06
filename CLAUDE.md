@@ -56,6 +56,14 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### CNI ADD timing — #396, 2026-11-06
+
+stormcos#804: warm plain-pod ADD 130 ms (85 on the previous release, busier host) against Cilium's 76 ms; target < 50 ms on a VM, < 100 ms on an HDD server. Issue's guess: object load per endpoint. Code says not (one object per agent; tcx attach per veth). First suspect: 4 fsyncs per endpoint in the agent's state store on a disk-backed /var/lib/flowsdn. Measure first.
+Plan: plugin times its steps and POSTs them; agent times PUT's steps; `GET /v1/cni/timing` gives p50/p99 by step; medium test `cni-add-timing` (warm ADDs, state on a real ext4 disk in kernel-check, which boots with a virtio disk). Then cut the largest.
+
+- [ ] Timing, test, kernel-check numbers.
+- [ ] Cut the largest step, numbers before and after; docs, changelog.
+
 ### Service NAT46/64 on the uplink — #292 (P0), 2026-11-06
 
 Queue released #292 (12.62 carries registry 9912c98), but 12.62-flowsdn is still composing and pvetest2 is on 12.61-flowsdn: medium and perf wait for the install. Next row meanwhile (ADR-0011 #79; RFC 6052 gateway stays milestone 3).
