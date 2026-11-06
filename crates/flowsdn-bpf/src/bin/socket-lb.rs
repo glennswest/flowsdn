@@ -23,7 +23,7 @@ use aya_ebpf::{
     EbpfContext,
     bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, __sk_buff, bpf_fib_lookup, bpf_sock_addr},
     helpers::{
-        bpf_fib_lookup as fib_lookup, bpf_get_netns_cookie, bpf_get_prandom_u32,
+        bpf_check_mtu, bpf_fib_lookup as fib_lookup, bpf_get_netns_cookie, bpf_get_prandom_u32,
         bpf_get_socket_cookie, bpf_ktime_get_ns, bpf_redirect, bpf_redirect_neigh,
     },
     btf_maps::{Array as BtfArray, HashOfMaps},
@@ -613,6 +613,14 @@ pub fn sock6_getpeername(ctx: SockAddrContext) -> i32 {
 // must not masquerade it: it is the reply of a connection its conntrack saw
 // arrive, which iptables/nftables masquerade leaves alone.
 //
+// With `FWD_MODE_DSR` on the frontend (spec 05 §3.12), a backend on another
+// node gets the client's own source: the packet is DNATed and redirected with
+// the frontend in an IP option (spec 02 §2.5) on a TCP SYN or each UDP packet
+// that fits the device's MTU. The backend's node reads the option at its
+// uplink's ingress into a reply entry, and its uplink's egress rewrites the
+// reply's source to the frontend, so replies skip this node. A too-big UDP
+// packet goes without the option: DSR ICMP errors are not implemented.
+//
 // Every direction of a flow is remembered in one LRU map, so a connection
 // keeps its backend and NAT port. Neither program ever drops a packet:
 // anything it does not handle passes untouched.
@@ -639,6 +647,19 @@ const REPLY: u8 = 1;
 const SNAT_REPLY: u8 = 2;
 /// A forward flow to a backend on another node.
 const FLOW_SNAT: u8 = 1;
+/// A forward flow to a backend on another node, keeping the client's source.
+const FLOW_DSR: u8 = 2;
+/// The IPv4 DSR option's type (`IPOPT_COPY | 0x1a`) and length.
+const DSR_OPT4: [u8; 2] = [0x9a, 8];
+/// The IPv6 DSR Destination Options header's length and its option's type and
+/// length (spec 02 §2.5).
+const DSR_OPT6_LEN: i32 = 24;
+const DSR_OPT6: [u8; 2] = [0x1b, 20];
+const IPPROTO_DSTOPTS: u8 = 60;
+/// `BPF_ADJ_ROOM_NET`: room after the fixed network header.
+const ADJ_ROOM_NET: u32 = 0;
+const TCP_FLAGS_SYN_ACK: u8 = 0x12;
+const TCP_FLAG_SYN: u8 = 0x02;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -931,9 +952,121 @@ fn snat_forward4(
     redirect(ctx, result, &fib)
 }
 
+/// Whether a packet going out of `device` carries the DSR option: a TCP SYN
+/// (later packets find the reply entry the SYN left) or a UDP packet that
+/// still fits the device's MTU with `room` more bytes.
+#[inline(always)]
+fn dsr_option_wanted(ctx: &TcContext, l4: usize, proto: u8, device: u32, room: i32) -> Option<bool> {
+    if proto == 6 {
+        let flags = ctx.load::<u8>(l4.checked_add(13)?).ok()?;
+        return Some(flags & TCP_FLAGS_SYN_ACK == TCP_FLAG_SYN);
+    }
+    let mut mtu: u32 = 0;
+    // SAFETY: a live skb; `mtu` is a local the helper writes.
+    let fits = unsafe { bpf_check_mtu(ctx.skb.skb.cast(), device, &mut mtu, room, 0) };
+    Some(fits == 0)
+}
+
+/// Add the frontend as an IP option to a packet with a bare 20-byte header.
+/// An option covers neither L4 checksum, only the header's.
+#[inline(always)]
+fn push_option4(ctx: &TcContext, front: [u8; 4], port: [u8; 2]) -> Option<()> {
+    let first = ctx.load::<[u8; 2]>(14).ok()?;
+    let total = ctx.load::<[u8; 2]>(16).ok()?;
+    ctx.skb.adjust_room(8, ADJ_ROOM_NET, 0).ok()?;
+    let new_first = [0x47, first[1]];
+    let new_total = u16::from_be_bytes(total).checked_add(8)?.to_be_bytes();
+    let head = [DSR_OPT4[0], DSR_OPT4[1], port[0], port[1]];
+    ctx.store(14, &new_first, 0).ok()?;
+    ctx.store(16, &new_total, 0).ok()?;
+    ctx.store(34, &head, 0).ok()?;
+    ctx.store(38, &front, 0).ok()?;
+    let words = [
+        (u16::from_ne_bytes(first), u16::from_ne_bytes(new_first)),
+        (u16::from_ne_bytes(total), u16::from_ne_bytes(new_total)),
+    ];
+    for (old, new) in words {
+        ctx.l3_csum_replace(24, u64::from(old), u64::from(new), 2)
+            .ok()?;
+    }
+    for word in [u32::from_ne_bytes(head), u32::from_ne_bytes(front)] {
+        ctx.l3_csum_replace(24, 0, u64::from(word), 4).ok()?;
+    }
+    Some(())
+}
+
+/// The client's packet to a backend on another node, keeping its source.
+#[inline(always)]
+fn dsr_forward4(
+    ctx: &TcContext,
+    tuple: (usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8; 2]),
+    flow: Nodeport4Value,
+    route: Option<(i64, bpf_fib_lookup)>,
+) -> Option<i32> {
+    let (l4, proto, client, front, _, front_port) = tuple;
+    ttl_ok(ctx)?;
+    let (result, fib) = match route {
+        Some(route) => route,
+        None => fib4(ctx, proto, client, flow.address, 0),
+    };
+    if !forwarded(result) {
+        return None;
+    }
+    // A packet that already has options passes without ours.
+    let option = l4 == 34 && dsr_option_wanted(ctx, l4, proto, fib.ifindex, 8)?;
+    rewrite4(
+        ctx,
+        l4,
+        proto,
+        30,
+        l4.checked_add(2)?,
+        (front, front_port),
+        (flow.address, flow.port),
+    )?;
+    if option {
+        push_option4(ctx, front, front_port)?;
+    }
+    redirect(ctx, result, &fib)
+}
+
+/// On the backend's node: a packet carrying the DSR option leaves the reply
+/// entry [`nodeport4_out`] rewrites by. The packet itself goes on to the pod.
+#[inline(always)]
+fn dsr_backend4(
+    ctx: &TcContext,
+    tuple: (usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8; 2]),
+) -> Option<()> {
+    let (l4, proto, client, backend, client_port, backend_port) = tuple;
+    if l4 != 42 || ctx.load::<[u8; 2]>(34).ok()? != DSR_OPT4 {
+        return None;
+    }
+    let reverse = Nodeport4Key {
+        a: backend,
+        b: client,
+        ap: backend_port,
+        bp: client_port,
+        proto,
+        direction: REPLY,
+        pad: [0; 2],
+    };
+    let front = Nodeport4Value {
+        address: ctx.load::<[u8; 4]>(38).ok()?,
+        port: ctx.load::<[u8; 2]>(36).ok()?,
+        flags: 0,
+        pad: 0,
+        other: [0; 4],
+        other_port: [0; 2],
+        pad2: [0; 2],
+    };
+    NODEPORT4.insert(&reverse, &front, 0).ok()
+}
+
 #[inline(always)]
 fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
     let tuple = tuple4(ctx)?;
+    if dsr_backend4(ctx, tuple).is_some() {
+        return Some(TC_ACT_OK);
+    }
     let (l4, proto, client, front, client_port, front_port) = tuple;
     let mut key = Nodeport4Key {
         a: client,
@@ -986,7 +1119,11 @@ fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
                 other_port: [0; 2],
                 pad2: [0; 2],
             };
-            if forwarded(result) && fib.ifindex == uplink(ctx) {
+            let remote = forwarded(result) && fib.ifindex == uplink(ctx);
+            if remote && service.service_flags() & service_flags::FWD_MODE_DSR != 0 {
+                flow.flags = FLOW_DSR;
+                route = Some((result, fib));
+            } else if remote {
                 // Another node's backend: SNAT to this node's address there.
                 ttl_ok(ctx)?;
                 let (result, fib) = fib4(ctx, proto, [0; 4], backend.0, BPF_FIB_LOOKUP_SRC);
@@ -1037,6 +1174,9 @@ fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
     };
     if flow.flags & FLOW_SNAT != 0 {
         return snat_forward4(ctx, tuple, flow, route);
+    }
+    if flow.flags & FLOW_DSR != 0 {
+        return dsr_forward4(ctx, tuple, flow, route);
     }
     rewrite4(
         ctx,
@@ -1113,6 +1253,11 @@ const ETH_P_IPV6: [u8; 2] = [0x86, 0xdd];
 /// the L4 source port, destination port and UDP/TCP checksum.
 const IP6_NEXT: usize = 20;
 const IP6_HOPS: usize = 21;
+/// The next-header and payload-length fields, and where an extension header
+/// after the fixed header starts.
+const IP6_NEXT: usize = 20;
+const IP6_PAYLOAD: usize = 18;
+const IP6_OPT: usize = 54;
 const IP6_SRC: usize = 22;
 const IP6_DST: usize = 38;
 const IP6_SPORT: usize = 54;
@@ -1314,6 +1459,36 @@ const STEP_REPLY: i32 = 1;
 const STEP_NEW: i32 = 2;
 const STEP_FORWARD: i32 = 3;
 
+/// [`dsr_backend4`] for IPv6: the option is a Destination Options header right
+/// after the fixed one, its next header the L4 protocol.
+#[inline(always)]
+fn dsr_backend6(ctx: &TcContext) -> Option<()> {
+    if ctx.load::<[u8; 2]>(IP6_OPT.checked_add(2)?).ok()? != DSR_OPT6 {
+        return None;
+    }
+    let proto = ctx.load::<u8>(IP6_OPT).ok()?;
+    let l4 = IP6_SPORT.checked_add(usize::try_from(DSR_OPT6_LEN).ok()?)?;
+    let reverse = Nodeport6Key {
+        a: ctx.load::<[u8; 16]>(IP6_DST).ok()?,
+        b: ctx.load::<[u8; 16]>(IP6_SRC).ok()?,
+        ap: ctx.load::<[u8; 2]>(l4.checked_add(2)?).ok()?,
+        bp: ctx.load::<[u8; 2]>(l4).ok()?,
+        proto,
+        direction: REPLY,
+        pad: [0; 2],
+    };
+    let front = Nodeport6Value {
+        address: ctx.load::<[u8; 16]>(IP6_OPT.checked_add(4)?).ok()?,
+        port: ctx.load::<[u8; 2]>(IP6_OPT.checked_add(20)?).ok()?,
+        flags: 0,
+        pad: 0,
+        other: [0; 16],
+        other_port: [0; 2],
+        pad2: [0; 2],
+    };
+    NODEPORT6.insert(&reverse, &front, 0).ok()
+}
+
 /// [`nodeport4_in`] for IPv6, up to the flow lookup: fill [`INGRESS6`] and
 /// return the step.
 #[inline(never)]
@@ -1323,6 +1498,10 @@ fn ingress6(skb: *mut __sk_buff) -> i32 {
 #[inline(always)]
 fn classify6(ctx: &TcContext) -> Option<i32> {
     let state = INGRESS6.get_ptr_mut(0)?;
+    if ctx.load::<u8>(IP6_NEXT).ok()? == IPPROTO_DSTOPTS {
+        let _ = dsr_backend6(ctx);
+        return Some(STEP_PASS);
+    }
     let tuple = tuple6(ctx)?;
     let (proto, client, front, client_port, front_port) = tuple;
     let mut key = Nodeport6Key {
@@ -1412,6 +1591,8 @@ fn nodeport_forward6(skb: *mut __sk_buff) -> i32 {
     let state = unsafe { &*state };
     if state.flow.flags & FLOW_SNAT != 0 {
         snat_forward6_in(&ctx, &state.tuple, &state.flow).unwrap_or(TC_ACT_OK)
+    } else if state.flow.flags & FLOW_DSR != 0 {
+        dsr_forward6_in(&ctx, &state.tuple, &state.flow).unwrap_or(TC_ACT_OK)
     } else {
         let _ = local6(&ctx, &state.tuple, &state.flow);
         TC_ACT_OK
@@ -1442,6 +1623,41 @@ fn snat_forward6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> O
         (client, client_port),
         (flow.other, flow.other_port),
     )?;
+    redirect6(ctx, result, fib)
+}
+/// [`dsr_forward4`] for IPv6. The option is a Destination Options header, which
+/// neither the upper-layer length nor the protocol in the L4 checksum counts.
+#[inline(always)]
+fn dsr_forward6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Option<i32> {
+    let (proto, client, front, _, front_port) = *tuple;
+    hops_ok(ctx)?;
+    let (result, fib) = fib6(ctx, proto, client, flow.address, 0)?;
+    if !forwarded(result) {
+        return None;
+    }
+    // SAFETY: the per-CPU slot fib6 just filled; a plain field read.
+    let device = unsafe { (*fib).ifindex };
+    let option = dsr_option_wanted(ctx, IP6_SPORT, proto, device, DSR_OPT6_LEN)?;
+    rewrite6(
+        ctx,
+        proto,
+        IP6_DST,
+        IP6_DPORT,
+        (front, front_port),
+        (flow.address, flow.port),
+    )?;
+    if option {
+        let payload = u16::from_be_bytes(ctx.load::<[u8; 2]>(IP6_PAYLOAD).ok()?);
+        let grown = payload.checked_add(u16::try_from(DSR_OPT6_LEN).ok()?)?;
+        ctx.skb.adjust_room(DSR_OPT6_LEN, ADJ_ROOM_NET, 0).ok()?;
+        let head = [proto, 2, DSR_OPT6[0], DSR_OPT6[1]];
+        ctx.store(IP6_OPT, &head, 0).ok()?;
+        ctx.store(IP6_OPT.checked_add(4)?, &front, 0).ok()?;
+        ctx.store(IP6_OPT.checked_add(20)?, &front_port, 0).ok()?;
+        ctx.store(IP6_OPT.checked_add(22)?, &[0u8; 2], 0).ok()?;
+        ctx.store(IP6_PAYLOAD, &grown.to_be_bytes(), 0).ok()?;
+        ctx.store(IP6_NEXT, &IPPROTO_DSTOPTS, 0).ok()?;
+    }
     redirect6(ctx, result, fib)
 }
 /// A node-local backend: rewrite the destination, let the stack deliver it.
@@ -1525,7 +1741,10 @@ fn new_flow6_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> O
         other_port: [0; 2],
         pad2: [0; 2],
     };
-    if forwarded(result) && out_device == uplink(ctx) {
+    let remote = forwarded(result) && out_device == uplink(ctx);
+    if remote && service.service_flags() & service_flags::FWD_MODE_DSR != 0 {
+        flow.flags = FLOW_DSR;
+    } else if remote {
         // Another node's backend: SNAT to this node's address there.
         hops_ok(ctx)?;
         let (result, source) = fib6(ctx, proto, [0; 16], backend.0, BPF_FIB_LOOKUP_SRC)?;

@@ -45,6 +45,10 @@ pub struct ServiceInfo {
     /// Maglev for traffic from outside the cluster (the node-local
     /// frontends); the socket LB always picks at random.
     pub maglev: bool,
+    /// Direct server return for this Service's TCP ports, and its others
+    /// (`lb-mode: hybrid` differs), for traffic from outside the cluster.
+    pub dsr_tcp: bool,
+    pub dsr_other: bool,
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Endpoint {
@@ -228,6 +232,12 @@ pub fn frontends(
                             affinity: service.affinity,
                             scope,
                             maglev: service.maglev && scope == SCOPE_NODE_LOCAL,
+                            dsr: scope == SCOPE_NODE_LOCAL
+                                && if proto == PROTO_TCP {
+                                    service.dsr_tcp
+                                } else {
+                                    service.dsr_other
+                                },
                         },
                     });
                 }
@@ -289,6 +299,9 @@ pub fn service_list(frontends: &[Frontend], ids: &BTreeMap<(Address, u8), u16>) 
                 }
                 if let (true, Some(object)) = (f.service.maglev, flags.as_object_mut()) {
                     object.insert("lb-algorithm".into(), json!("maglev"));
+                }
+                if let (true, Some(object)) = (f.service.dsr, flags.as_object_mut()) {
+                    object.insert("forwarding-mode".into(), json!("dsr"));
                 }
                 let spec = json!({"id":id,"frontend-address":front,"backend-addresses":backends,
                     "flags":flags});

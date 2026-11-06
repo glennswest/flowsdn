@@ -102,6 +102,8 @@ pub struct Service {
     /// The [`LB_ALGORITHM_ANNOTATION`] when it is `random` or `maglev`
     /// (spec 05 §3.13); other values are ignored.
     pub lb_algorithm: Option<String>,
+    /// `service.flowsdn.io/forwarding-mode`: `dsr` or `snat` when valid.
+    pub forwarding_mode: Option<String>,
 }
 /// The per-Service load-balancing algorithm annotation.
 pub const LB_ALGORITHM_ANNOTATION: &str = "service.flowsdn.io/lb-algorithm";
@@ -584,6 +586,11 @@ fn parse_service(value: &Value, metadata: Metadata) -> Result<Service, Error> {
             .pointer("/metadata/annotations/service.flowsdn.io~1lb-algorithm")
             .and_then(Value::as_str)
             .filter(|a| matches!(*a, "random" | "maglev"))
+            .map(str::to_owned),
+        forwarding_mode: value
+            .pointer("/metadata/annotations/service.flowsdn.io~1forwarding-mode")
+            .and_then(Value::as_str)
+            .filter(|a| matches!(*a, "dsr" | "snat"))
             .map(str::to_owned),
     })
 }

@@ -66,6 +66,9 @@ pub struct Service {
     /// algorithm 2 and the frontend gets a lookup table. Only the uplink
     /// NodePort programs (scope 1) read it; the socket LB picks at random.
     pub maglev: bool,
+    /// Direct server return (spec 05 §3.12): the master carries `FWD_MODE_DSR`.
+    /// Only the uplink NodePort programs (scope 1) read it.
+    pub dsr: bool,
 }
 
 /// The four maps' contents as raw map bytes, keyed as the kernel keys them.
@@ -304,15 +307,20 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
         } else {
             Algorithm::Random
         };
+        let routable = if service.dsr {
+            service_flags::ROUTABLE | service_flags::FWD_MODE_DSR
+        } else {
+            service_flags::ROUTABLE
+        };
         match service.affinity {
             Some(seconds) => {
-                master.set_service_flags(service_flags::ROUTABLE | service_flags::SESSION_AFFINITY);
+                master.set_service_flags(routable | service_flags::SESSION_AFFINITY);
                 master
                     .set_affinity(algorithm, seconds)
                     .map_err(|_| format!("{frontend}: affinity timeout {seconds} s too long"))?;
             }
             None => {
-                master.set_service_flags(service_flags::ROUTABLE);
+                master.set_service_flags(routable);
                 if service.maglev {
                     // The union's top byte is the algorithm; no timeout.
                     master

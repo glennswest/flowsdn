@@ -52,6 +52,7 @@ fn service(frontend: &str, proto: u8, backends: &[&str]) -> Result<Service> {
         affinity: None,
         scope: socket::SCOPE_CLUSTER,
         maglev: false,
+        dsr: false,
     })
 }
 /// Plan from the kernel's maps and apply, as the agent's services thread does.
@@ -388,6 +389,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             affinity: None,
             scope: SCOPE_NODE_LOCAL,
             maglev: false,
+            dsr: false,
         });
     }
     program(lb, services)?;
@@ -436,7 +438,163 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     nodeport6(lb, services)?;
     snat(lb, services)?;
     maglev(lb, services)?;
+    dsr(lb, services)?;
     services.retain(|s| s.scope != SCOPE_NODE_LOCAL);
+    Ok(())
+}
+
+/// TCP checksum of a frame whose L4 starts at `l4`, after a change of flags.
+fn ack(mut frame: Vec<u8>, l4: usize) -> Result<Vec<u8>> {
+    let (src, dst) = if l4 == 34 { (26..30, 30..34) } else { (22..38, 38..54) };
+    *frame.get_mut(l4.saturating_add(13)).ok_or("tcp")? = 0x10;
+    frame.splice(l4.saturating_add(16)..l4.saturating_add(18), [0, 0]);
+    let check = !(l4_sum(
+        6,
+        frame.get(src).ok_or("ip")?,
+        frame.get(dst).ok_or("ip")?,
+        frame.get(l4..).ok_or("l4")?,
+    ) as u16);
+    frame.splice(l4.saturating_add(16)..l4.saturating_add(18), check.to_be_bytes());
+    Ok(frame)
+}
+
+/// Direct server return (spec 05 §3.12, spec 02 §2.5): the front node keeps
+/// the client's source and adds the frontend as an option; the backend's node
+/// learns the frontend from it and rewrites the reply's source.
+fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
+    let up0 = node()?;
+    let (front, client, remote) = ([192, 0, 2, 20], [198, 51, 100, 9], [10, 9, 1, 5]);
+    let (front6, client6, remote6) = (
+        ip6("2001:db8:2::20")?,
+        ip6("2001:db8:64::9")?,
+        ip6("fd00:9:1::5")?,
+    );
+    for proto in [PROTO_TCP, PROTO_UDP] {
+        for (frontend, backend) in [
+            ("192.0.2.20:30095", "10.9.1.5:8080"),
+            ("[2001:db8:2::20]:30095", "[fd00:9:1::5]:8080"),
+        ] {
+            services.push(Service {
+                frontend: address(frontend, proto)?,
+                backends: vec![address(backend, proto)?],
+                affinity: None,
+                scope: SCOPE_NODE_LOCAL,
+                maglev: false,
+                dsr: true,
+            });
+        }
+    }
+    program(lb, services)?;
+    let port = 30095u16.to_be_bytes();
+    let [p0, p1] = port;
+    let option4 = [0x9a, 8, p0, p1, 192, 0, 2, 20];
+    for (proto, udp_zero, sport) in [(6u8, false, 41000u16), (17, false, 41001), (17, true, 41002)] {
+        let request = frame4(proto, client, front, sport, 30095, udp_zero);
+        let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+        // The option moves L4 by 8 bytes; without it the frame parses as usual.
+        let mut bare = out.clone();
+        bare.drain(34..42);
+        let length = u16::from_be_bytes(out.get(16..18).ok_or("ip")?.try_into()?);
+        let ip_ok = sum(out.get(14..42).ok_or("ip")?, 0) == 0xffff;
+        let (src, dst, s, d, _, l4_ok) = parse4(&bare)?;
+        if out.get(14) != Some(&0x47)
+            || out.get(34..42) != Some(&option4[..])
+            || usize::from(length) != out.len().saturating_sub(14)
+            || !ip_ok
+            || !l4_ok
+            || (src, dst, s, d) != (client, remote, sport, 8080)
+            || out.get(22) != Some(&63)
+        {
+            return Err(format!(
+                "DSR forward proto {proto}: {src:?}:{s} -> {dst:?}:{d}, header {:?}, ip {ip_ok} l4 {l4_ok}",
+                out.get(14..42)
+            )
+            .into());
+        }
+        // The backend's node: nothing to rewrite before the option, then the
+        // reply leaves with the frontend as its source.
+        let reply = frame4(proto, remote, client, 8080, sport, udp_zero);
+        if run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)? != reply {
+            return Err(format!("DSR proto {proto}: a reply was rewritten before its option").into());
+        }
+        if run_on(lb, "nodeport_ingress", &out, up0, TC_ACT_OK)? != out {
+            return Err(format!("DSR proto {proto}: the backend's node changed the packet").into());
+        }
+        let (src, dst, s, d, ip_ok, l4_ok) = parse4(&run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)?)?;
+        if (src, dst, s, d) != (front, client, 30095, sport) || !ip_ok || !l4_ok {
+            return Err(format!(
+                "DSR reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}, ip {ip_ok} l4 {l4_ok}"
+            )
+            .into());
+        }
+    }
+    // A later TCP segment finds the reply entry the SYN left: no option.
+    let later = ack(frame4(6, client, front, 41000, 30095, false), 34)?;
+    let out = run_on(lb, "nodeport_ingress", &later, up0, TC_ACT_REDIRECT)?;
+    let (src, dst, _, d, ip_ok, l4_ok) = parse4(&out)?;
+    if out.get(14) != Some(&0x45) || (src, dst, d) != (client, remote, 8080) || !ip_ok || !l4_ok {
+        return Err(format!("DSR later segment: {src:?} -> {dst:?}:{d}, {:?}", out.get(14)).into());
+    }
+    // A UDP packet the option would push over the MTU goes without it.
+    let mut big = frame4(17, client, front, 41003, 30095, true);
+    big.resize(1514, 0);
+    big.splice(16..18, 1500u16.to_be_bytes());
+    big.splice(24..26, [0, 0]);
+    big.splice(38..40, 1480u16.to_be_bytes());
+    let check = !(sum(big.get(14..34).ok_or("ip")?, 0) as u16);
+    big.splice(24..26, check.to_be_bytes());
+    let out = run_on(lb, "nodeport_ingress", &big, up0, TC_ACT_REDIRECT)?;
+    if out.get(14) != Some(&0x45) || out.len() != 1514 {
+        return Err(format!("DSR too-big UDP: {:?}, {} bytes", out.get(14), out.len()).into());
+    }
+
+    let mut option6 = vec![2, 0x1b, 20];
+    option6.extend_from_slice(&front6);
+    option6.extend_from_slice(&port);
+    option6.extend_from_slice(&[0, 0]);
+    for (proto, sport) in [(6u8, 41100u16), (17, 41101)] {
+        let request = frame6(proto, client6, front6, sport, 30095, false);
+        let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+        let mut bare = out.clone();
+        bare.drain(54..78);
+        *bare.get_mut(20).ok_or("ip")? = proto;
+        let (src, dst, s, d, hops, l4_ok) = parse6(&bare)?;
+        let length = u16::from_be_bytes(out.get(18..20).ok_or("ip")?.try_into()?);
+        if out.get(20) != Some(&60)
+            || out.get(54) != Some(&proto)
+            || out.get(55..78) != Some(&option6[..])
+            || usize::from(length) != out.len().saturating_sub(54)
+            || (src, dst, s, d) != (client6, remote6, sport, 8080)
+            || hops != 63
+            || !l4_ok
+        {
+            return Err(format!(
+                "DSR IPv6 forward proto {proto}: {src:?}:{s} -> {dst:?}:{d}, hops {hops}, checksum {l4_ok}, header {:?}",
+                out.get(54..78)
+            )
+            .into());
+        }
+        let reply = frame6(proto, remote6, client6, 8080, sport, false);
+        if run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)? != reply {
+            return Err(format!("DSR IPv6 proto {proto}: a reply was rewritten before its option").into());
+        }
+        if run_on(lb, "nodeport_ingress", &out, up0, TC_ACT_OK)? != out {
+            return Err(format!("DSR IPv6 proto {proto}: the backend's node changed the packet").into());
+        }
+        let (src, dst, s, d, _, l4_ok) = parse6(&run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)?)?;
+        if (src, dst, s, d) != (front6, client6, 30095, sport) || !l4_ok {
+            return Err(format!("DSR IPv6 reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}").into());
+        }
+    }
+    let later = ack(frame6(6, client6, front6, 41100, 30095, false), 54)?;
+    let out = run_on(lb, "nodeport_ingress", &later, up0, TC_ACT_REDIRECT)?;
+    let (src, dst, _, d, _, l4_ok) = parse6(&out)?;
+    if out.get(20) != Some(&6) || (src, dst, d) != (client6, remote6, 8080) || !l4_ok {
+        return Err(format!("DSR IPv6 later segment: {src:?} -> {dst:?}:{d}").into());
+    }
+    println!(
+        "PASS DSR: to a backend on another node the client's source is kept and the frontend travels in the IPv4 option or IPv6 Destination Options header on a TCP SYN and each UDP packet (not on a later TCP segment, nor on UDP the option would push over the MTU), checksums valid; the backend's node leaves the packet alone and its egress rewrites the reply's source to the frontend"
+    );
     Ok(())
 }
 
@@ -454,6 +612,7 @@ fn maglev(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         affinity: None,
         scope: SCOPE_NODE_LOCAL,
         maglev: true,
+        dsr: false,
     });
     services.push(Service {
         frontend: address("[2001:db8:2::20]:30070", PROTO_UDP)?,
@@ -464,6 +623,7 @@ fn maglev(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         affinity: None,
         scope: SCOPE_NODE_LOCAL,
         maglev: true,
+        dsr: false,
     });
     program(lb, services)?;
     let maps = lb.dump()?;
@@ -540,6 +700,7 @@ fn nodeport6(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             affinity: None,
             scope: SCOPE_NODE_LOCAL,
             maglev: false,
+            dsr: false,
         });
     }
     program(lb, services)?;
@@ -603,6 +764,7 @@ fn snat(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             affinity: None,
             scope: SCOPE_NODE_LOCAL,
             maglev: false,
+            dsr: false,
         });
     }
     program(lb, services)?;
@@ -730,6 +892,7 @@ fn snat6(
             affinity: None,
             scope: SCOPE_NODE_LOCAL,
             maglev: false,
+            dsr: false,
         });
     }
     program(lb, services)?;

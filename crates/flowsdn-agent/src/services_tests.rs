@@ -68,6 +68,38 @@ fn backends(frontends: &[Frontend], port: u16, proto: u8) -> Vec<String> {
 }
 
 #[test]
+fn dsr_applies_to_node_local_frontends_of_the_port_protocol() {
+    let service = ServiceInfo {
+        namespace: "default".into(),
+        name: "web".into(),
+        service_type: "NodePort".into(),
+        cluster_ips: vec![ip("10.96.5.6")],
+        ports: vec![
+            ServicePort {
+                node_port: Some(30080),
+                ..port("http", "TCP", 80)
+            },
+            ServicePort {
+                node_port: Some(30053),
+                ..port("dns", "UDP", 53)
+            },
+        ],
+        dsr_tcp: true,
+        ..ServiceInfo::default()
+    };
+    let nodes = [NodeAddresses {
+        name: "n1".into(),
+        ips: vec![ip("192.0.2.1")],
+    }];
+    let out = frontends(&[service], &[], "n1", &nodes);
+    assert!(!out.is_empty());
+    for f in &out {
+        let tcp = f.service.frontend.proto == PROTO_TCP;
+        assert_eq!(f.service.dsr, tcp && f.service.scope == SCOPE_NODE_LOCAL);
+    }
+}
+
+#[test]
 fn kube_dns_and_kubernetes_services() {
     let kubernetes = ServiceInfo {
         namespace: "default".into(),

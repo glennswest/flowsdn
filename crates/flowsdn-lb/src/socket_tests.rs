@@ -17,6 +17,7 @@ fn dns(backends: &[&str]) -> Vec<Service> {
             affinity: None,
             scope: SCOPE_CLUSTER,
             maglev: false,
+            dsr: false,
         })
         .collect()
 }
@@ -156,6 +157,7 @@ fn dual_stack_and_mixed_backends() {
             affinity: None,
             scope: SCOPE_CLUSTER,
             maglev: false,
+            dsr: false,
         },
         Service {
             frontend: addr("fd00:10:96::1", 443, PROTO_TCP),
@@ -163,6 +165,7 @@ fn dual_stack_and_mixed_backends() {
             affinity: None,
             scope: SCOPE_CLUSTER,
             maglev: false,
+            dsr: false,
         },
     ];
     sync(&mut maps, &services);
@@ -276,11 +279,13 @@ fn node_local_scope_is_a_separate_service_with_its_own_id() {
         affinity: None,
         scope: SCOPE_CLUSTER,
         maglev: false,
+        dsr: false,
     };
     let local = Service {
         backends: vec![addr("10.1.0.5", 8080, PROTO_TCP)],
         scope: SCOPE_NODE_LOCAL,
         maglev: false,
+        dsr: false,
         ..cluster.clone()
     };
     let want = sync(&mut maps, &[cluster.clone(), local.clone()]);
@@ -318,6 +323,7 @@ fn maglev_tables_follow_their_backends() {
                 affinity,
                 scope: SCOPE_NODE_LOCAL,
                 maglev: true,
+                dsr: false,
             },
             Service {
                 frontend: front6,
@@ -325,6 +331,7 @@ fn maglev_tables_follow_their_backends() {
                 affinity,
                 scope: SCOPE_NODE_LOCAL,
                 maglev: true,
+                dsr: false,
             },
         ]
     };

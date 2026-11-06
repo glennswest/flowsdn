@@ -67,7 +67,17 @@ as PID 1 (`rdinit=/test`, flowsdn.suite=medium), reads the JSON lines on the ser
 - [x] First runs found socket-lb unloadable on 7.2 since 38f1c27 (Maglev index, `R0 unbounded memory access`); fixed with a volatile read, object + lock rebuilt.
       Run with the fix on 7.2.11-200.fc44: 18 pass, 0 fail, 2 skip (node probes), socket-lb-live 23 PASS, policy-live 13 PASS.
 - [x] Docs (build-and-test, test/README, xtask README), changelog; stage precondition for #370.
-- [ ] Full sc-build, stage the golden, close #370. Then the next #292 row.
+- [x] Full sc-build at 23ee542 (fmt, Clippy x2, 845 workspace tests, kubernetes agent tests, chart-check); stage a492ebac8856 requested; #370 closed.
+- [ ] Hardware medium + perf wait for a release carrying stormblock-registry v0.55.1.
+
+### DSR on the uplink NodePort path — #292 (P0), 2026-11-06
+
+Next row, since kernel-check lifts the "unverified objects" hold. Spec 05 §3.12, spec 02 §2.5 wire format, `opt` dispatch only. Scope-1 master with `FWD_MODE_DSR` and a backend on
+another node: `nodeport_ingress` keeps the client source, DNATs, adds the IPv4 option (0x9a, len 8, port, addr) or IPv6 24-byte Destination Options (type 0x1B, len 20) on a TCP SYN or a UDP
+packet that fits the MTU (too big: no option, DSR ICMP errors not done), FIB-redirects. Backend node's `nodeport_ingress` records the REPLY entry from the option; `nodeport_egress` already rewrites the reply's source.
+`kubernetes.lb-mode: snat|dsr|hybrid` (default snat), annotation `service.flowsdn.io/forwarding-mode: dsr|snat`. ipip/geneve dispatch: not done.
+
+- [ ] BPF, planner flag, agent setting + annotation, socket-lb-live DSR step, object + lock, docs, changelog.
 
 ### Pod rules of the flowsdn policy kinds — #292 (P0), 2026-11-06
 

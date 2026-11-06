@@ -25,6 +25,18 @@ const IPV6_CLUSTER_ALLOC_BASE: [u16; 4] = [0xf00d, 0, 0, 0];
 /// A network address and prefix length.
 pub type Cidr = (IpAddr, u8);
 
+/// `kubernetes.lb-mode` (spec 05 §3.12).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum LbMode {
+    /// Source-NAT to this node's address.
+    #[default]
+    Snat,
+    /// Direct server return.
+    Dsr,
+    /// Direct server return for TCP, source NAT otherwise.
+    Hybrid,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Settings {
     pub node_name: String,
@@ -48,6 +60,10 @@ pub struct Settings {
     /// backend. A Service's `service.flowsdn.io/lb-algorithm` annotation
     /// overrides it.
     pub maglev: bool,
+    /// `lb-mode` (default `snat`), which a Service's
+    /// `service.flowsdn.io/forwarding-mode` annotation overrides: how traffic
+    /// from outside reaches a backend on another node.
+    pub lb_mode: LbMode,
     /// Cluster identity allocation (spec 03 §3.3, #291), default on: watch
     /// Namespaces and FlowsdnIdentity objects and hold an identity for each
     /// local Pod's labels.
@@ -125,6 +141,12 @@ impl Settings {
             "maglev" => true,
             _ => return Err("kubernetes.lb-algorithm must be random or maglev".into()),
         };
+        let lb_mode = match text("lb-mode")?.as_str() {
+            "" | "snat" => LbMode::Snat,
+            "dsr" => LbMode::Dsr,
+            "hybrid" => LbMode::Hybrid,
+            _ => return Err("kubernetes.lb-mode must be snat, dsr or hybrid".into()),
+        };
         let host_firewall = match text("host-firewall")?.as_str() {
             "" | "off" => HostFirewall::Off,
             "audit" => HostFirewall::Audit,
@@ -163,6 +185,7 @@ impl Settings {
             service_lb: flag("service-lb", true)?,
             node_port: flag("node-port", true)?,
             maglev,
+            lb_mode,
             identity_allocation: flag("identity-allocation", true)?,
             network_policy: flag("network-policy", true)?,
             flowsdn_policy: flag("flowsdn-policy", false)?,

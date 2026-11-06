@@ -370,7 +370,7 @@ impl Controller {
                 }
                 if settings.service_lb {
                     let (svc_view, svc_lb) = (Arc::clone(&watch_view), lb.clone());
-                    let maglev = settings.maglev;
+                    let (maglev, lb_mode) = (settings.maglev, settings.lb_mode);
                     parts.push(
                         watch_forever(
                             &client,
@@ -378,7 +378,7 @@ impl Controller {
                             "services-watch",
                             &watch_view,
                             move |state| {
-                                let rows = service_rows(state, maglev);
+                                let rows = service_rows(state, maglev, lb_mode);
                                 let frontends = {
                                     let mut view = lock(&svc_view);
                                     view.services = rows;
@@ -893,8 +893,8 @@ fn identity_rows(state: &WatchState) -> Vec<identity::Object> {
         .collect()
 }
 /// The Services; `maglev` is the `lb-algorithm` default a Service's
-/// annotation overrides.
-fn service_rows(state: &WatchState, maglev: bool) -> Vec<ServiceInfo> {
+/// annotation overrides, as its annotation does `lb_mode`.
+fn service_rows(state: &WatchState, maglev: bool, lb_mode: LbMode) -> Vec<ServiceInfo> {
     state
         .snapshot()
         .all()
@@ -923,6 +923,14 @@ fn service_rows(state: &WatchState, maglev: bool) -> Vec<ServiceInfo> {
                     Some("maglev") => true,
                     Some(_) => false,
                     None => maglev,
+                },
+                dsr_tcp: match service.forwarding_mode.as_deref() {
+                    Some(mode) => mode == "dsr",
+                    None => lb_mode != LbMode::Snat,
+                },
+                dsr_other: match service.forwarding_mode.as_deref() {
+                    Some(mode) => mode == "dsr",
+                    None => lb_mode == LbMode::Dsr,
                 },
             }),
             _ => None,
