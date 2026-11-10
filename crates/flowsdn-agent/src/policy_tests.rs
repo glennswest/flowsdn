@@ -636,3 +636,37 @@ fn clusterwide_pod_rules_cross_namespaces_and_leave_host_rules_alone() {
         "the host rule is not a Pod policy"
     );
 }
+
+/// #402: before the FlowsdnClusterwideNetworkPolicy list (its CRD may not be
+/// applied, stormcos#303) the host firewall holds nothing back and enforces
+/// nothing; Pod rules of the flowsdn kinds still wait for it.
+#[test]
+fn host_firewall_does_not_wait_for_the_clusterwide_list() {
+    for mode in [HostFirewall::Audit, HostFirewall::Enforce] {
+        let mut view = host_view(mode, false);
+        view.clusterwide_policies.clear();
+        view.clusterwide_synced = false;
+        view.nodes_synced = true;
+        assert!(view.policy_lists_ready(), "{mode:?}: NetworkPolicy is not held back");
+        let desired = compile(&view, &[]);
+        assert_eq!(
+            desired.endpoints.get(&5),
+            Some(&PolicyEndpoint {
+                endpoint: HOST_ENDPOINT,
+                flags: 0
+            }),
+            "{mode:?}: the uplink is judged by nothing until the list arrives"
+        );
+        assert!(host_keys(&desired).is_empty());
+        view.flowsdn_policy = true;
+        view.pod_policies_synced = true;
+        assert!(!view.policy_lists_ready(), "{mode:?}: Pod rules wait");
+        view.clusterwide_synced = true;
+        assert!(view.policy_lists_ready());
+    }
+    let mut view = host_view(HostFirewall::Off, false);
+    view.nodes_synced = true;
+    assert!(view.policy_lists_ready());
+    view.policies_synced = false;
+    assert!(!view.policy_lists_ready(), "NetworkPolicy waits for its list");
+}

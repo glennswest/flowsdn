@@ -79,10 +79,12 @@ pinning or subsystem libraries are absent are **not current status**.
   rules (`nodeSelector`; ingress/ingressDeny with entities, CIDRs, endpoints,
   ports) enforced by `from_netdev`/`to_netdev` on the uplinks, audit mode,
   60 s learning, verdict counters for every enforced endpoint
-  (`GET /v1/policy/verdicts`); `kubernetes.host-firewall`, default off.
+  (`GET /v1/policy/verdicts`); `kubernetes.host-firewall`, default off, `audit`
+  in the stormcos `manifests-kubernetes` config (#402, stormfw's audit phase).
   Compiler unit-tested, programs test-run by `policy-live` on 7.2 (kernel-check);
-  in golden-flowsdn-e23d9621fbd6. Not on a cluster or a real uplink. Enabling it
-  needs the CRDs (stormcos#303), or policy updates stall.
+  in golden-flowsdn-e23d9621fbd6. Not on a cluster or a real uplink. Without the
+  CRDs (stormcos#303) it has nothing to judge; since #402 NetworkPolicy no longer
+  waits for that list.
 - Maglev backend selection for traffic from outside the cluster (spec 05
   §3.13/§5.1, `kubernetes.lb-algorithm` or the
   `service.flowsdn.io/lb-algorithm` annotation): per-frontend tables in

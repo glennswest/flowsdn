@@ -50,7 +50,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
 | `kubernetes.flowsdn-policy` | `false` | Enforce the Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy ([Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292)). The CRDs must exist: the policy thread waits for both lists, NetworkPolicy enforcement included. |
-| `kubernetes.host-firewall` | `off` | `off`, `audit` or `enforce`: filter traffic to the node itself from FlowsdnClusterwideNetworkPolicy host rules ([host firewall](#host-firewall-379)); `audit` counts would-be drops and passes them. |
+| `kubernetes.host-firewall` | `off` | `off`, `audit` or `enforce`: filter traffic to the node itself from FlowsdnClusterwideNetworkPolicy host rules ([host firewall](#host-firewall-379)); `audit` counts would-be drops and passes them. The stormcos Kubernetes-mode config sets `audit` (#402). |
 | `kubernetes.cluster-name` | `default` | The cluster label on every Pod identity (`io.flowsdn.k8s.policy.cluster`); a DNS label of at most 32 bytes. |
 
 The `kubernetes` booleans must be JSON booleans and its strings strings, or
@@ -588,9 +588,13 @@ reference's host firewall ([ADR-0022](decisions/0022-host-firewall.md)), so one
 policy works on both stormcos flavours: stormfw (stormcos#558) translates its
 `HostFirewallPolicy` into a `FlowsdnClusterwideNetworkPolicy` here as it does
 into a `CiliumClusterwideNetworkPolicy` there. Off by default
-(`kubernetes.host-firewall`). Do not turn it on before the flowsdn.io CRDs are applied
-(stormcos#303 is open): the policy thread waits for the
-FlowsdnClusterwideNetworkPolicy list, so NetworkPolicy updates would stall too.
+(`kubernetes.host-firewall`); the stormcos Kubernetes-mode config
+(`manifests-kubernetes/61-flowsdn-config.yaml`) sets `audit` for stormfw's
+audit phase (#402, stormcos#877). Until the FlowsdnClusterwideNetworkPolicy list
+succeeds (its CRD is applied by stormcos#303) the host endpoint has no rules: the
+uplinks carry the programs as while learning and nothing is judged. The policy
+thread does not wait for that list for the host firewall, so NetworkPolicy is
+not held back (before #402 it was); `kubernetes.flowsdn-policy` still waits for it.
 
 - **Policies.** Every FlowsdnClusterwideNetworkPolicy spec (`spec` or
   `specs[]`) with a `nodeSelector` that matches this Node's labels.

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-10
+- **feat:** The stormcos Kubernetes-mode config (`deploy/stormcos/manifests-kubernetes/61-flowsdn-config.yaml`) runs the host firewall in `audit` (#402, for stormfw, stormcos#877): what the node's FlowsdnClusterwideNetworkPolicy (stormfw's rendering of its HostFirewallPolicy) refuses is counted in `GET /v1/policy/verdicts` and passed; nothing is dropped. Enforce is a later, separate change. A test reads the shipped ConfigMap.
+- **fix:** The host firewall no longer holds NetworkPolicy back while the FlowsdnClusterwideNetworkPolicy list fails (its CRD is not applied yet, stormcos#303): the policy thread waited for that list whenever the host firewall was on. Until it is listed the host endpoint has no rules (the uplinks stay as while learning). `kubernetes.flowsdn-policy` still waits, since its Pod rules may isolate Pods (`View::policy_lists_ready`, tested).
+
 ### 2026-11-06
 - **feat:** Agent start can be read from its log (#397, stormcos#804): UTC time with milliseconds on every line, `ready: serving CNI requests <n> ms after start`, `kubernetes <part>: listed` when a watch recovers. A 404 retries at 1 s flat for a watch's first minute instead of doubling to 16 s, and logs once. Late identities do hold back NetworkPolicy allows from `podSelector` peers, though not isolation or `ipBlock` peers (#401).
 - **fix:** Dates need no libc, so the musl build's `time_t` warning is gone, and `test/build.sh` now fails the musl build on a warning (#373).

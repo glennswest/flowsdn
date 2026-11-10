@@ -786,14 +786,7 @@ fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
                 .filter(|(_, since)| since.elapsed() < HOST_LEARNING)
                 .map(|(index, _)| *index)
                 .collect();
-            if !((!view.network_policy || view.policies_synced)
-                && (!(host_firewall || view.flowsdn_policy) || view.clusterwide_synced)
-                && (!view.flowsdn_policy || view.pod_policies_synced)
-                && view.pods_synced
-                && view.nodes_synced
-                && view.namespaces_synced
-                && view.endpoints_published)
-            {
+            if !view.policy_lists_ready() {
                 continue;
             }
             crate::policy::compile(&view, gateways)

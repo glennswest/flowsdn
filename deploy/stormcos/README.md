@@ -143,8 +143,9 @@ configuration. The differences:
   (`crds/`, stormcos#303): the policy thread, NetworkPolicy included, waits for
   both lists. RBAC is already there
   ([runtime](../../docs/runtime.md#pod-rules-of-the-flowsdn-policy-kinds-292)).
-- `host-firewall` (#379, default `off`; not set in the ConfigMap, and an edit
-  there lasts only until the applier's next start, #388): with
+- `host-firewall` (#379, default `off`; `audit` in the ConfigMap since #402, for
+  stormfw's audit phase, stormcos#877; an edit there lasts only until the
+  applier's next start, #388, so enforce comes as a change here): with
   `audit` or `enforce`, FlowsdnClusterwideNetworkPolicy specs whose
   `nodeSelector` matches the Node filter traffic to the node on its uplinks
   (the flowsdn backend of stormfw, stormcos#558). The agent RBAC already

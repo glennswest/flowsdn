@@ -43,8 +43,8 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
   and FIB-redirect to other nodes' backends; IPv4 and IPv6. New flows pick a
   backend at random or by Maglev (`kubernetes.lb-algorithm`, or the
   `service.flowsdn.io/lb-algorithm` annotation).
-- **Host firewall** (`kubernetes.host-firewall: audit|enforce`, default off;
-  ADR-0022): FlowsdnClusterwideNetworkPolicy host rules (`nodeSelector`)
+- **Host firewall** (`kubernetes.host-firewall: audit|enforce`, default off,
+  `audit` in the stormcos Kubernetes-mode config; ADR-0022): FlowsdnClusterwideNetworkPolicy host rules (`nodeSelector`)
   filter traffic to the node on its uplinks in eBPF, with audit mode and
   verdict counters (`GET /v1/policy/verdicts`).
 - **Kubernetes NetworkPolicy in the datapath** (`kubernetes.network-policy`,

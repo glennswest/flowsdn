@@ -476,3 +476,33 @@ fn ip_list_has_node_identities_pod_labels_and_host_ips() {
     view.errors.insert("routes".into(), "boom".into());
     assert_eq!(view.health().get("msg"), Some(&json!("routes: boom")));
 }
+
+/// The `agent.json` of a shipped `61-flowsdn-config.yaml` ConfigMap.
+fn shipped_agent_json(yaml: &str) -> Value {
+    let body: String = yaml
+        .lines()
+        .skip_while(|line| line.trim() != "agent.json: |")
+        .skip(1)
+        .map(|line| format!("{}\n", line.trim_start()))
+        .collect();
+    serde_json::from_str(&body).expect("agent.json is JSON")
+}
+
+/// #402: the golden's Kubernetes-mode config runs the host firewall in audit
+/// (stormfw's audit phase, stormcos#877): counted, never dropped.
+#[test]
+fn shipped_kubernetes_config_audits_the_host_firewall() {
+    let config = shipped_agent_json(include_str!(
+        "../../../deploy/stormcos/manifests-kubernetes/61-flowsdn-config.yaml"
+    ));
+    let settings = Settings::parse(config.get("kubernetes"), &env(&[("K8S_NODE_NAME", "n1")]))
+        .expect("the shipped kubernetes section parses")
+        .expect("Kubernetes mode is on");
+    assert_eq!(settings.host_firewall, HostFirewall::Audit);
+    assert!(settings.network_policy);
+    assert!(!settings.flowsdn_policy, "Pod rules wait for stormcos#303");
+    let config = shipped_agent_json(include_str!(
+        "../../../deploy/stormcos/manifests/61-flowsdn-config.yaml"
+    ));
+    assert!(config.get("kubernetes").is_none(), "the static set has no Kubernetes mode");
+}

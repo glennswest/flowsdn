@@ -46,7 +46,11 @@ programs serve Pods only.
   uplink starts 60 s after the agent first wants it there (learning), and
   only when a host policy selects the node. Audit (setting, or the
   `policy.flowsdn.io/audit: "true"` annotation on a selecting policy) is an
-  endpoint flag: refused packets are counted and passed.
+  endpoint flag: refused packets are counted and passed. The stormcos
+  Kubernetes-mode config ships `audit` (#402, stormfw's audit phase), and
+  the host firewall does not hold NetworkPolicy back while the
+  FlowsdnClusterwideNetworkPolicy list is unavailable (no CRD): the host
+  endpoint simply has no rules until it is listed.
 - **Counters.** Every enforcing program counts each decision (allowed new
   flow, drop, audit) in `flowsdn_policy_verdicts`, an LRU per-CPU hash keyed
   by endpoint, direction, verdict, protocol and port; `GET

@@ -595,6 +595,21 @@ pub struct View {
     pub errors: BTreeMap<String, String>,
 }
 impl View {
+    /// Whether the policy thread has the lists it needs to compile (#292,
+    /// #379). The host firewall alone does not wait for the
+    /// FlowsdnClusterwideNetworkPolicy list (#402): before it is listed (the
+    /// CRD may not be applied yet, stormcos#303) the host endpoint has no
+    /// rules, so its uplinks stay as they are while learning (nothing judged,
+    /// nothing dropped), and NetworkPolicy is not held back. Pod rules of the
+    /// flowsdn kinds still wait: they may isolate Pods.
+    pub fn policy_lists_ready(&self) -> bool {
+        (!self.network_policy || self.policies_synced)
+            && (!self.flowsdn_policy || (self.clusterwide_synced && self.pod_policies_synced))
+            && self.pods_synced
+            && self.nodes_synced
+            && self.namespaces_synced
+            && self.endpoints_published
+    }
     fn host_ip(&self, node: &str, v6: bool) -> Option<IpAddr> {
         self.nodes
             .iter()
