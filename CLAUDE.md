@@ -56,6 +56,18 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Host firewall in audit in the shipped config — #402 (P1), 2026-11-10
+
+stormfw (stormcos#877) renders HostFirewallPolicy into a FlowsdnClusterwideNetworkPolicy; with `host-firewall: off`
+nothing is counted, so audit -> enforce has no data. Set `kubernetes.host-firewall: audit` in
+`manifests-kubernetes/61-flowsdn-config.yaml` (the set the golden carries; the static set has no `kubernetes`).
+Blocker found: stormcos#303 (CRDs) is open, and the policy thread waits for the FCNP list whenever the host firewall
+is on, so NetworkPolicy would stall. Fix first: only `flowsdn-policy` waits for that list; until it is listed the host
+endpoint has no rules (flags 0, as while learning), so nothing is dropped. Gate moved to `View::policy_lists_ready` with tests.
+
+- [ ] Gate + tests; config; docs (runtime, deploy README, ADR-0022), changelog.
+- [ ] sc-build (fmt, Clippy x2, workspace + kubernetes tests, chart-check); stage; close #402.
+
 ### Agent start log — #397, 2026-11-06
 
 stormcos#804 fix 16. Timestamps on every agent line (health_api's gmtime_r + ms), a `ready` line with time since start, a 404 retried at 1 s flat for a watch's first minute, a line when a watch recovers. Late identities: isolation does not wait for them, but `podSelector` peers allow nothing until the list succeeds (policy.rs peers(); #401). Fixes #373's time_t warning on the way (the stamp reuses that code).
