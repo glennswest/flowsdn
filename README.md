@@ -6,7 +6,7 @@ services, policy and observability. **That full stack is not implemented yet.**
 
 ## What works today
 
-As of 2026-10-09 (source through `eed1aca`), the executable pair is
+As of 2026-11-10 (source through `d50a453`), the executable pair is
 `flowsdn-agent` and `flowsdn-cni`. The agent provides persisted endpoint
 ownership, IPv4/IPv6 host-scope allocation and a bounded HTTP API over a Unix
 socket. The primary veth CNI supports ADD, CHECK, DEL, STATUS and VERSION,
@@ -42,11 +42,16 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
   DNAT to this node's backends or, for `externalTrafficPolicy: Cluster`, SNAT
   and FIB-redirect to other nodes' backends; IPv4 and IPv6. New flows pick a
   backend at random or by Maglev (`kubernetes.lb-algorithm`, or the
-  `service.flowsdn.io/lb-algorithm` annotation).
+  `service.flowsdn.io/lb-algorithm` annotation). `kubernetes.lb-mode:
+  snat|dsr|hybrid` (default `snat`; DSR by IP option, per Service
+  `service.flowsdn.io/forwarding-mode`) and `kubernetes.nat46x64` (default off)
+  are verified by kernel test runs only, not on a cluster.
 - **Host firewall** (`kubernetes.host-firewall: audit|enforce`, default off,
   `audit` in the stormcos Kubernetes-mode config; ADR-0022): FlowsdnClusterwideNetworkPolicy host rules (`nodeSelector`)
   filter traffic to the node on its uplinks in eBPF, with audit mode and
-  verdict counters (`GET /v1/policy/verdicts`).
+  verdict counters (`GET /v1/policy/verdicts`). The Pod rules of
+  FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy
+  (`kubernetes.flowsdn-policy`, default off) use the same endpoint policy maps.
 - **Kubernetes NetworkPolicy in the datapath** (`kubernetes.network-policy`,
   default on; ADR-0021) and **UDP socket termination** when a Service backend
   leaves (netlink `SOCK_DESTROY`).
@@ -70,8 +75,8 @@ two-node acceptance (#291) and live NetworkPolicy acceptance on a cluster
 
 The Kubernetes-mode agent also allocates cluster identities for its Pods
 (FlowsdnIdentity objects, #291). Not implemented in the agent:
-L7, FQDN and ICMP policy rules, host egress policy, flowsdn's own masquerade, DSR by IPIP or Geneve,
-NAT46/64 to local backends or in the socket LB, TCP socket termination, CRD controllers, an operator process and the
+L7, FQDN and ICMP policy rules, host egress policy, flowsdn's own masquerade, DSR by IPIP or Geneve
+and DSR ICMP errors, NAT46/64 to local backends or in the socket LB, TCP socket termination, CRD controllers, an operator process and the
 Hubble observer/relay. Libraries also implement configuration resolution,
 identity and map layouts, a Kubernetes NetworkPolicy importer and policy
 simulator, Maglev tables, BGP codecs/session state, encryption and egress
@@ -97,7 +102,7 @@ the package version alone does not distinguish these unreleased commits.
   `/v1/health/modules` reports unavailable controllers as degraded.
 - Endpoint list/detail, IPAM summaries, allocation, CNI publication/deletion
   and the Kubernetes-mode `/v1/ip`, `/v1/node/routes` and `/v1/service` views
-  (16 routes, `api::ROUTES`) are documented in the [agent API](docs/agent-api.md). This is a subset
+  (20 routes, `api::ROUTES`, incl. `/v1/identity`, `/v1/policy/verdicts` and `/v1/cni/timing`) are documented in the [agent API](docs/agent-api.md). This is a subset
   of the reference REST shape, not complete Cilium CLI/API compatibility.
 - The [runtime configuration reference](docs/runtime.md) lists every standalone
   key, required value, default and CNI override. The separate 539-key
@@ -129,8 +134,10 @@ Kubernetes-mode agent (`/flowsdn-agent`, GNU build with its Fedora glibc/OpenSSL
 runtime and the BPF objects embedded, stormcos#171), the static musl CNI
 (`/opt/cni/bin/flowsdn`) and `nft` for the node's masquerade. Nodes clone it
 copy-on-write and mount it at `/pallets/flowsdn`. The latest golden,
-`golden-flowsdn-a690ebee2ba7`, was staged from `4447eeb` (IPv6 NodePort,
-identity allocation, network-status). A source push
+`golden-flowsdn-de1d63ada483`, was staged from `1254993` (DSR, Maglev, host
+firewall, flowsdn policy kinds, NAT46/64; those features are off by default and
+kernel-test-run only). Later fixes (#396 CNI ADD timing, #397 start log, #402
+host firewall audit config, #404 state-lock wait) are staged separately. A source push
 alone does not update nodes: the revision must be staged into a new golden and
 composed into a stormcos release.
 

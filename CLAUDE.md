@@ -13,7 +13,7 @@ in `CHANGELOG.md`; Cargo.lock records workspace packages when versions change.
 Main contains unreleased endpoint agent/CNI work beyond that foundation release.
 This documentation-only audit does not warrant a version bump or release.
 
-As of 2026-10-09, source through `eed1aca` runs a standalone JSON-configured
+As of 2026-11-10, source through `d50a453` runs a standalone JSON-configured
 agent over a Unix socket (`/var/run/flowsdn/flowsdn.sock` in the manifests) and a
 primary veth + loopback CNI (`flowsdn-cni`, conflist `00-flowsdn.conflist`). The
 agent embeds its `local-delivery` BPF object (and, with the `kubernetes` feature,
@@ -24,10 +24,13 @@ remote pod-CIDR routes, translates ClusterIP/externalIP/LoadBalancer/NodePort at
 socket (cgroup hooks, ClientIP affinity, traffic policy Local), serves external
 NodePort/LB/externalIP traffic on the uplink (TCX, IPv4 and IPv6, SNAT to other
 nodes' backends), writes Events and the `flowsdn.io/pod-networks` annotation.
-`http-listen` is a loopback read-only TCP listener (#297). Not implemented:
-identity allocation (#291), policy enforcement in the datapath (the NetworkPolicy
-importer/simulator in flowsdn-policy is library only), the operator executable,
-CRD registration (#337), Hubble observer/relay (#293), Maglev/DSR. See
+`http-listen` is a loopback read-only TCP listener (#297). Also implemented: identity allocation (#291), NetworkPolicy enforcement in the
+datapath (ADR-0021), flowsdn policy kinds (`kubernetes.flowsdn-policy`), host
+firewall (`audit` in the stormcos config), UDP socket termination, Maglev, DSR by
+IP option, NAT46/64 (the last three off by default, kernel test runs only), CNI
+ADD timing (`/v1/cni/timing`), `cargo xtask kernel-check`. Not implemented: the
+operator executable, CRD registration (#337), Hubble observer/relay (#293), TCP
+socket termination, DSR by IPIP/Geneve, L7/FQDN/ICMP policy. See
 `docs/runtime.md`, `docs/agent-api.md`, `docs/implementation-status.md` and
 `deploy/stormcos/README.md` before changing runtime behavior. Fixture traffic and
 cross-architecture compilation do not establish two-node pod networking. Docs

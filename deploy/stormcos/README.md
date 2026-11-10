@@ -179,9 +179,9 @@ registry pull instead. The init container puts the plugin on the host, so the
 golden's internal CNI path does not have to be exposed separately.
 
 Goldens are staged with `stormcentral component stage flowsdn` and reach nodes
-only in a stormcos release. The latest is `golden-flowsdn-a690ebee2ba7`
-(flowsdn@4447eeb: IPv6 NodePort, identity allocation, network-status and the
-#369 stack fix; release request stormcos#494). Goldens built from 0fad164 up to
+only in a stormcos release. The latest is `golden-flowsdn-de1d63ada483`
+(flowsdn@1254993: DSR, Maglev, host firewall, flowsdn policy kinds, NAT46/64,
+all off by default; earlier a690ebee2ba7 at 4447eeb, release request stormcos#494). Goldens built from 0fad164 up to
 #369 were never staged: their socket LB failed the 7.2 verifier. Goldens before
 `golden-flowsdn-4b40a980ad16` have a socket LB that cannot attach on kernel 7.2:
 they create the cgroup links with `BPF_F_ALLOW_MULTI`, which the kernel refuses

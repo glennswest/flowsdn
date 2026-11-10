@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-10 (docs refresh)
+- **docs:** Refresh from code since 2026-11-03 (README, runtime, CLAUDE.md): 20 API routes, lb-mode/nat46x64/flowsdn-policy in the README, latest golden de1d63ada483 at 1254993, stale "not implemented" lists (policy enforcement, identity allocation, Maglev, DSR by option, NAT46/64) corrected. Closes the README/CLAUDE.md part of #380.
+
 ### 2026-11-10
 - **fix:** An agent that finds `/var/lib/flowsdn` held by another agent no longer exits `Error: EAGAIN` and crash-loops (#404, paired test 1439e5f1ee: on a worker that just joined, its former single-node cluster's agent was still running). It waits, logging `waiting for the state lock: state directory … is held by another flowsdn agent (pod …, pid …, since …, cgroup …)` at once and every 30 s; the holder writes that line into `agent.lock`. The manifests and chart pass `POD_NAME`/`POD_NAMESPACE` for it. Startup errors on the state directory name the path and the call. Tests: the error names its holder; a waiter reports it and takes over on release.
 - **feat:** The stormcos Kubernetes-mode config (`deploy/stormcos/manifests-kubernetes/61-flowsdn-config.yaml`) runs the host firewall in `audit` (#402, for stormfw, stormcos#877): what the node's FlowsdnClusterwideNetworkPolicy (stormfw's rendering of its HostFirewallPolicy) refuses is counted in `GET /v1/policy/verdicts` and passed; nothing is dropped. Enforce is a later, separate change. A test reads the shipped ConfigMap.

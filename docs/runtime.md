@@ -147,7 +147,7 @@ deletion replay; in Kubernetes mode it adds a `kubernetes` member (`Ok` once
 the Node and Pod lists, with `service-lb` the Service and EndpointSlice
 lists, and with `identity-allocation` the Namespace and FlowsdnIdentity lists,
 are synced and nothing failed). `/healthz` and `/readyz`
-are not implemented. Module health marks the policy controllers as unavailable. The config response's `ipam-mode: kubernetes` is a compatibility
+are not implemented. Module health marks controllers that are not running as unavailable. The config response's `ipam-mode: kubernetes` is a compatibility
 value: allocation uses the configured pools, or with `auto` the pool resolved
 from the Node at startup.
 
@@ -270,7 +270,7 @@ an error in health and nothing is allocated.
 
 Not yet: a flow/drop observer (the
 `flowsdn-hubble` `endpoint` module names flow peers `ns/pod (container)` once
-one exists, #293), BPF ipcache maps, tunnel routing, masquerade, and policy enforcement. Unit tests and a loopback-HTTPS controller test cover the
+one exists, #293), BPF ipcache maps, tunnel routing, masquerade, and the L7/FQDN policy kinds. Unit tests and a loopback-HTTPS controller test cover the
 watch and route logic; two-node pod traffic has not been demonstrated
 (pvetest1 + pvetest2, stormcentral#360).
 
@@ -378,7 +378,7 @@ pinned: they detach when the agent exits, and the per-CPU
 `flowsdn_nodeport6_fib`, `flowsdn_nodeport6_scratch` and
 `flowsdn_nodeport4_xlate_scratch` scratch maps are not
 pinned either. Not implemented:
-Maglev for the socket LB, DSR, topology hints, skip-LB for local redirect policy, TCP socket
+Maglev for the socket LB, DSR for the socket LB and by IPIP/Geneve, topology hints, skip-LB for local redirect policy, TCP socket
 termination (an existing TCP connection stays on its backend), SCTP, NAT46/64 in the socket LB, IPv4 fragments other than the first (they pass
 untouched), and BPF masquerade. `socket-lb-live` (medium test suite) checks the
 programs on a kernel, including the NodePort local and SNAT paths through
