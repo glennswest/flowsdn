@@ -65,7 +65,7 @@ Blocker found: stormcos#303 (CRDs) is open, and the policy thread waits for the 
 is on, so NetworkPolicy would stall. Fix first: only `flowsdn-policy` waits for that list; until it is listed the host
 endpoint has no rules (flags 0, as while learning), so nothing is dropped. Gate moved to `View::policy_lists_ready` with tests.
 
-- [ ] Gate + tests; config; docs (runtime, deploy README, ADR-0022), changelog.
+- [x] Gate + tests; config; docs (runtime, deploy README, ADR-0022, README, implementation-status), changelog (59ea545).
 - [ ] sc-build (fmt, Clippy x2, workspace + kubernetes tests, chart-check); stage; close #402.
 
 ### Agent start log — #397, 2026-11-06
