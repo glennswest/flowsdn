@@ -647,7 +647,10 @@ fn host_firewall_does_not_wait_for_the_clusterwide_list() {
         view.clusterwide_policies.clear();
         view.clusterwide_synced = false;
         view.nodes_synced = true;
-        assert!(view.policy_lists_ready(), "{mode:?}: NetworkPolicy is not held back");
+        assert!(
+            view.policy_lists_ready(),
+            "{mode:?}: NetworkPolicy is not held back"
+        );
         let desired = compile(&view, &[]);
         assert_eq!(
             desired.endpoints.get(&5),
@@ -668,5 +671,8 @@ fn host_firewall_does_not_wait_for_the_clusterwide_list() {
     view.nodes_synced = true;
     assert!(view.policy_lists_ready());
     view.policies_synced = false;
-    assert!(!view.policy_lists_ready(), "NetworkPolicy waits for its list");
+    assert!(
+        !view.policy_lists_ready(),
+        "NetworkPolicy waits for its list"
+    );
 }

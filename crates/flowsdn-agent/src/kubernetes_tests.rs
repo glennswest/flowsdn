@@ -504,5 +504,8 @@ fn shipped_kubernetes_config_audits_the_host_firewall() {
     let config = shipped_agent_json(include_str!(
         "../../../deploy/stormcos/manifests/61-flowsdn-config.yaml"
     ));
-    assert!(config.get("kubernetes").is_none(), "the static set has no Kubernetes mode");
+    assert!(
+        config.get("kubernetes").is_none(),
+        "the static set has no Kubernetes mode"
+    );
 }
