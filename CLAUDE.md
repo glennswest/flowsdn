@@ -66,7 +66,9 @@ is on, so NetworkPolicy would stall. Fix first: only `flowsdn-policy` waits for 
 endpoint has no rules (flags 0, as while learning), so nothing is dropped. Gate moved to `View::policy_lists_ready` with tests.
 
 - [x] Gate + tests; config; docs (runtime, deploy README, ADR-0022, README, implementation-status), changelog (59ea545).
-- [ ] sc-build (fmt, Clippy x2, workspace + kubernetes tests, chart-check); stage; close #402.
+- [x] sc-build at 72e03f9 (fmt fix for #403): fmt, workspace + kubernetes Clippy -D warnings, 953 tests (0 failed, 1 ignored)
+      incl. the two new ones, chart-check. kernel-check at 72e03f9 on 7.2.11: 19 pass, 0 fail, 2 skip (host firewall audit step PASS).
+- [x] Stage b4dc877d5d46 requested; #402 closed. On a node: `kubernetes.policy.host-firewall.mode` audit in /v1/healthz, comes with a release.
 
 ### Agent start log — #397, 2026-11-06
 
