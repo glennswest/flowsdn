@@ -1351,7 +1351,12 @@ pub fn run(config_path: &Path) -> Result<()> {
         config.pin_root.as_deref(),
         config.egress,
     )
-    .map_err(|error| format!("restoring endpoints from {}: {error}", config.state.display()))?;
+    .map_err(|error| {
+        format!(
+            "restoring endpoints from {}: {error}",
+            config.state.display()
+        )
+    })?;
     // Routes are written under the state directory, so start after restore
     // holds its exclusive lock.
     let ipv6 = config.v6.is_some();

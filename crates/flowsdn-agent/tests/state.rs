@@ -73,7 +73,10 @@ fn held_lock_names_its_holder_not_eagain() {
     let _owner = Store::open(&temp.0).expect("owner");
     let error = Store::open(&temp.0).err().expect("held").to_string();
     assert!(error.contains("held by another flowsdn agent"), "{error}");
-    assert!(error.contains(&format!("pid {}", std::process::id())), "{error}");
+    assert!(
+        error.contains(&format!("pid {}", std::process::id())),
+        "{error}"
+    );
     assert!(error.contains("since "), "{error}");
     assert!(!error.contains("EAGAIN"), "{error}");
 }
