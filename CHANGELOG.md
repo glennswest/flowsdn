@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-11-10
+- **fix:** An agent that finds `/var/lib/flowsdn` held by another agent no longer exits `Error: EAGAIN` and crash-loops (#404, paired test 1439e5f1ee: on a worker that just joined, its former single-node cluster's agent was still running). It waits, logging `waiting for the state lock: state directory … is held by another flowsdn agent (pod …, pid …, since …, cgroup …)` at once and every 30 s; the holder writes that line into `agent.lock`. The manifests and chart pass `POD_NAME`/`POD_NAMESPACE` for it. Startup errors on the state directory name the path and the call. Tests: the error names its holder; a waiter reports it and takes over on release.
 - **feat:** The stormcos Kubernetes-mode config (`deploy/stormcos/manifests-kubernetes/61-flowsdn-config.yaml`) runs the host firewall in `audit` (#402, for stormfw, stormcos#877): what the node's FlowsdnClusterwideNetworkPolicy (stormfw's rendering of its HostFirewallPolicy) refuses is counted in `GET /v1/policy/verdicts` and passed; nothing is dropped. Enforce is a later, separate change. A test reads the shipped ConfigMap.
 - **fix:** The host firewall no longer holds NetworkPolicy back while the FlowsdnClusterwideNetworkPolicy list fails (its CRD is not applied yet, stormcos#303): the policy thread waited for that list whenever the host firewall was on. Until it is listed the host endpoint has no rules (the uplinks stay as while learning). `kubernetes.flowsdn-policy` still waits, since its Pod rules may isolate Pods (`View::policy_lists_ready`, tested).
 

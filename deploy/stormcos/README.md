@@ -211,7 +211,7 @@ allocator, not the capacity of the fixed-size endpoint BPF map.
 | Kernel | Linux with TCX (6.6 or newer), BPF syscall support and readable BTF at `/sys/kernel/btf/vmlinux`; see [kernel requirements](../../docs/kernel-requirements.md). |
 | Network namespace | Host network namespace (`hostNetwork: true`), so the agent can attach to host veths. |
 | bpffs | Only with `bpf-pin-root`: `/sys/fs/bpf` mounted as bpffs, writable and shared with the host. PID 1 mounts it; the example adds no mount init container. |
-| State | `/var/lib/flowsdn` durable, writable and owned by one agent (exclusive lock). Keep it together with its matching pins. |
+| State | `/var/lib/flowsdn` durable, writable and owned by one agent (exclusive lock, `agent.lock` names the holding pod from `POD_NAME`/`POD_NAMESPACE`). A second agent waits and logs the holder every 30 s (#404): an agent that never gets Ready with `waiting for the state lock` means another agent on the node never stopped. Keep it together with its matching pins. |
 | Runtime directory | `/var/run/flowsdn` shared with the host CNI process: `flowsdn.sock` (mode 0600) and `deleteQueue`. |
 | CNI executable | On the host's `/opt/cni/bin`. The validation example does not install it; run `flowsdn-cni install` (as the edition's init container does) or install it by hand. |
 | Kubernetes credentials | Not used. The examples mount no ServiceAccount token. |

@@ -1409,7 +1409,7 @@ them.
 | `cargo deny` flags a new transitive GPL dependency | Recorded validation | no exception without an ADR (`docs/licensing.md`); the fix is a different dependency, not an `ignore` entry |
 | Nightly toolchain bump breaks `flowsdn-bpf` | BPF build fails | the pin is exact and separate; the workspace keeps building on stable while the BPF pin is fixed in its own PR |
 | Required arm64 test capacity unavailable | acceptance cannot run | record the gate as unavailable; never report a skipped runtime check as a pass |
-| Two agents on one node during migration | both try to own the same pins | prevented by the drain procedure (§3.7) and by an exclusive `flock` on `<state-dir>/agent.lock`; the second agent exits with a clear message |
+| Two agents on one node during migration | both try to own the same pins | prevented by the drain procedure (§3.7) and by an exclusive `flock` on `<state-dir>/agent.lock`; the second agent waits, logging which agent holds the lock (pod, pid, start time, cgroup) every 30 s (flowsdn#404 note: it exited with a bare `EAGAIN` and crash-looped) |
 
 ## 8. Observability of the build
 

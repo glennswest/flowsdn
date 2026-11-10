@@ -67,6 +67,39 @@ fn concurrent_agent_is_excluded_until_owner_drops() {
     Store::open(&temp.0).expect("new owner");
 }
 #[test]
+fn held_lock_names_its_holder_not_eagain() {
+    // #404: a second agent's error said only `EAGAIN`.
+    let temp = Temp::new();
+    let _owner = Store::open(&temp.0).expect("owner");
+    let error = Store::open(&temp.0).err().expect("held").to_string();
+    assert!(error.contains("held by another flowsdn agent"), "{error}");
+    assert!(error.contains(&format!("pid {}", std::process::id())), "{error}");
+    assert!(error.contains("since "), "{error}");
+    assert!(!error.contains("EAGAIN"), "{error}");
+}
+#[test]
+fn open_waiting_reports_the_holder_and_takes_over_when_released() {
+    let temp = Temp::new();
+    let owner = Store::open(&temp.0).expect("owner");
+    let (tx, rx) = std::sync::mpsc::channel();
+    let path = temp.0.clone();
+    let waiter = std::thread::spawn(move || {
+        let store = Store::open_waiting(&path, |held| {
+            tx.send(held.to_owned()).expect("send");
+        });
+        store.map(|_| ()).map_err(|error| error.to_string())
+    });
+    let held = rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("waiting reported");
+    assert!(held.contains("held by another flowsdn agent"), "{held}");
+    assert!(!waiter.is_finished());
+    drop(owner);
+    waiter.join().expect("join").expect("took over");
+    // One report: the release came well before HOLDER_REPORT.
+    assert!(rx.try_recv().is_err());
+}
+#[test]
 fn duplicate_attachment_and_directory_record_mismatch_fail_restore() {
     let temp = Temp::new();
     let store = Store::open(&temp.0).expect("store");

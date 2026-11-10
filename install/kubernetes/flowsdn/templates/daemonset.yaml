@@ -68,6 +68,14 @@ spec:
             - name: K8S_NODE_NAME
               valueFrom:
                 fieldRef: { apiVersion: v1, fieldPath: spec.nodeName }
+            # Named in <state-dir>/agent.lock, so an agent that finds the
+            # state held says which pod holds it (#404).
+            - name: POD_NAME
+              valueFrom:
+                fieldRef: { apiVersion: v1, fieldPath: metadata.name }
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef: { apiVersion: v1, fieldPath: metadata.namespace }
           securityContext:
             privileged: true
           {{- with .Values.agent.resources }}

@@ -1335,6 +1335,14 @@ pub fn run(config_path: &Path) -> Result<()> {
         Some(path) => Object::File(path),
         None => Object::Bytes(EMBEDDED_OBJECT),
     };
+    // Another agent holding the state (one still stopping, or the agent of a
+    // node's former single-node cluster) is waited out, saying who it is, not
+    // a bare `Error: EAGAIN` and a crash loop (#404). Released at once: the
+    // restore below takes it again, and an agent that slips in between makes
+    // the restore fail with the same named error.
+    drop(crate::state::Store::open_waiting(&config.state, |held| {
+        crate::log::logln!("waiting for the state lock: {held}");
+    })?);
     let manager = Manager::restore_with_egress(
         &config.state,
         object,
@@ -1342,7 +1350,8 @@ pub fn run(config_path: &Path) -> Result<()> {
         config.endpoint_id_max,
         config.pin_root.as_deref(),
         config.egress,
-    )?;
+    )
+    .map_err(|error| format!("restoring endpoints from {}: {error}", config.state.display()))?;
     // Routes are written under the state directory, so start after restore
     // holds its exclusive lock.
     let ipv6 = config.v6.is_some();

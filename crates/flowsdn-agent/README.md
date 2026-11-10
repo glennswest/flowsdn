@@ -8,7 +8,9 @@ Restore validates saved host interface identity and address ownership before
 restoring maps and attachments. With `bpf-pin-root` configured, restore validates
 and reuses pinned map/TCX ownership; without it, ownership is process-local.
 
-State storage holds an exclusive agent lock, ignores incomplete regeneration
+State storage holds an exclusive agent lock (`<state-dir>/agent.lock`, which
+names its holder: pod, pid, start time, cgroup). At start the agent waits while
+another agent holds it, logging the holder every 30 s (#404). It ignores incomplete regeneration
 directories, rejects mismatched IDs and duplicate attachments, and preserves
 unknown JSON fields. New IDs use the lowest free number through `endpoint-id-max` (default 4095,
 configurable in 1–65535); restore can reserve historical nonzero u16 IDs.
