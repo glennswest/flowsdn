@@ -64,8 +64,11 @@ CrashLoopBackOff. Cause in code: the next step, `Store::open`, takes `<state-dir
 never stopped. Fix here: wait for the lock (log the holder at once and every 30 s), holder line in agent.lock (POD_NAME/POD_NAMESPACE
 env, pid, since, cgroup), context on state errors. The leftover SNO agent itself belongs to the join (stormcluster / rustkube-node): filed there.
 
-- [ ] Code + tests, manifests/chart env, docs (runtime, deploy README, agent README, spec 22 note), changelog.
-- [ ] sc-build (fmt, Clippy x2, tests, chart-check); file the leftover-agent issue; stage; close #404.
+- [x] Code + tests, manifests/chart env, docs (runtime, deploy README, agent README, spec 22 note), changelog (d8ccb24, fmt 73f085e).
+- [x] sc-build at 73f085e: fmt, workspace + kubernetes Clippy -D warnings (+ indexing, arithmetic), workspace + kubernetes agent tests
+      (0 failed, 1 ignored) incl. the two new state tests, chart-check. kernel-check there on 7.2.11: 19 pass, 0 fail, 2 skip.
+- [x] Leftover SNO agent filed as stormcluster#112 (P1; rustkube-node SIGKILLs after grace, so the SNO pod was never stopped).
+      Stage 132e928ffd1c requested; #404 closed. The paired join still needs stormcluster#112; the agent's log now names the holder.
 
 ### Host firewall in audit in the shipped config — #402 (P1), 2026-11-10
 
