@@ -40,8 +40,14 @@ Owner decision posted (comment 6868495074, recommended B); `wait-owner` set. No 
 - [x] 2026-11-14 resumed on `wip/408-uplinks`: monitor (`uplinks_monitor.rs`), kernel side (`uplinks_apply.rs`, shared with
       the `uplinks-live` kernel fixture), ECMP direct routes, NodePort/host firewall on every uplink, `kubernetes.uplinks`,
       `GET /v1/uplinks`, docs. Build-failure issues #410-#412 are this branch's intermediate runs.
-- [ ] Green: clippy/tests + `test/build.sh && cargo xtask kernel-check` (uplinks-live) -> merge to main, `cargo xtask check`,
-      stage, `shipped` with the UplinkJoined Event proof. forge1 itself needs the flowsdn flavour (it is a cilium node).
+- [x] uplinks-live kernel fixture (two veth uplinks, the agent's own discovery/plan/kernel code): found two bugs on the way
+      (sysfs is per mount, so the fixture mounts its own; table deletes used scope universe so scope-link subnet routes stayed).
+- [x] Merged to main at 8480160. sc-build there: `cargo xtask check` (fmt, workspace Clippy -D warnings, 901 tests, 0 failed,
+      1 ignored, musl x86_64 + aarch64) and kernel-check medium on 7.2.11: 20 pass, 0 fail, 2 skip (uplinks-live: 64 flows over
+      both ports, each address on its port, u1 down -> flows on u0 + .204/32 on u0 with GARP, u1 back -> /32 removed; twice; single
+      cleans up).
+- [ ] Stage flowsdn; `shipped` with proof: an `UplinkJoined` Event "... 2 of 2 carrying" (a test machine with two ports on its
+      subnet). The issue's done-when on forge1 needs forge1 on the flowsdn flavour (it is a cilium node) and a cable pull.
 - (history) Paused 2026-11-13 for P0 #409. WIP on branch `wip/408-uplinks` (not built yet): `flowsdn-connector/src/multihome.rs`
   (ECMP route, rules, address delete, GARP, FEC ioctl) and `flowsdn-agent/src/uplinks.rs` (+ tests: settings, select,
   moves, nexthops, desired rules/tables, view JSON). Next: `uplinks_monitor.rs` (500 ms carrier tick, one address dump,

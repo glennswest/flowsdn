@@ -24,7 +24,9 @@ remote pod-CIDR routes, translates ClusterIP/externalIP/LoadBalancer/NodePort at
 socket (cgroup hooks, ClientIP affinity, traffic policy Local), serves external
 NodePort/LB/externalIP traffic on the uplink (TCX, IPv4 and IPv6, SNAT to other
 nodes' backends), writes Events and the `flowsdn.io/pod-networks` annotation.
-`http-listen` is a loopback read-only TCP listener (#297). Also implemented: identity allocation (#291), NetworkPolicy enforcement in the
+`http-listen` is a loopback read-only TCP listener (#297). Several uplinks (#408, 8480160): every port on a
+node address's subnet with carrier carries per-flow ECMP routes, with source rules per address, a failover /32 + GARP
+while a port is down, `GET /v1/uplinks` and `kubernetes.uplinks`; kernel-checked by `uplinks-live`, not yet on a two-port node. Also implemented: identity allocation (#291), NetworkPolicy enforcement in the
 datapath (ADR-0021), flowsdn policy kinds (`kubernetes.flowsdn-policy`), host
 firewall (`audit` in the stormcos config), UDP socket termination, Maglev, DSR by
 IP option, NAT46/64 (the last three off by default, kernel test runs only), CNI

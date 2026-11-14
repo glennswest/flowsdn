@@ -10,6 +10,8 @@
   - New `GET /v1/uplinks` reports each port's carrier, speed, configured and active FEC, bytes, the failover addresses and the history. `/v1/healthz` gives a summary.
   - New `kubernetes.uplinks` setting: `mode` active-active|active-backup|single, `weights`, `table`, `rule-priority`. A one-port node is unchanged.
   - Other components' halves: stormpump#234, rustkube-node#366, stormblock#596.
+- **test:** `uplinks-live` kernel fixture in the medium suite (kernel-check): two veth uplinks go through the agent's own discovery, plan and kernel code (`uplinks::apply`). Checked twice over: per-flow ECMP spreads 64 TCP flows over both ports, each address leaves through its own port, a port without carrier is skipped at once and its address held as a /32 on the live port, and the /32 is removed when carrier returns. `single` removes every rule and table entry. kernel-check at 8480160 on 7.2.11: 20 pass, 0 fail, 2 skip.
+- **fix:** (found by `uplinks-live`, before release) Routes in flowsdn's tables are deleted with scope `nowhere`. Scope-link subnet routes were never matched, and the kernel's ESRCH read as success. Main-table deletes keep scope universe, so the kernel's own subnet routes stay out of reach. `fib_multipath_use_neigh=1` skips an IPv4 path whose gateway does not answer ARP.
 
 ### 2026-11-13
 - **docs:** Work plan: #409 runtime FEC monitor waits on the owner's choice of where the speed -> FEC table lives.
