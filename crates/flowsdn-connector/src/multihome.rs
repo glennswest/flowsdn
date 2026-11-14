@@ -81,14 +81,7 @@ impl Connector {
         table: u32,
         metric: Option<u32>,
     ) -> Result<()> {
-        let mut builder = RouteMessageBuilder::<IpAddr>::new()
-            .destination_prefix(destination, prefix)?
-            .protocol(RouteProtocol::Kernel)
-            .table_id(table);
-        if let Some(metric) = metric {
-            builder = builder.priority(metric);
-        }
-        let message = builder.build();
+        let message = owned_route_delete(destination, prefix, table, metric)?;
         self.run(async {
             match self.handle.route().del(message).execute().await {
                 Err(rtnetlink::Error::NetlinkError(error)) if error.raw_code() == -3 => Ok(()),
@@ -197,6 +190,27 @@ impl Connector {
             }
         })
     }
+}
+
+/// The delete request for flowsdn's route to `destination/prefix`. Scope
+/// `nowhere` matches a route of any scope, as `ip route del` does: with the
+/// default (universe) a scope-link subnet route is never found, and the
+/// kernel's ESRCH reads as "already gone".
+pub(crate) fn owned_route_delete(
+    destination: IpAddr,
+    prefix: u8,
+    table: u32,
+    metric: Option<u32>,
+) -> Result<RouteMessage> {
+    let mut builder = RouteMessageBuilder::<IpAddr>::new()
+        .destination_prefix(destination, prefix)?
+        .protocol(RouteProtocol::Kernel)
+        .scope(RouteScope::NoWhere)
+        .table_id(table);
+    if let Some(metric) = metric {
+        builder = builder.priority(metric);
+    }
+    Ok(builder.build())
 }
 
 fn family(v6: bool) -> AddressFamily {
@@ -608,6 +622,15 @@ mod tests {
                 2, 204
             ]
         );
+    }
+
+    #[test]
+    fn a_delete_matches_routes_of_any_scope() {
+        let message = owned_route_delete("192.0.2.0".parse().expect("ip"), 24, 2081, None)
+            .expect("delete");
+        assert_eq!(message.header.scope, RouteScope::NoWhere);
+        assert_eq!(u8::from(message.header.protocol), RTPROT_KERNEL);
+        assert!(message.attributes.contains(&RouteAttribute::Table(2081)));
     }
 
     #[test]
