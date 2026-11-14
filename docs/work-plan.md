@@ -37,7 +37,12 @@ Owner decision posted (comment 6868495074, recommended B); `wait-owner` set. No 
       moves to the live port when its link drops).
 - [x] Filed the other halves: stormpump#234 (tolerate the failover /32), rustkube-node#366 (publish both InternalIPs),
       stormblock#596 (NVMe/TCP multipath, one connection per address).
-- Paused 2026-11-13 for P0 #409. WIP on branch `wip/408-uplinks` (not built yet): `flowsdn-connector/src/multihome.rs`
+- [x] 2026-11-14 resumed on `wip/408-uplinks`: monitor (`uplinks_monitor.rs`), kernel side (`uplinks_apply.rs`, shared with
+      the `uplinks-live` kernel fixture), ECMP direct routes, NodePort/host firewall on every uplink, `kubernetes.uplinks`,
+      `GET /v1/uplinks`, docs. Build-failure issues #410-#412 are this branch's intermediate runs.
+- [ ] Green: clippy/tests + `test/build.sh && cargo xtask kernel-check` (uplinks-live) -> merge to main, `cargo xtask check`,
+      stage, `shipped` with the UplinkJoined Event proof. forge1 itself needs the flowsdn flavour (it is a cilium node).
+- (history) Paused 2026-11-13 for P0 #409. WIP on branch `wip/408-uplinks` (not built yet): `flowsdn-connector/src/multihome.rs`
   (ECMP route, rules, address delete, GARP, FEC ioctl) and `flowsdn-agent/src/uplinks.rs` (+ tests: settings, select,
   moves, nexthops, desired rules/tables, view JSON). Next: `uplinks_monitor.rs` (500 ms carrier tick, one address dump,
   moves + GARP x3, state file `uplink-moves.json`, sysctls fib_multipath_hash_policy/ignore_routes_with_linkdown/

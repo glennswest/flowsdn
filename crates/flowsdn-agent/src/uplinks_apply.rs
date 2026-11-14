@@ -87,6 +87,9 @@ pub fn tune(root: &Path, uplink: &str, node_ips: &[IpAddr]) -> Vec<String> {
     let v6 = node_ips.iter().any(IpAddr::is_ipv6) || root.join("net/ipv6/conf/all").exists();
     let mut keys: Vec<(String, &str)> = vec![
         ("net/ipv4/fib_multipath_hash_policy".into(), "1"),
+        // A path whose gateway does not answer ARP (a port on another
+        // segment with the same subnet) is skipped, not blackholed.
+        ("net/ipv4/fib_multipath_use_neigh".into(), "1"),
         ("net/ipv4/conf/all/ignore_routes_with_linkdown".into(), "1"),
         (
             format!("net/ipv4/conf/{uplink}/ignore_routes_with_linkdown"),

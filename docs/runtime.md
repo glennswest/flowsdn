@@ -261,7 +261,9 @@ any number of times.
   publish both addresses (rustkube-node#366), traffic is spread over both
   ports at both ends. `GET /v1/node/routes` says `installed: 2 paths`.
 - The kernel hashes per flow on the L4 tuple (`fib_multipath_hash_policy=1`,
-  IPv4 and IPv6), so a flow is never reordered.
+  IPv4 and IPv6), so a flow is never reordered. `fib_multipath_use_neigh=1`
+  skips an IPv4 path whose gateway does not answer ARP through that port: a
+  port on another segment that reuses the subnet is not a blackhole.
 - Source rules pin each node address to the port that holds it. Rule
   `priority+10+i` sends `from <addr> to <its subnet>` to table `table+1+i`
   (`<subnet> dev <port> src <addr>`). Rule `priority+50` is `lookup main
