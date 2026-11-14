@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-13
+- **docs:** #408 (both NICs on a node): design question to the owner (A: stormpump balance-alb bond; B: flowsdn ECMP over the per-port addresses with failover /32), work plan entry. No code.
+
 ### 2026-11-10 (docs refresh)
 - **docs:** Refresh from code since 2026-11-03 (README, runtime, CLAUDE.md): 20 API routes, lb-mode/nat46x64/flowsdn-policy in the README, latest golden de1d63ada483 at 1254993, stale "not implemented" lists (policy enforcement, identity allocation, Maglev, DSR by option, NAT46/64) corrected. Closes the README/CLAUDE.md part of #380.
 

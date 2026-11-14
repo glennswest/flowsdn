@@ -59,6 +59,16 @@ the obsolete workflow. Do not add an Actions runner or re-enable Actions.
 
 ## Work plan
 
+### Both NICs on a node — #408 (P1), 2026-11-13
+
+Owner: load balance and combined throughput of two ports, discovered and not hard-coded (forge1 2x25G, no switch config).
+flowsdn does not own host ports: stormpump bridges the boot port (`stormbr0`, .203) and DHCPs the second (.204).
+Two designs (A: stormpump balance-alb bond, one address; B: flowsdn ECMP over the per-port addresses + failover /32 + GARP).
+Owner decision posted (comment 6868495074, recommended B); `wait-owner` set. No code yet.
+
+- [x] Question with recommendation on #408; wait-owner.
+- [ ] On the answer: file the other components' halves (stormpump /32 tolerance, rustkube-node both InternalIPs, stormblock NVMe/TCP multipath), then implement the flowsdn side.
+
 ### Agent EAGAIN on a just-joined worker — #404 (P1), 2026-11-10
 
 Paired test 1439e5f1ee (12.74.7-flowsdn): storm-003102 joined as worker; its agent printed the pod CIDRs, then `Error: EAGAIN`,
