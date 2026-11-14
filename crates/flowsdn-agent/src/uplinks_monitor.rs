@@ -5,8 +5,8 @@
 //! the uplinks for the route thread, the NodePort attach and `/v1/uplinks`.
 use super::*;
 use crate::uplinks::apply::{
-    FecCache, MOVES_FILE, default_gateways, global, load_moves, port_stats, read_ports, reconcile_kernel,
-    save_moves, tune,
+    FecCache, MOVES_FILE, default_gateways, global, load_moves, port_stats, read_ports,
+    reconcile_kernel, save_moves, tune,
 };
 use crate::uplinks::{self, Change, Move, Port, Settings as UplinkSettings, Uplink};
 use flowsdn_connector::multihome::{self, NextHop};

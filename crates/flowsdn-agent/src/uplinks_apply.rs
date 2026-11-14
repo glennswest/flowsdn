@@ -4,7 +4,7 @@
 //! thread (Kubernetes mode) and the `uplinks-live` kernel fixture both use
 //! these, so the fixture checks the agent's own code on a real kernel.
 use super::{Desired, Move, Port, PortStats, Settings, TableEntry, Uplink};
-use crate::kubernetes::{Cidr, cidr_text};
+use crate::kubernetes::cidr_text;
 use crate::state::Result;
 use flowsdn_connector::{
     Connector,
@@ -230,10 +230,7 @@ pub fn reconcile_kernel(
 
 /// Each uplink's physical ports (a bridge's members, else itself) with
 /// carrier, speed, FEC and byte counters.
-pub fn port_stats(
-    uplinks: &[Uplink],
-    fec: &mut FecCache,
-) -> BTreeMap<String, Vec<PortStats>> {
+pub fn port_stats(uplinks: &[Uplink], fec: &mut FecCache) -> BTreeMap<String, Vec<PortStats>> {
     let net = Path::new("/sys/class/net");
     let mut out = BTreeMap::new();
     for uplink in uplinks {

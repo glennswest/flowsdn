@@ -22,7 +22,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-type Result<T> = std::result::Result<T, Box<dyn Error>>;
+type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 
 fn ensure(ok: bool, message: &str) -> Result<()> {
     if ok { Ok(()) } else { Err(message.into()) }
@@ -102,7 +102,9 @@ fn apply_plan(
         ..View::default()
     };
     match view.hops(&[addr(PEER)?]) {
-        Some(hops) => connector.replace_multipath_route(addr(POD_CIDR)?, 16, &hops, 254, None, None)?,
+        Some(hops) => {
+            connector.replace_multipath_route(addr(POD_CIDR)?, 16, &hops, 254, None, None)?
+        }
         None => connector.replace_gateway_route(addr(POD_CIDR)?, 16, addr(PEER)?)?,
     }
     Ok(())
@@ -113,14 +115,18 @@ fn flow_devices() -> Result<BTreeSet<String>> {
     let mut devices = BTreeSet::new();
     for sport in 20_000u16..20_064 {
         let out = ip(&[
-            "-4", "route", "get", "10.9.1.1", "ipproto", "tcp", "sport", &sport.to_string(),
-            "dport", "80",
+            "-4",
+            "route",
+            "get",
+            "10.9.1.1",
+            "ipproto",
+            "tcp",
+            "sport",
+            &sport.to_string(),
+            "dport",
+            "80",
         ])?;
-        if let Some(dev) = out
-            .split_whitespace()
-            .skip_while(|w| *w != "dev")
-            .nth(1)
-        {
+        if let Some(dev) = out.split_whitespace().skip_while(|w| *w != "dev").nth(1) {
             devices.insert(dev.to_owned());
         }
     }
@@ -186,7 +192,10 @@ fn run() -> Result<()> {
         .into_iter()
         .filter(|r| settings.owns_priority(r.priority))
         .collect();
-    ensure(rules.len() == 6, &format!("want 6 flowsdn rules, got {rules:?}"))?;
+    ensure(
+        rules.len() == 6,
+        &format!("want 6 flowsdn rules, got {rules:?}"),
+    )?;
     println!("both up: ECMP route, {} rules", rules.len());
 
     for round in 1..=2 {
@@ -195,8 +204,14 @@ fn run() -> Result<()> {
             spread == BTreeSet::from(["u0".to_owned(), "u1".to_owned()]),
             &format!("round {round}: 64 flows used {spread:?}, want both ports"),
         )?;
-        ensure(device_from(NODE)? == "u0", "the node address leaves through u0")?;
-        ensure(device_from(SECOND)? == "u1", "the second address leaves through u1")?;
+        ensure(
+            device_from(NODE)? == "u0",
+            "the node address leaves through u0",
+        )?;
+        ensure(
+            device_from(SECOND)? == "u1",
+            "the second address leaves through u1",
+        )?;
         println!("round {round}: both up, 64 flows over u0 and u1, each address on its port");
 
         // u1 loses carrier.
@@ -229,12 +244,18 @@ fn run() -> Result<()> {
             device_from(SECOND)? == "u0",
             "the second address follows its failover to u0",
         )?;
-        ensure(flow_devices()? == BTreeSet::from(["u0".to_owned()]), "u0 only")?;
+        ensure(
+            flow_devices()? == BTreeSet::from(["u0".to_owned()]),
+            "u0 only",
+        )?;
         // The monitor must not see its own /32 as a port address.
         let ports = apply::read_ports(&connector, &held)?;
         ensure(
             !ports.iter().any(|p| {
-                p.name == "u0" && p.addresses.iter().any(|(a, len)| a.to_string() == SECOND && *len == 32)
+                p.name == "u0"
+                    && p.addresses
+                        .iter()
+                        .any(|(a, len)| a.to_string() == SECOND && *len == 32)
             }),
             "the failover /32 is excluded from discovery",
         )?;
@@ -253,13 +274,19 @@ fn run() -> Result<()> {
         )?;
         multihome::gratuitous_arp(
             found.iter().find(|u| u.name == "u1").map_or(0, |u| u.index),
-            found.iter().find(|u| u.name == "u1").map_or([0; 6], |u| u.mac),
+            found
+                .iter()
+                .find(|u| u.name == "u1")
+                .map_or([0; 6], |u| u.mac),
             SECOND.parse::<Ipv4Addr>()?,
         )?;
         println!("round {round}: u1 back, /32 removed, announced from u1");
     }
     let spread = flow_devices()?;
-    ensure(spread.len() == 2, "flows spread over both after the last return")?;
+    ensure(
+        spread.len() == 2,
+        "flows spread over both after the last return",
+    )?;
 
     // FEC on a veth: no FEC, not an error.
     ensure(multihome::fec("u0")?.is_none(), "a veth has no FEC")?;
@@ -272,7 +299,10 @@ fn run() -> Result<()> {
     let (found, moves) = plan(&connector, &single)?;
     apply_plan(&connector, &single, &found, &moves, &mut held)?;
     ensure(
-        !connector.rules(false)?.iter().any(|r| settings.owns_priority(r.priority)),
+        !connector
+            .rules(false)?
+            .iter()
+            .any(|r| settings.owns_priority(r.priority)),
         "single leaves no flowsdn rule",
     )?;
     for table in settings.tables() {
@@ -283,7 +313,9 @@ fn run() -> Result<()> {
     }
     connector.delete_owned_route(addr(POD_CIDR)?, 16, 254, None)?;
     ensure(
-        ip(&["-4", "route", "show", "10.9.0.0/16"])?.trim().is_empty(),
+        ip(&["-4", "route", "show", "10.9.0.0/16"])?
+            .trim()
+            .is_empty(),
         "the direct route is deleted",
     )?;
     println!("single: no rules, no tables, direct route deleted");
