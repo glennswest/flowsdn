@@ -294,6 +294,12 @@ fn controller_lists_watches_and_derives_the_pool() {
         network_policy: false,
         flowsdn_policy: false,
         cluster_name: "default".into(),
+        // The uplink monitor runs here too; `single` keeps it from touching
+        // the build host's rules on a machine with several ports.
+        uplinks: flowsdn_agent::uplinks::Settings {
+            mode: flowsdn_agent::uplinks::Mode::Single,
+            ..Default::default()
+        },
     };
     let controller = Controller::connect(settings, &dir).expect("connect");
     let (pool4, pool6) = controller.wait_for_pools(true, true).expect("pools");
