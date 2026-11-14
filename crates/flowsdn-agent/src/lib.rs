@@ -12,3 +12,4 @@ pub mod policy;
 pub mod services;
 pub mod state;
 pub mod tagging;
+pub mod uplinks;

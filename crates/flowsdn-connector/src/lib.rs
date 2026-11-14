@@ -17,6 +17,7 @@ use rtnetlink::{
 use std::{error::Error, fs::File, future::Future, net::IpAddr, os::fd::AsRawFd, time::Duration};
 use tokio::runtime::Runtime;
 
+pub mod multihome;
 pub mod sock_diag;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
