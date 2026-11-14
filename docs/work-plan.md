@@ -14,7 +14,14 @@ Owner decision posted (comment 6868716919: A boot-media conf / B one stormcos se
 `wait-owner` set. No code yet.
 
 - [x] Question with recommendation on #409; wait-owner.
-- [ ] On the answer: file the stormcentral/stormcos (setting) and stormbootx (per-speed lookup) halves, then the flowsdn monitor:
+- [x] Owner answered 2026-11-13: B, one stormcos node setting written to both (stormcos#958 delivers it). Correction the same day:
+      the trigger is **module presence** (SFP/QSFP insert), the key is the **module's EEPROM class** (SFF-8024 compliance, e.g.
+      25GBASE-CR CA-L/CA-S/CA-N, SR) plus configured speed, never the negotiated speed; no table answer -> walk RS, BaseR, off.
+- [ ] Blocked 2026-11-13 on stormcos#958 (needs-owner): who writes FEC at runtime, stormpump on every node (A, recommended:
+      forge1 is a cilium node, stormpump owns host ports and the console) or flowsdn (B). Under A flowsdn only reads and reports
+      (module class, configured/active FEC, link; FEC get ioctl already on `wip/408-uplinks`); under B flowsdn also writes.
+      The module-class -> FEC setting's format is stormcos's to define there too. Moved `--after stormcos#958`.
+- [ ] (superseded by the correction above) On the answer: file the stormcentral/stormcos (setting) and stormbootx (per-speed lookup) halves, then the flowsdn monitor:
       netlink link watch, ethtool-netlink FEC get/set, fix only on a sustained down/mismatch (never one sample), table looked up by
       the port's highest supported speed, per-port speed/FEC (configured, active)/link in network status. Re-join waits on #408.
 
