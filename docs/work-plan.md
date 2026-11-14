@@ -26,7 +26,14 @@ Two designs (A: stormpump balance-alb bond, one address; B: flowsdn ECMP over th
 Owner decision posted (comment 6868495074, recommended B); `wait-owner` set. No code yet.
 
 - [x] Question with recommendation on #408; wait-owner.
-- [ ] On the answer: file the other components' halves (stormpump /32 tolerance, rustkube-node both InternalIPs, stormblock NVMe/TCP multipath), then implement the flowsdn side.
+- [x] Owner answered 2026-11-13: **B, routed, two addresses** (each port keeps its address, flowsdn spreads flows, a port's address
+      moves to the live port when its link drops).
+- [ ] File the other halves: stormpump (tolerate the failover /32), rustkube-node (publish both InternalIPs), stormblock (NVMe/TCP
+      multipath, one connection per address).
+- [ ] flowsdn side (in progress): uplink set = every port holding a node address, discovered from the kernel (not the config);
+      a continuous netlink link monitor (join/leave logged with a timestamp); per-flow ECMP (L4 hash) for remote pod CIDRs over the
+      live ports; uplink programs on every port; failover /32 + gratuitous ARP on a live port while a port is down, removed on return;
+      `uplinks` setting (policy active-active|active-backup, weights); per-port link/speed/FEC/bytes in network status.
 
 ### Agent EAGAIN on a just-joined worker — #404 (P1), 2026-11-10
 
