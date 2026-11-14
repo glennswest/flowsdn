@@ -51,6 +51,7 @@ pub struct TableRoute {
 }
 
 const RTPROT_KERNEL: u8 = 2;
+const MAIN_TABLE: u32 = 254;
 
 impl Connector {
     /// `ip route replace <destination/prefix> [table] [metric] proto kernel`
@@ -192,10 +193,12 @@ impl Connector {
     }
 }
 
-/// The delete request for flowsdn's route to `destination/prefix`. Scope
-/// `nowhere` matches a route of any scope, as `ip route del` does: with the
-/// default (universe) a scope-link subnet route is never found, and the
-/// kernel's ESRCH reads as "already gone".
+/// The delete request for flowsdn's route to `destination/prefix`. In
+/// flowsdn's own tables, scope `nowhere` matches a route of any scope, as `ip
+/// route del` does: with the default (universe) a scope-link subnet route is
+/// never found, and the kernel's ESRCH reads as "already gone". In the main
+/// table flowsdn's routes go through gateways (universe), and that scope
+/// keeps the kernel's own scope-link subnet routes out of reach.
 pub(crate) fn owned_route_delete(
     destination: IpAddr,
     prefix: u8,
@@ -205,7 +208,11 @@ pub(crate) fn owned_route_delete(
     let mut builder = RouteMessageBuilder::<IpAddr>::new()
         .destination_prefix(destination, prefix)?
         .protocol(RouteProtocol::Kernel)
-        .scope(RouteScope::NoWhere)
+        .scope(if table == MAIN_TABLE {
+            RouteScope::Universe
+        } else {
+            RouteScope::NoWhere
+        })
         .table_id(table);
     if let Some(metric) = metric {
         builder = builder.priority(metric);
@@ -631,6 +638,9 @@ mod tests {
         assert_eq!(message.header.scope, RouteScope::NoWhere);
         assert_eq!(u8::from(message.header.protocol), RTPROT_KERNEL);
         assert!(message.attributes.contains(&RouteAttribute::Table(2081)));
+        let main = owned_route_delete("10.9.0.0".parse().expect("ip"), 16, 254, None)
+            .expect("delete");
+        assert_eq!(main.header.scope, RouteScope::Universe);
     }
 
     #[test]
