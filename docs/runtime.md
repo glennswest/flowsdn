@@ -621,7 +621,15 @@ and tracked flows survive an agent restart. `GET /v1/healthz` reports
 `network-policy` and `policy` (enforced endpoints, ipcache size, problems)
 under `kubernetes`; a policy that cannot be enforced as written (a rule the
 importer refuses, an invalid `ipBlock`) is a `policy` problem and allows
-nothing. Each decision of an enforcing program (a rule allowed a new flow, a
+nothing. Isolation applies as soon as the Pod and Namespace lists are in, but
+selector peers (`podSelector`/`namespaceSelector`, `from/toEndpoints`) resolve
+against the FlowsdnIdentity list: until it succeeds they match nothing, so a
+selected Pod stays default deny for that traffic (fail closed; a selector deny
+denies nothing meanwhile). This is reported as the `policy` problem
+`identities not listed yet (flowsdnidentities.flowsdn.io): … in <policies>`,
+which also turns the `kubernetes` health to Warning (#401). If it persists,
+check `kubectl get crd flowsdnidentities.flowsdn.io` (stormcos#303). `ipBlock`
+peers and policies without peers do not wait. Each decision of an enforcing program (a rule allowed a new flow, a
 drop, an audit pass) is counted in `flowsdn_policy_verdicts` (LRU per-CPU,
 16384 rows): `GET /v1/policy/verdicts`. Not implemented for Pods:
 CiliumNetworkPolicy-style rules (deny, L7, entities, FQDN), audit mode,

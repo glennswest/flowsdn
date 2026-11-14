@@ -51,6 +51,7 @@ fn view(policies: Vec<Value>) -> View {
         pods_synced: true,
         namespaces: [("shop".to_owned(), BTreeMap::new())].into_iter().collect(),
         namespaces_synced: true,
+        identities_synced: true,
         endpoints: vec![LocalEndpoint {
             id: 7,
             namespace: "shop".into(),
@@ -223,6 +224,44 @@ fn named_ports_resolve_on_the_destination_and_ranges_are_masked() {
             (db, true, 6, 9000, 14),
         ])
     );
+}
+
+#[test]
+fn selector_peers_before_the_identity_list_fail_closed_and_are_reported() {
+    // #401: isolation applies at once, but a podSelector peer has no
+    // identity to match until the FlowsdnIdentity list succeeds.
+    let selector = policy(json!({
+        "podSelector":{"matchLabels":{"app":"web"}},
+        "ingress":[{"from":[{"podSelector":{"matchLabels":{"app":"client"}}}]}]
+    }));
+    let mut unsynced = view(vec![selector.clone()]);
+    unsynced.identities_synced = false;
+    unsynced.identities.clear();
+    let desired = compile(&unsynced, &[]);
+    assert_eq!(
+        desired.endpoints.get(&40).map(|e| e.flags),
+        Some(enforce::INGRESS)
+    );
+    assert!(desired.entries.is_empty());
+    assert!(
+        desired
+            .problems
+            .iter()
+            .any(|p| p.starts_with("identities not listed yet") && p.ends_with("in shop/p")),
+        "{:?}",
+        desired.problems
+    );
+    // Once listed, the peer is allowed and the problem is gone.
+    let desired = compile(&view(vec![selector]), &[]);
+    assert_eq!(desired.entries.len(), 1);
+    assert!(desired.problems.is_empty(), "{:?}", desired.problems);
+    // ipBlock peers do not wait for identities: nothing to report.
+    let mut cidr_only = view(vec![policy(json!({
+        "podSelector":{"matchLabels":{"app":"web"}},
+        "ingress":[{"from":[{"ipBlock":{"cidr":"198.51.100.0/24"}}]}]
+    }))]);
+    cidr_only.identities_synced = false;
+    assert!(compile(&cidr_only, &[]).problems.is_empty());
 }
 
 #[test]

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-13 (#401)
+- **fix:** NetworkPolicy/flowsdn policy selector peers before the FlowsdnIdentity list succeeds are reported (#401). They still fail closed (a selected Pod is isolated at once; a selector peer has no identity to match until the list is in), but the policy compiler now adds the problem `identities not listed yet (flowsdnidentities.flowsdn.io): selector peers match nothing, so they allow (and deny) nothing, in <policies>`, which shows in `kubernetes.policy.problems` and turns the `kubernetes` health to Warning with that text. `ipBlock` peers and peerless policies are not reported. Unit test `selector_peers_before_the_identity_list_fail_closed_and_are_reported`.
+
 ### 2026-11-14
 - **feat:** Several uplinks (#408, owner's choice B: routed, one address per port). A new `flowsdn-uplinks` thread finds every port on a node address's subnet (forge1: `stormbr0` and the second 25G port) and watches each one's carrier every 500 ms for the agent's whole life.
   - Every port with carrier carries traffic: other nodes' pod CIDRs are per-flow ECMP routes over the live ports (L4 hash), source rules pin each address to its port, and the default route has an ECMP copy in table 2080.

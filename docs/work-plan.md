@@ -4,6 +4,15 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Selector peers before the identity list — #401, 2026-11-13
+- Behaviour kept: fail closed (the issue's recommendation; allowing a selected
+  peer needs an identity number the datapath can match). stormcos#303 (apply
+  `crds/`) is the real fix for a node that never serves the CRD.
+- Done: `policy::compile` reports a problem naming the policies with selector
+  peers while identity allocation is on and `identities_synced` is false; it
+  reaches `/v1/healthz` through the policy loop's `errors["policy"]`. Unit test
+  added; docs/runtime.md updated. Verify with sc-build.
+
 ### Runtime FEC monitor and cable hotplug — #409 (P0), 2026-11-13
 
 Owner: watch every port's FEC and link for the node's whole life, set FEC live from the speed -> FEC table when a port is down or wrong,

@@ -373,27 +373,51 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
     let pod_rules = pod_policies
         .iter()
         .flat_map(|p| p.ingress.rules.iter().chain(&p.egress.rules));
+    // Policies with selector peers: those resolve against the FlowsdnIdentity
+    // list only (#401).
+    let mut selector_policies = BTreeSet::new();
     for rule in hosts.iter().flat_map(|h| &h.rules).chain(pod_rules) {
         for peer in rule.peers.iter().flatten() {
-            if let HostPeer::Cidr { cidr, except } = peer {
-                for text in std::iter::once(cidr).chain(except) {
-                    if let Ok(prefix) = text.parse::<CidrPrefix>() {
-                        prefixes.insert(prefix);
+            match peer {
+                HostPeer::Cidr { cidr, except } => {
+                    for text in std::iter::once(cidr).chain(except) {
+                        if let Ok(prefix) = text.parse::<CidrPrefix>() {
+                            prefixes.insert(prefix);
+                        }
                     }
+                }
+                HostPeer::Endpoints(_) => {
+                    selector_policies.insert(rule.policy.clone());
+                }
+                HostPeer::Identities(_) => {}
+            }
+        }
+    }
+    for (policy, entry) in &entries {
+        for peer in entry.l3.iter().flatten() {
+            match peer {
+                Peer::Cidr { cidr, except } => {
+                    for text in std::iter::once(cidr).chain(except) {
+                        if let Ok(prefix) = text.parse::<CidrPrefix>() {
+                            prefixes.insert(prefix);
+                        }
+                    }
+                }
+                Peer::Selector(_) => {
+                    selector_policies.insert(policy.clone());
                 }
             }
         }
     }
-    for (_, entry) in &entries {
-        for peer in entry.l3.iter().flatten() {
-            if let Peer::Cidr { cidr, except } = peer {
-                for text in std::iter::once(cidr).chain(except) {
-                    if let Ok(prefix) = text.parse::<CidrPrefix>() {
-                        prefixes.insert(prefix);
-                    }
-                }
-            }
-        }
+    // Isolation does not wait for identities, but selector peers do: until
+    // the FlowsdnIdentity list succeeds they match nothing, so their allows
+    // (and denies) are absent. Fail closed and say so (#401).
+    if view.identity && !view.identities_synced && !selector_policies.is_empty() {
+        problems.insert(format!(
+            "identities not listed yet (flowsdnidentities.flowsdn.io): selector peers match nothing, \
+             so they allow (and deny) nothing, in {}",
+            selector_policies.into_iter().collect::<Vec<_>>().join(", ")
+        ));
     }
     let cidrs: BTreeMap<CidrPrefix, u32> = prefixes
         .into_iter()
