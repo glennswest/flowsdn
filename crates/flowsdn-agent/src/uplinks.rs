@@ -670,6 +670,9 @@ impl View {
     }
 }
 
+#[path = "uplinks_apply.rs"]
+pub mod apply;
+
 #[cfg(test)]
 #[path = "uplinks_tests.rs"]
 mod tests;

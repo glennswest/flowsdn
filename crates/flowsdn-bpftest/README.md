@@ -43,6 +43,16 @@ post-creation failure to verify endpoint, link and address rollback and retry.
 Endpoint setup now uses the native Rust connector. The fixture retains `ip`
 for isolated setup/inspection; it is not the CNI executable.
 
+Run `uplinks-live` with no arguments to check several uplinks (#408) on a real
+kernel. Two veth uplinks in an anonymous namespace go through the agent's own
+discovery, plan and kernel code (`flowsdn_agent::uplinks`). The checks:
+- per-flow ECMP to a pod CIDR uses both ports over 64 TCP flows (`ip route get`);
+- each address leaves through its own port;
+- a port without carrier is skipped at once and its address is held as a /32
+  on the live port, with a gratuitous ARP;
+- the /32 goes when carrier returns, twice over;
+- `single` removes every rule and table entry.
+
 Run `native-routing` with the same BPF object for two router namespaces and
 two endpoints. It tests dual-stack traffic, route removal/restoration and
 object detach/reload. Mandatory namespace-local nftables FORWARD drops prevent
