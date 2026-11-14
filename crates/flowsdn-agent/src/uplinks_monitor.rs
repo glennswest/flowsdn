@@ -159,9 +159,14 @@ pub(super) fn monitor_loop(view: &Shared, settings: &UplinkSettings, state_dir: 
         }
         announce.retain(|a| a.left > 0);
         if uplinks::balancing(&now, settings.mode) {
-            for uplink in now.iter().filter(|u| !tuned.contains(&u.name)) {
-                failures.extend(tune(Path::new("/proc/sys"), &uplink.name, &node_ips));
-                tuned.insert(uplink.name.clone());
+            let fresh: Vec<String> = now
+                .iter()
+                .map(|u| u.name.clone())
+                .filter(|name| !tuned.contains(name))
+                .collect();
+            for name in fresh {
+                failures.extend(tune(Path::new("/proc/sys"), &name, &node_ips));
+                tuned.insert(name);
             }
         }
         let defaults = default_gateways(&connector);
@@ -248,7 +253,10 @@ fn read_ports(connector: &Connector, moved: &[Move]) -> std::result::Result<Vec<
         let held = addresses
             .iter()
             .filter(|(i, ip, _)| {
-                *i == index && !moved.iter().any(|m| m.to_index == index && m.address == *ip)
+                *i == index
+                    && !moved
+                        .iter()
+                        .any(|m| m.to_index == index && m.address == *ip)
             })
             .map(|(_, ip, prefix)| (*ip, *prefix))
             .collect();
@@ -281,7 +289,10 @@ pub(super) fn tune(root: &Path, uplink: &str, node_ips: &[IpAddr]) -> Vec<String
     let mut keys: Vec<(String, &str)> = vec![
         ("net/ipv4/fib_multipath_hash_policy".into(), "1"),
         ("net/ipv4/conf/all/ignore_routes_with_linkdown".into(), "1"),
-        (format!("net/ipv4/conf/{uplink}/ignore_routes_with_linkdown"), "1"),
+        (
+            format!("net/ipv4/conf/{uplink}/ignore_routes_with_linkdown"),
+            "1",
+        ),
         (format!("net/ipv4/conf/{uplink}/arp_ignore"), "1"),
         (format!("net/ipv4/conf/{uplink}/arp_announce"), "2"),
         (format!("net/ipv4/conf/{uplink}/rp_filter"), "0"),
@@ -290,7 +301,10 @@ pub(super) fn tune(root: &Path, uplink: &str, node_ips: &[IpAddr]) -> Vec<String
         keys.extend([
             ("net/ipv6/fib_multipath_hash_policy".into(), "1"),
             ("net/ipv6/conf/all/ignore_routes_with_linkdown".into(), "1"),
-            (format!("net/ipv6/conf/{uplink}/ignore_routes_with_linkdown"), "1"),
+            (
+                format!("net/ipv6/conf/{uplink}/ignore_routes_with_linkdown"),
+                "1",
+            ),
             (format!("net/ipv6/conf/{uplink}/ndisc_notify"), "1"),
         ]);
     }
@@ -458,8 +472,12 @@ fn port_stats(
                         .and_then(|s| s.trim().parse::<i64>().ok())
                         .and_then(|s| u32::try_from(s).ok())
                         .filter(|s| *s > 0),
-                    fec_configured: modes.map(|(c, _)| multihome::fec_names(c)).unwrap_or_default(),
-                    fec_active: modes.map(|(_, a)| multihome::fec_names(a)).unwrap_or_default(),
+                    fec_configured: modes
+                        .map(|(c, _)| multihome::fec_names(c))
+                        .unwrap_or_default(),
+                    fec_active: modes
+                        .map(|(_, a)| multihome::fec_names(a))
+                        .unwrap_or_default(),
                     rx_bytes: number("statistics/rx_bytes"),
                     tx_bytes: number("statistics/tx_bytes"),
                     name,
@@ -550,15 +568,30 @@ mod tests {
         let failed = tune(&dir, "stormbr0", &["192.168.16.203".parse().expect("ip")]);
         assert!(failed.is_empty(), "{failed:?}");
         let read = |k: &str| fs::read_to_string(dir.join(k)).ok();
-        assert_eq!(read("net/ipv4/fib_multipath_hash_policy").as_deref(), Some("1"));
-        assert_eq!(read("net/ipv4/conf/stormbr0/arp_ignore").as_deref(), Some("1"));
-        assert_eq!(read("net/ipv4/conf/stormbr0/arp_announce").as_deref(), Some("2"));
-        assert_eq!(read("net/ipv4/conf/stormbr0/rp_filter").as_deref(), Some("0"));
+        assert_eq!(
+            read("net/ipv4/fib_multipath_hash_policy").as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            read("net/ipv4/conf/stormbr0/arp_ignore").as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            read("net/ipv4/conf/stormbr0/arp_announce").as_deref(),
+            Some("2")
+        );
+        assert_eq!(
+            read("net/ipv4/conf/stormbr0/rp_filter").as_deref(),
+            Some("0")
+        );
         assert_eq!(
             read("net/ipv4/conf/all/ignore_routes_with_linkdown").as_deref(),
             Some("1")
         );
-        assert_eq!(parse_mac("e8:eb:d3:94:a2:81\n"), [0xe8, 0xeb, 0xd3, 0x94, 0xa2, 0x81]);
+        assert_eq!(
+            parse_mac("e8:eb:d3:94:a2:81\n"),
+            [0xe8, 0xeb, 0xd3, 0x94, 0xa2, 0x81]
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 }

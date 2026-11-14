@@ -478,7 +478,10 @@ impl Api {
                 }
                 return Ok((200, status));
             }
-            ("GET", "/v1/ip" | "/v1/identity" | "/v1/node/routes" | "/v1/service" | "/v1/uplinks") => {
+            (
+                "GET",
+                "/v1/ip" | "/v1/identity" | "/v1/node/routes" | "/v1/service" | "/v1/uplinks",
+            ) => {
                 let Some(view) = &self.kubernetes else {
                     return fail(404, "kubernetes node discovery is not enabled");
                 };
