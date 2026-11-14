@@ -115,8 +115,9 @@ impl Settings {
                             .filter(|w| *w >= 1)
                             .ok_or("kubernetes.uplinks.weights values must be 1-255")?;
                         if name.is_empty() || name.len() >= 16 {
-                            return Err("kubernetes.uplinks.weights keys must be interface names"
-                                .into());
+                            return Err(
+                                "kubernetes.uplinks.weights keys must be interface names".into()
+                            );
                         }
                         settings.weights.insert(name.clone(), weight);
                     }
@@ -324,7 +325,7 @@ pub fn moves(uplinks: &[Uplink], mode: Mode) -> Vec<Move> {
 /// subnet is dropped; if none is left, every reachable pair is used.
 pub fn nexthops(gateways: &[IpAddr], carriers: &[&Uplink]) -> Vec<NextHop> {
     let mut out: Vec<NextHop> = Vec::new();
-    let mut push = |gateway: IpAddr, uplink: &Uplink| {
+    let push = |out: &mut Vec<NextHop>, gateway: IpAddr, uplink: &Uplink| {
         let hop = NextHop {
             gateway: Some(gateway),
             index: uplink.index,
@@ -346,13 +347,13 @@ pub fn nexthops(gateways: &[IpAddr], carriers: &[&Uplink]) -> Vec<NextHop> {
             carriers.get(k.checked_rem(count_c.get()).unwrap_or(0)),
         ) && uplink.reaches(*gateway)
         {
-            push(*gateway, uplink);
+            push(&mut out, *gateway, uplink);
         }
     }
     if out.is_empty() {
         for gateway in gateways {
             for uplink in carriers.iter().filter(|u| u.reaches(*gateway)) {
-                push(*gateway, uplink);
+                push(&mut out, *gateway, uplink);
             }
         }
     }
@@ -473,11 +474,14 @@ pub fn desired(
             destination: None,
             suppress_prefix: None,
         });
-        out.tables.entry(settings.table).or_default().push(TableEntry {
-            destination: (unspecified(v6), 0),
-            hops,
-            source: None,
-        });
+        out.tables
+            .entry(settings.table)
+            .or_default()
+            .push(TableEntry {
+                destination: (unspecified(v6), 0),
+                hops,
+                source: None,
+            });
     }
     out
 }

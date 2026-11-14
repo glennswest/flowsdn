@@ -144,6 +144,36 @@ impl Connector {
             }
         })
     }
+    /// Every address of every interface in one dump: (ifindex, address,
+    /// prefix length).
+    pub fn all_addresses(&self) -> Result<Vec<(u32, IpAddr, u8)>> {
+        use rtnetlink::packet_route::address::AddressAttribute;
+        self.run(async {
+            let mut stream = self.handle.address().get().execute();
+            let mut out = Vec::new();
+            while let Some(message) = stream.try_next().await? {
+                let mut address = None;
+                for attribute in &message.attributes {
+                    match attribute {
+                        // IFA_LOCAL is the interface's own address on
+                        // point-to-point links; prefer it.
+                        AddressAttribute::Local(ip) => address = Some(*ip),
+                        AddressAttribute::Address(ip) if address.is_none() => {
+                            address = Some(*ip);
+                        }
+                        _ => {}
+                    }
+                }
+                if let Some(ip) = address {
+                    let entry = (message.header.index, ip, message.header.prefix_len);
+                    if !out.contains(&entry) {
+                        out.push(entry);
+                    }
+                }
+            }
+            Ok(out)
+        })
+    }
     /// `ip address del <address>/<prefix> dev <index>`; absent is success.
     pub fn delete_address(&self, index: u32, address: IpAddr, prefix: u8) -> Result<()> {
         let message = match address {
@@ -496,7 +526,10 @@ mod tests {
             .collect();
         assert_eq!(paths.len(), 2);
         assert_eq!(
-            paths.iter().map(|p| (p.interface_index, p.hops)).collect::<Vec<_>>(),
+            paths
+                .iter()
+                .map(|p| (p.interface_index, p.hops))
+                .collect::<Vec<_>>(),
             [(3, 0), (4, 2)]
         );
         assert_eq!(u8::from(message.header.protocol), RTPROT_KERNEL);
@@ -571,8 +604,8 @@ mod tests {
         assert_eq!(
             packet,
             [
-                0, 1, 8, 0, 6, 4, 0, 1, 2, 0, 0, 0, 0, 9, 192, 0, 2, 204, 0, 0, 0, 0, 0, 0, 192,
-                0, 2, 204
+                0, 1, 8, 0, 6, 4, 0, 1, 2, 0, 0, 0, 0, 9, 192, 0, 2, 204, 0, 0, 0, 0, 0, 0, 192, 0,
+                2, 204
             ]
         );
     }

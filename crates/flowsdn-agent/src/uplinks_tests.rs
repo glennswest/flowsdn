@@ -17,7 +17,12 @@ fn port(name: &str, index: u32, carrier: bool, addresses: &[(&str, u8)]) -> Port
 fn forge1(bridge_up: bool, second_up: bool) -> Vec<Port> {
     vec![
         port("lo", 1, true, &[("127.0.0.1", 8)]),
-        port("stormbr0", 4, bridge_up, &[("192.168.16.203", 20), ("fe80::1", 64)]),
+        port(
+            "stormbr0",
+            4,
+            bridge_up,
+            &[("192.168.16.203", 20), ("fe80::1", 64)],
+        ),
         port("enp65s0f1np1", 3, second_up, &[("192.168.16.204", 20)]),
         port("lxc1234", 9, true, &[("10.203.0.1", 32)]),
         port("storage0", 5, true, &[("172.16.0.9", 24)]),
@@ -45,7 +50,10 @@ fn uplinks_are_the_ports_on_a_node_address_subnet_found_not_configured() {
     settings.weights.insert("enp65s0f1np1".into(), 3);
     let uplinks = select(&forge1(true, true), &node(), &settings);
     assert_eq!(uplinks.first().map(|u| u.weight), Some(3));
-    assert_eq!(uplinks.first().map(|u| u.name.as_str()), Some("enp65s0f1np1"));
+    assert_eq!(
+        uplinks.first().map(|u| u.name.as_str()),
+        Some("enp65s0f1np1")
+    );
 }
 
 #[test]
@@ -101,10 +109,19 @@ fn both_up_carry_traffic_one_down_moves_its_address_and_it_comes_back() {
         let up = select(&forge1(true, true), &node(), &settings);
         let left = changes(&up, &down, "t");
         assert_eq!(left.len(), 1);
-        assert!(left.first().is_some_and(|c| !c.joined && c.port == "enp65s0f1np1"));
-        assert!(left.first().is_some_and(|c| c.message.contains("1 of 2 carrying")));
+        assert!(
+            left.first()
+                .is_some_and(|c| !c.joined && c.port == "enp65s0f1np1")
+        );
+        assert!(
+            left.first()
+                .is_some_and(|c| c.message.contains("1 of 2 carrying"))
+        );
         let back = changes(&down, &up, "t");
-        assert!(back.first().is_some_and(|c| c.joined && c.port == "enp65s0f1np1"));
+        assert!(
+            back.first()
+                .is_some_and(|c| c.joined && c.port == "enp65s0f1np1")
+        );
         assert!(changes(&up, &up, "t").is_empty());
     }
 }
@@ -118,13 +135,19 @@ fn routes_pair_each_remote_address_with_a_local_port() {
     let one = nexthops(&[ip("192.168.16.21")], &live);
     assert_eq!(
         one.iter().map(|h| (h.gateway, h.index)).collect::<Vec<_>>(),
-        [(Some(ip("192.168.16.21")), 4), (Some(ip("192.168.16.21")), 3)]
+        [
+            (Some(ip("192.168.16.21")), 4),
+            (Some(ip("192.168.16.21")), 3)
+        ]
     );
     // A peer with both addresses (rustkube-node#366): port k to address k.
     let two = nexthops(&[ip("192.168.16.21"), ip("192.168.16.22")], &live);
     assert_eq!(
         two.iter().map(|h| (h.gateway, h.index)).collect::<Vec<_>>(),
-        [(Some(ip("192.168.16.21")), 4), (Some(ip("192.168.16.22")), 3)]
+        [
+            (Some(ip("192.168.16.21")), 4),
+            (Some(ip("192.168.16.22")), 3)
+        ]
     );
     // One port down: everything leaves through the other.
     let down = select(&forge1(true, false), &node(), &settings);
@@ -266,16 +289,34 @@ fn the_view_reports_ports_failover_and_history() {
     }
     assert_eq!(view.history.len(), HISTORY);
     let json = view.json();
-    assert_eq!(json.pointer("/carrying"), Some(&serde_json::json!(["stormbr0"])));
-    assert_eq!(json.pointer("/failover/0/address"), Some(&serde_json::json!("192.168.16.204")));
-    assert_eq!(json.pointer("/failover/0/on"), Some(&serde_json::json!("stormbr0")));
+    assert_eq!(
+        json.pointer("/carrying"),
+        Some(&serde_json::json!(["stormbr0"]))
+    );
+    assert_eq!(
+        json.pointer("/failover/0/address"),
+        Some(&serde_json::json!("192.168.16.204"))
+    );
+    assert_eq!(
+        json.pointer("/failover/0/on"),
+        Some(&serde_json::json!("stormbr0"))
+    );
     assert_eq!(
         json.pointer("/uplinks/1/ports/0/fec/configured/0"),
         Some(&serde_json::json!("rs"))
     );
-    assert_eq!(json.pointer("/uplinks/1/ports/0/tx-bytes"), Some(&serde_json::json!(9)));
-    assert_eq!(json.pointer("/history/0/at"), Some(&serde_json::json!("t3")));
-    assert!(view.summary().contains("1 of 2 uplinks carrying (stormbr0)"));
+    assert_eq!(
+        json.pointer("/uplinks/1/ports/0/tx-bytes"),
+        Some(&serde_json::json!(9))
+    );
+    assert_eq!(
+        json.pointer("/history/0/at"),
+        Some(&serde_json::json!("t3"))
+    );
+    assert!(
+        view.summary()
+            .contains("1 of 2 uplinks carrying (stormbr0)")
+    );
     assert!(view.summary().contains("1 address(es) failed over"));
     assert_eq!(
         view.hops(&[ip("192.168.16.21")])

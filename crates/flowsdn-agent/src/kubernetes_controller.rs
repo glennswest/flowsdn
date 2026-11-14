@@ -28,6 +28,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "uplinks_monitor.rs"]
+mod uplinks_monitor;
+
 type Key = (IpAddr, u8, IpAddr);
 
 const LIST_PAGE: u32 = 500;
@@ -52,6 +55,7 @@ pub struct Controller {
     client: JsonClient,
     settings: Settings,
     routes_file: PathBuf,
+    state_dir: PathBuf,
     derive: Derive,
 }
 impl Controller {
@@ -71,6 +75,7 @@ impl Controller {
             client,
             settings,
             routes_file: state_dir.join(ROUTES_FILE),
+            state_dir: state_dir.to_path_buf(),
             derive: Derive::default(),
         })
     }
@@ -151,6 +156,16 @@ impl Controller {
             lock(&view)
                 .errors
                 .insert("sysctl".into(), failed.join("; "));
+        }
+        {
+            let uplink_view = Arc::clone(&view);
+            let uplink_settings = self.settings.uplinks.clone();
+            let state_dir = self.state_dir.clone();
+            std::thread::Builder::new()
+                .name("flowsdn-uplinks".into())
+                .spawn(move || {
+                    uplinks_monitor::monitor_loop(&uplink_view, &uplink_settings, &state_dir);
+                })?;
         }
         let routes = if self.settings.auto_direct_node_routes {
             let (sender, receiver) = mpsc::channel();
@@ -762,8 +777,10 @@ fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
                     .collect()
             };
             match interfaces_holding(&addresses) {
-                Ok(found) => {
-                    lock(view).errors.remove("host-firewall");
+                Ok(mut found) => {
+                    let mut view = lock(view);
+                    view.errors.remove("host-firewall");
+                    found.extend(uplink_ports(&view));
                     found
                 }
                 Err(error) => {
@@ -1054,15 +1071,18 @@ fn service_loop(
             }
         }
         if node_port {
-            let addresses = {
+            let (addresses, ports) = {
                 let view = lock(view);
-                view.nodes
-                    .iter()
-                    .find(|n| n.name == view.local_node)
-                    .map(|n| n.internal_ips.clone())
-                    .unwrap_or_default()
+                (
+                    view.nodes
+                        .iter()
+                        .find(|n| n.name == view.local_node)
+                        .map(|n| n.internal_ips.clone())
+                        .unwrap_or_default(),
+                    uplink_ports(&view),
+                )
             };
-            let result = attach_uplinks(lb, &addresses);
+            let result = attach_uplinks(lb, &addresses, &ports);
             let mut view = lock(view);
             match result {
                 Ok(()) => {
@@ -1079,6 +1099,15 @@ fn service_loop(
 /// The interfaces holding any of `addresses`, by name (`/sys/class/net`).
 fn interfaces_with(addresses: &[IpAddr]) -> std::result::Result<BTreeSet<String>, String> {
     Ok(interfaces_holding(addresses)?.into_keys().collect())
+}
+/// The uplink ports the monitor found (#408), name -> ifindex: a second
+/// port's address need not be an InternalIP yet (rustkube-node#366).
+fn uplink_ports(view: &View) -> BTreeMap<String, u32> {
+    view.uplinks
+        .uplinks
+        .iter()
+        .map(|u| (u.name.clone(), u.index))
+        .collect()
 }
 /// The interfaces (name -> ifindex) that hold one of `addresses`.
 fn interfaces_holding(addresses: &[IpAddr]) -> std::result::Result<BTreeMap<String, u32>, String> {
@@ -1105,11 +1134,16 @@ fn interfaces_holding(addresses: &[IpAddr]) -> std::result::Result<BTreeMap<Stri
 
 /// NodePort from outside the cluster (#292): the NodePort programs on every
 /// interface that holds one of this node's InternalIPs, and on no other.
-fn attach_uplinks(lb: &mut SocketLb, addresses: &[IpAddr]) -> std::result::Result<(), String> {
+fn attach_uplinks(
+    lb: &mut SocketLb,
+    addresses: &[IpAddr],
+    ports: &BTreeMap<String, u32>,
+) -> std::result::Result<(), String> {
     if addresses.is_empty() {
         return Ok(());
     }
-    let want = interfaces_with(addresses)?;
+    let mut want = interfaces_with(addresses)?;
+    want.extend(ports.keys().cloned());
     let stale: Vec<String> = lb
         .uplinks()
         .filter(|name| !want.contains(*name))
@@ -1360,8 +1394,12 @@ fn route_loop(
         }
     };
     let mut desired: Option<Vec<DesiredRoute>> = None;
+    // The uplinks a reconcile last saw (#408): a port leaving or joining
+    // rewrites the paths at once, not at the next 30 s repair.
+    let mut generation = lock(view).uplinks.generation;
+    let mut last = Instant::now();
     loop {
-        match receiver.recv_timeout(RECONCILE_INTERVAL) {
+        match receiver.recv_timeout(uplinks_monitor::TICK) {
             Ok(next) => {
                 let mut next = next;
                 while let Ok(newer) = receiver.try_recv() {
@@ -1369,13 +1407,26 @@ fn route_loop(
                 }
                 desired = Some(next);
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                let now = lock(view).uplinks.generation;
+                if now == generation && last.elapsed() < RECONCILE_INTERVAL {
+                    continue;
+                }
+            }
             Err(mpsc::RecvTimeoutError::Disconnected) => return,
         }
+        generation = lock(view).uplinks.generation;
+        last = Instant::now();
         // Nothing is pruned before the first complete Node list.
         if let Some(desired) = &desired {
-            let (states, error) =
-                reconcile(&connector, desired, &mut installed, file, skip_unreachable);
+            let (states, error) = reconcile(
+                &connector,
+                view,
+                desired,
+                &mut installed,
+                file,
+                skip_unreachable,
+            );
             let mut view = lock(view);
             view.routes = states;
             if let Some(error) = &error {
@@ -1395,6 +1446,7 @@ fn key(route: &DesiredRoute) -> Key {
 
 fn reconcile(
     connector: &Connector,
+    view: &Shared,
     desired: &[DesiredRoute],
     installed: &mut BTreeSet<Key>,
     file: &Path,
@@ -1404,7 +1456,7 @@ fn reconcile(
     let want: BTreeSet<Key> = desired.iter().map(key).collect();
     let stale: Vec<Key> = installed.difference(&want).copied().collect();
     for (destination, prefix, gateway) in stale {
-        match connector.delete_gateway_route(destination, prefix, gateway) {
+        match delete_direct_route(connector, destination, prefix, gateway) {
             Ok(()) => {
                 installed.remove(&(destination, prefix, gateway));
             }
@@ -1417,7 +1469,15 @@ fn reconcile(
     let mut states = BTreeMap::new();
     for route in desired {
         let cidr = cidr_text(route.destination, route.prefix);
-        let state = match install(connector, route, installed, file, skip_unreachable) {
+        let hops = uplinks_monitor::route_hops(view, route);
+        let state = match install(
+            connector,
+            route,
+            hops.as_deref(),
+            installed,
+            file,
+            skip_unreachable,
+        ) {
             Ok(state) => state,
             Err(error) => {
                 failures.push(format!("{cidr} via {}: {error}", route.gateway));
@@ -1433,9 +1493,36 @@ fn reconcile(
     (states, error)
 }
 
+/// Delete a direct route, plain or ECMP: an ECMP route is deleted whole
+/// (protocol kernel, no gateway), and only when it is one flowsdn installs.
+fn delete_direct_route(
+    connector: &Connector,
+    destination: IpAddr,
+    prefix: u8,
+    gateway: IpAddr,
+) -> Result<()> {
+    let ecmp = connector
+        .table_routes(254, destination.is_ipv6())?
+        .into_iter()
+        .any(|r| {
+            r.destination == destination
+                && r.prefix == prefix
+                && r.multipath
+                && flowsdn_connector::multihome::owned(&r)
+        });
+    if ecmp {
+        connector.delete_owned_route(destination, prefix, 254, None)
+    } else {
+        connector.delete_gateway_route(destination, prefix, gateway)
+    }
+}
+
+/// Install one direct route: with `hops` (several uplinks, #408) an ECMP
+/// route over them, else the plain route via the node's first address.
 fn install(
     connector: &Connector,
     route: &DesiredRoute,
+    hops: Option<&[flowsdn_connector::multihome::NextHop]>,
     installed: &mut BTreeSet<Key>,
     file: &Path,
     skip_unreachable: bool,
@@ -1464,8 +1551,27 @@ fn install(
     if installed.insert(key(route)) {
         save_routes(file, installed)?;
     }
-    connector.replace_gateway_route(route.destination, route.prefix, route.gateway)?;
-    Ok("installed".into())
+    match hops {
+        Some(hops) => {
+            connector.replace_multipath_route(
+                route.destination,
+                route.prefix,
+                hops,
+                254,
+                None,
+                None,
+            )?;
+            Ok(if hops.len() > 1 {
+                format!("installed: {} paths", hops.len())
+            } else {
+                "installed".into()
+            })
+        }
+        None => {
+            connector.replace_gateway_route(route.destination, route.prefix, route.gateway)?;
+            Ok("installed".into())
+        }
+    }
 }
 
 const RTPROT_KERNEL: u8 = 2;

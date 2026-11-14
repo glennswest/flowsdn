@@ -83,6 +83,8 @@ pub struct Settings {
     pub flowsdn_policy: bool,
     /// The host firewall (#379): `off` (default), `audit` or `enforce`.
     pub host_firewall: HostFirewall,
+    /// `kubernetes.uplinks` (#408): how several uplink ports are used.
+    pub uplinks: crate::uplinks::Settings,
 }
 /// `kubernetes.host-firewall`: whether the agent filters traffic to the
 /// node itself from FlowsdnClusterwideNetworkPolicy host rules, and whether
@@ -197,6 +199,7 @@ impl Settings {
             host_firewall,
             cluster_name,
             cgroup_root,
+            uplinks: crate::uplinks::Settings::parse(object.get("uplinks"))?,
         }))
     }
 }
@@ -412,7 +415,11 @@ pub fn router_ip((network, prefix): (IpAddr, u8)) -> Result<IpAddr> {
 pub struct DesiredRoute {
     pub destination: IpAddr,
     pub prefix: u8,
+    /// The node's first InternalIP of the family (the plain route's gateway).
     pub gateway: IpAddr,
+    /// Every InternalIP of the family, first one first: the ECMP paths over
+    /// this node's uplinks pair with them (#408).
+    pub gateways: Vec<IpAddr>,
     pub node: String,
 }
 
@@ -505,15 +512,18 @@ pub fn desired_routes(local: &str, nodes: &[NodeInfo], derive: Derive) -> RouteP
                 continue;
             }
             let (destination, prefix) = *cidr;
-            if let Some(gateway) = node
+            let gateways: Vec<IpAddr> = node
                 .internal_ips
                 .iter()
-                .find(|ip| ip.is_ipv6() == destination.is_ipv6())
-            {
+                .copied()
+                .filter(|ip| ip.is_ipv6() == destination.is_ipv6())
+                .collect();
+            if let Some(gateway) = gateways.first().copied() {
                 routes.insert(DesiredRoute {
                     destination,
                     prefix,
-                    gateway: *gateway,
+                    gateway,
+                    gateways,
                     node: node.name.clone(),
                 });
             }
@@ -591,6 +601,8 @@ pub struct View {
     pub clusterwide_synced: bool,
     pub host_interfaces: BTreeMap<String, u32>,
     pub host_learning: BTreeSet<u32>,
+    /// The node's uplink ports, their carrier and failover (#408).
+    pub uplinks: crate::uplinks::View,
     /// The latest failure of each controller part (`nodes`, `pods`, `routes`).
     pub errors: BTreeMap<String, String>,
 }
@@ -778,6 +790,7 @@ impl View {
                 .iter()
                 .map(|(cidr, (route, state))| {
                     json!({"destination":cidr,"gateway":route.gateway.to_string(),
+                        "gateways":route.gateways.iter().map(ToString::to_string).collect::<Vec<_>>(),
                         "node":route.node,"state":state})
                 })
                 .collect(),
@@ -845,7 +858,7 @@ impl View {
         json!({"state":state,"msg":msg,"node-name":self.local_node,
             "auto-direct-node-routes":self.direct_routes,"service-lb":self.service_lb,
             "identity-allocation":self.identity,"network-policy":self.network_policy,"flowsdn-policy":self.flowsdn_policy,
-            "policy":self.policy_status})
+            "policy":self.policy_status,"uplinks":self.uplinks.summary()})
     }
 }
 
