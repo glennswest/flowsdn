@@ -46,8 +46,9 @@ Owner decision posted (comment 6868495074, recommended B); `wait-owner` set. No 
       1 ignored, musl x86_64 + aarch64) and kernel-check medium on 7.2.11: 20 pass, 0 fail, 2 skip (uplinks-live: 64 flows over
       both ports, each address on its port, u1 down -> flows on u0 + .204/32 on u0 with GARP, u1 back -> /32 removed; twice; single
       cleans up).
-- [ ] Stage flowsdn; `shipped` with proof: an `UplinkJoined` Event "... 2 of 2 carrying" (a test machine with two ports on its
-      subnet). The issue's done-when on forge1 needs forge1 on the flowsdn flavour (it is a cilium node) and a cable pull.
+- [x] Stage a522a71052f0 requested at 1da24f3; `shipped` with proof: an `UplinkJoined` Event "... 2 of 2 carrying" in `default`
+      (a test machine with two ports on its subnet). Comment on #408 says what was verified. The done-when on forge1 needs forge1
+      on the flowsdn flavour (cilium node today, stormcos#958) and a cable pull; peers' second InternalIP is rustkube-node#366.
 - (history) Paused 2026-11-13 for P0 #409. WIP on branch `wip/408-uplinks` (not built yet): `flowsdn-connector/src/multihome.rs`
   (ECMP route, rules, address delete, GARP, FEC ioctl) and `flowsdn-agent/src/uplinks.rs` (+ tests: settings, select,
   moves, nexthops, desired rules/tables, view JSON). Next: `uplinks_monitor.rs` (500 ms carrier tick, one address dump,
