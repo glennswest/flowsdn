@@ -633,13 +633,13 @@ mod tests {
 
     #[test]
     fn a_delete_matches_routes_of_any_scope() {
-        let message = owned_route_delete("192.0.2.0".parse().expect("ip"), 24, 2081, None)
-            .expect("delete");
+        let message =
+            owned_route_delete("192.0.2.0".parse().expect("ip"), 24, 2081, None).expect("delete");
         assert_eq!(message.header.scope, RouteScope::NoWhere);
         assert_eq!(u8::from(message.header.protocol), RTPROT_KERNEL);
         assert!(message.attributes.contains(&RouteAttribute::Table(2081)));
-        let main = owned_route_delete("10.9.0.0".parse().expect("ip"), 16, 254, None)
-            .expect("delete");
+        let main =
+            owned_route_delete("10.9.0.0".parse().expect("ip"), 16, 254, None).expect("delete");
         assert_eq!(main.header.scope, RouteScope::Universe);
     }
 
