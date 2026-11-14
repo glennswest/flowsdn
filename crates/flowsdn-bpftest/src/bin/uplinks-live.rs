@@ -123,7 +123,7 @@ fn flow_devices() -> Result<BTreeSet<String>> {
             "get",
             "10.9.1.1",
             "ipproto",
-            "tcp",
+            "6", // TCP by number: the VM has no /etc/protocols
             "sport",
             &sport.to_string(),
             "dport",
