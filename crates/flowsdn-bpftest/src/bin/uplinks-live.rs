@@ -12,7 +12,10 @@
 //! It needs iproute2 and root, as kernel-check gives it.
 use flowsdn_agent::uplinks::{self, Mode, Settings, Uplink, View, apply};
 use flowsdn_connector::{Connector, multihome};
-use nix::sched::{CloneFlags, unshare};
+use nix::{
+    mount::{MsFlags, mount},
+    sched::{CloneFlags, unshare},
+};
 use std::{
     collections::BTreeSet,
     error::Error,
@@ -153,6 +156,24 @@ fn run() -> Result<()> {
     ensure(
         std::fs::read_link("/proc/self/ns/net")? != before,
         "namespace isolation failed",
+    )?;
+    // sysfs shows the network namespace it was mounted in: mount one for
+    // this namespace, in a private mount namespace, so /sys/class/net (which
+    // the monitor reads) lists u0 and u1.
+    unshare(CloneFlags::CLONE_NEWNS)?;
+    mount(
+        None::<&str>,
+        "/",
+        None::<&str>,
+        MsFlags::MS_REC | MsFlags::MS_PRIVATE,
+        None::<&str>,
+    )?;
+    mount(
+        Some("sysfs"),
+        "/sys",
+        Some("sysfs"),
+        MsFlags::empty(),
+        None::<&str>,
     )?;
     ip(&["link", "set", "lo", "up"])?;
     for (u, p) in [("u0", "p0"), ("u1", "p1")] {
