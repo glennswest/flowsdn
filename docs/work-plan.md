@@ -28,8 +28,15 @@ Owner decision posted (comment 6868495074, recommended B); `wait-owner` set. No 
 - [x] Question with recommendation on #408; wait-owner.
 - [x] Owner answered 2026-11-13: **B, routed, two addresses** (each port keeps its address, flowsdn spreads flows, a port's address
       moves to the live port when its link drops).
-- [ ] File the other halves: stormpump (tolerate the failover /32), rustkube-node (publish both InternalIPs), stormblock (NVMe/TCP
-      multipath, one connection per address).
+- [x] Filed the other halves: stormpump#234 (tolerate the failover /32), rustkube-node#366 (publish both InternalIPs),
+      stormblock#596 (NVMe/TCP multipath, one connection per address).
+- Paused 2026-11-13 for P0 #409. WIP on branch `wip/408-uplinks` (not built yet): `flowsdn-connector/src/multihome.rs`
+  (ECMP route, rules, address delete, GARP, FEC ioctl) and `flowsdn-agent/src/uplinks.rs` (+ tests: settings, select,
+  moves, nexthops, desired rules/tables, view JSON). Next: `uplinks_monitor.rs` (500 ms carrier tick, one address dump,
+  moves + GARP x3, state file `uplink-moves.json`, sysctls fib_multipath_hash_policy/ignore_routes_with_linkdown/
+  arp_ignore/arp_announce/rp_filter/ndisc_notify on uplinks, rules/tables reconcile on change + 30 s); `DesiredRoute.gateways`
+  + route thread uses `View::hops` (reconcile on uplink generation); NodePort attach on uplink names; `kubernetes.uplinks`
+  setting; `GET /v1/uplinks` + healthz summary; docs; sc-build.
 - [ ] flowsdn side (in progress): uplink set = every port holding a node address, discovered from the kernel (not the config);
       a continuous netlink link monitor (join/leave logged with a timestamp); per-flow ECMP (L4 hash) for remote pod CIDRs over the
       live ports; uplink programs on every port; failover /32 + gratuitous ARP on a live port while a port is down, removed on return;
