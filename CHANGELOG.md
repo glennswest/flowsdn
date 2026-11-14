@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 2026-11-14
+- **feat:** Several uplinks (#408, owner's choice B: routed, one address per port). A new `flowsdn-uplinks` thread finds every port on a node address's subnet (forge1: `stormbr0` and the second 25G port) and watches each one's carrier every 500 ms for the agent's whole life.
+  - Every port with carrier carries traffic: other nodes' pod CIDRs are per-flow ECMP routes over the live ports (L4 hash), source rules pin each address to its port, and the default route has an ECMP copy in table 2080.
+  - A port that loses carrier leaves at once. Its address is added as a `/32` on a live port with three gratuitous ARPs, and is removed when carrier returns. Each join and leave is logged with its time, written as an `UplinkJoined`/`UplinkLeft` Event, and kept in the history.
+  - NodePort programs and the host firewall attach to every uplink.
+  - New `GET /v1/uplinks` reports each port's carrier, speed, configured and active FEC, bytes, the failover addresses and the history. `/v1/healthz` gives a summary.
+  - New `kubernetes.uplinks` setting: `mode` active-active|active-backup|single, `weights`, `table`, `rule-priority`. A one-port node is unchanged.
+  - Other components' halves: stormpump#234, rustkube-node#366, stormblock#596.
+
 ### 2026-11-13
 - **docs:** Work plan: #409 runtime FEC monitor waits on the owner's choice of where the speed -> FEC table lives.
 - **docs:** #408 (both NICs on a node): design question to the owner (A: stormpump balance-alb bond; B: flowsdn ECMP over the per-port addresses with failover /32), work plan entry. No code.

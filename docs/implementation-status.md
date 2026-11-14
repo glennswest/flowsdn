@@ -85,6 +85,12 @@ pinning or subsystem libraries are absent are **not current status**.
   in golden-flowsdn-e23d9621fbd6. Not on a cluster or a real uplink. Without the
   CRDs (stormcos#303) it has nothing to judge; since #402 NetworkPolicy no longer
   waits for that list.
+- Several uplinks (#408): discovery, carrier monitor, per-flow ECMP direct
+  routes, source rules and tables, failover host address with gratuitous ARP,
+  per-port report (`GET /v1/uplinks`). The planner and the netlink messages are
+  unit-tested; it has not run on a two-port node (forge1 is a cilium node).
+  Peers' second InternalIP (rustkube-node#366) and NVMe/TCP multipath
+  (stormblock#596) belong to those components.
 - Maglev backend selection for traffic from outside the cluster (spec 05
   §3.13/§5.1, `kubernetes.lb-algorithm` or the
   `service.flowsdn.io/lb-algorithm` annotation): per-frontend tables in

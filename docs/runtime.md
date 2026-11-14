@@ -226,8 +226,90 @@ With the `kubernetes` feature and section the agent:
 - with `network-policy` (default on), lists and watches NetworkPolicies (and
   Namespaces) and enforces them in the endpoint programs
   ([below](#networkpolicy-enforcement-292));
-- serves `GET /v1/ip`, `GET /v1/identity`, `GET /v1/node/routes` and
-  `GET /v1/service` ([API](agent-api.md)).
+- watches the node's uplink ports for its whole life and uses every one with
+  carrier ([below](#several-uplinks-408));
+- serves `GET /v1/ip`, `GET /v1/identity`, `GET /v1/node/routes`,
+  `GET /v1/service` and `GET /v1/uplinks` ([API](agent-api.md)).
+
+### Several uplinks (#408)
+
+Owner's choice B (2026-11-13): routed, one address per port, no switch
+configuration (no LACP, no bond). A thread, `flowsdn-uplinks`, runs every
+500 ms for the agent's whole life.
+
+**Which ports.** An uplink is any interface that holds one of the Node's
+InternalIPs, or a global address on the subnet of one. Nothing names a port.
+On forge1 that is `stormbr0` (.203, the bridged boot port) and the second 25G
+port (.204, its own stormpump lease). A storage VLAN on another subnet, pod
+veths and `lo` are not uplinks. They are ordered by `weight`, then the one
+holding the first InternalIP, then ifindex. A down port that lost its address
+keeps the last one the monitor saw. With one uplink, or `mode: single`,
+nothing below happens and the routes are as before.
+
+**Only carrier decides.** `/sys/class/net/<port>/carrier` is read every tick.
+A port that gains carrier joins, one that loses it leaves; traffic,
+thresholds or tests never decide. Each join or leave is a log line with its
+UTC time (`uplink enp65s0f1np1 left: no carrier (192.168.16.204/20); 1 of 2
+carrying`), a Node Event (`UplinkJoined` Normal, `UplinkLeft` Warning) and an
+entry in the last 64 of `GET /v1/uplinks` `history`. A port may come and go
+any number of times.
+
+**Both carry (active-active, the default).**
+- Each other node's pod CIDR is one per-flow ECMP route, protocol kernel in
+  the main table, with one path per live uplink. Path k pairs the node's k-th
+  InternalIP with the k-th live port (cycling the shorter list). Once peers
+  publish both addresses (rustkube-node#366), traffic is spread over both
+  ports at both ends. `GET /v1/node/routes` says `installed: 2 paths`.
+- The kernel hashes per flow on the L4 tuple (`fib_multipath_hash_policy=1`,
+  IPv4 and IPv6), so a flow is never reordered.
+- Source rules pin each node address to the port that holds it. Rule
+  `priority+10+i` sends `from <addr> to <its subnet>` to table `table+1+i`
+  (`<subnet> dev <port> src <addr>`). Rule `priority+50` is `lookup main
+  suppress_prefixlength 0`, so every main-table route but the default still
+  applies. Rule `priority+100+i` sends `from <addr>` to the same table, whose
+  default route goes via the main default gateway over that port. Rule
+  `priority+200` sends everything else to table `table`, an ECMP copy of the
+  default route over the live ports; the main default stays as a fallback.
+  Defaults: `table` 2080 and `priority` 9100. flowsdn owns tables
+  2080–2112 and priorities 9100–9399, and nothing else: stormpump's lease,
+  address, subnet route and default route are never touched.
+- NodePort, LoadBalancer and externalIP programs, and the host firewall, are
+  attached to every uplink.
+- On each uplink: `arp_ignore=1` and `arp_announce=2` (each address is
+  answered only on its own port, the same as stormpump's path NIC), and
+  `rp_filter=0` (a reply may come back on the other port). Also
+  `ignore_routes_with_linkdown=1` (also `all`) and IPv6 `ndisc_notify=1`.
+  An address held on `lo` and answered over an uplink through ARP flux is no
+  longer answered.
+
+**A port leaves.** The kernel stops using its paths at once
+(`ignore_routes_with_linkdown`). Within one tick, its addresses are added
+as host addresses (`/32`, `/128`) on the most preferred live uplink on that
+subnet, followed by three gratuitous ARPs (IPv6: the kernel's unsolicited NA).
+Its source rules' tables point at that port, and the ECMP routes are
+rewritten over the ports left. Peers keep reaching every node address.
+
+**It returns.** The host addresses are removed, its own addresses are
+announced from it with three gratuitous ARPs, and the routes spread over both
+ports again. The moved addresses are recorded in
+`<state-dir>/uplink-moves.json`, so a restarted agent removes them when they
+are no longer wanted.
+
+`mode: active-backup` carries the balanced routes on the most preferred live
+uplink only. Failover is the same. `weights` (1–255, default 1) become path
+weights and the preference order.
+
+**Report.** `GET /v1/uplinks` gives each uplink's carrier, addresses and
+physical ports (a bridge lists its members), and for each port its carrier,
+speed, configured and active FEC (`ETHTOOL_GFECPARAM`, read every 5 s) and
+rx/tx bytes. It also gives the failover host addresses and the history.
+`/v1/healthz` `kubernetes.uplinks` is a one-line summary
+(`2 of 2 uplinks carrying (stormbr0, enp65s0f1np1), active-active`). Failures
+are in the `uplinks` healthz error.
+
+Not done here: forge1 must run the flowsdn flavour (it is a cilium node), the
+peers' second InternalIP is rustkube-node#366, NVMe/TCP multipath is
+stormblock#596, and stormpump keeping the failover `/32` is stormpump#234.
 
 ### Cluster identities (#291)
 

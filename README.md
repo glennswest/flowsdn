@@ -46,6 +46,13 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
   snat|dsr|hybrid` (default `snat`; DSR by IP option, per Service
   `service.flowsdn.io/forwarding-mode`) and `kubernetes.nat46x64` (default off)
   are verified by kernel test runs only, not on a cluster.
+- **Several uplinks** (#408, `kubernetes.uplinks`, default `active-active`):
+  every port on the node's subnet that has carrier carries traffic, as per-flow
+  ECMP routes to other nodes with source rules pinning each address to its
+  port. A port that loses carrier has its address held as a /32 by a live
+  port, with a gratuitous ARP, until carrier returns. `GET /v1/uplinks`
+  reports each port's link, speed, FEC, bytes and the join/leave history.
+  Unit-tested; not yet run on a two-port node.
 - **Host firewall** (`kubernetes.host-firewall: audit|enforce`, default off,
   `audit` in the stormcos Kubernetes-mode config; ADR-0022): FlowsdnClusterwideNetworkPolicy host rules (`nodeSelector`)
   filter traffic to the node on its uplinks in eBPF, with audit mode and

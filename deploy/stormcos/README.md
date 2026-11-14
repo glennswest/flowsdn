@@ -152,6 +152,12 @@ configuration. The differences:
   lists and watches that CRD; the CRD must be applied (`crds/`). New uplinks
   learn flows for 60 s before enforcing. `GET /v1/policy/verdicts` gives the
   counters ([runtime](../../docs/runtime.md#host-firewall-379)).
+- `uplinks` (#408, not set in the ConfigMap; every key optional): `mode`
+  (`active-active` default, `active-backup`, `single` = as before #408),
+  `weights` (`{"<interface>": 1-255}`), `table` (default 2080) and
+  `rule-priority` (default 9100). Uplinks are discovered, never listed. A node
+  with one uplink is unchanged
+  ([runtime](../../docs/runtime.md#several-uplinks-408)).
 
 Off-node egress still needs a masquerade, now for the node's derived pool.
 Moving a node from the static pool to `auto` needs its endpoints gone (a fresh
