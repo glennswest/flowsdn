@@ -4,6 +4,20 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Runtime FEC monitor and cable hotplug — #409 (P0), 2026-11-13
+
+Owner: watch every port's FEC and link for the node's whole life, set FEC live from the speed -> FEC table when a port is down or wrong,
+and bring a re-plugged cable up with no reboot (forge1 ConnectX-4 Lx, 25G on dsw1).
+Found: no speed -> FEC table exists. stormbootx reads one `fec_pin = rs` from the boot media (`config.rs` `stated_fec_pin`), and
+the running node does not read it. stormpump already gives a port that gets carrier later its address (docs/network.md, #75).
+Owner decision posted (comment 6868716919: A boot-media conf / B one stormcos setting written to both / C flowsdn only; recommended B);
+`wait-owner` set. No code yet.
+
+- [x] Question with recommendation on #409; wait-owner.
+- [ ] On the answer: file the stormcentral/stormcos (setting) and stormbootx (per-speed lookup) halves, then the flowsdn monitor:
+      netlink link watch, ethtool-netlink FEC get/set, fix only on a sustained down/mismatch (never one sample), table looked up by
+      the port's highest supported speed, per-port speed/FEC (configured, active)/link in network status. Re-join waits on #408.
+
 ### Both NICs on a node — #408 (P1), 2026-11-13
 
 Owner: load balance and combined throughput of two ports, discovered and not hard-coded (forge1 2x25G, no switch config).

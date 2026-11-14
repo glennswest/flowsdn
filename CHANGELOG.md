@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 2026-11-13
+- **docs:** Work plan: #409 runtime FEC monitor waits on the owner's choice of where the speed -> FEC table lives.
 - **docs:** #408 (both NICs on a node): design question to the owner (A: stormpump balance-alb bond; B: flowsdn ECMP over the per-port addresses with failover /32), work plan entry. No code.
 
 ### 2026-11-10 (docs refresh)
