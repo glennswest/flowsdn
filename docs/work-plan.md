@@ -11,7 +11,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - Done: `policy::compile` reports a problem naming the policies with selector
   peers while identity allocation is on and `identities_synced` is false; it
   reaches `/v1/healthz` through the policy loop's `errors["policy"]`. Unit test
-  added; docs/runtime.md updated. Verify with sc-build.
+  added; docs/runtime.md updated.
+- [x] sc-build at 763ce9a: `cargo xtask check` passed (fmt, Clippy -D warnings,
+  workspace tests all features); `policy::` tests 25 passed incl. the new one.
+  Stage 47c384afb5c5 requested. `shipped` with proof: the node's apiserver lists
+  `flowsdn.io/v1alpha1` FlowsdnIdentity (the condition that ends the window).
 
 ### Runtime FEC monitor and cable hotplug — #409 (P0), 2026-11-13
 
