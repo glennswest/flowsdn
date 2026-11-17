@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-17 (docs refresh)
+- **docs:** Refresh from code since 2026-11-10 (#408 uplinks, #401 selector-peer reporting): `kubernetes.uplinks` row in the runtime configuration table with its defaults, CLAUDE.md state through 763ce9a. No promise found unimplemented beyond already-open issues.
+
 ### 2026-11-13 (#401)
 - **fix:** NetworkPolicy/flowsdn policy selector peers before the FlowsdnIdentity list succeeds are reported (#401). They still fail closed (a selected Pod is isolated at once; a selector peer has no identity to match until the list is in), but the policy compiler now adds the problem `identities not listed yet (flowsdnidentities.flowsdn.io): selector peers match nothing, so they allow (and deny) nothing, in <policies>`, which shows in `kubernetes.policy.problems` and turns the `kubernetes` health to Warning with that text. `ipBlock` peers and peerless policies are not reported. Unit test `selector_peers_before_the_identity_list_fail_closed_and_are_reported`.
 

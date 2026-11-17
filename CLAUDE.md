@@ -13,7 +13,7 @@ in `CHANGELOG.md`; Cargo.lock records workspace packages when versions change.
 Main contains unreleased endpoint agent/CNI work beyond that foundation release.
 This documentation-only audit does not warrant a version bump or release.
 
-As of 2026-11-10, source through `d50a453` runs a standalone JSON-configured
+As of 2026-11-17, source through `763ce9a` (policy: selector peers waiting for the FlowsdnIdentity list are reported as a `policy` problem, #401; stages a522a71052f0 for #408 and 47c384afb5c5 for #401) runs a standalone JSON-configured
 agent over a Unix socket (`/var/run/flowsdn/flowsdn.sock` in the manifests) and a
 primary veth + loopback CNI (`flowsdn-cni`, conflist `00-flowsdn.conflist`). The
 agent embeds its `local-delivery` BPF object (and, with the `kubernetes` feature,
