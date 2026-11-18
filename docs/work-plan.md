@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### No stubs — #418, 2026-11-18
+
+Owner: "lets get rid of stubs please" … "stubs are lies".
+- [ ] Health API: rows computed from the agent's live state on every health request (API/endpoint count, restore, Kubernetes controller sync and errors, policy maps); no hardcoded `controllers` row answering "not implemented". A row changes (Count, Updated) only when its level/message/error does.
+- [ ] Remove promises of what is not there: bpf-loader README (replacement transactions, stale pin/policy lines), scripttest README (`db/cmp`), flowsdn-table doc (metrics; reconciliation lives in flowsdn-reconcile).
+- [ ] Refusals worded as what flowsdn does, not "not implemented": API 404/endpoint PUT fields (400), CNI, clustermesh, encryption, scripttest, BPF comments.
+- [ ] sc-build; stage; shipped with the health proof on a pvetest node.
+
 ### Selector peers before the identity list — #401, 2026-11-13
 - Behaviour kept: fail closed (the issue's recommendation; allowing a selected
   peer needs an identity number the datapath can match). stormcos#303 (apply
