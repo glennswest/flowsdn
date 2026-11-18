@@ -49,9 +49,8 @@ line by line; quote capture replacements such as `'$1'` so script environment
 expansion does not consume them. Comparison failures produce a whole-file
 unified diff unless quiet mode is selected.
 
-Networking adapters, update mode,
-agent fixture flags remain unimplemented. Unsupported commands and execution
-syntax fail explicitly.
+Commands not listed here, update mode and agent fixture flags fail
+explicitly, as does unsupported execution syntax.
 Section comments and asynchronous retry attempts are logged. Successful
 synthetic scripts do not imply that the harvested networking corpus passes.
 
@@ -126,7 +125,7 @@ capture errors remain terminal. Internal replay cancellation is distinguished
 from caller cancellation. Prior-section jobs remain queued. Cleanup discards
 attempt-job output without resetting script buffers or fixture state. Combining
 a retry prefix directly with background execution (`* exec ... &` or
-`!* exec ... &`) remains an explicitly unsupported gap; use a foreground retry
+`!* exec ... &`) is rejected; use a foreground retry
 assertion after launching background work.
 
 `Engine::register_table::<T>(name, Arc<Table<T>>)` binds rows implementing
@@ -141,16 +140,14 @@ primary-key order. Header spelling and default order come directly from
 order. The writer uses character widths, pads each column to its widest cell
 including the header, and separates columns by three spaces. Empty tables still
 print a header. Malformed row widths and cells containing tabs or line breaks
-are rejected. The future `db/cmp` command has its separately specified
-case-insensitive expected-header matching; it is not implemented yet.
+are rejected.
 
 `db/show` accepts `--columns`, `-o`/`--out`, and `-f`/`--format=table`, with
 separate or `=` values and flags before or after the table name. An output file
 uses the existing confined, nonblocking writer and leaves output buffers intact;
 without `-o`, rendering replaces stdout and clears stderr. Invalid formats,
-columns and row data are checked before opening an output file. JSON/YAML
-serialization, row deserialization, typed index queries and asynchronous
-`db/cmp` remain explicit gaps.
+columns and row data are checked before opening an output file. `table` is the
+only format.
 
 Rendering is bounded to 8 MiB of retained cell text and 8 MiB of final output,
 65,536 rows, 128 columns and 65,536 selected cells. Padding amplification is

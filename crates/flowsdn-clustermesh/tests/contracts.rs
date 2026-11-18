@@ -49,7 +49,7 @@ fn service_resync_and_deferred_features_are_explicit() {
     );
     assert_eq!(
         DeferredFeatures::default().warnings(),
-        vec!["clustermesh-mcs-api-install-crds is not implemented"]
+        vec!["clustermesh-mcs-api-install-crds is accepted and ignored: flowsdn has no MCS-API"]
     );
     assert!(
         DeferredFeatures {

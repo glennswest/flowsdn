@@ -354,6 +354,9 @@ struct Api {
     /// When the host firewall's uplinks were last brought to the view's.
     host_synced: Option<Instant>,
     timing: crate::cni_timing::Timing,
+    /// Why the policy maps could not be shared (NetworkPolicy not enforced);
+    /// a degraded health row while it holds (#418).
+    policy_maps_error: Option<String>,
 }
 impl Api {
     /// Once a second: attach the host firewall (#379) to the uplinks the
@@ -623,7 +626,7 @@ impl Api {
                 _ => fail(405, "method not supported"),
             };
         }
-        fail(404, "API route not implemented")
+        fail(404, "no such API route")
     }
     fn allocate(
         &mut self,
@@ -730,19 +733,25 @@ impl Api {
             .get("labels")
             .is_some_and(|labels| labels.as_array().is_none_or(|labels| !labels.is_empty()))
         {
-            return fail(501, "identity and policy labels are not implemented");
+            return fail(
+                400,
+                "endpoint labels are not taken: identities come from the Pod's Kubernetes labels",
+            );
         }
         if body
             .get("datapath-configuration")
             .is_some_and(|v| v.as_object().is_none_or(|v| !v.is_empty()))
         {
-            return fail(501, "custom datapath modes are not implemented");
+            return fail(
+                400,
+                "datapath-configuration is not taken: flowsdn endpoints are veth only",
+            );
         }
         if body
             .get("properties")
             .is_some_and(|v| v.as_object().is_none_or(|v| !v.is_empty()))
         {
-            return fail(501, "endpoint properties are not implemented");
+            return fail(400, "endpoint properties are not taken");
         }
         check_cni_route_mtu(body, self.config.route_mtu)?;
         let namespace = string(body, "k8s-namespace")?;
@@ -1365,6 +1374,7 @@ pub fn run(config_path: &Path) -> Result<()> {
     // Routes are written under the state directory, so start after restore
     // holds its exclusive lock.
     let ipv6 = config.v6.is_some();
+    let mut policy_maps_error = None;
     let kubernetes = match kubernetes {
         Some(controller) => {
             let policy = match manager.share_policy() {
@@ -1379,6 +1389,7 @@ pub fn run(config_path: &Path) -> Result<()> {
                     crate::log::logln!(
                         "policy maps unavailable, NetworkPolicy is not enforced: {error}"
                     );
+                    policy_maps_error = Some(error.to_string());
                     None
                 }
             };
@@ -1399,6 +1410,7 @@ pub fn run(config_path: &Path) -> Result<()> {
         kubernetes,
         host_synced: None,
         timing: crate::cni_timing::Timing::default(),
+        policy_maps_error,
     };
     // Without endpoint GC, never advertise readiness after skipping a deletion.
     // Preserve failed entries and fail startup so a supervisor can retry safely.
@@ -1434,7 +1446,7 @@ pub fn run(config_path: &Path) -> Result<()> {
     // Writers that waited for replay recheck a now-listening API under their
     // shared lock, so they cannot enqueue a deletion missed by this replay.
     drop(replay);
-    let health = health_api::ModuleHealth::new(enabled)?;
+    let health = health_api::ModuleHealth::new()?;
     crate::log::logln!(
         "initial endpoint API listening; Kubernetes node discovery {}",
         if enabled { "enabled" } else { "not enabled" }
@@ -1518,10 +1530,12 @@ fn serve(
             return fail(403, "the TCP listener is read-only; use the Unix socket");
         }
         match (request.method.as_str(), request.target.as_str()) {
-            ("GET" | "POST", "/statedb/query" | "/v1/statedb/query") => {
-                health.query(&request.body).map(|body| (200, body))
-            }
+            ("GET" | "POST", "/statedb/query" | "/v1/statedb/query") => health
+                .refresh(&health_api::Facts::of(api))
+                .and_then(|()| health.query(&request.body))
+                .map(|body| (200, body)),
             ("GET", "/health/modules" | "/v1/health/modules") => {
+                health.refresh(&health_api::Facts::of(api))?;
                 Ok((200, serde_json::to_vec(&health.modules()?)?))
             }
             _ => api

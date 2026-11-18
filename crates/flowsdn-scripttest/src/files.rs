@@ -574,7 +574,7 @@ impl Engine {
             return Err(RunError {
                 line: 1,
                 command: "#!".into(),
-                message: "agent fixture flags are not implemented".into(),
+                message: "agent fixture flags are not supported".into(),
             });
         }
         state.materialize(archive).map_err(|error| RunError {
@@ -853,7 +853,7 @@ pub(crate) fn replace(state: &mut State, args: &[String]) -> Result<Control> {
         let old = unescape(old)?;
         let new = unescape(new)?;
         if old.is_empty() {
-            return Err(fail("empty replacement patterns are not implemented"));
+            return Err(fail("a replacement pattern must not be empty"));
         }
         replacements.push((old, new));
     }

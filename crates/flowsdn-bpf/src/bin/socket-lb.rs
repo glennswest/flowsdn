@@ -14,7 +14,7 @@
 //! algorithm picks a new flow's backend from its lookup table in
 //! `flowsdn_lb{4,6}_maglev` by the flow hash, so every node sends a flow to
 //! the same backend (spec 05 §3.13, §5.1); without a table it picks at
-//! random. DSR and skip-LB are not implemented here; the agent terminates
+//! random. DSR and skip-LB are not done here; the agent terminates
 //! sockets.
 #![no_std]
 #![no_main]
@@ -620,7 +620,7 @@ pub fn sock6_getpeername(ctx: SockAddrContext) -> i32 {
 // that fits the device's MTU. The backend's node reads the option at its
 // uplink's ingress into a reply entry, and its uplink's egress rewrites the
 // reply's source to the frontend, so replies skip this node. A too-big UDP
-// packet goes without the option: DSR ICMP errors are not implemented.
+// packet goes without the option: DSR ICMP errors are not handled.
 //
 // A frontend whose master carries `NAT46X64` (spec 04 §3.15, spec 05 §3.1) has
 // backends of the other family, on other nodes: see "Service NAT46/64" below.

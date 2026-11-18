@@ -542,7 +542,9 @@ impl DeleteBackend for Deleter {
         Queue::open(&self.queue)?.lock_shared(Duration::from_millis(1500))
     }
     fn delegated_delete(&mut self, _: &DeleteRequest) -> Result<()> {
-        Err(error("delegated IPAM is not implemented"))
+        Err(error(
+            "delegated IPAM is not supported: flowsdn allocates pod addresses itself",
+        ))
     }
     fn enter_namespace(&mut self, path: Option<&str>) -> Result<bool> {
         let Some(path) = path.filter(|p| !p.is_empty()) else {
@@ -663,7 +665,9 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
         });
     }
     if !text(&conf, "chaining-mode").is_empty() || !text(field(&conf, "ipam"), "type").is_empty() {
-        return Err(error("chaining and delegated IPAM are not implemented"));
+        return Err(error(
+            "chaining and delegated IPAM are not supported: flowsdn is the primary plugin and allocates pod addresses itself",
+        ));
     }
     let socket = PathBuf::from(
         env.get("FLOWSDN_SOCK")
@@ -861,7 +865,7 @@ pub fn run(command: &str, input: &[u8], env: &BTreeMap<String, String>) -> Resul
             message: "plugin version does not allow GC".into(),
             details: String::new(),
         }),
-        _ => Err(error(format!("CNI command {command} is not implemented"))),
+        _ => Err(error(format!("unknown CNI command {command}"))),
     }
 }
 

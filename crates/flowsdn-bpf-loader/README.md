@@ -19,14 +19,17 @@ validates supported outer/inner shapes and compares complete inner templates.
 Inner capacity remains exact, including for LRU inner maps. Cluster arrays reserve
 the inclusive cluster-zero slot. The caller must validate map-type/flag
 combinations, BTF compatibility and actual kernel descriptor operations.
-Kernel probing, bpffs operations, live-map compatibility, and planned map
-replacement transactions are not implemented yet.
+These decisions are planning output only: the kernel adapter below never
+replaces a pinned map. A pinned map whose type, key, value, capacity or flags
+differ from the object's is preserved and startup is refused, naming the map.
 
 The optional `kernel` feature provides Aya object ownership for the integration
 classifier: endpoint-map updates, validated endpoint addresses and MACs, ingress
 attachments, explicit detach and cleanup when the owner is dropped. Duplicate
-attachments fail without replacing the existing link. This adapter does not yet
-implement persistent pins, production policy wiring or agent restart recovery.
+attachments fail without replacing the existing link. With a pin root
+(`load_pinned*`) the endpoint and policy maps and the TCX links are pinned there
+and reused across agent restarts; `PolicyMaps` hands the endpoint policy maps
+to the agent's policy thread.
 
 Auxiliary scratch planning uses target-specific 64/128-byte strides, possible
 CPU counts and checked map-value sizing. It exposes patch values and clamped
@@ -35,5 +38,5 @@ counts fail before allocation. Kernel-specific map limits remain caller checks.
 
 Typed tail inventories validate declared slots against exactly one program per
 slot, using the frozen ABI numbering. Global endpoint-policy arrays are separate.
-ELF section/name parsing, reachability and program-array population are not yet
-implemented; callers supply the typed declarations and program slots.
+Callers supply the typed declarations and program slots; this planner does
+not read them from the ELF object.

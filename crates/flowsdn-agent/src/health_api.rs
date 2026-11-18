@@ -3,37 +3,117 @@ use super::*;
 use flowsdn_health::{HealthStatus, Level, Registry};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// What the health rows are made from, read from the agent's live state on
+/// every health request (#418): nothing is reported that was not observed.
+pub(super) struct Facts {
+    /// Endpoints the API holds.
+    pub endpoints: usize,
+    /// The `kubernetes` member of `/v1/healthz` (state, msg), when the
+    /// Kubernetes controller runs.
+    pub kubernetes: Option<Value>,
+    /// Why the policy maps could not be shared with the policy thread.
+    pub policy_maps: Option<String>,
+}
+impl Facts {
+    pub(super) fn of(api: &Api) -> Self {
+        Self {
+            endpoints: api.manager.records().count(),
+            kubernetes: api
+                .kubernetes
+                .as_ref()
+                .map(|view| crate::kubernetes::lock(view).health()),
+            policy_maps: api.policy_maps_error.clone(),
+        }
+    }
+    /// (scope under `agent`, level, message, error) for each row.
+    fn rows(&self) -> Vec<(&'static str, Level, String, String)> {
+        let mut rows = vec![
+            (
+                "api",
+                Level::Ok,
+                format!("endpoint API listening; {} endpoints", self.endpoints),
+                String::new(),
+            ),
+            (
+                "restore",
+                Level::Ok,
+                "endpoint restore and deletion replay completed".into(),
+                String::new(),
+            ),
+        ];
+        if let Some(kubernetes) = &self.kubernetes {
+            let text = |key: &str| {
+                kubernetes
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned()
+            };
+            rows.push(if text("state") == "Ok" {
+                ("kubernetes", Level::Ok, text("msg"), String::new())
+            } else {
+                (
+                    "kubernetes",
+                    Level::Degraded,
+                    "Kubernetes controller is not ready".into(),
+                    text("msg"),
+                )
+            });
+            if let Some(error) = &self.policy_maps {
+                rows.push((
+                    "policy",
+                    Level::Degraded,
+                    "policy maps unavailable, NetworkPolicy is not enforced".into(),
+                    error.clone(),
+                ));
+            }
+        }
+        rows
+    }
+}
+
 pub(super) struct ModuleHealth {
     registry: Registry,
     runtime: tokio::runtime::Runtime,
 }
 impl ModuleHealth {
-    pub(super) fn new(kubernetes: bool) -> Result<Self> {
-        let value = Self {
+    /// Empty until the first [`Self::refresh`]: unknown is absent, not OK.
+    pub(super) fn new() -> Result<Self> {
+        Ok(Self {
             registry: Registry::new(),
             runtime: tokio::runtime::Builder::new_current_thread().build()?,
-        };
-        value.runtime.block_on(async {
-            let root = value.registry.reporter("agent")?;
-            root.new_scope("api")?
-                .ok("initial endpoint API listening")
-                .await?;
-            root.new_scope("restore")?
-                .ok("endpoint restore and deletion replay completed")
-                .await?;
-            root.new_scope("controllers")?
-                .degraded(
-                    if kubernetes {
-                        "Kubernetes node discovery enabled; identity and policy controllers are not"
-                    } else {
-                        "Kubernetes, identity and policy controllers are not enabled"
-                    },
-                    "not implemented",
-                )
-                .await?;
+        })
+    }
+    /// Bring the rows to `facts`. A row is written only when its level,
+    /// message or error changed, so `Count` and `Updated` mean real changes;
+    /// a scope no longer reported is removed.
+    pub(super) fn refresh(&self, facts: &Facts) -> Result<()> {
+        let root = self.registry.reporter("agent")?;
+        let snapshot = self.registry.snapshot();
+        let rows = facts.rows();
+        self.runtime.block_on(async {
+            for (scope, level, message, error) in &rows {
+                let reporter = root.new_scope(scope)?;
+                let current = snapshot.get("primary", reporter.id().as_bytes())?;
+                if current.is_some_and(|(row, _)| {
+                    row.level == *level && row.message == *message && row.error == *error
+                }) {
+                    continue;
+                }
+                match level {
+                    Level::Degraded => reporter.degraded(message.clone(), error.clone()).await?,
+                    _ => reporter.ok(message.clone()).await?,
+                }
+            }
+            for (row, _) in snapshot.all() {
+                let scope = row.id.strip_prefix("agent.").unwrap_or_default();
+                if !rows.iter().any(|(name, ..)| *name == scope) {
+                    root.new_scope(scope)?.close().await?;
+                }
+            }
             Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
         })?;
-        Ok(value)
+        Ok(())
     }
     pub(super) fn query(&self, request: &Value) -> Result<Vec<u8>> {
         if !request.is_object() {
@@ -164,7 +244,14 @@ mod tests {
     use super::*;
     #[test]
     fn state_db_query_is_ordered_ndjson_with_reference_identifier_and_time_shapes() {
-        let health = ModuleHealth::new(false).expect("registry");
+        let health = ModuleHealth::new().expect("registry");
+        health
+            .refresh(&Facts {
+                endpoints: 2,
+                kubernetes: Some(json!({"state":"Ok","msg":"1 nodes, 3 pods"})),
+                policy_maps: None,
+            })
+            .expect("refresh");
         let body = health
             .query(&json!({"table":"health","index":"id","key":"YWdlbnQ=","lowerbound":true}))
             .expect("query");
@@ -217,7 +304,7 @@ mod tests {
     }
     #[test]
     fn health_queries_validate_scope_and_base64_before_reading_rows() {
-        let health = ModuleHealth::new(false).expect("registry");
+        let health = ModuleHealth::new().expect("registry");
         for (body, expected) in [
             (
                 json!({"table":"secrets","index":"id","key":"","lowerbound":true}),
@@ -249,6 +336,71 @@ mod tests {
         assert_eq!(
             timestamp(Some(UNIX_EPOCH)).expect("epoch"),
             "1970-01-01T00:00:00Z"
+        );
+    }
+    fn levels(health: &ModuleHealth) -> Vec<(String, String, String, String, u64)> {
+        health
+            .modules()
+            .expect("modules")
+            .as_array()
+            .expect("array")
+            .iter()
+            .map(|row| {
+                let text = |p: &str| row.pointer(p).and_then(Value::as_str).unwrap_or_default().to_owned();
+                (
+                    text("/ID/Component/0"),
+                    text("/Level"),
+                    text("/Message"),
+                    text("/Error"),
+                    row.get("Count").and_then(Value::as_u64).unwrap_or_default(),
+                )
+            })
+            .collect()
+    }
+    #[test]
+    fn rows_follow_the_live_state_and_change_only_when_it_does() {
+        let health = ModuleHealth::new().expect("registry");
+        assert!(levels(&health).is_empty(), "nothing before the first look");
+        let alone = Facts {
+            endpoints: 0,
+            kubernetes: None,
+            policy_maps: None,
+        };
+        health.refresh(&alone).expect("refresh");
+        health.refresh(&alone).expect("same facts");
+        let rows = levels(&health);
+        assert_eq!(rows.len(), 2, "no Kubernetes row without the controller: {rows:?}");
+        assert!(rows.iter().all(|r| r.1 == "OK" && r.4 == 1), "{rows:?}");
+        let waiting = Facts {
+            endpoints: 1,
+            kubernetes: Some(json!({"state":"Warning","msg":"waiting for the initial Kubernetes lists"})),
+            policy_maps: Some("map pin missing".into()),
+        };
+        health.refresh(&waiting).expect("refresh");
+        let rows = levels(&health);
+        assert_eq!(rows.len(), 4, "{rows:?}");
+        let row = |name: &str| rows.iter().find(|r| r.0 == name).expect(name).clone();
+        assert_eq!(row("api").2, "endpoint API listening; 1 endpoints");
+        assert_eq!(row("api").4, 2);
+        assert_eq!(row("restore").4, 1, "unchanged rows are not rewritten");
+        assert_eq!(row("kubernetes").1, "Degraded");
+        assert_eq!(row("kubernetes").3, "waiting for the initial Kubernetes lists");
+        assert_eq!(row("policy").1, "Degraded");
+        assert_eq!(row("policy").3, "map pin missing");
+        health
+            .refresh(&Facts {
+                endpoints: 1,
+                kubernetes: Some(json!({"state":"Ok","msg":"2 nodes, 5 pods"})),
+                policy_maps: None,
+            })
+            .expect("refresh");
+        let rows = levels(&health);
+        assert_eq!(rows.len(), 3, "the policy row goes when its cause does: {rows:?}");
+        let kubernetes = rows.iter().find(|r| r.0 == "kubernetes").expect("kubernetes");
+        assert_eq!((kubernetes.1.as_str(), kubernetes.2.as_str(), kubernetes.3.as_str()), ("OK", "2 nodes, 5 pods", ""));
+        assert!(
+            rows.iter().all(|r| !r.2.contains("implement") && !r.3.contains("implement")),
+            "{rows:?}"
         );
     }
 }

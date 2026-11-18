@@ -385,7 +385,7 @@ fn upstream_configuration_plurals_are_not_owned() {
     assert!(operator_config_scope("ciliumgatewayclassconfigs").is_err());
 }
 // Small atomic RFC6902 subset interpreter exercises generated operations against
-// independently modified objects. Production HTTP transport is not implemented.
+// independently modified objects. Production HTTP transport is not part of this crate.
 fn apply(source: &Value, ops: &[Value]) -> Result<Value, String> {
     let mut candidate = source.clone();
     for op in ops {

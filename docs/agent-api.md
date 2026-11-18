@@ -33,7 +33,8 @@ plugin (stormconsole#83) and the CNI depend on it. Within `/v1`:
   kept for at least one release and the change in the changelog as **BREAKING**.
 - Status codes keep their meaning: 2xx success, 400 bad request, 403 a mutation on
   the read-only TCP listener, 404 unknown object or route, 405 method, 409
-  conflict, 413 too large, 501 not implemented, 502 an internal allocation failure.
+  conflict, 413 too large, 501 a transfer coding the server does not take
+  (chunked), 502 an internal allocation failure.
 - Error bodies are a JSON string with the message.
 
 `api::ROUTES` in the agent lists the routes below, and a test fails when this
@@ -53,7 +54,7 @@ curl http://127.0.0.1:9878/v1/endpoint     # with "http-listen": "127.0.0.1:9878
 `GET /v1/healthz` returns HTTP 200 and the initial endpoint API status after
 state restoration and queued deletion replay complete. It is an API liveness
 and startup signal, not policy/controller readiness. Bare `/healthz` and
-`/readyz` are not implemented. A supervisor that only probes TCP HTTP needs a
+`/readyz` do not exist (404). A supervisor that only probes TCP HTTP needs a
 Unix-socket-capable probe or an explicit adapter; do not configure a nonexistent
 path and restart an otherwise running daemon.
 
@@ -78,8 +79,16 @@ that cannot be found or attached is the `host-firewall` /
 `host-firewall-attach` part error. (Before #298 the member was named after the reference project;
 it is `agent` now.)
 
-`GET /v1/health/modules` reports component details, including the degraded
-unimplemented-controller state. Module rows and endpoint health are separate
+`GET /v1/health/modules` (and the `health` table of `/v1/statedb/query`)
+reports module rows built from the agent's live state on each request (#418):
+`agent.api` (OK, with the endpoint count) and `agent.restore` (OK: restore and
+deletion replay completed) always; with Kubernetes, `agent.kubernetes` (OK with
+the `/v1/healthz` `kubernetes` message, or Degraded with that message as
+`Error` while lists are not synced or a part has failed) and, while the policy
+maps could not be shared, `agent.policy` (Degraded: NetworkPolicy is not
+enforced). A row is rewritten (`Count`, `Updated`) only when its level,
+message or error changes; a row whose cause is gone is removed. Nothing is
+reported that was not observed. Module rows and endpoint health are separate
 from `/v1/healthz`.
 
 The server processes one request per connection, then closes it. Request headers

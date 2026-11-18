@@ -309,7 +309,8 @@ fn verify_health(client: &Client) -> Result<()> {
         .lines()
         .map(serde_json::from_str)
         .collect::<std::result::Result<_, _>>()?;
-    ensure(rows.len() == 3, "health query row count")?;
+    // Standalone (no Kubernetes): the API and restore rows, both observed OK.
+    ensure(rows.len() == 2, "health query row count")?;
     for row in &rows {
         ensure(
             row.get("rev")
@@ -323,11 +324,17 @@ fn verify_health(client: &Client) -> Result<()> {
         )?;
     }
     ensure(
+        rows.iter().all(|r| r.pointer("/obj/Level") == Some(&json!("OK"))),
+        "standalone agent health rows must be OK",
+    )?;
+    ensure(
         rows.iter().any(|r| {
-            r.pointer("/obj/ID/Component") == Some(&json!(["controllers"]))
-                && r.pointer("/obj/Level") == Some(&json!("Degraded"))
+            r.pointer("/obj/ID/Component") == Some(&json!(["api"]))
+                && r.pointer("/obj/Message")
+                    .and_then(Value::as_str)
+                    .is_some_and(|m| m.starts_with("endpoint API listening; "))
         }),
-        "unimplemented controllers must report degraded",
+        "health api row must count endpoints",
     )?;
     let modules = client.request(Method::Get, "/health/modules", None)?;
     ensure(
@@ -336,7 +343,7 @@ fn verify_health(client: &Client) -> Result<()> {
                 .json
                 .as_ref()
                 .and_then(Value::as_array)
-                .is_some_and(|v| v.len() == 3),
+                .is_some_and(|v| v.len() == 2),
         "native health modules",
     )?;
     let unknown = client.request(

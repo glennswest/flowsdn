@@ -148,7 +148,9 @@ deletion replay; in Kubernetes mode it adds a `kubernetes` member (`Ok` once
 the Node and Pod lists, with `service-lb` the Service and EndpointSlice
 lists, and with `identity-allocation` the Namespace and FlowsdnIdentity lists,
 are synced and nothing failed). `/healthz` and `/readyz`
-are not implemented. Module health marks controllers that are not running as unavailable. The config response's `ipam-mode: kubernetes` is a compatibility
+do not exist (404). Module health (`/v1/health/modules`) is built from the live
+state on each request: API and restore rows, and with Kubernetes the controller
+and policy-map rows (see `docs/agent-api.md`). The config response's `ipam-mode: kubernetes` is a compatibility
 value: allocation uses the configured pools, or with `auto` the pool resolved
 from the Node at startup.
 

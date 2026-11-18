@@ -77,13 +77,13 @@ impl DeferredFeatures {
     pub fn warnings(&self) -> Vec<&'static str> {
         let mut warnings = Vec::new();
         if self.mcs_api {
-            warnings.push("clustermesh-enable-mcs-api is not implemented");
+            warnings.push("clustermesh-enable-mcs-api is accepted and ignored: flowsdn has no MCS-API");
         }
         if self.mcs_install_crds {
-            warnings.push("clustermesh-mcs-api-install-crds is not implemented");
+            warnings.push("clustermesh-mcs-api-install-crds is accepted and ignored: flowsdn has no MCS-API");
         }
         if self.endpoint_sync {
-            warnings.push("clustermesh-enable-endpoint-sync is not implemented");
+            warnings.push("clustermesh-enable-endpoint-sync is accepted and ignored: flowsdn does not sync endpoints");
         }
         warnings
     }

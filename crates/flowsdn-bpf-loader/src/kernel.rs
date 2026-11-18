@@ -1,5 +1,6 @@
-//! Live ownership for the initial local-delivery object.
-//! This is not the full pin/reuse/upgrade loader or a policy-aware agent.
+//! Live ownership for the local-delivery object. With a pin root, maps and
+//! TCX links are pinned and reused; a pinned map whose ABI differs is kept
+//! and startup is refused, never replaced.
 use aya::{
     Ebpf, EbpfLoader,
     maps::{HashMap, Map, MapData, MapError, MapInfo, MapType},

@@ -3,7 +3,7 @@
 //! Snapshots are immutable and cheap; writers publish one version atomically.
 //! Whole-table streams coalesce writes and retain deletions until acknowledged.
 //! Named initializers gate readiness after registration is sealed.
-//! Metrics and reconciliation are not implemented yet.
+//! Reconciling rows into the kernel or another store is `flowsdn-reconcile`.
 use arc_swap::ArcSwap;
 use imbl::OrdMap;
 use std::{collections::BTreeSet, error::Error, fmt, sync::Arc};

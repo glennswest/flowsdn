@@ -10,7 +10,7 @@
 //! `to_netdev` run this on the uplinks for traffic to and from this node's
 //! own addresses only ([`SCOPE_HOST`]). An endpoint in audit mode passes
 //! what its policy would drop. Each decision is counted in
-//! `flowsdn_policy_verdicts` (remembered flows are not). Not implemented:
+//! `flowsdn_policy_verdicts` (remembered flows are not). It does not do
 //! authentication (an entry that requires it drops), proxy redirects,
 //! verdict events, ICMP error classification as related, and fragments
 //! other than the first (dropped where enforced).

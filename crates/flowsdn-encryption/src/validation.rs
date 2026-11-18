@@ -40,7 +40,7 @@ impl Encryption {
     pub fn validate(self) -> Result<Vec<&'static str>, Error> {
         if self.vtep || self.srv6 {
             return Err(Error(
-                "VTEP and SRv6 are not implemented; configuration cannot enable them",
+                "VTEP and SRv6 are not supported; configuration cannot enable them",
             ));
         }
         if self.wireguard && self.ipsec {
