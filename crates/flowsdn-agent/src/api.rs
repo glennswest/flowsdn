@@ -1464,9 +1464,18 @@ pub fn run(config_path: &Path) -> Result<()> {
         "ready: serving CNI requests {} ms after start",
         started.elapsed().as_millis()
     );
+    let mut health_checked = None::<Instant>;
     loop {
         api.expire();
         api.sync_host_firewall();
+        // Once a second, so health changes are logged when they happen, not
+        // only when someone asks (#418).
+        if health_checked.is_none_or(|at| at.elapsed() >= Duration::from_secs(1)) {
+            health_checked = Some(Instant::now());
+            if let Err(error) = health.refresh(&health_api::Facts::of(&api)) {
+                crate::log::logln!("health refresh failed: {error}");
+            }
+        }
         // Accepted streams are blocking; each is bounded by REQUEST_BUDGET.
         let mut idle = true;
         match listener.accept() {

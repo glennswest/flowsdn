@@ -86,7 +86,8 @@ impl ModuleHealth {
     }
     /// Bring the rows to `facts`. A row is written only when its level,
     /// message or error changed, so `Count` and `Updated` mean real changes;
-    /// a scope no longer reported is removed.
+    /// a scope no longer reported is removed. A new row, a level change and
+    /// a removal are logged.
     pub(super) fn refresh(&self, facts: &Facts) -> Result<()> {
         let root = self.registry.reporter("agent")?;
         let snapshot = self.registry.snapshot();
@@ -95,10 +96,22 @@ impl ModuleHealth {
             for (scope, level, message, error) in &rows {
                 let reporter = root.new_scope(scope)?;
                 let current = snapshot.get("primary", reporter.id().as_bytes())?;
-                if current.is_some_and(|(row, _)| {
+                if current.as_ref().is_some_and(|(row, _)| {
                     row.level == *level && row.message == *message && row.error == *error
                 }) {
                     continue;
+                }
+                if current.is_none_or(|(row, _)| row.level != *level) {
+                    crate::log::logln!(
+                        "health {} {}: {message}{}",
+                        reporter.id(),
+                        level_text(*level),
+                        if error.is_empty() {
+                            String::new()
+                        } else {
+                            format!(": {error}")
+                        }
+                    );
                 }
                 match level {
                     Level::Degraded => reporter.degraded(message.clone(), error.clone()).await?,
@@ -108,6 +121,7 @@ impl ModuleHealth {
             for (row, _) in snapshot.all() {
                 let scope = row.id.strip_prefix("agent.").unwrap_or_default();
                 if !rows.iter().any(|(name, ..)| *name == scope) {
+                    crate::log::logln!("health {} removed", row.id);
                     root.new_scope(scope)?.close().await?;
                 }
             }
@@ -170,10 +184,17 @@ fn wire_status(status: &HealthStatus) -> Result<Value> {
     let module = parts.next().ok_or("empty health ID")?;
     let components: Vec<_> = parts.collect();
     Ok(json!({"ID":{"Module":[module],"Component":components},
-        "Level":match status.level {Level::Ok=>"OK",Level::Degraded=>"Degraded",Level::Stopped=>"Stopped"},
+        "Level":level_text(status.level),
         "Message":status.message,"Error":status.error,"LastOK":timestamp(status.last_ok)?,
         "Updated":timestamp(Some(status.updated))?,"Stopped":timestamp(status.stopped)?,
         "Final":status.final_message,"Count":status.count}))
+}
+fn level_text(level: Level) -> &'static str {
+    match level {
+        Level::Ok => "OK",
+        Level::Degraded => "Degraded",
+        Level::Stopped => "Stopped",
+    }
 }
 fn timestamp(value: Option<SystemTime>) -> Result<String> {
     let Some(value) = value else {

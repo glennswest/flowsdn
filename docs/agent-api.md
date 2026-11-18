@@ -87,8 +87,10 @@ the `/v1/healthz` `kubernetes` message, or Degraded with that message as
 `Error` while lists are not synced or a part has failed) and, while the policy
 maps could not be shared, `agent.policy` (Degraded: NetworkPolicy is not
 enforced). A row is rewritten (`Count`, `Updated`) only when its level,
-message or error changes; a row whose cause is gone is removed. Nothing is
-reported that was not observed. Module rows and endpoint health are separate
+message or error changes; a row whose cause is gone is removed. The agent also
+refreshes the rows once a second and logs each new row, level change and
+removal (`health agent.kubernetes OK: …`). Nothing is reported that was not
+observed. Module rows and endpoint health are separate
 from `/v1/healthz`.
 
 The server processes one request per connection, then closes it. Request headers
