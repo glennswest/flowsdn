@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### 2026-11-18 (#418)
+- **fix:** No stubs (#418). The agent's module health (`/v1/health/modules`, the `health` table of `/v1/statedb/query`) is built from its live state on each request: `agent.api` (with the endpoint count), `agent.restore`, and with Kubernetes `agent.kubernetes` (OK, or Degraded with the `/v1/healthz` message while lists are unsynced or a part failed) and `agent.policy` (Degraded while the policy maps could not be shared). The hardcoded Degraded `agent.controllers` row ("not implemented") is gone, so stormconsole's Idle-on-not-implemented mapping has nothing to map. A row changes (`Count`, `Updated`) only when its level, message or error does.
+- **fix:** Unknown API routes answer 404 "no such API route". Endpoint PUT with `labels`, `datapath-configuration` or `properties` answers 400 (was 501) naming why flowsdn does not take them; 501 remains only for chunked request bodies. CNI, clustermesh, encryption and scripttest refusals say what flowsdn does instead of "not implemented".
+- **docs:** bpf-loader README states that a pinned map with a different ABI is kept and startup refused (no replacement transactions) and that pins/policy maps exist; scripttest README drops the unbuilt `db/cmp`; flowsdn-table no longer promises metrics (reconciliation is `flowsdn-reconcile`); agent-api/runtime docs describe the live health rows.
+
 ### 2026-11-17 (docs refresh)
 - **docs:** Refresh from code since 2026-11-10 (#408 uplinks, #401 selector-peer reporting): `kubernetes.uplinks` row in the runtime configuration table with its defaults, CLAUDE.md state through 763ce9a. No promise found unimplemented beyond already-open issues.
 

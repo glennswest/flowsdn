@@ -324,7 +324,8 @@ fn verify_health(client: &Client) -> Result<()> {
         )?;
     }
     ensure(
-        rows.iter().all(|r| r.pointer("/obj/Level") == Some(&json!("OK"))),
+        rows.iter()
+            .all(|r| r.pointer("/obj/Level") == Some(&json!("OK"))),
         "standalone agent health rows must be OK",
     )?;
     ensure(

@@ -346,7 +346,12 @@ mod tests {
             .expect("array")
             .iter()
             .map(|row| {
-                let text = |p: &str| row.pointer(p).and_then(Value::as_str).unwrap_or_default().to_owned();
+                let text = |p: &str| {
+                    row.pointer(p)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned()
+                };
                 (
                     text("/ID/Component/0"),
                     text("/Level"),
@@ -369,11 +374,17 @@ mod tests {
         health.refresh(&alone).expect("refresh");
         health.refresh(&alone).expect("same facts");
         let rows = levels(&health);
-        assert_eq!(rows.len(), 2, "no Kubernetes row without the controller: {rows:?}");
+        assert_eq!(
+            rows.len(),
+            2,
+            "no Kubernetes row without the controller: {rows:?}"
+        );
         assert!(rows.iter().all(|r| r.1 == "OK" && r.4 == 1), "{rows:?}");
         let waiting = Facts {
             endpoints: 1,
-            kubernetes: Some(json!({"state":"Warning","msg":"waiting for the initial Kubernetes lists"})),
+            kubernetes: Some(
+                json!({"state":"Warning","msg":"waiting for the initial Kubernetes lists"}),
+            ),
             policy_maps: Some("map pin missing".into()),
         };
         health.refresh(&waiting).expect("refresh");
@@ -384,7 +395,10 @@ mod tests {
         assert_eq!(row("api").4, 2);
         assert_eq!(row("restore").4, 1, "unchanged rows are not rewritten");
         assert_eq!(row("kubernetes").1, "Degraded");
-        assert_eq!(row("kubernetes").3, "waiting for the initial Kubernetes lists");
+        assert_eq!(
+            row("kubernetes").3,
+            "waiting for the initial Kubernetes lists"
+        );
         assert_eq!(row("policy").1, "Degraded");
         assert_eq!(row("policy").3, "map pin missing");
         health
@@ -395,11 +409,26 @@ mod tests {
             })
             .expect("refresh");
         let rows = levels(&health);
-        assert_eq!(rows.len(), 3, "the policy row goes when its cause does: {rows:?}");
-        let kubernetes = rows.iter().find(|r| r.0 == "kubernetes").expect("kubernetes");
-        assert_eq!((kubernetes.1.as_str(), kubernetes.2.as_str(), kubernetes.3.as_str()), ("OK", "2 nodes, 5 pods", ""));
+        assert_eq!(
+            rows.len(),
+            3,
+            "the policy row goes when its cause does: {rows:?}"
+        );
+        let kubernetes = rows
+            .iter()
+            .find(|r| r.0 == "kubernetes")
+            .expect("kubernetes");
+        assert_eq!(
+            (
+                kubernetes.1.as_str(),
+                kubernetes.2.as_str(),
+                kubernetes.3.as_str()
+            ),
+            ("OK", "2 nodes, 5 pods", "")
+        );
         assert!(
-            rows.iter().all(|r| !r.2.contains("implement") && !r.3.contains("implement")),
+            rows.iter()
+                .all(|r| !r.2.contains("implement") && !r.3.contains("implement")),
             "{rows:?}"
         );
     }
