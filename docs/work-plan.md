@@ -7,10 +7,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 ### No stubs — #418, 2026-11-18
 
 Owner: "lets get rid of stubs please" … "stubs are lies".
-- [ ] Health API: rows computed from the agent's live state on every health request (API/endpoint count, restore, Kubernetes controller sync and errors, policy maps); no hardcoded `controllers` row answering "not implemented". A row changes (Count, Updated) only when its level/message/error does.
-- [ ] Remove promises of what is not there: bpf-loader README (replacement transactions, stale pin/policy lines), scripttest README (`db/cmp`), flowsdn-table doc (metrics; reconciliation lives in flowsdn-reconcile).
-- [ ] Refusals worded as what flowsdn does, not "not implemented": API 404/endpoint PUT fields (400), CNI, clustermesh, encryption, scripttest, BPF comments.
-- [ ] sc-build; stage; shipped with the health proof on a pvetest node.
+- [x] Health API: rows computed from the agent's live state (API/endpoint count, restore, Kubernetes controller sync and errors, policy maps), refreshed once a second and on each health request; transitions logged (`health agent.<scope> <Level>: …`). Hardcoded `controllers` row gone.
+- [x] Promises removed: bpf-loader README/kernel.rs (pinned ABI mismatch refuses startup, never replaced), scripttest README (`db/cmp`), flowsdn-table doc (metrics).
+- [x] Refusals reworded; endpoint PUT labels/datapath-configuration/properties 400 (was 501); 404 "no such API route".
+- [x] sc-build at 2ba23b6: `cargo xtask check` passed (fmt, Clippy -D warnings, all-features workspace tests incl. `rows_follow_the_live_state_and_change_only_when_it_does`). `grep -rn 'not implemented' crates` empty outside tests.
+- [x] Stage requested (build 9c1dd348152c); `shipped` with proof `log:health agent\.(api|kubernetes) OK`.
 
 ### Selector peers before the identity list — #401, 2026-11-13
 - Behaviour kept: fail closed (the issue's recommendation; allowing a selected
