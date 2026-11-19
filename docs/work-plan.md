@@ -6,19 +6,22 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### Network-level metrics — #420 (P2), 2026-11-18
 
-stormcos#64 scrapes every level with the node's ironprom; a flowsdn node serves
+stormcos#64 scrapes every level with the node's ironprom; a flowsdn node served
 nothing for the network level.
-- [ ] Agent `metrics-listen` (loopback `IP:port`, manifests `127.0.0.1:9962` as
-  cilium's): `GET /metrics`, Prometheus text 0.0.4, `flowsdn_*` names, built
-  from live state on each scrape: controllers failing (per part), unreachable
-  nodes (direct routes not installed), drops by reason and policy verdicts
-  (from `flowsdn_policy_verdicts`), endpoint state, identities, BPF map
-  pressure of the policy maps, uplink carrier, build info.
-- [ ] Unit tests (exposition format, values from fixtures); docs (runtime,
-  agent-api, deploy README), changelog; manifests.
-- Not here: drop reasons other than policy (the datapath counts nothing else;
-  follow-up issue), operator metrics (no operator executable yet, #337).
-- [ ] sc-build; stage; tell stormcos the port (job + check-metrics rows).
+- [x] Agent `metrics-listen` (loopback `IP:port`, not the `http-listen` one;
+  manifests `127.0.0.1:9962`): `GET /metrics`, Prometheus text 0.0.4,
+  `flowsdn_*` names, from live state on each scrape (series in
+  `docs/agent-api.md#metrics`). Policy map pressure walks the keys per scrape.
+- [x] Unit tests: exposition well-formed and values from fixtures, failures
+  reported as `flowsdn_metrics_source_failing` (no zeros), config validation,
+  both shipped configs set 9962. Docs (agent-api, runtime, README, deploy
+  README, implementation-status), changelog.
+- Follow-ups: other drop reasons need datapath counters (#421); operator
+  metrics wait for an operator executable (#337); ironprom job and
+  check-metrics rows are stormcos#1045.
+- [x] sc-build `cargo xtask check` passed at f7097dc (fmt, Clippy -D warnings,
+  workspace tests incl. `api::metrics::tests::*`); the 1a611f4 fmt failure
+  (#422) closed itself. Stage requested (build dca023a7d325).
 
 ### No stubs — #418, 2026-11-18
 
