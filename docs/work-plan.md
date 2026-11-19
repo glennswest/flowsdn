@@ -6,10 +6,10 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### spec 11 stub markers — #438 (P0), 2026-11-19
 
-- [ ] §11 config row (line 2548, a catalogue provenance line: keep it one
+- [x] §11 config row (line 2548, a catalogue provenance line: keep it one
   line with the option names): PacketDrop emitter absent, new gap; §11
   ring note and §12.3: no "unimplemented"/"not implemented" wording.
-- [ ] sc-build; marker grep finds nothing; close #438.
+- [x] Filed and proposed #470; sc-build at eb983a1 (exit 0); #438 closed.
 
 ### spec 10 stub markers — #437 (P0), 2026-11-19
 
