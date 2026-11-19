@@ -4,6 +4,15 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 07 stub markers — #434 (P0), 2026-11-19
+
+- [ ] Reword the four markers (and §3.10's "unimplemented"): v1.19 ENI is out
+  of scope (deviation, not a gap); Azure CreateInterface/ReleaseIPs and
+  Alibaba AllocateStaticIP are specified as errors the provider returns.
+  Cloud providers themselves are #293/#446. Keep line counts (catalogue
+  cites 07-ipam.md:1273).
+- [ ] sc-build; marker grep finds nothing; close #434.
+
 ### spec 08 stub marker — #435 (P0), 2026-11-19
 
 - [x] Spec 08 / ADR-0012 #118: routes not built are absent (404, as the agent
