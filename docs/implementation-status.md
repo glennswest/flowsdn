@@ -102,11 +102,14 @@ pinning or subsystem libraries are absent are **not current status**.
   denies, `enableDefaultDeny`, both directions): compiler unit-tested on the
   existing programs; not on a cluster, and stormcos does not apply the CRDs yet
   (stormcos#303).
-- Not implemented: operator identity GC (#332), L7, FQDN, ICMP, node and group
-  peers in policy rules, host egress policy, policy verdict events,
-  masquerade (the node provides it), Maglev in the socket LB, DSR by IPIP or Geneve, DSR ICMP errors, NAT46/64 to local backends or in the socket LB, the RFC 6052 gateway, TCP socket
-  termination, CRD controllers or registration, an operator process, Hubble
-  observer/relay.
+- Masquerade is the node's (`egress: stack`), not flowsdn's.
+- Open gaps, each an issue with the `gap` label: operator identity GC (#332);
+  L7, FQDN and ICMP policy rules (#448); node and group peers in policy rules
+  (#451); host egress policy (#384); policy verdict events (#452); Maglev in
+  the socket LB (#453); DSR by IPIP or Geneve (#447); DSR ICMP errors (#449);
+  NAT46/64 to local backends or in the socket LB (#450); the RFC 6052 gateway
+  (#454); TCP socket termination (#392); CRD registration (#337); the operator
+  executable (#446); the Hubble observer/relay (#293).
 
 ### Cloud fixtures (ADR-0007)
 
@@ -270,8 +273,9 @@ The runtime engine and adapters remain unimplemented. No harvested file changed.
 ## Version 0.3.0 validation
 
 The indexed table core adds immutable snapshots, revisions, serialized writes,
-unique/multikey indexes and atomic batch publication. Watches, retained
-change streams, initialization tracking and reconciliation are not implemented.
+unique/multikey indexes and atomic batch publication. That release had no
+watches or change streams (added in 0.4.0), initialization tracking (0.5.0) or
+initialization-gated pruning (0.7.0).
 
 Validated on Linux with Rust 1.95.0:
 - `cargo xtask check`: formatting, Clippy with warnings denied, 29 native

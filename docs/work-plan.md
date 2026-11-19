@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### implementation-status stub markers — #425 (P0), 2026-11-19
+
+- [x] "Not implemented: …" list replaced by open gap issues; filed and proposed
+  #451 (node/group peers), #452 (policy verdict events), #453 (Maglev in
+  socket LB), #454 (RFC 6052 gateway); `gap` label on #332. 0.3.0 history
+  line now says when streams/initialization/pruning arrived. Docs only.
+- [ ] sc-build after push; marker grep empty; close #425.
+
 ### README stub markers — #424 (P0), 2026-11-19
 
 - [x] README intro and "Not implemented in the agent" list replaced by open gap

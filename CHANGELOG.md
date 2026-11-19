@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#425)
+- **docs:** docs/implementation-status.md's stub markers (#425) are gone: the "Not implemented" list is now open gap issues (#332, #448, #451, #384, #452, #453, #447, #449, #450, #454, #392, #337, #446, #293; #451–#454 new: node/group policy peers, policy verdict events, Maglev in the socket LB, the RFC 6052 gateway), masquerade stated as the node's; the 0.3.0 validation note says the table's streams, initialization tracking and pruning came in 0.4.0, 0.5.0 and 0.7.0.
+
 ### 2026-11-19 (#424)
 - **docs:** README's stub markers (#424) are gone: the intro states what flowsdn is and runs; the "Not implemented in the agent" list is now open gap issues — L7/FQDN/ICMP (#448), host egress policy (#384), DSR by IPIP/Geneve (#447), DSR ICMP errors (#449, new), NAT46/64 to local backends or in the socket LB (#450, new), TCP socket termination (#392), CRD registration (#337), operator (#446), Hubble (#293). Masquerade is stated as the node's. The CRD paragraph no longer says no controller reads or writes them: the agent writes FlowsdnIdentity and reads the flowsdn policy kinds.
 
