@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#441)
+- **docs:** Spec 15 (#441): BFD, TCP-AO, ADD-PATH and the rest are stated as out of scope (as in the reference), the FSM as having no `DelayOpen` timer, and the speaker's missing runtime pieces name #293/#337 instead of "not implemented"/"unimplemented".
+
 ### 2026-11-19 (#440)
 - **docs:** Spec 13 (#440) names the open issues for the CRD Rust types and tests (#331–#336) and the registration/readiness gap (#337) instead of "not implemented yet". Spec 12 and gap #471 corrected: the vendored CRD hash manifest exists (T-CRD-1); only its binding to `SCHEMA_VERSION` is missing.
 

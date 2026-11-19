@@ -65,7 +65,7 @@ and `Route` tables (`10`); the operator binary skeleton, leader election and
 resource stores (`12`); the datapath that must accept traffic for an
 advertised prefix (`02`, `05`) — BGP installs nothing in the kernel or in BPF.
 
-Explicitly not implemented (matching the reference): BFD, TCP-AO, ADD-PATH,
+Out of scope, as in the reference: BFD, TCP-AO, ADD-PATH,
 route reflection, confederations, VRFs, non-unicast SAFIs, importing learned
 routes into any table, per-neighbor import policies.
 
@@ -829,7 +829,7 @@ length (1), value. Encoded by flowsdn:
 #### 3.16.3 Finite state machine
 
 States and the events that move between them. `ConnectRetry`, `Hold`,
-`Keepalive`, `IdleHold` are the timers; `DelayOpen` is not implemented.
+`Keepalive`, `IdleHold` are the timers; the FSM has no `DelayOpen` timer.
 
 | State | Event | Next | Action |
 |---|---|---|---|
@@ -864,7 +864,7 @@ A missing or zero instance localPort is a configuration error, not an implicit
 port 179. Inbound OPEN handling, Hold/Keepalive timers and administrative
 reset behavior are unchanged. After transport loss and IdleHold, return to
 passive Active. Default false retains both listening and initiating when a
-localPort exists. Socket listeners and this FSM integration remain unimplemented;
+localPort exists. Socket listeners and this FSM integration do not exist yet (#293);
 the transport planner enforces configuration and initiation decisions.
 
 Connection collision (both sides connect simultaneously, only possible when
@@ -1886,7 +1886,7 @@ plane or session speaker is implied by this sequencing decision.
 **O-2. Resolved #184: serve both versions.** Keep deprecated `v2alpha1` served
 alongside storage `v2` for all five BGP CRDs, consistent with spec 13 §12.2.
 Registration projection rejects removal of the older served version. Live
-registration and storage-version migration remain unimplemented; the decision
+registration (#337) and storage-version migration do not exist yet; the decision
 is not a claim that a running reference installation can already be migrated.
 
 **O-3. Resolved #185: MD5 first, TCP-AO deferred.** Keep TCP MD5 as the
@@ -1930,8 +1930,8 @@ reason. Operators may supply external reachability separately.
 §3.16.5 default-false session-survival policy for bounded content errors, with
 strict=true closing on all detected UPDATE errors. Framing/TLV truncation is
 always fatal. The classifier and independent malformed-message vectors cover
-both modes; runtime counters, bounded diagnostics and session actions remain
-unimplemented. This does not claim interop coverage or full RFC conformance.
+both modes; runtime counters, bounded diagnostics and session actions do not
+exist yet (#293). This does not claim interop coverage or full RFC conformance.
 
 **O-10. BGP backend scope — resolved #192.** Keep `bgp-backend` a node-level setting.
 Both in-tree BGP and RouterOS backends remain in scope under the shared advertiser

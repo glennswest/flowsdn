@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 15 stub markers — #441 (P0), 2026-11-19
+
+- [ ] Scope list (BFD, TCP-AO, …) as out of scope; DelayOpen absent from the
+  FSM; speaker runtime pieces name #293 (kinds #334, registration #337).
+- [ ] sc-build; marker grep finds nothing; close #441.
+
 ### spec 13 stub marker — #440 (P0), 2026-11-19
 
 - [x] §0 status: types/tests per group are #331–#336, registration and the
