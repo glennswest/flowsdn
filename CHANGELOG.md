@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#436)
+- **docs:** Spec 09 (#436) states the CNI GC verb as decided in #125: the plugin answers error code 1 (`plugin version does not allow GC`) and touches no endpoint, as the reference, instead of "not implemented" and an open "defer" decision.
+
 ### 2026-11-19 (#434)
 - **docs:** Spec 07 (#434): the v1.19 per-IP ENI protocol is stated as out of scope (a deliberate deviation), and Azure `CreateInterface`/`ReleaseIPs` and Alibaba `AllocateStaticIP` as the errors those providers return by design, instead of "not implemented". Building the cloud providers remains #293/#446.
 

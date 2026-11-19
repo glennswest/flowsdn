@@ -78,7 +78,7 @@ Everything they observe MUST match the reference.
 |---|---|---|
 | Binary name `cilium-cni` in the CNI bin dir (conflist `type`) | container runtime (execs `<binPath>/<type>`), existing custom conflists (`cni.customConf`) | name; see open decision 12.1 for the `flowsdn-cni` alias |
 | CNI spec versions `0.1.0 0.2.0 0.3.0 0.3.1 0.4.0 1.0.0 1.1.0` | runtime negotiates via `VERSION` | exact list, `VERSION` output JSON `{"cniVersion":…,"supportedVersions":[…]}` |
-| Verbs `ADD DEL CHECK STATUS VERSION` | runtime | GC is not implemented (section 3.7) |
+| Verbs `ADD DEL CHECK STATUS VERSION` | runtime | GC answers error code 1 and changes nothing, as the reference (section 3.7, #125) |
 | Environment `CNI_COMMAND CNI_CONTAINERID CNI_NETNS CNI_IFNAME CNI_ARGS CNI_PATH` and stdin JSON | runtime | as CNI spec; `CNI_ARGS` keys section 4.2 |
 | Network configuration JSON fields (section 4.1) | Helm-rendered conflists, user conflists, chained plugins | field names and types |
 | Conflist file `/etc/cni/net.d/05-cilium.conflist` and its three templates (section 4.5) | kubelet (file presence = node Ready), Istio/other tools that rewrite it, `cilium-dbg status` (`cni-file`) | path, `name`, `cniVersion`, plugin entries |
@@ -478,8 +478,8 @@ kubelet keeps the node NotReady while STATUS fails.
 
 **GC** (CNI 1.1.0): the reference registers no GC handler, so the skel
 answers `ErrIncompatibleCNIVersion` (1) `plugin version does not allow GC`.
-flowsdn MUST do the same at this tag. Implementing GC (delete endpoints whose
-`cni.dev/valid-attachments` does not list them) is open decision 12.3.
+flowsdn does the same (`crates/flowsdn-cni/src/runtime.rs`, with a unit test):
+no endpoint is touched. Decision 12.3 (#125) settled this.
 
 ### 3.8 Connector modes and the netkit interface
 
@@ -1268,10 +1268,10 @@ time, so the ADD function can be tested with a recording implementation.
    with normal CNI version/error handling. Do not bundle the Go loopback binary.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
-3. **CNI GC verb.** Not implemented by the reference. Implementing it would
-   let flowsdn delete endpoints whose attachment is not in
-   `cni.dev/valid-attachments` and replace part of the endpoint GC.
-   Recommendation: defer; keep the `ErrIncompatibleCNIVersion` answer.
+3. **CNI GC verb — resolved #125.** The reference registers no GC handler.
+   flowsdn answers GC the same way, `ErrIncompatibleCNIVersion` (1) with no
+   endpoint mutation. The agent drops an endpoint whose link is gone when it
+   restores endpoints at startup; `cni.dev/valid-attachments` is not read.
 4. **CHECK depth.** Add MTU and route verification to CHECK. Cheap, but a
    stricter CHECK can make a runtime tear down pods after an agent MTU
    change. Recommendation: verify MTU and the two routes, but only report
