@@ -6,11 +6,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### spec 16 stub markers — #442 (P0), 2026-11-19
 
-- [ ] §mutual auth: state the code's refusal (host_policy.rs skips the rule,
+- [x] §mutual auth: state the code's refusal (host_policy.rs skips the rule,
   `policy` problem, fails closed); mesh-auth flags absent; §4.7 auth map
   absent; file mutual-auth gap. ztunnel/ADS "unimplemented" wording. Keep
   line counts above spec 16:1500.
-- [ ] sc-build; marker grep finds nothing; close #442.
+- [x] Filed and proposed #472; sc-build at eb67a4c (exit 0); #442 closed.
 
 ### spec 15 stub markers — #441 (P0), 2026-11-19
 
