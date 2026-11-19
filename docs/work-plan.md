@@ -6,10 +6,10 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### spec 12 stub markers — #439 (P0), 2026-11-19
 
-- [ ] Schema version paragraph: hash-manifest check is a new gap (before
+- [x] Schema version paragraph: hash-manifest check is a new gap (before
   #337 ships); label key is `io.flowsdn.…` in code. Metrics row: none until
   #420/#446. Keep line counts above spec 12:1493.
-- [ ] sc-build; marker grep finds nothing; close #439.
+- [x] Filed and proposed #471; sc-build at d94e1fd (exit 0); #439 closed.
 
 ### spec 11 stub markers — #438 (P0), 2026-11-19
 
