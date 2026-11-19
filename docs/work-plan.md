@@ -10,7 +10,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
   issues; filed #449 (DSR ICMP errors), #450 (NAT46/64 local/socket LB);
   `gap` label on #384, #392, #337, #293. CRD paragraph corrected (the agent
   writes FlowsdnIdentity, reads the policy kinds). Docs only: no image.
-- [ ] sc-build after push; marker grep empty in README.md; close #424.
+- [x] sc-build at ac2d6f1 (exit 0); marker grep finds nothing in README.md; #424 closed.
 
 ### CLAUDE.md stub marker — #423 (P0), 2026-11-19
 
