@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 11 stub markers — #438 (P0), 2026-11-19
+
+- [ ] §11 config row (line 2548, a catalogue provenance line: keep it one
+  line with the option names): PacketDrop emitter absent, new gap; §11
+  ring note and §12.3: no "unimplemented"/"not implemented" wording.
+- [ ] sc-build; marker grep finds nothing; close #438.
+
 ### spec 10 stub markers — #437 (P0), 2026-11-19
 
 - [x] §3.4 neighbor management: no code; file gap (managed neighbors + probe),
