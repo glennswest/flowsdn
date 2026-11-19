@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#426)
+- **docs:** docs/kernel-requirements.md's pod-attach row (#426) states tcx-only attach as the accepted 6.6 minimum (kernels without tcx are refused at startup; legacy clsact is cleanup-only) instead of "legacy clsact filter path not implemented".
+
 ### 2026-11-19 (#425)
 - **docs:** docs/implementation-status.md's stub markers (#425) are gone: the "Not implemented" list is now open gap issues (#332, #448, #451, #384, #452, #453, #447, #449, #450, #454, #392, #337, #446, #293; #451–#454 new: node/group policy peers, policy verdict events, Maglev in the socket LB, the RFC 6052 gateway), masquerade stated as the node's; the 0.3.0 validation note says the table's streams, initialization tracking and pruning came in 0.4.0, 0.5.0 and 0.7.0.
 
