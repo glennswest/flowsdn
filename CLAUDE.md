@@ -30,9 +30,10 @@ while a port is down, `GET /v1/uplinks` and `kubernetes.uplinks`; kernel-checked
 datapath (ADR-0021), flowsdn policy kinds (`kubernetes.flowsdn-policy`), host
 firewall (`audit` in the stormcos config), UDP socket termination, Maglev, DSR by
 IP option, NAT46/64 (the last three off by default, kernel test runs only), CNI
-ADD timing (`/v1/cni/timing`), `cargo xtask kernel-check`. Not implemented: the
-operator executable, CRD registration (#337), Hubble observer/relay (#293), TCP
-socket termination, DSR by IPIP/Geneve, L7/FQDN/ICMP policy. See
+ADD timing (`/v1/cni/timing`), `cargo xtask kernel-check`. Open gaps, each an
+issue: operator executable (#446), CRD registration (#337), Hubble observer/relay
+(#293), TCP socket termination (#392), DSR by IPIP/Geneve (#447), L7/FQDN/ICMP
+policy (#448). See
 `docs/runtime.md`, `docs/agent-api.md`, `docs/implementation-status.md` and
 `deploy/stormcos/README.md` before changing runtime behavior. Fixture traffic and
 cross-architecture compilation do not establish two-node pod networking. Docs

@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### CLAUDE.md stub marker — #423 (P0), 2026-11-19
+
+- [x] Unbuilt list in CLAUDE.md replaced by open gap issues; filed and
+  proposed #446 (operator executable), #447 (DSR IPIP/Geneve), #448
+  (L7/FQDN/ICMP policy). Docs only: no image.
+- [ ] sc-build stub sweep over CLAUDE.md passes, then close #423.
+
 ### Network-level metrics — #420 (P2), 2026-11-18
 
 stormcos#64 scrapes every level with the node's ironprom; a flowsdn node served

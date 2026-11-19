@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#423)
+- **docs:** CLAUDE.md's list of unbuilt parts (the stub sweep's marker) is now a list of open gap issues: operator executable (#446), CRD registration (#337), Hubble (#293), TCP socket termination (#392), DSR by IPIP/Geneve (#447), L7/FQDN/ICMP policy (#448).
+
 ### 2026-11-18 (#420)
 - **feat:** Agent `/metrics` (#420, stormcos#64). New `metrics-listen` (a loopback `IP:port`, not the `http-listen` one; the edition manifests use `127.0.0.1:9962`) serves `GET /metrics` only; `/metrics` is also on the socket and `http-listen`. Prometheus text 0.0.4, every name `flowsdn_*`, read from live state on each scrape: `flowsdn_build_info`, `flowsdn_endpoint_state`, `flowsdn_controllers_failing` and `flowsdn_controller_failing{controller}` (the parts with a current reconcile error), `flowsdn_policy_verdict_total{direction,action}`, `flowsdn_drop_count_total`/`flowsdn_drop_bytes_total{reason="policy_denied",direction}`, `flowsdn_bpf_map_pressure{map_name}` of the five policy maps, and in Kubernetes mode `flowsdn_kubernetes_synced`, `flowsdn_nodes`, `flowsdn_pods`, `flowsdn_unreachable_nodes`, `flowsdn_identity`, `flowsdn_identity_waiting`, `flowsdn_services{state}`, `flowsdn_uplink_up{uplink}`. A map that cannot be read gives `flowsdn_metrics_source_failing{source}` and no series, never zeros. Other drop reasons are not counted by the datapath yet (#421); the operator has no executable, so no operator metrics.
 
