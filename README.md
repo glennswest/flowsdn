@@ -1,8 +1,10 @@
 # flowsdn
 
 flowsdn is a Rust networking stack for stormcos, implementing a CNI plugin and
-an eBPF endpoint datapath. Its broader goal is Cilium-compatible networking,
-services, policy and observability. **That full stack is not implemented yet.**
+an eBPF endpoint datapath, with Kubernetes Services, NetworkPolicy and a host
+firewall in eBPF. Its data shapes follow Cilium's (CNI result, agent API, BPF
+map layouts). What runs today is below; each unbuilt part is an open `gap`
+issue, listed after it.
 
 ## What works today
 
@@ -81,10 +83,12 @@ two-node acceptance (#291) and live NetworkPolicy acceptance on a cluster
 (#292) are still open.
 
 The Kubernetes-mode agent also allocates cluster identities for its Pods
-(FlowsdnIdentity objects, #291). Not implemented in the agent:
-L7, FQDN and ICMP policy rules, host egress policy, flowsdn's own masquerade, DSR by IPIP or Geneve
-and DSR ICMP errors, NAT46/64 to local backends or in the socket LB, TCP socket termination, CRD controllers, an operator process and the
-Hubble observer/relay. Libraries also implement configuration resolution,
+(FlowsdnIdentity objects, #291). Masquerade is the node's (`egress: stack`),
+not flowsdn's. Open gaps, each an issue with the `gap` label: L7, FQDN and ICMP
+policy rules (#448), host egress policy (#384), DSR by IPIP or Geneve (#447),
+DSR ICMP errors (#449), NAT46/64 to local backends or in the socket LB (#450),
+TCP socket termination (#392), CRD registration (#337), the operator executable
+(#446) and the Hubble observer/relay (#293). Libraries also implement configuration resolution,
 identity and map layouts, a Kubernetes NetworkPolicy importer and policy
 simulator, Maglev tables, BGP codecs/session state, encryption and egress
 plans, proxy ACK handling, flow filtering and cloud request plans. A library or
@@ -124,9 +128,11 @@ flowsdn ships 22 custom resources in `flowsdn.io/v1alpha1` ([CRD reference](docs
 reference schemas (validation, status subresources, printer columns) projected
 from vendored Cilium v1.20.1 CRDs. The manifests are generated into
 `deploy/stormcos/manifests-kubernetes/crds/`, with examples and offline
-accept/reject validation for every kind. No controller reads or writes them
-yet: the daemon does not register or reconcile CRDs, and flowsdn must not adopt
-or garbage-collect existing `cilium.io` objects.
+accept/reject validation for every kind. The Kubernetes-mode agent writes
+FlowsdnIdentity objects and, with `kubernetes.flowsdn-policy`, reads
+FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy. Nothing registers the
+CRDs (#337) or reconciles the other kinds (no operator, #446); flowsdn must not
+adopt or garbage-collect existing `cilium.io` objects.
 
 Compatibility concerns data shape (CNI result, agent API, BPF map layouts),
 not names: nothing flowsdn ships carries the reference project's name. The CNI

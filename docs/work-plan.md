@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### README stub markers — #424 (P0), 2026-11-19
+
+- [x] README intro and "Not implemented in the agent" list replaced by open gap
+  issues; filed #449 (DSR ICMP errors), #450 (NAT46/64 local/socket LB);
+  `gap` label on #384, #392, #337, #293. CRD paragraph corrected (the agent
+  writes FlowsdnIdentity, reads the policy kinds). Docs only: no image.
+- [ ] sc-build after push; marker grep empty in README.md; close #424.
+
 ### CLAUDE.md stub marker — #423 (P0), 2026-11-19
 
 - [x] Unbuilt list in CLAUDE.md replaced by open gap issues; filed and
