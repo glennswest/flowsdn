@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 05 stub marker — #433 (P0), 2026-11-19
+
+- [ ] §3 Maglev amendment: socket-LB Maglev is gap #453; external ClusterIP
+  access (with its Maglev) filed as a new gap; spec names both.
+- [ ] sc-build; marker grep finds nothing; close #433.
+
 ### spec 02 stub marker — #432 (P0), 2026-11-19
 
 - [x] Remove `flowsdn_encryption::ObjectBuild` (unused; names Cargo features
