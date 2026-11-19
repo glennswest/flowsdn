@@ -8,7 +8,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] §11.3: no generated stub tests for unported cases (counted in the
   report instead); generator and §9.4 test absent, filed gap #473.
-- [ ] sc-build; marker grep; close #443; propose #473.
+- [x] sc-build at b420922 (exit 0); marker grep finds nothing; #473 proposed; #443 closed.
 
 ### spec 16 stub markers — #442 (P0), 2026-11-19
 
