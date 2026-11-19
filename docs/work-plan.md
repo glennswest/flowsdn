@@ -8,7 +8,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] §2 exempt list: `HTTPRouteParentRefPort` stated as absent, gap #474
   (matches `EXEMPT_FEATURES`). Line count unchanged.
-- [ ] sc-build; marker grep; close #445.
+- [x] sc-build at e83f833 passed (114s); marker grep clean; #445 closed.
 
 ### spec 20 stub markers — #444 (P0), 2026-11-19
 
