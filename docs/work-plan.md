@@ -6,11 +6,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### spec 08 stub marker — #435 (P0), 2026-11-19
 
-- [ ] Spec 08 / ADR-0012 #118: routes not built are absent (404, as the agent
+- [x] Spec 08 / ADR-0012 #118: routes not built are absent (404, as the agent
   already answers), not registered 501s (owner, stormcentral#1455); file gaps
   for the prefilter routes and for cgroup-dump-metadata / map events. Keep
   line counts above spec 08:1338 (catalogue provenance).
-- [ ] sc-build; marker grep finds nothing; close #435.
+- [x] Filed and proposed #467/#468; sc-build at c0f990b (exit 0); #435 closed.
 
 ### spec 05 stub marker — #433 (P0), 2026-11-19
 
