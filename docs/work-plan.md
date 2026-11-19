@@ -9,7 +9,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] Unbuilt list in CLAUDE.md replaced by open gap issues; filed and
   proposed #446 (operator executable), #447 (DSR IPIP/Geneve), #448
   (L7/FQDN/ICMP policy). Docs only: no image.
-- [ ] sc-build stub sweep over CLAUDE.md passes, then close #423.
+- [x] sc-build at c70dec4: the marker grep finds nothing in CLAUDE.md; #423 closed.
 
 ### Network-level metrics — #420 (P2), 2026-11-18
 
