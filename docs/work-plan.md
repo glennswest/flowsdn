@@ -6,11 +6,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### runtime.md stub markers — #430 (P0), 2026-11-19
 
-- [ ] docs/runtime.md socket-LB and Pod-policy limit lists: each limit names
+- [x] docs/runtime.md socket-LB and Pod-policy limit lists: each limit names
   its gap issue (existing #336/#392/#447/#448/#450/#452/#453; new ones filed
   and proposed for SCTP, non-first IPv4 fragments, topology hints, BPF
   masquerade, Pod audit mode, flows open before a policy, related ICMP errors).
-- [ ] sc-build; marker grep finds nothing; close #430.
+- [x] Filed and proposed #457–#463; sc-build at 96a2bd7 (exit 0); marker
+  grep finds nothing; #430 closed.
 
 ### spec 01 stub marker — #431 (P0), 2026-11-19
 
