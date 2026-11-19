@@ -171,7 +171,11 @@ pub(super) fn render(facts: &Facts) -> String {
         "1 for each controller part whose last reconcile failed (its error is in /v1/healthz).",
     );
     for part in facts.failing.keys() {
-        f.sample("flowsdn_controller_failing", &[("controller", part.as_str())], 1);
+        f.sample(
+            "flowsdn_controller_failing",
+            &[("controller", part.as_str())],
+            1,
+        );
     }
 
     let mut failing_sources = Vec::new();
@@ -318,7 +322,11 @@ pub(super) fn render(facts: &Facts) -> String {
             "1 while an uplink port has carrier.",
         );
         for (name, up) in &k.uplinks {
-            f.sample("flowsdn_uplink_up", &[("uplink", name.as_str())], u8::from(*up));
+            f.sample(
+                "flowsdn_uplink_up",
+                &[("uplink", name.as_str())],
+                u8::from(*up),
+            );
         }
     }
 
@@ -405,7 +413,10 @@ mod tests {
             assert!(text.lines().any(|l| l == line), "missing {line}:\n{text}");
         }
         assert!(!text.contains("flowsdn_metrics_source_failing{"));
-        assert!(!text.contains("flowsdn_nodes"), "no Kubernetes series without it");
+        assert!(
+            !text.contains("flowsdn_nodes"),
+            "no Kubernetes series without it"
+        );
     }
 
     #[test]
@@ -442,7 +453,10 @@ mod tests {
         ] {
             assert!(text.lines().any(|l| l == line), "missing {line}:\n{text}");
         }
-        assert!(!text.contains("flowsdn_drop_count_total{"), "no drops without the map");
+        assert!(
+            !text.contains("flowsdn_drop_count_total{"),
+            "no drops without the map"
+        );
         assert!(!text.contains("flowsdn_bpf_map_pressure{"));
     }
 
