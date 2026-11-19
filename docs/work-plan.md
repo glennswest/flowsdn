@@ -8,7 +8,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] tcx/cgroup-link-only attach stated as the 6.6-minimum design (as #426);
   not a gap.
-- [ ] sc-build after push; marker grep empty; close #431.
+- [x] sc-build at 5703f88 (exit 0); marker grep finds nothing; #431 closed.
 
 ### 0.7.0 release-notes stub markers — #429 (P0), 2026-11-19
 
