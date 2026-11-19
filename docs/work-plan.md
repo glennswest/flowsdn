@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 18 stub marker — #443 (P0), 2026-11-19
+
+- [x] §11.3: no generated stub tests for unported cases (counted in the
+  report instead); generator and §9.4 test absent, filed gap #473.
+- [ ] sc-build; marker grep; close #443; propose #473.
+
 ### spec 16 stub markers — #442 (P0), 2026-11-19
 
 - [x] §mutual auth: state the code's refusal (host_policy.rs skips the rule,

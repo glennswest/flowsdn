@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#443)
+- **docs:** Spec 18 (#443): the §11.3 corpus generator no longer designs `#[ignore]` tests with `unimplemented!()` bodies for unported cases; it asserts ported tests exist and counts the rest in the build output and coverage report. The generator and the §9.4 consistency test are stated as absent, new gap #473.
+
 ### 2026-11-19 (#442)
 - **docs:** Spec 16 (#442): rules carrying `authentication` are described as the agent refuses them (skipped, a `policy` problem, fail closed) instead of a "not implemented" validation message; `mesh-auth-*` settings (§3.8, §6.3), `enable-ztunnel` and `cilium_auth_map` are absent, mutual authentication being new gap #472; ztunnel/ADS wording without "unimplemented".
 

@@ -697,8 +697,8 @@ merely awaiting a human classification of which pipeline they exercise.
 over Markdown**, and the reasons are worth stating because ADR-0005 leaves the
 choice open:
 
-- it is *input*, not documentation: `flowsdn-bpftest`'s build step reads it to
-  generate one `#[test]` stub per case, so a case cannot be silently forgotten;
+- it is *input*, not documentation: `flowsdn-bpftest`'s build step is to read
+  it and count every unported case (§11.3, gap #473), so none is forgotten;
 - CI computes coverage from it (`ported / total`, per milestone, per pipeline)
   and gates on the M1 denominator;
 - re-harvesting at a newer reference tag produces a diffable file, so
@@ -1175,7 +1175,7 @@ tests, at the tiers of §10.3.
 - [ ] `CASES.toml` parses, and its `[meta]` counts equal the sums of its rows.
 - [ ] Every `PORTED.toml` key resolves to a `CASES.toml` case.
 - [ ] Every `status = "ported"` entry names a Rust test path that exists (the
-      generated stub list is the oracle).
+      §11.3 compile-time check is the oracle).
 - [ ] Every `retargeted` / `replaced` / `dropped` entry has a `disposition`.
 - [ ] Coverage is monotonic against the previous commit (§5.3).
 - [ ] Re-running `tools/harvest-bpf-cases (Rust)` against the pinned reference
@@ -1301,7 +1301,7 @@ crates/
       events/               perf drain + spec-11 decode + matchers
       harvest/              CASES.toml / PORTED.toml models and consistency
     tests/                  the generated corpus, one module per reference file
-    build.rs                generates test stubs from CASES.toml (§11.3)
+    build.rs                checks ported cases, counts the rest (§11.3, #473)
   flowsdn-bpf-testprogs/    tiny BPF objects used only by tests: mock_policy_verdict,
                             the direct-call wrappers of §3.9, the §9.1 self-test
                             programs. Never linked into flowsdn-bpf.
@@ -1354,20 +1354,22 @@ harness stays safe Rust.
 
 ### 11.3 Test generation from the harvest
 
-`build.rs` reads `tests/bpf/CASES.toml` and `tests/bpf/PORTED.toml` and emits,
-per reference file, a module containing one item per case:
+The generator is gap #473: there is no `build.rs`, generated corpus or §9.4 test.
+
+Its `build.rs` reads `tests/bpf/CASES.toml` and `tests/bpf/PORTED.toml` and,
+per reference file and case:
 
 - `status = "ported"` → nothing (the hand-written test already exists in
   `tests/<file_stem>.rs`; the generator emits a compile-time assertion that a
   function with that path exists, so a rename breaks the build);
-- `status = "deferred"` → `#[test] #[ignore = "deferred to M2"] fn <name>() {
-  unimplemented!() }`, so `cargo nextest list` shows the complete corpus and the
-  unported count is visible in every run, not only in a report;
-- `status ∈ {retargeted, replaced}` → a stub whose `#[ignore]` reason quotes the
-  `disposition`, keeping the reference name discoverable by `grep`.
+- every other case (`deferred`, `retargeted`, `replaced`, `dropped`, unlisted)
+  → no test item: an ignored test with an empty body would be a stub. The build
+  prints the unported count and writes it, with each name, to the coverage report
+  per file, milestone and pipeline, so it is visible in every run; the
+  `disposition` keeps a retargeted or replaced name discoverable by `grep`.
 
-This is the mechanism that makes "625 cases" a checklist the compiler enforces
-rather than a number in a document.
+This is the mechanism that makes "625 cases" a checklist the build enforces and
+counts rather than a number in a document.
 
 ### 11.4 Dependencies
 
