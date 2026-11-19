@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#430)
+- **docs:** docs/runtime.md's socket-LB and Pod-policy limit lists (#430) state each limit with its gap issue instead of "Not implemented:"; deny/entity Pod rules are credited to the flowsdn policy kinds. New gaps #457 (SCTP Services), #458 (non-first IPv4 fragments), #459 (topology hints), #460 (BPF masquerade), #461 (Pod policy audit mode), #462 (flows open before a policy), #463 (ICMP errors as related traffic), also listed in docs/implementation-status.md.
+
 ### 2026-11-19 (#431)
 - **docs:** Spec 01 (#431) states tcx/cgroup-link-only attachment as the design for the 6.6 minimum (a kernel without them is refused at startup) instead of "legacy clsact … not implemented".
 

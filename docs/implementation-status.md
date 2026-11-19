@@ -108,7 +108,10 @@ pinning or subsystem libraries are absent are **not current status**.
   (#451); host egress policy (#384); policy verdict events (#452); Maglev in
   the socket LB (#453); DSR by IPIP or Geneve (#447); DSR ICMP errors (#449);
   NAT46/64 to local backends or in the socket LB (#450); the RFC 6052 gateway
-  (#454); TCP socket termination (#392); CRD registration (#337); the operator
+  (#454); TCP socket termination (#392); SCTP Services (#457); IPv4 fragments
+  after the first (#458); topology hints (#459); BPF masquerade (#460); Pod
+  policy audit mode (#461); flows open before a policy (#462); ICMP errors as
+  related traffic (#463); CRD registration (#337); the operator
   executable (#446); the Hubble observer/relay (#293).
 
 ### Cloud fixtures (ADR-0007)

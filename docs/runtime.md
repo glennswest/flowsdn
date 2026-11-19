@@ -465,10 +465,14 @@ root the links detach when the agent exits. The NodePort uplink links are never
 pinned: they detach when the agent exits, and the per-CPU
 `flowsdn_nodeport6_fib`, `flowsdn_nodeport6_scratch` and
 `flowsdn_nodeport4_xlate_scratch` scratch maps are not
-pinned either. Not implemented:
-Maglev for the socket LB, DSR for the socket LB and by IPIP/Geneve, topology hints, skip-LB for local redirect policy, TCP socket
-termination (an existing TCP connection stays on its backend), SCTP, NAT46/64 in the socket LB, IPv4 fragments other than the first (they pass
-untouched), and BPF masquerade. `socket-lb-live` (medium test suite) checks the
+pinned either. The socket LB picks backends at random (Maglev there is gap
+#453); an existing TCP connection stays on its backend when it leaves (TCP
+socket termination, #392); SCTP ports get no translation (#457); IPv4
+fragments other than the first pass untouched (#458); backends are chosen
+without topology hints (#459); masquerading is the node's stack, not BPF
+(#460). Further gaps, each an issue: DSR by IPIP/Geneve (#447), NAT46/64 in
+the socket LB (#450), and skip-LB, which comes with local redirect policy
+(#336). `socket-lb-live` (medium test suite) checks the
 programs on a kernel, including the NodePort local and SNAT paths through
 `BPF_PROG_TEST_RUN` and Maglev picks against the planner's tables; no
 two-node cluster run yet.
@@ -635,11 +639,13 @@ which also turns the `kubernetes` health to Warning (#401). If it persists,
 check `kubectl get crd flowsdnidentities.flowsdn.io` (stormcos#303). `ipBlock`
 peers and policies without peers do not wait. Each decision of an enforcing program (a rule allowed a new flow, a
 drop, an audit pass) is counted in `flowsdn_policy_verdicts` (LRU per-CPU,
-16384 rows): `GET /v1/policy/verdicts`. Not implemented for Pods:
-CiliumNetworkPolicy-style rules (deny, L7, entities, FQDN), audit mode,
-policy verdict events, ICMP errors as related traffic, and enforcement on
-flows already open when a policy first selects a Pod (their replies are
-judged as new flows). `policy-live` (medium test suite) checks the programs
+16384 rows): `GET /v1/policy/verdicts`. Deny and entity rules for Pods come
+from the flowsdn policy kinds (below). Pod policy always enforces (audit
+mode for Pods is gap #461); a flow already open when a policy first selects
+a Pod has its replies judged as new flows (#462); an ICMP error about an
+allowed flow is judged as new traffic (#463). L7, FQDN and ICMP rules
+(#448) and per-flow policy verdict events (#452) are gaps, each an issue.
+`policy-live` (medium test suite) checks the programs
 on a kernel through `BPF_PROG_TEST_RUN`; no cluster run yet.
 
 ### Pod rules of the flowsdn policy kinds (#292)
