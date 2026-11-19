@@ -11,9 +11,10 @@ pinning or subsystem libraries are absent are **not current status**.
 ### Agent and CNI
 
 - `flowsdn-agent` serves a persisted local endpoint and host-pool IPAM API on
-  a mode-0600 Unix socket (16 routes, `api::ROUTES`), plus an optional
+  a mode-0600 Unix socket (`api::ROUTES`), plus an optional
   read-only `http-listen` on a loopback address (mutations get 403; other
-  addresses are refused). It embeds the BPF objects built from its commit
+  addresses are refused) and an optional loopback `metrics-listen` for
+  `GET /metrics` (#420; drops counted for policy denials only, #421). It embeds the BPF objects built from its commit
   (`local-delivery`; `socket-lb` in Kubernetes mode), recorded in
   `bpf-objects.lock`; a configured `bpf-object` overrides `local-delivery`.
   Two egress modes: `fib` (BPF FIB redirect) and `stack` (every endpoint

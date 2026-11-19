@@ -509,3 +509,16 @@ fn shipped_kubernetes_config_audits_the_host_firewall() {
         "the static set has no Kubernetes mode"
     );
 }
+
+/// #420: both shipped configs serve `/metrics` where the node's scraper
+/// looks for the network level (stormcos#64).
+#[test]
+fn shipped_configs_serve_metrics_on_9962() {
+    for yaml in [
+        include_str!("../../../deploy/stormcos/manifests-kubernetes/61-flowsdn-config.yaml"),
+        include_str!("../../../deploy/stormcos/manifests/61-flowsdn-config.yaml"),
+    ] {
+        let config = shipped_agent_json(yaml);
+        assert_eq!(config.get("metrics-listen"), Some(&json!("127.0.0.1:9962")));
+    }
+}

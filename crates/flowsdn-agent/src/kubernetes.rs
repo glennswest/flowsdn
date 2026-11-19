@@ -819,19 +819,23 @@ impl View {
         crate::services::service_list(&self.frontends, &self.service_ids)
     }
     /// The `kubernetes` member of `GET /v1/healthz`.
+    /// Every list the enabled features need has been received once.
+    pub fn synced(&self) -> bool {
+        self.nodes_synced
+            && self.pods_synced
+            && (!self.service_lb || (self.services_synced && self.slices_synced))
+            && (!self.identity || (self.namespaces_synced && self.identities_synced))
+            && (!self.network_policy || (self.namespaces_synced && self.policies_synced))
+            && (!self.flowsdn_policy
+                || (self.namespaces_synced && self.pod_policies_synced && self.clusterwide_synced))
+    }
     pub fn health(&self) -> Value {
         let errors: Vec<_> = self
             .errors
             .iter()
             .map(|(part, error)| format!("{part}: {error}"))
             .collect();
-        let synced = self.nodes_synced
-            && self.pods_synced
-            && (!self.service_lb || (self.services_synced && self.slices_synced))
-            && (!self.identity || (self.namespaces_synced && self.identities_synced))
-            && (!self.network_policy || (self.namespaces_synced && self.policies_synced))
-            && (!self.flowsdn_policy
-                || (self.namespaces_synced && self.pod_policies_synced && self.clusterwide_synced));
+        let synced = self.synced();
         let (state, msg) = match (errors.is_empty(), synced) {
             (false, _) => ("Warning", errors.join("; ")),
             (true, false) => ("Warning", "waiting for the initial Kubernetes lists".into()),

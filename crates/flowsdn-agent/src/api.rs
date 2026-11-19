@@ -31,6 +31,8 @@ use std::{
 
 #[path = "health_api.rs"]
 mod health_api;
+#[path = "metrics.rs"]
+mod metrics;
 
 const BODY_LIMIT: usize = 4_194_304;
 const HEADER_LIMIT: usize = 16_384;
@@ -84,6 +86,8 @@ struct Config {
     socket: PathBuf,
     /// `http-listen`: an optional read-only loopback TCP listener (#297).
     http: Option<SocketAddr>,
+    /// `metrics-listen`: an optional loopback listener for `GET /metrics` (#420).
+    metrics: Option<SocketAddr>,
     state: PathBuf,
     object: Option<PathBuf>,
     egress: Egress,
@@ -114,19 +118,26 @@ impl Config {
         let socket = PathBuf::from(string(&value, "socket-path")?);
         let state = PathBuf::from(string(&value, "state-dir")?);
         // No authentication on TCP: loopback only, and read-only (see `read_only`).
-        let http = match optional(&value, "http-listen")? {
-            "" => None,
-            raw => {
-                let address: SocketAddr = raw.parse().map_err(|_| Failure {
-                    status: 400,
-                    message: "http-listen must be IP:port".into(),
-                })?;
-                if !address.ip().is_loopback() || address.port() == 0 {
-                    return fail(400, "http-listen must be a loopback address with a port");
+        let loopback = |key: &str| -> Result<Option<SocketAddr>> {
+            match optional(&value, key)? {
+                "" => Ok(None),
+                raw => {
+                    let address: SocketAddr = raw.parse().map_err(|_| Failure {
+                        status: 400,
+                        message: format!("{key} must be IP:port"),
+                    })?;
+                    if !address.ip().is_loopback() || address.port() == 0 {
+                        return fail(400, format!("{key} must be a loopback address with a port"));
+                    }
+                    Ok(Some(address))
                 }
-                Some(address)
             }
         };
+        let http = loopback("http-listen")?;
+        let metrics = loopback("metrics-listen")?;
+        if metrics.is_some() && metrics == http {
+            return fail(400, "metrics-listen and http-listen must differ");
+        }
         let object = match optional(&value, "bpf-object")? {
             "" => None,
             path => Some(PathBuf::from(path)),
@@ -254,6 +265,7 @@ impl Config {
         Ok(Self {
             socket,
             http,
+            metrics,
             state,
             object,
             egress,
@@ -323,7 +335,7 @@ struct Lease {
 /// Every route the agent serves, as the first column of docs/agent-api.md's
 /// "Supported methods" table; a test keeps the two equal (#298: the API is a
 /// supported boundary for `sc net` and the console plugin).
-pub const ROUTES: [&str; 21] = [
+pub const ROUTES: [&str; 22] = [
     "`GET /v1/config`",
     "`GET /v1/healthz`",
     "`GET /v1/health/modules`",
@@ -345,6 +357,7 @@ pub const ROUTES: [&str; 21] = [
     "`GET /v1/policy/verdicts`",
     "`GET /v1/cni/timing`",
     "`POST /v1/cni/timing`",
+    "`GET /metrics`",
 ];
 struct Api {
     config: Config,
@@ -1186,8 +1199,13 @@ fn read_request(stream: &mut impl Connection) -> Result<Request> {
     }
 }
 
-fn write_response(stream: &mut impl Connection, status: u16, body: Vec<u8>) -> Result<()> {
-    let mut response=format!("HTTP/1.1 {status} Agent\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",body.len()).into_bytes();
+fn write_typed(
+    stream: &mut impl Connection,
+    status: u16,
+    content_type: &str,
+    body: Vec<u8>,
+) -> Result<()> {
+    let mut response=format!("HTTP/1.1 {status} Agent\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",body.len()).into_bytes();
     response.extend_from_slice(&body);
     let start = Instant::now();
     let mut bytes = response.as_slice();
@@ -1460,6 +1478,15 @@ pub fn run(config_path: &Path) -> Result<()> {
         }
         None => None,
     };
+    let metrics = match api.config.metrics {
+        Some(address) => {
+            let listener = TcpListener::bind(address)?;
+            listener.set_nonblocking(true)?;
+            crate::log::logln!("metrics listening on http://{address}/metrics");
+            Some(listener)
+        }
+        None => None,
+    };
     crate::log::logln!(
         "ready: serving CNI requests {} ms after start",
         started.elapsed().as_millis()
@@ -1481,7 +1508,7 @@ pub fn run(config_path: &Path) -> Result<()> {
         match listener.accept() {
             Ok((mut stream, _)) => {
                 idle = false;
-                serve(&mut api, &health, &mut stream, false)?;
+                serve(&mut api, &health, &mut stream, Listener::Unix)?;
             }
             Err(error)
                 if matches!(
@@ -1494,7 +1521,7 @@ pub fn run(config_path: &Path) -> Result<()> {
             match http.accept() {
                 Ok((mut stream, _)) => {
                     idle = false;
-                    serve(&mut api, &health, &mut stream, true)?;
+                    serve(&mut api, &health, &mut stream, Listener::ReadOnly)?;
                 }
                 Err(error)
                     if matches!(
@@ -1506,8 +1533,22 @@ pub fn run(config_path: &Path) -> Result<()> {
                 Err(error) => crate::log::logln!("read-only API accept failed: {error}"),
             }
         }
+        if let Some(metrics) = &metrics {
+            match metrics.accept() {
+                Ok((mut stream, _)) => {
+                    idle = false;
+                    serve(&mut api, &health, &mut stream, Listener::Metrics)?;
+                }
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
+                    ) => {}
+                Err(error) => crate::log::logln!("metrics accept failed: {error}"),
+            }
+        }
         if idle {
-            wait_for_request(&listener, http.as_ref());
+            wait_for_request(&listener, [http.as_ref(), metrics.as_ref()]);
         }
     }
 }
@@ -1515,10 +1556,10 @@ pub fn run(config_path: &Path) -> Result<()> {
 /// Until a request is waiting, or the 20 ms after which the loop's periodic
 /// work is due. Never a plain sleep: every CNI request would wait it out, 20 ms
 /// each and four per ADD (#396).
-fn wait_for_request(listener: &UnixListener, http: Option<&TcpListener>) {
+fn wait_for_request(listener: &UnixListener, tcp: [Option<&TcpListener>; 2]) {
     let mut fds = vec![PollFd::new(listener.as_fd(), PollFlags::POLLIN)];
-    if let Some(http) = http {
-        fds.push(PollFd::new(http.as_fd(), PollFlags::POLLIN));
+    for tcp in tcp.into_iter().flatten() {
+        fds.push(PollFd::new(tcp.as_fd(), PollFlags::POLLIN));
     }
     // An error (EINTR is the expected one) only means the loop looks again, but
     // a persistent one must not make it spin.
@@ -1527,16 +1568,40 @@ fn wait_for_request(listener: &UnixListener, http: Option<&TcpListener>) {
     }
 }
 
-/// Answer one request; `read_only` refuses anything that could change state.
+/// Which listener a request came in on.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Listener {
+    /// The 0600 Unix socket: every route.
+    Unix,
+    /// `http-listen`: reads only.
+    ReadOnly,
+    /// `metrics-listen`: `GET /metrics` only.
+    Metrics,
+}
+
+/// Answer one request; a TCP listener refuses anything that could change state.
 fn serve(
     api: &mut Api,
     health: &health_api::ModuleHealth,
     stream: &mut impl Connection,
-    read_only_listener: bool,
+    listener: Listener,
 ) -> Result<()> {
+    let mut content_type = "application/json";
     let result = read_request(stream).and_then(|request| {
-        if read_only_listener && !read_only(&request.method, &request.target) {
+        if listener != Listener::Unix && !read_only(&request.method, &request.target) {
             return fail(403, "the TCP listener is read-only; use the Unix socket");
+        }
+        let path = request
+            .target
+            .split_once('?')
+            .map_or(request.target.as_str(), |(path, _)| path);
+        if listener == Listener::Metrics && path != "/metrics" {
+            return fail(404, "the metrics listener serves GET /metrics only");
+        }
+        if (request.method.as_str(), path) == ("GET", "/metrics") {
+            content_type = "text/plain; version=0.0.4; charset=utf-8";
+            let facts = metrics::Facts::of(api);
+            return Ok((200, metrics::render(&facts).into_bytes()));
         }
         match (request.method.as_str(), request.target.as_str()) {
             ("GET" | "POST", "/statedb/query" | "/v1/statedb/query") => health
@@ -1565,7 +1630,7 @@ fn serve(
             )
         }
     };
-    if let Err(error) = write_response(stream, status, body) {
+    if let Err(error) = write_typed(stream, status, content_type, body) {
         crate::log::logln!("API response failed: {error}");
     }
     Ok(())

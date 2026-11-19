@@ -236,9 +236,13 @@ response shapes and unimplemented routes. HTTP runs over the Unix socket and,
 read-only, on the node's loopback at `127.0.0.1:9878` (`http-listen`; the agent
 is on the host network). That port is for the stormcos console plugin
 (stormconsole#83, spec flowsdn#297): endpoints, IPAM, health, config and the
-statedb query; mutations return 403 and stay on the socket. There is no
-Kubernetes Service, Hubble observer listener on 4244, or relay endpoint to
-expose, so the flow view waits for Hubble. No Service manifest is included.
+statedb query; mutations return 403 and stay on the socket. Metrics are
+served on `127.0.0.1:9962/metrics` (`metrics-listen`, #420): Prometheus text,
+`flowsdn_*` series, for the node's ironprom (stormcos#64; the series are listed
+in the [agent API](../../docs/agent-api.md#metrics)). The operator has none (no
+operator executable yet). There is no Kubernetes Service, Hubble observer
+listener on 4244, or relay endpoint to expose, so the flow view waits for
+Hubble. No Service manifest is included.
 
 `GET /v1/healthz` on the Unix socket is the present liveness check after startup
 restore and offline-deletion replay complete. It is **not** an assertion of

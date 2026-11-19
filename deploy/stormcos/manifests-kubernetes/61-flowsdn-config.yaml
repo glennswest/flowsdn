@@ -46,6 +46,7 @@ data:
     {
       "socket-path": "/var/run/flowsdn/flowsdn.sock",
       "http-listen": "127.0.0.1:9878",
+      "metrics-listen": "127.0.0.1:9962",
       "delete-queue": "/var/run/flowsdn/deleteQueue",
       "state-dir": "/var/lib/flowsdn",
       "egress": "stack",

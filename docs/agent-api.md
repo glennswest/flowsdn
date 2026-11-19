@@ -126,12 +126,39 @@ on recognized endpoint detail/IPAM address routes return HTTP 405.
 | `GET /v1/policy/verdicts` | flowsdn (#379): the policy decisions the endpoint programs counted, one row per `{endpoint, direction, verdict, protocol, port}` with `packets` and `bytes` summed over CPUs. `endpoint` is the Pod endpoint ID or `host` (the host firewall); `verdict` is `allowed` (a rule allowed a new flow), `denied` (dropped) or `audit` (audit mode: would have been dropped, passed); `port` is the destination port (0 without one). Packets of a remembered flow are not counted. LRU, 16384 rows; counters reset when the agent's object is reloaded. Read-only, also on the TCP listener. |
 | `GET /v1/cni/timing` | Each CNI ADD step's `{samples, p50-us, p99-us, max-us}` over its last 256 samples: the plugin's `config`, `lookup`, `allocate`, `link`, `configure`, `endpoint`, `finalize`, `total`, and the agent's `agent-check`, `agent-state`, `agent-install`, `agent-create` (#396). |
 | `POST /v1/cni/timing` | The plugin's report after an ADD: `{"steps":{"<step>":<microseconds>}}`. Unknown steps are ignored. |
+| `GET /metrics` | Prometheus text format 0.0.4 (#420), every name `flowsdn_*`, built from live state on each scrape; also the only route of `metrics-listen` (other paths 404). See [Metrics](#metrics). |
 
 List, detail and pool summary reads perform no allocation or endpoint mutation.
 As with existing API requests, expired pending IP leases are processed first.
 Read identifiers consisting entirely of decimal digits must fit a nonzero u16;
 invalid or unknown numeric IDs return 404. Other identifiers match the stored
 CNI attachment string. PUT/DELETE continue to use attachment identifiers.
+
+## Metrics
+
+`GET /metrics` (on the socket, `http-listen`, or its own loopback
+`metrics-listen`; the edition manifests use `127.0.0.1:9962`, the port the node
+scrape config already knows for the network level, stormcos#64). Every series
+is read when scraped; nothing is cached or estimated.
+
+| Series | Type | Meaning |
+|---|---|---|
+| `flowsdn_build_info{version}` | gauge | 1; the agent's version. |
+| `flowsdn_endpoint_state{endpoint_state}` | gauge | Endpoints held, `ready` or `disconnecting` (deletion started, not finished). |
+| `flowsdn_controllers_failing` | gauge | Controller parts whose last reconcile failed (the `errors` of `/v1/healthz`, plus `policy-maps` when NetworkPolicy maps could not be shared). |
+| `flowsdn_controller_failing{controller}` | gauge | 1 per failing part (`routes`, `pod-cidrs`, `services`, `identities`, `policy`, `host-firewall`, `host-firewall-attach`, `uplinks`, `node-port`, `socket-termination`, `policy-maps`). The error text is in `/v1/healthz`. |
+| `flowsdn_policy_verdict_total{direction,action}` | counter | Packets judged by policy, `ingress`/`egress` × `allowed`/`denied`/`audit`, summed over endpoints and ports from `flowsdn_policy_verdicts` (new flows only). |
+| `flowsdn_drop_count_total{reason,direction}`, `flowsdn_drop_bytes_total{…}` | counter | Dropped packets/bytes by reason. Only `policy_denied` is counted: the datapath keeps no counter for its other drops yet (#421). |
+| `flowsdn_bpf_map_pressure{map_name}` | gauge | Entries / `max_entries` of `flowsdn_policy_ep`, `flowsdn_policy`, `flowsdn_ipcache`, `flowsdn_policy_ct`, `flowsdn_policy_verdicts` (keys are walked per scrape). |
+| `flowsdn_kubernetes_synced` | gauge | Kubernetes mode: 1 once every list the enabled features need was received. |
+| `flowsdn_nodes`, `flowsdn_pods` | gauge | Kubernetes mode: Nodes and Pods watched. |
+| `flowsdn_unreachable_nodes` | gauge | Kubernetes mode: nodes with a direct pod-CIDR route not installed (`skipped` or `error`). |
+| `flowsdn_identity{type="cluster"}`, `flowsdn_identity_waiting` | gauge | With identity allocation: identities known; local label sets still waiting for one. |
+| `flowsdn_services{state}` | gauge | Kubernetes mode with the service LB: frontends `desired` and `programmed`. |
+| `flowsdn_uplink_up{uplink}` | gauge | Kubernetes mode: 1 while an uplink has carrier (#408). |
+| `flowsdn_metrics_source_failing{source}` | gauge | 1 for `policy-verdicts` or `bpf-map-pressure` when that map could not be read this scrape; its series are then absent, not zero. |
+
+The operator has no metrics: there is no operator executable yet (#337).
 
 ## Endpoint inventory shape
 

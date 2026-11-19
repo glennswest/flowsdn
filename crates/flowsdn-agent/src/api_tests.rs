@@ -454,6 +454,34 @@ fn http_listen_is_loopback_only() {
 }
 
 #[test]
+fn metrics_listen_is_loopback_only_and_apart_from_http_listen() {
+    let temp = Temp::new();
+    let path = temp.0.join("config.json");
+    let mut config = json!({"socket-path":temp.0.join("agent.sock"),"state-dir":temp.0.join("state"),"ipv4-pool":"198.18.0.0/29","ipv4-gateway":"198.18.0.1","device-mtu":1500,"route-mtu":1450});
+    fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
+    assert_eq!(Config::read(&path).expect("config").metrics, None);
+    for (metrics, http, valid) in [
+        ("127.0.0.1:9962", "", true),
+        ("[::1]:9962", "127.0.0.1:9878", true),
+        ("127.0.0.1:9962", "127.0.0.1:9878", true),
+        ("127.0.0.1:9878", "127.0.0.1:9878", false),
+        ("0.0.0.0:9962", "", false),
+        ("127.0.0.1:0", "", false),
+        ("9962", "", false),
+    ] {
+        let object = config.as_object_mut().expect("object");
+        object.insert("metrics-listen".into(), json!(metrics));
+        object.insert("http-listen".into(), json!(http));
+        fs::write(&path, serde_json::to_vec(&config).expect("JSON")).expect("config");
+        let read = Config::read(&path);
+        assert_eq!(read.is_ok(), valid, "{metrics} {http}");
+        if let Ok(read) = read {
+            assert_eq!(read.metrics, Some(metrics.parse().expect("address")));
+        }
+    }
+}
+
+#[test]
 fn read_only_listener_serves_reads_and_the_statedb_query_only() {
     for (method, target) in [
         ("GET", "/v1/endpoint"),
@@ -496,7 +524,7 @@ fn requests_are_read_and_answered_over_loopback_tcp() {
         (request.method.as_str(), request.target.as_str()),
         ("GET", "/v1/ipam")
     );
-    write_response(&mut server, 200, b"{}".to_vec()).expect("response");
+    write_typed(&mut server, 200, "application/json", b"{}".to_vec()).expect("response");
     drop(server);
     let reply = client.join().expect("client");
     assert!(reply.starts_with("HTTP/1.1 200 "), "{reply}");

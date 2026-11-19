@@ -240,4 +240,37 @@ impl PolicyMaps {
         }
         Ok(out)
     }
+
+    /// Each policy map's name, entries and `max_entries` (#420), for the
+    /// agent's `flowsdn_bpf_map_pressure`. Entries are counted by walking the
+    /// keys (one syscall each), so this is for a scrape, not a hot path.
+    pub fn pressure(&self) -> KernelResult<Vec<(&'static str, u64, u32)>> {
+        fn count<T, E>(keys: impl Iterator<Item = Result<T, E>>) -> Result<u64, E> {
+            let mut total = 0u64;
+            for key in keys {
+                key?;
+                total = total.saturating_add(1);
+            }
+            Ok(total)
+        }
+        let counts = [
+            count(self.endpoints.keys())?,
+            count(self.policy.keys())?,
+            count(self.ipcache.keys())?,
+            count(self.flows.keys())?,
+            count(self.verdicts.keys())?,
+        ];
+        let data: [&MapData; 5] = [
+            IterableMap::map(&self.endpoints),
+            IterableMap::map(&self.policy),
+            IterableMap::map(&self.ipcache),
+            IterableMap::map(&self.flows),
+            IterableMap::map(&self.verdicts),
+        ];
+        let mut out = Vec::new();
+        for ((name, entries), map) in NAMES.into_iter().zip(counts).zip(data) {
+            out.push((name, entries, map.info()?.max_entries()));
+        }
+        Ok(out)
+    }
 }

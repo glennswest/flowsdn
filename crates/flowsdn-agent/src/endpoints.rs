@@ -280,6 +280,14 @@ impl Manager {
     > {
         kernel(self.driver.policy().policy_verdicts())
     }
+    /// Each policy map's (name, entries, max entries), for `/metrics` (#420).
+    pub fn policy_map_pressure(&mut self) -> Result<Vec<(&'static str, u64, u32)>> {
+        kernel(self.driver.policy().pressure())
+    }
+    /// Endpoints whose deletion has started and not finished.
+    pub fn deleting(&self) -> usize {
+        self.deleting.len()
+    }
     pub fn records(&self) -> impl Iterator<Item = &Record> {
         self.records.values()
     }
