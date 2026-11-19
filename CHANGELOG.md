@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#442)
+- **docs:** Spec 16 (#442): rules carrying `authentication` are described as the agent refuses them (skipped, a `policy` problem, fail closed) instead of a "not implemented" validation message; `mesh-auth-*` settings (§3.8, §6.3), `enable-ztunnel` and `cilium_auth_map` are absent, mutual authentication being new gap #472; ztunnel/ADS wording without "unimplemented".
+
 ### 2026-11-19 (#441)
 - **docs:** Spec 15 (#441): BFD, TCP-AO, ADD-PATH and the rest are stated as out of scope (as in the reference), the FSM as having no `DelayOpen` timer, and the speaker's missing runtime pieces name #293/#337 instead of "not implemented"/"unimplemented".
 

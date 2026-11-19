@@ -1168,12 +1168,12 @@ What flowsdn MUST do now, so the datapath does not have to be redesigned later:
 
 - Reserve and document the map (§4.7). The datapath spec's policy entry already
   carries an `auth_type` byte (spec 06 §4.5).
-- Accept `authentication.mode` in the policy API. `disabled` is the only value
-  that may be honoured; `required` and `test-always-fail` MUST be **rejected at
-  policy validation** with `mutual authentication is not implemented`, rather
-  than silently allowed — silently allowing would turn an authentication
-  requirement into a plain allow, which is a security regression.
-- Accept and ignore the `mesh-auth-*` flags, documented as no-ops (§6).
+- A rule carrying `authentication` is **refused, never silently allowed**: the
+  agent skips it and reports `<policy>: authentication is not enforced; the
+  rule is skipped` as a `policy` problem (`host_policy.rs`), so a skipped allow
+  fails closed. Silently allowing would turn an authentication requirement
+  into a plain allow, a security regression. Mutual authentication is gap #472.
+- The agent has no `mesh-auth-*` settings (§6); they come with gap #472.
 
 The contract a future implementation must satisfy: the datapath's `auth_lookup`
 consults `cilium_auth_map` with `(local_sec_label, remote_sec_label,
@@ -1325,7 +1325,7 @@ semaphore_acquire_time_ns (4), policy_check_time_ns (5)}`;
 `DNSResponseData{is_response (1), cnames (2), qtypes (3), answer_types (4)}`;
 `UpdateMappingResponse{response (1)}`.
 
-### 4.7 `cilium_auth_map` (reserved, not implemented)
+### 4.7 `cilium_auth_map` (reserved; absent until gap #472)
 
 | | Layout |
 |---|---|
@@ -1555,17 +1555,17 @@ Accepted and **ignored**: `envoy-log`, `envoy-base-id`,
 Accepted and **ignored**: `tofqdns-pre-cache` (removed upstream at v1.21),
 `dnsproxy-insecure-skip-transparent-mode-check`.
 
-### 6.3 Deferred features
+### 6.3 Features flowsdn does not have
 
-Accepted and **ignored**, with a warning when set to a non-default value:
+Absent from the agent's configuration (mutual authentication, gap #472):
 `mesh-auth-enabled`, `mesh-auth-queue-size`, `mesh-auth-gc-interval`,
 `mesh-auth-signal-backoff-duration`, `mesh-auth-mutual-listener-port`,
 `mesh-auth-mutual-connect-timeout`, `mesh-auth-spire-admin-socket`,
 `mesh-auth-spiffe-trust-domain`, `mesh-auth-rotated-identities-queue-size`,
-`bpf-auth-map-max`. An explicit `enable-ztunnel=true` must instead be rejected
-until the ADR-0015 nftables enrollment path is implemented; never accept it
-as an ignored request for mesh encryption. Note that `authentication.mode: required`
-in a policy is a **validation error**, not an ignored setting (§3.8).
+`bpf-auth-map-max`. `enable-ztunnel` is absent too, until the ADR-0015
+nftables enrollment path exists; it is never an ignored request for mesh
+encryption. A policy rule carrying `authentication` is refused (skipped and
+reported as a `policy` problem), not ignored (§3.8).
 
 ---
 
@@ -1892,8 +1892,8 @@ what buys the option.
 Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integration-issue-resolutions.md); their implementation and acceptance tests remain required.
 
 1. **Resolved — #193.** Implement split SOTW xDS first, with split as the default and a
-   bootstrap builder supporting both config-source shapes. Reject unimplemented ADS
-   modes explicitly. ADS remains in the full compatibility scope; implementing it is
+   bootstrap builder supporting both config-source shapes. Reject ADS modes
+   explicitly until they are built. ADS remains in the full compatibility scope; implementing it is
    required before claiming parity for those modes.
 
 2. **Resolved — #194.** Pin the external Envoy image by immutable digest. Review the
@@ -1957,7 +1957,7 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
 11. **Resolved #203:** [ADR-0015](../decisions/0015-proxy-and-ztunnel-contracts.md)
     selects Rust nftables transactions in the enrolled pod namespace, without
     an iptables exception. Enrollment and its privileged tests remain required;
-    reject enablement while unimplemented, never silently omit mTLS.
+    reject enablement until enrollment exists, never silently omit mTLS.
 12. **Resolved #204: FQDN shares spec03's complete local scope.** No separate
     FQDN numeric partition or allocator is introduced. Range and ownership are
     defined in spec03; preallocate selector identities before policy publication,
