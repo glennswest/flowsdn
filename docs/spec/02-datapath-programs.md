@@ -1746,12 +1746,11 @@ claim that the full packet path has been validated.
 11. **Resolved #63: debug events are an explicit build dimension.**
     Select `debug-events` only for diagnostic BPF objects; ordinary release
     objects exclude it and `test-hooks`. `cilium-dbg monitor --type debug`
-    requires a debug build. `ObjectBuild` validates the release selection and
-    names requested Cargo features. The present BPF crate has not implemented
-    debug event instrumentation; this plan does not create an empty feature
-    or claim those objects exist. Before delivery, wire the feature to actual
-    emit sites and verify event presence/absence, object size and verifier
-    acceptance on both architectures. Trace/drop compatibility is separate.
+    requires a debug build. flowsdn-bpf has neither feature today: no debug
+    emit sites and no diagnostic objects, so every object built is a release
+    object. Building them is gap #464 (wire the feature to actual emit sites,
+    verify event presence/absence, object size and verifier acceptance on
+    both architectures). Trace/drop compatibility is separate.
 
 ### Pinned helper audit (#254, 2026-09-22)
 

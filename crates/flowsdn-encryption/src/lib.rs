@@ -97,29 +97,3 @@ pub fn host_delivery(legacy: bool, endpoint_routes: bool) -> Result<HostDelivery
         HostDelivery::BpfHostRouting
     })
 }
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct ObjectBuild {
-    pub debug_events: bool,
-    pub test_hooks: bool,
-}
-impl ObjectBuild {
-    pub fn validate_release(self) -> Result<(), Error> {
-        if self.debug_events || self.test_hooks {
-            Err(Error(
-                "release objects must exclude debug-events and test-hooks",
-            ))
-        } else {
-            Ok(())
-        }
-    }
-    pub fn cargo_features(self) -> Vec<&'static str> {
-        let mut features = Vec::new();
-        if self.debug_events {
-            features.push("debug-events");
-        }
-        if self.test_hooks {
-            features.push("test-hooks");
-        }
-        features
-    }
-}

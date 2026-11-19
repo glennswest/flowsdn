@@ -170,21 +170,6 @@ fn modern_layering_host_routing_and_debug_build_decisions() {
     );
     assert!(host_delivery(true, true).is_err());
     assert!(host_delivery(true, false).is_err());
-    assert!(ObjectBuild::default().validate_release().is_ok());
-    let debug = ObjectBuild {
-        debug_events: true,
-        test_hooks: false,
-    };
-    assert_eq!(debug.cargo_features(), vec!["debug-events"]);
-    assert!(debug.validate_release().is_err());
-    assert!(
-        ObjectBuild {
-            test_hooks: true,
-            ..Default::default()
-        }
-        .validate_release()
-        .is_err()
-    );
 }
 #[test]
 fn legacy_map_reader_gate_requires_migration_synchronization() {
