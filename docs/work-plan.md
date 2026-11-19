@@ -6,11 +6,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### spec 02 stub marker — #432 (P0), 2026-11-19
 
-- [ ] Remove `flowsdn_encryption::ObjectBuild` (unused; names Cargo features
+- [x] Remove `flowsdn_encryption::ObjectBuild` (unused; names Cargo features
   `debug-events`/`test-hooks` that flowsdn-bpf does not have); spec 02 item 11
   states the #63 decision as design with the build as a new gap issue.
-- [ ] sc-build; marker grep finds nothing; close #432. Then the queued P0
-  stub issues #433–#445.
+- [x] Filed and proposed #464; sc-build at 59e8fff (exit 0); marker grep
+  finds nothing; #432 closed. Next: queued P0 stub issues #433–#445.
 
 ### runtime.md stub markers — #430 (P0), 2026-11-19
 
