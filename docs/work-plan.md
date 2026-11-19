@@ -8,7 +8,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] docs/releases/0.7.0.md: health and script paragraphs as history; filed
   and proposed #456 (health probe scheduling/history); adapters are #455.
-- [ ] sc-build after push; marker grep empty; close #429.
+- [x] sc-build at 382d8d4 (exit 0); marker grep finds nothing; #429 closed.
 
 ### 0.2.0 release-notes stub marker — #427 (P0), 2026-11-19
 
