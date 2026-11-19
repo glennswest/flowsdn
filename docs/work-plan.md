@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 21 stub marker — #445 (P0), 2026-11-19
+
+- [x] §2 exempt list: `HTTPRouteParentRefPort` stated as absent, gap #474
+  (matches `EXEMPT_FEATURES`). Line count unchanged.
+- [ ] sc-build; marker grep; close #445.
+
 ### spec 20 stub markers — #444 (P0), 2026-11-19
 
 - [x] F11 (fastetcd#129), double-write row (config validation message,

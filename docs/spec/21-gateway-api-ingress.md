@@ -267,7 +267,7 @@ The reference's exempt list, which flowsdn adopts as its starting point, is:
 
 | Exempt feature | Why |
 |---|---|
-| `HTTPRouteParentRefPort` | `parentRef.port` disambiguation not implemented |
+| `HTTPRouteParentRefPort` | absent: routes are not attached by `parentRef.port` (gap #474) |
 | `ListenerSet` | staged after the single-Gateway conflict/status implementation; stage 3 (#286) |
 | `MeshConsumerRoute` | GAMMA consumer routes (§3.8) |
 | `BackendTLSPolicySANValidation` | SAN validation not passed to Envoy |

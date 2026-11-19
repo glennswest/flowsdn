@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#445)
+- **docs:** Spec 21 (#445): the `HTTPRouteParentRefPort` exemption states that routes are not attached by `parentRef.port`, new gap #474. No "not implemented" marker remains; line count unchanged.
+
 ### 2026-11-19 (#444)
 - **docs:** Spec 20 (#444): F11 states that fastetcd ignores `hasleader` (fastetcd#129) and that flowsdn's client must set it without relying on it; the double-write identity modes are absent and rejected at startup with `expected one of crd, kvstore` (#274); the per-cluster conntrack/NAT maps are stated as absent. No "not implemented" markers remain.
 
