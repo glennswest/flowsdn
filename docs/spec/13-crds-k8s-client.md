@@ -60,8 +60,9 @@ migration projection of them (`flowsdn_k8s::crd`), written to
 (T-CRD-4's inputs) live at `crates/flowsdn-k8s/testdata/crs/<plural>/` with
 minimal, realistic and reject cases, validated offline by
 `flowsdn_k8s::schema` (structural checks plus the CEL subset the schemas use).
-The Rust types, T-CRD-3/4/5/7, registration (§3.2) and the readiness gate are
-not implemented yet; they are the per-group follow-ups of #325. §4.7 no longer
+The Rust types and T-CRD-3/4/5/7 of each group are open issues #331–#336
+(follow-ups of #325); registration (§3.2) and the readiness gate are gap
+#337. §4.7 no longer
 grants `flowsdnendpoints/status`: the endpoint CRD has no status subresource.
 
 ## 1. Scope

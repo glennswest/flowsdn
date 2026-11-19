@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#440)
+- **docs:** Spec 13 (#440) names the open issues for the CRD Rust types and tests (#331–#336) and the registration/readiness gap (#337) instead of "not implemented yet". Spec 12 and gap #471 corrected: the vendored CRD hash manifest exists (T-CRD-1); only its binding to `SCHEMA_VERSION` is missing.
+
 ### 2026-11-19 (#439)
 - **docs:** Spec 12 (#439): the CRD hash-manifest check is new gap #471 (needed before registration, #337); the schema label key is `io.flowsdn.k8s.crd.schema.version` throughout, as in the code and ADR-0017; operator metrics are stated as absent (#446, #420) instead of "not yet implemented".
 

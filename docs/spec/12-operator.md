@@ -325,8 +325,8 @@ upgraded in place (#157). The canonical target constant is
 `io.flowsdn.k8s.crd.schema.version`. Registration must consume that constant,
 not maintain an independent operator version. Before registration is shipped,
 CI MUST bind a manifest of the vendored YAML hashes to this version; changes to
-that manifest require a reviewed schema-version update. That hash check does
-not exist yet: gap #471, needed before #337 ships. Equal/newer schema
+that manifest require a reviewed schema-version update. T-CRD-1 checks the hashes
+(spec 13); tying them to the version is gap #471, before #337. Equal/newer schema
 protection below remains mandatory; keeping the label alone proves no live
 upgrade safety. Reassess the version line at 1.0 without silently forking it.
 

@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 13 stub marker — #440 (P0), 2026-11-19
+
+- [ ] §0 status: types/tests per group are #331–#336, registration and the
+  readiness gate #337. Also correct spec 12/#471: the hash manifest exists
+  (T-CRD-1); only its binding to SCHEMA_VERSION is the gap.
+- [ ] sc-build; marker grep finds nothing; close #440.
+
 ### spec 12 stub markers — #439 (P0), 2026-11-19
 
 - [x] Schema version paragraph: hash-manifest check is a new gap (before
