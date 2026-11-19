@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#428)
+- **docs:** docs/releases/0.4.0.md (#428) says which later release added what 0.4.0 lacked (initialization gates 0.5.0, gated pruning 0.7.0, script execution 0.9.0/0.10.0, the agent/datapath on main after 0.14.0) instead of "not implemented".
+
 ### 2026-11-19 (#426)
 - **docs:** docs/kernel-requirements.md's pod-attach row (#426) states tcx-only attach as the accepted 6.6 minimum (kernels without tcx are refused at startup; legacy clsact is cleanup-only) instead of "legacy clsact filter path not implemented".
 

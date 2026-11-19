@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### 0.4.0 release-notes stub marker — #428 (P0), 2026-11-19
+
+- [x] docs/releases/0.4.0.md says what that release lacked and where each part
+  arrived (0.5.0, 0.7.0, 0.9.0/0.10.0, main after 0.14.0). History, not a gap.
+- [ ] sc-build after push; marker grep empty; close #428.
+
 ### kernel-requirements stub marker — #426 (P0), 2026-11-19
 
 - [x] Pod-attach row: tcx-only is the accepted 6.6 minimum (legacy clsact
