@@ -6,9 +6,9 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### spec 09 stub markers — #436 (P0), 2026-11-19
 
-- [ ] GC verb: state #125's resolution (code 1 `plugin version does not allow
+- [x] GC verb: state #125's resolution (code 1 `plugin version does not allow
   GC`, no mutation, as the reference; runtime.rs) in §2 table, §3.7, §12.3.
-- [ ] sc-build; marker grep finds nothing; close #436.
+- [x] sc-build at 4af4db0 (exit 0); marker grep finds nothing; #436 closed.
 
 ### spec 07 stub markers — #434 (P0), 2026-11-19
 
