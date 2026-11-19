@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#429)
+- **docs:** docs/releases/0.7.0.md (#429) states what that release lacked as history: the agent now serves module health over HTTP, subprocesses/background/section retry came later; health probe scheduling and history persistence are new gap #456, the scripttest networking adapters #455.
+
 ### 2026-11-19 (#427)
 - **docs:** docs/releases/0.2.0.md (#427) says what that release lacked and that execution, variable expansion and file materialization came later and the agent/datapath/CNI on main after 0.14.0; the scripttest subsystem command adapters are now gap issue #455.
 
