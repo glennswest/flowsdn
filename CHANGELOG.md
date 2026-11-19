@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#434)
+- **docs:** Spec 07 (#434): the v1.19 per-IP ENI protocol is stated as out of scope (a deliberate deviation), and Azure `CreateInterface`/`ReleaseIPs` and Alibaba `AllocateStaticIP` as the errors those providers return by design, instead of "not implemented". Building the cloud providers remains #293/#446.
+
 ### 2026-11-19 (#435)
 - **docs:** Spec 08 (#435) and ADR-0012 #118: API routes flowsdn has not built are absent and answer 404 (as the agent already does), superseding the registered-501 plan under the owner's no-stubs rule; the prefilter routes are new gap #467, `GET /cgroup-dump-metadata` and `GET /map/{name}/events` new gap #468.
 

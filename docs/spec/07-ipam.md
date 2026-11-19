@@ -412,7 +412,7 @@ the multi-pool manager with the ENI pool accessor and signals demand through
 `spec.ipam.pools.requested`; the operator provisions IPs/prefixes/ENIs and
 releases by CIDR. The v1.19 per-IP path (agent CRD allocator over
 `spec.ipam.pool`, `status.ipam.used`, four-state `release-ips` handshake on
-ENI) is **not implemented on either side**. A flowsdn operator that observes a
+ENI) is **out of flowsdn's scope on either side**. A flowsdn operator that sees a
 node with non-empty `status.ipam.used` and no `requested` entry for `default`
 MUST NOT allocate for it and MUST write
 `status.ipam.operator-status.error = "agent uses the pre-1.20 ENI protocol; upgrade the agent"`.
@@ -613,7 +613,7 @@ Azure NICs are fixed at VM creation; the operator adds **IP configurations**
 to an existing NIC. The agent uses the CRD allocator (3.7) over `spec.ipam.pool`
 where `resource` is the NIC resource id, and participates in the release
 handshake (3.13) — although the reference operator never initiates it on
-Azure (`ReleaseIPs` unimplemented, excess release disabled), the agent side
+Azure (no Azure `ReleaseIPs`, excess release disabled), the agent side
 MUST be implemented because it is shared with Alibaba.
 
 Agent:
@@ -666,7 +666,7 @@ Operator:
 - Limits: fixed 256 addresses per NIC and per VM (`InterfaceAddressLimit`),
   minus one per NIC whose primary is not exposed. `GetMaximumAllocatableIPv4 =
   256`, `GetMinimumAllocatableIPv4 = 8`, no prefix delegation, `CreateInterface`
-  → error "not implemented".
+  → error (an Azure VM's NICs are fixed at creation, so none is ever added).
 - `ResyncInterfacesAndIPs`: `available = {ip → {resource: nic.id}}` for
   addresses in state `succeeded` only (others logged and skipped);
   `NodeCapacity = 256 − #NICs whose primary is hidden`;
@@ -695,7 +695,7 @@ Operator:
   model update or NIC update), return the resulting public address (reads it
   back via `PublicIPAddresses`). Legacy values in `assigned-static-ip` that do
   not parse as an IP MUST be re-resolved (3.15).
-- `PrepareIPRelease` returns an empty action; `ReleaseIPs` is "not implemented";
+- `PrepareIPRelease` returns an empty action; `ReleaseIPs` returns an error;
   the node manager is started with release disabled. The deprecated mirror
   fields `interfaces[].cidr` and `addresses[].subnet` MUST be read (fallback)
   and MUST be written as mirrors of the current fields (ADR-0012 #106).
@@ -757,7 +757,7 @@ Operator:
   primary-ip-address, private-ipsets[{private-ip-address, primary}], tags}`.
 - `GetMaximumAllocatableIPv4 = (L.Adapters − 1) × L.IPv4` (primary ENI is never
   used for pods); `GetMinimumAllocatableIPv4 = 8`; no prefix delegation; no
-  static IP ("not implemented").
+  static IP (`AllocateStaticIP` returns an error, as the reference's does).
 - `ResyncInterfacesAndIPs`: `available = {ip → {resource: eni id}}` over
   **secondary** ENIs' `private-ipsets` (including their primary address);
   `NodeCapacity = L.IPv4 × (L.Adapters − 1) − #primary addresses of secondary
