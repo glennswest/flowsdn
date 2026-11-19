@@ -10,7 +10,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
   #451 (node/group peers), #452 (policy verdict events), #453 (Maglev in
   socket LB), #454 (RFC 6052 gateway); `gap` label on #332. 0.3.0 history
   line now says when streams/initialization/pruning arrived. Docs only.
-- [ ] sc-build after push; marker grep empty; close #425.
+- [x] sc-build at 5f91ec6 (exit 0); marker grep finds nothing; #425 closed.
 
 ### README stub markers — #424 (P0), 2026-11-19
 
