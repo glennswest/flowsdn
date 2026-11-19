@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 01 stub marker — #431 (P0), 2026-11-19
+
+- [x] tcx/cgroup-link-only attach stated as the 6.6-minimum design (as #426);
+  not a gap.
+- [ ] sc-build after push; marker grep empty; close #431.
+
 ### 0.7.0 release-notes stub markers — #429 (P0), 2026-11-19
 
 - [x] docs/releases/0.7.0.md: health and script paragraphs as history; filed

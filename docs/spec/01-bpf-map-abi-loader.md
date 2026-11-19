@@ -1259,7 +1259,8 @@ on both architectures, as fixed by `docs/kernel-requirements.md` (#54).
 Required capabilities are checked at startup, including tcx and cgroup links;
 version strings are not a substitute for feature checks. Features above the
 minimum, including netkit, retain their explicit capability requirements.
-Legacy clsact attachment and older-kernel cgroup fallbacks are not implemented.
+Attachment is tcx and cgroup links only: a kernel without them is refused at
+startup, so there is no legacy clsact or older-kernel cgroup path (by design).
 The cgroup `EPERM` takeover path and driver-specific XDP fallbacks remain
 because they address existing attachments/drivers on supported kernels.
 These are implementation and validation targets, not a claim that a working

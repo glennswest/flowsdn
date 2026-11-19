@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#431)
+- **docs:** Spec 01 (#431) states tcx/cgroup-link-only attachment as the design for the 6.6 minimum (a kernel without them is refused at startup) instead of "legacy clsact … not implemented".
+
 ### 2026-11-19 (#429)
 - **docs:** docs/releases/0.7.0.md (#429) states what that release lacked as history: the agent now serves module health over HTTP, subprocesses/background/section retry came later; health probe scheduling and history persistence are new gap #456, the scripttest networking adapters #455.
 
