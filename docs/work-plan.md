@@ -4,6 +4,22 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Network-level metrics — #420 (P2), 2026-11-18
+
+stormcos#64 scrapes every level with the node's ironprom; a flowsdn node serves
+nothing for the network level.
+- [ ] Agent `metrics-listen` (loopback `IP:port`, manifests `127.0.0.1:9962` as
+  cilium's): `GET /metrics`, Prometheus text 0.0.4, `flowsdn_*` names, built
+  from live state on each scrape: controllers failing (per part), unreachable
+  nodes (direct routes not installed), drops by reason and policy verdicts
+  (from `flowsdn_policy_verdicts`), endpoint state, identities, BPF map
+  pressure of the policy maps, uplink carrier, build info.
+- [ ] Unit tests (exposition format, values from fixtures); docs (runtime,
+  agent-api, deploy README), changelog; manifests.
+- Not here: drop reasons other than policy (the datapath counts nothing else;
+  follow-up issue), operator metrics (no operator executable yet, #337).
+- [ ] sc-build; stage; tell stormcos the port (job + check-metrics rows).
+
 ### No stubs — #418, 2026-11-18
 
 Owner: "lets get rid of stubs please" … "stubs are lies".
