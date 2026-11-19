@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 02 stub marker — #432 (P0), 2026-11-19
+
+- [ ] Remove `flowsdn_encryption::ObjectBuild` (unused; names Cargo features
+  `debug-events`/`test-hooks` that flowsdn-bpf does not have); spec 02 item 11
+  states the #63 decision as design with the build as a new gap issue.
+- [ ] sc-build; marker grep finds nothing; close #432. Then the queued P0
+  stub issues #433–#445.
+
 ### runtime.md stub markers — #430 (P0), 2026-11-19
 
 - [x] docs/runtime.md socket-LB and Pod-policy limit lists: each limit names
