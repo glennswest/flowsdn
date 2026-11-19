@@ -153,8 +153,11 @@ remove it from scope.
 
 **Evidence:** Spec 08 §2 and §4.3 already require explicit 501 responses.
 
-**Remaining:** Route matrix tests must cover implemented, recognized-unimplemented,
-unknown, and method-mismatch requests; initial runtime coverage is incomplete.
+**Superseded (2026-11-19, #435):** the owner's no-stubs rule (stormcentral#1455,
+"stubs are lies") replaces this decision. A route flowsdn has not built is absent
+and answers 404 like any unknown path; each is a `gap` issue (the prefilter
+routes #467, `cgroup-dump-metadata` and `map/{name}/events` #468). The agent
+never registered the 501 routes this decision called for.
 
 ## #119: Adaptive API limiting
 

@@ -60,8 +60,8 @@ Out of scope, with owner:
 - Proxy redirect creation and Envoy xDS — spec 11.
 - Hubble, monitor, `cilium-dbg` rewrite, bugtool.
 - The hive shell (`shell.sock`), StateDB dump, `dynamiclifecycle`,
-  `prefilter` semantics (route kept, returns 501 until an XDP prefilter spec
-  exists), `cgroup-dump-metadata` and `map/{name}/events` (deferred, see 2.2).
+  the XDP prefilter and its routes (absent, gap #467), `cgroup-dump-metadata`
+  and `map/{name}/events` (absent, gap #468; see 2.2).
 
 ## 2. Compatibility contract
 
@@ -98,13 +98,13 @@ Out of scope, with owner:
   `Method + PascalPath` per §5.9; the 47 tokens are listed in §4.4/4.7.
 - Rate-limited operations return `429` with `Retry-After` from the limiter.
 - Access-denied operations return `403` with body `"Forbidden"`.
-- Deferred operations MUST still exist in the router and return `501` with
-  `models.Error` text `"not implemented"`: `GET /cgroup-dump-metadata`,
-  `GET /map/{name}/events`, `PATCH /prefilter`, `DELETE /prefilter`
-  (`GET /prefilter` returns an empty `Prefilter{spec{deny:[],revision:0}}`).
-  Reason: a missing route yields a go-swagger `404 path not found`, which
-  `cilium-dbg` prints as a confusing "unknown API" error; `501` is what the
-  reference itself returns for BGP when the control plane is disabled.
+- Operations flowsdn has not built are absent: not in the router, so the
+  agent answers `404` (`no such API route`) as for any unknown path (owner,
+  stormcentral#1455, superseding the registered-`501` plan of #118). Absent:
+  `GET`/`PATCH`/`DELETE /prefilter` (gap #467), `GET /cgroup-dump-metadata`
+  and `GET /map/{name}/events` (gap #468); `cilium-dbg` reports them as an
+  unknown API. `501` stays only where the reference answers it for a real
+  state (BGP routes with the BGP control plane disabled).
 
 ### 2.3 File formats
 
@@ -1060,14 +1060,14 @@ unless the code is listed bare (empty body).
 | 25 | `GET /policy/subject-selectors` | `GetPolicySubjectSelectors` | — | → 200 `SelectorCache` | — | dbg policy selectors --subject | — |
 | 26 | `GET /lrp` | `GetLRP` | — | → 200 `[]LRPSpec` | — | dbg lrp list — spec 05 | — |
 | 27 | `GET /service` | `GetService` | — | → 200 `[]Service` | — | dbg service list — spec 05 | — |
-| 28 | `GET /prefilter` | `GetPrefilter` | — | → 200 `Prefilter` | 500 `Error` | dbg prefilter list (deferred: empty spec) | — |
-| 29 | `PATCH /prefilter` | `PatchPrefilter` | body `PrefilterSpec` | → 200 `Prefilter` | 403, 461 `Error` (invalid CIDR), 500 `Error`; flowsdn 501 | dbg prefilter update (deferred) | — |
-| 30 | `DELETE /prefilter` | `DeletePrefilter` | body `PrefilterSpec` | → 200 `Prefilter` | 403, 461 `Error`, 500 `Error`; flowsdn 501 | dbg prefilter delete (deferred) | — |
+| 28 | `GET /prefilter` | `GetPrefilter` | — | → 200 `Prefilter` | 500 `Error` | dbg prefilter list (flowsdn: absent, 404, gap #467) | — |
+| 29 | `PATCH /prefilter` | `PatchPrefilter` | body `PrefilterSpec` | → 200 `Prefilter` | 403, 461 `Error` (invalid CIDR), 500 `Error`; flowsdn absent (404, gap #467) | dbg prefilter update | — |
+| 30 | `DELETE /prefilter` | `DeletePrefilter` | body `PrefilterSpec` | → 200 `Prefilter` | 403, 461 `Error`, 500 `Error`; flowsdn absent (404, gap #467) | dbg prefilter delete | — |
 | 31 | `GET /debuginfo` | `GetDebuginfo` | — | → 200 `DebugInfo` | 500 `Error` | dbg debuginfo, dbg version, bugtool | — |
-| 32 | `GET /cgroup-dump-metadata` | `GetCgroupDumpMetadata` | — | → 200 `CgroupDumpMetadata` | 500 `Error`; flowsdn 501 | dbg cgroups list (deferred) | — |
+| 32 | `GET /cgroup-dump-metadata` | `GetCgroupDumpMetadata` | — | → 200 `CgroupDumpMetadata` | 500 `Error`; flowsdn absent (404, gap #468) | dbg cgroups list | — |
 | 33 | `GET /map` | `GetMap` | — | → 200 `BPFMapList` | — | dbg map list (userspace cache view, spec 01 §3.11) | — |
 | 34 | `GET /map/{name}` | `GetMapName` | path `name` | → 200 `BPFMap` | 404 | dbg map get | — |
-| 35 | `GET /map/{name}/events` | `GetMapNameEvents` | path `name`; query `follow` bool | → 200 JSON-lines stream | 404; flowsdn 501 | dbg map events (deferred) | — |
+| 35 | `GET /map/{name}/events` | `GetMapNameEvents` | path `name`; query `follow` bool | → 200 JSON-lines stream | 404; flowsdn absent (404, gap #468) | dbg map events | — |
 | 36 | `GET /fqdn/cache` | `GetFqdnCache` | query `matchpattern`, `cidr`, `source` | → 200 `[]DNSLookup` | 400 `Error`, 404 | dbg fqdn cache list — spec 11 | — |
 | 37 | `DELETE /fqdn/cache` | `DeleteFqdnCache` | query `matchpattern` | → 200 | 400 `Error`, 403 | dbg fqdn cache clean — spec 11 | — |
 | 38 | `GET /fqdn/cache/{id}` | `GetFqdnCacheID` | path `id` (endpoint); query as 36 | → 200 `[]DNSLookup` | 400 `Error`, 404 | dbg fqdn cache list -e — spec 11 | — |
@@ -1689,10 +1689,12 @@ API server + models + limiter ~5k, healthcheck ~2k, status ~0.8k, tests ~5k.
    route required by spec 00 §8.4; other tables return 404. Native
    `/health/modules` remains available. Upstream debug CLI end-to-end
    acceptance remains pending; no generic dump API is enabled.
-6. **Unimplemented API routes — resolved #118.** Register recognized but
-   not-yet-implemented method/path pairs and return 501 with the standard Error body.
-   Unknown paths remain 404; invalid methods are handled separately. A 501 explicitly
-   reports an unfinished feature and does not remove it from scope.
+6. **API routes not built — #118, superseded.** #118 chose to register
+   recognized but unbuilt method/path pairs and answer 501. The owner's
+   no-stubs rule (stormcentral#1455, "stubs are lies") replaces it: a route
+   flowsdn has not built is absent and answers 404 like any unknown path, and
+   each such route is a `gap` issue (#467, #468). Invalid methods on a built
+   path are handled separately. The router never registered those 501s.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
 7. **Adaptive API limiting — resolved #119.** Implement the adaptive auto-adjust
@@ -1751,8 +1753,8 @@ This closes a restart race between GET config and IPAM allocation.
   BPF commands require the compatible map schemas and permissions. Match field
   values, errors and omitted/null distinctions; JSON object whitespace/order is
   not a compatibility promise. P0 status includes module health via `/statedb/query`
-  (#46). Unsupported recognized routes return 501 until implemented; they must
-  not fabricate empty successful state. `GET /policy` returns 404 only for an
+  (#46). Routes not built are absent (404; §2.2), never an empty successful
+  state. `GET /policy` returns 404 only for an
   initialized empty policy repository, never to conceal a missing subsystem.
   These are acceptance priorities, not a claim that the initial daemon serves
   all routes. Upstream CLI integration checks remain #291/#294.
