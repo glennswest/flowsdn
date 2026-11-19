@@ -9,7 +9,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] F11 (fastetcd#129), double-write row (config validation message,
   #274), §10 per-cluster CT/NAT maps absent. Line counts unchanged (catalogue
   cites spec 20:1544–1586).
-- [ ] sc-build; marker grep; close #444.
+- [x] sc-build at 45db4ee (exit 0); marker grep finds nothing; #444 closed.
 
 ### spec 18 stub marker — #443 (P0), 2026-11-19
 
