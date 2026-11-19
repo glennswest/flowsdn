@@ -651,9 +651,8 @@ IPv4 `jhash_3words(client, dport << 16 | sport, proto, seed4)`, IPv6 the
 two-round mix of `hash_from_tuple_v6`; sport 0 with session affinity.
 Tables are written after backends and before masters, deleted after stale
 masters; a table is never written in place (a new inner map is swapped in).
-The socket LB picks at random (Maglev there: gap #453). ClusterIP has no uplink
-copy: external ClusterIP access (`bpf-lb-external-clusterip`) and its Maglev
-are gap #465.
+Socket LB Maglev is gap #453; ClusterIP has no uplink copy (external ClusterIP
+access, `bpf-lb-external-clusterip`, and its Maglev are gap #465).
 
 ## 4. Data model
 
