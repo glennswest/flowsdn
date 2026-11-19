@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#427)
+- **docs:** docs/releases/0.2.0.md (#427) says what that release lacked and that execution, variable expansion and file materialization came later and the agent/datapath/CNI on main after 0.14.0; the scripttest subsystem command adapters are now gap issue #455.
+
 ### 2026-11-19 (#428)
 - **docs:** docs/releases/0.4.0.md (#428) says which later release added what 0.4.0 lacked (initialization gates 0.5.0, gated pruning 0.7.0, script execution 0.9.0/0.10.0, the agent/datapath on main after 0.14.0) instead of "not implemented".
 

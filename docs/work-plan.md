@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### 0.2.0 release-notes stub marker — #427 (P0), 2026-11-19
+
+- [x] docs/releases/0.2.0.md says what that release lacked and what arrived
+  later; filed and proposed #455 (scripttest subsystem command adapters).
+- [ ] sc-build after push; marker grep empty; close #427.
+
 ### 0.4.0 release-notes stub marker — #428 (P0), 2026-11-19
 
 - [x] docs/releases/0.4.0.md says what that release lacked and where each part
