@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#439)
+- **docs:** Spec 12 (#439): the CRD hash-manifest check is new gap #471 (needed before registration, #337); the schema label key is `io.flowsdn.k8s.crd.schema.version` throughout, as in the code and ADR-0017; operator metrics are stated as absent (#446, #420) instead of "not yet implemented".
+
 ### 2026-11-19 (#438)
 - **docs:** Spec 11 (#438): the `hubble-drop-events*` row says the PacketDrop emitter and its settings are absent (new gap #470) instead of "accepted and ignored … not implemented"; the ring note and decision 12.3 say what does not exist yet (#293) without stub markers.
 

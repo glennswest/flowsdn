@@ -98,7 +98,7 @@ management, gops, hive shell (`shell.sock`), `--cmdref`, the five-binary split
 | Interface | MUST match | Consumer |
 |---|---|---|
 | Lease name `cilium-operator-resource-lock`, `coordination.k8s.io/v1`, in the operator namespace | name, namespace resolution, holder-identity shape | a mixed-version rollout where a Cilium operator and a flowsdn operator briefly coexist; both must contend for the *same* lock |
-| CRD schema-version label `io.cilium.k8s.crd.schema.version`, value on the `1.33.x` line | label key, semver value, "update only if strictly older" rule | in-place upgrade of an existing Cilium cluster; a Cilium operator that races with flowsdn must not downgrade the schema |
+| CRD schema-version label `io.flowsdn.k8s.crd.schema.version`, value on the `1.33.x` line | label key, semver value, "update only if strictly older" rule | in-place upgrade of an existing Cilium cluster; a Cilium operator that races with flowsdn must not downgrade the schema |
 | CRD names, group `cilium.io`, versions, scope, short names, categories, printer columns, OpenAPI schemas | byte-identical to the vendored YAML (§4.2) | agents (Cilium and flowsdn), `kubectl`, users' manifests |
 | CRD `Established` gate | operator MUST NOT report ready before every CRD it creates is `Established` | agent CRD wait (`crd-wait-timeout`, spec `00` fence `k8s-crds`) |
 | `CiliumEndpointSlice` object shape: cluster-scoped, `namespace` string, `endpoints[]` of `CoreCiliumEndpoint` with JSON keys `name`, `id`, `pod-uid`, `networking`, `encryption`, `named-ports`, `service-account` | byte-identical JSON | agent CES watcher (spec `08-endpoint-agent-api`), `cilium-dbg` |
@@ -309,7 +309,7 @@ enabled externally managed dependencies; agent wait sets remain conditional.
 the binary. The object written is assembled as:
 
 - `metadata.name` = `<plural>.cilium.io`
-- `metadata.labels` = exactly `{io.cilium.k8s.crd.schema.version: <schema version>}`
+- `metadata.labels` = exactly `{io.flowsdn.k8s.crd.schema.version: <schema version>}`
   — the label map is **replaced**, not merged, on update
 - `spec.group` = `cilium.io`
 - `spec.names` = `{kind, plural, singular, shortNames, categories}` from the
@@ -322,11 +322,11 @@ the binary. The object written is assembled as:
 reference's `1.33.x` line so that an existing Cilium v1.20.1 cluster can be
 upgraded in place (#157). The canonical target constant is
 `flowsdn_k8s::SCHEMA_VERSION = "1.33.11"`, with label key
-`io.cilium.k8s.crd.schema.version`. Registration must consume that constant,
+`io.flowsdn.k8s.crd.schema.version`. Registration must consume that constant,
 not maintain an independent operator version. Before registration is shipped,
 CI MUST bind a manifest of the vendored YAML hashes to this version; changes to
-that manifest require a reviewed schema-version update. The corpus/hash CI
-check is not implemented by the operator planning library. Equal/newer schema
+that manifest require a reviewed schema-version update. That hash check does
+not exist yet: gap #471, needed before #337 ships. Equal/newer schema
 protection below remains mandatory; keeping the label alone proves no live
 upgrade safety. Reassess the version line at 1.0 without silently forking it.
 
@@ -338,7 +338,7 @@ upgrade safety. Reassess the version line at 1.0 without silently forking it.
    - Any other error → fail.
 2. Decide `needs_update` against the *installed* object:
    - installed `spec.versions[0].schema` is absent → **yes**
-   - label `io.cilium.k8s.crd.schema.version` absent → **yes**
+   - label `io.flowsdn.k8s.crd.schema.version` absent → **yes**
    - label value does not parse as semver → **yes**
    - parsed value `< binary schema version` → **yes**
    - otherwise → **no**
@@ -1067,7 +1067,7 @@ full OpenAPI schemas are the vendored YAML and are catalogued per-field in
 | CiliumGatewayClassConfig | `ciliumgatewayclassconfigs` | Namespaced | **v2alpha1** | status | `enable-gateway-api` |
 | ServiceExport / ServiceImport | `serviceexports` / `serviceimports` | Namespaced | `multicluster.x-k8s.io/v1beta1` | status | `clustermesh-enable-mcs-api` ∧ `clustermesh-mcs-api-install-crds` |
 
-Every one carries `metadata.labels["io.cilium.k8s.crd.schema.version"]`. No
+Every one carries `metadata.labels["io.flowsdn.k8s.crd.schema.version"]`. No
 CRD has a conversion webhook; multi-version CRDs use strategy `None` with
 byte-identical schemas across versions.
 
@@ -1625,7 +1625,7 @@ depend on them.
 | `cilium_operator_feature_adv_connect_and_lb_l7_aware_traffic_management_enabled` | gauge | – | |
 | `cilium_operator_feature_adv_connect_and_lb_node_ipam_enabled` | gauge | – | |
 | `cilium_operator_feature_controlplane_kubernetes_version` | gauge | `version` | emitted unless suppressed by `CILIUM_FEATURE_METRICS_WITHOUT_ENV_VERSION` |
-| `cilium_operator_process_*`, `cilium_operator_go_*` | — | — | **DEVIATION**: Go runtime collectors have no Rust equivalent. flowsdn exports `process_*` (RSS, CPU, FDs, start time) and omits `go_*`. Dashboards keying on `go_goroutines` will show no data; see [dashboard delta](../compatibility/metrics.md) (#163). Collectors are not yet implemented |
+| `cilium_operator_process_*`, `cilium_operator_go_*` | — | — | **DEVIATION**: Go runtime collectors have no Rust equivalent. flowsdn exports `process_*` (RSS, CPU, FDs, start time) and omits `go_*`. Dashboards keying on `go_goroutines` will show no data; see [dashboard delta](../compatibility/metrics.md) (#163). No operator metrics exist yet: no operator executable (#446), no `/metrics` (#420) |
 | `cilium_operator_workqueue_depth` | gauge | `name` | per queue |
 | `cilium_operator_workqueue_adds_total` | counter | `name` | |
 | `cilium_operator_workqueue_queue_duration_seconds` | histogram | `name` | |
