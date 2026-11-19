@@ -6,12 +6,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### spec 07 stub markers — #434 (P0), 2026-11-19
 
-- [ ] Reword the four markers (and §3.10's "unimplemented"): v1.19 ENI is out
+- [x] Reword the four markers (and §3.10's "unimplemented"): v1.19 ENI is out
   of scope (deviation, not a gap); Azure CreateInterface/ReleaseIPs and
   Alibaba AllocateStaticIP are specified as errors the provider returns.
   Cloud providers themselves are #293/#446. Keep line counts (catalogue
   cites 07-ipam.md:1273).
-- [ ] sc-build; marker grep finds nothing; close #434.
+- [x] sc-build at 33411fb (exit 0); marker grep finds nothing; #434 closed.
 
 ### spec 08 stub marker — #435 (P0), 2026-11-19
 
