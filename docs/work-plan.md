@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### runtime.md stub markers — #430 (P0), 2026-11-19
+
+- [ ] docs/runtime.md socket-LB and Pod-policy limit lists: each limit names
+  its gap issue (existing #336/#392/#447/#448/#450/#452/#453; new ones filed
+  and proposed for SCTP, non-first IPv4 fragments, topology hints, BPF
+  masquerade, Pod audit mode, flows open before a policy, related ICMP errors).
+- [ ] sc-build; marker grep finds nothing; close #430.
+
 ### spec 01 stub marker — #431 (P0), 2026-11-19
 
 - [x] tcx/cgroup-link-only attach stated as the 6.6-minimum design (as #426);
