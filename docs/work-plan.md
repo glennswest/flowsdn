@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 09 stub markers — #436 (P0), 2026-11-19
+
+- [ ] GC verb: state #125's resolution (code 1 `plugin version does not allow
+  GC`, no mutation, as the reference; runtime.rs) in §2 table, §3.7, §12.3.
+- [ ] sc-build; marker grep finds nothing; close #436.
+
 ### spec 07 stub markers — #434 (P0), 2026-11-19
 
 - [x] Reword the four markers (and §3.10's "unimplemented"): v1.19 ENI is out
