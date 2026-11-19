@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#438)
+- **docs:** Spec 11 (#438): the `hubble-drop-events*` row says the PacketDrop emitter and its settings are absent (new gap #470) instead of "accepted and ignored … not implemented"; the ring note and decision 12.3 say what does not exist yet (#293) without stub markers.
+
 ### 2026-11-19 (#437)
 - **docs:** Spec 10 (#437): the managed-neighbor deviation states flowsdn has no `NTF_USE` fallback (#132) and that neighbor management with its startup probe is new gap #469; MKE cgroup v1 `net_cls` marking is out of scope (cgroup v2 only); no "not implemented" markers remain.
 

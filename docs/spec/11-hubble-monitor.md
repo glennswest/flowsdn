@@ -2545,7 +2545,7 @@ flow (§3.19.5), with the timestamp excluded.
 | Key | Reason |
 |---|---|
 | `hubble-prefer-ipv6` | deprecated upstream in favour of the global `prefer-ipv6`; flowsdn accepts it and warns whenever explicitly supplied; explicit global `prefer-ipv6` wins even when false, otherwise this legacy value is used, otherwise false (§12.10) |
-| `hubble-drop-events`, `hubble-drop-events-interval`, `hubble-drop-events-reasons`, `hubble-drop-events-extended`, `hubble-drop-events-rate-limit` | the Kubernetes `PacketDrop` event emitter is **deferred** (§1). Accepted and ignored so an existing ConfigMap loads; setting `hubble-drop-events=true` MUST log a warning that the feature is not implemented. Defaults are `false`, `2m`, `[auth_required, policy_denied]`, `false`, `1`. |
+| `hubble-drop-events`, `hubble-drop-events-interval`, `hubble-drop-events-reasons`, `hubble-drop-events-extended`, `hubble-drop-events-rate-limit` | the Kubernetes `PacketDrop` event emitter: absent in flowsdn (§1), the agent has no such settings; gap #470. Reference defaults are `false`, `2m`, `[auth_required, policy_denied]`, `false`, `1`. |
 | `FlowFilter.experimental.cel_expression` | CEL is deferred; a request carrying it MUST be rejected with `InvalidArgument` naming the unsupported field rather than silently ignored (a silently-ignored filter returns *more* data than asked for, which is a disclosure risk) |
 
 ### 6.6 Relay flags
@@ -3255,7 +3255,7 @@ position. It retains at most capacity+1 event references; readers may retain
 their own `Arc`s. Payload sizes must be bounded by the ingestion adapter.
 Production cycle equivalence, async wakeup races, cancellation, protobufs,
 perf ingestion, enrichment, metrics, exporters and the gRPC/monitor servers
-remain unimplemented. No runtime throughput or loss benchmark is claimed.
+do not exist yet (Hubble observer, #293). No throughput or loss benchmark is claimed.
 
 ## 12. Decision register (resolved and open)
 
@@ -3273,9 +3273,9 @@ change requires measured latency and loss results before adoption.
 
 **12.3 Decode-task scaling (#143 remains open).** Initial implementation must
 use one decode task with snapshot enrichment and one ring writer. Sharding, if
-needed, must sequence results before that writer. The production task and CI
-throughput/latency benchmark gate are not implemented; synchronous ring unit
-tests do not satisfy this acceptance.
+needed, must sequence results before that writer. Neither the production task
+nor the throughput/latency benchmark gate exists yet (#293); synchronous ring
+unit tests do not satisfy this acceptance.
 
 **12.4. Flow Summary compatibility — resolved #144.** Populate deprecated `Summary` for
 both L3/L4 and L7 flows using the existing layer-derived strings. Lazy generation or a
