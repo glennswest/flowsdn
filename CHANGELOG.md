@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#433)
+- **docs:** Spec 05 §3's Maglev amendment (#433) states that the socket LB picks at random (gap #453) and that ClusterIP has no uplink copy, external ClusterIP access with its Maglev being new gap #465, instead of "not implemented".
+
 ### 2026-11-19 (#432)
 - **refactor:** Removed the unused `flowsdn_encryption::ObjectBuild` (#432): it named Cargo features `debug-events`/`test-hooks` that flowsdn-bpf does not have.
 - **docs:** Spec 02 decision 11 (#432) states that flowsdn-bpf has no debug-events/test-hooks build today; building them is new gap #464.
