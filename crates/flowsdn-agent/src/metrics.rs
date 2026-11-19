@@ -68,7 +68,7 @@ impl Facts {
                     .collect(),
                 identities: view
                     .identity
-                    .then(|| (view.identities.len(), view.identities_waiting)),
+                    .then_some((view.identities.len(), view.identities_waiting)),
                 frontends: view.frontends.len(),
                 programmed: view.service_ids.len(),
                 uplinks: view
@@ -121,7 +121,7 @@ fn escape(text: &str) -> String {
         .replace('"', "\\\"")
         .replace('\n', "\\n")
 }
-fn direction(key: &PolicyVerdictKey) -> &'static str {
+fn direction_of(key: &PolicyVerdictKey) -> &'static str {
     if key.egress != 0 { "egress" } else { "ingress" }
 }
 
@@ -171,7 +171,7 @@ pub(super) fn render(facts: &Facts) -> String {
         "1 for each controller part whose last reconcile failed (its error is in /v1/healthz).",
     );
     for part in facts.failing.keys() {
-        f.sample("flowsdn_controller_failing", &[("controller", part)], 1);
+        f.sample("flowsdn_controller_failing", &[("controller", part.as_str())], 1);
     }
 
     let mut failing_sources = Vec::new();
@@ -192,7 +192,7 @@ pub(super) fn render(facts: &Facts) -> String {
                     verdict::AUDIT => "audit",
                     _ => continue,
                 };
-                let sum = sums.entry((direction(key), kind)).or_default();
+                let sum = sums.entry((direction_of(key), kind)).or_default();
                 sum.0 = sum.0.saturating_add(value.packets);
                 sum.1 = sum.1.saturating_add(value.bytes);
             }
@@ -205,7 +205,7 @@ pub(super) fn render(facts: &Facts) -> String {
             for ((direction, kind), (packets, _)) in &sums {
                 f.sample(
                     "flowsdn_policy_verdict_total",
-                    &[("direction", direction), ("action", kind)],
+                    &[("direction", *direction), ("action", *kind)],
                     packets,
                 );
             }
@@ -219,7 +219,7 @@ pub(super) fn render(facts: &Facts) -> String {
                 if *kind == "denied" {
                     f.sample(
                         "flowsdn_drop_count_total",
-                        &[("reason", "policy_denied"), ("direction", direction)],
+                        &[("reason", "policy_denied"), ("direction", *direction)],
                         packets,
                     );
                 }
@@ -234,7 +234,7 @@ pub(super) fn render(facts: &Facts) -> String {
                 if *kind == "denied" {
                     f.sample(
                         "flowsdn_drop_bytes_total",
-                        &[("reason", "policy_denied"), ("direction", direction)],
+                        &[("reason", "policy_denied"), ("direction", *direction)],
                         bytes,
                     );
                 }
@@ -256,7 +256,7 @@ pub(super) fn render(facts: &Facts) -> String {
                 } else {
                     *entries as f64 / f64::from(*max)
                 };
-                f.sample("flowsdn_bpf_map_pressure", &[("map_name", name)], ratio);
+                f.sample("flowsdn_bpf_map_pressure", &[("map_name", *name)], ratio);
             }
         }
         Err(_) => failing_sources.push("bpf-map-pressure"),
@@ -318,7 +318,7 @@ pub(super) fn render(facts: &Facts) -> String {
             "1 while an uplink port has carrier.",
         );
         for (name, up) in &k.uplinks {
-            f.sample("flowsdn_uplink_up", &[("uplink", name)], u8::from(*up));
+            f.sample("flowsdn_uplink_up", &[("uplink", name.as_str())], u8::from(*up));
         }
     }
 
