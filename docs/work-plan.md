@@ -6,9 +6,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### spec 05 stub marker — #433 (P0), 2026-11-19
 
-- [ ] §3 Maglev amendment: socket-LB Maglev is gap #453; external ClusterIP
+- [x] §3 Maglev amendment: socket-LB Maglev is gap #453; external ClusterIP
   access (with its Maglev) filed as a new gap; spec names both.
-- [ ] sc-build; marker grep finds nothing; close #433.
+- [x] Filed and proposed #465; first edit added a line and broke the
+  catalogue provenance test (#466, the #358 line-number fragility); kept
+  the original line count. sc-build at 151b0b9 (exit 0); #433 closed.
 
 ### spec 02 stub marker — #432 (P0), 2026-11-19
 
