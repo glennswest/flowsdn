@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 08 stub marker — #435 (P0), 2026-11-19
+
+- [ ] Spec 08 / ADR-0012 #118: routes not built are absent (404, as the agent
+  already answers), not registered 501s (owner, stormcentral#1455); file gaps
+  for the prefilter routes and for cgroup-dump-metadata / map events. Keep
+  line counts above spec 08:1338 (catalogue provenance).
+- [ ] sc-build; marker grep finds nothing; close #435.
+
 ### spec 05 stub marker — #433 (P0), 2026-11-19
 
 - [x] §3 Maglev amendment: socket-LB Maglev is gap #453; external ClusterIP
