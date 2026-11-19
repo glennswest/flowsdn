@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 10 stub markers — #437 (P0), 2026-11-19
+
+- [ ] §3.4 neighbor management: no code; file gap (managed neighbors + probe),
+  state the no-fallback deviation (#132) plainly. §3.7 item 12 MKE net_cls:
+  out of scope (cgroup v2 only). Batch 6 "unimplemented" wording. Keep line
+  counts above spec 10:1382 (catalogue provenance).
+- [ ] sc-build; marker grep finds nothing; close #437.
+
 ### spec 09 stub markers — #436 (P0), 2026-11-19
 
 - [x] GC verb: state #125's resolution (code 1 `plugin version does not allow
