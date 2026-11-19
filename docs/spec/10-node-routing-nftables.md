@@ -659,10 +659,10 @@ throwaway netns, add a neighbor with `NTF_EXT_MANAGED`, read it back) and
 falls back to `NTF_EXT_LEARNED|NTF_USE` with an initial `NUD_STALE` insert
 plus a userspace refresher that re-arms entries reported `NUD_STALE` by the
 neighbor subscription. flowsdn's floor is 6.6 (managed neighbors are 5.16+),
-so the fallback is **not implemented**; the probe remains as part of the
-startup check (kernel-requirements §4.7) and its failure is fatal when neighbor
-management is enabled (ADR-0001: refuse, don't adapt). The `NTF_USE` mode is
-documented here only so a future decision can restore it.
+so flowsdn has **no fallback** (#132); the probe belongs to the startup
+check (kernel-requirements §4.7) and its failure is fatal when neighbor
+management is on (ADR-0001: refuse, don't adapt). flowsdn has no neighbor
+management yet: this section, its probe included, is gap #469.
 
 ### 3.5 MTU
 
@@ -866,7 +866,7 @@ Validation and derived settings at startup, in order:
     work for requests sent to other than <dev> device. Run 'sysctl -w
     net.ipv4.conf.<dev>.rp_filter=2' (or set to '0') on each node to fix"`.
 11. `bpf-lb-sock-hostns-only` without socket LB → warning only.
-12. MKE cgroup v1 `net_cls` marking — **not implemented** (deferred, inventory).
+12. MKE cgroup v1 `net_cls` marking — out of scope: flowsdn needs cgroup v2 only.
 
 **BPF host routing prerequisites** (for spec 02 `fib_redirect`):
 `bpf_redirect_neigh` and `bpf_redirect_peer` (5.10; startup check), KPR on,
@@ -2037,8 +2037,8 @@ without root by encoding then decoding.
 complete host-pipeline evidence supports removing it. This supersedes the
 proposed feature gate and the claim that an otherwise disabled residual installs
 nothing: N1 now expects the host mark baseline, and N11 expects the rule with
-host firewall both enabled and disabled. The gate would depend on unimplemented
-pipeline behavior. `flowsdn-packaging::host_identity_mark` tests preserved
+host firewall both enabled and disabled. The gate would depend on host-pipeline
+behavior flowsdn does not have. `flowsdn-packaging::host_identity_mark` tests preserved
 special magic values and unrelated bits; this is a rule contract, not a live
 nftables installation.
 

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#437)
+- **docs:** Spec 10 (#437): the managed-neighbor deviation states flowsdn has no `NTF_USE` fallback (#132) and that neighbor management with its startup probe is new gap #469; MKE cgroup v1 `net_cls` marking is out of scope (cgroup v2 only); no "not implemented" markers remain.
+
 ### 2026-11-19 (#436)
 - **docs:** Spec 09 (#436) states the CNI GC verb as decided in #125: the plugin answers error code 1 (`plugin version does not allow GC`) and touches no endpoint, as the reference, instead of "not implemented" and an open "defer" decision.
 
