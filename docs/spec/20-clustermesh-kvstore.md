@@ -212,7 +212,7 @@ evidence a row needs before flowsdn relaxes a mitigation (§12 decision 2).
 | F8 | `Watch` with `key`+`range_end` (prefix), `start_revision`, and `prev_kv` not required | all imports | OK | use as is |
 | F9 | `Watch` cancels with `canceled = true` and `compact_revision` set when `start_revision` precedes the compaction floor | the relist-on-compaction state machine (§5.4) is the only thing standing between a compaction and permanently stale caches | OK, with an off-by-one at the boundary (`start_revision < compact_rev` vs etcd's `<=`) | flowsdn treats *any* watch cancellation with a non-zero `compact_revision`, and any watch error, as "relist from scratch"; the boundary difference is therefore unobservable. Conformance test C9 pins it. |
 | F10 | A watch never silently skips a revision in its range | every import cache would drift with no error and no self-heal | OK from **v1.2.1** (fastetcd#16): a lagging watcher is resynced from history or cancelled with `compact_revision`, never skipped | No longer blocking. flowsdn keeps the periodic full resync of §5.4.4 (`kvstore-resync-interval`, default 5 m) until a pinned-server conformance run proves lag always cancels (§12 decision 2 does not switch on a version string or a reported fix); `0` stays available with its warning. |
-| F11 | `WithRequireLeader` (`hasleader` gRPC metadata): a watch on a member that has lost quorum is cancelled rather than going silent | a partitioned reader would serve stale remote state indefinitely | **GAP** — not implemented (filed as fastetcd#129) | flowsdn sets the metadata anyway (harmless), and does not rely on it: liveness is detected by the heartbeat watcher (§3.5.1) and the status checker (§3.2.5), which are mandatory in flowsdn (they are optional in the reference for remote clients). |
+| F11 | `WithRequireLeader` (`hasleader` gRPC metadata): a watch on a member that has lost quorum is cancelled rather than going silent | a partitioned reader would serve stale remote state indefinitely | **GAP** — fastetcd ignores the metadata and keeps the watch open (fastetcd#129) | flowsdn's client MUST set the metadata anyway (harmless) and MUST NOT rely on it: liveness is detected by the heartbeat watcher (§3.5.1) and the status checker (§3.2.5), which are mandatory in flowsdn (they are optional in the reference for remote clients). |
 | F12 | `LeaseGrant` with a client-visible TTL; `LeaseKeepAlive` as a bidirectional stream; `LeaseRevoke` | every non-master key in the schema is leased so a dead writer's state expires | OK | use as is |
 | F13 | Keys attached to a lease are deleted, with normal `DELETE` watch events, when the lease expires or is revoked | remote readers learn that a peer died | OK | use as is |
 | F14 | `Put` against a non-existent lease id fails | detects a lease that expired between grant and use | OK from **v1.5.2** (fastetcd#19) | flowsdn still does not rely on the error. The lease manager (§3.3.1) instead re-grants on any keep-alive stream failure and re-writes every key of the lost lease (this is required against etcd too, because the same race exists there). |
@@ -651,7 +651,7 @@ over-eager GC.
 |---|---|---|
 | `crd` | `CiliumIdentity` objects (spec `03` §3.3) | supported; the default |
 | `kvstore` | this section | supported when `kvstore` is set; otherwise fatal |
-| `doublewrite-readkvstore`, `doublewrite-readcrd` | both, one authoritative | **not implemented**; rejected at startup with a message naming the two supported values |
+| `doublewrite-readkvstore`, `doublewrite-readcrd` | both, one authoritative | absent: rejected at startup (`expected one of crd, kvstore`; §12 decision 3, #274) |
 
 Everything above the trait is identical in both modes, including the numbering,
 the cluster-ID range, the label-string key, the local (`0x01`) and remote-node
@@ -1841,7 +1841,7 @@ the agent's own. The two datapath touch points are owned elsewhere: the
 §4.8) and the identity bit split (spec `03` §4.5). The per-cluster
 conntrack/NAT array-of-maps that the reference carries behind
 `ENABLE_CLUSTER_AWARE_ADDRESSING` have no user-facing switch at the reference
-tag and are **not implemented** (§12 decision 7); flowsdn keeps the reference's
+tag and flowsdn has none (§12 decision 7); flowsdn keeps the reference's
 documented requirement that PodCIDRs be unique across the mesh.
 
 Both x86-64 and arm64 are first class. fastetcd builds static musl binaries for

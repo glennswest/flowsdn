@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### spec 20 stub markers — #444 (P0), 2026-11-19
+
+- [x] F11 (fastetcd#129), double-write row (config validation message,
+  #274), §10 per-cluster CT/NAT maps absent. Line counts unchanged (catalogue
+  cites spec 20:1544–1586).
+- [ ] sc-build; marker grep; close #444.
+
 ### spec 18 stub marker — #443 (P0), 2026-11-19
 
 - [x] §11.3: no generated stub tests for unported cases (counted in the

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#444)
+- **docs:** Spec 20 (#444): F11 states that fastetcd ignores `hasleader` (fastetcd#129) and that flowsdn's client must set it without relying on it; the double-write identity modes are absent and rejected at startup with `expected one of crd, kvstore` (#274); the per-cluster conntrack/NAT maps are stated as absent. No "not implemented" markers remain.
+
 ### 2026-11-19 (#443)
 - **docs:** Spec 18 (#443): the §11.3 corpus generator no longer designs `#[ignore]` tests with `unimplemented!()` bodies for unported cases; it asserts ported tests exist and counts the rest in the build output and coverage report. The generator and the §9.4 consistency test are stated as absent, new gap #473.
 
