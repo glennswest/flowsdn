@@ -661,8 +661,8 @@ plus a userspace refresher that re-arms entries reported `NUD_STALE` by the
 neighbor subscription. flowsdn's floor is 6.6 (managed neighbors are 5.16+),
 so flowsdn has **no fallback** (#132); the probe belongs to the startup
 check (kernel-requirements §4.7) and its failure is fatal when neighbor
-management is on (ADR-0001: refuse, don't adapt). flowsdn has no neighbor
-management yet: this section, its probe included, is gap #469.
+management is on (ADR-0001: refuse, don't adapt). Implemented by #469; see
+the amendment at the end of this spec.
 
 ### 3.5 MTU
 
@@ -2065,3 +2065,14 @@ routing metadata; CNI RoutingInfo.Configure installs per-pod rules and gateway
 routes, and the agent reconciles shared gateway routes. Retain spec 07 §3.20's
 routes. The Azure per-interface table is the interface index (ENI uses its
 separate table mapping); see the pinned reference audit in spec 14.
+
+## Amendment — neighbor management implemented (#469, 2026-11-20)
+
+§3.4 and §5.7 are implemented by `flowsdn_connector::neighbor` and `flowsdn_agent::neighbors` under
+`kubernetes.l2-neigh-discovery` (default false). Forwardable IPs are the other Nodes' InternalIPs; Service backends are
+not added (the reference feeds them for XDP acceleration only, which flowsdn does not have). Selected devices are the
+uplinks (#408) with a hardware address. Every calculation reconciles fully (add every desired entry, delete learned
+entries on selected devices that are not desired), so a change and a resync differ only in when they run. The probe
+runs at agent start in a throwaway network namespace and is fatal when the setting is on. The
+`flowsdn_neighbor_nexthop_lookup_total` counter is not exported; the `unreachable` count is in `/v1/healthz`
+`kubernetes.neighbors`. Kernel-checked by `neighbors-live`.

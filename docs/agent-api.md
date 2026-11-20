@@ -70,7 +70,9 @@ error (`msg` then lists `<part>: <error>`, for example `annotations`,
 counts. `flowsdn-endpoints` (`{served, objects}`) and `flowsdn-node`
 (`{served}`) are the FlowsdnEndpoint and FlowsdnNode writers' last pass
 (#332; `null` before it or when off); `node-config` is what FlowsdnNodeConfigs
-changed at start (#480: `{selected, applied, refused}`); a refused write is the
+changed at start (#480: `{selected, applied, refused}`); `neighbors` is the
+managed-neighbor thread's last pass (#469: `{enabled, devices, forwardable,
+desired, unreachable, pruned, last, errors}`, `null` when off); a refused write is the
 `flowsdn-endpoints` / `flowsdn-node` part error. `policy` is what the policy thread last programmed (#292):
 `{endpoints: [{id, pod, ingress-enforced, egress-enforced, entries}], ipcache,
 host-firewall, flowsdn-policies, problems}`, `null` before its first pass. `host-firewall` (#379)
@@ -155,7 +157,7 @@ is read when scraped; nothing is cached or estimated.
 | `flowsdn_build_info{version}` | gauge | 1; the agent's version. |
 | `flowsdn_endpoint_state{endpoint_state}` | gauge | Endpoints held, `ready` or `disconnecting` (deletion started, not finished). |
 | `flowsdn_controllers_failing` | gauge | Controller parts whose last reconcile failed (the `errors` of `/v1/healthz`, plus `policy-maps` when NetworkPolicy maps could not be shared). |
-| `flowsdn_controller_failing{controller}` | gauge | 1 per failing part (`routes`, `pod-cidrs`, `services`, `identities`, `policy`, `host-firewall`, `host-firewall-attach`, `uplinks`, `node-port`, `socket-termination`, `policy-maps`). The error text is in `/v1/healthz`. |
+| `flowsdn_controller_failing{controller}` | gauge | 1 per failing part (`routes`, `pod-cidrs`, `services`, `identities`, `policy`, `host-firewall`, `host-firewall-attach`, `uplinks`, `neighbors`, `node-port`, `socket-termination`, `policy-maps`). The error text is in `/v1/healthz`. |
 | `flowsdn_policy_verdict_total{direction,action}` | counter | Packets judged by policy, `ingress`/`egress` × `allowed`/`denied`/`audit`, summed over endpoints and ports from `flowsdn_policy_verdicts` (new flows only). |
 | `flowsdn_drop_count_total{reason,direction}`, `flowsdn_drop_bytes_total{…}` | counter | Dropped packets/bytes by reason. Only `policy_denied` is counted: the datapath keeps no counter for its other drops yet (#421). |
 | `flowsdn_bpf_map_pressure{map_name}` | gauge | Entries / `max_entries` of `flowsdn_policy_ep`, `flowsdn_policy`, `flowsdn_ipcache`, `flowsdn_policy_ct`, `flowsdn_policy_verdicts` (keys are walked per scrape). |

@@ -121,6 +121,10 @@ pinning or subsystem libraries are absent are **not current status**.
   (`TCX_NEXT`); before, they ended the TCX chain and the firewall never ran
   there. `host-chain-live` attaches both to a veth and checks it with real
   connections (kernel-check).
+- Managed L2 neighbors (#469, `kubernetes.l2-neigh-discovery`, default off):
+  entries for the next hops to other nodes on the uplinks, kept by the kernel;
+  start probe fatal when on. Unit-tested; `neighbors-live` on a kernel
+  (kernel-check). Not on a cluster.
 - Several uplinks (#408): discovery, carrier monitor, per-flow ECMP direct
   routes, source rules and tables, failover host address with gratuitous ARP,
   per-port report (`GET /v1/uplinks`). The planner and the netlink messages are

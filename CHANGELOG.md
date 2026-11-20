@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#469)
+- **feat:** L2 neighbor management (spec 10 §3.4): with `kubernetes.l2-neigh-discovery` (default false) the agent keeps a kernel-managed neighbor entry (`NTF_EXT_LEARNED` + `NTF_EXT_MANAGED`, `NUD_NONE`) for every next hop to another node's InternalIP on each uplink with a MAC, found by FIB-match route lookups (gateway, multipath gateways on that uplink, or on-link). Stale learned entries on those uplinks are deleted; an administrator's entries are never touched. Runs at start, on input changes (at most every 15 s) and every 5 minutes. The managed-neighbor probe runs at start and stops the agent when it fails (no fallback, #132). `/v1/healthz` `kubernetes.neighbors`. `flowsdn_connector::neighbor` (next hops, learned entries, managed add/delete, probe).
+- **test:** Kernel fixture `neighbors-live`; unit tests of the planner, calculator and next-hop parsing.
+
 ### 2026-11-20 (#471)
 - **test:** The vendored CRD hash manifest is bound to `flowsdn_k8s::SCHEMA_VERSION` (spec 12 §3.4). `crates/flowsdn-k8s/crds/SCHEMA_VERSIONS` lists each reviewed schema version with the sha256 of `SHA256SUMS`; T-CRD-1b (`sha256sums_are_bound_to_the_schema_version`) requires the last line to be `SCHEMA_VERSION` with the current digest and versions to increase, so a re-vendor without a reviewed bump fails, naming the line to append. `tools/vendor-crds.sh` prints the digest and says when it is unbound; it never writes the binding.
 

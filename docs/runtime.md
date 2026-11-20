@@ -44,6 +44,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.direct-routing-skip-unreachable` | `false` | Skip, instead of reporting an error for, a node whose InternalIP is reached through a gateway. |
 | `kubernetes.service-lb` | `true` | Watch Services and EndpointSlices and load the embedded `socket-lb` object ([socket LB](#clusterip-socket-lb-292)). |
 | `kubernetes.cgroup-root` | `/sys/fs/cgroup` | Absolute path of the cgroup v2 directory the socket-LB programs attach to (the manifests mount the host's root at `/run/flowsdn/cgroupv2`). |
+| `kubernetes.l2-neigh-discovery` | `false` | Managed neighbor entries for the next hops to other nodes on the uplinks ([neighbor management](#neighbor-management-469); the reference's `enable-l2-neigh-discovery`). On, the agent refuses to start on a kernel without managed neighbors. |
 | `kubernetes.node-port` | `true` | Attach the NodePort programs to the uplinks (traffic from outside the cluster). Takes effect only with `service-lb`. |
 | `kubernetes.uplinks` | `{}` (`mode: active-active`, `table: 2080`, `rule-priority: 9100`, no weights) | Several uplinks (#408): an object, every key optional. `mode` is `active-active`, `active-backup` or `single` (as before #408); `weights` is `{"<interface>": 1-255}`; `table` and `rule-priority` place flowsdn's per-address source rules. Uplinks are discovered, never listed ([several uplinks](#several-uplinks-408)). |
 | `kubernetes.lb-algorithm` | `random` | `random` or `maglev`: how the uplink programs pick a backend for a new flow from outside the cluster ([Maglev](#clusterip-socket-lb-292)). A Service's `service.flowsdn.io/lb-algorithm` annotation (`random` or `maglev`) overrides it. |
@@ -322,6 +323,38 @@ are in the `uplinks` healthz error.
 Not done here: forge1 must run the flowsdn flavour (it is a cilium node), the
 peers' second InternalIP is rustkube-node#366, NVMe/TCP multipath is
 stormblock#596, and stormpump keeping the failover `/32` is stormpump#234.
+
+### Neighbor management (#469)
+
+With `kubernetes.l2-neigh-discovery` (default off; spec 10 §3.4) the
+`flowsdn-neighbors` thread keeps a kernel-managed neighbor entry
+(`extern_learn managed`, `NUD_NONE`) for every next hop to another node, so
+`bpf_redirect_neigh` and `bpf_fib_lookup` find it resolved instead of dropping
+the first packets while the kernel resolves it.
+
+- **Forwardable addresses**: every InternalIP of the other Nodes. (The
+  reference also adds Service backends, for XDP acceleration only; flowsdn has
+  no XDP acceleration.)
+- **Devices**: the uplinks ([several uplinks](#several-uplinks-408)) with a
+  hardware address.
+- **Next hops**: `ip route get <address> oif <uplink> fibmatch` for every pair:
+  the route's gateway, every gateway of a multipath route on that uplink, or
+  the address itself on-link. No route on that uplink: no entry there
+  (`unreachable` counts them).
+- **Reconcile**: every next hop gets `ip neigh replace … extern_learn
+  managed`; the kernel resolves it and keeps it fresh. Entries with
+  `extern_learn` on those uplinks that are not next hops are deleted;
+  entries without it (an administrator's) are never touched. It runs at
+  start, on any change of the nodes' addresses or the uplinks (at most once
+  per 15 s), and as a full resync every 5 minutes.
+- **Start**: with the setting on, the agent first probes for managed
+  neighbors (a veth pair in a throwaway network namespace gets a managed
+  entry that must read back as managed). A kernel without them stops the
+  agent, naming the setting; there is no fallback (#132).
+- **Status**: `/v1/healthz` `kubernetes.neighbors`: `{enabled, devices,
+  forwardable, desired, unreachable, pruned, last, errors}` (`null` when
+  off); failures are the `neighbors` part error. `neighbors-live` checks it on
+  a kernel (kernel-check).
 
 ### Cluster identities (#291)
 
