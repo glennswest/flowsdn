@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Cloud fixture writer validates before deleting — #492 (P1), finding 580a411b7925, 2026-11-20
+
+- [x] `fixture::write`: metadata must survive `Meta::parse(to_toml())` unchanged (name `[a-z0-9-]+`, date, operations),
+      every operation name valid, interactions non-empty, destination exactly `<root>/<provider>/<name>` — all before
+      any remove/create. Test: `..`, `../gcp`, `a/b`, empty, uppercase, an absolute path; bad operation/date keep the
+      old copy.
+- [ ] sc-build; changelog; close.
+
 ### Policy identity findings — #490 (P1), 2026-11-20
 
 - [x] a84713ccfa49: each remote node address gets its own identity `2<<24 | n` (address order) in the ipcache; the

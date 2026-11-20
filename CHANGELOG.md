@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#492)
+- **fix:** The cloud fixture writer validates a scenario before touching any path (finding 580a411b7925): its metadata must read back unchanged through `Meta::parse` (name `[a-z0-9-]+`, so never `..`, a path or empty; date; operations), every operation name must be valid and the destination exactly `<root>/<provider>/<name>`; a refused scenario deletes and writes nothing, so a bad name can no longer remove another provider's fixtures or a directory outside the root.
+
 ### 2026-11-20 (#490)
 - **fix:** A CIDR selects only the remote nodes inside it (finding a84713ccfa49): each other node's InternalIP gets its own identity (`2<<24 | n`) in the ipcache, which the datapath aggregates to remote-node (14); `remote-node` and `cluster` entities also name 14; an `ipBlock`/`fromCIDR` (with `except`) selects exactly the node addresses it holds.
 - **fix:** Egress named ports are scoped to the Pods that name them (finding fd362d87218c): never an entry at the wildcard identity; a peer-less rule names the identities of the Pods declaring the port; an identity whose Pods map the name differently (or only partly) gets nothing and a `policy` problem.

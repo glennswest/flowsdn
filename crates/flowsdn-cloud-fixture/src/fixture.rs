@@ -344,10 +344,40 @@ pub fn load(dir: &Path) -> Result<Scenario, Error> {
 /// Writes a scenario under `root` (`tests/cloud`) as
 /// `<provider>/<name>/`, replacing what was there, then scans it. The
 /// interactions must already be scrubbed: on a finding the files are removed.
+/// Everything is validated before any path is touched (finding 580a411b7925):
+/// the metadata as [`Meta::parse`] would read it (so the name is
+/// `[a-z0-9-]+`, never `..`, a path or empty), every operation name, and the
+/// destination being exactly one level under the provider's directory.
 pub fn write(root: &Path, scenario: &Scenario) -> Result<PathBuf, Error> {
-    let dir = root
-        .join(scenario.meta.provider.name())
-        .join(&scenario.meta.name);
+    let provider_dir = root.join(scenario.meta.provider.name());
+    let refuse = |message: String| Err(Error::Format(provider_dir.clone(), message));
+    let reread = match Meta::parse(&scenario.meta.to_toml()) {
+        Ok(meta) => meta,
+        Err(error) => return refuse(format!("scenario metadata: {error}")),
+    };
+    if reread != scenario.meta {
+        return refuse("scenario metadata does not read back as written".into());
+    }
+    if let Some(bad) = scenario
+        .interactions
+        .iter()
+        .find(|i| !is_name(&i.operation))
+    {
+        return refuse(format!("operation {:?} is not [a-z0-9-]+", bad.operation));
+    }
+    if scenario.interactions.is_empty() {
+        return refuse("no interactions".into());
+    }
+    let dir = provider_dir.join(&scenario.meta.name);
+    if dir.parent() != Some(provider_dir.as_path())
+        || dir.file_name().and_then(|n| n.to_str()) != Some(scenario.meta.name.as_str())
+    {
+        return refuse(format!(
+            "scenario name {:?} does not name a directory under {}",
+            scenario.meta.name,
+            provider_dir.display()
+        ));
+    }
     let io = |p: &Path| {
         let p = p.to_path_buf();
         move |e| Error::Io(p, e)
@@ -359,12 +389,6 @@ pub fn write(root: &Path, scenario: &Scenario) -> Result<PathBuf, Error> {
     let toml_path = dir.join("scenario.toml");
     std::fs::write(&toml_path, scenario.meta.to_toml()).map_err(io(&toml_path))?;
     for (n, i) in (1_u32..).zip(&scenario.interactions) {
-        if !is_name(&i.operation) {
-            return Err(Error::Format(
-                dir.clone(),
-                format!("operation {:?} is not [a-z0-9-]+", i.operation),
-            ));
-        }
         let path = dir.join(format!("{n:03}-{}.json", i.operation));
         let mut text = serde_json::to_string_pretty(&i.to_json())
             .map_err(|e| Error::Format(path.clone(), e.to_string()))?;
@@ -445,6 +469,56 @@ pub(crate) mod tests {
         assert!(dir.join("002-create-network-interface.json").exists());
         assert_eq!(load(&dir).expect("load"), s);
         std::fs::remove_dir_all(&root).expect("cleanup");
+    }
+
+    /// Finding 580a411b7925: a name that is not `[a-z0-9-]+` (`..`, an
+    /// absolute or nested path, empty) is refused before anything is deleted
+    /// or written, so no directory outside `<root>/<provider>/` is touched.
+    #[test]
+    fn a_bad_scenario_name_touches_nothing() {
+        let root = temp_root("names");
+        // A sibling provider's fixture and a file at the root: both must survive.
+        let gcp = root.join("gcp").join("kept");
+        std::fs::create_dir_all(&gcp).expect("gcp");
+        std::fs::write(gcp.join("scenario.toml"), "x").expect("gcp file");
+        let aws = root.join("aws");
+        std::fs::create_dir_all(aws.join("other")).expect("aws");
+        let outside = temp_root("outside");
+        std::fs::create_dir_all(&outside).expect("outside");
+        std::fs::write(outside.join("keep"), "x").expect("outside file");
+        for name in [
+            "..".to_string(),
+            "../gcp".to_string(),
+            "a/b".to_string(),
+            String::new(),
+            "Happy".to_string(),
+            outside.display().to_string(),
+        ] {
+            let mut s = scenario();
+            s.meta.name = name.clone();
+            match write(&root, &s) {
+                Err(Error::Format(_, message)) => {
+                    assert!(message.contains("scenario"), "{name:?}: {message}");
+                }
+                other => panic!("{name:?}: expected a refusal, got {other:?}"),
+            }
+        }
+        assert!(gcp.join("scenario.toml").exists(), "another provider's fixture went");
+        assert!(aws.join("other").exists(), "a sibling scenario went");
+        assert!(outside.join("keep").exists(), "a directory outside the root went");
+        // An invalid operation or date is refused before the old copy goes.
+        let dir = write(&root, &scenario()).expect("write");
+        let mut bad = scenario();
+        if let Some(i) = bad.interactions.first_mut() {
+            i.operation = "../x".to_string();
+        }
+        assert!(matches!(write(&root, &bad), Err(Error::Format(..))));
+        let mut late = scenario();
+        late.meta.captured = "yesterday".to_string();
+        assert!(matches!(write(&root, &late), Err(Error::Format(..))));
+        assert!(dir.join("001-describe-instances.json").exists(), "the old copy went");
+        std::fs::remove_dir_all(&root).expect("cleanup");
+        std::fs::remove_dir_all(&outside).expect("cleanup");
     }
 
     #[test]
