@@ -10,8 +10,12 @@ The datapath already enforces generically (`to_netdev` egress=1 SCOPE_HOST; `to_
 only the agent was missing. Plan: parse egress/egressDeny with `to*` peers into `HostPolicies.egress_rules`
 (+ `enforce_egress` from enableDefaultDeny.egress), compile to HOST_ENDPOINT egress entries, set EGRESS after learning
 on the uplinks and HOST_PODS; `egress-enforced` in health; policy-live steps; docs (runtime, ADR-0022, status, README).
-- [ ] Code + unit tests + policy-live + docs: one commit. Then sc-build with kernel-check.
-- [ ] Stage, ship (proof: agent health), close; live run with #478.
+- [x] Code + unit tests + policy-live + docs: 485fb99, fmt b543e7b. sc-build at 485fb99 (fmt fallback): `cargo xtask
+      check` 980 tests 0 failed, test/build.sh, kernel-check on 7.3.4: 22 pass 0 fail 2 skip; policy-live 19 PASS incl.
+      the 3 host egress steps.
+- [ ] Paused for P0 #487 (2026-11-20): strict sc-build at b543e7b was started, result unread. On resume: check it (or
+      rerun `sc-build 'cargo fmt --all --check && cargo xtask check && test/build.sh'`), then stage, ship (proof: agent
+      health), close #477; live run with #478.
 
 ### Host firewall first live run — #478 (P3), 2026-11-20
 
