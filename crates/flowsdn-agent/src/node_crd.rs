@@ -144,7 +144,10 @@ impl NodeWriter {
         {
             return Ok(true);
         }
-        if self.unserved.is_some_and(|at| at.elapsed() < UNSERVED_RETRY) {
+        if self
+            .unserved
+            .is_some_and(|at| at.elapsed() < UNSERVED_RETRY)
+        {
             return Ok(false);
         }
         self.unserved = None;
@@ -175,7 +178,9 @@ impl NodeWriter {
         if owned(&current) != owned(&want) {
             let mut replace = want.clone();
             if let (Some(object), Some(version)) = (
-                replace.pointer_mut("/metadata").and_then(Value::as_object_mut),
+                replace
+                    .pointer_mut("/metadata")
+                    .and_then(Value::as_object_mut),
                 current.pointer("/metadata/resourceVersion").cloned(),
             ) {
                 object.insert("resourceVersion".into(), version);

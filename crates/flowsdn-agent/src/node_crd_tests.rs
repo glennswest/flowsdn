@@ -26,10 +26,7 @@ fn view() -> View {
             value: json!({"default": {"ip_addresses": ["10.1.0.5/32"]}}),
             ..LocalEndpoint::default()
         }],
-        derive: Derive {
-            v4: true,
-            v6: true,
-        },
+        derive: Derive { v4: true, v6: true },
         ..View::default()
     }
 }
@@ -110,10 +107,10 @@ impl Api {
     }
 }
 fn pass(writer: &mut NodeWriter, want: Option<&FlowsdnNode>, api: &mut Api) -> Result {
-    let mut send =
-        |m: http::Method, p: &str, b: Option<&Value>| -> std::result::Result<(u16, Value), String> {
-            Ok(api.send(m, p, b))
-        };
+    let mut send = |m: http::Method,
+                    p: &str,
+                    b: Option<&Value>|
+     -> std::result::Result<(u16, Value), String> { Ok(api.send(m, p, b)) };
     writer.sync(want, &mut send)
 }
 
@@ -193,7 +190,8 @@ fn a_refused_write_is_an_error() {
     let object = desired(&view(), "boot-1").expect("desired");
     let mut writer = NodeWriter::default();
     let mut api = Api::default();
-    api.answers.push(("GET".into(), 500, json!({"message": "boom"})));
+    api.answers
+        .push(("GET".into(), 500, json!({"message": "boom"})));
     assert_eq!(
         pass(&mut writer, Some(&object), &mut api),
         Err("HTTP 500 boom".to_owned())
