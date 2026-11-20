@@ -10,12 +10,17 @@ TCP: spec 05 §3.8 (flowsdn's own) already decides it: UDP always, TCP only with
 `lb-sock-terminate-all-protos` (default false) -> `kubernetes.lb-sock-terminate-all-protos`, default false. The socket
 LB records only UDP translations in `_reverse_sk` (as the reference), so with it TCP sockets are matched by the
 removed backend's address and port (a direct connection to that port is ended too; documented).
-- [ ] connector `sock_diag`: protocol-generic dump/destroy (`sockets(proto)`), `destroy_to(gone, udp_cookies, tcp)`
+- [x] connector `sock_diag`: protocol-generic dump/destroy (`sockets(proto)`), `destroy_to(gone, udp_cookies, tcp)`
       shared by the agent and the fixture.
-- [ ] agent: startup reconcile (first successful programming: UDP backends in `_reverse_sk` that no Service has
+- [x] agent: startup reconcile (first successful programming: UDP backends in `_reverse_sk` that no Service has
       now); 50 ms batching (`Batch`: gone backends collect, one pass per 50 ms); the setting.
-- [ ] socket-lb-live: TCP termination step + startup reconcile shape; unit tests for Batch and selection.
-- [ ] Docs (runtime, spec 05 amendment line count check), changelog, sc-build + kernel-check, stage, close.
+- [x] socket-lb-live: TCP termination step + startup reconcile shape; unit tests for Batch and selection.
+- [x] Code 8f9018d, fmt a86adc3, docs 347c16e (spec 05 amendment kept at 5 lines: catalogue cites lines below).
+      sc-build at 347c16e: fmt --check, `cargo xtask check` (Clippy -D warnings, 961 tests, 0 failed, 1 ignored, incl.
+      batch, stale/terminable selection, sock_diag ends), test/build.sh, kernel-check on 7.3.4: 21 pass, 0 fail,
+      2 skip; socket-lb-live: UDP destroy through the shared destroy_to, TCP left alone by default and ended with
+      all protocols, a connection to another backend kept.
+- [x] Stage 91e10462367b; `shipped` (proof: agent health OK in the install log). #392 closed.
 
 ### CRD registration by the operator, agent CRD readiness gate — #337 (P1), 2026-11-20
 
