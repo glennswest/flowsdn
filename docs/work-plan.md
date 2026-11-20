@@ -8,18 +8,22 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 Operator parts (identity GC, node GC, FlowsdnEndpointSlice batching) need the operator executable (gap #446):
 split to #479, proposed after #446. FlowsdnIdentity allocation itself shipped with #291. Here:
-- [ ] `flowsdn_k8s::kinds`: serde types for FlowsdnEndpoint, FlowsdnEndpointSlice, FlowsdnIdentity, FlowsdnNode,
+- [x] `flowsdn_k8s::kinds`: serde types for FlowsdnEndpoint, FlowsdnEndpointSlice, FlowsdnIdentity, FlowsdnNode,
       FlowsdnNodeConfig (one field per schema property, ObjectMeta, `Kind` trait with paths). Drafted from the
       vendored schemas by a throwaway script in tmp/ (not committed), then kept by hand. Deviation from spec 13
       §11.2: no `#[derive(CustomResource)]` (three of the five kinds have no `spec`) and no schemars/proptest:
       T-CRD-3 is schema-driven (an every-field and a required-only instance round-trip, the type's own output is
       admitted by `flowsdn_k8s::schema` strict validation); T-CRD-7 is seeded random schema-valid documents.
-- [ ] Agent: FlowsdnEndpoint per local Pod (POST with ownerReference -> Pod controller: true; status by JSON patch
+- [x] Agent: FlowsdnEndpoint per local Pod (POST with ownerReference -> Pod controller: true; status by JSON patch
       with a UID `test` op; DELETE on removal), carrying #328's pod facts; 404 (CRD absent, stormcos#303) is not
       an error. Events on the Pod for endpoint failures.
-- [ ] Agent: its own FlowsdnNode (addresses, health, pod CIDRs, bootid; ownerReference -> Node).
-- [ ] FlowsdnNodeConfig as an agent configuration source (spec 00 §3.3).
-- [ ] Docs, changelog, sc-build, stage, close.
+- [x] Agent: its own FlowsdnNode (addresses, health, pod CIDRs, bootid; ownerReference -> Node).
+- [x] FlowsdnNodeConfig: what it overrides is the owner's call (agent JSON keys vs reference option names); split to
+      #480 with a recommendation, wait-owner.
+- [x] Code bb17770..d39aa94 (types, JSON-patch client, endpoint writer, node writer, fmt); docs d090be7, spec 13
+      amendment 2dc4f80. sc-build at d39aa94: fmt --check, `cargo xtask check` (Clippy -D warnings, 944 tests, 0 failed,
+      1 ignored: 6 kinds tests, 6 endpoint and 5 node writer tests), test/build.sh (lock check, no-cilium clean).
+- [x] Stage 4b0daa98d949 requested. Seeing it on a node needs stormcos#303 (CRDs): #482, proposed after it. #332 closed.
 
 ### Host firewall follow-ups — #384 (P3), 2026-11-20
 
