@@ -4,6 +4,19 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### XDP prefilter and /v1/prefilter — #467 (P3), 2026-11-20
+
+In scope (spec 02 M2, spec 01 maps deferred, spec 00 `enable-xdp-prefilter` default false). Plan:
+- [ ] BPF (local-delivery): `xdp_prefilter` + `flowsdn_cidr_v{4,6}_{fix,dyn}` (hash for /32,/128; LPM otherwise;
+      1024, NO_PREALLOC); drop on source match, else pass. Object + lock via sc-build.
+- [ ] Loader: attach (native, else generic) / detach per interface, map insert/delete/clear.
+- [ ] Agent: `kubernetes.xdp-prefilter` (default false) attaches to the uplinks with a MAC; state {revision from 1,
+      deny set}; `GET/PATCH/DELETE /v1/prefilter` (Prefilter {spec{revision,deny},status{realized}}; PATCH/DELETE
+      body PrefilterSpec: revision mismatch 500, invalid CIDR 461, absent CIDR on DELETE 500; off: 500 "not
+      enabled"); maps cleared at start (state not persisted, as the reference).
+- [ ] Tests: unit (state, routes with a fake map), fixture `prefilter-live` (test-run drop/pass v4/v6 fix+dyn,
+      real attach/detach on a veth); docs (agent API, runtime, spec 08/01/02 amendments), changelog.
+
 ### cgroup-dump-metadata and map events routes — #468 (P3), 2026-11-20
 
 Scope question: only cilium-dbg calls them; `/map/{name}/events` needs the `/map`, `/map/{name}` cache API flowsdn
