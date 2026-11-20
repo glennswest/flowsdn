@@ -54,6 +54,28 @@ use std::{
     net::IpAddr,
 };
 
+/// A `flowsdn_policy_ep` flag the datapath ignores: the row is a new
+/// endpoint's quarantine (#489), both directions enforced with no entries,
+/// so it passes only what the datapath always passes (the node's own
+/// traffic to it, ARP, neighbour discovery). The endpoint manager writes it
+/// before attaching a new endpoint when Pod policy is enforced; the policy
+/// thread replaces it once the Pod's policy is known.
+pub const QUARANTINE: u32 = 8;
+/// A new endpoint's quarantine row.
+pub fn quarantine(id: u16) -> PolicyEndpoint {
+    PolicyEndpoint {
+        endpoint: u32::from(id),
+        flags: enforce::INGRESS | enforce::EGRESS | QUARANTINE,
+    }
+}
+/// Whether the policy thread removes `flowsdn_policy_ep` row `ifindex`
+/// holding `flags`: every row it does not want, except a quarantine row of an
+/// endpoint it does not know yet (published after this pass began).
+pub fn stale_row(desired: &Desired, ifindex: u32, flags: u32) -> bool {
+    !desired.endpoints.contains_key(&ifindex)
+        && (flags & QUARANTINE == 0 || desired.local.contains(&ifindex))
+}
+
 /// Every Pod allow entry's precedence (spec 06 §3.5.2: allow verdict byte 1).
 /// Pod denies are [`HOST_DENY_PRECEDENCE`], above every allow.
 pub const ALLOW_PRECEDENCE: u32 = 1;
@@ -70,6 +92,12 @@ const CIDR_IDENTITY_BASE: u32 = 1 << 24;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Desired {
     pub endpoints: BTreeMap<u32, PolicyEndpoint>,
+    /// The interface indexes of the local endpoints this pass knew (#489): a
+    /// quarantine row of another interface is a new endpoint's, not stale.
+    pub local: BTreeSet<u32>,
+    /// Local endpoints still quarantined: their Pod or its labels are not
+    /// known yet (#489).
+    pub quarantined: Vec<u16>,
     pub entries: BTreeMap<[u8; 16], PolicyEntry>,
     pub ipcache: BTreeMap<[u8; 24], RemoteEndpointInfo>,
     /// What could not be enforced as written (one line each).
@@ -91,6 +119,7 @@ impl Desired {
             "ipcache": self.ipcache.len(),
             "host-firewall": self.host,
             "flowsdn-policies": self.pod_policies,
+            "quarantined": self.quarantined,
             "problems": self.problems,
         })
     }
@@ -486,6 +515,9 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             ifindex,
             ..
         } = endpoint;
+        if *ifindex != 0 {
+            desired.local.insert(*ifindex);
+        }
         let pod_key = (namespace.clone(), name.clone());
         let (Some(labels), Some(pod)) = (
             subjects.get(&pod_key),
@@ -493,6 +525,14 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
                 .iter()
                 .find(|p| p.namespace == *namespace && p.name == *name),
         ) else {
+            // Its policy cannot be known yet: it stays isolated (#489,
+            // finding bd9892ebb241) as the endpoint manager installed it.
+            if (view.network_policy || view.flowsdn_policy) && *ifindex != 0 {
+                desired
+                    .endpoints
+                    .insert(*ifindex, quarantine(*id));
+                desired.quarantined.push(*id);
+            }
             continue;
         };
         let mut flags = 0;

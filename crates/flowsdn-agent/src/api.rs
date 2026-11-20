@@ -1464,6 +1464,10 @@ pub fn run(config_path: &Path) -> Result<()> {
         None => None,
     };
     let xdp_prefilter = config.kubernetes.as_ref().is_some_and(|k| k.xdp_prefilter);
+    let pod_policy = config
+        .kubernetes
+        .as_ref()
+        .is_some_and(|k| k.network_policy || k.flowsdn_policy);
     let kubernetes = connect_kubernetes(&mut config)?;
     #[cfg(feature = "kubernetes")]
     for refused in node_report.iter().flat_map(|r| &r.refused) {
@@ -1534,6 +1538,9 @@ pub fn run(config_path: &Path) -> Result<()> {
         None => None,
     };
     let enabled = kubernetes.is_some();
+    // New endpoints wait isolated for their policy (#489) only where the
+    // policy thread runs to lift it.
+    let quarantine = pod_policy && enabled && policy_maps_error.is_none();
     let mut api = Api {
         config,
         manager,
@@ -1545,6 +1552,10 @@ pub fn run(config_path: &Path) -> Result<()> {
         timing: crate::cni_timing::Timing::default(),
         policy_maps_error,
     };
+    api.manager.set_quarantine(quarantine);
+    if quarantine {
+        crate::log::logln!("new endpoints are isolated until their policy is installed");
+    }
     if xdp_prefilter {
         // The list lives in this process: start empty at revision 1, even
         // over pinned maps an earlier agent filled (#467).

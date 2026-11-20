@@ -861,3 +861,87 @@ fn host_firewall_does_not_wait_for_the_clusterwide_list() {
         "NetworkPolicy waits for its list"
     );
 }
+
+/// Finding bd9892ebb241 (#489): a local endpoint whose Pod the watch has not
+/// shown yet stays quarantined (both directions, no entries); once its Pod is
+/// known it gets its own row, or none when no policy selects it.
+#[test]
+fn a_new_endpoint_stays_quarantined_until_its_pod_is_known() {
+    let mut view = view(Vec::new());
+    view.endpoints.push(LocalEndpoint {
+        id: 9,
+        namespace: "shop".into(),
+        name: "newcomer".into(),
+        interface: "lxc9".into(),
+        ifindex: 41,
+        ..LocalEndpoint::default()
+    });
+    let desired = compile(&view, &[]);
+    assert_eq!(desired.endpoints.get(&41), Some(&quarantine(9)));
+    assert_eq!(
+        desired.endpoints.get(&41).map(|e| e.flags),
+        Some(enforce::INGRESS | enforce::EGRESS | QUARANTINE)
+    );
+    assert_eq!(desired.quarantined, vec![9]);
+    assert!(desired.local.contains(&41) && desired.local.contains(&40));
+    // The known, unselected web endpoint has no row: unenforced.
+    assert!(!desired.endpoints.contains_key(&40));
+    assert!(
+        !desired.entries.keys().any(|k| EndpointPolicyKey::from_bytes(*k).endpoint == 9),
+        "a quarantined endpoint has no allow entry"
+    );
+
+    // The Pod arrives, no policy selects it: no row, and the sweep removes
+    // the quarantine row the manager wrote.
+    view.pods.push(pod("newcomer", "n1", "10.1.0.9", &[("app", "new")]));
+    let filter = LabelFilter::identity(&[]).expect("filter");
+    let sets = view.pod_label_sets(&filter);
+    for (pod, _, labels) in sets {
+        if pod.1 == "newcomer" {
+            view.identities
+                .insert(399, crate::identity::label_strings(&labels));
+            view.pod_identities.insert(pod, 399);
+        }
+    }
+    let released = compile(&view, &[]);
+    assert!(!released.endpoints.contains_key(&41));
+    assert!(released.quarantined.is_empty());
+    assert!(stale_row(&released, 41, quarantine(9).flags));
+
+    // A default-deny policy selecting it: its own row replaces the quarantine.
+    view.network_policies = vec![policy(json!({
+        "podSelector":{"matchLabels":{"app":"new"}},
+        "policyTypes":["Ingress","Egress"]
+    }))];
+    let enforced = compile(&view, &[]);
+    assert_eq!(
+        enforced.endpoints.get(&41),
+        Some(&PolicyEndpoint {
+            endpoint: 9,
+            flags: enforce::INGRESS | enforce::EGRESS
+        })
+    );
+}
+
+/// The sweep keeps a quarantine row of an endpoint the pass did not know
+/// (created after the view was read) and removes every other unwanted row.
+#[test]
+fn the_sweep_keeps_an_unknown_endpoints_quarantine() {
+    let desired = compile(&view(Vec::new()), &[]);
+    let row = quarantine(12).flags;
+    assert!(!stale_row(&desired, 77, row), "unknown endpoint: kept");
+    assert!(stale_row(&desired, 77, enforce::INGRESS), "an ordinary row: removed");
+    assert!(stale_row(&desired, 40, row), "known endpoint without policy: removed");
+
+    // Pod policy off: nothing is quarantined.
+    let mut off = view(Vec::new());
+    off.network_policy = false;
+    off.endpoints.push(LocalEndpoint {
+        id: 9,
+        namespace: "shop".into(),
+        name: "newcomer".into(),
+        ifindex: 41,
+        ..LocalEndpoint::default()
+    });
+    assert!(compile(&off, &[]).endpoints.is_empty());
+}

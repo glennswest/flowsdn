@@ -4,6 +4,16 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### New endpoints isolated until their policy is installed — #489 (P1), finding bd9892ebb241, 2026-11-20
+
+- [x] Manager `set_quarantine` (on in Kubernetes mode with network-policy or flowsdn-policy and shared policy maps):
+      `install` writes `flowsdn_policy_ep[ifindex] = {id, INGRESS|EGRESS|QUARANTINE(8)}` before attaching (restored
+      endpoints untouched). Compiler: a local endpoint whose Pod/labels are unknown keeps the quarantine row;
+      `Desired.local` lists known endpoints; the sweep (`stale_row`) keeps a quarantine row of an unknown endpoint.
+      No datapath change (unknown flag bits are ignored). Unsynced watches: no reconcile, quarantine holds.
+- [ ] Tests: policy_tests (quarantine kept / released / replaced; sweep), cni-runtime (real ADD: no UDP either way
+      until the row is lifted). sc-build + kernel-check; docs; stage; close.
+
 ### socket-lb review findings — #488 (P1), 2026-11-20
 
 - [x] 0252b1736f32 (security): the backend node accepts a DSR option only when its frontend has a node-local master

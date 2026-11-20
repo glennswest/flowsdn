@@ -92,6 +92,10 @@ pub struct Manager {
     egress: Egress,
     /// The last [`Manager::create`]'s steps in microseconds (#396).
     steps: Vec<(&'static str, u64)>,
+    /// Pod policy is enforced (#489): a new endpoint is quarantined (both
+    /// directions denied) before its programs attach, until the policy
+    /// thread installs its policy.
+    quarantine: bool,
 }
 impl Manager {
     /// Restore into a fresh object before the caller exposes its API. Stale or
@@ -161,6 +165,7 @@ impl Manager {
             ipam,
             egress,
             steps: Vec::new(),
+            quarantine: false,
         };
         let connector = Connector::open()?;
         // Validate every persisted identity/address before installing any link.
@@ -414,7 +419,7 @@ impl Manager {
             self.deleting.insert(record.attachment.clone());
             staged.publish()?;
             step("agent-state");
-            if let Err(error) = install(&mut self.driver, &record, self.egress) {
+            if let Err(error) = install(&mut self.driver, &record, self.egress, self.quarantine) {
                 // Retain ID, addresses and durable intent on any uncertain
                 // rollback. DEL/restart can then complete recovery safely.
                 if uninstall(&mut self.driver, &record).is_ok()
@@ -457,14 +462,34 @@ impl Manager {
         Ok(true)
     }
     fn install(&mut self, record: &Record) -> Result<()> {
-        install(&mut self.driver, record, self.egress)
+        // Restored endpoints keep whatever policy row they had (pinned) or
+        // get theirs from the policy thread: they are running Pods.
+        install(&mut self.driver, record, self.egress, false)
+    }
+    /// Quarantine new endpoints until their policy is installed (#489,
+    /// finding bd9892ebb241): on when Pod policy is enforced and the policy
+    /// thread runs.
+    pub fn set_quarantine(&mut self, on: bool) {
+        self.quarantine = on;
+    }
+    /// An endpoint's `flowsdn_policy_ep` row, if it has one.
+    pub fn policy_row(
+        &mut self,
+        ifindex: u32,
+    ) -> Result<Option<flowsdn_bpf_abi::policy::PolicyEndpoint>> {
+        kernel(self.driver.policy().policy_endpoint(ifindex))
     }
 }
 fn mac_value(bytes: &[u8]) -> Result<u64> {
     let [a, b, c, d, e, f]: [u8; 6] = bytes.try_into().map_err(|_| "invalid Ethernet link MAC")?;
     Ok(u64::from_le_bytes([a, b, c, d, e, f, 0, 0]))
 }
-fn install(driver: &mut LocalDelivery, record: &Record, egress: Egress) -> Result<()> {
+fn install(
+    driver: &mut LocalDelivery,
+    record: &Record,
+    egress: Egress,
+    quarantine: bool,
+) -> Result<()> {
     let endpoint = info(record)?;
     let mut installed = Vec::new();
     let outcome = (|| {
@@ -480,6 +505,13 @@ fn install(driver: &mut LocalDelivery, record: &Record, egress: Egress) -> Resul
             .is_some_and(|entry| entry.endpoint != u32::from(record.id))
         {
             kernel(driver.policy().remove_policy_endpoint(endpoint.ifindex))?;
+        }
+        // Isolated before the first packet can pass (#489).
+        if quarantine {
+            kernel(driver.policy().set_policy_endpoint(
+                endpoint.ifindex,
+                crate::policy::quarantine(record.id),
+            ))?;
         }
         kernel(driver.attach(text(&record.document, "IfName")))?;
         if egress == Egress::Stack {

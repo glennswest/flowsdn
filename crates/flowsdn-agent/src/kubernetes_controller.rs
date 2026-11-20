@@ -1080,8 +1080,9 @@ fn apply_policy(
         }
     }
     for ifindex in endpoints
-        .keys()
-        .filter(|k| !desired.endpoints.contains_key(k))
+        .iter()
+        .filter(|(k, v)| crate::policy::stale_row(desired, **k, v.flags))
+        .map(|(k, _)| k)
     {
         maps.remove_policy_endpoint(*ifindex).map_err(text)?;
     }

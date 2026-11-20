@@ -666,6 +666,21 @@ fn exchange(from: &mut Endpoint, to: &mut Endpoint, v6: bool) -> Result<()> {
     Ok(())
 }
 
+/// A datagram from `from` to `to` that must not arrive.
+fn blocked(from: &mut Endpoint, to: &mut Endpoint, v6: bool) -> Result<()> {
+    let family = if v6 { 6 } else { 4 };
+    let payload = format!("quarantine-{}-{}-{family}", from.id, to.id);
+    ensure(
+        from.command(&format!("send {family} {} {payload}", to.socket(v6)?))? == "SENT",
+        "send failed",
+    )?;
+    let received = to.command(&format!("recv {family}"))?;
+    ensure(
+        received == "TIMEOUT",
+        &format!("IPv{family} {payload} reached a quarantined endpoint's peer: {received}"),
+    )
+}
+
 fn run(binary: &Path, object: &Path) -> Result<()> {
     let binary = fs::canonicalize(binary)?;
     let object = fs::canonicalize(object)?;
@@ -798,6 +813,68 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
     )?;
     println!(
         "PASS: actual CNI ADD and CHECK, dual-stack BPF UDP, fabricated missing-address CHECK failure"
+    );
+    // #489 (finding bd9892ebb241): with Pod policy enforced, a new endpoint
+    // is isolated from its first packet until its policy is installed, so a
+    // namespace's existing default deny holds even before the policy thread
+    // has seen the Pod (or when its first list never completes).
+    state
+        .lock()
+        .map_err(|_| "state")?
+        .manager_mut()?
+        .set_quarantine(true);
+    let mut third = Endpoint::spawn(3)?;
+    cni(&binary, &temp, "ADD", 3, &third.netns(), &conf, true)?;
+    third.configure()?;
+    let ifindex = {
+        let state = state.lock().map_err(|_| "state")?;
+        state
+            .manager()?
+            .get("cni-attachment-id:cid3:eth0")
+            .ok_or("quarantined endpoint state")?
+            .document
+            .get("IfIndex")
+            .and_then(Value::as_u64)
+            .and_then(|i| u32::try_from(i).ok())
+            .ok_or("IfIndex")?
+    };
+    let row = managed(
+        state
+            .lock()
+            .map_err(|_| "state")?
+            .manager_mut()?
+            .policy_row(ifindex),
+    )?;
+    ensure(
+        row.is_some_and(|r| r.flags == flowsdn_agent::policy::quarantine(0).flags),
+        &format!("new endpoint's policy row: {row:?}"),
+    )?;
+    for v6 in [false, true] {
+        blocked(&mut first, &mut third, v6)?;
+        blocked(&mut third, &mut first, v6)?;
+    }
+    // The policy thread's release for a Pod no policy selects: the row goes.
+    managed(
+        state
+            .lock()
+            .map_err(|_| "state")?
+            .manager_mut()?
+            .share_policy(),
+    )?
+    .remove_policy_endpoint(ifindex)?;
+    for v6 in [false, true] {
+        exchange(&mut first, &mut third, v6)?;
+        exchange(&mut third, &mut first, v6)?;
+    }
+    cni(&binary, &temp, "DEL", 3, &third.netns(), &conf, true)?;
+    drop(third);
+    state
+        .lock()
+        .map_err(|_| "state")?
+        .manager_mut()?
+        .set_quarantine(false);
+    println!(
+        "PASS: with Pod policy enforced a new endpoint is quarantined from its first packet (no UDP either way, IPv4 and IPv6) until its policy row is replaced, then traffic flows"
     );
     for endpoint in [&first, &second] {
         let host = {
