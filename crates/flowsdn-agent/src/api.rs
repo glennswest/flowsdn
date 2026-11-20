@@ -581,7 +581,10 @@ impl Api {
             }
             ("GET" | "PATCH" | "DELETE", "/v1/prefilter") => {
                 let Some(state) = self.prefilter.as_mut() else {
-                    return fail(500, "the XDP prefilter is not enabled (kubernetes.xdp-prefilter)");
+                    return fail(
+                        500,
+                        "the XDP prefilter is not enabled (kubernetes.xdp-prefilter)",
+                    );
                 };
                 let result = match request.method.as_str() {
                     "GET" => return Ok((200, state.json())),

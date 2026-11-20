@@ -30,7 +30,9 @@ fn masked(address: IpAddr, prefix: u8) -> Option<IpAddr> {
     match address {
         IpAddr::V4(v4) => {
             let bits = u32::from(v4);
-            let mask = u32::MAX.checked_shl(32u32.checked_sub(u32::from(prefix))?).unwrap_or(0);
+            let mask = u32::MAX
+                .checked_shl(32u32.checked_sub(u32::from(prefix))?)
+                .unwrap_or(0);
             (prefix <= 32).then(|| IpAddr::from(std::net::Ipv4Addr::from(bits & mask)))
         }
         IpAddr::V6(v6) => {
@@ -62,13 +64,15 @@ impl PrefilterMaps {
     pub fn insert(&mut self, address: IpAddr, prefix: u8) -> KernelResult<()> {
         match masked(address, prefix).ok_or("prefix length too long")? {
             IpAddr::V4(v4) if prefix == 32 => self.v4_fix.insert(v4.octets(), 1, 0)?,
-            IpAddr::V4(v4) => self
-                .v4_dyn
-                .insert(&Key::new(u32::from(prefix), v4.octets()), 1, 0)?,
+            IpAddr::V4(v4) => {
+                self.v4_dyn
+                    .insert(&Key::new(u32::from(prefix), v4.octets()), 1, 0)?
+            }
             IpAddr::V6(v6) if prefix == 128 => self.v6_fix.insert(v6.octets(), 1, 0)?,
-            IpAddr::V6(v6) => self
-                .v6_dyn
-                .insert(&Key::new(u32::from(prefix), v6.octets()), 1, 0)?,
+            IpAddr::V6(v6) => {
+                self.v6_dyn
+                    .insert(&Key::new(u32::from(prefix), v6.octets()), 1, 0)?
+            }
         }
         Ok(())
     }
@@ -77,9 +81,13 @@ impl PrefilterMaps {
     pub fn remove(&mut self, address: IpAddr, prefix: u8) -> KernelResult<()> {
         match masked(address, prefix).ok_or("prefix length too long")? {
             IpAddr::V4(v4) if prefix == 32 => self.v4_fix.remove(&v4.octets())?,
-            IpAddr::V4(v4) => self.v4_dyn.remove(&Key::new(u32::from(prefix), v4.octets()))?,
+            IpAddr::V4(v4) => self
+                .v4_dyn
+                .remove(&Key::new(u32::from(prefix), v4.octets()))?,
             IpAddr::V6(v6) if prefix == 128 => self.v6_fix.remove(&v6.octets())?,
-            IpAddr::V6(v6) => self.v6_dyn.remove(&Key::new(u32::from(prefix), v6.octets()))?,
+            IpAddr::V6(v6) => self
+                .v6_dyn
+                .remove(&Key::new(u32::from(prefix), v6.octets()))?,
         }
         Ok(())
     }

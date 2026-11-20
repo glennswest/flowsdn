@@ -134,18 +134,41 @@ fn test_runs(delivery: &mut LocalDelivery) -> Result<()> {
     expect(delivery, "ARP", &arp, XDP_PASS)?;
     let mut short = frame(addr("203.0.113.9"));
     short.truncate(20);
-    expect(delivery, "a frame too short for its source", &short, XDP_PASS)?;
+    expect(
+        delivery,
+        "a frame too short for its source",
+        &short,
+        XDP_PASS,
+    )?;
     println!(
         "PASS test runs: denied v4/v6 sources drop through the hash and LPM maps; other sources, ARP and short frames pass"
     );
     let maps = delivery.prefilter()?;
     maps.remove(addr("198.51.100.0"), 24)?;
     maps.remove(addr("2001:db8:9::5"), 128)?;
-    expect(delivery, "removed v4 /24", &frame(addr("198.51.100.200")), XDP_PASS)?;
-    expect(delivery, "removed v6 /128", &frame(addr("2001:db8:9::5")), XDP_PASS)?;
-    expect(delivery, "kept v4 /32", &frame(addr("203.0.113.9")), XDP_DROP)?;
+    expect(
+        delivery,
+        "removed v4 /24",
+        &frame(addr("198.51.100.200")),
+        XDP_PASS,
+    )?;
+    expect(
+        delivery,
+        "removed v6 /128",
+        &frame(addr("2001:db8:9::5")),
+        XDP_PASS,
+    )?;
+    expect(
+        delivery,
+        "kept v4 /32",
+        &frame(addr("203.0.113.9")),
+        XDP_DROP,
+    )?;
     delivery.prefilter()?.clear()?;
-    ensure(delivery.prefilter()?.entries()?.is_empty(), "clear left entries")?;
+    ensure(
+        delivery.prefilter()?.entries()?.is_empty(),
+        "clear left entries",
+    )?;
     expect(delivery, "cleared", &frame(addr("203.0.113.9")), XDP_PASS)?;
     println!("PASS removing an entry passes its source again; clear empties all four maps");
     Ok(())
@@ -198,7 +221,9 @@ fn attached(delivery: &mut LocalDelivery) -> Result<()> {
     ip(&["link", "set", "a0", "up"])?;
     let mode = delivery.attach_prefilter("a0")?;
     ensure(
-        delivery.prefilter_interfaces().any(|(n, m)| n == "a0" && m == mode),
+        delivery
+            .prefilter_interfaces()
+            .any(|(n, m)| n == "a0" && m == mode),
         "a0 not listed as attached",
     )?;
     writeln!(input, "GO")?;
@@ -223,7 +248,10 @@ fn attached(delivery: &mut LocalDelivery) -> Result<()> {
     delivery.prefilter()?.insert(addr("192.0.2.9"), 32)?;
     ensure(!send(&mut input)?, "UDP from a denied source arrived")?;
     delivery.prefilter()?.remove(addr("192.0.2.9"), 32)?;
-    ensure(send(&mut input)?, "UDP did not arrive after the source was allowed again")?;
+    ensure(
+        send(&mut input)?,
+        "UDP did not arrive after the source was allowed again",
+    )?;
     println!(
         "PASS attached to a0 ({mode} XDP): a denied source's UDP is dropped, an allowed one arrives"
     );

@@ -33,7 +33,10 @@ fn spec(revision: i64, deny: &[&str]) -> Value {
 fn cidrs_parse_to_their_network() {
     assert_eq!(parse_cidr("192.0.2.77/24"), Some(cidr("192.0.2.0/24")));
     assert_eq!(parse_cidr("2001:db8::1/32"), Some(cidr("2001:db8::/32")));
-    assert_eq!(parse_cidr("0.0.0.0/0"), Some((IpAddr::from([0, 0, 0, 0]), 0)));
+    assert_eq!(
+        parse_cidr("0.0.0.0/0"),
+        Some((IpAddr::from([0, 0, 0, 0]), 0))
+    );
     for bad in ["192.0.2.1", "192.0.2.1/33", "x/8", "2001:db8::/129", ""] {
         assert_eq!(parse_cidr(bad), None, "{bad}");
     }
@@ -48,12 +51,19 @@ fn patch_and_delete_follow_the_revision() {
         json!({"spec":{"revision":1,"deny":[]},"status":{"realized":{"revision":1,"deny":[]}}})
     );
     let got = state
-        .patch(&spec(1, &["198.51.100.0/24", "203.0.113.9/32", "2001:db8::/48"]), &mut maps)
+        .patch(
+            &spec(1, &["198.51.100.0/24", "203.0.113.9/32", "2001:db8::/48"]),
+            &mut maps,
+        )
         .expect("patch");
     assert_eq!(got.pointer("/spec/revision"), Some(&json!(2)));
     assert_eq!(
         got.pointer("/status/realized/deny"),
-        Some(&json!(["198.51.100.0/24", "203.0.113.9/32", "2001:db8::/48"]))
+        Some(&json!([
+            "198.51.100.0/24",
+            "203.0.113.9/32",
+            "2001:db8::/48"
+        ]))
     );
     assert_eq!(maps.entries.len(), 3);
     // A stale revision changes nothing.
@@ -82,7 +92,11 @@ fn patch_and_delete_follow_the_revision() {
         .delete(&spec(4, &["203.0.113.9/32"]), &mut maps)
         .expect_err("absent");
     assert_eq!(absent.status, 500);
-    assert!(absent.message.contains("not in the prefilter"), "{}", absent.message);
+    assert!(
+        absent.message.contains("not in the prefilter"),
+        "{}",
+        absent.message
+    );
 }
 
 #[test]
