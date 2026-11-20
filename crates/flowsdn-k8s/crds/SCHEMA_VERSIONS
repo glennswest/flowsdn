@@ -1,0 +1,9 @@
+# The vendored CRD hash manifest (SHA256SUMS) bound to flowsdn_k8s::SCHEMA_VERSION
+# (spec 12 §3.4, #471). One line per reviewed schema version, oldest first:
+#   <schema version>  <sha256 of SHA256SUMS>
+# The last line's version must equal SCHEMA_VERSION and its digest the current
+# SHA256SUMS (test sha256sums_are_bound_to_the_schema_version). After
+# tools/vendor-crds.sh changes SHA256SUMS: review the schema change, bump
+# SCHEMA_VERSION, and append a line with the digest the tool prints. Never edit
+# an existing line.
+1.33.11  927979011b78cca3f6e14dbbf8e8f4bf2a31c635eb4c6e093faf1962688b2c9a

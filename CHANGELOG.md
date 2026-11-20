@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#471)
+- **test:** The vendored CRD hash manifest is bound to `flowsdn_k8s::SCHEMA_VERSION` (spec 12 §3.4). `crates/flowsdn-k8s/crds/SCHEMA_VERSIONS` lists each reviewed schema version with the sha256 of `SHA256SUMS`; T-CRD-1b (`sha256sums_are_bound_to_the_schema_version`) requires the last line to be `SCHEMA_VERSION` with the current digest and versions to increase, so a re-vendor without a reviewed bump fails, naming the line to append. `tools/vendor-crds.sh` prints the digest and says when it is unbound; it never writes the binding.
+
 ### 2026-11-20 (#479, decision)
 - **docs:** FlowsdnEndpointSlice batching is not built, by decision on #479 (option A): agents learn remote Pods and identities from their cluster-wide Pod watch and read no FlowsdnEndpoint, so slices would have no reader. Removed from the open-gap lists; spec 12/13, runtime and status say so.
 

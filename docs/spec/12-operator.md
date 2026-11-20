@@ -326,7 +326,7 @@ upgraded in place (#157). The canonical target constant is
 not maintain an independent operator version. Before registration is shipped,
 CI MUST bind a manifest of the vendored YAML hashes to this version; changes to
 that manifest require a reviewed schema-version update. T-CRD-1 checks the hashes
-(spec 13); tying them to the version is gap #471, before #337. Equal/newer schema
+(spec 13); `crds/SCHEMA_VERSIONS` binds them to the version (#471). Equal/newer schema
 protection below remains mandatory; keeping the label alone proves no live
 upgrade safety. Reassess the version line at 1.0 without silently forking it.
 
@@ -2002,9 +2002,9 @@ compatibility tests required by this specification.
    ownership remain in scope, gated as §3.7.2 describes, with shared derivation
    fixtures before enablement. The mode constants do not implement controllers.
 3. **Resolved #157: keep the schema-version label and 1.33.x line.** Start at
-   canonical `flowsdn_k8s::SCHEMA_VERSION` 1.33.11. Version/hash coupling is a
-   release gate for the eventual vendored CRD registration payload (§3.4), not
-   a claim that its corpus or CI gate has already been delivered.
+   canonical `flowsdn_k8s::SCHEMA_VERSION` 1.33.11. Version/hash coupling is
+   delivered (#471): `crds/SCHEMA_VERSIONS` and T-CRD-1b refuse new vendored
+   hashes still bound to the old version.
 4. **Resolved #158: keep `node.cilium.io/agent-not-ready`.** Honor the existing
    custom-key option for add and remove; remove by key regardless of effect or
    value, preserve every unrelated taint. The library implements that desired

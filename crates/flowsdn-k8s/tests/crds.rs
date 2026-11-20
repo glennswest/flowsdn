@@ -47,6 +47,106 @@ fn vendored_documents_match_sha256sums() {
     }
 }
 
+/// `major.minor.patch` as numbers.
+fn semver(text: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = text.split('.').map(|p| p.parse::<u64>().ok());
+    let version = (parts.next()??, parts.next()??, parts.next()??);
+    parts.next().is_none().then_some(version)
+}
+
+/// The binding of crds/SCHEMA_VERSIONS: (version, SHA256SUMS digest) lines.
+fn schema_versions(text: &str) -> Vec<(String, String)> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|line| {
+            let (version, digest) = line
+                .split_once("  ")
+                .unwrap_or_else(|| panic!("SCHEMA_VERSIONS line {line:?}: version, two spaces, digest"));
+            (version.to_owned(), digest.trim().to_owned())
+        })
+        .collect()
+}
+
+/// Why a binding does not hold for `schema_version` and `sums`, if it does not.
+fn binding_problem(bound: &[(String, String)], schema_version: &str, sums: &str) -> Option<String> {
+    let digest = format!("{:x}", Sha256::digest(sums.as_bytes()));
+    let mut last: Option<(u64, u64, u64)> = None;
+    for (version, line_digest) in bound {
+        let Some(parsed) = semver(version) else {
+            return Some(format!("{version} is not a semver version"));
+        };
+        if line_digest.len() != 64 || !line_digest.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Some(format!("{version}: {line_digest} is not a sha256 digest"));
+        }
+        if last.is_some_and(|before| before >= parsed) {
+            return Some(format!("{version} does not come after the line before it"));
+        }
+        last = Some(parsed);
+    }
+    let Some((version, bound_digest)) = bound.last() else {
+        return Some("SCHEMA_VERSIONS binds no version".into());
+    };
+    if version != schema_version {
+        return Some(format!(
+            "SCHEMA_VERSION is {schema_version} but the last bound version is {version}: append \
+             `{schema_version}  {digest}` to crds/SCHEMA_VERSIONS"
+        ));
+    }
+    if *bound_digest != digest {
+        return Some(format!(
+            "crds/SHA256SUMS changed (sha256 {digest}) but SCHEMA_VERSION is still {version}, \
+             bound to {bound_digest}: review the schema change, bump flowsdn_k8s::SCHEMA_VERSION \
+             and append `<new version>  {digest}` to crds/SCHEMA_VERSIONS"
+        ));
+    }
+    None
+}
+
+/// T-CRD-1b (#471, spec 12 §3.4): the vendored hash manifest is bound to
+/// SCHEMA_VERSION, so a re-vendor without a reviewed version bump fails.
+#[test]
+fn sha256sums_are_bound_to_the_schema_version() {
+    let dir = crate_dir().join("crds");
+    let sums = std::fs::read_to_string(dir.join("SHA256SUMS")).expect("SHA256SUMS");
+    let bound = schema_versions(
+        &std::fs::read_to_string(dir.join("SCHEMA_VERSIONS")).expect("SCHEMA_VERSIONS"),
+    );
+    assert_eq!(
+        binding_problem(&bound, flowsdn_k8s::SCHEMA_VERSION, &sums),
+        None
+    );
+}
+
+#[test]
+fn a_rehashed_manifest_without_a_version_bump_is_refused() {
+    let sums = "aa  v2/a.yaml\n";
+    let digest = format!("{:x}", Sha256::digest(sums.as_bytes()));
+    let line = |v: &str, d: &str| (v.to_owned(), d.to_owned());
+    let bound = vec![line("1.33.11", &digest)];
+    assert_eq!(binding_problem(&bound, "1.33.11", sums), None);
+    // Re-vendored: new hashes, same version.
+    let changed = binding_problem(&bound, "1.33.11", "bb  v2/a.yaml\n").expect("refused");
+    assert!(changed.contains("bump flowsdn_k8s::SCHEMA_VERSION"), "{changed}");
+    // Version bumped but not bound.
+    let unbound = binding_problem(&bound, "1.33.12", sums).expect("refused");
+    assert!(unbound.contains("append `1.33.12"), "{unbound}");
+    // The reviewed bump: a new line for the new hashes.
+    let new_sums = "bb  v2/a.yaml\n";
+    let new_digest = format!("{:x}", Sha256::digest(new_sums.as_bytes()));
+    let bumped = vec![line("1.33.11", &digest), line("1.33.12", &new_digest)];
+    assert_eq!(binding_problem(&bumped, "1.33.12", new_sums), None);
+    // Versions must increase; digests must be digests.
+    let backwards = vec![line("1.33.12", &digest), line("1.33.11", &digest)];
+    assert!(binding_problem(&backwards, "1.33.11", sums).is_some());
+    assert!(binding_problem(&[line("1.33.11", "xyz")], "1.33.11", sums).is_some());
+    assert!(binding_problem(&[], "1.33.11", sums).is_some());
+    assert_eq!(
+        schema_versions("# c\n\n1.33.11  abc\n"),
+        vec![line("1.33.11", "abc")]
+    );
+}
+
 #[test]
 fn owned_set_is_the_registration_catalogue() {
     let crds = crds();

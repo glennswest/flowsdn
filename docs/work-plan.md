@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### CRD hash manifest bound to SCHEMA_VERSION — #471 (P3), 2026-11-20
+
+- [x] `crds/SCHEMA_VERSIONS` (version  sha256-of-SHA256SUMS lines), T-CRD-1b + refusal unit test in
+      crates/flowsdn-k8s/tests/crds.rs, vendor-crds.sh prints the digest, spec 12 (same line count), crds.md, changelog.
+- [ ] sc-build; close.
+
 ### Mutual authentication gap — #472 (P3), 2026-11-20
 
 Scope question, not code: needs SPIRE (no platform component runs it; stormcert workload identities are design only),

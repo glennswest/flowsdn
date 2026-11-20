@@ -15,7 +15,11 @@ What ships:
   Every schema keeps the reference's validation: enums, patterns, formats, bounds, list
   types and the CEL `x-kubernetes-validations` rules. Each CRD has one served/storage version
   `v1alpha1`, the reference's `status` subresource and printer columns, and the label
-  `io.flowsdn.k8s.crd.schema.version: 1.33.11`.
+  `io.flowsdn.k8s.crd.schema.version: 1.33.11`. The vendored reference YAML's hash manifest
+  (`crates/flowsdn-k8s/crds/SHA256SUMS`) is bound to that version in `crds/SCHEMA_VERSIONS`
+  (#471): re-vendoring with `tools/vendor-crds.sh` fails the tests until the schema change
+  is reviewed, `flowsdn_k8s::SCHEMA_VERSION` is bumped and a line with the printed digest is
+  appended.
 - **Examples**: [`crates/flowsdn-k8s/testdata/crs/<plural>/`](../crates/flowsdn-k8s/testdata/crs/).
   Each kind has `minimal.yaml` (the smallest object the API server admits),
   `realistic.yaml` (a representative production object) and `reject-*.yaml` cases the
