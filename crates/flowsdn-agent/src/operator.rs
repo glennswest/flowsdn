@@ -100,8 +100,8 @@ pub fn parse(args: &[std::ffi::OsString]) -> Result<Options, String> {
                 options.gc.rate_interval = seconds(value);
             }
             Some(name @ "--identity-gc-rate-limit") => {
-                options.gc.rate_limit =
-                    u32::try_from(number(&mut rest, name, 1_000_000)?).map_err(|e| e.to_string())?;
+                options.gc.rate_limit = u32::try_from(number(&mut rest, name, 1_000_000)?)
+                    .map_err(|e| e.to_string())?;
             }
             Some(name @ "--nodes-gc-interval") => {
                 options.gc.nodes_interval = seconds(number(&mut rest, name, 604_800)?);

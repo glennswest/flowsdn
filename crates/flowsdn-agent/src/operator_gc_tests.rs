@@ -175,7 +175,10 @@ fn identity_gc_run_marks_deletes_with_preconditions_and_respects_the_rate_limit(
         ),
         (
             ENDPOINTS,
-            (200, json!({"items": [{"status": {"identity": {"id": 304}}}]})),
+            (
+                200,
+                json!({"items": [{"status": {"identity": {"id": 304}}}]}),
+            ),
         ),
     ]);
     let writes = RefCell::new(Vec::new());
@@ -183,7 +186,13 @@ fn identity_gc_run_marks_deletes_with_preconditions_and_respects_the_rate_limit(
     // First listed at `later`: not the term's first list, so counts from now.
     let mut send = fake(&lists, &writes, 200);
     let summary = identity_gc(&mut gc, later, "w", &mut send).expect("run");
-    assert_eq!(summary, IdentitySummary { alive: 1, ..Default::default() });
+    assert_eq!(
+        summary,
+        IdentitySummary {
+            alive: 1,
+            ..Default::default()
+        }
+    );
     let much_later = later.checked_add(mins(31)).expect("time");
     let summary = identity_gc(&mut gc, much_later, "w", &mut send).expect("run");
     assert_eq!(
@@ -196,7 +205,7 @@ fn identity_gc_run_marks_deletes_with_preconditions_and_respects_the_rate_limit(
             deferred: 1,
         }
     );
-    let writes = writes.into_inner();
+    let writes = writes.take();
     assert_eq!(writes.len(), 3);
     let (method, path, body) = writes.first().expect("delete");
     assert_eq!(method, "DELETE");
@@ -218,7 +227,10 @@ fn identity_gc_conflicts_are_skipped_and_a_failed_list_writes_nothing() {
     let start = Instant::now();
     let mut gc = IdentityGc::new(&settings(), start);
     let lists = BTreeMap::from([
-        (IDENTITIES, (200, json!({"items": [identity("300", "1", true)]}))),
+        (
+            IDENTITIES,
+            (200, json!({"items": [identity("300", "1", true)]})),
+        ),
         (ENDPOINTS, (200, json!({"items": []}))),
     ]);
     let writes = RefCell::new(Vec::new());
@@ -230,14 +242,17 @@ fn identity_gc_conflicts_are_skipped_and_a_failed_list_writes_nothing() {
     assert_eq!(summary.deleted, 0);
 
     let broken = BTreeMap::from([
-        (IDENTITIES, (200, json!({"items": [identity("300", "1", true)]}))),
+        (
+            IDENTITIES,
+            (200, json!({"items": [identity("300", "1", true)]})),
+        ),
         (ENDPOINTS, (403, json!({"message": "forbidden"}))),
     ]);
     let none = RefCell::new(Vec::new());
     let mut send = fake(&broken, &none, 200);
     let error = identity_gc(&mut gc, later, "w", &mut send).expect_err("list failed");
     assert!(error.contains("403 forbidden"), "{error}");
-    assert!(none.into_inner().is_empty());
+    assert!(none.take().is_empty());
 }
 
 fn flowsdn_node(name: &str, owned: bool, do_not_gc: Option<&str>) -> Value {
@@ -270,7 +285,10 @@ fn node_gc_deletes_an_orphan_after_one_interval_as_a_candidate() {
     let back = [flowsdn_node("node9", false, None)];
     gc.plan(at(10), &back, &used(&[]));
     gc.plan(at(12), &back, &used(&["node9"]));
-    assert!(gc.plan(at(16), &back, &used(&[])).is_empty(), "candidate again from 16");
+    assert!(
+        gc.plan(at(16), &back, &used(&[])).is_empty(),
+        "candidate again from 16"
+    );
     assert_eq!(gc.plan(at(21), &back, &used(&[])), vec!["node9"]);
 }
 
@@ -283,14 +301,20 @@ fn node_gc_run_deletes_and_treats_not_found_as_done() {
             FLOWSDN_NODES,
             (200, json!({"items": [flowsdn_node("gone", false, None)]})),
         ),
-        (NODES, (200, json!({"items": [{"metadata": {"name": "live"}}]}))),
+        (
+            NODES,
+            (200, json!({"items": [{"metadata": {"name": "live"}}]})),
+        ),
     ]);
     let writes = RefCell::new(Vec::new());
     let mut send = fake(&lists, &writes, 404);
     assert!(node_gc(&mut gc, start, &mut send).expect("run").is_empty());
     let later = start.checked_add(mins(5)).expect("time");
-    assert_eq!(node_gc(&mut gc, later, &mut send).expect("run"), vec!["gone"]);
-    let writes = writes.into_inner();
+    assert_eq!(
+        node_gc(&mut gc, later, &mut send).expect("run"),
+        vec!["gone"]
+    );
+    let writes = writes.take();
     assert_eq!(
         writes,
         vec![("DELETE".to_owned(), format!("{FLOWSDN_NODES}/gone"), None)]

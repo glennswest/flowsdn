@@ -49,7 +49,10 @@ fn items(list: &Value) -> &[Value] {
         .map_or(&[], Vec::as_slice)
 }
 fn text<'a>(object: &'a Value, pointer: &str) -> &'a str {
-    object.pointer(pointer).and_then(Value::as_str).unwrap_or("")
+    object
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .unwrap_or("")
 }
 
 /// A FlowsdnIdentity write.
@@ -152,9 +155,7 @@ impl IdentityGc {
             } else {
                 let mut object = object.clone();
                 if let Some(meta) = object.get_mut("metadata").and_then(Value::as_object_mut) {
-                    let annotations = meta
-                        .entry("annotations")
-                        .or_insert_with(|| json!({}));
+                    let annotations = meta.entry("annotations").or_insert_with(|| json!({}));
                     if !annotations.is_object() {
                         *annotations = json!({});
                     }
@@ -237,10 +238,7 @@ pub fn used_identities(endpoints: &Value, slices: Option<&Value>) -> BTreeSet<St
 fn list(send: &mut Send<'_>, path: &str) -> Result<Value, String> {
     match send(http::Method::GET, path, None).map_err(|e| format!("{path}: {e}"))? {
         (200, body) => Ok(body),
-        (status, body) => Err(format!(
-            "{path}: HTTP {status} {}",
-            text(&body, "/message")
-        )),
+        (status, body) => Err(format!("{path}: HTTP {status} {}", text(&body, "/message"))),
     }
 }
 
@@ -282,10 +280,7 @@ pub fn identity_gc(
                     (200..=299, _) => summary.marked = summary.marked.saturating_add(1),
                     (404 | 409, _) => summary.skipped = summary.skipped.saturating_add(1),
                     (status, body) => {
-                        return Err(format!(
-                            "{path}: HTTP {status} {}",
-                            text(&body, "/message")
-                        ));
+                        return Err(format!("{path}: HTTP {status} {}", text(&body, "/message")));
                     }
                 }
             }
@@ -299,17 +294,15 @@ pub fn identity_gc(
                     continue;
                 }
                 let path = format!("{IDENTITIES}/{name}");
-                let body = json!({"preconditions": {"uid": uid, "resourceVersion": resource_version}});
+                let body =
+                    json!({"preconditions": {"uid": uid, "resourceVersion": resource_version}});
                 match send(http::Method::DELETE, &path, Some(&body))
                     .map_err(|e| format!("{path}: {e}"))?
                 {
                     (200..=299, _) => summary.deleted = summary.deleted.saturating_add(1),
                     (404 | 409, _) => summary.skipped = summary.skipped.saturating_add(1),
                     (status, body) => {
-                        return Err(format!(
-                            "{path}: HTTP {status} {}",
-                            text(&body, "/message")
-                        ));
+                        return Err(format!("{path}: HTTP {status} {}", text(&body, "/message")));
                     }
                 }
             }
@@ -385,10 +378,7 @@ pub fn node_gc(gc: &mut NodeGc, now: Instant, send: &mut Send<'_>) -> Result<Vec
         match send(http::Method::DELETE, &path, None).map_err(|e| format!("{path}: {e}"))? {
             (200..=299 | 404, _) => deleted.push(name),
             (status, body) => {
-                return Err(format!(
-                    "{path}: HTTP {status} {}",
-                    text(&body, "/message")
-                ));
+                return Err(format!("{path}: HTTP {status} {}", text(&body, "/message")));
             }
         }
     }
