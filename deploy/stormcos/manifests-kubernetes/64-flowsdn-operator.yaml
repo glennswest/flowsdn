@@ -1,0 +1,47 @@
+# The flowsdn operator (#337, spec 12/13 §3.2): `flowsdn-agent operator`, the
+# same GNU Kubernetes binary as the agent (so the flowsdn golden already
+# carries it and its runtime). It holds the Lease kube-system/flowsdn-operator
+# and, while leading, registers the 22 flowsdn.io CRDs (create, or update an
+# older schema; a newer one is left alone) at start and every five minutes.
+# Its identity and RBAC are 63-flowsdn-operator-rbac.yaml.
+#
+# hostNetwork, and every taint tolerated: agents wait for the CRDs it
+# registers before their flowsdn.io watchers start
+# (`kubernetes.crd-wait-timeout`), so it must run before the pod network
+# does, on a node that is not Ready yet. Add --skip-crd-creation to the
+# command when an administrator applies crds/ instead.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flowsdn-operator
+  namespace: kube-system
+  labels: { k8s-app: flowsdn-operator, app.kubernetes.io/name: flowsdn-operator, app.kubernetes.io/part-of: flowsdn, addonmanager.kubernetes.io/mode: Reconcile }
+  annotations: { addonmanager.kubernetes.io/mode: Reconcile }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { k8s-app: flowsdn-operator }
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels: { k8s-app: flowsdn-operator, app.kubernetes.io/name: flowsdn-operator, app.kubernetes.io/part-of: flowsdn }
+    spec:
+      serviceAccountName: flowsdn-operator
+      automountServiceAccountToken: true
+      hostNetwork: true
+      priorityClassName: system-cluster-critical
+      terminationGracePeriodSeconds: 5
+      nodeSelector: { kubernetes.io/os: linux }
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: flowsdn-operator
+          image: flowsdn
+          command: ["/flowsdn-agent", "operator"]
+          env:
+            # The Lease holder identity.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef: { apiVersion: v1, fieldPath: metadata.name }

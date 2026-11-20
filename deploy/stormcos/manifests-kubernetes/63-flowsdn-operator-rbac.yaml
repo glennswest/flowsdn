@@ -2,8 +2,7 @@
 # update limited to the 22 flowsdn.io CRDs by name, leader election, and the
 # flowsdn.io kinds it reconciles. Feature-conditional rules (Ingress, Gateway
 # API, MCS-API, secret sync, unmanaged-pod restart) are left out until those
-# controllers exist. No operator Deployment ships yet; until it does, stormcos
-# applies crds/ itself (the --skip-crd-creation path).
+# controllers exist. The operator itself is 64-flowsdn-operator.yaml (#337).
 ---
 apiVersion: v1
 kind: ServiceAccount
