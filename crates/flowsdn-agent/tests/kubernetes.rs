@@ -523,10 +523,7 @@ fn controller_lists_watches_and_derives_the_pool() {
                     && p == "/apis/flowsdn.io/v1alpha1/flowsdnloadbalancerippools/lan/status"
                     && body.pointer("/status/conditions/1/message") == Some(&json!("10"))));
                 let status = view.lb_ipam_json();
-                assert_eq!(
-                    status.pointer("/services/0/name"),
-                    Some(&json!("edge-lb"))
-                );
+                assert_eq!(status.pointer("/services/0/name"), Some(&json!("edge-lb")));
                 assert_eq!(
                     status.pointer("/services/0/ips/0"),
                     Some(&json!("192.0.2.240"))

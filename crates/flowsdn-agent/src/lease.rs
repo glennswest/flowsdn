@@ -58,8 +58,9 @@ impl Elector {
     /// than a lease duration ago (minus a margin for the write's own time).
     pub fn leading(&self, now: Instant) -> bool {
         let margin = self.duration.checked_div(5).unwrap_or_default();
-        self.renewed
-            .is_some_and(|at| now.saturating_duration_since(at).saturating_add(margin) < self.duration)
+        self.renewed.is_some_and(|at| {
+            now.saturating_duration_since(at).saturating_add(margin) < self.duration
+        })
     }
     /// The next step, given the Lease as read (`None`: it does not exist).
     /// `wall` is the current time as a MicroTime (`renewTime`).
@@ -163,7 +164,8 @@ mod tests {
     use super::*;
 
     fn after(at: Instant, seconds: u64) -> Instant {
-        at.checked_add(Duration::from_secs(seconds)).expect("instant")
+        at.checked_add(Duration::from_secs(seconds))
+            .expect("instant")
     }
     fn lease(holder: &str, renew: &str) -> Value {
         json!({"metadata": {"name": "flowsdn-lb-ipam", "namespace": "kube-system",
@@ -210,19 +212,11 @@ mod tests {
         let later = after(start, 10);
         assert_eq!(other.step(later, "t", Some(&lease("n1", "b"))), Step::Wait);
         assert_eq!(
-            other.step(
-                after(later, 14),
-                "t",
-                Some(&lease("n1", "b"))
-            ),
+            other.step(after(later, 14), "t", Some(&lease("n1", "b"))),
             Step::Wait
         );
         // Unchanged for its duration: take it over.
-        let Step::Update(body) = other.step(
-            after(later, 15),
-            "t9",
-            Some(&lease("n1", "b")),
-        ) else {
+        let Step::Update(body) = other.step(after(later, 15), "t9", Some(&lease("n1", "b"))) else {
             panic!("take over");
         };
         assert_eq!(body.pointer("/spec/holderIdentity"), Some(&json!("n2")));

@@ -273,5 +273,8 @@ fn the_status_json_lists_pools_and_services() {
     let status = status_json(&out, true, true);
     assert_eq!(status.pointer("/leader"), Some(&json!(true)));
     assert_eq!(status.pointer("/pools/0/available"), Some(&json!("1")));
-    assert_eq!(status.pointer("/services/0/ips/0"), Some(&json!("10.0.0.0")));
+    assert_eq!(
+        status.pointer("/services/0/ips/0"),
+        Some(&json!("10.0.0.0"))
+    );
 }

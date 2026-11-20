@@ -91,7 +91,7 @@ impl Policy {
 }
 
 /// One address this node answers for.
-#[derive(Clone, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Announcement {
     pub ip: IpAddr,
     pub namespace: String,

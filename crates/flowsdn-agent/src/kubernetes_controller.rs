@@ -247,6 +247,7 @@ impl Controller {
                     derive,
                     ..
                 } = self;
+                let (lb_ipam_on, l2_on) = (settings.lb_ipam_on(), settings.l2_on());
                 let local = settings.node_name;
                 let node_view = Arc::clone(&watch_view);
                 let node_lb = lb.clone();
@@ -451,7 +452,7 @@ impl Controller {
                         .boxed_local(),
                     );
                 }
-                if settings.lb_ipam_on() {
+                if lb_ipam_on {
                     let pool_view = Arc::clone(&watch_view);
                     parts.push(
                         watch_forever(
@@ -469,7 +470,7 @@ impl Controller {
                         .boxed_local(),
                     );
                 }
-                if settings.l2_on() {
+                if l2_on {
                     let l2_view = Arc::clone(&watch_view);
                     parts.push(
                         watch_forever(
