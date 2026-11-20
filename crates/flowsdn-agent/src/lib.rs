@@ -23,6 +23,7 @@ pub mod operator;
 #[cfg(feature = "kubernetes")]
 pub mod operator_gc;
 pub mod policy;
+pub mod prefilter;
 pub mod services;
 pub mod state;
 pub mod tagging;

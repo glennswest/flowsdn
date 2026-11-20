@@ -117,6 +117,14 @@ wildcard identities; a top-precedence deny over a broader allow; ICMP echo
 replies by conntrack only; maps reading back as written; and removal of
 enforcement.
 
+Run `prefilter-live` with the `local-delivery` BPF object for the XDP
+prefilter (#467). In anonymous network namespaces it test-runs `xdp_prefilter`
+(denied IPv4/IPv6 sources drop through the host-prefix hash maps and the LPM
+tries; other sources, ARP and short frames pass; removal and clear), then
+attaches it to a veth uplink as the agent does (native, else generic) and
+checks that UDP from a peer namespace is dropped while its source is denied and
+arrives while it is allowed.
+
 Run `neighbors-live` with no arguments for managed neighbors (#469, spec 10
 §3.4). In anonymous network namespaces, with an uplink `a0` and a peer holding
 the gateway and an on-link address, it checks the managed-neighbor startup

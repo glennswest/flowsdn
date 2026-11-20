@@ -3,7 +3,8 @@
 //! on its egress (pod ingress: policy); `from_netdev`/`to_netdev` on the
 //! uplinks are the host firewall (#379), which the endpoint programs also
 //! apply to local Pods' traffic to the host (#384). See
-//! `local-delivery/policy.rs`.
+//! `local-delivery/policy.rs`. `xdp_prefilter` is the XDP prefilter on the
+//! uplinks (#467, `local-delivery/prefilter.rs`).
 #![no_std]
 #![no_main]
 
@@ -11,12 +12,14 @@
 mod helper_coverage;
 #[path = "local-delivery/policy.rs"]
 mod policy;
+#[path = "local-delivery/prefilter.rs"]
+mod prefilter;
 
 use aya_ebpf::{
     bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, TC_ACT_SHOT},
-    macros::{classifier, map},
+    macros::{classifier, map, xdp},
     maps::HashMap,
-    programs::TcContext,
+    programs::{TcContext, XdpContext},
 };
 use flowsdn_bpf::local_delivery::{deliver, destination, destination_candidate};
 use flowsdn_bpf_abi::endpoint::{EndpointInfo, EndpointKey};
@@ -84,8 +87,8 @@ pub fn from_netdev(ctx: TcContext) -> i32 {
 }
 
 /// The host firewall on an uplink's egress: flows this node starts are
-/// remembered, so their replies pass `from_netdev`. Host egress policy is
-/// not enforced.
+/// remembered, so their replies pass `from_netdev`; with host egress rules
+/// (#477) they are judged.
 #[classifier]
 pub fn to_netdev(ctx: TcContext) -> i32 {
     policy::enforce(&ctx, 1, policy::SCOPE_HOST)
@@ -110,6 +113,13 @@ pub fn uplink_ingress(ctx: TcContext) -> i32 {
         return TC_ACT_SHOT;
     }
     deliver(&ctx, endpoint)
+}
+
+/// The XDP prefilter (#467) on an uplink: frames from a denied source are
+/// dropped before the stack. See `local-delivery/prefilter.rs`.
+#[xdp]
+pub fn xdp_prefilter(ctx: XdpContext) -> u32 {
+    prefilter::filter(&ctx)
 }
 
 // SAFETY: unique immutable ELF license declaration, required by the loader.

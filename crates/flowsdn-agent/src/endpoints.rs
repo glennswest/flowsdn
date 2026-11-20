@@ -269,6 +269,39 @@ impl Manager {
         }
         failed
     }
+    /// The XDP prefilter's deny maps (#467).
+    pub fn prefilter_maps(&mut self) -> Result<&mut flowsdn_bpf_loader::kernel::PrefilterMaps> {
+        kernel(self.driver.prefilter())
+    }
+    /// Put the XDP prefilter (#467) on exactly the uplinks in `want`;
+    /// returns each attached uplink with its mode, and what failed.
+    pub fn sync_prefilter(
+        &mut self,
+        want: &BTreeSet<String>,
+    ) -> (BTreeMap<String, &'static str>, Vec<String>) {
+        let stale: Vec<String> = self
+            .driver
+            .prefilter_interfaces()
+            .map(|(name, _)| name)
+            .filter(|name| !want.contains(*name))
+            .map(str::to_owned)
+            .collect();
+        for name in stale {
+            self.driver.detach_prefilter(&name);
+        }
+        let mut failed = Vec::new();
+        for name in want {
+            if let Err(error) = self.driver.attach_prefilter(name) {
+                failed.push(format!("attach the XDP prefilter to {name}: {error}"));
+            }
+        }
+        let attached = self
+            .driver
+            .prefilter_interfaces()
+            .map(|(name, mode)| (name.to_owned(), mode))
+            .collect();
+        (attached, failed)
+    }
     /// The policy decisions counted so far (#379), summed over CPUs.
     pub fn policy_verdicts(
         &mut self,

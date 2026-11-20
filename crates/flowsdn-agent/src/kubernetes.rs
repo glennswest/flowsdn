@@ -60,6 +60,10 @@ pub struct Settings {
     /// ([`crate::neighbors`]). On, the agent refuses to start on a kernel
     /// without managed neighbors.
     pub l2_neigh_discovery: bool,
+    /// `xdp-prefilter` (#467; the reference's `enable-xdp-prefilter`,
+    /// default false): the XDP prefilter on the uplinks and its
+    /// `/v1/prefilter` deny list ([`crate::prefilter`]).
+    pub xdp_prefilter: bool,
     /// `lb-algorithm: maglev` (default `random`): NodePort, external and
     /// LoadBalancer traffic from outside the cluster picks backends by
     /// Maglev (spec 05 §3.13), so every node sends a flow to the same
@@ -258,6 +262,7 @@ impl Settings {
             service_lb: flag("service-lb", true)?,
             node_port: flag("node-port", true)?,
             l2_neigh_discovery: flag("l2-neigh-discovery", false)?,
+            xdp_prefilter: flag("xdp-prefilter", false)?,
             maglev,
             lb_mode,
             nat46x64: flag("nat46x64", false)?,
@@ -696,6 +701,8 @@ pub struct View {
     /// Managed neighbors (#469): what the neighbors thread last did; null
     /// while `l2-neigh-discovery` is off.
     pub neighbors: Value,
+    /// The XDP prefilter's uplinks and modes (#467); null while off.
+    pub prefilter: Value,
     /// LB-IPAM (#475): on, the FlowsdnLoadBalancerIPPool objects, and what
     /// the LB-IPAM thread last planned (`GET /v1/lb-ipam`).
     pub lb_ipam: bool,
@@ -1007,7 +1014,7 @@ impl View {
             "flowsdn-endpoints":self.endpoint_crd_status,"flowsdn-node":self.node_crd_status,
             "node-config":self.node_config,
             "policy":self.policy_status,"uplinks":self.uplinks.summary(),
-            "neighbors":self.neighbors})
+            "neighbors":self.neighbors,"prefilter":self.prefilter})
     }
 }
 

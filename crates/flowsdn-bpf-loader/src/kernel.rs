@@ -5,9 +5,10 @@ use aya::{
     Ebpf, EbpfLoader,
     maps::{HashMap, Map, MapData, MapError, MapInfo, MapType},
     programs::{
-        LinkOrder, SchedClassifier, TcAttachType,
+        LinkOrder, SchedClassifier, TcAttachType, Xdp,
         links::{FdLink, Link, PinnedLink},
         tc::{SchedClassifierLink, TcAttachOptions},
+        xdp::{XdpLink, XdpMode},
     },
 };
 use flowsdn_bpf_abi::{
@@ -31,6 +32,10 @@ pub mod socket_lb;
 mod policy_maps;
 pub use policy_maps::PolicyMaps;
 
+#[path = "prefilter_maps.rs"]
+mod prefilter_maps;
+pub use prefilter_maps::PrefilterMaps;
+
 pub type KernelResult<T> = Result<T, Box<dyn Error>>;
 
 /// Owns the loaded program, its attachments and an anonymous endpoint map.
@@ -44,6 +49,11 @@ pub struct LocalDelivery {
     /// The host firewall's links on uplinks (#379), by interface: never
     /// pinned, they detach when this owner drops.
     hosts: BTreeMap<String, [SchedClassifierLink; 2]>,
+    /// The XDP prefilter's deny maps (#467); None for an object without them.
+    prefilter: Option<PrefilterMaps>,
+    /// The XDP prefilter's links on uplinks (#467), by interface, with the
+    /// mode it attached in: never pinned, they detach when this owner drops.
+    prefilters: BTreeMap<String, (XdpLink, &'static str)>,
     pin_root: Option<PathBuf>,
     map_id: u32,
 }
@@ -166,6 +176,14 @@ impl LocalDelivery {
         };
         let endpoints = HashMap::try_from(map)?;
         let policy = PolicyMaps::take(&mut bpf)?;
+        let prefilter = if prefilter_maps::NAMES
+            .iter()
+            .all(|name| bpf.map(name).is_some())
+        {
+            Some(PrefilterMaps::take(&mut bpf)?)
+        } else {
+            None
+        };
         for name in ["local_delivery", "to_container"] {
             let program: &mut SchedClassifier = bpf
                 .program_mut(name)
@@ -179,6 +197,8 @@ impl LocalDelivery {
             policy,
             interfaces: BTreeMap::new(),
             hosts: BTreeMap::new(),
+            prefilter,
+            prefilters: BTreeMap::new(),
             pin_root,
             map_id,
         })
@@ -385,6 +405,61 @@ impl LocalDelivery {
             program.load()?;
         }
         Ok(program)
+    }
+
+    /// The XDP prefilter's deny maps (#467).
+    pub fn prefilter(&mut self) -> KernelResult<&mut PrefilterMaps> {
+        self.prefilter
+            .as_mut()
+            .ok_or_else(|| "this local-delivery object has no XDP prefilter".into())
+    }
+    /// The `xdp_prefilter` program, loaded (for BPF_PROG_TEST_RUN).
+    pub fn prefilter_program(&mut self) -> KernelResult<&mut Xdp> {
+        let program: &mut Xdp = self
+            .bpf
+            .program_mut("xdp_prefilter")
+            .ok_or("this local-delivery object has no XDP prefilter")?
+            .try_into()?;
+        if program.fd().is_err() {
+            program.load()?;
+        }
+        Ok(program)
+    }
+    /// Attach the XDP prefilter (#467) to uplink `interface`: native mode
+    /// where the driver has it, else generic. Returns the mode (`native`,
+    /// `generic`). Already attached is fine.
+    pub fn attach_prefilter(&mut self, interface: &str) -> KernelResult<&'static str> {
+        valid_interface(interface)?;
+        if let Some((_, mode)) = self.prefilters.get(interface) {
+            return Ok(mode);
+        }
+        self.prefilter()?;
+        let program = self.prefilter_program()?;
+        let (id, mode) = match program.attach(interface, XdpMode::Driver) {
+            Ok(id) => (id, "native"),
+            Err(native) => match program.attach(interface, XdpMode::Skb) {
+                Ok(id) => (id, "generic"),
+                Err(generic) => {
+                    return Err(format!(
+                        "XDP on {interface}: native: {native}; generic: {generic}"
+                    )
+                    .into());
+                }
+            },
+        };
+        let link = program.take_link(id)?;
+        self.prefilters.insert(interface.to_owned(), (link, mode));
+        Ok(mode)
+    }
+    /// Detach the XDP prefilter from `interface`.
+    pub fn detach_prefilter(&mut self, interface: &str) {
+        self.prefilters.remove(interface);
+    }
+    /// The interfaces the XDP prefilter is on, with their mode.
+    pub fn prefilter_interfaces(&self) -> impl Iterator<Item = (&str, &'static str)> {
+        self.prefilters
+            .iter()
+            .map(|(name, (_, mode))| (name.as_str(), *mode))
     }
 
     /// Remove the owned attachments; retrying an already detached name succeeds.

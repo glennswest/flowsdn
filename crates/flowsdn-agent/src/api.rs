@@ -352,7 +352,7 @@ struct Lease {
 /// Every route the agent serves, as the first column of docs/agent-api.md's
 /// "Supported methods" table; a test keeps the two equal (#298: the API is a
 /// supported boundary for `sc net` and the console plugin).
-pub const ROUTES: [&str; 24] = [
+pub const ROUTES: [&str; 27] = [
     "`GET /v1/config`",
     "`GET /v1/healthz`",
     "`GET /v1/health/modules`",
@@ -374,6 +374,9 @@ pub const ROUTES: [&str; 24] = [
     "`GET /v1/lb-ipam`",
     "`GET /v1/l2-announcements`",
     "`GET /v1/policy/verdicts`",
+    "`GET /v1/prefilter`",
+    "`PATCH /v1/prefilter`",
+    "`DELETE /v1/prefilter`",
     "`GET /v1/cni/timing`",
     "`POST /v1/cni/timing`",
     "`GET /metrics`",
@@ -385,12 +388,48 @@ struct Api {
     kubernetes: Option<crate::kubernetes::Shared>,
     /// When the host firewall's uplinks were last brought to the view's.
     host_synced: Option<Instant>,
+    /// The XDP prefilter's deny list (#467); None while
+    /// `kubernetes.xdp-prefilter` is off.
+    prefilter: Option<crate::prefilter::Prefilter>,
+    /// When the prefilter's uplinks were last brought to the view's.
+    prefilter_synced: Option<Instant>,
     timing: crate::cni_timing::Timing,
     /// Why the policy maps could not be shared (NetworkPolicy not enforced);
     /// a degraded health row while it holds (#418).
     policy_maps_error: Option<String>,
 }
 impl Api {
+    /// Once a second, with the XDP prefilter on (#467): attach it to the
+    /// uplinks with a hardware address and detach it from the rest.
+    fn sync_prefilter(&mut self) {
+        if self.prefilter.is_none()
+            || self
+                .prefilter_synced
+                .is_some_and(|at| at.elapsed() < Duration::from_secs(1))
+        {
+            return;
+        }
+        self.prefilter_synced = Some(Instant::now());
+        let Some(view) = &self.kubernetes else {
+            return;
+        };
+        let want: BTreeSet<String> = crate::kubernetes::lock(view)
+            .uplinks
+            .uplinks
+            .iter()
+            .filter(|u| u.mac != [0; 6])
+            .map(|u| u.name.clone())
+            .collect();
+        let (attached, failed) = self.manager.sync_prefilter(&want);
+        let mut view = crate::kubernetes::lock(view);
+        if failed.is_empty() {
+            view.errors.remove("prefilter-attach");
+        } else {
+            view.errors
+                .insert("prefilter-attach".into(), failed.join("; "));
+        }
+        view.prefilter = json!({"interfaces": attached});
+    }
     /// Once a second: attach the host firewall (#379) to the uplinks the
     /// policy thread wants and detach it from the rest; this thread owns
     /// the programs.
@@ -539,6 +578,20 @@ impl Api {
                         _ => view.route_list(),
                     },
                 ));
+            }
+            ("GET" | "PATCH" | "DELETE", "/v1/prefilter") => {
+                let Some(state) = self.prefilter.as_mut() else {
+                    return fail(500, "the XDP prefilter is not enabled (kubernetes.xdp-prefilter)");
+                };
+                let result = match request.method.as_str() {
+                    "GET" => return Ok((200, state.json())),
+                    "PATCH" => state.patch(&request.body, self.manager.prefilter_maps()?),
+                    _ => state.delete(&request.body, self.manager.prefilter_maps()?),
+                };
+                return match result {
+                    Ok(body) => Ok((200, body)),
+                    Err(refusal) => fail(refusal.status, refusal.message),
+                };
             }
             ("GET", "/v1/policy/verdicts") => {
                 return Ok((200, verdict_list(&self.manager.policy_verdicts()?)));
@@ -1407,6 +1460,7 @@ pub fn run(config_path: &Path) -> Result<()> {
         }
         None => None,
     };
+    let xdp_prefilter = config.kubernetes.as_ref().is_some_and(|k| k.xdp_prefilter);
     let kubernetes = connect_kubernetes(&mut config)?;
     #[cfg(feature = "kubernetes")]
     for refused in node_report.iter().flat_map(|r| &r.refused) {
@@ -1483,9 +1537,21 @@ pub fn run(config_path: &Path) -> Result<()> {
         leases: BTreeMap::new(),
         kubernetes,
         host_synced: None,
+        prefilter: None,
+        prefilter_synced: None,
         timing: crate::cni_timing::Timing::default(),
         policy_maps_error,
     };
+    if xdp_prefilter {
+        // The list lives in this process: start empty at revision 1, even
+        // over pinned maps an earlier agent filled (#467).
+        api.manager
+            .prefilter_maps()
+            .and_then(|maps| maps.clear().map_err(|e| e.to_string().into()))
+            .map_err(|error| format!("kubernetes.xdp-prefilter: {error}"))?;
+        api.prefilter = Some(crate::prefilter::Prefilter::default());
+        crate::log::logln!("XDP prefilter on: deny list empty at revision 1");
+    }
     // Without endpoint GC, never advertise readiness after skipping a deletion.
     // Preserve failed entries and fail startup so a supervisor can retry safely.
     let mut replay = Queue::open(&api.config.queue)?.lock_exclusive(Duration::from_millis(1500))?;
@@ -1551,6 +1617,7 @@ pub fn run(config_path: &Path) -> Result<()> {
     loop {
         api.expire();
         api.sync_host_firewall();
+        api.sync_prefilter();
         // Once a second, so health changes are logged when they happen, not
         // only when someone asks (#418).
         if health_checked.is_none_or(|at| at.elapsed() >= Duration::from_secs(1)) {
