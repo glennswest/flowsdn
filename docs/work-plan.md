@@ -10,12 +10,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 everything they do not redirect or drop; TCX stops the chain there, so `from_netdev`/`to_netdev` (attached last)
 never ran on an uplink with NodePort on. Fix: both classifiers return TCX_NEXT (-1) where they returned TC_ACT_OK
 (redirect and drop unchanged), so the host firewall judges the (translated) packet.
-- [ ] BPF: `next()` at both entry points; socket-lb object + lock + embedded copy rebuilt through sc-build.
-- [ ] socket-lb-live expects TCX_NEXT from the NodePort test runs instead of TC_ACT_OK.
-- [ ] New fixture `host-chain-live`: both chains attached to a real veth uplink (socket-lb `attach_uplink`, then
-      `attach_host`), traffic from a peer netns: an allowed host port connects, a denied one does not, a connection
-      the host starts is in the policy flow map (to_netdev ran). Fails on the old object (negative control).
-- [ ] Docs (bpftest README, implementation-status, changelog), sc-build, kernel-check, stage, ship.
+- [x] BPF `next()` at both entry points 8cf7cfb, socket-lb object + lock 6925607 (sha256 af7b97f9…).
+- [x] socket-lb-live expects TCX_NEXT; new fixture `host-chain-live` 8859ca6 (fmt 4fa00b0).
+- [x] Negative control at 8859ca6 (old object, SC_BUILD_EXPECT_FAIL): kernel-check 7.3.4 21 pass, 1 fail: host-chain-live
+      "peer to host TCP 7002: OK: the host firewall did not run after the NodePort program" (the finding reproduced).
+- [x] kernel-check at 6925607 on 7.3.4-200.fc44: 22 pass, 0 fail, 2 skip; host-chain-live 4 PASS, socket-lb-live 26 PASS,
+      policy-live 16 PASS. Strict sc-build at 4fa00b0: fmt --check, `cargo xtask check` (966 tests, 0 failed), test/build.sh.
+- [ ] Stage, ship (proof: host-chain-live in the medium log), close #484.
 
 ### FlowsdnNodeConfig as an agent configuration source — #480 (P2), 2026-11-20
 
