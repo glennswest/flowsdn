@@ -188,6 +188,26 @@ fn server(
                     let _ = stream.write_all(response.as_bytes());
                     return;
                 }
+                // The FlowsdnNodeConfig source (#480): this Node's labels and
+                // the configs of kube-system.
+                if line.starts_with("GET /api/v1/nodes/local ")
+                    || line.starts_with("GET /apis/flowsdn.io/v1alpha1/namespaces/kube-system/flowsdnnodeconfigs ")
+                {
+                    let body = if line.contains("/nodes/local") {
+                        json!({"metadata": {"name": "local", "labels": {"edge": "yes"}}})
+                    } else {
+                        json!({"items": [{"metadata": {"name": "edge"}, "spec": {
+                            "nodeSelector": {"matchLabels": {"edge": "yes"}},
+                            "defaults": {"kubernetes.lb-mode": "dsr"}}}]})
+                    }
+                    .to_string();
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                    return;
+                }
                 // At the start of a boot the kind is not served yet (#397).
                 if line.starts_with("GET /apis/flowsdn.io/v1alpha1/flowsdnidentities")
                     && Instant::now() < crd_served_at
@@ -424,6 +444,19 @@ fn controller_lists_watches_and_derives_the_pool() {
         terminate_tcp: false,
         node_config: serde_json::Value::Null,
     };
+    // FlowsdnNodeConfig (#480): the agent reads its Node's labels and the
+    // configs of its namespace at start; the edge config selects it.
+    let (labels, configs) =
+        flowsdn_agent::node_config::fetch(&settings, "kube-system").expect("node configuration");
+    assert_eq!(labels.get("edge").map(String::as_str), Some("yes"));
+    let (merged, report) = flowsdn_agent::node_config::apply(
+        &json!({"kubernetes": {}}),
+        &configs,
+        &labels,
+        &|_| Ok(()),
+    );
+    assert_eq!(report.selected, ["edge"]);
+    assert_eq!(merged.pointer("/kubernetes/lb-mode"), Some(&json!("dsr")));
     let controller = Controller::connect(settings, &dir).expect("connect");
     let (pool4, pool6) = controller.wait_for_pools(true, true).expect("pools");
     assert_eq!(pool4, Some(("10.172.0.0".parse().expect("IP"), 16)));
