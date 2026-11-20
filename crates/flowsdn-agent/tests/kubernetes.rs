@@ -424,6 +424,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         service_lb: true,
         cgroup_root: PathBuf::from("/sys/fs/cgroup"),
         node_port: false,
+        l2_neigh_discovery: false,
         maglev: false,
         host_firewall: flowsdn_agent::kubernetes::HostFirewall::Off,
         identity_allocation: true,

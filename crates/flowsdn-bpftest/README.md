@@ -117,6 +117,14 @@ wildcard identities; a top-precedence deny over a broader allow; ICMP echo
 replies by conntrack only; maps reading back as written; and removal of
 enforcement.
 
+Run `neighbors-live` with no arguments for managed neighbors (#469, spec 10
+§3.4). In anonymous network namespaces, with an uplink `a0` and a peer holding
+the gateway and an on-link address, it checks the managed-neighbor startup
+probe; next hops from FIB-match lookups (gateway, on-link, unreachable); the
+agent's reconcile making `extern_learn` + `managed` entries, removing a stray
+learned entry and leaving a static one; the kernel resolving a managed entry by
+itself; and an address no longer forwardable losing its entry.
+
 Run `host-chain-live` with the `local-delivery` and `socket-lb` BPF objects
 for the uplink's whole TCX chain (#484). It attaches the host firewall
 (`from_netdev`/`to_netdev`, last) and the NodePort programs

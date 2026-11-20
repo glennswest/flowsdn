@@ -19,6 +19,7 @@ use tokio::runtime::Runtime;
 
 pub mod announce;
 pub mod multihome;
+pub mod neighbor;
 pub mod sock_diag;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;

@@ -54,6 +54,12 @@ pub struct Settings {
     /// cluster (#292), default on with `service-lb`: tc programs on the
     /// interfaces holding this node's InternalIPs.
     pub node_port: bool,
+    /// `l2-neigh-discovery` (#469, spec 10 §3.4; the reference's
+    /// `enable-l2-neigh-discovery`, default false): kernel-managed neighbor
+    /// entries for the next hops to other nodes on the uplinks
+    /// ([`crate::neighbors`]). On, the agent refuses to start on a kernel
+    /// without managed neighbors.
+    pub l2_neigh_discovery: bool,
     /// `lb-algorithm: maglev` (default `random`): NodePort, external and
     /// LoadBalancer traffic from outside the cluster picks backends by
     /// Maglev (spec 05 §3.13), so every node sends a flow to the same
@@ -251,6 +257,7 @@ impl Settings {
             skip_unreachable: flag("direct-routing-skip-unreachable", false)?,
             service_lb: flag("service-lb", true)?,
             node_port: flag("node-port", true)?,
+            l2_neigh_discovery: flag("l2-neigh-discovery", false)?,
             maglev,
             lb_mode,
             nat46x64: flag("nat46x64", false)?,
@@ -686,6 +693,9 @@ pub struct View {
     pub host_addresses: Vec<IpAddr>,
     /// The node's uplink ports, their carrier and failover (#408).
     pub uplinks: crate::uplinks::View,
+    /// Managed neighbors (#469): what the neighbors thread last did; null
+    /// while `l2-neigh-discovery` is off.
+    pub neighbors: Value,
     /// LB-IPAM (#475): on, the FlowsdnLoadBalancerIPPool objects, and what
     /// the LB-IPAM thread last planned (`GET /v1/lb-ipam`).
     pub lb_ipam: bool,
@@ -996,7 +1006,8 @@ impl View {
             "lb-ipam":self.lb_ipam,"l2-announcements":self.l2_announcements,
             "flowsdn-endpoints":self.endpoint_crd_status,"flowsdn-node":self.node_crd_status,
             "node-config":self.node_config,
-            "policy":self.policy_status,"uplinks":self.uplinks.summary()})
+            "policy":self.policy_status,"uplinks":self.uplinks.summary(),
+            "neighbors":self.neighbors})
     }
 }
 

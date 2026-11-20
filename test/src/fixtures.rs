@@ -83,6 +83,11 @@ fn fixtures(env: &Env) -> Vec<(&'static str, PathBuf, Vec<PathBuf>)> {
             Vec::new(),
         ),
         (
+            "fixture-neighbors-live",
+            env.fixture("neighbors-live"),
+            Vec::new(),
+        ),
+        (
             "fixture-skb-ctx-matrix",
             env.fixture("skb-ctx-matrix"),
             vec![env.bpf("skb-ctx")],

@@ -13,6 +13,7 @@ pub mod l2_announce;
 pub mod lb_ipam;
 pub mod lease;
 pub mod log;
+pub mod neighbors;
 #[cfg(feature = "kubernetes")]
 pub mod node_config;
 #[cfg(feature = "kubernetes")]

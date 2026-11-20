@@ -166,6 +166,14 @@ impl Controller {
                 .errors
                 .insert("sysctl".into(), failed.join("; "));
         }
+        if self.settings.l2_neigh_discovery {
+            // No fallback (#132): without managed neighbors the agent stops.
+            crate::neighbors::probe()?;
+            let neighbor_view = Arc::clone(&view);
+            std::thread::Builder::new()
+                .name("flowsdn-neighbors".into())
+                .spawn(move || crate::neighbors::run(&neighbor_view))?;
+        }
         {
             let uplink_view = Arc::clone(&view);
             let uplink_settings = self.settings.uplinks.clone();
