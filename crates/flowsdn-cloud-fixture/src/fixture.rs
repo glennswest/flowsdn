@@ -503,9 +503,15 @@ pub(crate) mod tests {
                 other => panic!("{name:?}: expected a refusal, got {other:?}"),
             }
         }
-        assert!(gcp.join("scenario.toml").exists(), "another provider's fixture went");
+        assert!(
+            gcp.join("scenario.toml").exists(),
+            "another provider's fixture went"
+        );
         assert!(aws.join("other").exists(), "a sibling scenario went");
-        assert!(outside.join("keep").exists(), "a directory outside the root went");
+        assert!(
+            outside.join("keep").exists(),
+            "a directory outside the root went"
+        );
         // An invalid operation or date is refused before the old copy goes.
         let dir = write(&root, &scenario()).expect("write");
         let mut bad = scenario();
@@ -516,7 +522,10 @@ pub(crate) mod tests {
         let mut late = scenario();
         late.meta.captured = "yesterday".to_string();
         assert!(matches!(write(&root, &late), Err(Error::Format(..))));
-        assert!(dir.join("001-describe-instances.json").exists(), "the old copy went");
+        assert!(
+            dir.join("001-describe-instances.json").exists(),
+            "the old copy went"
+        );
         std::fs::remove_dir_all(&root).expect("cleanup");
         std::fs::remove_dir_all(&outside).expect("cleanup");
     }
