@@ -4,6 +4,17 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Host firewall first live run — #478 (P3), 2026-11-20
+
+Needs a flowsdn node whose golden has the operator (CRDs, 66daa9b; stormcos#303 closed for it) and the #484 fix
+(6925607: NodePort TCX programs no longer bypass the firewall on the uplink). pvetest2's 12.97-flowsdn has flowsdn
+2b801ce: neither.
+- [x] Proposed `--after-install flowsdn>=6925607@pvetest2`.
+- [ ] Then on pvetest2: `HostFirewall` Event, `/v1/healthz` `kubernetes.policy.host-firewall`, `/v1/policy/verdicts`
+      audit rows (audit is the edition's setting); kubelet/API/SSH alive through the 60 s learning window; HOST_PODS
+      judged; a non-InternalIP node address is the host's. Enforce via a FlowsdnNodeConfig `kubernetes.host-firewall`
+      (#480) for the node. Ship with the Event proof; close.
+
 ### #408 on real hardware — #417 (P2), 2026-11-20
 
 Owner (on #417, 2026-11-20): the proof runs on a flowsdn test machine (server1-8 or the Dell), pulling a cable more
