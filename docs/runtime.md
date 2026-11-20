@@ -51,6 +51,8 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.nat46x64` | `false` | Service NAT46/64: a node-local frontend with no backend of its own family reaches the other family's backends on other nodes ([NAT46/64](#service-nat4664)). |
 | `kubernetes.lb-ipam` | `true` | LB-IPAM: give `type: LoadBalancer` Services addresses from FlowsdnLoadBalancerIPPools ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb`; nothing happens without a pool. |
 | `kubernetes.l2-announcements` | `true` | Answer ARP and NDP for the load-balancer and external addresses FlowsdnL2AnnouncementPolicies give this node ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb` and `node-port`; nothing is announced without a policy. |
+| `kubernetes.endpoint-crd` | `true` | Keep a FlowsdnEndpoint for each local Pod endpoint ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). Nothing is written while the kind is not served. |
+| `kubernetes.node-crd` | `true` | Keep this node's FlowsdnNode ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
 | `kubernetes.flowsdn-policy` | `false` | Enforce the Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy ([Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292)). The CRDs must exist: the policy thread waits for both lists, NetworkPolicy enforcement included. |
@@ -579,6 +581,47 @@ Geneve). A UDP packet the option would push over the device's MTU is sent withou
 it, and no ICMP error is produced: if it opens the flow, the reply keeps the
 backend's source. Verified by kernel test runs only (`socket-lb-live`); it has not
 carried traffic between two nodes.
+
+### FlowsdnEndpoint and FlowsdnNode (#332)
+
+The Kubernetes-mode agent publishes its endpoints and its node as
+`flowsdn.io/v1alpha1` objects, from a `flowsdn-crds` thread every 2 s
+(`flowsdn_agent::endpoint_crd`, `node_crd`; types in `flowsdn_k8s::kinds`).
+
+- **FlowsdnEndpoint**, one per local Pod endpoint (not host-network Pods),
+  in the Pod's namespace and named after it, owned by the Pod
+  (`controller: true`), so Kubernetes deletes it with the Pod. `status`:
+  `id`, `state` (`ready`, or `waiting-for-identity` while allocation has
+  none), `service-account`, `identity` (`id`, `labels`), `networking`
+  (`node`: this node's first InternalIP; `addressing`: the endpoint's IPv4
+  and IPv6), `named-ports`, `external-identifiers` (`container-id`: the
+  sandbox, `cni-attachment-id`: `<sandbox>:<interface>`, `k8s-namespace`,
+  `k8s-pod-name`, `pod-name`) and `policy` (`ingress`/`egress` `enforcing`
+  and `state`, from the policy thread). The Pod's workload and containers
+  (#328) have no field in the schema; they stay on `/v1/endpoint` and the
+  Pod's `flowsdn.io/pod-networks`. Created with `POST`; a status change is a
+  JSON patch whose first op tests the object's UID (spec 13 §3.9), so a
+  replaced object is never overwritten; deleted (UID precondition) when the
+  endpoint goes. An existing object of the same name is adopted when the
+  same Pod owns it (an agent restart) and replaced otherwise. A write the
+  server refuses is a `flowsdn-endpoints` part error and a
+  `FlowsdnEndpointFailed` Warning Event on the Pod.
+- **FlowsdnNode**, cluster-scoped, named after the Node and owned by it,
+  with its labels; `spec.addresses` (InternalIPs), `spec.ipam.podCIDRs` (the
+  Node's pod CIDRs, or the ones this agent derives, #296) and `spec.bootid`;
+  `status.ipam.used` maps each local endpoint address to its
+  `<namespace>/<pod>`. Read, then created (`POST`), replaced (`PUT` with the
+  read resourceVersion) when labels, owner or spec differ, and its status
+  written through `/status`; left alone for 5 minutes while unchanged. A
+  refused write is the `flowsdn-node` part error.
+- **Not served.** Until the CRDs are applied (stormcos#303) a create gets
+  404: the writer logs it once, retries every minute, and it is not an
+  error. `/v1/healthz` shows `flowsdn-endpoints` (`served`, `objects`) and
+  `flowsdn-node` (`served`).
+- **Not here.** Deleting the FlowsdnNode of a removed Node, FlowsdnIdentity
+  garbage collection and FlowsdnEndpointSlice batching are the operator's
+  (#479, after the operator executable #446). What a FlowsdnNodeConfig
+  overrides is an open decision (#480); the agent does not read it.
 
 ### LoadBalancer Services (#475)
 

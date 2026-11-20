@@ -31,10 +31,14 @@ What ships:
   `63-flowsdn-operator-rbac.yaml`. Operator CRD `update` is limited by `resourceNames` to
   these 22 CRDs. A test checks both roles against the CRD set.
 
+Rust types exist for FlowsdnEndpoint, FlowsdnEndpointSlice, FlowsdnIdentity,
+FlowsdnNode and FlowsdnNodeConfig (`flowsdn_k8s::kinds`, #332, checked against
+their schemas by `tests/kinds.rs`), and the agent writes FlowsdnEndpoint and
+FlowsdnNode ([runtime](runtime.md#flowsdnendpoint-and-flowsdnnode-332)).
 What does not exist yet: registration by an operator (stormcos applies `crds/` directly,
 which is the reference's `--skip-crd-creation` mode), the agent's CRD readiness gate,
-Rust types per kind, and the controllers that write `status`, emit events and garbage
-collect. Applying a `FlowsdnNetworkPolicy` today stores it, validated, but nothing
+Rust types of the other kinds, and the controllers that write their `status`, emit
+events and garbage collect (#479 for the endpoint, identity and node kinds). Applying a `FlowsdnNetworkPolicy` today stores it, validated, but nothing
 enforces it. Each of these is tracked per group in the issues linked from #325.
 
 ## The kinds

@@ -67,7 +67,10 @@ FlowsdnIdentity or NetworkPolicy lists; with `flowsdn-policy`, Namespaces and bo
 flowsdn policy lists) are complete or while a part has an
 error (`msg` then lists `<part>: <error>`, for example `annotations`,
 `services`, `node-port`, `policy`), otherwise `Ok` with node, pod and frontend
-counts. `policy` is what the policy thread last programmed (#292):
+counts. `flowsdn-endpoints` (`{served, objects}`) and `flowsdn-node`
+(`{served}`) are the FlowsdnEndpoint and FlowsdnNode writers' last pass
+(#332; `null` before it or when off); a refused write is the
+`flowsdn-endpoints` / `flowsdn-node` part error. `policy` is what the policy thread last programmed (#292):
 `{endpoints: [{id, pod, ingress-enforced, egress-enforced, entries}], ipcache,
 host-firewall, flowsdn-policies, problems}`, `null` before its first pass. `host-firewall` (#379)
 is `null` with `kubernetes.host-firewall: off`, else `{mode, policies,

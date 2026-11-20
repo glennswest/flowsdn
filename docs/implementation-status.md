@@ -67,6 +67,12 @@ pinning or subsystem libraries are absent are **not current status**.
   the `flowsdn.io/pod-networks` annotation on local Pods (and flowsdn's entry in
   the Multus `network-status`, #371) and pod/container/
   workload fields on `/v1/endpoint` and `/v1/ip` (#328).
+- FlowsdnEndpoint per local Pod endpoint and this node's FlowsdnNode (#332,
+  `kubernetes.endpoint-crd`/`node-crd`, default on), with Rust types of the
+  endpoint, identity and node kinds checked against their schemas
+  (T-CRD-3/4/5/7 by schema-driven tests). Unit-tested against a recording
+  API; not on a cluster (the CRDs wait on stormcos#303). Operator GC and
+  slices: #479; FlowsdnNodeConfig: decision #480.
 - Cluster identities for local Pods over FlowsdnIdentity objects (spec 03
   §3.3, #291): oldest-object lookup, create on a free number, heartbeat
   removal, recreate; `GET /v1/identity` and identities on `/v1/ip` and
