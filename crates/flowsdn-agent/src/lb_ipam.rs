@@ -75,7 +75,7 @@ impl Range {
         self.v6 == other.v6 && self.first <= other.last && other.first <= self.last
     }
     fn size(&self) -> u128 {
-        (self.last - self.first).saturating_add(1)
+        self.last.saturating_sub(self.first).saturating_add(1)
     }
 }
 
@@ -107,19 +107,17 @@ fn parse_block(block: &Value, allow_first_last: bool) -> Result<Range, String> {
             .filter(|p| *p <= bits)
             .ok_or_else(|| format!("{cidr}: invalid prefix"))?;
         let (v6, value) = number(ip);
-        let host_bits = bits - prefix;
-        let mask = if host_bits >= 128 {
-            u128::MAX
-        } else {
-            (1u128 << host_bits) - 1
-        };
+        let host_bits = bits.saturating_sub(prefix);
+        let mask = 1u128
+            .checked_shl(host_bits)
+            .map_or(u128::MAX, |bit| bit.wrapping_sub(1));
         let first = value & !mask;
         let last = first | mask;
         if !allow_first_last && host_bits >= 2 {
             return Ok(Range {
                 v6,
-                first: first + 1,
-                last: last - 1,
+                first: first.saturating_add(1),
+                last: last.saturating_sub(1),
             });
         }
         return Ok(Range { v6, first, last });
@@ -132,13 +130,17 @@ fn parse_block(block: &Value, allow_first_last: bool) -> Result<Range, String> {
         .parse()
         .map_err(|_| format!("{start}: not an address"))?;
     let last: IpAddr = match block.get("stop").and_then(Value::as_str) {
-        Some(stop) => stop.parse().map_err(|_| format!("{stop}: not an address"))?,
+        Some(stop) => stop
+            .parse()
+            .map_err(|_| format!("{stop}: not an address"))?,
         None => first,
     };
     let (v6, first) = number(first);
     let (stop_v6, last) = number(last);
     if v6 != stop_v6 || last < first {
-        return Err(format!("{start}: stop must be of its family and not before it"));
+        return Err(format!(
+            "{start}: stop must be of its family and not before it"
+        ));
     }
     Ok(Range { v6, first, last })
 }
@@ -157,7 +159,9 @@ impl Pool {
         let mut pool = Pool {
             name: meta("name"),
             created: meta("creationTimestamp"),
-            generation: object.pointer("/metadata/generation").and_then(Value::as_u64),
+            generation: object
+                .pointer("/metadata/generation")
+                .and_then(Value::as_u64),
             disabled: spec.get("disabled").and_then(Value::as_bool) == Some(true),
             conditions: object
                 .pointer("/status/conditions")
@@ -280,7 +284,7 @@ pub struct Plan {
 }
 impl Plan {
     /// The Services whose status differs from the plan.
-    pub fn patches<'a>(&'a self, services: &'a [ServiceInfo]) -> Vec<&'a Desired> {
+    pub fn patches(&self, services: &[ServiceInfo]) -> Vec<&Desired> {
         services
             .iter()
             .filter_map(|s| {
@@ -298,10 +302,11 @@ fn conflicts(pools: &[Pool]) -> BTreeMap<String, String> {
     let mut kept: Vec<&Pool> = Vec::new();
     let mut out = BTreeMap::new();
     for pool in ordered {
-        if let Some(older) = kept
-            .iter()
-            .find(|k| k.ranges.iter().any(|a| pool.ranges.iter().any(|b| a.overlaps(b))))
-        {
+        if let Some(older) = kept.iter().find(|k| {
+            k.ranges
+                .iter()
+                .any(|a| pool.ranges.iter().any(|b| a.overlaps(b)))
+        }) {
             out.insert(pool.name.clone(), older.name.clone());
         } else {
             // Overlap inside one pool is the same pool's addresses: not a conflict.
@@ -323,7 +328,7 @@ fn lowest_free(pool: &Pool, v6: bool, used: &BTreeMap<Number, (String, String)>)
             if candidate == range.last {
                 break;
             }
-            candidate += 1;
+            candidate = candidate.saturating_add(1);
         }
     }
     None
@@ -354,8 +359,8 @@ fn condition(
         "message": message,
         "lastTransitionTime": since,
     });
-    if let Some(generation) = generation {
-        value["observedGeneration"] = json!(generation);
+    if let (Some(generation), Some(object)) = (generation, value.as_object_mut()) {
+        object.insert("observedGeneration".into(), json!(generation));
     }
     value
 }
@@ -373,19 +378,18 @@ pub fn plan(pools: &[Pool], services: &[ServiceInfo], now: &str) -> Plan {
     ordered.sort_by(|a, b| {
         (&a.created, &a.namespace, &a.name).cmp(&(&b.created, &b.namespace, &b.name))
     });
-    let labels: Vec<BTreeMap<String, String>> = ordered.iter().map(|s| service_labels(s)).collect();
-    let matching = |i: usize, enabled: bool| -> Vec<&Pool> {
+    let matching = |labels: &BTreeMap<String, String>, enabled: bool| -> Vec<&Pool> {
         usable
             .iter()
-            .filter(|p| (!enabled || !p.disabled) && p.selector.matches(&labels[i]))
+            .filter(|p| (!enabled || !p.disabled) && p.selector.matches(labels))
             .copied()
             .collect()
     };
     let mut used: BTreeMap<Number, (String, String)> = BTreeMap::new();
-    let mut kept: Vec<Vec<IpAddr>> = vec![Vec::new(); ordered.len()];
+    let mut kept: BTreeMap<(String, String), Vec<IpAddr>> = BTreeMap::new();
     let mut plan = Plan::default();
     // Pass 1: every Service keeps the valid addresses it has, oldest first.
-    for (i, service) in ordered.iter().enumerate() {
+    for service in &ordered {
         let key = (service.namespace.clone(), service.name.clone());
         if !managed(service) {
             // No longer a LoadBalancer of ours: give back pool addresses.
@@ -414,28 +418,30 @@ pub fn plan(pools: &[Pool], services: &[ServiceInfo], now: &str) -> Plan {
             continue;
         }
         let families = families(service);
-        let pools = matching(i, false);
+        let pools = matching(&service_labels(service), false);
+        let mine = kept.entry(key.clone()).or_default();
         for ip in &service.load_balancer_ips {
             let n = number(*ip);
             let wanted = if service.requested_ips.is_empty() {
-                families.contains(&ip.is_ipv6()) && !kept[i].iter().any(|k| k.is_ipv6() == ip.is_ipv6())
+                families.contains(&ip.is_ipv6())
+                    && !mine.iter().any(|k| k.is_ipv6() == ip.is_ipv6())
             } else {
                 service.requested_ips.contains(ip)
             };
             if wanted && !used.contains_key(&n) && pools.iter().any(|p| p.contains(n)) {
                 used.insert(n, key.clone());
-                kept[i].push(*ip);
+                mine.push(*ip);
             }
         }
     }
     // Pass 2: what is still missing, oldest first.
-    for (i, service) in ordered.iter().enumerate() {
+    for service in &ordered {
         if !managed(service) {
             continue;
         }
         let key = (service.namespace.clone(), service.name.clone());
-        let pools = matching(i, true);
-        let mut ips = kept[i].clone();
+        let pools = matching(&service_labels(service), true);
+        let mut ips = kept.get(&key).cloned().unwrap_or_default();
         let mut problems = Vec::new();
         if service.requested_ips.is_empty() {
             for v6 in families(service) {

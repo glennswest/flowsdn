@@ -248,7 +248,11 @@ pub fn plan(
 }
 
 /// `GET /v1/l2-announcements`.
-pub fn status_json(announcements: &[Announcement], policies: &[Policy], errors: &[String]) -> Value {
+pub fn status_json(
+    announcements: &[Announcement],
+    policies: &[Policy],
+    errors: &[String],
+) -> Value {
     json!({
         "policies": policies.iter().map(|p| json!({
             "name": p.name,

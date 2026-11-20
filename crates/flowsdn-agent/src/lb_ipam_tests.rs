@@ -20,12 +20,33 @@ fn lb(namespace: &str, name: &str, created: &str) -> ServiceInfo {
         ..ServiceInfo::default()
     }
 }
+fn desired<'a>(plan: &'a Plan, namespace: &str, name: &str) -> &'a Desired {
+    plan.services
+        .get(&(namespace.to_owned(), name.to_owned()))
+        .expect("planned")
+}
 fn ips(plan: &Plan, namespace: &str, name: &str) -> Vec<String> {
-    plan.services[&(namespace.to_owned(), name.to_owned())]
+    desired(plan, namespace, name)
         .ips
         .iter()
         .map(ToString::to_string)
         .collect()
+}
+fn first_pool(plan: &Plan) -> &PoolStatus {
+    plan.pools.first().expect("pool")
+}
+fn pool_status<'a>(plan: &'a Plan, name: &str) -> &'a PoolStatus {
+    plan.pools.iter().find(|p| p.name == name).expect("pool")
+}
+/// Field `key` of condition `index` of a pool's conditions to write.
+fn condition_field(status: &PoolStatus, index: usize, key: &str) -> Value {
+    status
+        .conditions
+        .as_ref()
+        .and_then(|c| c.get(index))
+        .and_then(|c| c.get(key))
+        .cloned()
+        .unwrap_or(Value::Null)
 }
 const NOW: &str = "2026-11-19T00:00:00Z";
 
@@ -40,16 +61,17 @@ fn edge_lb_gets_the_lowest_address_and_the_status_patch_names_it() {
         external_local: true,
         ..lb("storefront", "edge-lb", "2026-11-19T00:00:00Z")
     };
-    let plan = plan(&pools, std::slice::from_ref(&edge), NOW);
-    assert_eq!(ips(&plan, "storefront", "edge-lb"), ["192.168.30.240"]);
-    let patches = plan.patches(std::slice::from_ref(&edge));
+    let out = plan(&pools, std::slice::from_ref(&edge), NOW);
+    assert_eq!(ips(&out, "storefront", "edge-lb"), ["192.168.30.240"]);
+    let patches = out.patches(std::slice::from_ref(&edge));
     assert_eq!(patches.len(), 1);
+    let patch = patches.first().expect("patch");
     assert_eq!(
-        patches[0].path(),
+        patch.path(),
         "/api/v1/namespaces/storefront/services/edge-lb/status"
     );
     assert_eq!(
-        patches[0].body(),
+        patch.body(),
         json!({"metadata": {"resourceVersion": "7"},
                "status": {"loadBalancer": {"ingress": [{"ip": "192.168.30.240"}]}}})
     );
@@ -58,10 +80,10 @@ fn edge_lb_gets_the_lowest_address_and_the_status_patch_names_it() {
         load_balancer_ips: vec![ip("192.168.30.240")],
         ..edge
     };
-    let again = super::plan(&pools, std::slice::from_ref(&written), NOW);
+    let again = plan(&pools, std::slice::from_ref(&written), NOW);
     assert!(again.patches(std::slice::from_ref(&written)).is_empty());
-    assert_eq!(again.pools[0].used, 1);
-    assert_eq!(again.pools[0].available, 10);
+    assert_eq!(first_pool(&again).used, 1);
+    assert_eq!(first_pool(&again).available, 10);
 }
 
 #[test]
@@ -77,7 +99,7 @@ fn addresses_are_kept_released_and_never_shared() {
         load_balancer_ips: vec![ip("10.0.0.0")],
         ..lb("ns", "b", "2026-11-02T00:00:00Z")
     };
-    let plan1 = plan(&pools, &[a.clone(), b.clone()], NOW);
+    let plan1 = plan(&pools, &[a, b.clone()], NOW);
     assert_eq!(ips(&plan1, "ns", "b"), ["10.0.0.0"]);
     assert_eq!(ips(&plan1, "ns", "a"), ["10.0.0.1"]);
     // Two Services claim one address: the older keeps it.
@@ -85,7 +107,7 @@ fn addresses_are_kept_released_and_never_shared() {
         load_balancer_ips: vec![ip("10.0.0.0")],
         ..lb("ns", "c", "2026-11-03T00:00:00Z")
     };
-    let plan2 = plan(&pools, &[b.clone(), c.clone()], NOW);
+    let plan2 = plan(&pools, &[b.clone(), c], NOW);
     assert_eq!(ips(&plan2, "ns", "b"), ["10.0.0.0"]);
     assert_eq!(ips(&plan2, "ns", "c"), ["10.0.0.1"]);
     // b is deleted: its address is free for the next Service.
@@ -112,26 +134,29 @@ fn exhausted_pool_and_requested_addresses() {
     let second = lb("ns", "second", "2026-11-02T00:00:00Z");
     let full = plan(&pools, &[first, second.clone()], NOW);
     assert_eq!(ips(&full, "ns", "first"), ["198.51.100.9"]);
-    let starved = &full.services[&("ns".to_owned(), "second".to_owned())];
+    let starved = desired(&full, "ns", "second");
     assert!(starved.ips.is_empty());
     assert_eq!(
         starved.problem.as_deref(),
         Some("no free IPv4 address in a matching pool")
     );
-    assert_eq!(full.pools[0].available, 0);
-    let conditions = full.pools[0].conditions.as_ref().expect("written");
-    assert_eq!(conditions[1]["type"], CONDITION_AVAILABLE);
-    assert_eq!(conditions[1]["status"], "False");
+    let status = first_pool(&full);
+    assert_eq!(status.available, 0);
+    assert_eq!(
+        condition_field(status, 1, "type"),
+        json!(CONDITION_AVAILABLE)
+    );
+    assert_eq!(condition_field(status, 1, "status"), json!("False"));
     // A requested address outside every pool is reported, not invented.
     let asks = ServiceInfo {
         requested_ips: vec![ip("203.0.113.1")],
         ..second
     };
     let refused = plan(&pools, &[asks], NOW);
-    let desired = &refused.services[&("ns".to_owned(), "second".to_owned())];
-    assert!(desired.ips.is_empty());
+    let wanted = desired(&refused, "ns", "second");
+    assert!(wanted.ips.is_empty());
     assert_eq!(
-        desired.problem.as_deref(),
+        wanted.problem.as_deref(),
         Some("203.0.113.1 is in no enabled pool that matches")
     );
 }
@@ -167,12 +192,13 @@ fn selectors_classes_families_and_disabled_pools() {
         ..lb("default", "old", "2026-10-01T00:00:00Z")
     };
     let out = plan(&pools, &[dual, other, classed, old], NOW);
-    assert_eq!(ips(&out, "storefront", "edge-lb"), ["10.1.0.1", "fd00:1::1"]);
+    assert_eq!(
+        ips(&out, "storefront", "edge-lb"),
+        ["10.1.0.1", "fd00:1::1"]
+    );
     assert!(ips(&out, "default", "web").is_empty());
     assert_eq!(
-        out.services[&("default".to_owned(), "web".to_owned())]
-            .problem
-            .as_deref(),
+        desired(&out, "default", "web").problem.as_deref(),
         Some("no enabled pool matches for IPv4")
     );
     assert!(
@@ -203,20 +229,23 @@ fn overlapping_and_invalid_pools_are_not_used_and_say_why() {
     ];
     let out = plan(&pools, &[lb("ns", "s", "2026-11-03T00:00:00Z")], NOW);
     assert_eq!(ips(&out, "ns", "s"), ["10.0.0.4"]);
-    let by_name: BTreeMap<_, _> = out.pools.iter().map(|p| (p.name.as_str(), p)).collect();
-    assert_eq!(by_name["newer"].conflict.as_deref(), Some("older"));
-    let newer = by_name["newer"].conditions.as_ref().expect("conditions");
-    assert_eq!(newer[0]["type"], CONDITION_CONFLICT);
-    assert_eq!(newer[0]["status"], "True");
-    assert_eq!(newer[0]["lastTransitionTime"], NOW);
-    let broken = by_name["broken"].conditions.as_ref().expect("conditions");
-    assert_eq!(broken[1]["reason"], "InvalidPool");
-    assert_eq!(by_name["broken"].available, 0);
+    let newer = pool_status(&out, "newer");
+    assert_eq!(newer.conflict.as_deref(), Some("older"));
+    assert_eq!(condition_field(newer, 0, "type"), json!(CONDITION_CONFLICT));
+    assert_eq!(condition_field(newer, 0, "status"), json!("True"));
+    assert_eq!(condition_field(newer, 0, "lastTransitionTime"), json!(NOW));
+    let broken = pool_status(&out, "broken");
+    assert_eq!(condition_field(broken, 1, "reason"), json!("InvalidPool"));
+    assert_eq!(broken.available, 0);
     // Conditions already written (same status) are not written again and
     // keep their transition time.
+    let older = pools.get(1).expect("older pool");
     let written = Pool {
-        conditions: by_name["older"].conditions.clone().expect("conditions"),
-        ..pools[1].clone()
+        conditions: pool_status(&out, "older")
+            .conditions
+            .clone()
+            .expect("conditions"),
+        ..older.clone()
     };
     let later = plan(
         &[written],
@@ -226,9 +255,9 @@ fn overlapping_and_invalid_pools_are_not_used_and_say_why() {
         }],
         "2026-11-20T00:00:00Z",
     );
-    assert!(later.pools[0].conditions.is_none());
+    assert!(first_pool(&later).conditions.is_none());
     assert_eq!(
-        later.pools[0].path(),
+        first_pool(&later).path(),
         "/apis/flowsdn.io/v1alpha1/flowsdnloadbalancerippools/older/status"
     );
 }
@@ -242,7 +271,7 @@ fn the_status_json_lists_pools_and_services() {
     )];
     let out = plan(&pools, &[lb("ns", "s", "x")], NOW);
     let status = status_json(&out, true, true);
-    assert_eq!(status["leader"], true);
-    assert_eq!(status["pools"][0]["available"], "1");
-    assert_eq!(status["services"][0]["ips"][0], "10.0.0.0");
+    assert_eq!(status.pointer("/leader"), Some(&json!(true)));
+    assert_eq!(status.pointer("/pools/0/available"), Some(&json!("1")));
+    assert_eq!(status.pointer("/services/0/ips/0"), Some(&json!("10.0.0.0")));
 }

@@ -28,10 +28,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[path = "uplinks_monitor.rs"]
-mod uplinks_monitor;
 #[path = "kubernetes_lb.rs"]
 mod lb;
+#[path = "uplinks_monitor.rs"]
+mod uplinks_monitor;
 
 type Key = (IpAddr, u8, IpAddr);
 

@@ -62,7 +62,9 @@ pub(super) fn ipam_loop(view: &Shared, kubeconfig: Option<&Path>, identity: &str
         let now = Instant::now();
         let read = runtime.block_on(client.send_json(http::Method::GET, &elector.path(), None));
         let step = match read {
-            Ok((200, lease)) => Some(elector.step(now, &micro_time(SystemTime::now()), Some(&lease))),
+            Ok((200, lease)) => {
+                Some(elector.step(now, &micro_time(SystemTime::now()), Some(&lease)))
+            }
             Ok((404, _)) => Some(elector.step(now, &micro_time(SystemTime::now()), None)),
             Ok((status, body)) => {
                 failures.push(format!("lease: HTTP {status} {}", message(&body)));
@@ -95,7 +97,11 @@ pub(super) fn ipam_loop(view: &Shared, kubeconfig: Option<&Path>, identity: &str
         }
         let leading = elector.leading(Instant::now());
         let pools: Vec<Pool> = pools.iter().map(Pool::parse).collect();
-        let plan = lb_ipam::plan(&pools, &services, &crate::events::rfc3339(SystemTime::now()));
+        let plan = lb_ipam::plan(
+            &pools,
+            &services,
+            &crate::events::rfc3339(SystemTime::now()),
+        );
         for desired in plan.services.values() {
             let key = (desired.namespace.clone(), desired.name.clone());
             let seen = (desired.ips.clone(), desired.problem.clone());
@@ -234,7 +240,10 @@ pub(super) fn announce_loop(view: &Shared) {
             {
                 None
             } else {
-                if parsed.as_ref().is_none_or(|(raw, _)| *raw != view.l2_policies) {
+                if parsed
+                    .as_ref()
+                    .is_none_or(|(raw, _)| *raw != view.l2_policies)
+                {
                     let policies = view
                         .l2_policies
                         .iter()
@@ -242,7 +251,10 @@ pub(super) fn announce_loop(view: &Shared) {
                         .collect();
                     parsed = Some((view.l2_policies.clone(), policies));
                 }
-                let policies = parsed.as_ref().map(|(_, p)| p.as_slice()).unwrap_or_default();
+                let policies = parsed
+                    .as_ref()
+                    .map(|(_, p)| p.as_slice())
+                    .unwrap_or_default();
                 let interface_names: Vec<String> = names.keys().cloned().collect();
                 Some(l2_announce::plan(
                     policies,
@@ -382,7 +394,7 @@ pub(super) fn announce_loop(view: &Shared) {
                 errors.push(format!("{} announce {}: {error}", item.interface, item.ip));
             }
             item.left = item.left.saturating_sub(1);
-            item.next = now + Duration::from_secs(1);
+            item.next = now.checked_add(Duration::from_secs(1)).unwrap_or(now);
         }
         pending.retain(|p| p.left > 0 && ports.contains_key(&p.interface));
         // Answer until the next plan.
@@ -420,7 +432,10 @@ pub(super) fn announce_loop(view: &Shared) {
         }
         errors.extend(setup.iter().cloned());
         let mut view = lock(view);
-        let policies = parsed.as_ref().map(|(_, p)| p.as_slice()).unwrap_or_default();
+        let policies = parsed
+            .as_ref()
+            .map(|(_, p)| p.as_slice())
+            .unwrap_or_default();
         view.l2_status = l2_announce::status_json(&current, policies, &errors);
         if errors.is_empty() {
             view.errors.remove("l2-announcements");

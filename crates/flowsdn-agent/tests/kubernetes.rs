@@ -198,7 +198,11 @@ fn server(
                         .map(|(_, _, body)| body.clone());
                     let response = match lease {
                         Some(mut lease) => {
-                            lease["metadata"]["resourceVersion"] = json!("70");
+                            if let Some(metadata) =
+                                lease.get_mut("metadata").and_then(|m| m.as_object_mut())
+                            {
+                                metadata.insert("resourceVersion".into(), json!("70"));
+                            }
                             let body = lease.to_string();
                             format!(
                                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -418,7 +422,7 @@ fn controller_lists_watches_and_derives_the_pool() {
                 && watches.load(Ordering::SeqCst) >= 2
                 && view.identities_synced
                 && view.pod_identities.len() == 2
-                && view.lb_ipam_json()["leader"] == json!(true)
+                && view.lb_ipam_json().get("leader") == Some(&json!(true))
                 && writes
                     .lock()
                     .expect("writes")
@@ -510,15 +514,23 @@ fn controller_lists_watches_and_derives_the_pool() {
                         "status":{"loadBalancer":{"ingress":[{"ip":"192.0.2.240"}]}}})
                 );
                 assert!(
-                    !writes.iter().any(|(_, p, _)| p.contains("/services/kube-dns")),
+                    !writes
+                        .iter()
+                        .any(|(_, p, _)| p.contains("/services/kube-dns")),
                     "a ClusterIP Service is not touched"
                 );
                 assert!(writes.iter().any(|(m, p, body)| m == "PATCH"
                     && p == "/apis/flowsdn.io/v1alpha1/flowsdnloadbalancerippools/lan/status"
                     && body.pointer("/status/conditions/1/message") == Some(&json!("10"))));
                 let status = view.lb_ipam_json();
-                assert_eq!(status["services"][0]["name"], "edge-lb");
-                assert_eq!(status["services"][0]["ips"][0], "192.0.2.240");
+                assert_eq!(
+                    status.pointer("/services/0/name"),
+                    Some(&json!("edge-lb"))
+                );
+                assert_eq!(
+                    status.pointer("/services/0/ips/0"),
+                    Some(&json!("192.0.2.240"))
+                );
                 break;
             }
         }

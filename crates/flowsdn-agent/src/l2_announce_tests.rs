@@ -40,7 +40,7 @@ fn edge_slice(nodes: &[(&str, bool)]) -> SliceInfo {
             .iter()
             .enumerate()
             .map(|(i, (n, ready))| Endpoint {
-                addresses: vec![ip(&format!("10.1.0.{}", i + 10))],
+                addresses: vec![ip(&format!("10.1.0.{}", i.saturating_add(10)))],
                 ready: *ready,
                 serving: *ready,
                 terminating: false,
@@ -80,7 +80,11 @@ fn winners(
 
 #[test]
 fn etp_local_is_answered_by_one_node_with_an_endpoint() {
-    let nodes = [node("pvetest1", true), node("pvetest2", true), node("pvetest3", true)];
+    let nodes = [
+        node("pvetest1", true),
+        node("pvetest2", true),
+        node("pvetest3", true),
+    ];
     let service = edge_lb(true);
     // Both edge pods on pvetest2: only it answers.
     let both = [edge_slice(&[("pvetest2", true), ("pvetest2", true)])];
@@ -89,7 +93,8 @@ fn etp_local_is_answered_by_one_node_with_an_endpoint() {
     let spread = [edge_slice(&[("pvetest1", true), ("pvetest3", true)])];
     let won = winners(&[all_lb()], &service, &spread, &nodes);
     assert_eq!(won.len(), 1);
-    assert!(won[0] == "pvetest1" || won[0] == "pvetest3", "{won:?}");
+    let first = won.first().expect("winner");
+    assert!(first == "pvetest1" || first == "pvetest3", "{won:?}");
     // No ready endpoint: nobody answers.
     let none = [edge_slice(&[("pvetest1", false)])];
     assert!(winners(&[all_lb()], &service, &none, &nodes).is_empty());
@@ -99,7 +104,15 @@ fn etp_local_is_answered_by_one_node_with_an_endpoint() {
         uplink("eth1", ("192.168.16.10", 20), true),
         uplink("eth2", ("192.168.16.11", 20), false),
     ];
-    let out = plan(&[all_lb()], &[service], &both, &nodes, "pvetest2", &uplinks, &[]);
+    let out = plan(
+        &[all_lb()],
+        &[service],
+        &both,
+        &nodes,
+        "pvetest2",
+        &uplinks,
+        &[],
+    );
     assert_eq!(
         out,
         [Announcement {
@@ -117,17 +130,18 @@ fn etp_cluster_picks_one_ready_selected_node_and_moves_when_it_goes() {
     let nodes = [node("a", true), node("b", true), node("c", true)];
     let won = winners(&[all_lb()], &service, &[], &nodes);
     assert_eq!(won.len(), 1);
+    let first = won.first().expect("winner").clone();
     // The winner stops being Ready: another node takes over.
     let down: Vec<NodeInfo> = nodes
         .iter()
         .map(|n| NodeInfo {
-            ready: n.name != won[0],
+            ready: n.name != first,
             ..n.clone()
         })
         .collect();
     let next = winners(&[all_lb()], &service, &[], &down);
     assert_eq!(next.len(), 1);
-    assert_ne!(next[0], won[0]);
+    assert_ne!(next.first(), Some(&first));
     // nodeSelector limits the candidates.
     let only_b = Policy::parse(&json!({"metadata": {"name": "b"}, "spec": {
         "loadBalancerIPs": true,
@@ -164,7 +178,11 @@ fn nothing_is_announced_without_a_selecting_policy_or_flag() {
     assert!(winners(&[all_lb()], &classed, &[], &nodes).is_empty());
     let bad = Policy::parse(&json!({"metadata": {"name": "bad"}, "spec": {
         "loadBalancerIPs": true, "interfaces": ["("]}}));
-    assert!(bad.invalid.as_deref().is_some_and(|e| e.starts_with("interfaces:")));
+    assert!(
+        bad.invalid
+            .as_deref()
+            .is_some_and(|e| e.starts_with("interfaces:"))
+    );
     assert!(winners(&[bad], &service, &[], &nodes).is_empty());
 }
 
@@ -180,9 +198,16 @@ fn interfaces_and_external_ips() {
     let names = ["ens18".to_owned(), "lo".to_owned(), "bond0".to_owned()];
     let out = plan(&[policy], &[service], &[], &nodes, "a", &[], &names);
     assert_eq!(out.len(), 1);
-    assert_eq!(out[0].ip, ip("203.0.113.5"));
-    assert_eq!(out[0].interfaces, ["bond0", "ens18"]);
+    let only = out.first().expect("announcement");
+    assert_eq!(only.ip, ip("203.0.113.5"));
+    assert_eq!(only.interfaces, ["bond0", "ens18"]);
     let status = status_json(&out, &[], &[]);
-    assert_eq!(status["announcing"][0]["service"], "storefront/edge-lb");
-    assert_eq!(status["announcing"][0]["interfaces"][1], "ens18");
+    assert_eq!(
+        status.pointer("/announcing/0/service"),
+        Some(&json!("storefront/edge-lb"))
+    );
+    assert_eq!(
+        status.pointer("/announcing/0/interfaces/1"),
+        Some(&json!("ens18"))
+    );
 }

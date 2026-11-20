@@ -89,7 +89,7 @@ fn icmpv6_checksum(source: Ipv6Addr, destination: Ipv6Addr, message: &[u8]) -> u
     let mut sum: u32 = 0;
     let mut add = |bytes: &[u8]| {
         for pair in bytes.chunks(2) {
-            let high = u32::from(pair[0]) << 8;
+            let high = pair.first().copied().map_or(0, u32::from) << 8;
             let low = pair.get(1).copied().map_or(0, u32::from);
             sum = sum.wrapping_add(high | low);
         }
@@ -101,7 +101,7 @@ fn icmpv6_checksum(source: Ipv6Addr, destination: Ipv6Addr, message: &[u8]) -> u
     add(&[0, 0, 0, ICMPV6]);
     add(message);
     while sum >> 16 != 0 {
-        sum = (sum & 0xffff) + (sum >> 16);
+        sum = (sum & 0xffff).wrapping_add(sum >> 16);
     }
     !u16::try_from(sum).unwrap_or(u16::MAX)
 }
@@ -146,12 +146,12 @@ pub fn solicited_node_mac(ip: Ipv6Addr) -> [u8; 6] {
 /// on an `ETH_P_IPV6` datagram socket (offsets from the IPv6 header):
 /// (code, jt, jf, k).
 pub const SOLICITATION_FILTER: [(u16, u8, u8, u32); 6] = [
-    (0x30, 0, 0, 6),         // ldb [6]: next header
-    (0x15, 0, 3, 58),        // jeq ICMPv6, else drop
-    (0x30, 0, 0, 40),        // ldb [40]: ICMPv6 type
-    (0x15, 0, 1, 135),       // jeq Neighbor Solicitation, else drop
+    (0x30, 0, 0, 6),           // ldb [6]: next header
+    (0x15, 0, 3, 58),          // jeq ICMPv6, else drop
+    (0x30, 0, 0, 40),          // ldb [40]: ICMPv6 type
+    (0x15, 0, 1, 135),         // jeq Neighbor Solicitation, else drop
     (0x06, 0, 0, 0x0004_0000), // accept
-    (0x06, 0, 0, 0),         // drop
+    (0x06, 0, 0, 0),           // drop
 ];
 
 /// One received packet: its payload and the sender's MAC.
@@ -358,13 +358,8 @@ impl Socket {
             return Ok(());
         }
         // SAFETY: fds is a live array of the length passed.
-        let ready = unsafe {
-            libc::poll(
-                fds.as_mut_ptr(),
-                libc::nfds_t::try_from(fds.len())?,
-                millis,
-            )
-        };
+        let ready =
+            unsafe { libc::poll(fds.as_mut_ptr(), libc::nfds_t::try_from(fds.len())?, millis) };
         if ready < 0 {
             let error = std::io::Error::last_os_error();
             if error.kind() != std::io::ErrorKind::Interrupted {
@@ -392,8 +387,7 @@ pub fn answer(
     }
     let solicitation = parse_solicitation(&received.payload)?;
     // Duplicate address detection (unspecified source) is not answered.
-    if solicitation.source.is_unspecified()
-        || !announced.contains(&IpAddr::V6(solicitation.target))
+    if solicitation.source.is_unspecified() || !announced.contains(&IpAddr::V6(solicitation.target))
     {
         return None;
     }
@@ -437,6 +431,7 @@ mod tests {
             source_mac: PEER,
         };
         let (to, reply) = answer(ETH_P_ARP, &request, &[IpAddr::V4(lb)], MAC).expect("answer");
+        let reply: [u8; 28] = reply.try_into().expect("28 bytes");
         assert_eq!(to, PEER);
         assert_eq!(&reply[..8], &[0, 1, 8, 0, 6, 4, 0, 2]);
         assert_eq!(&reply[8..14], &MAC);
@@ -450,9 +445,11 @@ mod tests {
         };
         assert!(answer(ETH_P_ARP, &other, &[IpAddr::V4(lb)], MAC).is_none());
         let mut not_request = arp_request(lb);
-        not_request[7] = 2;
+        if let Some(op) = not_request.get_mut(7) {
+            *op = 2;
+        }
         assert!(parse_arp_request(&not_request).is_none());
-        assert!(parse_arp_request(&not_request[..20]).is_none());
+        assert!(parse_arp_request(not_request.get(..20).expect("prefix")).is_none());
     }
 
     #[test]
@@ -464,6 +461,7 @@ mod tests {
             source_mac: PEER,
         };
         let (to, na) = answer(ETH_P_IPV6, &ns, &[IpAddr::V6(lb)], MAC).expect("answer");
+        let na: [u8; 72] = na.try_into().expect("72 bytes");
         assert_eq!(to, PEER);
         assert_eq!(na[0], 0x60);
         assert_eq!((na[6], na[7]), (ICMPV6, 255));
@@ -483,7 +481,9 @@ mod tests {
         };
         assert!(answer(ETH_P_IPV6, &dad, &[IpAddr::V6(lb)], MAC).is_none());
         let mut low_hop = solicitation(peer, lb);
-        low_hop[7] = 64;
+        if let Some(hop) = low_hop.get_mut(7) {
+            *hop = 64;
+        }
         assert!(parse_solicitation(&low_hop).is_none());
         let unsolicited = advertisement(lb, MAC, ALL_NODES, false);
         assert_eq!(unsolicited[44], 0x20);

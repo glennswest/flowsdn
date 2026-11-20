@@ -856,7 +856,9 @@ impl View {
                    "pools": [], "services": []})
         } else {
             let mut status = self.lb_ipam_status.clone();
-            status["enabled"] = json!(self.lb_ipam);
+            if let Some(object) = status.as_object_mut() {
+                object.insert("enabled".into(), json!(self.lb_ipam));
+            }
             status
         }
     }
@@ -867,7 +869,9 @@ impl View {
                    "errors": []})
         } else {
             let mut status = self.l2_status.clone();
-            status["enabled"] = json!(self.l2_announcements);
+            if let Some(object) = status.as_object_mut() {
+                object.insert("enabled".into(), json!(self.l2_announcements));
+            }
             status
         }
     }

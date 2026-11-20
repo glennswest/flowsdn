@@ -78,7 +78,15 @@ fn worker() -> Result<()> {
     ensure(line.trim() == "GO", "worker: expected GO")?;
     ip(&["link", "set", "lo", "up"])?;
     ip(&["addr", "add", "192.0.2.9/24", "dev", "b0"])?;
-    ip(&["-6", "addr", "add", "2001:db8:30::9/64", "dev", "b0", "nodad"])?;
+    ip(&[
+        "-6",
+        "addr",
+        "add",
+        "2001:db8:30::9/64",
+        "dev",
+        "b0",
+        "nodad",
+    ])?;
     ip(&["link", "set", "b0", "up"])?;
     let v4 = UdpSocket::bind("0.0.0.0:0")?;
     let v6 = UdpSocket::bind("[::]:0")?;
@@ -124,7 +132,15 @@ fn run() -> Result<()> {
     ip(&["link", "add", "a0", "type", "veth", "peer", "name", "b0"])?;
     ip(&["link", "set", "b0", "netns", &child.id().to_string()])?;
     ip(&["addr", "add", "192.0.2.1/24", "dev", "a0"])?;
-    ip(&["-6", "addr", "add", "2001:db8:30::1/64", "dev", "a0", "nodad"])?;
+    ip(&[
+        "-6",
+        "addr",
+        "add",
+        "2001:db8:30::1/64",
+        "dev",
+        "a0",
+        "nodad",
+    ])?;
     ip(&["link", "set", "a0", "up"])?;
     let index: u32 = std::fs::read_to_string("/sys/class/net/a0/ifindex")
         .map_err(|e| format!("a0 ifindex: {e}"))?
@@ -217,9 +233,7 @@ fn run() -> Result<()> {
             &format!("{target} must not be a host address"),
         )?;
     }
-    println!(
-        "{NOT_ANNOUNCED}: unresolved; answers sent (ARP, NA): {counts:?}; no address added"
-    );
+    println!("{NOT_ANNOUNCED}: unresolved; answers sent (ARP, NA): {counts:?}; no address added");
     Ok(())
 }
 

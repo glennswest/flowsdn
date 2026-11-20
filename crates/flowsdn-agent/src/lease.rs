@@ -57,9 +57,9 @@ impl Elector {
     /// Whether this agent holds the Lease now: it wrote it as holder less
     /// than a lease duration ago (minus a margin for the write's own time).
     pub fn leading(&self, now: Instant) -> bool {
-        let margin = self.duration / 5;
+        let margin = self.duration.checked_div(5).unwrap_or_default();
         self.renewed
-            .is_some_and(|at| now.duration_since(at) + margin < self.duration)
+            .is_some_and(|at| now.saturating_duration_since(at).saturating_add(margin) < self.duration)
     }
     /// The next step, given the Lease as read (`None`: it does not exist).
     /// `wall` is the current time as a MicroTime (`renewTime`).
@@ -96,8 +96,10 @@ impl Elector {
         }
         if holder == self.identity {
             self.observed = None;
-            next["spec"]["renewTime"] = json!(wall);
-            next["spec"]["leaseDurationSeconds"] = json!(seconds);
+            if let Some(spec) = next.get_mut("spec").and_then(Value::as_object_mut) {
+                spec.insert("renewTime".into(), json!(wall));
+                spec.insert("leaseDurationSeconds".into(), json!(seconds));
+            }
             return Step::Update(next);
         }
         // A different holder: hold off until its record stops changing.
@@ -121,13 +123,16 @@ impl Elector {
             .get("leaseTransitions")
             .and_then(Value::as_u64)
             .unwrap_or(0);
-        next["spec"] = json!({
+        let spec = json!({
             "holderIdentity": self.identity,
             "leaseDurationSeconds": seconds,
             "acquireTime": wall,
             "renewTime": wall,
-            "leaseTransitions": transitions + 1,
+            "leaseTransitions": transitions.saturating_add(1),
         });
+        if let Some(object) = next.as_object_mut() {
+            object.insert("spec".into(), spec);
+        }
         Step::Update(next)
     }
     /// The result of a Create or Update: `ok` when the API server took it.
@@ -157,6 +162,9 @@ pub fn micro_time(time: std::time::SystemTime) -> String {
 mod tests {
     use super::*;
 
+    fn after(at: Instant, seconds: u64) -> Instant {
+        at.checked_add(Duration::from_secs(seconds)).expect("instant")
+    }
     fn lease(holder: &str, renew: &str) -> Value {
         json!({"metadata": {"name": "flowsdn-lb-ipam", "namespace": "kube-system",
                             "resourceVersion": "5"},
@@ -167,7 +175,12 @@ mod tests {
     #[test]
     fn creates_renews_and_waits_out_another_holder() {
         let start = Instant::now();
-        let mut me = Elector::new("kube-system", "flowsdn-lb-ipam", "n1", Duration::from_secs(15));
+        let mut me = Elector::new(
+            "kube-system",
+            "flowsdn-lb-ipam",
+            "n1",
+            Duration::from_secs(15),
+        );
         assert_eq!(
             me.path(),
             "/apis/coordination.k8s.io/v1/namespaces/kube-system/leases/flowsdn-lb-ipam"
@@ -175,40 +188,56 @@ mod tests {
         let Step::Create(body) = me.step(start, "t0", None) else {
             panic!("create");
         };
-        assert_eq!(body["spec"]["holderIdentity"], "n1");
+        assert_eq!(body.pointer("/spec/holderIdentity"), Some(&json!("n1")));
         assert!(!me.leading(start));
         me.wrote(start, true);
-        assert!(me.leading(start + Duration::from_secs(5)));
-        assert!(!me.leading(start + Duration::from_secs(13)));
+        assert!(me.leading(after(start, 5)));
+        assert!(!me.leading(after(start, 13)));
         // Our own Lease: renew it, keeping the resourceVersion as a guard.
         let Step::Update(body) = me.step(start, "t1", Some(&lease("n1", "t0"))) else {
             panic!("renew");
         };
-        assert_eq!(body["spec"]["renewTime"], "t1");
-        assert_eq!(body["metadata"]["resourceVersion"], "5");
+        assert_eq!(body.pointer("/spec/renewTime"), Some(&json!("t1")));
+        assert_eq!(body.pointer("/metadata/resourceVersion"), Some(&json!("5")));
         // Someone else's live Lease: wait while its record keeps changing.
-        let mut other = Elector::new("kube-system", "flowsdn-lb-ipam", "n2", Duration::from_secs(15));
+        let mut other = Elector::new(
+            "kube-system",
+            "flowsdn-lb-ipam",
+            "n2",
+            Duration::from_secs(15),
+        );
         assert_eq!(other.step(start, "t", Some(&lease("n1", "a"))), Step::Wait);
-        let later = start + Duration::from_secs(10);
+        let later = after(start, 10);
         assert_eq!(other.step(later, "t", Some(&lease("n1", "b"))), Step::Wait);
         assert_eq!(
-            other.step(later + Duration::from_secs(14), "t", Some(&lease("n1", "b"))),
+            other.step(
+                after(later, 14),
+                "t",
+                Some(&lease("n1", "b"))
+            ),
             Step::Wait
         );
         // Unchanged for its duration: take it over.
-        let Step::Update(body) =
-            other.step(later + Duration::from_secs(15), "t9", Some(&lease("n1", "b")))
-        else {
+        let Step::Update(body) = other.step(
+            after(later, 15),
+            "t9",
+            Some(&lease("n1", "b")),
+        ) else {
             panic!("take over");
         };
-        assert_eq!(body["spec"]["holderIdentity"], "n2");
-        assert_eq!(body["spec"]["leaseTransitions"], 3);
-        assert_eq!(body["metadata"]["resourceVersion"], "5");
+        assert_eq!(body.pointer("/spec/holderIdentity"), Some(&json!("n2")));
+        assert_eq!(body.pointer("/spec/leaseTransitions"), Some(&json!(3)));
+        assert_eq!(body.pointer("/metadata/resourceVersion"), Some(&json!("5")));
         // Lost the race (409): not leading.
         other.wrote(later, false);
         assert!(!other.leading(later));
         // A released Lease (no holder) is taken at once.
-        let mut third = Elector::new("kube-system", "flowsdn-lb-ipam", "n3", Duration::from_secs(15));
+        let mut third = Elector::new(
+            "kube-system",
+            "flowsdn-lb-ipam",
+            "n3",
+            Duration::from_secs(15),
+        );
         assert!(matches!(
             third.step(start, "t", Some(&lease("", ""))),
             Step::Update(_)
@@ -217,7 +246,9 @@ mod tests {
 
     #[test]
     fn micro_time_has_six_fraction_digits() {
-        let time = std::time::SystemTime::UNIX_EPOCH + Duration::from_micros(1_500_000);
+        let time = std::time::SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_micros(1_500_000))
+            .expect("time");
         assert_eq!(micro_time(time), "1970-01-01T00:00:01.500000Z");
     }
 }
