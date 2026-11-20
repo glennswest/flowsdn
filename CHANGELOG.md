@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#490)
+- **fix:** A CIDR selects only the remote nodes inside it (finding a84713ccfa49): each other node's InternalIP gets its own identity (`2<<24 | n`) in the ipcache, which the datapath aggregates to remote-node (14); `remote-node` and `cluster` entities also name 14; an `ipBlock`/`fromCIDR` (with `except`) selects exactly the node addresses it holds.
+- **fix:** Egress named ports are scoped to the Pods that name them (finding fd362d87218c): never an entry at the wildcard identity; a peer-less rule names the identities of the Pods declaring the port; an identity whose Pods map the name differently (or only partly) gets nothing and a `policy` problem.
+- **test:** Policy unit tests (two nodes with a /32 and an exception; external destinations, a Pod without the name, same-identity Pods with different mappings); `policy-live` step for a scope-2 node identity falling back to the remote-node aggregate.
+
 ### 2026-11-20 (#489)
 - **fix:** New endpoints are isolated until their policy is installed (finding bd9892ebb241): with Pod policy enforced, the endpoint manager writes a quarantine row (both directions, no entries, flag bit 8) before attaching a new endpoint; the policy thread keeps it for endpoints whose Pod or labels it does not know yet, replaces it with the Pod's own, or removes it when no policy selects the Pod, and its sweep never removes a quarantine row of an endpoint it has not seen. Unsynced or failed lists leave the quarantine in place (fail closed). `/v1/healthz` `policy.quarantined`.
 - **test:** `cni-runtime`: a real CNI ADD under quarantine exchanges no UDP either way (IPv4/IPv6) until the row is lifted; policy unit tests for keep, release, replace and the sweep.

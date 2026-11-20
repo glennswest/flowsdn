@@ -38,8 +38,10 @@ programs serve Pods only.
   (allow `0xFFFFFF01`, deny `0xFFFFFFFF`). The compiler drops an allow a deny
   of its identity (or of every identity) covers and repeats a deny inside an
   allow at the allow's identity, so the datapath's lookups give "deny wins".
-- **Remote nodes** get the remote-node identity (6) in the ipcache; an
-  `ipBlock` keeps selecting them, as it does the host, so Pod policy is
+- **Remote nodes** get an identity per address in the ipcache (since #490:
+  `2<<24 | n`, aggregated to remote-node 14 by the datapath; before, the
+  shared remote-node identity 6); an `ipBlock` keeps selecting exactly the
+  node addresses inside it, as it does the host, so Pod policy is
   unchanged.
 - **Mode.** `kubernetes.host-firewall: off|audit|enforce`, default `off`.
   On, the programs are attached and track host flows; enforcement on an

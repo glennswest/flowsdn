@@ -868,9 +868,13 @@ ingress policy). Both read:
 - `flowsdn_policy_ep` (host interface index -> endpoint ID and the enforced
   directions): an endpoint without an entry is neither enforced nor tracked;
 - `flowsdn_ipcache` (LPM, address -> identity): every Pod IP with an identity,
-  this node's InternalIPs and router addresses (host, 1), other nodes'
-  InternalIPs (remote-node, 6), and one local identity (`1<<24 | n`) per
-  `ipBlock`/host-rule prefix and exception. Anything else is world;
+  this node's InternalIPs and router addresses (host, 1), each of other
+  nodes' InternalIPs with an identity of its own (`2<<24 | n`, numbered in
+  address order; the datapath aggregates them to remote-node, 14, so
+  `remote-node` and `cluster` rules cover them, #490), and one local identity
+  (`1<<24 | n`) per `ipBlock`/host-rule prefix and exception. An `ipBlock`
+  selects exactly the node addresses inside it, never every node for one.
+  Anything else is world;
 - `flowsdn_policy` (LPM): spec 06 §4.4 policy keys and entries behind a 32-bit
   endpoint ID, looked up as spec 02 §3.10 says (the identity, its aggregate,
   then the wildcard identity 0);
@@ -908,9 +912,13 @@ Namespace lists are complete and the endpoints are published:
 - each rule's peers resolve to identities: `podSelector`/`namespaceSelector`
   peers against every identity's labels (so they need `identity-allocation`),
   no `from`/`to` to the wildcard identity, `ipBlock` to the CIDR identities it
-  covers minus its exceptions, plus the host and remote nodes when one of
-  their addresses is inside it; ports to masked LPM blocks (spec 06 §5.2), named ports to the
-  Pod's container ports (ingress) or the peer Pods' (egress);
+  covers minus its exceptions, plus the host when one of its addresses is
+  inside it and each remote node address inside it; ports to masked LPM
+  blocks (spec 06 §5.2), named ports to the Pod's container ports (ingress)
+  or, on egress, per destination identity whose Pods all map the name to the
+  same ports (never as a port open to every destination: a peer-less rule
+  names the identities of the Pods that declare it; Pods of one identity
+  that disagree get nothing and a `policy` problem, #490);
 - the maps are brought to the result when it changes and every minute,
   compared with what the kernel holds: entries and ipcache before enforcement,
   removals last.
