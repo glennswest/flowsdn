@@ -90,9 +90,10 @@ The Kubernetes-mode agent also allocates cluster identities for its Pods
 not flowsdn's. Open gaps, each an issue with the `gap` label: L7, FQDN and ICMP
 policy rules (#448), host egress policy (#477), DSR by IPIP or Geneve (#447),
 DSR ICMP errors (#449), NAT46/64 to local backends or in the socket LB (#450),
-the operator's other controllers (#479) and the
+FlowsdnEndpointSlice batching (#479) and the
 Hubble observer/relay (#293). The operator (`flowsdn-agent operator`, #337)
-registers the flowsdn.io CRDs under leader election, and the agent's flowsdn.io
+registers the flowsdn.io CRDs under leader election and collects unused
+FlowsdnIdentities and ownerless FlowsdnNodes (#479), and the agent's flowsdn.io
 watchers wait for them. Libraries also implement configuration resolution,
 identity and map layouts, a Kubernetes NetworkPolicy importer and policy
 simulator, Maglev tables, BGP codecs/session state, encryption and egress
@@ -136,7 +137,7 @@ from vendored Cilium v1.20.1 CRDs. The manifests are generated into
 accept/reject validation for every kind. The Kubernetes-mode agent writes
 FlowsdnIdentity objects and, with `kubernetes.flowsdn-policy`, reads
 FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy. The operator registers
-the CRDs (#337); nothing reconciles the other kinds yet (#479); flowsdn must not
+the CRDs (#337) and collects FlowsdnIdentity and FlowsdnNode garbage (#479); flowsdn must not
 adopt or garbage-collect existing `cilium.io` objects.
 
 Compatibility concerns data shape (CNI result, agent API, BPF map layouts),

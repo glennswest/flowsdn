@@ -2038,3 +2038,13 @@ compatibility tests required by this specification.
     returns blockers and keeps the CRD fence closed without any fatal action.
     `/readyz` reports the blocked state, while liveness continues on `/healthz`.
     CRD watches, serving and Helm probe wiring remain required (§3.4, §3.16).
+
+
+## Amendment — garbage collectors (#479, 2026-11-20)
+
+`flowsdn-agent operator` runs §3.9's FlowsdnNode GC (`--nodes-gc-interval`, seconds, default 300, 0 off; owner
+references and `flowsdn.io/do-not-gc: true` exempt; two-pass hysteresis; 404 is success) and spec 03 §3.6's identity
+GC (see spec 03's amendment) while leading, with per-term state (§4.7). §3.6's CiliumEndpoint GC has no flowsdn
+counterpart: FlowsdnEndpoints are owned by their Pods. The §3.7 FlowsdnEndpointSlice controller is not built:
+agents learn other nodes' endpoints from the cluster-wide Pod watch and read no FlowsdnEndpoint or slice, so there
+is no reader for slices (#479). RBAC: `delete` on flowsdnnodes.

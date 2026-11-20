@@ -1,6 +1,8 @@
 # The flowsdn operator's identity (spec 12 §4.8, #325): CRD registration with
 # update limited to the 22 flowsdn.io CRDs by name, leader election, and the
-# flowsdn.io kinds it reconciles. Feature-conditional rules (Ingress, Gateway
+# flowsdn.io kinds it reconciles, including the identity and FlowsdnNode
+# garbage collectors (#479: update/delete flowsdnidentities, delete
+# flowsdnnodes, list nodes, flowsdnendpoints and flowsdnendpointslices). Feature-conditional rules (Ingress, Gateway
 # API, MCS-API, secret sync, unmanaged-pod restart) are left out until those
 # controllers exist. The operator itself is 64-flowsdn-operator.yaml (#337).
 ---
@@ -83,7 +85,7 @@ rules:
     verbs: [update]
   - apiGroups: [flowsdn.io]
     resources: [flowsdnnodes]
-    verbs: [create, update, get, list, watch]
+    verbs: [create, update, get, list, watch, delete]
   - apiGroups: [flowsdn.io]
     resources: [flowsdnnodes/status]
     verbs: [update]

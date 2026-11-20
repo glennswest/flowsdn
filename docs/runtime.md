@@ -352,8 +352,7 @@ node's Pods:
   same labels keeps it; new lookups everywhere converge on the oldest.
 
 Sets no longer used are released without an API call: deleting unused objects
-is the operator's identity GC (#332), which does not run yet, so objects
-accumulate until it does. Remote Pods resolve to the oldest object with their
+is the operator's identity GC ([below](#crds-and-the-operator-337), #479). Remote Pods resolve to the oldest object with their
 labels. The identities appear in `GET /v1/identity`, on Pod rows of
 `GET /v1/ip`, and as `status.identity` and `pod.identity` of local endpoints.
 They are not in BPF maps: nothing in the datapath consumes them until policy
@@ -609,6 +608,32 @@ carried traffic between two nodes.
   are retried after 30 s. The payloads are the generated `crds/` files,
   embedded in the binary. `--skip-crd-creation` leaves the CRDs to an
   administrator (the Helm chart installs its `crds/`).
+- **Identity GC** (#479, spec 03 §3.6), every `--identity-gc-interval`
+  seconds (900; 0 turns it off) while leading. It lists FlowsdnIdentities,
+  FlowsdnEndpoints and, when served, FlowsdnEndpointSlices. An identity is
+  in use when an endpoint's `status.identity.id` (or a slice entry's `id`)
+  names it; its lifesign is renewed then, and whenever its resourceVersion
+  changed since the last list (an agent acquired it). One in the term's
+  first list counts from the operator's start, so a new leader waits a whole
+  timeout. Unused for more than `--identity-heartbeat-timeout` (1800 s):
+  the first run sets `io.flowsdn.heartbeat` (a `PUT`, which itself renews
+  the lifesign); a later run, unused a further timeout and still marked,
+  deletes it with preconditions `{uid, resourceVersion}`. An agent that
+  takes the identity again removes the annotation, which stops it; a 409 or
+  404 is skipped. At most `--identity-gc-rate-limit` deletes (2500) per
+  `--identity-gc-rate-interval` (60 s); the rest wait for the next run, so
+  the loop keeps renewing the Lease. A list that fails writes nothing; the
+  run is retried after 30 s. There is no FlowsdnEndpoint GC: endpoints are
+  owned by their Pods and go with them.
+- **FlowsdnNode GC** (#479, spec 12 §3.9), every `--nodes-gc-interval`
+  seconds (300; 0 off). A FlowsdnNode with no ownerReferences, without
+  `flowsdn.io/do-not-gc: true` (any case) and with no Node of its name is a
+  candidate; still one a whole interval later, it is deleted (404 is
+  success). A Node that comes back ends the candidacy. The agents' own
+  FlowsdnNodes are owned by their Node and go with it, so this catches
+  objects written without an owner.
+- Both collectors log only when they change something, and keep their
+  memory for one leader term.
 - **The agent's gate.** Before any flowsdn.io watcher starts (identities,
   LB pools, L2 policies, the policy kinds), the agent lists the CRDs as
   metadata only (`PartialObjectMetadataList`) every second until every CRD
@@ -658,8 +683,9 @@ The Kubernetes-mode agent publishes its endpoints and its node as
   404: the writer logs it once, retries every minute, and it is not an
   error. `/v1/healthz` shows `flowsdn-endpoints` (`served`, `objects`) and
   `flowsdn-node` (`served`).
-- **Not here.** Deleting the FlowsdnNode of a removed Node, FlowsdnIdentity
-  garbage collection and FlowsdnEndpointSlice batching are the operator's
+- **Elsewhere.** A removed Node's FlowsdnNode goes with it (owner), and
+  unowned ones and unused FlowsdnIdentities are the operator's GC
+  ([above](#crds-and-the-operator-337)). Nothing writes FlowsdnEndpointSlices
   (#479). FlowsdnNodeConfig: [below](#per-node-settings-flowsdnnodeconfig-480).
 
 ### Per-node settings: FlowsdnNodeConfig (#480)
@@ -701,7 +727,7 @@ parses (`"true"`, `"1400"`, `'{"mode":"single"}'`) and as text otherwise.
 
 A `type: LoadBalancer` Service gets its address from flowsdn and is reached
 from the node's LAN without a router or BGP. Three parts, all in the
-Kubernetes-mode agent (the operator only registers CRDs, #337):
+Kubernetes-mode agent (the operator registers CRDs and collects garbage, #337, #479):
 
 - **LB-IPAM** (`kubernetes.lb-ipam`). One agent at a time holds the Lease
   `kube-system/flowsdn-lb-ipam` (taken over when its holder stops renewing for

@@ -1270,3 +1270,16 @@ Decision #204 retains one shared local identity range for CIDR/FQDN/CIDR-group
 allocation (`0x01000001..0x01ffffff`). FQDN has no carved-out subrange. Shared
 allocation, reference counts and restored reservations prevent collisions;
 `flowsdn-proxy::fqdn` only checks range membership and is not an allocator.
+
+
+## Amendment — operator identity GC implemented (#479, 2026-11-20)
+
+§3.6 is implemented in `flowsdn-agent operator` (`crates/flowsdn-agent/src/operator_gc.rs`) with flowsdn's names:
+`io.flowsdn.heartbeat`, FlowsdnEndpoint `status.identity.id` and FlowsdnEndpointSlice `endpoints[].id` for aliveness,
+flags `--identity-gc-interval`, `--identity-heartbeat-timeout`, `--identity-gc-rate-limit`,
+`--identity-gc-rate-interval` in seconds with the §6 defaults. Differences, all deliberate: (1) it lists every
+interval instead of watching, so an upsert event is a resourceVersion change between two lists; (2) it is not
+coupled to an endpoint GC interval, because flowsdn has no endpoint GC (FlowsdnEndpoints are owned by their Pods and
+deleted with them); (3) deletes the rate limit does not admit wait for the next run rather than blocking, since the
+same loop renews the operator's Lease; (4) lifesigns are forgotten when an object leaves the list, not after ten
+timeouts.

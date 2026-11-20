@@ -19,6 +19,8 @@ pub mod node_config;
 pub mod node_crd;
 #[cfg(feature = "kubernetes")]
 pub mod operator;
+#[cfg(feature = "kubernetes")]
+pub mod operator_gc;
 pub mod policy;
 pub mod services;
 pub mod state;

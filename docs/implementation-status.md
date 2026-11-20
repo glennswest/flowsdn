@@ -71,8 +71,10 @@ pinning or subsystem libraries are absent are **not current status**.
   `kubernetes.endpoint-crd`/`node-crd`, default on), with Rust types of the
   endpoint, identity and node kinds checked against their schemas
   (T-CRD-3/4/5/7 by schema-driven tests). Unit-tested against a recording
-  API; not on a cluster (the CRDs wait on stormcos#303). Operator GC and
-  slices: #479.
+  API; not on a cluster (the CRDs wait on stormcos#303). The operator's
+  FlowsdnIdentity and FlowsdnNode GC (#479, `operator_gc.rs`): planned from
+  lists and unit-tested against a recording API, not on a cluster.
+  FlowsdnEndpointSlices: nothing writes or reads them (#479).
 - FlowsdnNodeConfig (#480): on the nodes it selects, `spec.defaults`
   override the agent's own settings at start (an allow-list of node
   settings; each validated by the agent's parse, refusals as Node Events,
@@ -141,7 +143,7 @@ pinning or subsystem libraries are absent are **not current status**.
   (#454); SCTP Services (#457); IPv4 fragments
   after the first (#458); topology hints (#459); BPF masquerade (#460); Pod
   policy audit mode (#461); flows open before a policy (#462); ICMP errors as
-  related traffic (#463); the operator's GC and slice controllers (#479);
+  related traffic (#463); FlowsdnEndpointSlice batching (#479);
   the Hubble observer/relay (#293).
 
 ### Cloud fixtures (ADR-0007)

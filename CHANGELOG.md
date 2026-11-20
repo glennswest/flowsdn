@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#479)
+- **feat:** The operator's garbage collectors (`flowsdn-agent operator`, while leading; `operator_gc.rs`). FlowsdnIdentity GC (spec 03 §3.6): every `--identity-gc-interval` seconds (900, 0 off) an identity no FlowsdnEndpoint (`status.identity.id`) or FlowsdnEndpointSlice entry uses, with no change for more than `--identity-heartbeat-timeout` (1800 s; a new leader counts from its start), gets `io.flowsdn.heartbeat`; still unused and marked a timeout later, it is deleted with `{uid, resourceVersion}` preconditions (409/404 skipped), at most `--identity-gc-rate-limit` (2500) per `--identity-gc-rate-interval` (60 s), the rest next run. An agent re-acquiring it removes the annotation. FlowsdnNode GC (spec 12 §3.9): every `--nodes-gc-interval` seconds (300, 0 off) a FlowsdnNode with no owner, no `flowsdn.io/do-not-gc: true` and no Node of its name for a whole interval is deleted. RBAC: `delete` on flowsdnnodes. Spec 03/12 amendments.
+- **docs:** FlowsdnEndpointSlice batching is not built: agents read no other node's FlowsdnEndpoint (they watch Pods), so slices would have no reader; the owner decides on #479.
+
 ### 2026-11-20 (#484)
 - **fix:** NodePort TCX programs no longer short-circuit the host firewall (critical review finding 9353481628e3). `nodeport_ingress`/`nodeport_egress` are attached first on an uplink's TCX hooks and returned `TC_ACT_OK` (TCX's final pass) for every packet they did not redirect or drop, so `from_netdev`/`to_netdev`, attached last, never ran on an uplink with NodePort on: host ports the policy denies were reachable and the host's own flows were not tracked. They now return `TCX_NEXT` there; redirect and drop stay final. Rebuilt `socket-lb` object + lock.
 - **test:** Kernel fixture `host-chain-live`: both objects attached to a veth uplink as the agent attaches them, real TCP from a peer namespace (allowed port connects, denied port does not and is counted, a host-started connection is tracked and its reply passes). `socket-lb-live` expects `TCX_NEXT` from the NodePort test runs.
