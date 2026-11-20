@@ -144,6 +144,7 @@ impl Controller {
             cluster_name: self.settings.cluster_name.clone(),
             lb_ipam: self.settings.lb_ipam_on(),
             l2_announcements: self.settings.l2_on(),
+            derive: self.derive,
             ..View::default()
         }));
         let host_firewall = self.settings.host_firewall != HostFirewall::Off;
@@ -232,12 +233,13 @@ impl Controller {
                 .name("flowsdn-l2".into())
                 .spawn(move || lb::announce_loop(&l2_view))?;
         }
-        if self.settings.endpoint_crd {
-            let endpoint_view = Arc::clone(&view);
+        if self.settings.endpoint_crd || self.settings.node_crd {
+            let crd_view = Arc::clone(&view);
             let kubeconfig = self.settings.kubeconfig.clone();
+            let (endpoints, node) = (self.settings.endpoint_crd, self.settings.node_crd);
             std::thread::Builder::new()
-                .name("flowsdn-endpoints".into())
-                .spawn(move || endpoint_crd_loop(&endpoint_view, kubeconfig.as_deref()))?;
+                .name("flowsdn-crds".into())
+                .spawn(move || crd_loop(&crd_view, kubeconfig.as_deref(), endpoints, node))?;
         }
         let annotate_view = Arc::clone(&view);
         let kubeconfig = self.settings.kubeconfig.clone();
@@ -693,11 +695,13 @@ fn annotation_loop(view: &Shared, kubeconfig: Option<&Path>) {
     }
 }
 
-/// The FlowsdnEndpoint writer (#332, [`crate::endpoint_crd`]), with its own
-/// client: every few seconds, bring each local Pod's FlowsdnEndpoint to the
-/// view. A write the server refuses is a `flowsdn-endpoints` part error and
-/// a Warning Event on the Pod.
-fn endpoint_crd_loop(view: &Shared, kubeconfig: Option<&Path>) {
+/// The FlowsdnEndpoint and FlowsdnNode writers (#332,
+/// [`crate::endpoint_crd`], [`crate::node_crd`]), with their own client:
+/// every few seconds, bring each local Pod's FlowsdnEndpoint and this
+/// node's FlowsdnNode to the view. A write the server refuses is a
+/// `flowsdn-endpoints` (and a Warning Event on the Pod) or `flowsdn-node`
+/// part error.
+fn crd_loop(view: &Shared, kubeconfig: Option<&Path>, endpoints: bool, node: bool) {
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -720,15 +724,34 @@ fn endpoint_crd_loop(view: &Shared, kubeconfig: Option<&Path>) {
         }
     };
     let mut writer = crate::endpoint_crd::Writer::default();
+    let mut node_writer = crate::node_crd::NodeWriter::default();
+    let bootid = crate::node_crd::boot_id();
     let mut said_unserved = false;
     loop {
         std::thread::sleep(ANNOTATE_INTERVAL);
-        let desired = crate::endpoint_crd::desired(&lock(view));
         let mut send = |method: http::Method, path: &str, body: Option<&Value>| {
             runtime
                 .block_on(client.send_json(method, path, body))
                 .map_err(|e| e.to_string())
         };
+        if node {
+            let desired = crate::node_crd::desired(&lock(view), &bootid);
+            let result = node_writer.sync(desired.as_ref(), &mut send);
+            let mut view = lock(view);
+            match result {
+                Ok(served) => {
+                    view.errors.remove("flowsdn-node");
+                    view.node_crd_status = json!({"served": served});
+                }
+                Err(error) => {
+                    view.errors.insert("flowsdn-node".into(), error);
+                }
+            }
+        }
+        if !endpoints {
+            continue;
+        }
+        let desired = crate::endpoint_crd::desired(&lock(view));
         let outcome = writer.sync(&desired, &mut send);
         if outcome.unserved && !said_unserved {
             crate::log::logln!(
@@ -794,6 +817,7 @@ fn apply_sysctls(root: &Path, ipv6: bool) -> Vec<String> {
 fn node_info(node: &flowsdn_k8s::watch::Node) -> NodeInfo {
     NodeInfo {
         name: node.metadata.name.clone(),
+        uid: node.metadata.uid.clone(),
         pod_cidrs: node.pod_cidrs.clone(),
         internal_ips: node.internal_ips.clone(),
         labels: node.labels.clone(),

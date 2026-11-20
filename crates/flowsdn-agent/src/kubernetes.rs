@@ -96,6 +96,9 @@ pub struct Settings {
     /// `kubernetes.endpoint-crd` (#332), default on: keep a FlowsdnEndpoint
     /// for each local Pod endpoint ([`crate::endpoint_crd`]).
     pub endpoint_crd: bool,
+    /// `kubernetes.node-crd` (#332), default on: keep this node's
+    /// FlowsdnNode ([`crate::node_crd`]).
+    pub node_crd: bool,
 }
 /// `kubernetes.host-firewall`: whether the agent filters traffic to the
 /// node itself from FlowsdnClusterwideNetworkPolicy host rules, and whether
@@ -225,6 +228,7 @@ impl Settings {
             lb_ipam: flag("lb-ipam", true)?,
             l2_announcements: flag("l2-announcements", true)?,
             endpoint_crd: flag("endpoint-crd", true)?,
+            node_crd: flag("node-crd", true)?,
         }))
     }
 }
@@ -232,6 +236,8 @@ impl Settings {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct NodeInfo {
     pub name: String,
+    /// `metadata.uid` (the FlowsdnNode's owner, #332).
+    pub uid: String,
     pub pod_cidrs: Vec<(IpAddr, u8)>,
     pub internal_ips: Vec<IpAddr>,
     /// The Node's labels (host policy `nodeSelector`).
@@ -643,6 +649,11 @@ pub struct View {
     /// The FlowsdnEndpoint writer (#332): `{served, objects}` after its
     /// first pass, null before or when `kubernetes.endpoint-crd` is off.
     pub endpoint_crd_status: Value,
+    /// The pod CIDR families derived when the Node has none (#296), so the
+    /// FlowsdnNode writer publishes the pools this agent uses (#332), and
+    /// that writer's last result (`{served}`, null before or when off).
+    pub derive: Derive,
+    pub node_crd_status: Value,
     /// L2 announcements (#475): on, the FlowsdnL2AnnouncementPolicy
     /// objects, and what the announcer last answered for.
     pub l2_announcements: bool,
@@ -935,7 +946,7 @@ impl View {
             "auto-direct-node-routes":self.direct_routes,"service-lb":self.service_lb,
             "identity-allocation":self.identity,"network-policy":self.network_policy,"flowsdn-policy":self.flowsdn_policy,
             "lb-ipam":self.lb_ipam,"l2-announcements":self.l2_announcements,
-            "flowsdn-endpoints":self.endpoint_crd_status,
+            "flowsdn-endpoints":self.endpoint_crd_status,"flowsdn-node":self.node_crd_status,
             "policy":self.policy_status,"uplinks":self.uplinks.summary()})
     }
 }

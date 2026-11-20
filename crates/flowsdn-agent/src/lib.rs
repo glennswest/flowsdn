@@ -13,6 +13,8 @@ pub mod l2_announce;
 pub mod lb_ipam;
 pub mod lease;
 pub mod log;
+#[cfg(feature = "kubernetes")]
+pub mod node_crd;
 pub mod policy;
 pub mod services;
 pub mod state;
