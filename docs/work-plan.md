@@ -4,6 +4,19 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### #408 on real hardware — #417 (P2), 2026-11-20
+
+Owner (on #417, 2026-11-20): the proof runs on a flowsdn test machine (server1-8 or the Dell), pulling a cable more
+than once on its 25G ports; forge1 moves to flowsdn separately. Choice: **C2NR0Q2 (Dell R230)**, the only one with
+two 25G ports: ConnectX-4 Lx 15b3:1015, eth0 5c:06:22:06:f9:6c (g16 reservation 192.168.30.1) and eth1
+5c:06:22:06:f9:6d (192.168.30.2, the machine's address), both on 192.168.16.0/20 and both receiving (stormdrive
+readings). server1-8 have one ixgbe + one mlx4 port each, not 25G pairs. 12.97-flowsdn already carries #408 (8480160).
+- [x] Master note: `testhost edit C2NR0Q2 --set flavor=flowsdn`, then install the newest flowsdn release on it.
+- [ ] Proposed `--after-install flowsdn>=8480160@C2NR0Q2`.
+- [ ] Then `wait-owner --action`: pull/replug eth0 (30.1) twice and eth1 (30.2) once, 30 s apart.
+- [ ] Proof: Node Events UplinkLeft/UplinkJoined on C2NR0Q2 ("2 of 2 carrying" after each return); ship, close #417
+      and #408's done-when (2x25G throughput: a measurement on the same run, perf suite).
+
 ### Operator executable gap — #446 (P2), 2026-11-20
 
 Binary and manifests done by #337 (`flowsdn-agent operator`, 64-flowsdn-operator.yaml). Left: a test-standard test.
