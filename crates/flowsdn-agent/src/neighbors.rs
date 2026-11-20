@@ -132,18 +132,24 @@ pub fn reconcile(connector: &Connector, inputs: &Inputs) -> Outcome {
         for (index, name) in &inputs.devices {
             match connector.next_hops(*ip, *index) {
                 Ok(Lookup::Hops(hops)) => {
-                    outcome.desired.extend(hops.into_iter().map(|h| (*index, h)));
+                    outcome
+                        .desired
+                        .extend(hops.into_iter().map(|h| (*index, h)));
                 }
                 Ok(Lookup::Unreachable) => {
                     outcome.unreachable = outcome.unreachable.saturating_add(1);
                 }
-                Err(error) => outcome.errors.push(format!("route to {ip} on {name}: {error}")),
+                Err(error) => outcome
+                    .errors
+                    .push(format!("route to {ip} on {name}: {error}")),
             }
         }
     }
     for (index, hop) in &outcome.desired {
         if let Err(error) = connector.add_managed(*index, *hop) {
-            outcome.errors.push(format!("neighbor {hop} on {index}: {error}"));
+            outcome
+                .errors
+                .push(format!("neighbor {hop} on {index}: {error}"));
         }
     }
     match connector.learned() {
@@ -207,7 +213,9 @@ pub fn run(view: &Shared) {
             let outcome = reconcile(&connector, &current);
             pruned = pruned.saturating_add(outcome.removed.len());
             for (index, ip) in &outcome.removed {
-                crate::log::logln!("neighbors: removed learned entry {ip} on {index} (not a next hop)");
+                crate::log::logln!(
+                    "neighbors: removed learned entry {ip} on {index} (not a next hop)"
+                );
             }
             let mut shared = lock(view);
             if outcome.errors.is_empty() {

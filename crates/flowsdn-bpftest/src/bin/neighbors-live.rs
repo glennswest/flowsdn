@@ -115,7 +115,15 @@ fn run() -> Result<()> {
         .strip_prefix("UP ")
         .ok_or_else(|| format!("peer: {up}"))?
         .to_owned();
-    ip(&["route", "add", "198.51.100.0/24", "via", "192.0.2.9", "dev", "a0"])?;
+    ip(&[
+        "route",
+        "add",
+        "198.51.100.0/24",
+        "via",
+        "192.0.2.9",
+        "dev",
+        "a0",
+    ])?;
     let a0: u32 = ip(&["-o", "link", "show", "dev", "a0"])?
         .split(':')
         .next()
@@ -139,15 +147,30 @@ fn run() -> Result<()> {
         nowhere == Lookup::Unreachable,
         &format!("203.0.113.1 on a0: {nowhere:?}"),
     )?;
-    println!("PASS next hops by FIB match: gateway for a routed address, the address on-link, none unreachable");
+    println!(
+        "PASS next hops by FIB match: gateway for a routed address, the address on-link, none unreachable"
+    );
 
     // An administrator's static entry, and a stray learned one.
     ip(&[
-        "neigh", "add", "192.0.2.50", "dev", "a0", "lladdr", "02:00:00:00:00:50", "nud",
+        "neigh",
+        "add",
+        "192.0.2.50",
+        "dev",
+        "a0",
+        "lladdr",
+        "02:00:00:00:00:50",
+        "nud",
         "permanent",
     ])?;
     ip(&[
-        "neigh", "add", "192.0.2.77", "dev", "a0", "lladdr", "02:00:00:00:00:77",
+        "neigh",
+        "add",
+        "192.0.2.77",
+        "dev",
+        "a0",
+        "lladdr",
+        "02:00:00:00:00:77",
         "extern_learn",
     ])?;
     let mut inputs = Inputs {
@@ -166,7 +189,10 @@ fn run() -> Result<()> {
         [(a0, addr("192.0.2.9")), (a0, addr("192.0.2.20"))]
             .into_iter()
             .collect();
-    ensure(outcome.desired == want, &format!("desired {:?}", outcome.desired))?;
+    ensure(
+        outcome.desired == want,
+        &format!("desired {:?}", outcome.desired),
+    )?;
     ensure(outcome.unreachable == 1, "one unreachable address")?;
     ensure(
         outcome.removed == vec![(a0, addr("192.0.2.77"))],
@@ -183,7 +209,9 @@ fn run() -> Result<()> {
         "the static entry was touched",
     )?;
     ensure(
-        ip(&["neigh", "show", "192.0.2.77", "dev", "a0"])?.trim().is_empty(),
+        ip(&["neigh", "show", "192.0.2.77", "dev", "a0"])?
+            .trim()
+            .is_empty(),
         "the stray learned entry is still there",
     )?;
     println!(

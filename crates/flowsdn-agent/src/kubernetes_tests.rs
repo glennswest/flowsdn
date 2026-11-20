@@ -38,7 +38,10 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(parsed.auto_direct_node_routes);
     assert!(parsed.service_lb);
     assert!(parsed.node_port);
-    assert!(!parsed.l2_neigh_discovery, "neighbor management is off by default");
+    assert!(
+        !parsed.l2_neigh_discovery,
+        "neighbor management is off by default"
+    );
     assert!(!parsed.maglev);
     assert_eq!(parsed.lb_mode, LbMode::Snat);
     assert_eq!(parsed.host_firewall, HostFirewall::Off);

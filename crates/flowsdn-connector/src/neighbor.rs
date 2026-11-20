@@ -113,10 +113,12 @@ impl Connector {
         request.header.address_family = family(ip);
         request.header.destination_prefix_length = if ip.is_ipv4() { 32 } else { 128 };
         request.header.flags = RouteFlags::FibMatch | RouteFlags::LookupTable;
-        request.attributes.push(RouteAttribute::Destination(match ip {
-            IpAddr::V4(v4) => RouteAddress::Inet(v4),
-            IpAddr::V6(v6) => RouteAddress::Inet6(v6),
-        }));
+        request
+            .attributes
+            .push(RouteAttribute::Destination(match ip {
+                IpAddr::V4(v4) => RouteAddress::Inet(v4),
+                IpAddr::V6(v6) => RouteAddress::Inet6(v6),
+            }));
         request.attributes.push(RouteAttribute::Oif(oif));
         self.run(async {
             match self.handle.route().get(request).execute().try_next().await {
@@ -257,7 +259,10 @@ pub fn probe_managed() -> Result<()> {
             if connector.is_managed(link.index, probe)? {
                 Ok(())
             } else {
-                Err("a managed neighbor entry (NTF_EXT_MANAGED) did not read back as managed".into())
+                Err(
+                    "a managed neighbor entry (NTF_EXT_MANAGED) did not read back as managed"
+                        .into(),
+                )
             }
         })?
         .join()
@@ -311,7 +316,10 @@ mod tests {
     #[test]
     fn a_route_by_another_device_gives_none() {
         let message = route(vec![gateway("192.0.2.9"), RouteAttribute::Oif(5)]);
-        assert_eq!(hops_of(&message, v4("198.51.100.7"), 4), Lookup::Unreachable);
+        assert_eq!(
+            hops_of(&message, v4("198.51.100.7"), 4),
+            Lookup::Unreachable
+        );
     }
 
     #[test]

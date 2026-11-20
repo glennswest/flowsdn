@@ -66,8 +66,16 @@ fn the_calculator_resyncs_first_then_rate_limits_changes_and_resyncs_every_five_
     assert_eq!(calc.due(start, &a), Some(true), "start: resync");
     calc.done(start, a.clone(), true);
     assert_eq!(calc.due(after(start, 1), &a), None, "nothing changed");
-    assert_eq!(calc.due(after(start, 5), &b), None, "changed, but within 15 s");
-    assert_eq!(calc.due(after(start, 15), &b), Some(false), "changed, 15 s on");
+    assert_eq!(
+        calc.due(after(start, 5), &b),
+        None,
+        "changed, but within 15 s"
+    );
+    assert_eq!(
+        calc.due(after(start, 15), &b),
+        Some(false),
+        "changed, 15 s on"
+    );
     calc.done(after(start, 15), b.clone(), false);
     assert_eq!(calc.due(after(start, 20), &b), None);
     assert_eq!(calc.due(after(start, 299), &b), None);
@@ -83,7 +91,10 @@ fn only_learned_entries_on_selected_devices_that_are_not_desired_are_stale() {
         (2, ip("192.0.2.77")),
         (7, ip("10.0.0.1")),
     ];
-    assert_eq!(stale(&desired, &learned, &devices), vec![(2, ip("192.0.2.77"))]);
+    assert_eq!(
+        stale(&desired, &learned, &devices),
+        vec![(2, ip("192.0.2.77"))]
+    );
 }
 
 #[test]
