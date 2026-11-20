@@ -905,6 +905,7 @@ fn claim_port(
     proto: u8,
     reply: &Nodeport4Value,
 ) -> Option<[u8; 2]> {
+    let keys = NAT_KEYS.get_ptr_mut(0)?;
     // SAFETY: no arguments; returns a pseudo-random scalar.
     let start = unsafe { bpf_get_prandom_u32() };
     for i in 0..NAT_TRIES {
@@ -912,43 +913,42 @@ fn claim_port(
         let port = u16::try_from(NAT_PORT_MIN.checked_add(offset)?)
             .ok()?
             .to_be_bytes();
-        let key = Nodeport4Key {
-            a: backend.0,
-            b: nat,
-            ap: backend.1,
-            bp: port,
-            proto,
-            direction: SNAT_REPLY,
-            pad: [0; 2],
-        };
-        if NODEPORT4.insert(&key, reply, BPF_NOEXIST).is_ok() {
+        // SAFETY: this CPU's scratch slot, used by nothing else meanwhile;
+        // the keys live there, not on the stack (#369).
+        let keys = unsafe { &mut *keys };
+        keys.k4.a = backend.0;
+        keys.k4.b = nat;
+        keys.k4.ap = backend.1;
+        keys.k4.bp = port;
+        keys.k4.proto = proto;
+        keys.k4.direction = SNAT_REPLY;
+        keys.k4.pad = [0; 2];
+        if NODEPORT4.insert(&keys.k4, reply, BPF_NOEXIST).is_ok() {
             return Some(port);
         }
         // Taken: reclaim it if its flow is over, dropping that flow's forward
         // entry when it still points at this port (finding 1cb155baca89).
-        // SAFETY: LRU value copied at once.
-        let Some(held) = (unsafe { NODEPORT4.get(&key).copied() }) else {
+        // SAFETY: an LRU value read in place.
+        let Some(held) = (unsafe { NODEPORT4.get(&keys.k4) }) else {
             continue;
         };
         if !expired(held.flags, held.pad2, proto, now16()) {
             continue;
         }
-        let stale = Nodeport4Key {
-            a: held.other,
-            b: held.address,
-            ap: held.other_port,
-            bp: held.port,
-            proto,
-            direction: FORWARD,
-            pad: [0; 2],
-        };
+        keys.s4.a = held.other;
+        keys.s4.b = held.address;
+        keys.s4.ap = held.other_port;
+        keys.s4.bp = held.port;
+        keys.s4.proto = proto;
+        keys.s4.direction = FORWARD;
+        keys.s4.pad = [0; 2];
         // SAFETY: as above.
-        if unsafe { NODEPORT4.get(&stale).copied() }
+        if unsafe { NODEPORT4.get(&keys.s4) }
             .is_some_and(|f| f.other == nat && f.other_port == port)
         {
-            let _ = NODEPORT4.remove(&stale);
+            let _ = NODEPORT4.remove(&keys.s4);
         }
-        if NODEPORT4.insert(&key, reply, 0).is_ok() {
+        if NODEPORT4.insert(&keys.k4, reply, 0).is_ok() {
             return Some(port);
         }
     }
@@ -965,16 +965,19 @@ fn live4(
     proto: u8,
     fin: bool,
 ) -> bool {
-    let key = Nodeport4Key {
-        a: flow.address,
-        b: flow.other,
-        ap: flow.port,
-        bp: flow.other_port,
-        proto,
-        direction: SNAT_REPLY,
-        pad: [0; 2],
+    let Some(keys) = NAT_KEYS.get_ptr_mut(0) else {
+        return false;
     };
-    let Some(value) = NODEPORT4.get_ptr_mut(&key) else {
+    // SAFETY: this CPU's scratch slot, used by nothing else meanwhile.
+    let keys = unsafe { &mut *keys };
+    keys.k4.a = flow.address;
+    keys.k4.b = flow.other;
+    keys.k4.ap = flow.port;
+    keys.k4.bp = flow.other_port;
+    keys.k4.proto = proto;
+    keys.k4.direction = SNAT_REPLY;
+    keys.k4.pad = [0; 2];
+    let Some(value) = NODEPORT4.get_ptr_mut(&keys.k4) else {
         return false;
     };
     // SAFETY: an LRU value of this map, read and written in place; a racing
@@ -1443,6 +1446,20 @@ pub struct Nodeport6Value {
 #[map(name = "flowsdn_nodeport6_nat")]
 static NODEPORT6: LruHashMap<Nodeport6Key, Nodeport6Value> = LruHashMap::with_max_entries(65536, 0);
 
+/// Keys a NAT port claim or renewal builds (finding 1cb155baca89), kept in
+/// per-CPU map memory: on the stack they would push the ingress paths over
+/// the 512-byte frame (#369).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct NatKeys {
+    k4: Nodeport4Key,
+    s4: Nodeport4Key,
+    k6: Nodeport6Key,
+    s6: Nodeport6Key,
+}
+#[map(name = "flowsdn_nodeport_natkeys")]
+static NAT_KEYS: PerCpuArray<NatKeys> = PerCpuArray::with_max_entries(1, 0);
+
 const ETH_P_IPV6: [u8; 2] = [0x86, 0xdd];
 /// Offsets in the frame: next header, hop limit, source, destination, then
 /// the L4 source port, destination port and UDP/TCP checksum.
@@ -1600,6 +1617,7 @@ fn claim_port6(
     proto: u8,
     reply: &Nodeport6Value,
 ) -> Option<[u8; 2]> {
+    let keys = NAT_KEYS.get_ptr_mut(0)?;
     // SAFETY: no arguments; returns a pseudo-random scalar.
     let start = unsafe { bpf_get_prandom_u32() };
     for i in 0..NAT_TRIES {
@@ -1607,41 +1625,39 @@ fn claim_port6(
         let port = u16::try_from(NAT_PORT_MIN.checked_add(offset)?)
             .ok()?
             .to_be_bytes();
-        let key = Nodeport6Key {
-            a: backend.0,
-            b: nat,
-            ap: backend.1,
-            bp: port,
-            proto,
-            direction: SNAT_REPLY,
-            pad: [0; 2],
-        };
-        if NODEPORT6.insert(&key, reply, BPF_NOEXIST).is_ok() {
+        // SAFETY: this CPU's scratch slot (see claim_port).
+        let keys = unsafe { &mut *keys };
+        keys.k6.a = backend.0;
+        keys.k6.b = nat;
+        keys.k6.ap = backend.1;
+        keys.k6.bp = port;
+        keys.k6.proto = proto;
+        keys.k6.direction = SNAT_REPLY;
+        keys.k6.pad = [0; 2];
+        if NODEPORT6.insert(&keys.k6, reply, BPF_NOEXIST).is_ok() {
             return Some(port);
         }
-        // SAFETY: LRU value copied at once.
-        let Some(held) = (unsafe { NODEPORT6.get(&key).copied() }) else {
+        // SAFETY: an LRU value read in place.
+        let Some(held) = (unsafe { NODEPORT6.get(&keys.k6) }) else {
             continue;
         };
         if !expired(held.flags, held.pad2, proto, now16()) {
             continue;
         }
-        let stale = Nodeport6Key {
-            a: held.other,
-            b: held.address,
-            ap: held.other_port,
-            bp: held.port,
-            proto,
-            direction: FORWARD,
-            pad: [0; 2],
-        };
+        keys.s6.a = held.other;
+        keys.s6.b = held.address;
+        keys.s6.ap = held.other_port;
+        keys.s6.bp = held.port;
+        keys.s6.proto = proto;
+        keys.s6.direction = FORWARD;
+        keys.s6.pad = [0; 2];
         // SAFETY: as above.
-        if unsafe { NODEPORT6.get(&stale).copied() }
+        if unsafe { NODEPORT6.get(&keys.s6) }
             .is_some_and(|f| f.other == nat && f.other_port == port)
         {
-            let _ = NODEPORT6.remove(&stale);
+            let _ = NODEPORT6.remove(&keys.s6);
         }
-        if NODEPORT6.insert(&key, reply, 0).is_ok() {
+        if NODEPORT6.insert(&keys.k6, reply, 0).is_ok() {
             return Some(port);
         }
     }
@@ -1901,16 +1917,19 @@ const STALE6: i32 = 1000;
 #[inline(always)]
 fn live6(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> bool {
     let (proto, client, _, client_port, _) = *tuple;
-    let key = Nodeport6Key {
-        a: flow.address,
-        b: flow.other,
-        ap: flow.port,
-        bp: flow.other_port,
-        proto,
-        direction: SNAT_REPLY,
-        pad: [0; 2],
+    let Some(keys) = NAT_KEYS.get_ptr_mut(0) else {
+        return false;
     };
-    let Some(value) = NODEPORT6.get_ptr_mut(&key) else {
+    // SAFETY: this CPU's scratch slot, used by nothing else meanwhile.
+    let keys = unsafe { &mut *keys };
+    keys.k6.a = flow.address;
+    keys.k6.b = flow.other;
+    keys.k6.ap = flow.port;
+    keys.k6.bp = flow.other_port;
+    keys.k6.proto = proto;
+    keys.k6.direction = SNAT_REPLY;
+    keys.k6.pad = [0; 2];
+    let Some(value) = NODEPORT6.get_ptr_mut(&keys.k6) else {
         return false;
     };
     // SAFETY: an LRU value of this map, read and written in place.
