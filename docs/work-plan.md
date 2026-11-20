@@ -31,7 +31,8 @@ Design (the operator executable is gap #446, so both run in the Kubernetes-mode 
 - [x] kernel-check at 47a6fa6 on 7.3.4-200.fc44: 21 pass, 0 fail, 2 skip. l2-announce-live: the other namespace's kernel
       holds a0's MAC REACHABLE for 192.0.2.240 and 2001:db8:30::f0 (1 ARP reply, 1 NA), 192.0.2.241 unresolved, no host
       address added. (First run failed on the fixture's sysfs ifindex read, #476.)
-- [ ] stage; shipped with proof the Lease is held on a node; edge-lb's address needs the pool and policy from stormcos#385.
+- [x] Stage requested (build bef7524486e3); `shipped` with proof: Lease kube-system/flowsdn-lb-ipam has a holder. Shape posted on
+      stormcos#385 (pool + policy, `loadBalancerIPs: true`), which edge-lb's address needs. Comment on #475 says what was verified.
 
 ### spec 21 stub marker — #445 (P0), 2026-11-19
 
