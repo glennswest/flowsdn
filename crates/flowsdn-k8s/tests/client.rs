@@ -36,6 +36,19 @@ fn namespace_and_identity_paths() {
 }
 
 #[test]
+fn load_balancer_pool_and_announcement_policy_paths() {
+    assert_eq!(
+        request_uri(&Scope::LbIpPools, &Query::default()).expect("URI"),
+        "/apis/flowsdn.io/v1alpha1/flowsdnloadbalancerippools"
+    );
+    assert_eq!(
+        request_uri(&Scope::L2Policies, &Query::default()).expect("URI"),
+        "/apis/flowsdn.io/v1alpha1/flowsdnl2announcementpolicies"
+    );
+    assert!(!Scope::LbIpPools.namespaced() && !Scope::L2Policies.namespaced());
+}
+
+#[test]
 fn request_paths_and_opaque_values_are_encoded() {
     assert_eq!(
         request_uri(&Scope::Nodes, &Query::default()).expect("URI"),

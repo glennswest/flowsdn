@@ -80,6 +80,8 @@ pub fn request_uri(scope: &Scope, query: &Query<'_>) -> Result<String, Error> {
         Scope::NetworkPolicies => "/apis/networking.k8s.io/v1/networkpolicies",
         Scope::ClusterwidePolicies => CLUSTERWIDE_POLICIES_PATH,
         Scope::PodPolicies => POD_POLICIES_PATH,
+        Scope::LbIpPools => LB_IP_POOLS_PATH,
+        Scope::L2Policies => L2_POLICIES_PATH,
     };
     let mut params = Vec::new();
     if let Some(selector) = scope.field_selector() {
@@ -131,6 +133,11 @@ pub const CLUSTERWIDE_POLICIES_PATH: &str =
     "/apis/flowsdn.io/v1alpha1/flowsdnclusterwidenetworkpolicies";
 /// `flowsdn.io/v1alpha1` FlowsdnNetworkPolicy in every namespace (#292).
 pub const POD_POLICIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnnetworkpolicies";
+/// `flowsdn.io/v1alpha1` FlowsdnLoadBalancerIPPool; a pool's status is
+/// `<path>/<name>/status` (#475).
+pub const LB_IP_POOLS_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnloadbalancerippools";
+/// `flowsdn.io/v1alpha1` FlowsdnL2AnnouncementPolicy (#475).
+pub const L2_POLICIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnl2announcementpolicies";
 
 pub struct JsonClient {
     client: Client,

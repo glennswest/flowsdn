@@ -1,8 +1,10 @@
 //! The controller against a loopback HTTPS API server: kubeconfig credentials,
 //! Node/Pod lists, a watch event, a watch the server ends, the pool the
 //! agent derives, and a FlowsdnIdentity created for the local Pod while the
-//! remote Pod resolves to an existing one. No routes are installed (that
-//! needs CAP_NET_ADMIN); this is not cluster acceptance.
+//! remote Pod resolves to an existing one. LB-IPAM takes the Lease and
+//! writes a LoadBalancer Service's ingress address from a pool (#475). No
+//! routes are installed (that needs CAP_NET_ADMIN); this is not cluster
+//! acceptance.
 #![cfg(feature = "kubernetes")]
 use flowsdn_agent::kubernetes::{Settings, controller::Controller, lock};
 use openssl::{
@@ -80,6 +82,37 @@ fn node(name: &str, rv: &str, cidrs: &[&str], ips: &[&str]) -> serde_json::Value
         "spec":{"podCIDRs":cidrs},"status":{"addresses":addresses}})
 }
 
+/// The request body, `Content-Length` bytes after the head.
+fn read_body(stream: &mut impl Read, request: &[u8]) -> Option<Vec<u8>> {
+    let text = String::from_utf8_lossy(request).into_owned();
+    let length: usize = text
+        .lines()
+        .find_map(|l| {
+            l.to_ascii_lowercase()
+                .strip_prefix("content-length:")
+                .map(|v| v.trim().to_owned())
+        })
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let start = request
+        .windows(4)
+        .position(|b| b == b"\r\n\r\n")
+        .map_or(request.len(), |p| p.saturating_add(4));
+    let mut body = request.get(start..).unwrap_or_default().to_vec();
+    while body.len() < length {
+        let mut buffer = [0_u8; 1024];
+        match stream.read(&mut buffer) {
+            Ok(0) | Err(_) => return None,
+            Ok(n) => body.extend_from_slice(buffer.get(..n).unwrap_or_default()),
+        }
+    }
+    Some(body)
+}
+
+/// Writes other than FlowsdnIdentity creates: (method, path, body).
+type Writes = Arc<Mutex<Vec<(String, String, serde_json::Value)>>>;
+const LEASE: &str = "/apis/coordination.k8s.io/v1/namespaces/kube-system/leases";
+
 /// Each connection is answered on its own thread: lists, one node watch event
 /// then the end of that watch, and later watches held open.
 fn server(
@@ -87,6 +120,7 @@ fn server(
     cert: X509,
     watches: Arc<AtomicUsize>,
     created: Arc<Mutex<Vec<serde_json::Value>>>,
+    writes: Writes,
     crd_served_at: Instant,
 ) -> u16 {
     let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).expect("acceptor");
@@ -101,6 +135,7 @@ fn server(
             let acceptor = Arc::clone(&acceptor);
             let watches = Arc::clone(&watches);
             let created = Arc::clone(&created);
+            let writes = Arc::clone(&writes);
             thread::spawn(move || {
                 let Ok(mut stream) = acceptor.accept(socket) else {
                     return;
@@ -132,34 +167,64 @@ fn server(
                     return;
                 }
                 if line.starts_with("POST /apis/flowsdn.io/v1alpha1/flowsdnidentities ") {
-                    let text = String::from_utf8_lossy(&request).into_owned();
-                    let length: usize = text
-                        .lines()
-                        .find_map(|l| {
-                            l.to_ascii_lowercase()
-                                .strip_prefix("content-length:")
-                                .map(|v| v.trim().to_owned())
-                        })
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(0);
-                    let start = request
-                        .windows(4)
-                        .position(|b| b == b"\r\n\r\n")
-                        .map_or(request.len(), |p| p.saturating_add(4));
-                    let mut body = request.get(start..).unwrap_or_default().to_vec();
-                    while body.len() < length {
-                        let mut buffer = [0_u8; 1024];
-                        match stream.read(&mut buffer) {
-                            Ok(0) | Err(_) => return,
-                            Ok(n) => body.extend_from_slice(buffer.get(..n).unwrap_or_default()),
-                        }
-                    }
+                    let Some(body) = read_body(&mut stream, &request) else {
+                        return;
+                    };
                     let value: serde_json::Value =
                         serde_json::from_slice(&body).expect("identity JSON");
                     created.lock().expect("created").push(value.clone());
                     let body = value.to_string();
                     let response = format!(
                         "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                    let _ = stream.shutdown();
+                    return;
+                }
+                let mut words = line.split(' ');
+                let (method, path) = (
+                    words.next().unwrap_or_default().to_owned(),
+                    words.next().unwrap_or_default().to_owned(),
+                );
+                // The LB-IPAM Lease: 404 until created, then the last write.
+                if method == "GET" && path.starts_with(LEASE) {
+                    let lease = writes
+                        .lock()
+                        .expect("writes")
+                        .iter()
+                        .rev()
+                        .find(|(_, p, _)| p.starts_with(LEASE))
+                        .map(|(_, _, body)| body.clone());
+                    let response = match lease {
+                        Some(mut lease) => {
+                            lease["metadata"]["resourceVersion"] = json!("70");
+                            let body = lease.to_string();
+                            format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                                body.len()
+                            )
+                        }
+                        None => {
+                            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                                .to_owned()
+                        }
+                    };
+                    let _ = stream.write_all(response.as_bytes());
+                    return;
+                }
+                if matches!(method.as_str(), "POST" | "PUT" | "PATCH") {
+                    let Some(body) = read_body(&mut stream, &request) else {
+                        return;
+                    };
+                    let value: serde_json::Value = serde_json::from_slice(&body).expect("JSON");
+                    writes
+                        .lock()
+                        .expect("writes")
+                        .push((method, path, value.clone()));
+                    let body = value.to_string();
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                         body.len()
                     );
                     let _ = stream.write_all(response.as_bytes());
@@ -193,7 +258,19 @@ fn server(
                         {"metadata":{"name":"kube-dns","namespace":"kube-system","uid":"s1","resourceVersion":"29"},
                          "spec":{"clusterIP":"10.96.0.10","clusterIPs":["10.96.0.10"],
                             "ports":[{"name":"dns","protocol":"UDP","port":53},
-                                     {"name":"dns-tcp","protocol":"TCP","port":53}]}}
+                                     {"name":"dns-tcp","protocol":"TCP","port":53}]}},
+                        {"metadata":{"name":"edge-lb","namespace":"storefront","uid":"s2","resourceVersion":"31",
+                            "creationTimestamp":"2026-11-19T10:00:00Z"},
+                         "spec":{"type":"LoadBalancer","clusterIP":"10.96.0.80","clusterIPs":["10.96.0.80"],
+                            "externalTrafficPolicy":"Local",
+                            "ports":[{"name":"http","protocol":"TCP","port":80,"nodePort":30080}]}}
+                    ]})
+                } else if line.starts_with("GET /apis/flowsdn.io/v1alpha1/flowsdnloadbalancerippools") {
+                    json!({"metadata":{"resourceVersion":"80"},"items":[
+                        {"apiVersion":"flowsdn.io/v1alpha1","kind":"FlowsdnLoadBalancerIPPool",
+                         "metadata":{"name":"lan","uid":"lp1","resourceVersion":"79",
+                            "creationTimestamp":"2026-11-01T00:00:00Z"},
+                         "spec":{"blocks":[{"start":"192.0.2.240","stop":"192.0.2.250"}]}}
                     ]})
                 } else if line.starts_with("GET /apis/discovery.k8s.io/v1/endpointslices") {
                     json!({"metadata":{"resourceVersion":"40"},"items":[
@@ -257,6 +334,7 @@ fn controller_lists_watches_and_derives_the_pool() {
     std::fs::write(&ca, cert.to_pem().expect("PEM")).expect("CA file");
     let watches = Arc::new(AtomicUsize::new(0));
     let created = Arc::new(Mutex::new(Vec::new()));
+    let writes: Writes = Arc::new(Mutex::new(Vec::new()));
     // Late enough that doubling from 1 s (retries at 0, 1, 3, 7, 15 s) would be 7 s
     // late; #397's target is within 2 s.
     let crd_served_at = Instant::now()
@@ -267,6 +345,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         cert,
         Arc::clone(&watches),
         Arc::clone(&created),
+        Arc::clone(&writes),
         crd_served_at,
     );
     let kubeconfig = dir.join("kubeconfig");
@@ -300,6 +379,9 @@ fn controller_lists_watches_and_derives_the_pool() {
             mode: flowsdn_agent::uplinks::Mode::Single,
             ..Default::default()
         },
+        lb_ipam: true,
+        // Needs node-port; answering ARP needs CAP_NET_RAW.
+        l2_announcements: false,
     };
     let controller = Controller::connect(settings, &dir).expect("connect");
     let (pool4, pool6) = controller.wait_for_pools(true, true).expect("pools");
@@ -336,6 +418,12 @@ fn controller_lists_watches_and_derives_the_pool() {
                 && watches.load(Ordering::SeqCst) >= 2
                 && view.identities_synced
                 && view.pod_identities.len() == 2
+                && view.lb_ipam_json()["leader"] == json!(true)
+                && writes
+                    .lock()
+                    .expect("writes")
+                    .iter()
+                    .any(|(_, path, _)| path.ends_with("/services/edge-lb/status"))
             {
                 // Unprivileged test runs cannot write /proc/sys; nothing else failed.
                 assert!(
@@ -361,6 +449,7 @@ fn controller_lists_watches_and_derives_the_pool() {
                 let dns: Vec<_> = view
                     .frontends
                     .iter()
+                    .filter(|f| f.name == "kube-dns")
                     .map(|f| {
                         let backends: Vec<_> =
                             f.service.backends.iter().map(ToString::to_string).collect();
@@ -400,6 +489,36 @@ fn controller_lists_watches_and_derives_the_pool() {
                 );
                 let identities = view.identity_list();
                 assert_eq!(identities.as_array().map(Vec::len), Some(2));
+                // LB-IPAM: the Lease was created as this node, then edge-lb's
+                // status patched with the pool's first address, guarded by
+                // the Service's resourceVersion, and the pool's conditions.
+                let writes = writes.lock().expect("writes").clone();
+                let (method, _, lease) = writes
+                    .iter()
+                    .find(|(_, p, _)| p.starts_with(LEASE))
+                    .expect("lease write");
+                assert_eq!(method, "POST");
+                assert_eq!(lease.pointer("/spec/holderIdentity"), Some(&json!("local")));
+                let (method, _, patch) = writes
+                    .iter()
+                    .find(|(_, p, _)| p == "/api/v1/namespaces/storefront/services/edge-lb/status")
+                    .expect("status patch");
+                assert_eq!(method, "PATCH");
+                assert_eq!(
+                    patch,
+                    &json!({"metadata":{"resourceVersion":"31"},
+                        "status":{"loadBalancer":{"ingress":[{"ip":"192.0.2.240"}]}}})
+                );
+                assert!(
+                    !writes.iter().any(|(_, p, _)| p.contains("/services/kube-dns")),
+                    "a ClusterIP Service is not touched"
+                );
+                assert!(writes.iter().any(|(m, p, body)| m == "PATCH"
+                    && p == "/apis/flowsdn.io/v1alpha1/flowsdnloadbalancerippools/lan/status"
+                    && body.pointer("/status/conditions/1/message") == Some(&json!("10"))));
+                let status = view.lb_ipam_json();
+                assert_eq!(status["services"][0]["name"], "edge-lb");
+                assert_eq!(status["services"][0]["ips"][0], "192.0.2.240");
                 break;
             }
         }

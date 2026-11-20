@@ -53,6 +53,16 @@ discovery, plan and kernel code (`flowsdn_agent::uplinks`). The checks:
 - the /32 goes when carrier returns, twice over;
 - `single` removes every rule and table entry.
 
+Run `l2-announce-live` with no arguments to check the L2 announcer's answers
+(#475) on a real kernel. Two namespaces share a veth pair; this process answers
+for 192.0.2.240 and 2001:db8:30::f0 on its end with `flowsdn_connector::announce`
+(the agent's sockets and answers), and a worker in the other namespace sends UDP
+to them. The checks:
+- the worker's kernel accepts the ARP reply and the Neighbor Advertisement and
+  holds this end's MAC for both addresses;
+- an address that is not announced stays unresolved;
+- neither address is added to this end's host.
+
 Run `native-routing` with the same BPF object for two router namespaces and
 two endpoints. It tests dual-stack traffic, route removal/restoration and
 object detach/reload. Mandatory namespace-local nftables FORWARD drops prevent

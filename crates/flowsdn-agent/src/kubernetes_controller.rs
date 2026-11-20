@@ -30,6 +30,8 @@ use std::{
 
 #[path = "uplinks_monitor.rs"]
 mod uplinks_monitor;
+#[path = "kubernetes_lb.rs"]
+mod lb;
 
 type Key = (IpAddr, u8, IpAddr);
 
@@ -139,6 +141,8 @@ impl Controller {
             flowsdn_policy: self.settings.flowsdn_policy,
             host_firewall: self.settings.host_firewall,
             cluster_name: self.settings.cluster_name.clone(),
+            lb_ipam: self.settings.lb_ipam_on(),
+            l2_announcements: self.settings.l2_on(),
             ..View::default()
         }));
         let host_firewall = self.settings.host_firewall != HostFirewall::Off;
@@ -212,6 +216,20 @@ impl Controller {
             std::thread::Builder::new()
                 .name("flowsdn-identity".into())
                 .spawn(move || identity_loop(&identity_view, kubeconfig.as_deref()))?;
+        }
+        if self.settings.lb_ipam_on() {
+            let ipam_view = Arc::clone(&view);
+            let kubeconfig = self.settings.kubeconfig.clone();
+            let identity = self.settings.node_name.clone();
+            std::thread::Builder::new()
+                .name("flowsdn-lb-ipam".into())
+                .spawn(move || lb::ipam_loop(&ipam_view, kubeconfig.as_deref(), &identity))?;
+        }
+        if self.settings.l2_on() {
+            let l2_view = Arc::clone(&view);
+            std::thread::Builder::new()
+                .name("flowsdn-l2".into())
+                .spawn(move || lb::announce_loop(&l2_view))?;
         }
         let annotate_view = Arc::clone(&view);
         let kubeconfig = self.settings.kubeconfig.clone();
@@ -428,6 +446,42 @@ impl Controller {
                                 if let (Some(sender), Some(frontends)) = (&lb, frontends) {
                                     let _ = sender.send(frontends);
                                 }
+                            },
+                        )
+                        .boxed_local(),
+                    );
+                }
+                if settings.lb_ipam_on() {
+                    let pool_view = Arc::clone(&watch_view);
+                    parts.push(
+                        watch_forever(
+                            &client,
+                            Scope::LbIpPools,
+                            "lb-ip-pools",
+                            &watch_view,
+                            move |state| {
+                                let rows = object_rows(state);
+                                let mut view = lock(&pool_view);
+                                view.lb_pools = rows;
+                                view.lb_pools_synced = true;
+                            },
+                        )
+                        .boxed_local(),
+                    );
+                }
+                if settings.l2_on() {
+                    let l2_view = Arc::clone(&watch_view);
+                    parts.push(
+                        watch_forever(
+                            &client,
+                            Scope::L2Policies,
+                            "l2-policies",
+                            &watch_view,
+                            move |state| {
+                                let rows = object_rows(state);
+                                let mut view = lock(&l2_view);
+                                view.l2_policies = rows;
+                                view.l2_policies_synced = true;
                             },
                         )
                         .boxed_local(),
@@ -658,6 +712,7 @@ fn node_info(node: &flowsdn_k8s::watch::Node) -> NodeInfo {
         pod_cidrs: node.pod_cidrs.clone(),
         internal_ips: node.internal_ips.clone(),
         labels: node.labels.clone(),
+        ready: node.ready,
     }
 }
 fn node_rows(state: &WatchState) -> Vec<NodeInfo> {
@@ -738,6 +793,17 @@ fn clusterwide_rows(state: &WatchState) -> Vec<Value> {
         .all()
         .filter_map(|(row, _)| match &*row {
             Resource::ClusterwidePolicy(p) => Some(p.object.clone()),
+            _ => None,
+        })
+        .collect()
+}
+/// The FlowsdnLoadBalancerIPPool or FlowsdnL2AnnouncementPolicy objects.
+fn object_rows(state: &WatchState) -> Vec<Value> {
+    state
+        .snapshot()
+        .all()
+        .filter_map(|(row, _)| match &*row {
+            Resource::LbIpPool(p) | Resource::L2Policy(p) => Some(p.object.clone()),
             _ => None,
         })
         .collect()
@@ -951,6 +1017,12 @@ fn service_rows(
                     None => lb_mode == LbMode::Dsr,
                 },
                 nat46x64,
+                labels: service.labels.clone(),
+                created: service.created.clone(),
+                load_balancer_class: service.load_balancer_class.clone(),
+                ip_families: service.ip_families.clone(),
+                requested_ips: service.requested_ips.clone(),
+                resource_version: service.metadata.resource_version.clone(),
             }),
             _ => None,
         })

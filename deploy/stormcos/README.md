@@ -58,8 +58,40 @@ any flowsdn custom resource; they are generated, so don't edit them. Until a
 flowsdn operator registers CRDs, stormcos applies them with the other
 manifests. `63-flowsdn-operator-rbac.yaml` creates the operator's
 ServiceAccount and ClusterRole ahead of that operator; the agent's
-`flowsdn-crds` ClusterRole is in `60-flowsdn-rbac.yaml`. Nothing consumes the
-resources yet, so applying them changes no traffic.
+`flowsdn-crds` ClusterRole is in `60-flowsdn-rbac.yaml`. The Kubernetes-mode
+agent consumes FlowsdnIdentity, the policy kinds, FlowsdnLoadBalancerIPPool and
+FlowsdnL2AnnouncementPolicy; the other kinds have no consumer.
+
+## LoadBalancer Services
+
+With the Kubernetes-mode agent, a `type: LoadBalancer` Service gets an address
+from a FlowsdnLoadBalancerIPPool and one node answers ARP/NDP for it on the
+LAN ([LoadBalancer Services](../../docs/runtime.md#loadbalancer-services-475),
+#475). Both settings are on by default; nothing happens until the cluster has a
+pool and a policy. For addresses on the nodes' LAN (stormcos makes these from
+the install's load-balancer range):
+
+```yaml
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnLoadBalancerIPPool
+metadata:
+  name: default
+spec:
+  blocks:
+    - start: 192.0.2.240
+      stop: 192.0.2.250
+---
+apiVersion: flowsdn.io/v1alpha1
+kind: FlowsdnL2AnnouncementPolicy
+metadata:
+  name: default
+spec:
+  loadBalancerIPs: true
+```
+
+The range must be on the uplinks' subnet and outside the LAN's DHCP pool. With
+`externalTrafficPolicy: Local`, only a node with a ready endpoint of the
+Service answers, and only its endpoints get the traffic.
 
 ## Kubernetes mode: more than one node (#291)
 

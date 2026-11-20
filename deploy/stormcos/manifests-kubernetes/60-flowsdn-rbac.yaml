@@ -3,7 +3,8 @@
 # IP cache), Services and EndpointSlices (ClusterIP socket LB) and
 # NetworkPolicies (policy enforcement), read-only,
 # writes Events (#298) and patches its Pods' flowsdn.io/pod-networks
-# annotation (#328).
+# annotation (#328). LB-IPAM (#475) holds the Lease kube-system/flowsdn-lb-ipam
+# and patches LoadBalancer Services' status.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -39,6 +40,14 @@ rules:
   - apiGroups: [""]
     resources: [pods]
     verbs: [patch]
+  # LB-IPAM (#475): ingress addresses of LoadBalancer Services, written by
+  # the agent holding the flowsdn-lb-ipam Lease.
+  - apiGroups: [""]
+    resources: [services/status]
+    verbs: [patch]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, create, update]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -58,8 +67,10 @@ subjects:
 # The agent's flowsdn.io access (spec 13 §4.7, #325): read every kind it
 # watches, write its own FlowsdnEndpoints, FlowsdnIdentities and FlowsdnNode,
 # and the status of the kinds it reports on. CRDs are read only: the operator
-# registers them. These are the contract for the per-kind controllers; the
-# current agent uses none of them yet.
+# registers them. The agent lists and watches FlowsdnIdentity, the policy
+# kinds, FlowsdnLoadBalancerIPPool and FlowsdnL2AnnouncementPolicy, creates
+# and updates FlowsdnIdentity, and patches FlowsdnLoadBalancerIPPool status
+# (LB-IPAM, #475); the other grants are the contract for later controllers.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -105,7 +116,7 @@ rules:
     resources: [flowsdnnodes, flowsdnnodes/status]
     verbs: [get, update]
   - apiGroups: [flowsdn.io]
-    resources: [flowsdnendpoints, flowsdnl2announcementpolicies/status, flowsdnbgpnodeconfigs/status]
+    resources: [flowsdnendpoints, flowsdnl2announcementpolicies/status, flowsdnbgpnodeconfigs/status, flowsdnloadbalancerippools/status]
     verbs: [patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

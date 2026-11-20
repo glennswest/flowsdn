@@ -73,6 +73,11 @@ fn fixtures(env: &Env) -> Vec<(&'static str, PathBuf, Vec<PathBuf>)> {
             Vec::new(),
         ),
         (
+            "fixture-l2-announce-live",
+            env.fixture("l2-announce-live"),
+            Vec::new(),
+        ),
+        (
             "fixture-skb-ctx-matrix",
             env.fixture("skb-ctx-matrix"),
             vec![env.bpf("skb-ctx")],

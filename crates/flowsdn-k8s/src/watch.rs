@@ -25,6 +25,8 @@ pub struct Node {
     pub internal_ips: Vec<IpAddr>,
     /// `metadata.labels` (host policy `nodeSelector`, #379).
     pub labels: BTreeMap<String, String>,
+    /// The `Ready` condition is `True` (L2 announcement candidates, #475).
+    pub ready: bool,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Pod {
@@ -104,7 +106,23 @@ pub struct Service {
     pub lb_algorithm: Option<String>,
     /// `service.flowsdn.io/forwarding-mode`: `dsr` or `snat` when valid.
     pub forwarding_mode: Option<String>,
+    /// `metadata.labels` (pool and announcement `serviceSelector`, #475).
+    pub labels: BTreeMap<String, String>,
+    /// `metadata.creationTimestamp` (RFC 3339): older Services keep a
+    /// contested load-balancer address.
+    pub created: String,
+    /// `spec.loadBalancerClass` when set.
+    pub load_balancer_class: Option<String>,
+    /// `spec.ipFamilies` (`IPv4`, `IPv6`); empty when absent.
+    pub ip_families: Vec<String>,
+    /// The addresses the Service asks for: [`LB_IPS_ANNOTATION`] (comma
+    /// separated) and `spec.loadBalancerIP`; values that are not addresses
+    /// are skipped.
+    pub requested_ips: Vec<IpAddr>,
 }
+/// The annotation naming the load-balancer addresses a Service asks LB-IPAM
+/// for (comma separated), #475.
+pub const LB_IPS_ANNOTATION: &str = "lbipam.flowsdn.io/ips";
 /// The per-Service load-balancing algorithm annotation.
 pub const LB_ALGORITHM_ANNOTATION: &str = "service.flowsdn.io/lb-algorithm";
 /// An EndpointSlice port; `port` is absent for "all ports".
@@ -174,6 +192,10 @@ pub enum Resource {
     ClusterwidePolicy(NetworkPolicy),
     /// A `flowsdn.io/v1alpha1` FlowsdnNetworkPolicy, kept whole.
     PodPolicy(NetworkPolicy),
+    /// A `flowsdn.io/v1alpha1` FlowsdnLoadBalancerIPPool, kept whole (#475).
+    LbIpPool(NetworkPolicy),
+    /// A `flowsdn.io/v1alpha1` FlowsdnL2AnnouncementPolicy, kept whole (#475).
+    L2Policy(NetworkPolicy),
 }
 impl Resource {
     pub fn metadata(&self) -> &Metadata {
@@ -184,7 +206,11 @@ impl Resource {
             Self::EndpointSlice(e) => &e.metadata,
             Self::Namespace(n) => &n.metadata,
             Self::Identity(i) => &i.metadata,
-            Self::NetworkPolicy(p) | Self::ClusterwidePolicy(p) | Self::PodPolicy(p) => &p.metadata,
+            Self::NetworkPolicy(p)
+            | Self::ClusterwidePolicy(p)
+            | Self::PodPolicy(p)
+            | Self::LbIpPool(p)
+            | Self::L2Policy(p) => &p.metadata,
         }
     }
 }
@@ -217,6 +243,10 @@ pub enum Scope {
     ClusterwidePolicies,
     /// Every `flowsdn.io/v1alpha1` FlowsdnNetworkPolicy (Pod rules, #292).
     PodPolicies,
+    /// Every `flowsdn.io/v1alpha1` FlowsdnLoadBalancerIPPool (LB-IPAM, #475).
+    LbIpPools,
+    /// Every `flowsdn.io/v1alpha1` FlowsdnL2AnnouncementPolicy (#475).
+    L2Policies,
 }
 impl Scope {
     pub fn field_selector(&self) -> Option<String> {
@@ -228,7 +258,12 @@ impl Scope {
     pub fn namespaced(&self) -> bool {
         !matches!(
             self,
-            Self::Nodes | Self::Namespaces | Self::Identities | Self::ClusterwidePolicies
+            Self::Nodes
+                | Self::Namespaces
+                | Self::Identities
+                | Self::ClusterwidePolicies
+                | Self::LbIpPools
+                | Self::L2Policies
         )
     }
     pub fn parse(&self, value: &Value) -> Result<Resource, Error> {
@@ -244,6 +279,8 @@ impl Scope {
                 Self::NetworkPolicies => "NetworkPolicy",
                 Self::ClusterwidePolicies => "FlowsdnClusterwideNetworkPolicy",
                 Self::PodPolicies => "FlowsdnNetworkPolicy",
+                Self::LbIpPools => "FlowsdnLoadBalancerIPPool",
+                Self::L2Policies => "FlowsdnL2AnnouncementPolicy",
             };
             if text(kind)? != expected {
                 return Err(error("unexpected resource kind"));
@@ -270,7 +307,12 @@ impl Scope {
                         ips.push(parse_ip(required(address, "address")?)?);
                     }
                 }
+                let ready = array(value.pointer("/status/conditions"))?.iter().any(|c| {
+                    c.get("type").and_then(Value::as_str) == Some("Ready")
+                        && c.get("status").and_then(Value::as_str) == Some("True")
+                });
                 Ok(Resource::Node(Node {
+                    ready,
                     labels: labels(value)?,
                     metadata,
                     pod_cidrs: cidrs,
@@ -338,6 +380,14 @@ impl Scope {
                 object: value.clone(),
             })),
             Self::PodPolicies => Ok(Resource::PodPolicy(NetworkPolicy {
+                metadata,
+                object: value.clone(),
+            })),
+            Self::LbIpPools => Ok(Resource::LbIpPool(NetworkPolicy {
+                metadata,
+                object: value.clone(),
+            })),
+            Self::L2Policies => Ok(Resource::L2Policy(NetworkPolicy {
                 metadata,
                 object: value.clone(),
             })),
@@ -592,7 +642,51 @@ fn parse_service(value: &Value, metadata: Metadata) -> Result<Service, Error> {
             .and_then(Value::as_str)
             .filter(|a| matches!(*a, "dsr" | "snat"))
             .map(str::to_owned),
+        labels: labels(value)?,
+        created: value
+            .pointer("/metadata/creationTimestamp")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned(),
+        load_balancer_class: spec
+            .get("loadBalancerClass")
+            .and_then(Value::as_str)
+            .filter(|c| !c.is_empty())
+            .map(str::to_owned),
+        ip_families: spec
+            .get("ipFamilies")
+            .and_then(Value::as_array)
+            .map(|f| {
+                f.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        requested_ips: requested_ips(value),
     })
+}
+/// [`LB_IPS_ANNOTATION`] then `spec.loadBalancerIP`, each address once.
+fn requested_ips(value: &Value) -> Vec<IpAddr> {
+    let annotation = value
+        .pointer("/metadata/annotations/lbipam.flowsdn.io~1ips")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let field = value
+        .pointer("/spec/loadBalancerIP")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let mut out: Vec<IpAddr> = Vec::new();
+    for ip in annotation
+        .split(',')
+        .chain(std::iter::once(field))
+        .filter_map(|ip| ip.trim().parse().ok())
+    {
+        if !out.contains(&ip) {
+            out.push(ip);
+        }
+    }
+    out
 }
 fn parse_slice(value: &Value, metadata: Metadata) -> Result<EndpointSlice, Error> {
     let service_name = match value.pointer("/metadata/labels/kubernetes.io~1service-name") {

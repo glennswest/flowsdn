@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-19 (#475)
+- **feat:** LoadBalancer Services end to end (#475, stormlb#37). LB-IPAM in the Kubernetes-mode agent (`kubernetes.lb-ipam`, default on): the agent holding the Lease `kube-system/flowsdn-lb-ipam` gives `type: LoadBalancer` Services addresses from FlowsdnLoadBalancerIPPools (CIDR or start/stop blocks, `allowFirstLastIPs`, `disabled`, `serviceSelector`, requested addresses by `lbipam.flowsdn.io/ips` or `spec.loadBalancerIP`, one per `ipFamilies` family), writes `status.loadBalancer.ingress` (merge patch guarded by resourceVersion) and the pools' `flowsdn.io/PoolConflict` / `flowsdn.io/IPsAvailable` conditions; overlapping pools conflict, the older Service keeps a contested address, a deleted Service's address is freed. L2 announcements (`kubernetes.l2-announcements`, default on): FlowsdnL2AnnouncementPolicies (`serviceSelector`, `nodeSelector`, `interfaces`, `loadBalancerIPs`, `externalIPs`) and a rendezvous election over Ready nodes (with `externalTrafficPolicy: Local`, nodes with a ready endpoint) pick one node per Service, which answers ARP and NDP for its addresses from AF_PACKET sockets (`flowsdn_connector::announce`; cBPF filter for Neighbor Solicitations, solicited-node membership) and announces a takeover with gratuitous ARP / unsolicited NA. New `GET /v1/lb-ipam` and `GET /v1/l2-announcements`; RBAC for `services/status`, Leases and pool status; watch kinds for the pool and policy CRDs, Service labels/creation/class/families/requested IPs and Node readiness; kernel fixture `l2-announce-live`.
+
 ### 2026-11-19 (#445)
 - **docs:** Spec 21 (#445): the `HTTPRouteParentRefPort` exemption states that routes are not attached by `parentRef.port`, new gap #474. No "not implemented" marker remains; line count unchanged.
 

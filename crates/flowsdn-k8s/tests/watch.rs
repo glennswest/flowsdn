@@ -612,3 +612,63 @@ fn pod_service_account(value: &Value) -> String {
         _ => panic!("pod"),
     }
 }
+
+#[test]
+fn load_balancer_fields_node_readiness_and_the_pool_and_policy_kinds() {
+    let ip = |s: &str| s.parse::<std::net::IpAddr>().expect("ip");
+    let edge = json!({"metadata":{"name":"edge-lb","namespace":"storefront","uid":"u",
+            "resourceVersion":"3","creationTimestamp":"2026-11-19T10:00:00Z",
+            "labels":{"app":"edge"},
+            "annotations":{"lbipam.flowsdn.io/ips":"192.0.2.241, bad,2001:db8::f1"}},
+        "spec":{"type":"LoadBalancer","clusterIP":"10.96.7.7","externalTrafficPolicy":"Local",
+            "loadBalancerClass":"io.flowsdn/l2-announcer","loadBalancerIP":"192.0.2.241",
+            "ipFamilies":["IPv4","IPv6"],"ports":[{"name":"http","port":80,"nodePort":30080}]}});
+    let Resource::Service(parsed) = Scope::Services.parse(&edge).expect("service") else {
+        panic!("service row expected");
+    };
+    assert_eq!(parsed.labels.get("app").map(String::as_str), Some("edge"));
+    assert_eq!(parsed.created, "2026-11-19T10:00:00Z");
+    assert_eq!(
+        parsed.load_balancer_class.as_deref(),
+        Some("io.flowsdn/l2-announcer")
+    );
+    assert_eq!(parsed.ip_families, ["IPv4", "IPv6"]);
+    // The annotation first, `loadBalancerIP` once, odd values skipped.
+    assert_eq!(
+        parsed.requested_ips,
+        vec![ip("192.0.2.241"), ip("2001:db8::f1")]
+    );
+    let plain = json!({"metadata":{"name":"a","namespace":"ns","uid":"u","resourceVersion":"1"},
+        "spec":{"clusterIP":"10.96.5.6","ports":[{"port":80}],"loadBalancerClass":""}});
+    let Resource::Service(parsed) = Scope::Services.parse(&plain).expect("service") else {
+        panic!("service row expected");
+    };
+    assert!(parsed.requested_ips.is_empty() && parsed.ip_families.is_empty());
+    assert_eq!(parsed.load_balancer_class, None);
+    let node = |status: &str| {
+        json!({"metadata":{"name":"n","uid":"u","resourceVersion":"1"},
+            "status":{"conditions":[{"type":"MemoryPressure","status":"False"},
+                                    {"type":"Ready","status":status}]}})
+    };
+    for (status, ready) in [("True", true), ("False", false), ("Unknown", false)] {
+        let Resource::Node(parsed) = Scope::Nodes.parse(&node(status)).expect("node") else {
+            panic!("node row expected");
+        };
+        assert_eq!(parsed.ready, ready, "{status}");
+    }
+    let pool = json!({"apiVersion":"flowsdn.io/v1alpha1","kind":"FlowsdnLoadBalancerIPPool",
+        "metadata":{"name":"lan","uid":"p","resourceVersion":"4"},
+        "spec":{"blocks":[{"cidr":"192.0.2.240/28"}]}});
+    let Resource::LbIpPool(parsed) = Scope::LbIpPools.parse(&pool).expect("pool") else {
+        panic!("pool row expected");
+    };
+    assert_eq!(parsed.object, pool);
+    assert!(Scope::L2Policies.parse(&pool).is_err(), "kind is checked");
+    let policy = json!({"kind":"FlowsdnL2AnnouncementPolicy",
+        "metadata":{"name":"lan","uid":"q","resourceVersion":"5"},
+        "spec":{"loadBalancerIPs":true}});
+    let Resource::L2Policy(parsed) = Scope::L2Policies.parse(&policy).expect("policy") else {
+        panic!("policy row expected");
+    };
+    assert_eq!(parsed.metadata.name, "lan");
+}

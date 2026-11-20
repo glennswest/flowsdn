@@ -49,6 +49,8 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.lb-algorithm` | `random` | `random` or `maglev`: how the uplink programs pick a backend for a new flow from outside the cluster ([Maglev](#clusterip-socket-lb-292)). A Service's `service.flowsdn.io/lb-algorithm` annotation (`random` or `maglev`) overrides it. |
 | `kubernetes.lb-mode` | `snat` | `snat`, `dsr` or `hybrid` (DSR for TCP, SNAT otherwise): how traffic from outside the cluster reaches a backend on another node ([DSR](#direct-server-return)). A Service's `service.flowsdn.io/forwarding-mode: dsr\|snat` annotation overrides it. |
 | `kubernetes.nat46x64` | `false` | Service NAT46/64: a node-local frontend with no backend of its own family reaches the other family's backends on other nodes ([NAT46/64](#service-nat4664)). |
+| `kubernetes.lb-ipam` | `true` | LB-IPAM: give `type: LoadBalancer` Services addresses from FlowsdnLoadBalancerIPPools ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb`; nothing happens without a pool. |
+| `kubernetes.l2-announcements` | `true` | Answer ARP and NDP for the load-balancer and external addresses FlowsdnL2AnnouncementPolicies give this node ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb` and `node-port`; nothing is announced without a policy. |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
 | `kubernetes.flowsdn-policy` | `false` | Enforce the Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy ([Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292)). The CRDs must exist: the policy thread waits for both lists, NetworkPolicy enforcement included. |
@@ -577,6 +579,66 @@ Geneve). A UDP packet the option would push over the device's MTU is sent withou
 it, and no ICMP error is produced: if it opens the flow, the reply keeps the
 backend's source. Verified by kernel test runs only (`socket-lb-live`); it has not
 carried traffic between two nodes.
+
+### LoadBalancer Services (#475)
+
+A `type: LoadBalancer` Service gets its address from flowsdn and is reached
+from the node's LAN without a router or BGP. Three parts, all in the
+Kubernetes-mode agent (there is no operator executable, #446):
+
+- **LB-IPAM** (`kubernetes.lb-ipam`). One agent at a time holds the Lease
+  `kube-system/flowsdn-lb-ipam` (taken over when its holder stops renewing for
+  15 s, measured by the taker's own clock) and writes; every agent plans the
+  same and shows it in `GET /v1/lb-ipam`. Addresses come from
+  FlowsdnLoadBalancerIPPools: `blocks` of `cidr` or `start`/`stop` (no `stop`:
+  one address), `allowFirstLastIPs: "No"` keeps a CIDR's first and last
+  address back (not /31, /32, /127, /128), `disabled: true` gives no new
+  addresses but keeps those given, and `serviceSelector` matches the
+  Service's labels plus `io.kubernetes.service.namespace` and
+  `io.kubernetes.service.name`. A pool overlapping an older one is not used
+  (`flowsdn.io/PoolConflict` True); one with a block or selector that does not
+  parse is not used (`flowsdn.io/IPsAvailable` False, `InvalidPool`). Otherwise
+  `flowsdn.io/IPsAvailable` carries the free count. A Service with no
+  `loadBalancerClass` or `io.flowsdn/l2-announcer` gets one address per
+  `spec.ipFamilies` family (default IPv4), the lowest free one of the first
+  matching pool by name, or exactly the addresses it asks for in the
+  `lbipam.flowsdn.io/ips` annotation (comma separated) or
+  `spec.loadBalancerIP`. It is written to `status.loadBalancer.ingress[].ip`
+  by a merge patch guarded by the Service's resourceVersion. A Service keeps
+  its address while a matching pool holds it; of two Services with one
+  address the older keeps it. A deleted Service's address is free once it is
+  gone; a Service that stops being a LoadBalancer loses its pool addresses.
+  Why a Service has fewer addresses than it asks for is in
+  `GET /v1/lb-ipam` (`problem`) and the agent log (`lb-ipam: ns/name -> [...]`).
+- **L2 announcement** (`kubernetes.l2-announcements`). A
+  FlowsdnL2AnnouncementPolicy selects Services (`serviceSelector`, the same
+  two naming labels) and nodes (`nodeSelector`), and announces their ingress
+  addresses with `loadBalancerIPs: true` and their `spec.externalIPs` with
+  `externalIPs: true` (both default false). One node answers for a Service:
+  the highest rendezvous hash of (node, Service) among the Ready nodes a
+  selecting policy selects, and with `externalTrafficPolicy: Local` only those
+  with a ready endpoint of the Service. Every agent computes the same winner
+  from the same lists; when it changes (a node not Ready, the last local
+  endpoint gone), the new node takes over with three gratuitous ARPs or
+  unsolicited Neighbor Advertisements, one a second. The address is never
+  added to the host: an AF_PACKET socket per interface answers ARP requests,
+  and one with a classic BPF filter answers Neighbor Solicitations (it joins
+  each address's solicited-node group; duplicate address detection is not
+  answered). Interfaces are those a policy's `interfaces` regular expressions
+  match, else the uplinks with carrier on the address's subnet, else every
+  uplink with carrier. `GET /v1/l2-announcements` lists what this node
+  answers for.
+- **Datapath**: the uplink programs serve a Service's ingress addresses
+  like its NodePorts ([socket LB](#clusterip-socket-lb-292)): every backend
+  (other nodes' through SNAT, or DSR), or with `externalTrafficPolicy: Local`
+  this node's only, keeping the client's address.
+
+In L2 mode one node receives a Service's traffic. With
+`externalTrafficPolicy: Local` that node's endpoints serve it, so endpoints
+on other nodes get none of it; spread over every endpoint needs
+`externalTrafficPolicy: Cluster` (with `lb-mode: dsr` to keep the client's
+address). A pool and a policy for a LAN are in
+[deploy/stormcos/README.md](../deploy/stormcos/README.md#loadbalancer-services).
 
 ### NetworkPolicy enforcement (#292)
 

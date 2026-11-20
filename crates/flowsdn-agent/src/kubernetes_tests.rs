@@ -15,6 +15,7 @@ fn node(name: &str, cidrs: &[(&str, u8)], ips: &[&str]) -> NodeInfo {
         pod_cidrs: cidrs.iter().map(|(a, p)| (ip(a), *p)).collect(),
         internal_ips: ips.iter().map(|a| ip(a)).collect(),
         labels: BTreeMap::new(),
+        ready: true,
     }
 }
 

@@ -85,6 +85,14 @@ pub struct Settings {
     pub host_firewall: HostFirewall,
     /// `kubernetes.uplinks` (#408): how several uplink ports are used.
     pub uplinks: crate::uplinks::Settings,
+    /// LB-IPAM (#475), default on with `service-lb`: watch
+    /// FlowsdnLoadBalancerIPPools and, holding the LB-IPAM Lease, write
+    /// LoadBalancer Services' ingress addresses. Nothing without a pool.
+    pub lb_ipam: bool,
+    /// L2 announcements (#475), default on with `service-lb` and
+    /// `node-port`: watch FlowsdnL2AnnouncementPolicies and answer ARP/NDP
+    /// for the addresses they give this node. Nothing without a policy.
+    pub l2_announcements: bool,
 }
 /// `kubernetes.host-firewall`: whether the agent filters traffic to the
 /// node itself from FlowsdnClusterwideNetworkPolicy host rules, and whether
@@ -95,6 +103,17 @@ pub enum HostFirewall {
     Off,
     Audit,
     Enforce,
+}
+impl Settings {
+    /// LB-IPAM runs: `lb-ipam`, with `service-lb` (it reads the Services).
+    pub fn lb_ipam_on(&self) -> bool {
+        self.lb_ipam && self.service_lb
+    }
+    /// The L2 announcer runs: `l2-announcements`, with `service-lb` and
+    /// `node-port` (the uplink programs serve what it announces).
+    pub fn l2_on(&self) -> bool {
+        self.l2_announcements && self.service_lb && self.node_port
+    }
 }
 /// Where a DaemonSet mounts the host's cgroup v2 root.
 pub const DEFAULT_CGROUP_ROOT: &str = "/sys/fs/cgroup";
@@ -200,6 +219,8 @@ impl Settings {
             cluster_name,
             cgroup_root,
             uplinks: crate::uplinks::Settings::parse(object.get("uplinks"))?,
+            lb_ipam: flag("lb-ipam", true)?,
+            l2_announcements: flag("l2-announcements", true)?,
         }))
     }
 }
@@ -211,6 +232,8 @@ pub struct NodeInfo {
     pub internal_ips: Vec<IpAddr>,
     /// The Node's labels (host policy `nodeSelector`).
     pub labels: BTreeMap<String, String>,
+    /// The Node's `Ready` condition is `True` (L2 announcement candidates).
+    pub ready: bool,
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PodInfo {
@@ -603,6 +626,18 @@ pub struct View {
     pub host_learning: BTreeSet<u32>,
     /// The node's uplink ports, their carrier and failover (#408).
     pub uplinks: crate::uplinks::View,
+    /// LB-IPAM (#475): on, the FlowsdnLoadBalancerIPPool objects, and what
+    /// the LB-IPAM thread last planned (`GET /v1/lb-ipam`).
+    pub lb_ipam: bool,
+    pub lb_pools: Vec<Value>,
+    pub lb_pools_synced: bool,
+    pub lb_ipam_status: Value,
+    /// L2 announcements (#475): on, the FlowsdnL2AnnouncementPolicy
+    /// objects, and what the announcer last answered for.
+    pub l2_announcements: bool,
+    pub l2_policies: Vec<Value>,
+    pub l2_policies_synced: bool,
+    pub l2_status: Value,
     /// The latest failure of each controller part (`nodes`, `pods`, `routes`).
     pub errors: BTreeMap<String, String>,
 }
@@ -814,6 +849,28 @@ impl View {
             crate::services::frontends(&self.services, &self.slices, &self.local_node, &nodes);
         Some(self.frontends.iter().map(|f| f.service.clone()).collect())
     }
+    /// `GET /v1/lb-ipam`.
+    pub fn lb_ipam_json(&self) -> Value {
+        if self.lb_ipam_status.is_null() {
+            json!({"enabled": self.lb_ipam, "leader": false, "synced": false,
+                   "pools": [], "services": []})
+        } else {
+            let mut status = self.lb_ipam_status.clone();
+            status["enabled"] = json!(self.lb_ipam);
+            status
+        }
+    }
+    /// `GET /v1/l2-announcements`.
+    pub fn l2_json(&self) -> Value {
+        if self.l2_status.is_null() {
+            json!({"enabled": self.l2_announcements, "policies": [], "announcing": [],
+                   "errors": []})
+        } else {
+            let mut status = self.l2_status.clone();
+            status["enabled"] = json!(self.l2_announcements);
+            status
+        }
+    }
     /// `GET /v1/service`.
     pub fn service_list(&self) -> Value {
         crate::services::service_list(&self.frontends, &self.service_ids)
@@ -862,6 +919,7 @@ impl View {
         json!({"state":state,"msg":msg,"node-name":self.local_node,
             "auto-direct-node-routes":self.direct_routes,"service-lb":self.service_lb,
             "identity-allocation":self.identity,"network-policy":self.network_policy,"flowsdn-policy":self.flowsdn_policy,
+            "lb-ipam":self.lb_ipam,"l2-announcements":self.l2_announcements,
             "policy":self.policy_status,"uplinks":self.uplinks.summary()})
     }
 }

@@ -53,6 +53,15 @@ pub struct ServiceInfo {
     /// backend of its own family balances over the other family's backends on
     /// other nodes.
     pub nat46x64: bool,
+    /// For LB-IPAM and L2 announcements (#475): labels, creation time,
+    /// `loadBalancerClass`, `ipFamilies`, the addresses it asks for and
+    /// the resourceVersion a status patch is guarded by.
+    pub labels: BTreeMap<String, String>,
+    pub created: String,
+    pub load_balancer_class: Option<String>,
+    pub ip_families: Vec<String>,
+    pub requested_ips: Vec<IpAddr>,
+    pub resource_version: String,
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Endpoint {
