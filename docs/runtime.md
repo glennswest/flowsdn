@@ -45,6 +45,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.service-lb` | `true` | Watch Services and EndpointSlices and load the embedded `socket-lb` object ([socket LB](#clusterip-socket-lb-292)). |
 | `kubernetes.cgroup-root` | `/sys/fs/cgroup` | Absolute path of the cgroup v2 directory the socket-LB programs attach to (the manifests mount the host's root at `/run/flowsdn/cgroupv2`). |
 | `kubernetes.l2-neigh-discovery` | `false` | Managed neighbor entries for the next hops to other nodes on the uplinks ([neighbor management](#neighbor-management-469); the reference's `enable-l2-neigh-discovery`). On, the agent refuses to start on a kernel without managed neighbors. |
+| `kubernetes.xdp-prefilter` | `false` | The XDP prefilter on the uplinks and its `/v1/prefilter` deny list ([XDP prefilter](#xdp-prefilter-467); the reference's `enable-xdp-prefilter`). |
 | `kubernetes.node-port` | `true` | Attach the NodePort programs to the uplinks (traffic from outside the cluster). Takes effect only with `service-lb`. |
 | `kubernetes.uplinks` | `{}` (`mode: active-active`, `table: 2080`, `rule-priority: 9100`, no weights) | Several uplinks (#408): an object, every key optional. `mode` is `active-active`, `active-backup` or `single` (as before #408); `weights` is `{"<interface>": 1-255}`; `table` and `rule-priority` place flowsdn's per-address source rules. Uplinks are discovered, never listed ([several uplinks](#several-uplinks-408)). |
 | `kubernetes.lb-algorithm` | `random` | `random` or `maglev`: how the uplink programs pick a backend for a new flow from outside the cluster ([Maglev](#clusterip-socket-lb-292)). A Service's `service.flowsdn.io/lb-algorithm` annotation (`random` or `maglev`) overrides it. |
@@ -323,6 +324,23 @@ are in the `uplinks` healthz error.
 Not done here: forge1 must run the flowsdn flavour (it is a cilium node), the
 peers' second InternalIP is rustkube-node#366, NVMe/TCP multipath is
 stormblock#596, and stormpump keeping the failover `/32` is stormpump#234.
+
+### XDP prefilter (#467)
+
+With `kubernetes.xdp-prefilter` (default off) the API thread attaches the
+local-delivery object's `xdp_prefilter` program to every uplink with a
+hardware address (native XDP where the driver has it, else generic; checked
+every second as uplinks come and go) and serves its deny list at
+`GET`/`PATCH`/`DELETE /v1/prefilter` ([agent API](agent-api.md)). A frame
+whose IPv4 or IPv6 source is in the list is dropped before the stack sees it:
+host prefixes in the `flowsdn_cidr_v{4,6}_fix` hash maps, other prefixes in
+the `flowsdn_cidr_v{4,6}_dyn` LPM tries (1024 entries each). ARP, VLAN-tagged
+and non-IP frames pass. Each change takes the current revision and
+increments it, as the reference's prefilter does. The list is not
+persisted: at start the maps are emptied and the revision is 1. Attach
+failures are the `prefilter-attach` part error; `/v1/healthz`
+`kubernetes.prefilter` lists the uplinks and their mode. `prefilter-live`
+checks it on a kernel.
 
 ### Neighbor management (#469)
 

@@ -60,7 +60,7 @@ Out of scope, with owner:
 - Proxy redirect creation and Envoy xDS — spec 11.
 - Hubble, monitor, `cilium-dbg` rewrite, bugtool.
 - The hive shell (`shell.sock`), StateDB dump, `dynamiclifecycle`,
-  the XDP prefilter and its routes (absent, gap #467), `cgroup-dump-metadata`
+  `cgroup-dump-metadata`
   and `map/{name}/events` (absent, gap #468; see 2.2).
 
 ## 2. Compatibility contract
@@ -101,7 +101,7 @@ Out of scope, with owner:
 - Operations flowsdn has not built are absent: not in the router, so the
   agent answers `404` (`no such API route`) as for any unknown path (owner,
   stormcentral#1455, superseding the registered-`501` plan of #118). Absent:
-  `GET`/`PATCH`/`DELETE /prefilter` (gap #467), `GET /cgroup-dump-metadata`
+  `GET /cgroup-dump-metadata`
   and `GET /map/{name}/events` (gap #468); `cilium-dbg` reports them as an
   unknown API. `501` stays only where the reference answers it for a real
   state (BGP routes with the BGP control plane disabled).
@@ -1060,9 +1060,9 @@ unless the code is listed bare (empty body).
 | 25 | `GET /policy/subject-selectors` | `GetPolicySubjectSelectors` | — | → 200 `SelectorCache` | — | dbg policy selectors --subject | — |
 | 26 | `GET /lrp` | `GetLRP` | — | → 200 `[]LRPSpec` | — | dbg lrp list — spec 05 | — |
 | 27 | `GET /service` | `GetService` | — | → 200 `[]Service` | — | dbg service list — spec 05 | — |
-| 28 | `GET /prefilter` | `GetPrefilter` | — | → 200 `Prefilter` | 500 `Error` | dbg prefilter list (flowsdn: absent, 404, gap #467) | — |
-| 29 | `PATCH /prefilter` | `PatchPrefilter` | body `PrefilterSpec` | → 200 `Prefilter` | 403, 461 `Error` (invalid CIDR), 500 `Error`; flowsdn absent (404, gap #467) | dbg prefilter update | — |
-| 30 | `DELETE /prefilter` | `DeletePrefilter` | body `PrefilterSpec` | → 200 `Prefilter` | 403, 461 `Error`, 500 `Error`; flowsdn absent (404, gap #467) | dbg prefilter delete | — |
+| 28 | `GET /prefilter` | `GetPrefilter` | — | → 200 `Prefilter` | 500 `Error` | dbg prefilter list (flowsdn: #467, with `kubernetes.xdp-prefilter`; off: 500) | — |
+| 29 | `PATCH /prefilter` | `PatchPrefilter` | body `PrefilterSpec` | → 200 `Prefilter` | 403, 461 `Error` (invalid CIDR), 500 `Error`; flowsdn #467 (no 403: no API access control) | dbg prefilter update | — |
+| 30 | `DELETE /prefilter` | `DeletePrefilter` | body `PrefilterSpec` | → 200 `Prefilter` | 403, 461 `Error`, 500 `Error`; flowsdn #467 (no 403: no API access control) | dbg prefilter delete | — |
 | 31 | `GET /debuginfo` | `GetDebuginfo` | — | → 200 `DebugInfo` | 500 `Error` | dbg debuginfo, dbg version, bugtool | — |
 | 32 | `GET /cgroup-dump-metadata` | `GetCgroupDumpMetadata` | — | → 200 `CgroupDumpMetadata` | 500 `Error`; flowsdn absent (404, gap #468) | dbg cgroups list | — |
 | 33 | `GET /map` | `GetMap` | — | → 200 `BPFMapList` | — | dbg map list (userspace cache view, spec 01 §3.11) | — |
@@ -1786,3 +1786,13 @@ links and pinned maps do not survive a reboot, and restore drops a record whose 
 gone, so a record lost to a power cut loses nothing. The store therefore syncs only the
 file's contents, so a published record is never torn, and puts no barrier on directory
 entries. Appended here because the catalogue cites specs by line number (#358).
+
+## Amendment — the prefilter routes (#467, 2026-11-20)
+
+`GET`/`PATCH`/`DELETE /v1/prefilter` are served in Kubernetes mode (`crates/flowsdn-agent/src/prefilter.rs`). With
+`kubernetes.xdp-prefilter` off they answer 500 `the XDP prefilter is not enabled`, as the reference does without a
+prefilter. The revision starts at 1 and each successful change increments it; a request revision other than the
+current one (0 skips the check) is 500 `Latest revision is N not M`; an unparsable CIDR is 461; a failed map write is
+500 and the request's earlier writes are undone; a `DELETE` of a CIDR not in the list is 500. CIDRs are stored as
+their network (host bits cleared). `PATCH` and `DELETE` are refused by the read-only TCP listener (#297). 403 is not
+produced (no `api-server-access` control). The list is not persisted: an agent start empties the maps at revision 1.

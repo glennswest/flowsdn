@@ -1793,3 +1793,11 @@ validate pointer lifetimes and verifier constraints at each call site. Symbol
 availability does not establish kernel helper support or verifier acceptance;
 #3, #256 and #257 retain those runtime obligations. The historical recalled
 0.13/0.1.x table is superseded by this locked-source audit.
+
+## Amendment — XDP prefilter (#467, 2026-11-20)
+
+`xdp_prefilter` in the local-delivery object drops a frame at XDP when its IPv4 or IPv6 source is in
+`flowsdn_cidr_v{4,6}_fix` (hash, host prefixes) or `flowsdn_cidr_v{4,6}_dyn` (LPM, other prefixes; 1024 entries each,
+no prealloc); every other frame (ARP, VLAN-tagged, short, non-IP) passes. With `kubernetes.xdp-prefilter` the agent
+attaches it to the uplinks with a hardware address, native mode where the driver has it, else generic. NodePort
+acceleration at XDP is not part of it. Kernel-checked by `prefilter-live`.

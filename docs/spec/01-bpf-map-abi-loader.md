@@ -201,7 +201,7 @@ under `tc/globals` unless marked. Layouts are in §4.
 | `cilium_ipv4_frag_datagrams` | LRU_HASH | `ipv4_frag_id` 12 | `ipv4_frag_l4ports` 4 | 8192 | LRUF | `bpf-fragments-map-max` | DP; cilium-dbg bpf frag |
 | `cilium_ipv6_frag_datagrams` | LRU_HASH | `ipv6_frag_id` 40 | 4 | 8192 | LRUF | same | DP |
 | `cilium_mcast_group_outer_v4_map` | HASH_OF_MAPS | be32 group | u32 (inner fd) | 1024 | CP | fixed | agent; inner HASH be32 → `mcast_subscriber_v4` 12, 1024, CP (deferred) |
-| `cilium_cidr_v{4,6}_{fix,dyn}` | HASH / LPM_TRIE | `lpm_v4_key` 8 / `lpm_v6_key` 20 | `lpm_val` 1 | 1024 | NP,RO | — | **deferred** (XDP prefilter) |
+| `cilium_cidr_v{4,6}_{fix,dyn}` | HASH / LPM_TRIE | `lpm_v4_key` 8 / `lpm_v6_key` 20 | `lpm_val` 1 | 1024 | NP,RO | — | as `flowsdn_cidr_v{4,6}_{fix,dyn}` in local-delivery (#467): XDP prefilter |
 
 ### 2.3 Consumers that freeze the layouts
 

@@ -121,6 +121,10 @@ pinning or subsystem libraries are absent are **not current status**.
   (`TCX_NEXT`); before, they ended the TCX chain and the firewall never ran
   there. `host-chain-live` attaches both to a veth and checks it with real
   connections (kernel-check).
+- XDP prefilter (#467, `kubernetes.xdp-prefilter`, default off): source-CIDR
+  deny list dropped at XDP on the uplinks, `GET/PATCH/DELETE /v1/prefilter`
+  with the reference's revisions. Unit-tested; `prefilter-live` on a kernel
+  (kernel-check). Not on a cluster.
 - Managed L2 neighbors (#469, `kubernetes.l2-neigh-discovery`, default off):
   entries for the next hops to other nodes on the uplinks, kept by the kernel;
   start probe fatal when on. Unit-tested; `neighbors-live` on a kernel

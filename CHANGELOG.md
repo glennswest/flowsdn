@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#467)
+- **feat:** XDP prefilter (the reference's `enable-xdp-prefilter`): `xdp_prefilter` in the local-delivery object drops frames whose IPv4/IPv6 source is in `flowsdn_cidr_v{4,6}_fix` (hash, host prefixes) or `_dyn` (LPM); with `kubernetes.xdp-prefilter` (default false) the agent attaches it to the uplinks (native, else generic) and serves `GET`/`PATCH`/`DELETE /v1/prefilter` (`Prefilter {spec, status.realized}`, revision from 1, stale revision 500, invalid CIDR 461, failed writes undone). Loader: `PrefilterMaps`, `attach_prefilter`/`detach_prefilter`. Rebuilt local-delivery object + lock. Spec 01/02/08 amendments.
+- **test:** Kernel fixture `prefilter-live` (test runs through all four maps, a real attach dropping a denied peer's UDP); unit tests of the revision and CIDR rules.
+
 ### 2026-11-20 (#469)
 - **feat:** L2 neighbor management (spec 10 §3.4): with `kubernetes.l2-neigh-discovery` (default false) the agent keeps a kernel-managed neighbor entry (`NTF_EXT_LEARNED` + `NTF_EXT_MANAGED`, `NUD_NONE`) for every next hop to another node's InternalIP on each uplink with a MAC, found by FIB-match route lookups (gateway, multipath gateways on that uplink, or on-link). Stale learned entries on those uplinks are deleted; an administrator's entries are never touched. Runs at start, on input changes (at most every 15 s) and every 5 minutes. The managed-neighbor probe runs at start and stops the agent when it fails (no fallback, #132). `/v1/healthz` `kubernetes.neighbors`. `flowsdn_connector::neighbor` (next hops, learned entries, managed add/delete, probe).
 - **test:** Kernel fixture `neighbors-live`; unit tests of the planner, calculator and next-hop parsing.
