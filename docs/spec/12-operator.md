@@ -2047,4 +2047,5 @@ references and `flowsdn.io/do-not-gc: true` exempt; two-pass hysteresis; 404 is 
 GC (see spec 03's amendment) while leading, with per-term state (§4.7). §3.6's CiliumEndpoint GC has no flowsdn
 counterpart: FlowsdnEndpoints are owned by their Pods. The §3.7 FlowsdnEndpointSlice controller is not built:
 agents learn other nodes' endpoints from the cluster-wide Pod watch and read no FlowsdnEndpoint or slice, so there
-is no reader for slices (#479). RBAC: `delete` on flowsdnnodes.
+is no reader for slices. Decided on #479 (option A, 2026-11-20): not built until agents move off the Pod watch.
+RBAC: `delete` on flowsdnnodes.

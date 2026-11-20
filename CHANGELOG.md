@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#479, decision)
+- **docs:** FlowsdnEndpointSlice batching is not built, by decision on #479 (option A): agents learn remote Pods and identities from their cluster-wide Pod watch and read no FlowsdnEndpoint, so slices would have no reader. Removed from the open-gap lists; spec 12/13, runtime and status say so.
+
 ### 2026-11-20 (#477)
 - **feat:** Host firewall egress rules. `egress`/`egressDeny` of a FlowsdnClusterwideNetworkPolicy spec that selects this node (`toEntities`, `toCIDR`, `toCIDRSet`, `toEndpoints`, `toPorts`; `enableDefaultDeny.egress`) compile to the host endpoint's egress entries, denies over allows; `enforce::EGRESS` (with `AUDIT` in audit mode) is set on the uplinks and `HOST_PODS` after the same 60 s learning. `to_netdev` judges the node's own outgoing packets and `to_container` the node's packets to local Pods; replies of allowed or learned flows pass. `/v1/healthz` host firewall gets `egress-enforced`. No datapath change (the programs already enforced generically). `toServices`, `toFQDNs`, `toRequires`, `toNodes`, `toGroups` stay reported problems.
 - **test:** `policy-live` host egress steps: allow/drop/deny on `to_netdev`, forwarded traffic unjudged, replies both ways, host-to-Pod allow and drop, audit and denied counters, removal.

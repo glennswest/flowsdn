@@ -74,7 +74,8 @@ pinning or subsystem libraries are absent are **not current status**.
   API; not on a cluster (the CRDs wait on stormcos#303). The operator's
   FlowsdnIdentity and FlowsdnNode GC (#479, `operator_gc.rs`): planned from
   lists and unit-tested against a recording API, not on a cluster.
-  FlowsdnEndpointSlices: nothing writes or reads them (#479).
+  FlowsdnEndpointSlices: nothing writes or reads them, by decision (#479:
+  agents' Pod watch already gives what slices would).
 - FlowsdnNodeConfig (#480): on the nodes it selects, `spec.defaults`
   override the agent's own settings at start (an allow-list of node
   settings; each validated by the agent's parse, refusals as Node Events,
@@ -145,8 +146,7 @@ pinning or subsystem libraries are absent are **not current status**.
   (#454); SCTP Services (#457); IPv4 fragments
   after the first (#458); topology hints (#459); BPF masquerade (#460); Pod
   policy audit mode (#461); flows open before a policy (#462); ICMP errors as
-  related traffic (#463); FlowsdnEndpointSlice batching (#479);
-  the Hubble observer/relay (#293).
+  related traffic (#463); the Hubble observer/relay (#293).
 
 ### Cloud fixtures (ADR-0007)
 

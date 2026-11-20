@@ -75,7 +75,8 @@ The operator exists now (#337). Parts:
       52b381c. sc-build at 52b381c: fmt --check, `cargo xtask check` (Clippy -D warnings, 975 tests, 0 failed, 1 ignored;
       9 operator_gc tests + operator flags). Stage requested at the next commit.
 - [ ] FlowsdnEndpointSlice batching: agents learn peers from the cluster-wide Pod watch and read no other node's
-      FlowsdnEndpoint, so slices would have no reader. Owner decision asked on the issue (recommended: A, close as not applicable); `wait-owner`.
+      FlowsdnEndpoint, so slices would have no reader. Decided A (master, 2026-11-20, on the issue): not built; docs updated. Ship the GC (stage 433eefa2e1bd,
+      proof: the operator Lease held on pvetest2), close #479.
 
 ### FlowsdnEndpoint/FlowsdnNode seen on a node — #482 (P2), 2026-11-20
 

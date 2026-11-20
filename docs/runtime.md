@@ -685,8 +685,9 @@ The Kubernetes-mode agent publishes its endpoints and its node as
   `flowsdn-node` (`served`).
 - **Elsewhere.** A removed Node's FlowsdnNode goes with it (owner), and
   unowned ones and unused FlowsdnIdentities are the operator's GC
-  ([above](#crds-and-the-operator-337)). Nothing writes FlowsdnEndpointSlices
-  (#479). FlowsdnNodeConfig: [below](#per-node-settings-flowsdnnodeconfig-480).
+  ([above](#crds-and-the-operator-337)). Nothing writes FlowsdnEndpointSlices:
+  agents read remote Pods from their Pod watch, so slices would have no reader
+  (decided on #479). FlowsdnNodeConfig: [below](#per-node-settings-flowsdnnodeconfig-480).
 
 ### Per-node settings: FlowsdnNodeConfig (#480)
 

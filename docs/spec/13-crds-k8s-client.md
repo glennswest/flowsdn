@@ -75,8 +75,8 @@ tests use no schemars or proptest: T-CRD-3 is schema-driven (an instance with
 every property and one with only the required ones round-trip, and what the
 type writes passes `flowsdn_k8s::schema` strict validation), T-CRD-7 is 300
 seeded random schema-valid documents per kind. T-CRD-4/5 are as written. The
-agent's FlowsdnEndpoint and FlowsdnNode writers follow §3.9; identity GC,
-node GC and FlowsdnEndpointSlice batching wait on the operator (#479).
+agent's FlowsdnEndpoint and FlowsdnNode writers follow §3.9; the operator does identity and
+node GC; FlowsdnEndpointSlice batching is not built, by decision (#479).
 
 ## Registration and readiness gate amendment — #337, 2026-11-20
 

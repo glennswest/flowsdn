@@ -31,7 +31,7 @@ datapath (ADR-0021), flowsdn policy kinds (`kubernetes.flowsdn-policy`), host
 firewall (`audit` in the stormcos config), socket termination (UDP; TCP opt-in, #392), Maglev, DSR by
 IP option, NAT46/64 (the last three off by default, kernel test runs only), CNI
 ADD timing (`/v1/cni/timing`), `cargo xtask kernel-check`. Open gaps, each an
-issue: FlowsdnEndpointSlice batching (#479; the operator registers CRDs, #337, and runs identity/node GC), Hubble observer/relay
+issue (the operator registers CRDs, #337, and runs identity/node GC, #479): Hubble observer/relay
 (#293), DSR by IPIP/Geneve (#447), L7/FQDN/ICMP
 policy (#448). See
 `docs/runtime.md`, `docs/agent-api.md`, `docs/implementation-status.md` and
