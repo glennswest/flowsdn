@@ -142,9 +142,14 @@ fn run() -> Result<()> {
         "nodad",
     ])?;
     ip(&["link", "set", "a0", "up"])?;
-    let index: u32 = std::fs::read_to_string("/sys/class/net/a0/ifindex")
-        .map_err(|e| format!("a0 ifindex: {e}"))?
-        .trim()
+    // `ip -o link` starts with "<ifindex>: a0@…": sysfs shows the namespace
+    // it was mounted in, not this one.
+    let link = ip(&["-o", "link", "show", "dev", "a0"])?;
+    let index: u32 = link
+        .split(':')
+        .next()
+        .map(str::trim)
+        .ok_or("no ifindex")?
         .parse()?;
     let mac_string = mac_text("a0")?;
     let mut mac = [0u8; 6];

@@ -53,8 +53,8 @@ enforces it. Each of these is tracked per group in the issues linked from #325.
 | FlowsdnEgressGatewayPolicy | `fsegp` | Cluster | — | send selected pods' egress through gateway nodes with a fixed IP | users |
 | FlowsdnEnvoyConfig | `fsec` | Namespaced | — | Envoy listeners/clusters for L7 traffic of selected Services | users, operator (Ingress/Gateway) |
 | FlowsdnClusterwideEnvoyConfig | `fscec` | Cluster | — | the same, cluster-wide | users, operator |
-| FlowsdnLoadBalancerIPPool | `fslbippool` | Cluster | yes | address pools for LoadBalancer Services | users; operator writes status |
-| FlowsdnL2AnnouncementPolicy | `fsl2announcement` | Cluster | yes | which nodes answer ARP/NDP for which Service IPs | users; agent writes status |
+| FlowsdnLoadBalancerIPPool | `fslbippool` | Cluster | yes | address pools for LoadBalancer Services | users; the agent holding the LB-IPAM Lease writes status (#475) |
+| FlowsdnL2AnnouncementPolicy | `fsl2announcement` | Cluster | yes | which nodes answer ARP/NDP for which Service IPs | users; the agent reads it (no status written) |
 | FlowsdnPodIPPool | `fspip` | Cluster | — | pod CIDR pools for multi-pool IPAM | users, operator (default pool) |
 | FlowsdnBGPClusterConfig | `fsbgpcluster` | Cluster | yes | BGP instances and peers for a set of nodes | users |
 | FlowsdnBGPPeerConfig | `fsbgppeer` | Cluster | yes | peer session settings: timers, auth, families | users |

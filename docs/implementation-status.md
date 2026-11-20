@@ -55,6 +55,14 @@ pinning or subsystem libraries are absent are **not current status**.
   at uplink ingress. IPv4 (`flowsdn_nodeport4_nat`) and IPv6
   (`flowsdn_nodeport6_nat`, `53bffc7`). Service NAT46/64 (`kubernetes.nat46x64`,
   default off) on the uplink to other nodes' backends: kernel test-run only.
+- **LoadBalancer Services** (#475): LB-IPAM (`lb-ipam`, default on) under the
+  Lease `kube-system/flowsdn-lb-ipam` writes `status.loadBalancer.ingress`
+  from FlowsdnLoadBalancerIPPools and the pools' conditions; L2 announcements
+  (`l2-announcements`, default on) answer ARP/NDP for the addresses a
+  FlowsdnL2AnnouncementPolicy gives this node (one node per Service; with
+  `externalTrafficPolicy: Local`, one with a ready endpoint), from AF_PACKET
+  sockets; `GET /v1/lb-ipam`, `GET /v1/l2-announcements`. Unit and loopback-API
+  tests, and the `l2-announce-live` kernel fixture; not yet seen on a node.
 - Kubernetes Events on Pods and the Node, aggregated and non-blocking (#298);
   the `flowsdn.io/pod-networks` annotation on local Pods (and flowsdn's entry in
   the Multus `network-status`, #371) and pod/container/
