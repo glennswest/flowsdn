@@ -501,3 +501,70 @@ fn maglev_applies_to_the_node_local_copies_only() {
     let out = frontends(&[random], &[], "n1", &nodes);
     assert!(out.iter().all(|f| !f.service.maglev));
 }
+
+#[test]
+fn termination_passes_are_at_most_every_50_ms() {
+    use std::time::{Duration, Instant};
+    let ip: IpAddr = "10.2.0.9".parse().expect("IP");
+    let start = Instant::now();
+    let at = |ms| start.checked_add(Duration::from_millis(ms)).expect("time");
+    let mut batch = TerminationBatch::default();
+    assert_eq!(batch.wait(start), None);
+    assert_eq!(batch.take(start), None, "nothing pending");
+    batch.add([(PROTO_UDP, ip, 53)]);
+    assert_eq!(batch.wait(start), Some(Duration::ZERO), "the first is due at once");
+    assert_eq!(batch.take(start).map(|g| g.len()), Some(1));
+    // Two more within 50 ms: held, then ended in one pass.
+    batch.add([(PROTO_UDP, ip, 54)]);
+    assert_eq!(batch.take(at(10)), None);
+    batch.add([(PROTO_TCP, ip, 80)]);
+    assert_eq!(batch.wait(at(30)), Some(Duration::from_millis(20)));
+    assert_eq!(batch.take(at(49)), None);
+    let pass = batch.take(at(50)).expect("due");
+    assert_eq!(pass.len(), 2);
+    assert_eq!(batch.wait(at(50)), None);
+}
+
+#[test]
+fn terminable_and_stale_backends() {
+    let ip = |s: &str| -> IpAddr { s.parse().expect("IP") };
+    let service = Service {
+        frontend: Address {
+            ip: ip("10.96.0.10"),
+            port: 53,
+            proto: PROTO_UDP,
+        },
+        backends: vec![
+            Address {
+                ip: ip("::ffff:10.2.0.9"),
+                port: 53,
+                proto: PROTO_UDP,
+            },
+            Address {
+                ip: ip("10.2.0.9"),
+                port: 53,
+                proto: PROTO_TCP,
+            },
+        ],
+        affinity: None,
+        scope: SCOPE_CLUSTER,
+        maglev: false,
+        dsr: false,
+        nat46x64: false,
+    };
+    let udp_only = terminable_backends(std::slice::from_ref(&service), false);
+    assert_eq!(udp_only, [(PROTO_UDP, ip("10.2.0.9"), 53)].into());
+    let all = terminable_backends(std::slice::from_ref(&service), true);
+    assert_eq!(all.len(), 2);
+    // At start: _reverse_sk remembers 10.2.0.9:53 (still a backend) and
+    // 10.2.0.8:53 (gone while the agent was down).
+    let reverse = vec![
+        (1, ip("10.2.0.9"), 53),
+        (2, ip("10.2.0.8"), 53),
+        (3, ip("10.2.0.8"), 53),
+    ];
+    assert_eq!(
+        stale_udp_backends(&reverse, &udp_only),
+        [(PROTO_UDP, ip("10.2.0.8"), 53)].into()
+    );
+}

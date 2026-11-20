@@ -193,11 +193,12 @@ impl Controller {
                     let (sender, receiver) = mpsc::channel();
                     let lb_view = Arc::clone(&view);
                     let node_port = self.settings.node_port;
+                    let terminate_tcp = self.settings.terminate_tcp;
                     std::thread::Builder::new()
                         .name("flowsdn-services".into())
                         .spawn(move || {
                             let mut lb = lb;
-                            service_loop(&receiver, &lb_view, &mut lb, node_port);
+                            service_loop(&receiver, &lb_view, &mut lb, node_port, terminate_tcp);
                         })?;
                     Some(sender)
                 }
@@ -1212,17 +1213,29 @@ fn load_socket_lb(
 /// Own the socket-LB maps: on every new frontend set (after both lists are
 /// complete) and every 30 s, plan from what the kernel holds and apply.
 /// Nothing is pruned before the first complete lists.
+///
+/// Socket termination (spec 05 §3.8, #292, #392): a backend that leaves the
+/// programmed services (UDP; TCP too with `terminate_tcp`) has its sockets
+/// ended, in passes at most every 50 ms. The first successful programming
+/// also ends sockets to UDP backends `_reverse_sk` remembers from before
+/// (the agent was down when they left).
 fn service_loop(
     receiver: &mpsc::Receiver<Vec<socket::Service>>,
     view: &Shared,
     lb: &mut SocketLb,
     node_port: bool,
+    terminate_tcp: bool,
 ) {
     let mut desired: Option<Vec<socket::Service>> = None;
-    // The UDP backends last programmed; None until the first success.
-    let mut programmed: Option<BTreeSet<(IpAddr, u16)>> = None;
+    // The terminable backends last programmed; None until the first success.
+    let mut programmed: Option<BTreeSet<flowsdn_connector::sock_diag::Backend>> = None;
+    let mut batch = services::TerminationBatch::default();
     loop {
-        match receiver.recv_timeout(RECONCILE_INTERVAL) {
+        let timeout = batch
+            .wait(Instant::now())
+            .unwrap_or(RECONCILE_INTERVAL)
+            .min(RECONCILE_INTERVAL);
+        match receiver.recv_timeout(timeout) {
             Ok(next) => {
                 let mut next = next;
                 while let Ok(newer) = receiver.try_recv() {
@@ -1236,28 +1249,13 @@ fn service_loop(
         if let Some(services) = &desired {
             let result = program(lb, services);
             if result.is_ok() {
-                let now = udp_backends(services);
-                if let Some(before) = &programmed {
-                    let gone: BTreeSet<_> = before.difference(&now).copied().collect();
-                    if !gone.is_empty() {
-                        let namespaces = lock(view)
-                            .endpoints
-                            .iter()
-                            .filter(|e| !e.netns_path.is_empty())
-                            .map(|e| (PathBuf::from(&e.netns_path), e.netns_cookie))
-                            .collect();
-                        let outcome = terminate(lb, &gone, namespaces);
-                        let mut view = lock(view);
-                        match outcome {
-                            Ok(_) => {
-                                view.errors.remove("socket-termination");
-                            }
-                            Err(error) => {
-                                crate::log::logln!("socket termination: {error}");
-                                view.errors.insert("socket-termination".into(), error);
-                            }
-                        }
-                    }
+                let now = services::terminable_backends(services, terminate_tcp);
+                match &programmed {
+                    Some(before) => batch.add(before.difference(&now).copied()),
+                    None => match lb.reverse_sockets() {
+                        Ok(reverse) => batch.add(services::stale_udp_backends(&reverse, &now)),
+                        Err(error) => crate::log::logln!("read reverse socket maps: {error}"),
+                    },
                 }
                 programmed = Some(now);
             }
@@ -1270,6 +1268,31 @@ fn service_loop(
                 Err(error) => {
                     crate::log::logln!("socket LB: {error}");
                     view.errors.insert("services".into(), error);
+                }
+            }
+        }
+        if let Some(gone) = batch.take(Instant::now()) {
+            let namespaces = lock(view)
+                .endpoints
+                .iter()
+                .filter(|e| !e.netns_path.is_empty())
+                .map(|e| (PathBuf::from(&e.netns_path), e.netns_cookie))
+                .collect();
+            let outcome = terminate(lb, &gone, namespaces, terminate_tcp);
+            let mut view = lock(view);
+            match outcome {
+                Ok(count) => {
+                    if count > 0 {
+                        crate::log::logln!(
+                            "socket termination: {count} sockets to {} removed backends ended",
+                            gone.len()
+                        );
+                    }
+                    view.errors.remove("socket-termination");
+                }
+                Err(error) => {
+                    crate::log::logln!("socket termination: {error}");
+                    view.errors.insert("socket-termination".into(), error);
                 }
             }
         }
@@ -1389,57 +1412,33 @@ fn attach_uplinks(
     }
     Ok(())
 }
-/// Every UDP backend address of the services (IPv4-mapped as IPv4).
-fn udp_backends(services: &[socket::Service]) -> BTreeSet<(IpAddr, u16)> {
-    services
-        .iter()
-        .flat_map(|s| &s.backends)
-        .filter(|b| b.proto == socket::PROTO_UDP)
-        .map(|b| (unmapped(b.ip), b.port))
-        .collect()
-}
-fn unmapped(ip: IpAddr) -> IpAddr {
-    match ip {
-        IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(ip, IpAddr::V4),
-        v4 => v4,
-    }
-}
-
-/// Spec 05 §3.8 socket termination: destroy the UDP sockets the socket LB
-/// translated to a backend that is gone (their cookies are in `_reverse_sk`
-/// with that backend), in the host network namespace and in each local
-/// endpoint's (entered by its path only when the namespace cookie matches).
-/// Returns how many were destroyed; a namespace that cannot be entered or
-/// a kernel without `SOCK_DESTROY` is an error after the rest were tried.
+/// Spec 05 §3.8 socket termination ([`flowsdn_connector::sock_diag::ends`]):
+/// destroy the UDP sockets the socket LB translated to a backend that is
+/// gone (their cookies are in `_reverse_sk` with that backend) and, with
+/// `tcp`, the TCP sockets connected to a gone TCP backend, in the host
+/// network namespace and in each local endpoint's (entered by its path only
+/// when the namespace cookie matches). Returns how many were destroyed; a
+/// namespace that cannot be entered or a kernel without `SOCK_DESTROY` is an
+/// error after the rest were tried.
 fn terminate(
     lb: &SocketLb,
-    gone: &BTreeSet<(IpAddr, u16)>,
+    gone: &BTreeSet<flowsdn_connector::sock_diag::Backend>,
     namespaces: Vec<(PathBuf, u64)>,
+    tcp: bool,
 ) -> std::result::Result<usize, String> {
     use flowsdn_connector::sock_diag;
     let cookies: BTreeSet<u64> = lb
         .reverse_sockets()
         .map_err(|e| format!("read reverse socket maps: {e}"))?
         .into_iter()
-        .filter(|(_, ip, port)| gone.contains(&(unmapped(*ip), *port)))
+        .filter(|(_, ip, port)| gone.contains(&(socket::PROTO_UDP, sock_diag::unmapped(*ip), *port)))
         .map(|(cookie, _, _)| cookie)
         .collect();
-    if cookies.is_empty() {
+    if cookies.is_empty() && !tcp {
         return Ok(0);
     }
-    let kill = move |cookies: BTreeSet<u64>, gone: BTreeSet<(IpAddr, u16)>| {
-        move || -> flowsdn_connector::Result<usize> {
-            let mut count = 0usize;
-            for socket in sock_diag::udp_sockets()? {
-                if cookies.contains(&socket.cookie)
-                    && gone.contains(&(unmapped(socket.destination), socket.destination_port))
-                {
-                    sock_diag::destroy(&socket)?;
-                    count = count.saturating_add(1);
-                }
-            }
-            Ok(count)
-        }
+    let kill = move |cookies: BTreeSet<u64>, gone: BTreeSet<sock_diag::Backend>| {
+        move || -> flowsdn_connector::Result<usize> { sock_diag::destroy_to(&gone, &cookies, tcp) }
     };
     let mut count = 0usize;
     let mut failures = Vec::new();

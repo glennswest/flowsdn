@@ -421,6 +421,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         endpoint_crd: true,
         node_crd: true,
         crd_wait_timeout: Duration::from_secs(60),
+        terminate_tcp: false,
     };
     let controller = Controller::connect(settings, &dir).expect("connect");
     let (pool4, pool6) = controller.wait_for_pools(true, true).expect("pools");

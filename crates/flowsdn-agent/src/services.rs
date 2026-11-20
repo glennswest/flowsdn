@@ -357,6 +357,73 @@ pub fn service_list(frontends: &[Frontend], ids: &BTreeMap<(Address, u8), u16>) 
     )
 }
 
+/// Spec 05 §3.8: at most one socket termination pass per 50 ms (#392).
+pub const TERMINATION_BATCH: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// The backends that left and wait for a termination pass (#392): gathered
+/// while passes are less than [`TERMINATION_BATCH`] apart, then ended in one.
+#[derive(Debug, Default)]
+pub struct TerminationBatch {
+    pending: BTreeSet<flowsdn_connector::sock_diag::Backend>,
+    last: Option<std::time::Instant>,
+}
+impl TerminationBatch {
+    pub fn add(&mut self, gone: impl IntoIterator<Item = flowsdn_connector::sock_diag::Backend>) {
+        self.pending.extend(gone);
+    }
+    /// The pending backends, when a pass is due at `now` (nothing pending,
+    /// or the last pass less than 50 ms ago: None). Taking them starts the
+    /// next 50 ms.
+    pub fn take(
+        &mut self,
+        now: std::time::Instant,
+    ) -> Option<BTreeSet<flowsdn_connector::sock_diag::Backend>> {
+        if self.pending.is_empty() || self.wait(now).is_some_and(|w| !w.is_zero()) {
+            return None;
+        }
+        self.last = Some(now);
+        Some(std::mem::take(&mut self.pending))
+    }
+    /// How long until the pending backends are due; None with none pending.
+    pub fn wait(&self, now: std::time::Instant) -> Option<std::time::Duration> {
+        if self.pending.is_empty() {
+            return None;
+        }
+        Some(self.last.map_or(std::time::Duration::ZERO, |last| {
+            TERMINATION_BATCH.saturating_sub(now.saturating_duration_since(last))
+        }))
+    }
+}
+
+/// The backends of `services` socket termination watches (#392): UDP, and
+/// TCP with `tcp` (`kubernetes.lb-sock-terminate-all-protos`). IPv4-mapped
+/// addresses as IPv4.
+pub fn terminable_backends(
+    services: &[Service],
+    tcp: bool,
+) -> BTreeSet<flowsdn_connector::sock_diag::Backend> {
+    services
+        .iter()
+        .flat_map(|s| &s.backends)
+        .filter(|b| b.proto == PROTO_UDP || (tcp && b.proto == PROTO_TCP))
+        .map(|b| (b.proto, flowsdn_connector::sock_diag::unmapped(b.ip), b.port))
+        .collect()
+}
+
+/// At start (#392): the UDP backends the socket LB translated sockets to
+/// before (`_reverse_sk`, kept across agent restarts) that no Service has
+/// now; those sockets lost their backend while the agent was down.
+pub fn stale_udp_backends(
+    reverse: &[(u64, IpAddr, u16)],
+    now: &BTreeSet<flowsdn_connector::sock_diag::Backend>,
+) -> BTreeSet<flowsdn_connector::sock_diag::Backend> {
+    reverse
+        .iter()
+        .map(|(_, ip, port)| (PROTO_UDP, flowsdn_connector::sock_diag::unmapped(*ip), *port))
+        .filter(|backend| !now.contains(backend))
+        .collect()
+}
+
 #[cfg(test)]
 #[path = "services_tests.rs"]
 mod tests;

@@ -102,6 +102,9 @@ pub struct Settings {
     /// `kubernetes.crd-wait-timeout` (#337, seconds, default 300): how long
     /// the flowsdn.io watchers wait for their CRDs before the agent exits.
     pub crd_wait_timeout: std::time::Duration,
+    /// `kubernetes.lb-sock-terminate-all-protos` (#392, default false):
+    /// socket termination ends TCP sockets to a removed backend too.
+    pub terminate_tcp: bool,
 }
 /// `kubernetes.host-firewall`: whether the agent filters traffic to the
 /// node itself from FlowsdnClusterwideNetworkPolicy host rules, and whether
@@ -259,6 +262,7 @@ impl Settings {
             l2_announcements: flag("l2-announcements", true)?,
             endpoint_crd: flag("endpoint-crd", true)?,
             node_crd: flag("node-crd", true)?,
+            terminate_tcp: flag("lb-sock-terminate-all-protos", false)?,
             crd_wait_timeout: match object.get("crd-wait-timeout") {
                 None | Some(Value::Null) => std::time::Duration::from_secs(300),
                 Some(value) => value

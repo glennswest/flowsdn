@@ -1,13 +1,16 @@
-//! UDP socket termination through `NETLINK_SOCK_DIAG` (spec 05 §3.8, #292):
-//! list the UDP sockets of the current network namespace (`inet_diag`) and
-//! destroy one (`SOCK_DESTROY`, needs `CONFIG_INET_DIAG_DESTROY`). A
-//! destroyed socket's next call fails with `ECONNABORTED`, so the
-//! application reconnects through the socket LB to a live backend.
+//! Socket termination through `NETLINK_SOCK_DIAG` (spec 05 §3.8, #292,
+//! #392): list the UDP or TCP sockets of the current network namespace
+//! (`inet_diag`) and destroy one (`SOCK_DESTROY`, needs
+//! `CONFIG_INET_DIAG_DESTROY`). A destroyed socket's next call fails with
+//! `ECONNABORTED`, so the application reconnects through the socket LB to a
+//! live backend. [`destroy_to`] is the selection the agent and the kernel
+//! fixture share.
 use crate::Result;
 use nix::sys::socket::{
     AddressFamily, MsgFlags, NetlinkAddr, SockFlag, SockProtocol, SockType, recv, sendto, socket,
 };
 use std::{
+    collections::BTreeSet,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     os::fd::{AsRawFd, OwnedFd},
 };
@@ -19,7 +22,8 @@ const NLMSG_DONE: u16 = 3;
 const NLM_F_REQUEST: u16 = 1;
 const NLM_F_ACK: u16 = 4;
 const NLM_F_DUMP: u16 = 0x300;
-const IPPROTO_UDP: u8 = 17;
+pub const IPPROTO_TCP: u8 = 6;
+pub const IPPROTO_UDP: u8 = 17;
 const AF_INET: u8 = 2;
 const AF_INET6: u8 = 10;
 const HEADER: usize = 16;
@@ -30,11 +34,12 @@ const SOCKID: usize = 48;
 /// `inet_diag_msg`: family, state, timer, retrans, id, then five u32.
 const MESSAGE: usize = 72;
 
-/// One UDP socket as `inet_diag` reports it; `id` is the raw socket id the
+/// One socket as `inet_diag` reports it; `id` is the raw socket id the
 /// kernel matches a destroy against (addresses, ports, interface, cookie).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct UdpSocket {
+pub struct InetSocket {
     pub family: u8,
+    pub protocol: u8,
     pub source: IpAddr,
     pub source_port: u16,
     pub destination: IpAddr,
@@ -53,7 +58,7 @@ fn open() -> Result<OwnedFd> {
 }
 
 /// A request: netlink header and `inet_diag_req_v2` with `id`.
-pub fn request(kind: u16, flags: u16, family: u8, id: &[u8; SOCKID]) -> Vec<u8> {
+pub fn request(kind: u16, flags: u16, family: u8, protocol: u8, id: &[u8; SOCKID]) -> Vec<u8> {
     let length = u32::try_from(HEADER.saturating_add(REQUEST)).unwrap_or(u32::MAX);
     let mut out = Vec::with_capacity(HEADER.saturating_add(REQUEST));
     out.extend_from_slice(&length.to_ne_bytes());
@@ -61,10 +66,22 @@ pub fn request(kind: u16, flags: u16, family: u8, id: &[u8; SOCKID]) -> Vec<u8> 
     out.extend_from_slice(&flags.to_ne_bytes());
     out.extend_from_slice(&1u32.to_ne_bytes());
     out.extend_from_slice(&0u32.to_ne_bytes());
-    out.extend_from_slice(&[family, IPPROTO_UDP, 0, 0]);
-    out.extend_from_slice(&u32::MAX.to_ne_bytes());
+    out.extend_from_slice(&[family, protocol, 0, 0]);
+    out.extend_from_slice(&states(protocol).to_ne_bytes());
     out.extend_from_slice(id);
     out
+}
+
+/// The `idiag_states` mask: every UDP socket; TCP connections that can be
+/// aborted (not LISTEN, TIME_WAIT or CLOSE).
+fn states(protocol: u8) -> u32 {
+    if protocol == IPPROTO_TCP {
+        // ESTABLISHED, SYN_SENT, SYN_RECV, FIN_WAIT1, FIN_WAIT2, CLOSE_WAIT,
+        // LAST_ACK, CLOSING (TCP states 1-5, 8, 9, 11).
+        0b1011_0011_1110
+    } else {
+        u32::MAX
+    }
 }
 
 fn address(family: u8, bytes: &[u8]) -> Option<IpAddr> {
@@ -77,8 +94,8 @@ fn address(family: u8, bytes: &[u8]) -> Option<IpAddr> {
     }
 }
 
-/// One `inet_diag_msg` payload.
-pub fn parse_message(payload: &[u8]) -> Option<UdpSocket> {
+/// One `inet_diag_msg` payload of a `protocol` dump.
+pub fn parse_message(protocol: u8, payload: &[u8]) -> Option<InetSocket> {
     if payload.len() < MESSAGE {
         return None;
     }
@@ -93,8 +110,9 @@ pub fn parse_message(payload: &[u8]) -> Option<UdpSocket> {
         ))
     };
     let cookie = u64::from_ne_bytes(id.get(40..48)?.try_into().ok()?);
-    Some(UdpSocket {
+    Some(InetSocket {
         family,
+        protocol,
         source_port: port(0)?,
         destination_port: port(2)?,
         source: address(family, id.get(4..20)?)?,
@@ -142,7 +160,13 @@ fn error_code(payload: &[u8]) -> i32 {
 }
 
 /// Every UDP socket (IPv4 and IPv6) of this thread's network namespace.
-pub fn udp_sockets() -> Result<Vec<UdpSocket>> {
+pub fn udp_sockets() -> Result<Vec<InetSocket>> {
+    sockets(IPPROTO_UDP)
+}
+
+/// Every socket of `protocol` (IPv4 and IPv6, any state) of this thread's
+/// network namespace.
+pub fn sockets(protocol: u8) -> Result<Vec<InetSocket>> {
     let mut out = Vec::new();
     for family in [AF_INET, AF_INET6] {
         let fd = open()?;
@@ -150,6 +174,7 @@ pub fn udp_sockets() -> Result<Vec<UdpSocket>> {
             SOCK_DIAG_BY_FAMILY,
             NLM_F_REQUEST | NLM_F_DUMP,
             family,
+            protocol,
             &[0; SOCKID],
         );
         sendto(
@@ -171,7 +196,7 @@ pub fn udp_sockets() -> Result<Vec<UdpSocket>> {
                         let code = error_code(payload);
                         return Err(std::io::Error::from_raw_os_error(code.saturating_neg()).into());
                     }
-                    SOCK_DIAG_BY_FAMILY => out.extend(parse_message(payload)),
+                    SOCK_DIAG_BY_FAMILY => out.extend(parse_message(protocol, payload)),
                     _ => {}
                 }
             }
@@ -182,12 +207,13 @@ pub fn udp_sockets() -> Result<Vec<UdpSocket>> {
 
 /// Destroy one socket. A socket already gone is not an error; a kernel
 /// without `SOCK_DESTROY` support returns `EOPNOTSUPP`.
-pub fn destroy(socket: &UdpSocket) -> Result<()> {
+pub fn destroy(socket: &InetSocket) -> Result<()> {
     let fd = open()?;
     let message = request(
         SOCK_DESTROY,
         NLM_F_REQUEST | NLM_F_ACK,
         socket.family,
+        socket.protocol,
         &socket.id,
     );
     sendto(
@@ -208,6 +234,57 @@ pub fn destroy(socket: &UdpSocket) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// An IPv4-mapped IPv6 address as IPv4 (a dual-stack socket's peer).
+pub fn unmapped(ip: IpAddr) -> IpAddr {
+    match ip {
+        IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(ip, IpAddr::V4),
+        v4 => v4,
+    }
+}
+
+/// A backend that left: protocol, address, port.
+pub type Backend = (u8, IpAddr, u16);
+
+/// Whether `socket` is one termination ends: connected to a `gone` backend
+/// of its protocol, and UDP with a cookie the socket LB recorded for it
+/// (`udp_cookies`, from `_reverse_sk`), or TCP when `tcp` (the socket LB
+/// records no TCP translation, so any TCP socket to that backend port).
+pub fn ends(
+    socket: &InetSocket,
+    gone: &BTreeSet<Backend>,
+    udp_cookies: &BTreeSet<u64>,
+    tcp: bool,
+) -> bool {
+    let to_gone = gone.contains(&(
+        socket.protocol,
+        unmapped(socket.destination),
+        socket.destination_port,
+    ));
+    match socket.protocol {
+        IPPROTO_UDP => to_gone && udp_cookies.contains(&socket.cookie),
+        IPPROTO_TCP => to_gone && tcp,
+        _ => false,
+    }
+}
+
+/// Destroy this namespace's sockets [`ends`] selects; how many.
+pub fn destroy_to(
+    gone: &BTreeSet<Backend>,
+    udp_cookies: &BTreeSet<u64>,
+    tcp: bool,
+) -> Result<usize> {
+    let mut count = 0usize;
+    let mut found = sockets(IPPROTO_UDP)?;
+    if tcp {
+        found.extend(sockets(IPPROTO_TCP)?);
+    }
+    for socket in found.iter().filter(|s| ends(s, gone, udp_cookies, tcp)) {
+        destroy(socket)?;
+        count = count.saturating_add(1);
+    }
+    Ok(count)
 }
 
 /// Run `work` in the network namespace at `path`, only if that namespace's
@@ -239,6 +316,7 @@ mod tests {
             SOCK_DIAG_BY_FAMILY,
             NLM_F_REQUEST | NLM_F_DUMP,
             AF_INET,
+            IPPROTO_UDP,
             &[0; SOCKID],
         );
         assert_eq!(message.len(), 72);
@@ -271,13 +349,51 @@ mod tests {
         buffer.extend_from_slice(&[0; 14]);
         let found = messages(&buffer);
         assert_eq!(found.len(), 2);
-        let socket = parse_message(found[0].1).expect("socket");
+        let socket = parse_message(IPPROTO_UDP, found[0].1).expect("socket");
         assert_eq!(socket.source, IpAddr::V4(Ipv4Addr::new(10, 1, 0, 5)));
         assert_eq!(socket.destination, IpAddr::V4(Ipv4Addr::new(10, 2, 0, 9)));
         assert_eq!((socket.source_port, socket.destination_port), (40000, 53));
         assert_eq!(socket.cookie, 77);
-        let destroy = request(SOCK_DESTROY, NLM_F_REQUEST | NLM_F_ACK, AF_INET, &socket.id);
+        let destroy = request(
+            SOCK_DESTROY,
+            NLM_F_REQUEST | NLM_F_ACK,
+            AF_INET,
+            socket.protocol,
+            &socket.id,
+        );
+        assert_eq!(destroy.get(16..20), Some(&[AF_INET, 17, 0, 0][..]));
+        let tcp = request(SOCK_DIAG_BY_FAMILY, NLM_F_REQUEST | NLM_F_DUMP, AF_INET, IPPROTO_TCP, &[0; SOCKID]);
+        assert_eq!(tcp.get(20..24), Some(&0b1011_0011_1110u32.to_ne_bytes()[..]));
         assert_eq!(destroy.get(24..72), Some(&id[..]));
         assert_eq!(found[1].0, NLMSG_DONE);
+    }
+
+    #[test]
+    fn selection_udp_by_cookie_tcp_only_when_asked() {
+        let socket = |protocol, destination: &str, port, cookie| InetSocket {
+            family: AF_INET,
+            protocol,
+            source: IpAddr::V4(Ipv4Addr::new(10, 1, 0, 5)),
+            source_port: 40000,
+            destination: destination.parse().expect("IP"),
+            destination_port: port,
+            cookie,
+            id: [0; SOCKID],
+        };
+        let backend = "10.2.0.9".parse().expect("IP");
+        let gone: BTreeSet<_> = [(IPPROTO_UDP, backend, 53u16), (IPPROTO_TCP, backend, 53)].into();
+        let cookies: BTreeSet<u64> = [7].into();
+        // UDP: the backend and a recorded cookie, IPv4-mapped too.
+        assert!(ends(&socket(IPPROTO_UDP, "10.2.0.9", 53, 7), &gone, &cookies, false));
+        assert!(ends(&socket(IPPROTO_UDP, "::ffff:10.2.0.9", 53, 7), &gone, &cookies, false));
+        assert!(!ends(&socket(IPPROTO_UDP, "10.2.0.9", 53, 8), &gone, &cookies, true));
+        assert!(!ends(&socket(IPPROTO_UDP, "10.2.0.9", 54, 7), &gone, &cookies, false));
+        // TCP: only with all protocols, by backend address and port.
+        assert!(!ends(&socket(IPPROTO_TCP, "10.2.0.9", 53, 0), &gone, &cookies, false));
+        assert!(ends(&socket(IPPROTO_TCP, "10.2.0.9", 53, 0), &gone, &cookies, true));
+        assert!(!ends(&socket(IPPROTO_TCP, "10.2.0.8", 53, 0), &gone, &cookies, true));
+        // A protocol whose backend stays is not ended.
+        let udp_only: BTreeSet<_> = [(IPPROTO_UDP, backend, 53u16)].into();
+        assert!(!ends(&socket(IPPROTO_TCP, "10.2.0.9", 53, 0), &udp_only, &cookies, true));
     }
 }

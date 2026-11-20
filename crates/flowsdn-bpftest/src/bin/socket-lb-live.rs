@@ -10,12 +10,14 @@
 //! SNAT to a backend on another node with the FIB redirect, run as arriving
 //! on a dummy uplink in this netns; IPv4 and IPv6; Maglev backend selection
 //! checked against the planner's tables; service NAT46/64; and UDP socket termination
-//! through SOCK_DIAG when a backend leaves.
+//! through SOCK_DIAG when a backend leaves, and TCP termination only with
+//! `lb-sock-terminate-all-protos` (#392).
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_lb::socket::{self, Address, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
 use nix::sched::{CloneFlags, unshare};
 use std::{
+    collections::BTreeSet,
     error::Error,
     io::{ErrorKind, Read, Write},
     net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket},
@@ -1144,7 +1146,7 @@ fn snat6(
 /// cookie is in `_reverse_sk` with that backend), so its next receive fails
 /// with ECONNABORTED; a socket connected to the backend address directly is
 /// not the socket LB's and stays.
-fn terminate(lb: &mut SocketLb, services: &mut [Service], server: &UdpSocket) -> Result<()> {
+fn terminate(lb: &mut SocketLb, services: &mut Vec<Service>, server: &UdpSocket) -> Result<()> {
     use flowsdn_connector::sock_diag;
     let through = UdpSocket::bind("127.0.0.1:0")?;
     through.connect(sa("192.0.2.10:53")?)?;
@@ -1163,21 +1165,16 @@ fn terminate(lb: &mut SocketLb, services: &mut [Service], server: &UdpSocket) ->
         .ok_or("IPv4 UDP service")?;
     udp.backends = vec![address("127.0.0.2:15353", PROTO_UDP)?];
     program(lb, services)?;
-    let gone = (IpAddr::from([127, 0, 0, 1]), 15353u16);
-    let cookies: Vec<u64> = lb
+    let backend = (IpAddr::from([127, 0, 0, 1]), 15353u16);
+    let gone: BTreeSet<sock_diag::Backend> = [(PROTO_UDP, backend.0, backend.1)].into();
+    let cookies: BTreeSet<u64> = lb
         .reverse_sockets()?
         .into_iter()
-        .filter(|(_, ip, port)| (*ip, *port) == gone)
+        .filter(|(_, ip, port)| (*ip, *port) == backend)
         .map(|(cookie, _, _)| cookie)
         .collect();
-    let mut destroyed = 0u32;
-    for socket in sock_diag::udp_sockets().map_err(|e| e.to_string())? {
-        if cookies.contains(&socket.cookie) && (socket.destination, socket.destination_port) == gone
-        {
-            sock_diag::destroy(&socket).map_err(|e| e.to_string())?;
-            destroyed = destroyed.saturating_add(1);
-        }
-    }
+    // The agent's selection and destroy (#392).
+    let destroyed = sock_diag::destroy_to(&gone, &cookies, false).map_err(|e| e.to_string())?;
     if destroyed != 1 {
         return Err(format!(
             "{destroyed} sockets destroyed, expected the one through the frontend"
@@ -1202,6 +1199,64 @@ fn terminate(lb: &mut SocketLb, services: &mut [Service], server: &UdpSocket) ->
     program(lb, services)?;
     println!(
         "PASS socket termination: the UDP socket connected through 192.0.2.10:53 to the removed backend was destroyed (ECONNABORTED); one connected to that backend directly stayed"
+    );
+    terminate_tcp(lb, services)
+}
+
+/// TCP termination (#392, `lb-sock-terminate-all-protos`): a TCP connection
+/// through a frontend whose backend leaves is left alone by default and
+/// ended (ECONNABORTED or reset) with TCP on; a connection to another
+/// backend stays.
+fn terminate_tcp(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
+    use flowsdn_connector::sock_diag;
+    let leaving = TcpListener::bind("127.0.0.1:18081")?;
+    let staying = TcpListener::bind("127.0.0.1:18082")?;
+    services.push(service("192.0.2.12:80", PROTO_TCP, &["127.0.0.1:18081"])?);
+    program(lb, services)?;
+    let mut through = TcpStream::connect_timeout(&sa("192.0.2.12:80")?, TIMEOUT)?;
+    if through.peer_addr()? != sa("127.0.0.1:18081")? {
+        return Err(format!("TCP through 192.0.2.12:80 reached {:?}", through.peer_addr()).into());
+    }
+    let (_held, _) = leaving.accept()?;
+    let mut other = TcpStream::connect_timeout(&sa("127.0.0.1:18082")?, TIMEOUT)?;
+    let (mut other_server, _) = staying.accept()?;
+    if let Some(entry) = services
+        .iter_mut()
+        .find(|s| s.frontend.ip == IpAddr::from([192, 0, 2, 12]))
+    {
+        entry.backends = vec![address("127.0.0.1:18082", PROTO_TCP)?];
+    }
+    program(lb, services)?;
+    let gone: BTreeSet<sock_diag::Backend> =
+        [(PROTO_TCP, IpAddr::from([127, 0, 0, 1]), 18081u16)].into();
+    let none = BTreeSet::new();
+    let by_default = sock_diag::destroy_to(&gone, &none, false).map_err(|e| e.to_string())?;
+    if by_default != 0 {
+        return Err(format!("{by_default} TCP sockets ended without all protocols").into());
+    }
+    let ended = sock_diag::destroy_to(&gone, &none, true).map_err(|e| e.to_string())?;
+    if ended != 1 {
+        return Err(format!("{ended} TCP sockets ended, expected the one through the frontend").into());
+    }
+    through.set_read_timeout(Some(TIMEOUT))?;
+    let mut buffer = [0u8; 4];
+    match through.read(&mut buffer) {
+        Err(error)
+            if matches!(
+                error.raw_os_error(),
+                Some(nix::libc::ECONNABORTED | nix::libc::ECONNRESET)
+            ) => {}
+        other => return Err(format!("ended TCP socket: {other:?}, expected ECONNABORTED").into()),
+    }
+    other.write_all(b"ok")?;
+    other_server.set_read_timeout(Some(TIMEOUT))?;
+    let mut two = [0u8; 2];
+    other_server.read_exact(&mut two)?;
+    if &two != b"ok" {
+        return Err("the connection to the staying backend stopped working".into());
+    }
+    println!(
+        "PASS TCP termination: the connection through 192.0.2.12:80 to the removed backend was left alone by default and ended with lb-sock-terminate-all-protos; one to another backend stayed"
     );
     Ok(())
 }
