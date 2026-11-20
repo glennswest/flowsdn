@@ -29,7 +29,10 @@ pub trait Kind: Serialize + DeserializeOwned + Default {
     /// The collection path (`namespace` is ignored for cluster kinds).
     fn collection(namespace: &str) -> String {
         if Self::NAMESPACED {
-            format!("/apis/{API_VERSION}/namespaces/{namespace}/{}", Self::PLURAL)
+            format!(
+                "/apis/{API_VERSION}/namespaces/{namespace}/{}",
+                Self::PLURAL
+            )
         } else {
             format!("/apis/{API_VERSION}/{}", Self::PLURAL)
         }
@@ -74,7 +77,11 @@ kind!(FlowsdnNodeConfig, "flowsdnnodeconfigs", true);
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnEndpoint {
     /// `apiVersion`: flowsdn.io/v1alpha1 (empty: not written).
-    #[serde(rename = "apiVersion", default, skip_serializing_if = "String::is_empty")]
+    #[serde(
+        rename = "apiVersion",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
     pub api_version: String,
     /// `kind`: the kind name (empty: not written).
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -98,7 +105,11 @@ pub struct FlowsdnEndpointStatus {
     pub encryption: Option<EncryptionSpec>,
     /// ExternalIdentifiers is a set of identifiers to identify the endpoint apart from the pod
     /// name. This includes container runtime IDs.
-    #[serde(rename = "external-identifiers", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "external-identifiers",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub external_identifiers: Option<FlowsdnEndpointStatusExternalIdentifiers>,
     /// Health is the overall endpoint & subcomponent health.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -114,7 +125,11 @@ pub struct FlowsdnEndpointStatus {
     pub log: Option<Vec<FlowsdnEndpointStatusLogItem>>,
     /// NamedPorts List of named Layer 4 port and protocol pairs which will be used in Network
     /// Policy specs.
-    #[serde(rename = "named-ports", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "named-ports",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub named_ports: Option<Vec<NamedPort>>,
     /// Networking is the networking properties of the endpoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -124,7 +139,11 @@ pub struct FlowsdnEndpointStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy: Option<FlowsdnEndpointStatusPolicy>,
     /// ServiceAccount is the service account associated with the endpoint
-    #[serde(rename = "service-account", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "service-account",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub service_account: Option<String>,
     /// State is the state of the endpoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -152,10 +171,18 @@ pub struct FlowsdnEndpointStatusController {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnEndpointStatusControllerConfiguration {
     /// Retry on error
-    #[serde(rename = "error-retry", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "error-retry",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub error_retry: Option<bool>,
     /// Base error retry back-off time Format: duration
-    #[serde(rename = "error-retry-base", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "error-retry-base",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub error_retry_base: Option<i64>,
     /// Regular synchronization interval Format: duration
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -165,17 +192,41 @@ pub struct FlowsdnEndpointStatusControllerConfiguration {
 /// Status is the status of the controller
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnEndpointStatusControllerStatus {
-    #[serde(rename = "consecutive-failure-count", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "consecutive-failure-count",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub consecutive_failure_count: Option<i64>,
-    #[serde(rename = "failure-count", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "failure-count",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub failure_count: Option<i64>,
-    #[serde(rename = "last-failure-msg", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "last-failure-msg",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub last_failure_msg: Option<String>,
-    #[serde(rename = "last-failure-timestamp", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "last-failure-timestamp",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub last_failure_timestamp: Option<String>,
-    #[serde(rename = "last-success-timestamp", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "last-success-timestamp",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub last_success_timestamp: Option<String>,
-    #[serde(rename = "success-count", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "success-count",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub success_count: Option<i64>,
 }
 
@@ -184,25 +235,53 @@ pub struct FlowsdnEndpointStatusControllerStatus {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnEndpointStatusExternalIdentifiers {
     /// ID assigned to this attachment by container runtime
-    #[serde(rename = "cni-attachment-id", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "cni-attachment-id",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub cni_attachment_id: Option<String>,
     /// ID assigned by container runtime (deprecated, may not be unique)
-    #[serde(rename = "container-id", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "container-id",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub container_id: Option<String>,
     /// Name assigned to container (deprecated, may not be unique)
-    #[serde(rename = "container-name", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "container-name",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub container_name: Option<String>,
     /// Docker endpoint ID
-    #[serde(rename = "docker-endpoint-id", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "docker-endpoint-id",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub docker_endpoint_id: Option<String>,
     /// Docker network ID
-    #[serde(rename = "docker-network-id", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "docker-network-id",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub docker_network_id: Option<String>,
     /// K8s namespace for this endpoint (deprecated, may not be unique)
-    #[serde(rename = "k8s-namespace", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "k8s-namespace",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub k8s_namespace: Option<String>,
     /// K8s pod name for this endpoint (deprecated, may not be unique)
-    #[serde(rename = "k8s-pod-name", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "k8s-pod-name",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub k8s_pod_name: Option<String>,
     /// K8s pod for this endpoint (deprecated, may not be unique)
     #[serde(rename = "pod-name", default, skip_serializing_if = "Option::is_none")]
@@ -219,7 +298,11 @@ pub struct FlowsdnEndpointStatusHealth {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connected: Option<bool>,
     /// overall health
-    #[serde(rename = "overallHealth", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "overallHealth",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub overall_health: Option<String>,
     /// policy
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -325,7 +408,11 @@ pub struct FlowsdnEndpointStatusPolicyIngress {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnEndpointSlice {
     /// `apiVersion`: flowsdn.io/v1alpha1 (empty: not written).
-    #[serde(rename = "apiVersion", default, skip_serializing_if = "String::is_empty")]
+    #[serde(
+        rename = "apiVersion",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
     pub api_version: String,
     /// Endpoints is a list of coreCEPs packed in a FlowsdnEndpointSlice
     pub endpoints: Vec<FlowsdnEndpointSliceEndpoint>,
@@ -355,7 +442,11 @@ pub struct FlowsdnEndpointSliceEndpoint {
     pub name: Option<String>,
     /// NamedPorts List of named Layer 4 port and protocol pairs which will be used in Network
     /// Policy specs.
-    #[serde(rename = "named-ports", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "named-ports",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub named_ports: Option<Vec<NamedPort>>,
     /// EndpointNetworking is the addressing information of an endpoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -364,7 +455,11 @@ pub struct FlowsdnEndpointSliceEndpoint {
     #[serde(rename = "pod-uid", default, skip_serializing_if = "Option::is_none")]
     pub pod_uid: Option<String>,
     /// ServiceAccount is the service account of the endpoint.
-    #[serde(rename = "service-account", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "service-account",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub service_account: Option<String>,
 }
 
@@ -391,7 +486,11 @@ pub struct FlowsdnEndpointSliceEndpointNetworking {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnIdentity {
     /// `apiVersion`: flowsdn.io/v1alpha1 (empty: not written).
-    #[serde(rename = "apiVersion", default, skip_serializing_if = "String::is_empty")]
+    #[serde(
+        rename = "apiVersion",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
     pub api_version: String,
     /// `kind`: the kind name (empty: not written).
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -409,7 +508,11 @@ pub struct FlowsdnIdentity {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnNode {
     /// `apiVersion`: flowsdn.io/v1alpha1 (empty: not written).
-    #[serde(rename = "apiVersion", default, skip_serializing_if = "String::is_empty")]
+    #[serde(
+        rename = "apiVersion",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
     pub api_version: String,
     /// `kind`: the kind name (empty: not written).
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -431,7 +534,11 @@ pub struct FlowsdnNodeSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub addresses: Option<Vec<FlowsdnNodeSpecAddress>>,
     /// AlibabaCloud is the AlibabaCloud IPAM specific configuration.
-    #[serde(rename = "alibaba-cloud", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "alibaba-cloud",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub alibaba_cloud: Option<FlowsdnNodeSpecAlibabaCloud>,
     /// Azure is the Azure IPAM specific configuration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -454,7 +561,11 @@ pub struct FlowsdnNodeSpec {
     /// InstanceID is the identifier of the node. This is different from the node name which is
     /// typically the FQDN of the node. The InstanceID typically refers to the identifier used by
     /// the cloud provider or some other means of identification.
-    #[serde(rename = "instance-id", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "instance-id",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub instance_id: Option<String>,
     /// IPAM is the address management specification. This section can be populated by a user or it
     /// can be automatically populated by an IPAM operator.
@@ -477,27 +588,51 @@ pub struct FlowsdnNodeSpecAddress {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnNodeSpecAlibabaCloud {
     /// AvailabilityZone is the availability zone to use when allocating ENIs.
-    #[serde(rename = "availability-zone", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "availability-zone",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub availability_zone: Option<String>,
     /// CIDRBlock is vpc ipv4 CIDR
-    #[serde(rename = "cidr-block", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "cidr-block",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub cidr_block: Option<String>,
     /// InstanceType is the ECS instance type, e.g. "ecs.g6.2xlarge"
-    #[serde(rename = "instance-type", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "instance-type",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub instance_type: Option<String>,
     /// SecurityGroupTags is the list of tags to use when evaluating which security groups to use
     /// for the ENI.
-    #[serde(rename = "security-group-tags", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "security-group-tags",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub security_group_tags: Option<BTreeMap<String, String>>,
     /// SecurityGroups is the list of security groups to attach to any ENI that is created and
     /// attached to the instance.
-    #[serde(rename = "security-groups", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "security-groups",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub security_groups: Option<Vec<String>>,
     /// VPCID is the VPC ID to use when allocating ENIs.
     #[serde(rename = "vpc-id", default, skip_serializing_if = "Option::is_none")]
     pub vpc_id: Option<String>,
     /// VSwitchTags is the list of tags to use when evaluating which vSwitch to use for the ENI.
-    #[serde(rename = "vswitch-tags", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "vswitch-tags",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub vswitch_tags: Option<BTreeMap<String, String>>,
     /// VSwitches is the ID of vSwitch available for ENI
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -509,7 +644,11 @@ pub struct FlowsdnNodeSpecAlibabaCloud {
 pub struct FlowsdnNodeSpecAzure {
     /// InterfaceName is the name of the interface the flowsdn-operator will use to allocate all the
     /// IPs on
-    #[serde(rename = "interface-name", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "interface-name",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub interface_name: Option<String>,
 }
 
@@ -517,52 +656,100 @@ pub struct FlowsdnNodeSpecAzure {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnNodeSpecEni {
     /// AvailabilityZone is the availability zone to use when allocating ENIs.
-    #[serde(rename = "availability-zone", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "availability-zone",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub availability_zone: Option<String>,
     /// DeleteOnTermination defines that the ENI should be deleted when the associated instance is
     /// terminated. If the parameter is not set the default behavior is to delete the ENI on
     /// instance termination.
-    #[serde(rename = "delete-on-termination", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "delete-on-termination",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub delete_on_termination: Option<bool>,
     /// DisablePrefixDelegation determines whether ENI prefix delegation should be disabled on this
     /// node.
-    #[serde(rename = "disable-prefix-delegation", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "disable-prefix-delegation",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub disable_prefix_delegation: Option<bool>,
     /// ExcludeInterfaceTags is the list of tags to use when excluding ENIs for flowsdn IP
     /// allocation. Any interface matching this set of tags will not be managed by flowsdn.
-    #[serde(rename = "exclude-interface-tags", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "exclude-interface-tags",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub exclude_interface_tags: Option<BTreeMap<String, String>>,
     /// FirstInterfaceIndex is the index of the first ENI to use for IP allocation, e.g. if the node
     /// has eth0, eth1, eth2 and FirstInterfaceIndex is set to 1, then only eth1 and eth2 will be
     /// used for IP allocation, eth0 will be ignored for PodIP allocation.
-    #[serde(rename = "first-interface-index", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "first-interface-index",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub first_interface_index: Option<i64>,
     /// InstanceType is the AWS EC2 instance type, e.g. "m5.large"
-    #[serde(rename = "instance-type", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "instance-type",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub instance_type: Option<String>,
     /// NodeSubnetID is the subnet of the primary ENI the instance was brought up with. It is used
     /// as a sensible default subnet to create ENIs in.
-    #[serde(rename = "node-subnet-id", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "node-subnet-id",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub node_subnet_id: Option<String>,
     /// SecurityGroupTags is the list of tags to use when evaliating what AWS security groups to use
     /// for the ENI.
-    #[serde(rename = "security-group-tags", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "security-group-tags",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub security_group_tags: Option<BTreeMap<String, String>>,
     /// SecurityGroups is the list of security groups to attach to any ENI that is created and
     /// attached to the instance.
-    #[serde(rename = "security-groups", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "security-groups",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub security_groups: Option<Vec<String>>,
     /// SubnetIDs is the list of subnet ids to use when evaluating what AWS subnets to use for ENI
     /// and IP allocation.
-    #[serde(rename = "subnet-ids", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "subnet-ids",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub subnet_ids: Option<Vec<String>>,
     /// SubnetTags is the list of tags to use when evaluating what AWS subnets to use for ENI and IP
     /// allocation.
-    #[serde(rename = "subnet-tags", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "subnet-tags",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub subnet_tags: Option<BTreeMap<String, String>>,
     /// UsePrimaryAddress determines whether an ENI's primary address should be available for
     /// allocations on the node
-    #[serde(rename = "use-primary-address", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "use-primary-address",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub use_primary_address: Option<bool>,
     /// VpcID is the VPC ID to use when allocating ENIs.
     #[serde(rename = "vpc-id", default, skip_serializing_if = "Option::is_none")]
@@ -581,18 +768,30 @@ pub struct FlowsdnNodeSpecIpam {
     /// to reach the PreAllocate watermark. Going above the watermark can help reduce the number of
     /// API calls to allocate IPs, e.g. when a new ENI is allocated, as many secondary IPs as
     /// possible are allocated. Limiting the amount can help reduce waste of IPs.
-    #[serde(rename = "max-above-watermark", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "max-above-watermark",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub max_above_watermark: Option<i64>,
     /// MaxAllocate is the maximum number of IPs that can be allocated to the node. When the current
     /// amount of allocated IPs will approach this value, the considered value for PreAllocate will
     /// decrease down to 0 in order to not attempt to allocate more addresses than defined.
-    #[serde(rename = "max-allocate", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "max-allocate",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub max_allocate: Option<i64>,
     /// MinAllocate is the minimum number of IPs that must be allocated when the node is first
     /// bootstrapped. It defines the minimum base socket of addresses that must be available. After
     /// reaching this watermark, the PreAllocate and MaxAboveWatermark logic takes over to continue
     /// allocating IPs.
-    #[serde(rename = "min-allocate", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "min-allocate",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub min_allocate: Option<i64>,
     /// PodCIDRs is the list of CIDRs available to the node for allocation. When an IP is used, the
     /// IP will be added to Status.IPAM.Used
@@ -608,11 +807,19 @@ pub struct FlowsdnNodeSpecIpam {
     /// PreAllocate defines the number of IP addresses that must be available for allocation in the
     /// IPAMSpec. It defines the buffer of addresses available immediately without requiring
     /// flowsdn-operator to get involved.
-    #[serde(rename = "pre-allocate", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "pre-allocate",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub pre_allocate: Option<i64>,
     /// StaticIPTags are used to determine the pool of IPs from which to attribute a static IP to
     /// the node. For example in AWS this is used to filter Elastic IP Addresses.
-    #[serde(rename = "static-ip-tags", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "static-ip-tags",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub static_ip_tags: Option<BTreeMap<String, String>>,
 }
 
@@ -635,10 +842,18 @@ pub struct FlowsdnNodeSpecIpamPools {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnNodeSpecIpamPoolsAllocatedItem {
     /// AllowFirstIP allows the first IP of each allocated CIDR to be used.
-    #[serde(rename = "allowFirstIP", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "allowFirstIP",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub allow_first_ip: Option<bool>,
     /// AllowLastIP allows the last IP of each allocated CIDR to be used.
-    #[serde(rename = "allowLastIP", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "allowLastIP",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub allow_last_ip: Option<bool>,
     /// CIDRs contains a list of pod CIDRs currently allocated from this pool
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -664,10 +879,18 @@ pub struct FlowsdnNodeSpecIpamPoolsRequestedItem {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnNodeSpecIpamPoolsRequestedItemNeeded {
     /// IPv4Addrs contains the number of requested IPv4 addresses out of a given pool
-    #[serde(rename = "ipv4-addrs", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "ipv4-addrs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ipv4_addrs: Option<i64>,
     /// IPv6Addrs contains the number of requested IPv6 addresses out of a given pool
-    #[serde(rename = "ipv6-addrs", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "ipv6-addrs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ipv6_addrs: Option<i64>,
 }
 
@@ -675,7 +898,11 @@ pub struct FlowsdnNodeSpecIpamPoolsRequestedItemNeeded {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnNodeStatus {
     /// AlibabaCloud is the AlibabaCloud specific status of the node.
-    #[serde(rename = "alibaba-cloud", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "alibaba-cloud",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub alibaba_cloud: Option<FlowsdnNodeStatusAlibabaCloud>,
     /// Azure is the Azure specific status of the node.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -700,22 +927,46 @@ pub struct FlowsdnNodeStatusAlibabaCloud {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnNodeStatusAlibabaCloudEnisValue {
     /// InstanceID is the InstanceID using this ENI
-    #[serde(rename = "instance-id", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "instance-id",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub instance_id: Option<String>,
     /// MACAddress is the mac address of the ENI
-    #[serde(rename = "mac-address", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "mac-address",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub mac_address: Option<String>,
     /// NetworkInterfaceID is the ENI id
-    #[serde(rename = "network-interface-id", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "network-interface-id",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub network_interface_id: Option<String>,
     /// PrimaryIPAddress is the primary IP on ENI
-    #[serde(rename = "primary-ip-address", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "primary-ip-address",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub primary_ip_address: Option<String>,
     /// PrivateIPSets is the list of all IPs on the ENI, including PrimaryIPAddress
-    #[serde(rename = "private-ipsets", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "private-ipsets",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub private_ipsets: Option<Vec<FlowsdnNodeStatusAlibabaCloudEnisValuePrivateIpset>>,
     /// SecurityGroupIDs is the security group ids used by this ENI
-    #[serde(rename = "security-groupids", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "security-groupids",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub security_groupids: Option<Vec<String>>,
     /// Tags is the tags on this ENI
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -739,7 +990,11 @@ pub struct FlowsdnNodeStatusAlibabaCloudEnisValue {
 pub struct FlowsdnNodeStatusAlibabaCloudEnisValuePrivateIpset {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary: Option<bool>,
-    #[serde(rename = "private-ip-address", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "private-ip-address",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub private_ip_address: Option<String>,
 }
 
@@ -753,7 +1008,11 @@ pub struct FlowsdnNodeStatusAlibabaCloudEnisValueVpc {
     #[serde(rename = "ipv6-cidr", default, skip_serializing_if = "Option::is_none")]
     pub ipv6_cidr: Option<String>,
     /// SecondaryCIDRs is the list of Secondary CIDRs associated with the VPC
-    #[serde(rename = "secondary-cidrs", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "secondary-cidrs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub secondary_cidrs: Option<Vec<String>>,
     /// VPCID is the vpc to which the ENI belongs
     #[serde(rename = "vpc-id", default, skip_serializing_if = "Option::is_none")]
@@ -770,7 +1029,11 @@ pub struct FlowsdnNodeStatusAlibabaCloudEnisValueVswitch {
     #[serde(rename = "ipv6-cidr", default, skip_serializing_if = "Option::is_none")]
     pub ipv6_cidr: Option<String>,
     /// VSwitchID is the vSwitch to which the ENI belongs
-    #[serde(rename = "vswitch-id", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "vswitch-id",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub vswitch_id: Option<String>,
 }
 
@@ -809,7 +1072,11 @@ pub struct FlowsdnNodeStatusAzureInterface {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// SecurityGroup is the security group associated with the interface
-    #[serde(rename = "security-group", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "security-group",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub security_group: Option<String>,
     /// State is the provisioning state
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -848,7 +1115,11 @@ pub struct FlowsdnNodeStatusEniEnisValue {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub addresses: Option<Vec<String>>,
     /// AvailabilityZone is the availability zone of the ENI
-    #[serde(rename = "availability-zone", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "availability-zone",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub availability_zone: Option<String>,
     /// Description is the description field of the ENI
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -860,7 +1131,11 @@ pub struct FlowsdnNodeStatusEniEnisValue {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ip: Option<String>,
     /// IPv6Prefixes is the list of all IPv6 /80 delegated prefixes associated with the ENI
-    #[serde(rename = "ipv6-prefixes", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "ipv6-prefixes",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ipv6_prefixes: Option<Vec<String>>,
     /// MAC is the mac address of the ENI
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -875,7 +1150,11 @@ pub struct FlowsdnNodeStatusEniEnisValue {
     #[serde(rename = "public-ip", default, skip_serializing_if = "Option::is_none")]
     pub public_ip: Option<String>,
     /// SecurityGroups are the security groups associated with the ENI
-    #[serde(rename = "security-groups", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "security-groups",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub security_groups: Option<Vec<String>>,
     /// Subnet is the subnet the ENI is associated with
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -899,7 +1178,11 @@ pub struct FlowsdnNodeStatusEniEnisValueVpc {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     /// PrimaryCIDR is the primary CIDR of the VPC
-    #[serde(rename = "primary-cidr", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "primary-cidr",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub primary_cidr: Option<String>,
 }
 
@@ -908,14 +1191,22 @@ pub struct FlowsdnNodeStatusEniEnisValueVpc {
 pub struct FlowsdnNodeStatusIpam {
     /// AssignedStaticIP is the static IP assigned to the node (ex: public Elastic IP address in
     /// AWS)
-    #[serde(rename = "assigned-static-ip", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "assigned-static-ip",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub assigned_static_ip: Option<String>,
     /// IPv6Used lists all IPv6 addresses out of Spec.IPAM.IPv6Pool which have been allocated and
     /// are in use.
     #[serde(rename = "ipv6-used", default, skip_serializing_if = "Option::is_none")]
     pub ipv6_used: Option<BTreeMap<String, AllocationIp>>,
     /// Operator is the Operator status of the node
-    #[serde(rename = "operator-status", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "operator-status",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub operator_status: Option<FlowsdnNodeStatusIpamOperatorStatus>,
     /// PodCIDRs lists the status of each pod CIDR allocated to this node.
     #[serde(rename = "pod-cidrs", default, skip_serializing_if = "Option::is_none")]
@@ -925,14 +1216,22 @@ pub struct FlowsdnNodeStatusIpam {
     /// for IP * ready-for-release  : Acknowledged as safe to release by agent * do-not-release
     /// : IP already in use / not owned by the node. Set by agent * released           : IP
     /// successfully released. Set by operator
-    #[serde(rename = "release-ips", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "release-ips",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub release_ips: Option<BTreeMap<String, String>>,
     /// ReleaseIPv6s tracks the state for every IPv6 address considered for release. The value can
     /// be one of the following strings: * marked-for-release : Set by operator as possible
     /// candidate for IP * ready-for-release  : Acknowledged as safe to release by agent * do-not-
     /// release     : IP already in use / not owned by the node. Set by agent * released           :
     /// IP successfully released. Set by operator
-    #[serde(rename = "release-ipv6s", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "release-ipv6s",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub release_ipv6s: Option<BTreeMap<String, String>>,
     /// Used lists all IPv4 addresses out of Spec.IPAM.Pool which have been allocated and are in
     /// use.
@@ -960,7 +1259,11 @@ pub struct FlowsdnNodeStatusIpamPodCidrsValue {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnNodeConfig {
     /// `apiVersion`: flowsdn.io/v1alpha1 (empty: not written).
-    #[serde(rename = "apiVersion", default, skip_serializing_if = "String::is_empty")]
+    #[serde(
+        rename = "apiVersion",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
     pub api_version: String,
     /// `kind`: the kind name (empty: not written).
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -991,12 +1294,20 @@ pub struct FlowsdnNodeConfigSpec {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnNodeConfigSpecNodeSelector {
     /// matchExpressions is a list of label selector requirements. The requirements are ANDed.
-    #[serde(rename = "matchExpressions", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "matchExpressions",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub match_expressions: Option<Vec<FlowsdnNodeConfigSpecNodeSelectorMatchExpression>>,
     /// matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is
     /// equivalent to an element of matchExpressions, whose key field is "key", the operator is
     /// "In", and the values array contains only "value". The requirements are ANDed.
-    #[serde(rename = "matchLabels", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "matchLabels",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub match_labels: Option<BTreeMap<String, String>>,
 }
 
@@ -1023,7 +1334,11 @@ pub struct IdentityTuple {
     pub dest_port: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<i64>,
-    #[serde(rename = "identity-labels", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "identity-labels",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub identity_labels: Option<BTreeMap<String, String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<i64>,

@@ -121,10 +121,17 @@ impl Generator<'_> {
             }
             Some("integer") => {
                 let min = schema.get("minimum").and_then(Value::as_i64).unwrap_or(0);
-                let max = schema.get("maximum").and_then(Value::as_i64).unwrap_or(65_535);
+                let max = schema
+                    .get("maximum")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(65_535);
                 let span = u64::try_from(max.saturating_sub(min)).unwrap_or(0);
-                let offset = i64::try_from(self.unique().checked_rem(span.saturating_add(1)).unwrap_or(0))
-                    .unwrap_or(0);
+                let offset = i64::try_from(
+                    self.unique()
+                        .checked_rem(span.saturating_add(1))
+                        .unwrap_or(0),
+                )
+                .unwrap_or(0);
                 json!(min.saturating_add(offset))
             }
             Some("number") => json!(1.5),
@@ -132,7 +139,11 @@ impl Generator<'_> {
             Some("array") => {
                 let item = schema.get("items").cloned().unwrap_or(Value::Null);
                 let n = if depth > 6 { 0 } else { self.count() };
-                Value::Array((0..n).map(|_| self.value(&item, depth.saturating_add(1))).collect())
+                Value::Array(
+                    (0..n)
+                        .map(|_| self.value(&item, depth.saturating_add(1)))
+                        .collect(),
+                )
             }
             _ => self.object(schema, depth),
         }
@@ -183,7 +194,10 @@ fn admitted(kind: &str, schema: &Value, value: &Value) {
 
 /// T-CRD-3: every property, only the required ones, and what the type writes.
 fn type_matches_schema<K: Kind>(schema: &Value) {
-    for (what, fill) in [("every field", Fill::Every), ("required only", Fill::Required)] {
+    for (what, fill) in [
+        ("every field", Fill::Every),
+        ("required only", Fill::Required),
+    ] {
         let value = generate(schema, fill);
         admitted(K::KIND, schema, &value);
         assert_round::<K>(what, &value);
@@ -281,7 +295,9 @@ fn tolerates_unknowns<K: Kind>(schema: &Value) {
         .join(K::PLURAL);
     let mut documents: Vec<Value> = ["minimal.yaml", "realistic.yaml"]
         .iter()
-        .map(|f| yaml_to_json(&std::fs::read_to_string(dir.join(f)).expect("golden")).expect("YAML"))
+        .map(|f| {
+            yaml_to_json(&std::fs::read_to_string(dir.join(f)).expect("golden")).expect("YAML")
+        })
         .collect();
     documents.push(generate(schema, Fill::Every));
     for original in documents {
@@ -293,7 +309,12 @@ fn tolerates_unknowns<K: Kind>(schema: &Value) {
         let back = round::<K>(&noisy);
         let mut expected = original.clone();
         strip_unknown(&mut expected);
-        assert_eq!(back, expected, "{}: an unknown key changed known fields", K::KIND);
+        assert_eq!(
+            back,
+            expected,
+            "{}: an unknown key changed known fields",
+            K::KIND
+        );
 
         let mut future = original.clone();
         if unknown_enums(schema, &mut future) > 0 {
