@@ -703,15 +703,38 @@ fn host_egress(lab: &mut Lab) -> Result<()> {
         let got = host_verdict(lab, program, up0, frame)?;
         if got != want {
             let name = |v| if v == OK { "pass" } else { "drop" };
-            return Err(format!("host egress {what}: {} instead of {}", name(got), name(want)).into());
+            return Err(format!(
+                "host egress {what}: {} instead of {}",
+                name(got),
+                name(want)
+            )
+            .into());
         }
         Ok(())
     };
     let out = |dst, sport, dport, flags| v4(TCP, HOST_ADDR, dst, 0, &tcp(sport, dport, flags));
     set(lab, up0, enforce::INGRESS | enforce::EGRESS)?;
-    check(lab, "host to admin:443", "to_netdev", &out(ADMIN, 45000, 443, SYN), OK)?;
-    check(lab, "host to admin:80", "to_netdev", &out(ADMIN, 45001, 80, SYN), SHOT)?;
-    check(lab, "host to admin:25", "to_netdev", &out(ADMIN, 45002, 25, SYN), SHOT)?;
+    check(
+        lab,
+        "host to admin:443",
+        "to_netdev",
+        &out(ADMIN, 45000, 443, SYN),
+        OK,
+    )?;
+    check(
+        lab,
+        "host to admin:80",
+        "to_netdev",
+        &out(ADMIN, 45001, 80, SYN),
+        SHOT,
+    )?;
+    check(
+        lab,
+        "host to admin:25",
+        "to_netdev",
+        &out(ADMIN, 45002, 25, SYN),
+        SHOT,
+    )?;
     check(
         lab,
         "forwarded pod to admin:80",
@@ -727,7 +750,13 @@ fn host_egress(lab: &mut Lab) -> Result<()> {
         &v4(TCP, ADMIN, HOST_ADDR, 0, &tcp(45004, 22, SYN)),
         OK,
     )?;
-    check(lab, "reply host:22 to admin", "to_netdev", &out(ADMIN, 22, 45004, SYN | ACK), OK)?;
+    check(
+        lab,
+        "reply host:22 to admin",
+        "to_netdev",
+        &out(ADMIN, 22, 45004, SYN | ACK),
+        OK,
+    )?;
     // The reply of the allowed 443 flow comes back in.
     check(
         lab,
@@ -760,8 +789,18 @@ fn host_egress(lab: &mut Lab) -> Result<()> {
         "PASS host egress to local Pods: the host reaches the pod's allowed port, not another; the reply passes"
     );
 
-    set(lab, up0, enforce::INGRESS | enforce::EGRESS | enforce::AUDIT)?;
-    check(lab, "audit host to admin:8443", "to_netdev", &out(ADMIN, 45010, 8443, SYN), OK)?;
+    set(
+        lab,
+        up0,
+        enforce::INGRESS | enforce::EGRESS | enforce::AUDIT,
+    )?;
+    check(
+        lab,
+        "audit host to admin:8443",
+        "to_netdev",
+        &out(ADMIN, 45010, 8443, SYN),
+        OK,
+    )?;
     let counted = lab
         .delivery
         .policy()
@@ -777,15 +816,29 @@ fn host_egress(lab: &mut Lab) -> Result<()> {
     if !counted {
         return Err("no egress audit verdict for host to admin:8443".into());
     }
-    let denied = lab.delivery.policy().policy_verdicts()?.iter().any(|(k, _)| {
-        k.endpoint == HOST_ENDPOINT && k.egress == 1 && k.dport.get() == 80 && k.verdict == verdict::DENIED
-    });
+    let denied = lab
+        .delivery
+        .policy()
+        .policy_verdicts()?
+        .iter()
+        .any(|(k, _)| {
+            k.endpoint == HOST_ENDPOINT
+                && k.egress == 1
+                && k.dport.get() == 80
+                && k.verdict == verdict::DENIED
+        });
     if !denied {
         return Err("no egress denied verdict for host to admin:80".into());
     }
     lab.delivery.policy().remove_policy_endpoint(up0)?;
     lab.delivery.policy().remove_policy_endpoint(HOST_PODS)?;
-    check(lab, "removed host to admin:80", "to_netdev", &out(ADMIN, 45011, 80, SYN), OK)?;
+    check(
+        lab,
+        "removed host to admin:80",
+        "to_netdev",
+        &out(ADMIN, 45011, 80, SYN),
+        OK,
+    )?;
     println!(
         "PASS host egress audit: a would-be drop passes and is counted; egress denied rows counted; removal stops judging"
     );

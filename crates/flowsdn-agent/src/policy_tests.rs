@@ -334,7 +334,10 @@ fn host_keys_of(desired: &Desired, egress: u8) -> BTreeSet<(u32, u8, u16, u32, b
 }
 /// The ingress host entries; `host_view` has no egress rules.
 fn host_keys(desired: &Desired) -> BTreeSet<(u32, u8, u16, u32, bool)> {
-    assert!(host_keys_of(desired, 1).is_empty(), "host_view has no egress rules");
+    assert!(
+        host_keys_of(desired, 1).is_empty(),
+        "host_view has no egress rules"
+    );
     host_keys_of(desired, 0)
 }
 
@@ -353,7 +356,10 @@ fn host_egress_rules_are_egress_entries_enforced_after_learning() {
     let desired = compile(&view, &[]);
     let both = enforce::INGRESS | enforce::EGRESS;
     assert_eq!(desired.endpoints.get(&5).map(|e| e.flags), Some(both));
-    assert_eq!(desired.endpoints.get(&HOST_PODS).map(|e| e.flags), Some(both));
+    assert_eq!(
+        desired.endpoints.get(&HOST_PODS).map(|e| e.flags),
+        Some(both)
+    );
     let client = identity_of(&view, "client");
     let out = host_keys_of(&desired, 1);
     for want in [

@@ -153,7 +153,10 @@ fn host_egress_rules_and_their_default_deny() {
             "egress":[{"toEntities":["world"]}]}),
     )];
     let got = select(&open, &node, false);
-    assert!(!got.enforce_egress, "default deny off: the rules add nothing");
+    assert!(
+        !got.enforce_egress,
+        "default deny off: the rules add nothing"
+    );
     assert_eq!(got.egress_rules.len(), 1);
 }
 
