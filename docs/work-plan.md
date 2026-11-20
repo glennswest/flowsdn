@@ -7,15 +7,18 @@ Kept here whole, newest notes as they were. Write new intentions here.
 ### XDP prefilter and /v1/prefilter — #467 (P3), 2026-11-20
 
 In scope (spec 02 M2, spec 01 maps deferred, spec 00 `enable-xdp-prefilter` default false). Plan:
-- [ ] BPF (local-delivery): `xdp_prefilter` + `flowsdn_cidr_v{4,6}_{fix,dyn}` (hash for /32,/128; LPM otherwise;
+- [x] BPF (local-delivery): `xdp_prefilter` + `flowsdn_cidr_v{4,6}_{fix,dyn}` (hash for /32,/128; LPM otherwise;
       1024, NO_PREALLOC); drop on source match, else pass. Object + lock via sc-build.
-- [ ] Loader: attach (native, else generic) / detach per interface, map insert/delete/clear.
-- [ ] Agent: `kubernetes.xdp-prefilter` (default false) attaches to the uplinks with a MAC; state {revision from 1,
+- [x] Loader: attach (native, else generic) / detach per interface, map insert/delete/clear.
+- [x] Agent: `kubernetes.xdp-prefilter` (default false) attaches to the uplinks with a MAC; state {revision from 1,
       deny set}; `GET/PATCH/DELETE /v1/prefilter` (Prefilter {spec{revision,deny},status{realized}}; PATCH/DELETE
       body PrefilterSpec: revision mismatch 500, invalid CIDR 461, absent CIDR on DELETE 500; off: 500 "not
       enabled"); maps cleared at start (state not persisted, as the reference).
-- [ ] Tests: unit (state, routes with a fake map), fixture `prefilter-live` (test-run drop/pass v4/v6 fix+dyn,
+- [x] Tests: unit (state, routes with a fake map), fixture `prefilter-live` (test-run drop/pass v4/v6 fix+dyn,
       real attach/detach on a veth); docs (agent API, runtime, spec 08/01/02 amendments), changelog.
+- [x] Code 453d9cf, docs 550620a, object + lock b7ca248 (sha256 2cc7ca08…), fmt acadbb2. kernel-check at b7ca248 on
+      7.3.4: 24 pass 0 fail 2 skip; prefilter-live 4 PASS (native XDP on a veth dropped a denied peer's UDP). Strict
+      sc-build at acadbb2: 995 tests 0 failed, lock matches. Stage, ship, close.
 
 ### cgroup-dump-metadata and map events routes — #468 (P3), 2026-11-20
 
