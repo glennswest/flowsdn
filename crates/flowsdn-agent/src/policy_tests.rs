@@ -446,11 +446,24 @@ fn host_firewall_judges_local_pods_and_every_node_address() {
     let other = compile(&view, &[]);
     assert_eq!(other.endpoints.get(&HOST_PODS).map(|e| e.flags), Some(0));
     assert_eq!(other.host.pointer("/pods"), Some(&json!("tracking")));
+    assert_eq!(
+        host_summary(&desired.host).as_deref(),
+        Some(
+            "host firewall enforce: interfaces eth0; enforcing on eth0; local Pods enforcing; 2 node addresses"
+        )
+    );
+    assert_eq!(
+        host_summary(&other.host).as_deref(),
+        Some(
+            "host firewall enforce: interfaces eth0; enforcing on none; local Pods tracking; 2 node addresses"
+        )
+    );
     // Off: no HOST_PODS entry, and the other addresses are not the host's.
     view.host_firewall = HostFirewall::Off;
     let off = compile(&view, &[]);
     assert!(!off.endpoints.contains_key(&HOST_PODS));
     assert!(!host_of(&off, ip("10.9.0.10")));
+    assert_eq!(host_summary(&off.host), None);
 }
 
 #[test]

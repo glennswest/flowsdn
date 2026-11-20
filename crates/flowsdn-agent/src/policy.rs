@@ -748,6 +748,34 @@ fn host_firewall(
     });
 }
 
+/// One line saying where the host firewall runs and what it does (#384):
+/// the `HostFirewall` Event and log line when it changes. None while off.
+pub fn host_summary(host: &Value) -> Option<String> {
+    let mode = host.get("mode")?.as_str()?;
+    let list = |key: &str| {
+        let names: Vec<&str> = host
+            .get(key)
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default();
+        if names.is_empty() {
+            "none".to_owned()
+        } else {
+            names.join(",")
+        }
+    };
+    let addresses = host
+        .get("addresses")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    Some(format!(
+        "host firewall {mode}: interfaces {}; enforcing on {}; local Pods {}; {addresses} node addresses",
+        list("interfaces"),
+        list("enforcing-on"),
+        host.get("pods").and_then(Value::as_str).unwrap_or("none"),
+    ))
+}
+
 /// The keys of one (identity, protocol, port range): protocol 0 is every L4.
 fn l4_keys(identity: u32, protocol: u8, range: PortRange) -> Vec<HostKey> {
     if protocol == 0 {

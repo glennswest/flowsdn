@@ -832,6 +832,8 @@ fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
     // When the host firewall first wanted each uplink (#379): it only
     // learns flows for HOST_LEARNING before enforcing there.
     let mut wanted: BTreeMap<u32, Instant> = BTreeMap::new();
+    // The host firewall's last announced state (#384).
+    let mut announced: Option<String> = None;
     loop {
         std::thread::sleep(POLICY_INTERVAL);
         let host_firewall = lock(view).host_firewall != HostFirewall::Off;
@@ -898,6 +900,15 @@ fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
                 crate::log::logln!("policy maps: {error}");
                 continue;
             }
+        }
+        drop(view);
+        let summary = crate::policy::host_summary(&desired.host);
+        if summary != announced {
+            if let Some(text) = &summary {
+                crate::log::logln!("{text}");
+                crate::events::node(crate::events::Type::Normal, "HostFirewall", text.clone());
+            }
+            announced = summary;
         }
         applied = Some((desired, Instant::now()));
     }
