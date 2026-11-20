@@ -448,6 +448,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     maglev(lb, services)?;
     dsr(lb, services)?;
     nat46x64(lb, services)?;
+    nat_expiry(lb, services)?;
     services.retain(|s| s.scope != SCOPE_NODE_LOCAL);
     Ok(())
 }
@@ -455,6 +456,86 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
 /// Service NAT46/64 (spec 04 §3.15): a client of one family reaches a backend
 /// of the other on another node, source-NATed to this node's address there; the
 /// reply comes back in the client's family from the frontend.
+/// `program`'s verdict on `frame` arriving on `ifindex`, whatever it is.
+fn verdict_on(lb: &mut SocketLb, program: &str, frame: &[u8], ifindex: u32) -> Result<u32> {
+    let fd = lb.classifier(program)?.fd()?.as_fd().as_raw_fd();
+    let mut ctx = [0u8; 256];
+    ctx.get_mut(40..44)
+        .ok_or("ctx")?
+        .copy_from_slice(&ifindex.to_ne_bytes());
+    let mut out = vec![0u8; 2048];
+    let mut ctx_out = [0u8; 256];
+    Ok(syscall::run(fd, frame, &mut out, &ctx, &mut ctx_out)?.0)
+}
+/// `frame` (IPv4 TCP) with the TCP flags `flags` and its checksum redone.
+fn tcp_flags(mut frame: Vec<u8>, flags: u8) -> Result<Vec<u8>> {
+    *frame.get_mut(47).ok_or("tcp")? = flags;
+    frame.splice(50..52, [0, 0]);
+    let check = !(l4_sum(
+        6,
+        frame.get(26..30).ok_or("ip")?,
+        frame.get(30..34).ok_or("ip")?,
+        frame.get(34..).ok_or("l4")?,
+    ) as u16);
+    frame.splice(50..52, check.to_be_bytes());
+    Ok(frame)
+}
+
+/// NAT port reservations expire (finding 1cb155baca89): one backend's pool
+/// is 4536 ports. 3000 closed TCP connections (SYN, then FIN) and, 12 s
+/// later (past the 10 s closing lifetime), 3000 more: the second round is
+/// source-NATed as the first was, because the closed flows' ports are
+/// reclaimed (without expiry at most 1536 of them could be). The same for
+/// UDP flows across their 60 s lifetime.
+fn nat_expiry(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
+    let up0 = ifindex("up0")?;
+    let (front, client) = ([192, 0, 2, 20], [198, 51, 100, 9]);
+    for proto in [PROTO_TCP, PROTO_UDP] {
+        services.push(Service {
+            frontend: address("192.0.2.20:30097", proto)?,
+            backends: vec![address("10.9.1.7:8080", proto)?],
+            affinity: None,
+            scope: SCOPE_NODE_LOCAL,
+            maglev: false,
+            dsr: false,
+            nat46x64: false,
+        });
+    }
+    program(lb, services)?;
+    const ROUND: u16 = 3000;
+    let round = |lb: &mut SocketLb, proto: u8, first: u16| -> Result<u16> {
+        let mut translated = 0u16;
+        for i in 0..ROUND {
+            let sport = first.saturating_add(i);
+            let request = frame4(proto, client, front, sport, 30097, false);
+            if verdict_on(lb, "nodeport_ingress", &request, up0)? == TC_ACT_REDIRECT {
+                translated = translated.saturating_add(1);
+            }
+            if proto == 6 {
+                let fin = tcp_flags(request, 0x11)?;
+                verdict_on(lb, "nodeport_ingress", &fin, up0)?;
+            }
+        }
+        Ok(translated)
+    };
+    for (proto, life, name) in [(6u8, 12u64, "closed TCP"), (17, 62, "UDP")] {
+        let first = round(lb, proto, 20000)?;
+        std::thread::sleep(Duration::from_secs(life));
+        let second = round(lb, proto, 30000)?;
+        let enough = ROUND / 10 * 9;
+        if first < enough || second < enough {
+            return Err(format!(
+                "NAT expiry, {name}: {first} then {second} of {ROUND} flows source-NATed (pool 4536 ports)"
+            )
+            .into());
+        }
+        println!(
+            "PASS NAT expiry, {name}: {first} then, {life} s later, {second} of {ROUND} new flows source-NATed: expired reservations are reclaimed"
+        );
+    }
+    Ok(())
+}
+
 fn nat46x64(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     let up0 = ifindex("up0")?;
     let (front, client, remote) = ([192, 0, 2, 20], [198, 51, 100, 9], [10, 9, 1, 5]);

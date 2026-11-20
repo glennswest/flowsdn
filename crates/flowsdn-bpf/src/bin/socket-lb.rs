@@ -693,6 +693,49 @@ const NAT_PORT_MIN: u32 = 61000;
 const NAT_PORTS: u32 = 65536 - NAT_PORT_MIN;
 /// NAT ports tried for a new flow before it is left untranslated.
 const NAT_TRIES: u32 = 8;
+/// A NAT reservation whose TCP flow saw a FIN or RST (finding 1cb155baca89).
+const FLOW_CLOSING: u8 = 8;
+/// Seconds a NAT reservation lives without traffic: TCP, TCP after a FIN or
+/// RST, everything else. Its last-seen second is kept in the value's `pad2`
+/// (16 bits, compared with wrapping arithmetic, so the pinned map's layout is
+/// unchanged); every lifetime is far below 2^15 s.
+const LIFE_TCP: u16 = 21600;
+const LIFE_CLOSING: u16 = 10;
+const LIFE_OTHER: u16 = 60;
+
+/// Seconds since boot, modulo 2^16.
+#[inline(always)]
+fn now16() -> u16 {
+    // SAFETY: no arguments; returns the monotonic clock in nanoseconds.
+    let ns = unsafe { bpf_ktime_get_ns() };
+    (ns.checked_div(1_000_000_000).unwrap_or(0) & 0xffff) as u16
+}
+/// Whether a reservation with `flags`, last seen at `seen`, has outlived its
+/// flow. NAT46/64 reservations (their traffic does not refresh them) never
+/// expire.
+#[inline(always)]
+fn expired(flags: u8, seen: [u8; 2], proto: u8, now: u16) -> bool {
+    if flags & FLOW_XLATE != 0 {
+        return false;
+    }
+    let life = if flags & FLOW_CLOSING != 0 {
+        LIFE_CLOSING
+    } else if proto == 6 {
+        LIFE_TCP
+    } else {
+        LIFE_OTHER
+    };
+    now.wrapping_sub(u16::from_ne_bytes(seen)) > life
+}
+/// A TCP segment with FIN or RST at `l4`.
+#[inline(always)]
+fn closes(ctx: &TcContext, l4: usize, proto: u8) -> bool {
+    proto == 6
+        && l4
+            .checked_add(13)
+            .and_then(|at| ctx.load::<u8>(at).ok())
+            .is_some_and(|flags| flags & 0x05 != 0)
+}
 
 /// The IPv4 TCP/UDP 5-tuple of a frame: (L4 offset, proto, src, dst,
 /// sport, dport). Fragments other than the first carry no ports: skipped.
@@ -881,8 +924,71 @@ fn claim_port(
         if NODEPORT4.insert(&key, reply, BPF_NOEXIST).is_ok() {
             return Some(port);
         }
+        // Taken: reclaim it if its flow is over, dropping that flow's forward
+        // entry when it still points at this port (finding 1cb155baca89).
+        // SAFETY: LRU value copied at once.
+        let Some(held) = (unsafe { NODEPORT4.get(&key).copied() }) else {
+            continue;
+        };
+        if !expired(held.flags, held.pad2, proto, now16()) {
+            continue;
+        }
+        let stale = Nodeport4Key {
+            a: held.other,
+            b: held.address,
+            ap: held.other_port,
+            bp: held.port,
+            proto,
+            direction: FORWARD,
+            pad: [0; 2],
+        };
+        // SAFETY: as above.
+        if unsafe { NODEPORT4.get(&stale).copied() }
+            .is_some_and(|f| f.other == nat && f.other_port == port)
+        {
+            let _ = NODEPORT4.remove(&stale);
+        }
+        if NODEPORT4.insert(&key, reply, 0).is_ok() {
+            return Some(port);
+        }
     }
     None
+}
+
+/// The reservation behind SNAT flow `flow` of `client`: renewed (and marked
+/// closing on a FIN or RST) while it still names this client; false when it
+/// is gone or another flow reclaimed it.
+#[inline(always)]
+fn live4(
+    flow: &Nodeport4Value,
+    client: ([u8; 4], [u8; 2]),
+    proto: u8,
+    fin: bool,
+) -> bool {
+    let key = Nodeport4Key {
+        a: flow.address,
+        b: flow.other,
+        ap: flow.port,
+        bp: flow.other_port,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    let Some(value) = NODEPORT4.get_ptr_mut(&key) else {
+        return false;
+    };
+    // SAFETY: an LRU value of this map, read and written in place; a racing
+    // writer only costs one renewal.
+    unsafe {
+        if (*value).other != client.0 || (*value).other_port != client.1 {
+            return false;
+        }
+        (*value).pad2 = now16().to_ne_bytes();
+        if fin {
+            (*value).flags |= FLOW_CLOSING;
+        }
+    }
+    true
 }
 
 /// A remote backend's reply to a NAT port: back to the client, from the
@@ -1131,6 +1237,7 @@ fn dsr_backend4(ctx: &TcContext) -> Option<i32> {
 fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
     let tuple = tuple4(ctx)?;
     let (l4, proto, client, front, client_port, front_port) = tuple;
+    let fin = closes(ctx, l4, proto);
     let mut key = Nodeport4Key {
         a: client,
         b: front,
@@ -1146,12 +1253,25 @@ fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
         if flow.flags & FLOW_XLATE != 0 {
             return None;
         }
+        if let Some(value) = NODEPORT4.get_ptr_mut(&key) {
+            // SAFETY: an LRU value of this map, written in place.
+            unsafe {
+                (*value).pad2 = now16().to_ne_bytes();
+                if fin {
+                    (*value).flags |= FLOW_CLOSING;
+                }
+            }
+        }
         return snat_reply4(ctx, tuple, flow);
     }
     key.direction = FORWARD;
     let mut route = None;
+    // A known SNAT flow whose reservation expired and went to another flow
+    // starts again as a new flow.
     // SAFETY: LRU value copied at once, never written through.
-    let flow = match unsafe { NODEPORT4.get(&key).copied() } {
+    let known = unsafe { NODEPORT4.get(&key).copied() }
+        .filter(|f| f.flags & FLOW_SNAT == 0 || live4(f, (client, client_port), proto, fin));
+    let flow = match known {
         Some(known) => known,
         None => {
             let mut service_key = Lb4Key {
@@ -1210,11 +1330,11 @@ fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
                 let reply = Nodeport4Value {
                     address: front,
                     port: front_port,
-                    flags: 0,
+                    flags: if fin { FLOW_CLOSING } else { 0 },
                     pad: 0,
                     other: client,
                     other_port: client_port,
-                    pad2: [0; 2],
+                    pad2: now16().to_ne_bytes(),
                 };
                 // The reply entry first: a reply must never find a flow it
                 // cannot undo.
@@ -1499,6 +1619,31 @@ fn claim_port6(
         if NODEPORT6.insert(&key, reply, BPF_NOEXIST).is_ok() {
             return Some(port);
         }
+        // SAFETY: LRU value copied at once.
+        let Some(held) = (unsafe { NODEPORT6.get(&key).copied() }) else {
+            continue;
+        };
+        if !expired(held.flags, held.pad2, proto, now16()) {
+            continue;
+        }
+        let stale = Nodeport6Key {
+            a: held.other,
+            b: held.address,
+            ap: held.other_port,
+            bp: held.port,
+            proto,
+            direction: FORWARD,
+            pad: [0; 2],
+        };
+        // SAFETY: as above.
+        if unsafe { NODEPORT6.get(&stale).copied() }
+            .is_some_and(|f| f.other == nat && f.other_port == port)
+        {
+            let _ = NODEPORT6.remove(&stale);
+        }
+        if NODEPORT6.insert(&key, reply, 0).is_ok() {
+            return Some(port);
+        }
     }
     None
 }
@@ -1685,6 +1830,24 @@ fn snat_reply6(skb: *mut __sk_buff) -> i32 {
 #[inline(always)]
 fn snat_reply6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Option<i32> {
     let (proto, backend, nat, backend_port, nat_port) = *tuple;
+    let key = Nodeport6Key {
+        a: backend,
+        b: nat,
+        ap: backend_port,
+        bp: nat_port,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    if let Some(value) = NODEPORT6.get_ptr_mut(&key) {
+        // SAFETY: an LRU value of this map, written in place.
+        unsafe {
+            (*value).pad2 = now16().to_ne_bytes();
+            if closes(ctx, IP6_SPORT, proto) {
+                (*value).flags |= FLOW_CLOSING;
+            }
+        }
+    }
     hops_ok(ctx)?;
     let (result, fib) = fib6(ctx, proto, flow.address, flow.other, 0)?;
     if !forwarded(result) {
@@ -1720,6 +1883,9 @@ fn nodeport_forward6(skb: *mut __sk_buff) -> i32 {
     // SAFETY: the slot ingress6 (and new_flow6) filled; read only.
     let state = unsafe { &*state };
     if state.flow.flags & FLOW_SNAT != 0 {
+        if !live6(&ctx, &state.tuple, &state.flow) {
+            return STALE6;
+        }
         snat_forward6_in(&ctx, &state.tuple, &state.flow).unwrap_or(TC_ACT_OK)
     } else if state.flow.flags & FLOW_DSR != 0 {
         dsr_forward6_in(&ctx, &state.tuple, &state.flow).unwrap_or(TC_ACT_OK)
@@ -1727,6 +1893,37 @@ fn nodeport_forward6(skb: *mut __sk_buff) -> i32 {
         let _ = local6(&ctx, &state.tuple, &state.flow);
         TC_ACT_OK
     }
+}
+/// [`nodeport_forward6`]'s answer for an SNAT flow whose reservation expired
+/// and went to another flow: the classifier starts it again as a new flow.
+const STALE6: i32 = 1000;
+/// [`live4`] for IPv6.
+#[inline(always)]
+fn live6(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> bool {
+    let (proto, client, _, client_port, _) = *tuple;
+    let key = Nodeport6Key {
+        a: flow.address,
+        b: flow.other,
+        ap: flow.port,
+        bp: flow.other_port,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    let Some(value) = NODEPORT6.get_ptr_mut(&key) else {
+        return false;
+    };
+    // SAFETY: an LRU value of this map, read and written in place.
+    unsafe {
+        if (*value).other != client || (*value).other_port != client_port {
+            return false;
+        }
+        (*value).pad2 = now16().to_ne_bytes();
+        if closes(ctx, IP6_SPORT, proto) {
+            (*value).flags |= FLOW_CLOSING;
+        }
+    }
+    true
 }
 /// The route is looked up again rather than kept from a new flow's lookup.
 #[inline(always)]
@@ -1865,11 +2062,15 @@ fn new_flow6_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> O
     let mut other = Nodeport6Value {
         address: front,
         port: front_port,
-        flags: 0,
+        flags: if closes(ctx, IP6_SPORT, proto) {
+            FLOW_CLOSING
+        } else {
+            0
+        },
         pad: 0,
         other: [0; 16],
         other_port: [0; 2],
-        pad2: [0; 2],
+        pad2: now16().to_ne_bytes(),
     };
     let remote = forwarded(result) && out_device == uplink(ctx);
     // As for IPv4: DSR only when this first packet can carry the option.
@@ -2520,9 +2721,21 @@ fn ingress(ctx: &TcContext) -> i32 {
                 0 => TC_ACT_OK,
                 NEW_NAT64 if new_flow64(skb) != 0 => to_v4(skb, false),
                 NEW_NAT64 => TC_ACT_OK,
-                _ => nodeport_forward6(skb),
+                _ => match nodeport_forward6(skb) {
+                    STALE6 => TC_ACT_OK,
+                    verdict => verdict,
+                },
             },
-            STEP_FORWARD => nodeport_forward6(skb),
+            STEP_FORWARD => match nodeport_forward6(skb) {
+                STALE6 => match new_flow6(skb) {
+                    0 | NEW_NAT64 => TC_ACT_OK,
+                    _ => match nodeport_forward6(skb) {
+                        STALE6 => TC_ACT_OK,
+                        verdict => verdict,
+                    },
+                },
+                verdict => verdict,
+            },
             STEP_XLATE_REPLY => to_v4(skb, true),
             STEP_XLATE_FORWARD => to_v4(skb, false),
             STEP_DSR => match dsr6(skb) {
