@@ -16,7 +16,9 @@
 //! iproute2 and root, as kernel-check gives it.
 use flowsdn_bpf_abi::{
     IpCacheKey, RemoteEndpointInfo,
-    policy::{EndpointPolicyKey, HOST_ENDPOINT, PolicyEndpoint, PolicyEntry, PolicyKey, enforce, verdict},
+    policy::{
+        EndpointPolicyKey, HOST_ENDPOINT, PolicyEndpoint, PolicyEntry, PolicyKey, enforce, verdict,
+    },
 };
 use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object, socket_lb::SocketLb};
 use nix::sched::{CloneFlags, unshare};
@@ -188,19 +190,17 @@ fn run(delivery_object: &[u8], lb_object: &[u8]) -> Result<()> {
             "peer to host TCP {DENIED}: {got}: the host firewall did not run after the NodePort program"
         ),
     )?;
-    let counted = delivery
-        .policy()
-        .policy_verdicts()?
-        .iter()
-        .any(|(k, v)| {
-            k.endpoint == HOST_ENDPOINT
-                && k.egress == 0
-                && k.dport.get() == DENIED
-                && k.verdict == verdict::DENIED
-                && v.packets >= 1
-        });
+    let counted = delivery.policy().policy_verdicts()?.iter().any(|(k, v)| {
+        k.endpoint == HOST_ENDPOINT
+            && k.egress == 0
+            && k.dport.get() == DENIED
+            && k.verdict == verdict::DENIED
+            && v.packets >= 1
+    });
     ensure(counted, &format!("no denied verdict for host TCP {DENIED}"))?;
-    println!("PASS peer cannot connect to the host's denied TCP {DENIED} ({got}); the drop is counted");
+    println!(
+        "PASS peer cannot connect to the host's denied TCP {DENIED} ({got}); the drop is counted"
+    );
 
     let out = TcpStream::connect_timeout(&SocketAddr::from(([192, 0, 2, 9], PEER_PORT)), TIMEOUT);
     ensure(
