@@ -152,7 +152,7 @@ impl Endpoint {
 }
 
 fn endpoint_worker(id: u8) -> Result<()> {
-    ensure((1..=3).contains(&id), "invalid endpoint id")?;
+    ensure((1..=4).contains(&id), "invalid endpoint id")?;
     isolate()?;
     say("READY")?;
     let mut lines = std::io::stdin().lock().lines();
@@ -311,6 +311,8 @@ impl State {
                 "fixture/pod1" => 1,
                 "fixture/pod2" => 2,
                 "fixture/pod3" => 3,
+                // The quarantine step's endpoint (#489).
+                "fixture/pod4" => 4,
                 _ => return Err("unknown fixture owner".into()),
             };
             for v6 in [true, false] {
@@ -823,14 +825,14 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
         .map_err(|_| "state")?
         .manager_mut()?
         .set_quarantine(true);
-    let mut third = Endpoint::spawn(3)?;
-    cni(&binary, &temp, "ADD", 3, &third.netns(), &conf, true)?;
+    let mut third = Endpoint::spawn(4)?;
+    cni(&binary, &temp, "ADD", 4, &third.netns(), &conf, true)?;
     third.configure()?;
     let ifindex = {
         let state = state.lock().map_err(|_| "state")?;
         state
             .manager()?
-            .get("cni-attachment-id:cid3:eth0")
+            .get("cni-attachment-id:cid4:eth0")
             .ok_or("quarantined endpoint state")?
             .document
             .get("IfIndex")
@@ -866,7 +868,7 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
         exchange(&mut first, &mut third, v6)?;
         exchange(&mut third, &mut first, v6)?;
     }
-    cni(&binary, &temp, "DEL", 3, &third.netns(), &conf, true)?;
+    cni(&binary, &temp, "DEL", 4, &third.netns(), &conf, true)?;
     drop(third);
     state
         .lock()
