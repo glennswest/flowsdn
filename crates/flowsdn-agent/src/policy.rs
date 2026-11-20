@@ -323,13 +323,7 @@ impl Compiler<'_> {
     /// must agree on what the name maps to; when they do not (or only some
     /// declare it), nothing is allowed to them and it is a problem, since
     /// the datapath tells destinations apart only by identity.
-    fn egress_named(
-        &mut self,
-        policy: &str,
-        id: u32,
-        protocol: u8,
-        name: &str,
-    ) -> Vec<(u32, u16)> {
+    fn egress_named(&mut self, policy: &str, id: u32, protocol: u8, name: &str) -> Vec<(u32, u16)> {
         let declares = |p: &PodInfo| {
             p.named_ports
                 .iter()

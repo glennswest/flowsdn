@@ -290,7 +290,10 @@ fn an_ip_block_still_selects_remote_nodes() {
     }))]);
     let desired = compile(&view, &[]);
     let identities: BTreeSet<u32> = keys_of(&desired).iter().map(|k| k.0).collect();
-    assert!(identities.contains(&(REMOTE_NODE_SCOPE | 1)), "{identities:?}");
+    assert!(
+        identities.contains(&(REMOTE_NODE_SCOPE | 1)),
+        "{identities:?}"
+    );
     assert!(identities.contains(&HOST));
 }
 
@@ -1001,8 +1004,14 @@ fn a_cidr_selects_only_the_remote_nodes_inside_it() {
     v.network_policies = vec![block("192.0.2.0/24", &["192.0.2.3/32"])];
     let excepted = compile(&v, &[]);
     let selected = peers(&excepted);
-    assert!(selected.contains(&n2) && selected.contains(&HOST), "{selected:?}");
-    assert!(!selected.contains(&n3), "the exception's node is selected: {selected:?}");
+    assert!(
+        selected.contains(&n2) && selected.contains(&HOST),
+        "{selected:?}"
+    );
+    assert!(
+        !selected.contains(&n3),
+        "the exception's node is selected: {selected:?}"
+    );
     assert!(!selected.contains(&AGGREGATE_REMOTE_NODE));
 }
 
