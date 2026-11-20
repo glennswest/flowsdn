@@ -393,7 +393,8 @@ fn run(object: &[u8]) -> Result<()> {
     )?;
     println!("PASS maps read back as written; removing the policy endpoint stops enforcement");
     host(&mut lab)?;
-    host_egress(&mut lab)
+    host_egress(&mut lab)?;
+    remote_node_aggregate(&mut lab)
 }
 
 const HOST_ADDR: [u8; 4] = [192, 0, 2, 20];
@@ -841,6 +842,38 @@ fn host_egress(lab: &mut Lab) -> Result<()> {
     )?;
     println!(
         "PASS host egress audit: a would-be drop passes and is counted; egress denied rows counted; removal stops judging"
+    );
+    Ok(())
+}
+
+/// A remote node address with an identity of its own (scope 2, #490):
+/// judged by its specific entry, then the remote-node aggregate (14), as the
+/// agent writes `remote-node` rules.
+fn remote_node_aggregate(lab: &mut Lab) -> Result<()> {
+    const NODE_B: [u8; 4] = [192, 0, 2, 31];
+    let up0 = ifindex("up0")?;
+    lab.identity(IpAddr::V4(Ipv4Addr::from(NODE_B)), (2 << 24) | 1)?;
+    lab.delivery.policy().set_policy_endpoint(
+        up0,
+        PolicyEndpoint {
+            endpoint: HOST_ENDPOINT,
+            flags: enforce::INGRESS,
+        },
+    )?;
+    let frame = v4(TCP, NODE_B, HOST_ADDR, 0, &tcp(47000, 5555, SYN));
+    let got = host_verdict(lab, "from_netdev", up0, &frame)?;
+    if got != SHOT {
+        return Err(format!("node B without a remote-node rule: verdict {got}").into());
+    }
+    host_rule(lab, 14, 0, 0, 0, false)?;
+    let again = v4(TCP, NODE_B, HOST_ADDR, 0, &tcp(47001, 5555, SYN));
+    let got = host_verdict(lab, "from_netdev", up0, &again)?;
+    if got != OK {
+        return Err(format!("node B with a remote-node (14) rule: verdict {got}").into());
+    }
+    lab.delivery.policy().remove_policy_endpoint(up0)?;
+    println!(
+        "PASS a remote node address's own identity (scope 2) is dropped without a rule and allowed by one at the remote-node aggregate (14)"
     );
     Ok(())
 }
