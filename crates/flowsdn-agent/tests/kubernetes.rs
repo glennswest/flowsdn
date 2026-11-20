@@ -2,7 +2,9 @@
 //! Node/Pod lists, a watch event, a watch the server ends, the pool the
 //! agent derives, and a FlowsdnIdentity created for the local Pod while the
 //! remote Pod resolves to an existing one. LB-IPAM takes the Lease and
-//! writes a LoadBalancer Service's ingress address from a pool (#475). No
+//! writes a LoadBalancer Service's ingress address from a pool (#475). The
+//! flowsdn.io watchers wait for their CRDs (#337: a metadata-only list that
+//! lacks FlowsdnIdentity's CRD at first). No
 //! routes are installed (that needs CAP_NET_ADMIN); this is not cluster
 //! acceptance.
 #![cfg(feature = "kubernetes")]
@@ -157,6 +159,35 @@ fn server(
                     String::from_utf8_lossy(&request).contains("Bearer test-token"),
                     "credentials from the kubeconfig"
                 );
+                // The agent's CRD gate (#337): a metadata-only list, without
+                // FlowsdnIdentity's CRD until it is served.
+                if line.starts_with("GET /apis/apiextensions.k8s.io/v1/customresourcedefinitions") {
+                    assert!(
+                        String::from_utf8_lossy(&request).contains("as=PartialObjectMetadataList"),
+                        "the CRD list asks for metadata only"
+                    );
+                    let mut names = vec![
+                        "flowsdnloadbalancerippools.flowsdn.io",
+                        "flowsdnendpoints.flowsdn.io",
+                        "flowsdnnodes.flowsdn.io",
+                    ];
+                    if Instant::now() >= crd_served_at {
+                        names.push("flowsdnidentities.flowsdn.io");
+                    }
+                    let items: Vec<_> = names
+                        .iter()
+                        .map(|n| json!({"metadata": {"name": n}}))
+                        .collect();
+                    let body = json!({"kind": "PartialObjectMetadataList",
+                        "metadata": {"resourceVersion": "5"}, "items": items})
+                    .to_string();
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                    return;
+                }
                 // At the start of a boot the kind is not served yet (#397).
                 if line.starts_with("GET /apis/flowsdn.io/v1alpha1/flowsdnidentities")
                     && Instant::now() < crd_served_at
@@ -389,6 +420,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         // No endpoint is published here (no API thread), so nothing is written.
         endpoint_crd: true,
         node_crd: true,
+        crd_wait_timeout: Duration::from_secs(60),
     };
     let controller = Controller::connect(settings, &dir).expect("connect");
     let (pool4, pool6) = controller.wait_for_pools(true, true).expect("pools");
@@ -407,8 +439,9 @@ fn controller_lists_watches_and_derives_the_pool() {
             let view = lock(&view);
             if view.identities_synced && identities_at.is_none() {
                 let late = Instant::now().saturating_duration_since(crd_served_at);
+                // The gate polls every second (#337), then the list runs.
                 assert!(
-                    late < Duration::from_secs(2),
+                    late < Duration::from_secs(3),
                     "identities listed {late:?} after the CRD was served"
                 );
                 identities_at = Some(late);

@@ -524,3 +524,45 @@ fn shipped_configs_serve_metrics_on_9962() {
         assert_eq!(config.get("metrics-listen"), Some(&json!("127.0.0.1:9962")));
     }
 }
+
+#[test]
+fn the_crd_gate_waits_for_what_the_settings_use() {
+    let parse = |value: Value| {
+        Settings::parse(Some(&value), &env(&[("NODE_NAME", "n1")]))
+            .expect("settings")
+            .expect("enabled")
+    };
+    let defaults = parse(json!({}));
+    assert_eq!(defaults.crd_wait_timeout, std::time::Duration::from_secs(300));
+    assert_eq!(
+        defaults.required_crds().into_iter().collect::<Vec<_>>(),
+        [
+            "flowsdnendpoints.flowsdn.io",
+            "flowsdnidentities.flowsdn.io",
+            "flowsdnl2announcementpolicies.flowsdn.io",
+            "flowsdnloadbalancerippools.flowsdn.io",
+            "flowsdnnodes.flowsdn.io",
+        ]
+    );
+    let policy = parse(json!({"flowsdn-policy": true, "host-firewall": "audit",
+        "identity-allocation": false, "service-lb": false,
+        "endpoint-crd": false, "node-crd": false, "crd-wait-timeout": 30}));
+    assert_eq!(policy.crd_wait_timeout, std::time::Duration::from_secs(30));
+    assert_eq!(
+        policy.required_crds().into_iter().collect::<Vec<_>>(),
+        [
+            "flowsdnclusterwidenetworkpolicies.flowsdn.io",
+            "flowsdnnetworkpolicies.flowsdn.io",
+        ]
+    );
+    for bad in [json!(0), json!(-1), json!("5m"), json!(86_401)] {
+        assert!(
+            Settings::parse(
+                Some(&json!({"crd-wait-timeout": bad})),
+                &env(&[("NODE_NAME", "n1")])
+            )
+            .is_err(),
+            "{bad}"
+        );
+    }
+}

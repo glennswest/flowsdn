@@ -43,6 +43,8 @@ const NOT_FOUND_FLAT: Duration = Duration::from_secs(60);
 const RECONCILE_INTERVAL: Duration = Duration::from_secs(30);
 const ROUTES_FILE: &str = "direct-routes.json";
 const ANNOTATE_INTERVAL: Duration = Duration::from_secs(2);
+/// How often an unchanged "waiting for CRDs" is logged again (#337).
+const CRD_WAIT_LOG: Duration = Duration::from_secs(15);
 const ANNOTATE_RETRY: Duration = Duration::from_secs(30);
 const IDENTITY_INTERVAL: Duration = Duration::from_secs(1);
 const POLICY_INTERVAL: Duration = Duration::from_secs(1);
@@ -258,6 +260,12 @@ impl Controller {
                     ..
                 } = self;
                 let (lb_ipam_on, l2_on) = (settings.lb_ipam_on(), settings.l2_on());
+                // flowsdn.io watchers start once their CRDs exist (#337).
+                let required: BTreeSet<String> =
+                    settings.required_crds().into_iter().map(str::to_owned).collect();
+                let gate = wait_for_crds(&client, &required, settings.crd_wait_timeout, &watch_view)
+                    .boxed_local()
+                    .shared();
                 let local = settings.node_name;
                 let node_view = Arc::clone(&watch_view);
                 let node_lb = lb.clone();
@@ -362,7 +370,8 @@ impl Controller {
                 }
                 if settings.flowsdn_policy {
                     let pod_policy_view = Arc::clone(&watch_view);
-                    parts.push(
+                    parts.push(gated(
+                        gate.clone(),
                         watch_forever(
                             &client,
                             Scope::PodPolicies,
@@ -375,12 +384,13 @@ impl Controller {
                                 view.pod_policies_synced = true;
                             },
                         )
-                        .boxed_local(),
+                        ),
                     );
                 }
                 if host_firewall || settings.flowsdn_policy {
                     let cw_view = Arc::clone(&watch_view);
-                    parts.push(
+                    parts.push(gated(
+                        gate.clone(),
                         watch_forever(
                             &client,
                             Scope::ClusterwidePolicies,
@@ -393,12 +403,13 @@ impl Controller {
                                 view.clusterwide_synced = true;
                             },
                         )
-                        .boxed_local(),
+                        ),
                     );
                 }
                 if settings.identity_allocation {
                     let id_view = Arc::clone(&watch_view);
-                    parts.push(
+                    parts.push(gated(
+                        gate.clone(),
                         watch_forever(
                             &client,
                             Scope::Identities,
@@ -411,7 +422,7 @@ impl Controller {
                                 view.identities_synced = true;
                             },
                         )
-                        .boxed_local(),
+                        ),
                     );
                 }
                 if settings.service_lb {
@@ -464,7 +475,8 @@ impl Controller {
                 }
                 if lb_ipam_on {
                     let pool_view = Arc::clone(&watch_view);
-                    parts.push(
+                    parts.push(gated(
+                        gate.clone(),
                         watch_forever(
                             &client,
                             Scope::LbIpPools,
@@ -477,12 +489,13 @@ impl Controller {
                                 view.lb_pools_synced = true;
                             },
                         )
-                        .boxed_local(),
+                        ),
                     );
                 }
                 if l2_on {
                     let l2_view = Arc::clone(&watch_view);
-                    parts.push(
+                    parts.push(gated(
+                        gate.clone(),
                         watch_forever(
                             &client,
                             Scope::L2Policies,
@@ -495,7 +508,7 @@ impl Controller {
                                 view.l2_policies_synced = true;
                             },
                         )
-                        .boxed_local(),
+                        ),
                     );
                 }
                 runtime.block_on(futures::future::join_all(parts));
@@ -1506,6 +1519,82 @@ fn next_wait(not_found: bool, since_start: Duration, backoff: Duration) -> (Dura
     }
     (backoff, backoff.saturating_mul(2).min(MAX_BACKOFF))
 }
+/// `part` after `gate` (#337: a flowsdn.io watcher after its CRDs exist).
+fn gated<'a>(
+    gate: futures::future::Shared<futures::future::LocalBoxFuture<'a, ()>>,
+    part: impl std::future::Future<Output = ()> + 'a,
+) -> futures::future::LocalBoxFuture<'a, ()> {
+    async move {
+        gate.await;
+        part.await;
+    }
+    .boxed_local()
+}
+
+/// The CRD readiness gate (#337, spec 13 §3.2): list the CRDs as metadata
+/// only, every second, until every `required` name exists. While waiting it
+/// is the `crds` part error; past `timeout` the agent exits, naming the
+/// missing CRDs (the operator registers them).
+async fn wait_for_crds(
+    client: &JsonClient,
+    required: &BTreeSet<String>,
+    timeout: Duration,
+    view: &Shared,
+) {
+    use flowsdn_k8s::register::{CRDS_PATH, listed_names};
+    let started = Instant::now();
+    let mut said: Option<(Vec<String>, Instant)> = None;
+    while !required.is_empty() {
+        let missing: Vec<String> = match client.list_metadata(CRDS_PATH).await {
+            Ok((200, list)) => {
+                let present = listed_names(&list);
+                required
+                    .iter()
+                    .filter(|name| !present.contains(*name))
+                    .cloned()
+                    .collect()
+            }
+            Ok((status, body)) => {
+                crate::log::logln!(
+                    "CRD list: HTTP {status} {}",
+                    body.get("message").and_then(Value::as_str).unwrap_or("")
+                );
+                required.iter().cloned().collect()
+            }
+            Err(error) => {
+                crate::log::logln!("CRD list: {error}");
+                required.iter().cloned().collect()
+            }
+        };
+        if missing.is_empty() {
+            break;
+        }
+        let text = format!("waiting for CRDs: {}", missing.join(", "));
+        if said
+            .as_ref()
+            .is_none_or(|(last, at)| *last != missing || at.elapsed() >= CRD_WAIT_LOG)
+        {
+            crate::log::logln!("{text}");
+            said = Some((missing.clone(), Instant::now()));
+        }
+        lock(view).errors.insert("crds".into(), text);
+        if started.elapsed() >= timeout {
+            crate::log::logln!(
+                "CRDs still missing after {}s: {}; the flowsdn operator (Deployment \
+                 kube-system/flowsdn-operator) registers them; exiting",
+                timeout.as_secs(),
+                missing.join(", ")
+            );
+            std::process::exit(1);
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    lock(view).errors.remove("crds");
+    if !required.is_empty() {
+        crate::log::logln!("CRDs present: {}", required.len());
+    }
+}
+
 async fn watch_forever(
     client: &JsonClient,
     scope: Scope,

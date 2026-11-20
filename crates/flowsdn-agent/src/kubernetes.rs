@@ -99,6 +99,9 @@ pub struct Settings {
     /// `kubernetes.node-crd` (#332), default on: keep this node's
     /// FlowsdnNode ([`crate::node_crd`]).
     pub node_crd: bool,
+    /// `kubernetes.crd-wait-timeout` (#337, seconds, default 300): how long
+    /// the flowsdn.io watchers wait for their CRDs before the agent exits.
+    pub crd_wait_timeout: std::time::Duration,
 }
 /// `kubernetes.host-firewall`: whether the agent filters traffic to the
 /// node itself from FlowsdnClusterwideNetworkPolicy host rules, and whether
@@ -111,6 +114,33 @@ pub enum HostFirewall {
     Enforce,
 }
 impl Settings {
+    /// The flowsdn.io CRDs this configuration uses (#337, spec 13 §3.2):
+    /// the agent's flowsdn.io watchers start only once all exist.
+    pub fn required_crds(&self) -> std::collections::BTreeSet<&'static str> {
+        let mut out = std::collections::BTreeSet::new();
+        if self.identity_allocation {
+            out.insert("flowsdnidentities.flowsdn.io");
+        }
+        if self.lb_ipam_on() {
+            out.insert("flowsdnloadbalancerippools.flowsdn.io");
+        }
+        if self.l2_on() {
+            out.insert("flowsdnl2announcementpolicies.flowsdn.io");
+        }
+        if self.flowsdn_policy {
+            out.insert("flowsdnnetworkpolicies.flowsdn.io");
+        }
+        if self.flowsdn_policy || self.host_firewall != HostFirewall::Off {
+            out.insert("flowsdnclusterwidenetworkpolicies.flowsdn.io");
+        }
+        if self.endpoint_crd {
+            out.insert("flowsdnendpoints.flowsdn.io");
+        }
+        if self.node_crd {
+            out.insert("flowsdnnodes.flowsdn.io");
+        }
+        out
+    }
     /// LB-IPAM runs: `lb-ipam`, with `service-lb` (it reads the Services).
     pub fn lb_ipam_on(&self) -> bool {
         self.lb_ipam && self.service_lb
@@ -229,6 +259,14 @@ impl Settings {
             l2_announcements: flag("l2-announcements", true)?,
             endpoint_crd: flag("endpoint-crd", true)?,
             node_crd: flag("node-crd", true)?,
+            crd_wait_timeout: match object.get("crd-wait-timeout") {
+                None | Some(Value::Null) => std::time::Duration::from_secs(300),
+                Some(value) => value
+                    .as_u64()
+                    .filter(|s| (1..=86_400).contains(s))
+                    .map(std::time::Duration::from_secs)
+                    .ok_or("kubernetes.crd-wait-timeout must be seconds, 1 to 86400")?,
+            },
         }))
     }
 }
