@@ -1036,16 +1036,73 @@ fn dsr_forward4(
     redirect(ctx, result, &fib)
 }
 
-/// On the backend's node: a packet carrying the DSR option leaves the reply
-/// entry [`nodeport4_out`] rewrites by. The packet itself goes on to the pod.
+/// Backend slots a DSR frontend is checked against (finding 0252b1736f32);
+/// a frontend with more backends than this cannot vouch for a DSR packet.
+const DSR_CHECK_SLOTS: u16 = 256;
+/// [`dsr4`]'s answers: no DSR option, an option accepted (the packet goes on
+/// to the pod), an option refused (dropped).
+const DSR_NONE: i32 = 0;
+const DSR_ACCEPT: i32 = 1;
+const DSR_REJECT: i32 = 2;
+
+/// Whether `front` is a frontend in DSR mode (its node-local master carries
+/// `FWD_MODE_DSR`) and `backend` one of its backends. A forged option cannot
+/// then make a reply leave from an address the service does not have.
 #[inline(always)]
-fn dsr_backend4(
-    ctx: &TcContext,
-    tuple: (usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8; 2]),
-) -> Option<()> {
-    let (l4, proto, client, backend, client_port, backend_port) = tuple;
+fn dsr_valid4(front: ([u8; 4], [u8; 2]), proto: u8, backend: ([u8; 4], [u8; 2])) -> bool {
+    let mut key = Lb4Key {
+        address: Be32(front.0),
+        dport: Be16(front.1),
+        backend_slot: 0,
+        proto,
+        scope: 1,
+        pad: [0; 2],
+    };
+    // SAFETY: see lookup4.
+    let Some(service) = (unsafe { LB4_SERVICES.get(&key).copied() }) else {
+        return false;
+    };
+    if service.service_flags() & service_flags::FWD_MODE_DSR == 0 {
+        return false;
+    }
+    for slot in 1..=DSR_CHECK_SLOTS {
+        if slot > service.count {
+            break;
+        }
+        key.backend_slot = slot;
+        // SAFETY: see lookup4.
+        let Some(entry) = (unsafe { LB4_SERVICES.get(&key).copied() }) else {
+            continue;
+        };
+        // SAFETY: see lookup4.
+        let Some(chosen) = (unsafe { LB4_BACKENDS.get(&entry.backend_id()).copied() }) else {
+            continue;
+        };
+        if chosen.address.0 == backend.0 && chosen.port.0 == backend.1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// On the backend's node: a packet carrying the DSR option, from the
+/// classifier on its own stack frame.
+#[inline(never)]
+fn dsr4(skb: *mut __sk_buff) -> i32 {
+    dsr_backend4(&TcContext::new(skb)).unwrap_or(DSR_NONE)
+}
+/// A valid option leaves the reply entry [`nodeport4_out`] rewrites by, and
+/// the packet goes on to the pod; an option naming a frontend that is not in
+/// DSR mode, or a destination that is not one of its backends, is refused.
+#[inline(always)]
+fn dsr_backend4(ctx: &TcContext) -> Option<i32> {
+    let (l4, proto, client, backend, client_port, backend_port) = tuple4(ctx)?;
     if l4 != 42 || ctx.load::<[u8; 2]>(34).ok()? != DSR_OPT4 {
-        return None;
+        return Some(DSR_NONE);
+    }
+    let advertised = (ctx.load::<[u8; 4]>(38).ok()?, ctx.load::<[u8; 2]>(36).ok()?);
+    if !dsr_valid4(advertised, proto, (backend, backend_port)) {
+        return Some(DSR_REJECT);
     }
     let reverse = Nodeport4Key {
         a: backend,
@@ -1057,23 +1114,22 @@ fn dsr_backend4(
         pad: [0; 2],
     };
     let front = Nodeport4Value {
-        address: ctx.load::<[u8; 4]>(38).ok()?,
-        port: ctx.load::<[u8; 2]>(36).ok()?,
+        address: advertised.0,
+        port: advertised.1,
         flags: 0,
         pad: 0,
         other: [0; 4],
         other_port: [0; 2],
         pad2: [0; 2],
     };
-    NODEPORT4.insert(&reverse, &front, 0).ok()
+    // A full table only costs this reply its rewrite; the packet is valid.
+    let _ = NODEPORT4.insert(&reverse, &front, 0);
+    Some(DSR_ACCEPT)
 }
 
 #[inline(always)]
 fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
     let tuple = tuple4(ctx)?;
-    if dsr_backend4(ctx, tuple).is_some() {
-        return Some(TC_ACT_OK);
-    }
     let (l4, proto, client, front, client_port, front_port) = tuple;
     let mut key = Nodeport4Key {
         a: client,
@@ -1131,7 +1187,15 @@ fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
                 pad2: [0; 2],
             };
             let remote = forwarded(result) && fib.ifindex == uplink(ctx);
-            if remote && service.service_flags() & service_flags::FWD_MODE_DSR != 0 {
+            // DSR only when this first packet can carry the option (a bare
+            // header; a TCP SYN, or UDP that fits with it): otherwise the
+            // backend's node would never learn the frontend (finding
+            // 08ad0c4a7dca), so the flow is source-NATed instead.
+            let dsr = remote
+                && service.service_flags() & service_flags::FWD_MODE_DSR != 0
+                && l4 == 34
+                && dsr_option_wanted(ctx, l4, proto, fib.ifindex, 8).unwrap_or(false);
+            if dsr {
                 flow.flags = FLOW_DSR;
                 route = Some((result, fib));
             } else if remote {
@@ -1471,13 +1535,57 @@ const STEP_FORWARD: i32 = 3;
 /// A translated flow's reply and, on the IPv6 side, its forward packet.
 const STEP_XLATE_REPLY: i32 = 4;
 const STEP_XLATE_FORWARD: i32 = 5;
+/// A frame with a Destination Options header: [`dsr6`] judges it.
+const STEP_DSR: i32 = 6;
 
+/// [`dsr_valid4`] for IPv6.
+#[inline(always)]
+fn dsr_valid6(front: ([u8; 16], [u8; 2]), proto: u8, backend: ([u8; 16], [u8; 2])) -> bool {
+    let mut key = Lb6Key {
+        address: front.0,
+        dport: Be16(front.1),
+        backend_slot: 0,
+        proto,
+        scope: 1,
+        pad: [0; 2],
+    };
+    // SAFETY: see lookup6.
+    let Some(service) = (unsafe { LB6_SERVICES.get(&key).copied() }) else {
+        return false;
+    };
+    if service.service_flags() & service_flags::FWD_MODE_DSR == 0 {
+        return false;
+    }
+    for slot in 1..=DSR_CHECK_SLOTS {
+        if slot > service.count {
+            break;
+        }
+        key.backend_slot = slot;
+        // SAFETY: see lookup6.
+        let Some(entry) = (unsafe { LB6_SERVICES.get(&key).copied() }) else {
+            continue;
+        };
+        // SAFETY: see lookup6.
+        let Some(chosen) = (unsafe { LB6_BACKENDS.get(&entry.backend_id()).copied() }) else {
+            continue;
+        };
+        if chosen.address == backend.0 && chosen.port.0 == backend.1 {
+            return true;
+        }
+    }
+    false
+}
+/// [`dsr4`] for IPv6, from the classifier on its own stack frame.
+#[inline(never)]
+fn dsr6(skb: *mut __sk_buff) -> i32 {
+    dsr_backend6(&TcContext::new(skb)).unwrap_or(DSR_NONE)
+}
 /// [`dsr_backend4`] for IPv6: the option is a Destination Options header right
 /// after the fixed one, its next header the L4 protocol.
 #[inline(always)]
-fn dsr_backend6(ctx: &TcContext) -> Option<()> {
+fn dsr_backend6(ctx: &TcContext) -> Option<i32> {
     if ctx.load::<[u8; 2]>(IP6_OPT.checked_add(2)?).ok()? != DSR_OPT6 {
-        return None;
+        return Some(DSR_NONE);
     }
     let proto = ctx.load::<u8>(IP6_OPT).ok()?;
     let l4 = IP6_SPORT.checked_add(usize::try_from(DSR_OPT6_LEN).ok()?)?;
@@ -1499,7 +1607,12 @@ fn dsr_backend6(ctx: &TcContext) -> Option<()> {
         other_port: [0; 2],
         pad2: [0; 2],
     };
-    NODEPORT6.insert(&reverse, &front, 0).ok()
+    // The destination (`reverse.a`, `.ap`) must be one of its backends.
+    if !dsr_valid6((front.address, front.port), proto, (reverse.a, reverse.ap)) {
+        return Some(DSR_REJECT);
+    }
+    let _ = NODEPORT6.insert(&reverse, &front, 0);
+    Some(DSR_ACCEPT)
 }
 
 /// [`nodeport4_in`] for IPv6, up to the flow lookup: fill [`INGRESS6`] and
@@ -1512,8 +1625,7 @@ fn ingress6(skb: *mut __sk_buff) -> i32 {
 fn classify6(ctx: &TcContext) -> Option<i32> {
     let state = INGRESS6.get_ptr_mut(0)?;
     if ctx.load::<u8>(IP6_NEXT).ok()? == IPPROTO_DSTOPTS {
-        let _ = dsr_backend6(ctx);
-        return Some(STEP_PASS);
+        return Some(STEP_DSR);
     }
     let tuple = tuple6(ctx)?;
     let (proto, client, front, client_port, front_port) = tuple;
@@ -1760,7 +1872,11 @@ fn new_flow6_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> O
         pad2: [0; 2],
     };
     let remote = forwarded(result) && out_device == uplink(ctx);
-    if remote && service.service_flags() & service_flags::FWD_MODE_DSR != 0 {
+    // As for IPv4: DSR only when this first packet can carry the option.
+    let dsr = remote
+        && service.service_flags() & service_flags::FWD_MODE_DSR != 0
+        && dsr_option_wanted(ctx, IP6_SPORT, proto, out_device, DSR_OPT6_LEN).unwrap_or(false);
+    if dsr {
         flow.flags = FLOW_DSR;
     } else if remote {
         // Another node's backend: SNAT to this node's address there.
@@ -2409,6 +2525,10 @@ fn ingress(ctx: &TcContext) -> i32 {
             STEP_FORWARD => nodeport_forward6(skb),
             STEP_XLATE_REPLY => to_v4(skb, true),
             STEP_XLATE_FORWARD => to_v4(skb, false),
+            STEP_DSR => match dsr6(skb) {
+                DSR_REJECT => TC_ACT_SHOT,
+                _ => TC_ACT_OK,
+            },
             _ => TC_ACT_OK,
         },
         _ => match xlate4(skb) {
@@ -2416,7 +2536,11 @@ fn ingress(ctx: &TcContext) -> i32 {
             STEP_NEW if new_flow46(skb) != 0 => to_v6(skb, false),
             STEP_NEW => TC_ACT_OK,
             STEP_FORWARD => to_v6(skb, false),
-            _ => ingress4(skb),
+            _ => match dsr4(skb) {
+                DSR_NONE => ingress4(skb),
+                DSR_ACCEPT => TC_ACT_OK,
+                _ => TC_ACT_SHOT,
+            },
         },
     }
 }

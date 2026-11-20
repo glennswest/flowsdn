@@ -285,6 +285,7 @@ const GATEWAY_MAC: [u8; 6] = [2, 0, 0, 0, 0, 0x30];
 /// drop: TCX_NEXT (-1), so the host firewall after them runs (#484).
 const TCX_NEXT: u32 = u32::MAX;
 const TC_ACT_REDIRECT: u32 = 7;
+const TC_ACT_SHOT: u32 = 2;
 
 fn ip(args: &[&str]) -> Result<()> {
     if Command::new("ip").args(args).status()?.success() {
@@ -715,7 +716,9 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         )
         .into());
     }
-    // A UDP packet the option would push over the MTU goes without it.
+    // A new flow whose first packet cannot carry the option is source-NATed,
+    // never sent as DSR without it (finding 08ad0c4a7dca): UDP the option
+    // would push over the MTU, and a TCP segment that is not a SYN.
     let mut big = frame4(17, client, front, 41003, 30095, true);
     big.resize(1514, 0);
     big.splice(16..18, 1500u16.to_be_bytes());
@@ -723,9 +726,45 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     big.splice(38..40, 1480u16.to_be_bytes());
     let check = !(sum(big.get(14..34).ok_or("ip")?, 0) as u16);
     big.splice(24..26, check.to_be_bytes());
-    let out = run_on(lb, "nodeport_ingress", &big, up0, TC_ACT_REDIRECT)?;
-    if out.get(14) != Some(&0x45) || out.len() != 1514 {
-        return Err(format!("DSR too-big UDP: {:?}, {} bytes", out.get(14), out.len()).into());
+    let mid_stream = ack(frame4(6, client, front, 41004, 30095, false), 34)?;
+    for (what, first) in [("too-big UDP", big), ("TCP without SYN", mid_stream)] {
+        let out = run_on(lb, "nodeport_ingress", &first, up0, TC_ACT_REDIRECT)?;
+        let (src, dst, s, d, ip_ok, _) = parse4(&out)?;
+        if out.get(14) != Some(&0x45)
+            || src != front
+            || !(61000..=65535).contains(&s)
+            || (dst, d) != (remote, 8080)
+            || !ip_ok
+        {
+            return Err(format!(
+                "DSR {what}: not source-NATed: {src:?}:{s} -> {dst:?}:{d}, {:?}",
+                out.get(14)
+            )
+            .into());
+        }
+    }
+    // The backend's node refuses an option whose frontend is not a DSR
+    // frontend, or whose destination is not one of its backends (finding
+    // 0252b1736f32): a forged option cannot set a reply's source.
+    let request = frame4(6, client, front, 41005, 30095, false);
+    let valid = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+    let mut forged_front = valid.clone();
+    forged_front.splice(38..42, [192, 0, 2, 99]);
+    let mut forged_port = valid.clone();
+    forged_port.splice(36..38, 30096u16.to_be_bytes());
+    let mut not_backend = valid.clone();
+    not_backend.splice(30..34, [10, 9, 1, 6]);
+    for (what, frame) in [
+        ("an unknown frontend", forged_front),
+        ("a frontend port with no service", forged_port),
+        ("a destination that is not a backend", not_backend),
+    ] {
+        run_on(lb, "nodeport_ingress", &frame, up0, TC_ACT_SHOT)
+            .map_err(|e| format!("DSR option with {what}: {e}"))?;
+        let reply = frame4(6, [10, 9, 1, 6], client, 8080, 41005, false);
+        if run_on(lb, "nodeport_egress", &reply, up0, TCX_NEXT)? != reply {
+            return Err(format!("DSR option with {what} left a reply rewrite").into());
+        }
     }
 
     let mut option6 = vec![2, 0x1b, 20];
@@ -777,8 +816,26 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     if out.get(20) != Some(&6) || (src, dst, d) != (client6, remote6, 8080) || !l4_ok {
         return Err(format!("DSR IPv6 later segment: {src:?} -> {dst:?}:{d}").into());
     }
+    // IPv6: a forged option (frontend, or a destination not a backend) drops.
+    let request = frame6(6, client6, front6, 41105, 30095, false);
+    let valid = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+    let mut forged_front = valid.clone();
+    if let Some(byte) = forged_front.get_mut(73) {
+        *byte = 0x99;
+    }
+    let mut not_backend = valid.clone();
+    if let Some(byte) = not_backend.get_mut(53) {
+        *byte = 0x06;
+    }
+    for (what, frame) in [
+        ("an unknown frontend", forged_front),
+        ("a destination that is not a backend", not_backend),
+    ] {
+        run_on(lb, "nodeport_ingress", &frame, up0, TC_ACT_SHOT)
+            .map_err(|e| format!("DSR IPv6 option with {what}: {e}"))?;
+    }
     println!(
-        "PASS DSR: to a backend on another node the client's source is kept and the frontend travels in the IPv4 option or IPv6 Destination Options header on a TCP SYN and each UDP packet (not on a later TCP segment, nor on UDP the option would push over the MTU), checksums valid; the backend's node leaves the packet alone and its egress rewrites the reply's source to the frontend"
+        "PASS DSR: to a backend on another node the client's source is kept and the frontend travels in the IPv4 option or IPv6 Destination Options header on a TCP SYN and each UDP packet (not on a later TCP segment); a new flow whose first packet cannot carry it (UDP over the MTU with it, TCP without SYN) is source-NATed instead; checksums valid; the backend's node leaves a valid packet alone and its egress rewrites the reply's source to the frontend, and it drops an option naming a frontend not in DSR mode or a destination not among its backends"
     );
     Ok(())
 }

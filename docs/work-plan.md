@@ -4,6 +4,18 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### socket-lb review findings — #488 (P1), 2026-11-20
+
+- [ ] 0252b1736f32 (security): the backend node accepts a DSR option only when its frontend has a node-local master
+      with FWD_MODE_DSR and the destination is one of its backends (slots 1..=count, at most 256); otherwise drop.
+      `dsr4`/`dsr6` run from the classifier on their own frames (IPv6: new STEP_DSR).
+- [ ] 08ad0c4a7dca: a new remote flow is DSR only when its first packet carries the option (IPv4 bare header + SYN or
+      UDP that fits with it; IPv6 fits); otherwise SNAT.
+- [ ] 1cb155baca89: NAT reservation expiry without changing the pinned value layout: 16-bit last-seen seconds in
+      `pad2`, FLOW_CLOSING (8) on FIN/RST; lifetimes TCP 21600 s / closing 10 s / UDP 60 s; claim reclaims an expired
+      reservation (deleting its stale forward entry); a forward flow whose reservation no longer names it is new.
+- [ ] socket-lb-live steps per finding; objects + lock; kernel-check; docs; stage; close.
+
 ### XDP prefilter and /v1/prefilter — #467 (P3), 2026-11-20
 
 In scope (spec 02 M2, spec 01 maps deferred, spec 00 `enable-xdp-prefilter` default false). Plan:
