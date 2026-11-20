@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#484)
+- **fix:** NodePort TCX programs no longer short-circuit the host firewall (critical review finding 9353481628e3). `nodeport_ingress`/`nodeport_egress` are attached first on an uplink's TCX hooks and returned `TC_ACT_OK` (TCX's final pass) for every packet they did not redirect or drop, so `from_netdev`/`to_netdev`, attached last, never ran on an uplink with NodePort on: host ports the policy denies were reachable and the host's own flows were not tracked. They now return `TCX_NEXT` there; redirect and drop stay final. Rebuilt `socket-lb` object + lock.
+- **test:** Kernel fixture `host-chain-live`: both objects attached to a veth uplink as the agent attaches them, real TCP from a peer namespace (allowed port connects, denied port does not and is counted, a host-started connection is tracked and its reply passes). `socket-lb-live` expects `TCX_NEXT` from the NodePort test runs.
+
 ### 2026-11-20 (#480)
 - **feat:** FlowsdnNodeConfig as an agent configuration source (decision (A) on #480): at start, the Kubernetes-mode agent reads its Node's labels and the FlowsdnNodeConfigs of its namespace; on a selected node, `spec.defaults` keys (an allow-list of flowsdn's own node settings: `egress`, MTUs, pools and gateways, and the `kubernetes.*` behaviour settings) override the configuration file's, in config-name order. Values are JSON when they parse, else text; a config's keys apply together when valid (a pool with its gateway), else one by one, each kept only when the agent's own parse accepts it. Refused keys (unknown, reference option names, paths, node name, kubeconfig, cluster name, invalid values) are logged and `NodeConfigRefused` Events on the Node; `/v1/healthz` `kubernetes.node-config` shows selected, applied and refused.
 

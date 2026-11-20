@@ -901,7 +901,12 @@ not held back (before #402 it was); `kubernetes.flowsdn-policy` still waits for 
   network's NIC, a SLAAC IPv6 on the uplink; not `lo`, not a bridge or bond
   port; #384) and every uplink port (#408), after the NodePort program, so
   NodePort traffic is judged as the Pod's after translation, and `to_netdev`
-  on its egress. Every such address has the host identity while the
+  on its egress. The NodePort programs end a packet's TCX chain only when
+  they redirect (SNAT or DSR to another node, NAT46/64) or drop it; every
+  other packet, and every packet on egress, goes on to the host firewall
+  (`TCX_NEXT`; before #484 they returned a final pass and the firewall never
+  ran on an uplink with NodePort on). `host-chain-live` checks the chain with
+  real connections. Every such address has the host identity while the
   firewall is on. Only packets to (ingress) or from (egress) the node's own
   addresses are looked at; forwarded traffic passes. The host is endpoint
   65536 in the policy maps, under each uplink's interface index.

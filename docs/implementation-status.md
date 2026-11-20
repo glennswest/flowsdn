@@ -111,7 +111,11 @@ pinning or subsystem libraries are absent are **not current status**.
   traffic to the host is judged on their veths (`HOST_PODS`), and every global
   address of the node is the host's, on every interface holding one;
   `policy-live` test-runs both. Host egress rules are gap #477; the first
-  cluster run is #478.
+  cluster run is #478. Since #484 (main): on an uplink with NodePort on, the
+  NodePort programs hand what they do not redirect or drop to the firewall
+  (`TCX_NEXT`); before, they ended the TCX chain and the firewall never ran
+  there. `host-chain-live` attaches both to a veth and checks it with real
+  connections (kernel-check).
 - Several uplinks (#408): discovery, carrier monitor, per-flow ECMP direct
   routes, source rules and tables, failover host address with gratuitous ARP,
   per-port report (`GET /v1/uplinks`). The planner and the netlink messages are
