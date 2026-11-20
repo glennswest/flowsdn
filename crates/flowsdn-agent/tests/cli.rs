@@ -65,3 +65,23 @@ fn non_utf8_unknown_argument_produces_usage_not_a_panic() {
     assert!(error.contains("usage:"));
     assert!(!error.contains("panicked"));
 }
+
+/// `operator` exists only in a Kubernetes build (#337); a bad argument
+/// fails before anything connects.
+#[test]
+fn operator_mode_is_a_kubernetes_build_command() {
+    let help = run(&["operator", "--help"]);
+    let bogus = run(&["operator", "--bogus"]);
+    assert!(!bogus.status.success());
+    if cfg!(feature = "kubernetes") {
+        assert!(help.status.success(), "{help:?}");
+        let text = String::from_utf8(help.stdout).expect("UTF-8");
+        assert!(text.contains("--skip-crd-creation") && text.contains("flowsdn-operator"));
+        let main = String::from_utf8(run(&["--help"]).stdout).expect("UTF-8");
+        assert!(main.contains("flowsdn-agent operator --help"));
+    } else {
+        assert!(!help.status.success());
+        let main = String::from_utf8(run(&["--help"]).stdout).expect("UTF-8");
+        assert!(!main.contains("operator"));
+    }
+}

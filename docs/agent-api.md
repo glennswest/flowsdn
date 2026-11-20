@@ -14,8 +14,8 @@ This is the persisted endpoint and host-scope IPAM API. Built with the
 `kubernetes` feature and configured with a `kubernetes` section, the agent also
 watches Nodes, Pods and (with `service-lb`) Services and EndpointSlices, and
 serves `/v1/ip`, `/v1/service` and `/v1/node/routes` from them. It has no
-identity/policy controllers, operator service, Hubble gRPC observer on 4244, or
-relay. A successful response does not establish a working multi-node pod
+Hubble gRPC observer on 4244 or relay. The flowsdn operator is the same binary
+in another mode, `flowsdn-agent operator` (Kubernetes builds, #337). A successful response does not establish a working multi-node pod
 network. The config response's `ipam-mode: kubernetes` is a compatibility value:
 the agent allocates from its configured local prefixes; with pools `auto` in
 Kubernetes mode that prefix is derived from the Node at startup (see

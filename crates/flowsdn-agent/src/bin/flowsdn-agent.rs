@@ -17,17 +17,31 @@ and loopback from the supplied Rust CNI executable.
 
 The API listens on the Unix socket configured by socket-path.
 GET /v1/healthz reports initial API availability after state restoration.
-It does not report complete pod-network readiness. Kubernetes and policy
-controllers, an operator service, and a Hubble observer/relay are not provided
-by this daemon.
+It does not report complete pod-network readiness. A Hubble observer/relay is
+not provided by this daemon.
 ";
+/// Only an agent built with the `kubernetes` feature has the operator (#337).
+#[cfg(feature = "kubernetes")]
+const OPERATOR_USAGE: &str =
+    "\nOperator (Kubernetes builds): flowsdn-agent operator --help\n";
+#[cfg(not(feature = "kubernetes"))]
+const OPERATOR_USAGE: &str = "";
 
 fn main() -> flowsdn_agent::state::Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     match args.as_slice() {
         [flag] if flag == "--help" || flag == "-h" => {
-            print!("{HELP}");
+            print!("{HELP}{OPERATOR_USAGE}");
             Ok(())
+        }
+        #[cfg(feature = "kubernetes")]
+        [operator, rest @ ..] if operator == "operator" => {
+            if rest.iter().any(|a| a == "--help" || a == "-h") {
+                print!("{}", flowsdn_agent::operator::HELP);
+                return Ok(());
+            }
+            let options = flowsdn_agent::operator::parse(rest)?;
+            Ok(flowsdn_agent::operator::run(&options)?)
         }
         [flag] if flag == "--version" || flag == "-V" => {
             println!("flowsdn-agent {}", env!("CARGO_PKG_VERSION"));

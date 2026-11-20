@@ -14,6 +14,8 @@ pub mod lb_ipam;
 pub mod lease;
 pub mod log;
 #[cfg(feature = "kubernetes")]
+pub mod operator;
+#[cfg(feature = "kubernetes")]
 pub mod node_crd;
 pub mod policy;
 pub mod services;
