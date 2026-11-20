@@ -28,7 +28,10 @@ Design (the operator executable is gap #446, so both run in the Kubernetes-mode 
 - [x] Code at 1890331, lints/fmt 561470c, 7d1e222. sc-build at 7d1e222: `cargo fmt` no diff, `cargo xtask check` (Clippy
       -D warnings incl. indexing/arithmetic, 925 tests, 0 failed; the loopback-API controller test sees the Lease created
       as `local` and edge-lb's status patched with 192.0.2.240, resourceVersion-guarded, and the pool's conditions).
-- [ ] kernel-check (`l2-announce-live`); stage; shipped with stormlb#37's proof.
+- [x] kernel-check at 47a6fa6 on 7.3.4-200.fc44: 21 pass, 0 fail, 2 skip. l2-announce-live: the other namespace's kernel
+      holds a0's MAC REACHABLE for 192.0.2.240 and 2001:db8:30::f0 (1 ARP reply, 1 NA), 192.0.2.241 unresolved, no host
+      address added. (First run failed on the fixture's sysfs ifindex read, #476.)
+- [ ] stage; shipped with proof the Lease is held on a node; edge-lb's address needs the pool and policy from stormcos#385.
 
 ### spec 21 stub marker — #445 (P0), 2026-11-19
 

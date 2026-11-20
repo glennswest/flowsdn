@@ -24,7 +24,7 @@ remote pod-CIDR routes, translates ClusterIP/externalIP/LoadBalancer/NodePort at
 socket (cgroup hooks, ClientIP affinity, traffic policy Local), serves external
 NodePort/LB/externalIP traffic on the uplink (TCX, IPv4 and IPv6, SNAT to other
 nodes' backends), writes Events and the `flowsdn.io/pod-networks` annotation.
-`http-listen` is a loopback read-only TCP listener (#297). Several uplinks (#408, 8480160): every port on a
+`http-listen` is a loopback read-only TCP listener (#297). LoadBalancer Services (#475, 47a6fa6): LB-IPAM under the Lease `kube-system/flowsdn-lb-ipam` writes `status.loadBalancer.ingress` from FlowsdnLoadBalancerIPPools; L2 announcer answers ARP/NDP from AF_PACKET sockets for FlowsdnL2AnnouncementPolicy-selected Services (one node, ETP Local: one with an endpoint); kernel-checked by `l2-announce-live`, pools on nodes wait on stormcos#385. Several uplinks (#408, 8480160): every port on a
 node address's subnet with carrier carries per-flow ECMP routes, with source rules per address, a failover /32 + GARP
 while a port is down, `GET /v1/uplinks` and `kubernetes.uplinks`; kernel-checked by `uplinks-live`, not yet on a two-port node. Also implemented: identity allocation (#291), NetworkPolicy enforcement in the
 datapath (ADR-0021), flowsdn policy kinds (`kubernetes.flowsdn-policy`), host

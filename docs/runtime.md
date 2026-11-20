@@ -640,6 +640,11 @@ on other nodes get none of it; spread over every endpoint needs
 address). A pool and a policy for a LAN are in
 [deploy/stormcos/README.md](../deploy/stormcos/README.md#loadbalancer-services).
 
+Verified by unit tests, the loopback API-server test (Lease taken, Service
+status patched) and the `l2-announce-live` kernel run (another namespace's
+kernel resolves the addresses to the answering interface); it has not served a
+Service on a node yet.
+
 ### NetworkPolicy enforcement (#292)
 
 Until the FlowsdnIdentity list first succeeds, `podSelector` peers allow nothing while isolation already applies, so traffic a policy allows from a selected peer is dropped (#401). `ipBlock` peers and policies with no peers are not affected.
