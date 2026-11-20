@@ -239,7 +239,8 @@ impl JsonClient {
         Ok(())
     }
     /// One JSON request to an API `path` (absolute, with any query string):
-    /// create, read, patch or delete an object. Returns the HTTP status and the
+    /// create, read, patch (a merge patch, or a JSON patch when `body` is a
+    /// list) or delete an object. Returns the HTTP status and the
     /// response body (`Null` when empty), bounded like a list. A non-success
     /// status is returned, not an error, so the caller can handle 404/409.
     pub async fn send_json(
@@ -257,8 +258,15 @@ impl JsonClient {
             ),
             None => Body::empty(),
         };
+        // A PATCH body that is a list is an RFC 6902 JSON patch (spec 13
+        // §3.9: the FlowsdnEndpoint status write tests the UID first); an
+        // object is a merge patch.
         let content_type = if method == http::Method::PATCH {
-            "application/merge-patch+json"
+            if body.is_some_and(Value::is_array) {
+                crate::patch::CONTENT_TYPE
+            } else {
+                "application/merge-patch+json"
+            }
         } else {
             crate::JSON_CONTENT_TYPE
         };
