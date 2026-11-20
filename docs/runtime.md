@@ -477,7 +477,14 @@ redirected to the client. The other node must not masquerade that reply; it
 is the reply of a connection its conntrack saw arrive, which masquerade rules
 leave alone. Every direction is kept per flow in the LRU
 `flowsdn_nodeport4_nat` / `flowsdn_nodeport6_nat` maps (64Ki entries each), so
-a connection keeps its backend and NAT port. A packet the FIB cannot route,
+a connection keeps its backend and NAT port. A NAT port's reservation is
+renewed by every packet of its flow, in either direction, and expires after
+6 h without traffic for TCP, 10 s after a FIN or RST, and 60 s for other
+protocols (#488). A new flow that finds an expired reservation on the port
+it tries takes it over, and the old flow's forward entry is dropped; a
+known flow whose reservation another flow took starts again as a new flow.
+So closed connections never hold the 4536 ports of a backend. NAT46/64
+reservations do not expire yet (#494). A packet the FIB cannot route,
 with TTL 1, or for which no NAT port is free within eight tries passes
 untranslated, and so does an IPv6 packet with extension headers before its
 TCP/UDP header (fragments among them).
@@ -494,7 +501,7 @@ and swaps it in whole as an inner map of `flowsdn_lb4_maglev` /
 backends and before the master entry, which carries the algorithm. A Maglev
 master without a table picks at random. The socket LB (clients inside the
 cluster) always picks at random.
-Other packets pass untouched; the programs never drop. `GET /v1/service` gives
+Other packets pass untouched; the only drop is a refused DSR option (below). `GET /v1/service` gives
 each frontend's `flags.type` (`ClusterIP`, `ExternalIPs`, `LoadBalancer`,
 `NodePort`) and `frontend-address.scope` (`external` for the socket LB's copy,
 `node-local` for the uplink copy).
@@ -634,14 +641,21 @@ uplink's `nodeport_ingress` DNATs the packet, keeps its source, and on a TCP SYN
 or a UDP packet adds the frontend as an option (spec 02 §2.5: IPv4 option `0x9a`,
 IPv6 24-byte Destination Options type `0x1B`), then redirects it by the FIB. On
 the backend's node `nodeport_ingress` records the frontend from the option, and
-`nodeport_egress` rewrites the reply's source to it. `GET /v1/service` shows
-`forwarding-mode: dsr`.
+`nodeport_egress` rewrites the reply's source to it. It accepts an option
+only when the frontend it names is a DSR frontend on this node too and the
+packet's destination is one of that frontend's backends (at most the first
+256 checked); any other option drops the packet, so a forged one cannot set a
+reply's source (#488). The client's source cannot vouch for the node that
+added the option. `GET /v1/service` shows `forwarding-mode: dsr`.
 
 Every node on the path must run these programs and the network must carry a
 reply whose source is the frontend. Only option dispatch exists (no IPIP or
-Geneve). A UDP packet the option would push over the device's MTU is sent without
-it, and no ICMP error is produced: if it opens the flow, the reply keeps the
-backend's source. Verified by kernel test runs only (`socket-lb-live`); it has not
+Geneve). A new flow whose first packet cannot carry the option (UDP the
+option would push over the device's MTU, an IPv4 header with options
+already, a TCP segment that is not a SYN) is source-NATed like an SNAT flow
+instead (#488), so its reply still comes back through this node. A later UDP
+packet of a DSR flow that the option would push over the MTU is sent
+without it; the backend's node already has the frontend. Verified by kernel test runs only (`socket-lb-live`); it has not
 carried traffic between two nodes.
 
 ### CRDs and the operator (#337)

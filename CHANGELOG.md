@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#488)
+- **fix:** DSR options are validated on the backend's node (finding 0252b1736f32): the option's frontend must be a DSR frontend there and the packet's destination one of its backends; any other option drops the packet, so a forged option cannot give a local backend's replies an arbitrary source. IPv4 and IPv6, each on its own BPF frame.
+- **fix:** A new DSR flow whose first packet cannot carry the option (UDP over the MTU with it, IPv4 options already present, TCP without SYN) is source-NATed instead of sent untracked (finding 08ad0c4a7dca).
+- **fix:** NodePort NAT port reservations expire (finding 1cb155baca89): renewed per packet, TCP 6 h, 10 s after FIN/RST, 60 s otherwise; a claim takes over an expired reservation (dropping its stale forward entry) and a flow whose reservation went elsewhere starts again. Last-seen seconds and the closing bit live in the value's padding, so the pinned maps keep their layout; claim keys are built in a per-CPU scratch map (`flowsdn_nodeport_natkeys`) for the stack limit. NAT46/64 reservations do not expire yet (#494).
+- **test:** `socket-lb-live`: forged IPv4/IPv6 options dropped, SNAT fallback for too-big UDP and mid-stream TCP, and NAT expiry (3000 closed TCP connections, then 3000 more 12 s later; the same for UDP across 62 s; each round over 90% translated against a 4536-port pool).
+
 ### 2026-11-20 (#467)
 - **feat:** XDP prefilter (the reference's `enable-xdp-prefilter`): `xdp_prefilter` in the local-delivery object drops frames whose IPv4/IPv6 source is in `flowsdn_cidr_v{4,6}_fix` (hash, host prefixes) or `_dyn` (LPM); with `kubernetes.xdp-prefilter` (default false) the agent attaches it to the uplinks (native, else generic) and serves `GET`/`PATCH`/`DELETE /v1/prefilter` (`Prefilter {spec, status.realized}`, revision from 1, stale revision 500, invalid CIDR 461, failed writes undone). Loader: `PrefilterMaps`, `attach_prefilter`/`detach_prefilter`. Rebuilt local-delivery object + lock. Spec 01/02/08 amendments.
 - **test:** Kernel fixture `prefilter-live` (test runs through all four maps, a real attach dropping a denied peer's UDP); unit tests of the revision and CIDR rules.

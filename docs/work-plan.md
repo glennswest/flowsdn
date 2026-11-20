@@ -6,15 +6,19 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### socket-lb review findings — #488 (P1), 2026-11-20
 
-- [ ] 0252b1736f32 (security): the backend node accepts a DSR option only when its frontend has a node-local master
+- [x] 0252b1736f32 (security): the backend node accepts a DSR option only when its frontend has a node-local master
       with FWD_MODE_DSR and the destination is one of its backends (slots 1..=count, at most 256); otherwise drop.
       `dsr4`/`dsr6` run from the classifier on their own frames (IPv6: new STEP_DSR).
-- [ ] 08ad0c4a7dca: a new remote flow is DSR only when its first packet carries the option (IPv4 bare header + SYN or
+- [x] 08ad0c4a7dca: a new remote flow is DSR only when its first packet carries the option (IPv4 bare header + SYN or
       UDP that fits with it; IPv6 fits); otherwise SNAT.
-- [ ] 1cb155baca89: NAT reservation expiry without changing the pinned value layout: 16-bit last-seen seconds in
+- [x] 1cb155baca89: NAT reservation expiry without changing the pinned value layout: 16-bit last-seen seconds in
       `pad2`, FLOW_CLOSING (8) on FIN/RST; lifetimes TCP 21600 s / closing 10 s / UDP 60 s; claim reclaims an expired
       reservation (deleting its stale forward entry); a forward flow whose reservation no longer names it is new.
-- [ ] socket-lb-live steps per finding; objects + lock; kernel-check; docs; stage; close.
+- [x] socket-lb-live steps per finding; objects + lock; kernel-check; docs; stage; close.
+- [x] DSR fixes 5ebae69 + object; kernel-check (DSR only) 24/0/2. NAT expiry + scratch keys (first link failed on the
+      BPF stack limit in new_flow6/ingress4: keys moved to `flowsdn_nodeport_natkeys`), object ff03ffd (sha256
+      505f361c…). kernel-check at ff03ffd on 7.3.4: 24 pass 0 fail 2 skip, 995 tests 0 failed, fmt clean; socket-lb-live
+      28 PASS incl. NAT expiry TCP 2941→2929/3000, UDP 2945→2955/3000. NAT46/64 reservations excluded: #494 (gap).
 
 ### XDP prefilter and /v1/prefilter — #467 (P3), 2026-11-20
 
