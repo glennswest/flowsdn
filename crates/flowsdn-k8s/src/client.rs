@@ -249,6 +249,27 @@ impl JsonClient {
         path: &str,
         body: Option<&Value>,
     ) -> Result<(u16, Value), Error> {
+        self.send_accepting(method, path, body, crate::JSON_CONTENT_TYPE)
+            .await
+    }
+    /// A `GET` of a list as metadata only (`PartialObjectMetadataList`, spec
+    /// 13 §3.2): the agent's CRD readiness gate never downloads a schema.
+    pub async fn list_metadata(&self, path: &str) -> Result<(u16, Value), Error> {
+        self.send_accepting(
+            http::Method::GET,
+            path,
+            None,
+            crate::register::METADATA_LIST_ACCEPT,
+        )
+        .await
+    }
+    async fn send_accepting(
+        &self,
+        method: http::Method,
+        path: &str,
+        body: Option<&Value>,
+        accept: &str,
+    ) -> Result<(u16, Value), Error> {
         if !path.starts_with('/') || path.contains(['\r', '\n', ' ']) {
             return Err(Error("invalid Kubernetes API path".into()));
         }
@@ -273,7 +294,7 @@ impl JsonClient {
         let mut request = Request::builder()
             .method(method)
             .uri(path)
-            .header(ACCEPT, crate::JSON_CONTENT_TYPE)
+            .header(ACCEPT, accept)
             .header(http::header::CONTENT_TYPE, content_type)
             .body(content)
             .map_err(|_| Error("invalid Kubernetes request".into()))?;

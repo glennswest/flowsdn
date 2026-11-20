@@ -7,6 +7,7 @@ pub mod crd;
 pub mod kinds;
 pub mod patch;
 pub mod plan;
+pub mod register;
 pub mod schema;
 pub mod version;
 pub mod watch;
