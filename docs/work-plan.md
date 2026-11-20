@@ -11,12 +11,13 @@ acceleration, which flowsdn has not: out). Selected devices: uplinks (#408) with
 `kubernetes.l2-neigh-discovery` (reference `enable-l2-neigh-discovery`, default false). rtnetlink 0.23 /
 netlink-packet-route 0.33 have FibMatch|LookupTable, Oif, MultiPath, NeighbourFlags::ExtLearned,
 NeighbourExtFlags::Managed, NeighbourState::None (read from the crates.io sources, checksums = Cargo.lock).
-- [ ] connector `neighbor.rs`: `next_hops(ip, oif)` (RTM_GETROUTE FIB match; gateway / multipath gateways on oif /
+- [x] connector `neighbor.rs`: `next_hops(ip, oif)` (RTM_GETROUTE FIB match; gateway / multipath gateways on oif /
       on-link; ENETUNREACH/EHOSTUNREACH = none), `learned()`, `add_managed`, `delete_neighbor`, `probe_managed()`.
-- [ ] agent `neighbors.rs`: planner (forwardable, devices, desired, prune diff), calculator (15 s limit, 5 min
+- [x] agent `neighbors.rs`: planner (forwardable, devices, desired, prune diff), calculator (15 s limit, 5 min
       resync), thread `flowsdn-neighbors`, health part `neighbors`, start probe fatal when on.
-- [ ] fixture `neighbors-live` (kernel-check), unit tests, docs (runtime, agent API, spec 10 amendment, status),
-      changelog; sc-build + kernel-check; stage; ship; close.
+- [x] fixture `neighbors-live`, unit tests, docs: code 43f9272, docs 3ef0fee, fmt eb25789. sc-build (fmt fallback) +
+      kernel-check on 7.3.4: 990 tests 0 failed, 23 pass 0 fail 2 skip, neighbors-live 5 PASS (kernel resolved the
+      managed entry: `managed extern_learn REACHABLE`). Strict sc-build at eb25789 green. Stage, ship, close.
 
 ### PacketDrop Events — #470 (P3), 2026-11-20
 
