@@ -65,6 +65,19 @@ The Rust types and T-CRD-3/4/5/7 of each group are open issues #331–#336
 #337. §4.7 no longer
 grants `flowsdnendpoints/status`: the endpoint CRD has no status subresource.
 
+## Endpoint, identity and node kinds amendment — #332, 2026-11-20
+
+`flowsdn_k8s::kinds` holds the Rust types of FlowsdnEndpoint,
+FlowsdnEndpointSlice, FlowsdnIdentity, FlowsdnNode and FlowsdnNodeConfig.
+**DEVIATION (§11.2):** they are plain serde structs with `ObjectMeta`, not
+`#[derive(CustomResource)]` (three of the five kinds have no `spec`), and the
+tests use no schemars or proptest: T-CRD-3 is schema-driven (an instance with
+every property and one with only the required ones round-trip, and what the
+type writes passes `flowsdn_k8s::schema` strict validation), T-CRD-7 is 300
+seeded random schema-valid documents per kind. T-CRD-4/5 are as written. The
+agent's FlowsdnEndpoint and FlowsdnNode writers follow §3.9; identity GC,
+node GC and FlowsdnEndpointSlice batching wait on the operator (#479).
+
 ## 1. Scope
 
 In scope:
