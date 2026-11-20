@@ -4,6 +4,19 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### NodePort TCX programs short-circuit the host firewall — #484 (P0), finding 9353481628e3, 2026-11-20
+
+`nodeport_ingress`/`nodeport_egress` attach first on the uplink's TCX hooks and return TC_ACT_OK (TCX_PASS) for
+everything they do not redirect or drop; TCX stops the chain there, so `from_netdev`/`to_netdev` (attached last)
+never ran on an uplink with NodePort on. Fix: both classifiers return TCX_NEXT (-1) where they returned TC_ACT_OK
+(redirect and drop unchanged), so the host firewall judges the (translated) packet.
+- [ ] BPF: `next()` at both entry points; socket-lb object + lock + embedded copy rebuilt through sc-build.
+- [ ] socket-lb-live expects TCX_NEXT from the NodePort test runs instead of TC_ACT_OK.
+- [ ] New fixture `host-chain-live`: both chains attached to a real veth uplink (socket-lb `attach_uplink`, then
+      `attach_host`), traffic from a peer netns: an allowed host port connects, a denied one does not, a connection
+      the host starts is in the policy flow map (to_netdev ran). Fails on the old object (negative control).
+- [ ] Docs (bpftest README, implementation-status, changelog), sc-build, kernel-check, stage, ship.
+
 ### FlowsdnNodeConfig as an agent configuration source — #480 (P2), 2026-11-20
 
 Decision (master 2026-11-20, on the issue, from the owner's standing rules): (A) — `spec.defaults` keys are flowsdn's own
