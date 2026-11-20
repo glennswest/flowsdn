@@ -37,8 +37,7 @@ fn view() -> View {
     }];
     view.pod_identities
         .insert(("shop".into(), "web".into()), 5000);
-    view.identities
-        .insert(5000, vec!["k8s:app=web".into()]);
+    view.identities.insert(5000, vec!["k8s:app=web".into()]);
     view.policy_status = json!({"endpoints": [
         {"id": 7, "ingress-enforced": true, "egress-enforced": false}
     ]});
@@ -86,9 +85,7 @@ fn the_object_carries_the_endpoint_and_is_owned_by_the_pod() {
     let crd = flowsdn_k8s::crd::owned_crds()
         .expect("CRDs")
         .into_iter()
-        .find(|c| {
-            c.document.pointer("/spec/names/plural") == Some(&json!("flowsdnendpoints"))
-        })
+        .find(|c| c.document.pointer("/spec/names/plural") == Some(&json!("flowsdnendpoints")))
         .expect("CRD");
     let schema = crd
         .document
@@ -153,10 +150,9 @@ impl Api {
     }
 }
 fn pass(writer: &mut Writer, want: &BTreeMap<Key, Desired>, api: &mut Api) -> Outcome {
-    let mut send =
-        |m: http::Method, p: &str, b: Option<&Value>| -> Result<(u16, Value), String> {
-            Ok(api.send(m, p, b))
-        };
+    let mut send = |m: http::Method, p: &str, b: Option<&Value>| -> Result<(u16, Value), String> {
+        Ok(api.send(m, p, b))
+    };
     writer.sync(want, &mut send)
 }
 
@@ -270,12 +266,19 @@ fn a_failed_uid_test_starts_over_and_a_refusal_is_reported() {
     api.answer("PATCH", 422, json!({"message": "test failed"}));
     let outcome = pass(&mut writer, &desired(&view), &mut api);
     assert!(outcome.failures.is_empty());
-    assert_eq!(writer.held(), 0, "forgotten: the next pass creates or adopts");
+    assert_eq!(
+        writer.held(),
+        0,
+        "forgotten: the next pass creates or adopts"
+    );
 
     api.answer("POST", 500, json!({"message": "boom"}));
     let outcome = pass(&mut writer, &desired(&view), &mut api);
     assert_eq!(
         outcome.failures,
-        vec![(("shop".to_owned(), "web".to_owned()), "HTTP 500 boom".to_owned())]
+        vec![(
+            ("shop".to_owned(), "web".to_owned()),
+            "HTTP 500 boom".to_owned()
+        )]
     );
 }

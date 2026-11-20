@@ -98,7 +98,14 @@ fn protocol_name(protocol: u8) -> Option<&'static str> {
 fn direction(enforcing: bool) -> FlowsdnEndpointStatusPolicyDirection {
     FlowsdnEndpointStatusPolicyDirection {
         enforcing,
-        state: Some(if enforcing { "enforcing" } else { "non-enforcing" }.into()),
+        state: Some(
+            if enforcing {
+                "enforcing"
+            } else {
+                "non-enforcing"
+            }
+            .into(),
+        ),
         ..FlowsdnEndpointStatusPolicyDirection::default()
     }
 }
@@ -139,12 +146,12 @@ pub fn object(view: &View, endpoint: &LocalEndpoint, pod: &PodInfo) -> FlowsdnEn
         .map(ToString::to_string);
     let sandbox = field("sandbox");
     let interface = field("interface");
-    let identity = view
-        .pod_identity(&pod.namespace, &pod.name)
-        .map(|id| FlowsdnEndpointStatusIdentity {
-            id: Some(i64::from(id)),
-            labels: view.identities.get(&id).cloned(),
-        });
+    let identity =
+        view.pod_identity(&pod.namespace, &pod.name)
+            .map(|id| FlowsdnEndpointStatusIdentity {
+                id: Some(i64::from(id)),
+                labels: view.identities.get(&id).cloned(),
+            });
     let (ingress, egress) = view
         .policy_status
         .get("endpoints")
@@ -293,7 +300,10 @@ impl Writer {
                 }
             }
         }
-        if self.unserved.is_some_and(|at| at.elapsed() < UNSERVED_RETRY) {
+        if self
+            .unserved
+            .is_some_and(|at| at.elapsed() < UNSERVED_RETRY)
+        {
             outcome.unserved = true;
             return outcome;
         }
@@ -302,7 +312,9 @@ impl Writer {
             let status = serde_json::to_value(&want.object.status).unwrap_or(Value::Null);
             let result = match self.written.get(key) {
                 Some(written) if written.status == status => continue,
-                Some(written) => self.update(key, written.uid.clone(), &want.pod_uid, &status, send),
+                Some(written) => {
+                    self.update(key, written.uid.clone(), &want.pod_uid, &status, send)
+                }
                 None => self.create(key, want, &status, send),
             };
             match result {

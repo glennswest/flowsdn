@@ -382,7 +382,6 @@ pub struct FlowsdnEndpointStatusPolicyDirection {
     pub state: Option<String>,
 }
 
-
 /// FlowsdnEndpointSlice contains a group of Coreflowsdnendpoints.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct FlowsdnEndpointSlice {
