@@ -35,9 +35,11 @@ Rust types exist for FlowsdnEndpoint, FlowsdnEndpointSlice, FlowsdnIdentity,
 FlowsdnNode and FlowsdnNodeConfig (`flowsdn_k8s::kinds`, #332, checked against
 their schemas by `tests/kinds.rs`), and the agent writes FlowsdnEndpoint and
 FlowsdnNode ([runtime](runtime.md#flowsdnendpoint-and-flowsdnnode-332)).
-What does not exist yet: registration by an operator (stormcos applies `crds/` directly,
-which is the reference's `--skip-crd-creation` mode), the agent's CRD readiness gate,
-Rust types of the other kinds, and the controllers that write their `status`, emit
+The operator (`flowsdn-agent operator`, #337) registers the 22 CRDs from these
+files (spec 13 §3.2), and the agent waits for the ones its configuration uses
+before its flowsdn.io watchers start
+([runtime](runtime.md#crds-and-the-operator-337)).
+What does not exist yet: Rust types of the other kinds, and the controllers that write their `status`, emit
 events and garbage collect (#479 for the endpoint, identity and node kinds). Applying a `FlowsdnNetworkPolicy` today stores it, validated, but nothing
 enforces it. Each of these is tracked per group in the issues linked from #325.
 

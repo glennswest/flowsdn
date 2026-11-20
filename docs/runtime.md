@@ -53,6 +53,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.l2-announcements` | `true` | Answer ARP and NDP for the load-balancer and external addresses FlowsdnL2AnnouncementPolicies give this node ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb` and `node-port`; nothing is announced without a policy. |
 | `kubernetes.endpoint-crd` | `true` | Keep a FlowsdnEndpoint for each local Pod endpoint ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). Nothing is written while the kind is not served. |
 | `kubernetes.node-crd` | `true` | Keep this node's FlowsdnNode ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). |
+| `kubernetes.crd-wait-timeout` | `300` | Seconds the flowsdn.io watchers wait for the CRDs this configuration uses before the agent exits ([CRDs and the operator](#crds-and-the-operator-337)). 1 to 86400. |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
 | `kubernetes.flowsdn-policy` | `false` | Enforce the Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy ([Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292)). The CRDs must exist: the policy thread waits for both lists, NetworkPolicy enforcement included. |
@@ -582,6 +583,34 @@ it, and no ICMP error is produced: if it opens the flow, the reply keeps the
 backend's source. Verified by kernel test runs only (`socket-lb-live`); it has not
 carried traffic between two nodes.
 
+### CRDs and the operator (#337)
+
+- **The operator** is `flowsdn-agent operator` (Kubernetes builds; the
+  stormcos edition runs it as the host-network Deployment
+  `kube-system/flowsdn-operator`, `64-flowsdn-operator.yaml`). It holds the
+  Lease `kube-system/flowsdn-operator` (30 s) and, while leading, registers
+  the 22 flowsdn.io CRDs at once and every five minutes (spec 13 §3.2):
+  `GET`; absent: `POST` (409 is success); present without a schema or with
+  an older `io.flowsdn.k8s.crd.schema.version` label: `PUT` this build's
+  labels and spec (409: re-read and retry, 500 ms for up to 60 s); a newer
+  label is left alone. Then it waits up to 60 s for `Established=True`.
+  `NamesAccepted=False` exits the operator naming the CRD; other failures
+  are retried after 30 s. The payloads are the generated `crds/` files,
+  embedded in the binary. `--skip-crd-creation` leaves the CRDs to an
+  administrator (the Helm chart installs its `crds/`).
+- **The agent's gate.** Before any flowsdn.io watcher starts (identities,
+  LB pools, L2 policies, the policy kinds), the agent lists the CRDs as
+  metadata only (`PartialObjectMetadataList`) every second until every CRD
+  its configuration uses exists: FlowsdnIdentity with
+  `identity-allocation`, FlowsdnLoadBalancerIPPool with LB-IPAM,
+  FlowsdnL2AnnouncementPolicy with L2 announcements,
+  FlowsdnNetworkPolicy with `flowsdn-policy`,
+  FlowsdnClusterwideNetworkPolicy with it or the host firewall,
+  FlowsdnEndpoint with `endpoint-crd`, FlowsdnNode with `node-crd`. Node,
+  Pod and Service watches do not wait. While it waits, `crds` is a part
+  error naming the missing ones; after `kubernetes.crd-wait-timeout`
+  (300 s) the agent exits with that list (the kubelet restarts it).
+
 ### FlowsdnEndpoint and FlowsdnNode (#332)
 
 The Kubernetes-mode agent publishes its endpoints and its node as
@@ -620,14 +649,14 @@ The Kubernetes-mode agent publishes its endpoints and its node as
   `flowsdn-node` (`served`).
 - **Not here.** Deleting the FlowsdnNode of a removed Node, FlowsdnIdentity
   garbage collection and FlowsdnEndpointSlice batching are the operator's
-  (#479, after the operator executable #446). What a FlowsdnNodeConfig
+  (#479). What a FlowsdnNodeConfig
   overrides is an open decision (#480); the agent does not read it.
 
 ### LoadBalancer Services (#475)
 
 A `type: LoadBalancer` Service gets its address from flowsdn and is reached
 from the node's LAN without a router or BGP. Three parts, all in the
-Kubernetes-mode agent (there is no operator executable, #446):
+Kubernetes-mode agent (the operator only registers CRDs, #337):
 
 - **LB-IPAM** (`kubernetes.lb-ipam`). One agent at a time holds the Lease
   `kube-system/flowsdn-lb-ipam` (taken over when its holder stops renewing for

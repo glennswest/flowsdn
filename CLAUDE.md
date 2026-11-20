@@ -31,7 +31,7 @@ datapath (ADR-0021), flowsdn policy kinds (`kubernetes.flowsdn-policy`), host
 firewall (`audit` in the stormcos config), UDP socket termination, Maglev, DSR by
 IP option, NAT46/64 (the last three off by default, kernel test runs only), CNI
 ADD timing (`/v1/cni/timing`), `cargo xtask kernel-check`. Open gaps, each an
-issue: operator executable (#446), CRD registration (#337), Hubble observer/relay
+issue: operator controllers beyond CRD registration (#479; `flowsdn-agent operator`, #337), Hubble observer/relay
 (#293), TCP socket termination (#392), DSR by IPIP/Geneve (#447), L7/FQDN/ICMP
 policy (#448). See
 `docs/runtime.md`, `docs/agent-api.md`, `docs/implementation-status.md` and

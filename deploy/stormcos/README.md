@@ -32,8 +32,10 @@ Kubernetes-mode agent and its runtime, and the edition ships this set with it
   has left `manifests.d` (flowsdn → cilium, rustkube#236). So a live edit does
   not last, `flowsdn-config` included: the applier restores the release's copy
   at its next start. A setting that must stay belongs in the manifest here.
-  `crds/` is not in the golden's `manifests/flowsdn.yaml` and carries no mode;
-  whoever applies it (stormcos#303) chooses.
+  `crds/` is not in the golden's `manifests/flowsdn.yaml` and carries no mode:
+  the operator (`64-flowsdn-operator.yaml`, #337) registers those CRDs itself;
+  stormcos may still apply them (stormcos#303), and the operator then finds
+  them current.
 
 What the node must provide besides the manifests:
 
@@ -54,10 +56,12 @@ while it reinstalls endpoints from state.
 
 [`manifests-kubernetes/crds/`](manifests-kubernetes/crds/) holds the 22
 `flowsdn.io/v1alpha1` CRDs ([reference](../../docs/crds.md)). Apply them before
-any flowsdn custom resource; they are generated, so don't edit them. Until a
-flowsdn operator registers CRDs, stormcos applies them with the other
-manifests. `63-flowsdn-operator-rbac.yaml` creates the operator's
-ServiceAccount and ClusterRole ahead of that operator; the agent's
+any flowsdn custom resource; they are generated, so don't edit them. The
+flowsdn operator (`64-flowsdn-operator.yaml`: `flowsdn-agent operator`, host
+network, #337) registers them under the Lease `kube-system/flowsdn-operator`,
+and agents wait for the ones they use (`kubernetes.crd-wait-timeout`, 300 s,
+then exit). `63-flowsdn-operator-rbac.yaml` is the operator's
+ServiceAccount and ClusterRole; the agent's
 `flowsdn-crds` ClusterRole is in `60-flowsdn-rbac.yaml`. The Kubernetes-mode
 agent consumes FlowsdnIdentity, the policy kinds, FlowsdnLoadBalancerIPPool and
 FlowsdnL2AnnouncementPolicy; the other kinds have no consumer.

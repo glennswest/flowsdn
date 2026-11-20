@@ -88,8 +88,10 @@ The Kubernetes-mode agent also allocates cluster identities for its Pods
 not flowsdn's. Open gaps, each an issue with the `gap` label: L7, FQDN and ICMP
 policy rules (#448), host egress policy (#477), DSR by IPIP or Geneve (#447),
 DSR ICMP errors (#449), NAT46/64 to local backends or in the socket LB (#450),
-TCP socket termination (#392), CRD registration (#337), the operator executable
-(#446) and the Hubble observer/relay (#293). Libraries also implement configuration resolution,
+TCP socket termination (#392), the operator's other controllers (#479) and the
+Hubble observer/relay (#293). The operator (`flowsdn-agent operator`, #337)
+registers the flowsdn.io CRDs under leader election, and the agent's flowsdn.io
+watchers wait for them. Libraries also implement configuration resolution,
 identity and map layouts, a Kubernetes NetworkPolicy importer and policy
 simulator, Maglev tables, BGP codecs/session state, encryption and egress
 plans, proxy ACK handling, flow filtering and cloud request plans. A library or
@@ -131,8 +133,8 @@ from vendored Cilium v1.20.1 CRDs. The manifests are generated into
 `deploy/stormcos/manifests-kubernetes/crds/`, with examples and offline
 accept/reject validation for every kind. The Kubernetes-mode agent writes
 FlowsdnIdentity objects and, with `kubernetes.flowsdn-policy`, reads
-FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy. Nothing registers the
-CRDs (#337) or reconciles the other kinds (no operator, #446); flowsdn must not
+FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy. The operator registers
+the CRDs (#337); nothing reconciles the other kinds yet (#479); flowsdn must not
 adopt or garbage-collect existing `cilium.io` objects.
 
 Compatibility concerns data shape (CNI result, agent API, BPF map layouts),

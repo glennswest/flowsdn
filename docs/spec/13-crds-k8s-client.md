@@ -78,6 +78,19 @@ seeded random schema-valid documents per kind. T-CRD-4/5 are as written. The
 agent's FlowsdnEndpoint and FlowsdnNode writers follow §3.9; identity GC,
 node GC and FlowsdnEndpointSlice batching wait on the operator (#479).
 
+## Registration and readiness gate amendment — #337, 2026-11-20
+
+§3.2 is implemented by `flowsdn_k8s::register` (steps 2-5, payloads from the
+generated `crds/` files so no reference text is in a binary) and the
+operator mode `flowsdn-agent operator` (Lease `kube-system/flowsdn-operator`).
+**DEVIATIONS:** the operator is a mode of the agent binary, which the flowsdn
+golden already carries with its runtime. The readiness gate lists CRDs as
+metadata every second instead of list+watch (same outcome, one request a
+second while waiting), logs on change and every 15 s, and its required set
+is the flowsdn.io kinds the agent's configuration uses (the table above names
+reference kinds flowsdn's agent does not read, such as pod IP pools). The
+timeout is `kubernetes.crd-wait-timeout` in seconds.
+
 ## 1. Scope
 
 In scope:
