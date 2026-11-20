@@ -162,7 +162,9 @@ pub fn apply(
                 continue;
             }
             let Some(text) = value.as_str() else {
-                report.refused.push(refuse("the value must be a string".into()));
+                report
+                    .refused
+                    .push(refuse("the value must be a string".into()));
                 continue;
             };
             pending.push((key, setting(text)));
@@ -170,7 +172,9 @@ pub fn apply(
         // All of this config's keys at once, when that parses.
         let together = pending
             .iter()
-            .try_fold(current.clone(), |doc, (key, value)| with(&doc, key, value.clone()));
+            .try_fold(current.clone(), |doc, (key, value)| {
+                with(&doc, key, value.clone())
+            });
         if let Some(candidate) = together.filter(|c| valid(c).is_ok()) {
             current = candidate;
             for (key, _) in pending {
@@ -185,7 +189,9 @@ pub fn apply(
                 reason,
             };
             let Some(candidate) = with(&current, &key, value) else {
-                report.refused.push(refuse("the agent is not in Kubernetes mode".into()));
+                report
+                    .refused
+                    .push(refuse("the agent is not in Kubernetes mode".into()));
                 continue;
             };
             match valid(&candidate) {
@@ -229,7 +235,8 @@ pub fn fetch(
         ))
         .map_err(|e| e.to_string())?;
     let node_path = format!("/api/v1/nodes/{}", settings.node_name);
-    let configs_path = format!("/apis/flowsdn.io/v1alpha1/namespaces/{namespace}/flowsdnnodeconfigs");
+    let configs_path =
+        format!("/apis/flowsdn.io/v1alpha1/namespaces/{namespace}/flowsdnnodeconfigs");
     let started = Instant::now();
     loop {
         let attempt = || -> Result<(BTreeMap<String, String>, Vec<Value>), String> {

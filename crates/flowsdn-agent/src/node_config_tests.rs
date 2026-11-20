@@ -50,7 +50,10 @@ fn selected_configs_override_agent_settings_in_name_order() {
     ];
     let (merged, report) = apply(&base(), &configs, &labels(), &valid);
     assert_eq!(report.selected, ["a-first", "b-later"]);
-    assert_eq!(merged.pointer("/kubernetes/host-firewall"), Some(&json!("enforce")));
+    assert_eq!(
+        merged.pointer("/kubernetes/host-firewall"),
+        Some(&json!("enforce"))
+    );
     assert_eq!(
         merged.pointer("/kubernetes/lb-sock-terminate-all-protos"),
         Some(&json!(true)),
@@ -59,10 +62,16 @@ fn selected_configs_override_agent_settings_in_name_order() {
     assert_eq!(merged.get("route-mtu"), Some(&json!(1400)));
     assert_eq!(merged.get("egress"), Some(&json!("fib")), "text otherwise");
     assert_eq!(
-        report.applied.get("kubernetes.host-firewall").map(String::as_str),
+        report
+            .applied
+            .get("kubernetes.host-firewall")
+            .map(String::as_str),
         Some("b-later")
     );
-    assert_eq!(report.applied.get("egress").map(String::as_str), Some("a-first"));
+    assert_eq!(
+        report.applied.get("egress").map(String::as_str),
+        Some("a-first")
+    );
     assert!(report.refused.is_empty(), "{:?}", report.refused);
     // The merged document is a configuration the agent accepts.
     assert_eq!(valid(&merged), Ok(()));
@@ -84,7 +93,10 @@ fn unknown_unsafe_and_invalid_keys_are_refused_and_the_rest_applies() {
     )];
     let (merged, report) = apply(&base(), &configs, &labels(), &valid);
     assert_eq!(merged.pointer("/kubernetes/lb-mode"), Some(&json!("dsr")));
-    assert_eq!(merged.pointer("/kubernetes/host-firewall"), Some(&json!("audit")));
+    assert_eq!(
+        merged.pointer("/kubernetes/host-firewall"),
+        Some(&json!("audit"))
+    );
     assert_eq!(merged.pointer("/kubernetes/node-name"), Some(&json!("n1")));
     assert_eq!(merged.get("state-dir"), Some(&json!("/var/lib/flowsdn")));
     let mut refused: Vec<&str> = report.refused.iter().map(|r| r.key.as_str()).collect();
@@ -107,7 +119,10 @@ fn unknown_unsafe_and_invalid_keys_are_refused_and_the_rest_applies() {
     assert!(bogus.reason.contains("host-firewall"), "{}", bogus.reason);
     assert_eq!(report.applied.len(), 1);
     let health = report.json();
-    assert_eq!(health.pointer("/applied/kubernetes.lb-mode"), Some(&json!("mixed")));
+    assert_eq!(
+        health.pointer("/applied/kubernetes.lb-mode"),
+        Some(&json!("mixed"))
+    );
     assert_eq!(health.pointer("/refused/0/config"), Some(&json!("mixed")));
     assert_eq!(health.pointer("/selected/0"), Some(&json!("mixed")));
 }
@@ -186,7 +201,11 @@ fn a_pool_and_its_gateway_apply_together() {
     assert_eq!(merged.get("ipv4-pool"), Some(&json!("10.9.0.0/16")));
     assert_eq!(merged.get("ipv4-gateway"), Some(&json!("10.9.0.1")));
     // Alone, the pool is not a valid configuration: refused, base kept.
-    let alone = [config("alone", json!({}), json!({"ipv4-pool": "10.9.0.0/16"}))];
+    let alone = [config(
+        "alone",
+        json!({}),
+        json!({"ipv4-pool": "10.9.0.0/16"}),
+    )];
     let (merged, report) = apply(&base(), &alone, &labels(), &valid);
     assert_eq!(merged, base());
     assert_eq!(report.refused.len(), 1);
