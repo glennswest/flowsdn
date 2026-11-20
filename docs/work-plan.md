@@ -4,6 +4,24 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### CRD registration by the operator, agent CRD readiness gate — #337 (P1), 2026-11-20
+
+Also builds the operator executable of gap #446. Packaging: `flowsdn-agent operator` (a mode of the agent binary, as
+`cni install` is), so the golden stormcos builds (GNU agent + its OpenSSL runtime, `-p flowsdn-agent --features
+kubernetes`) already carries it; no stormcos change. rustkube serves CRD Established/NamesAccepted and
+PartialObjectMetadata lists (checked in its source).
+- [ ] flowsdn-k8s: `crd::shipped_crds()` (the generated `crds/*.yaml`, include_str: no reference text in a binary);
+      `register` (spec 13 §3.2 steps 2-5: GET, POST/409 ok, update when schema absent / label missing / older,
+      poll 500 ms x 60 s, Established, NamesAccepted=False fatal) with an injected request fn; metadata-only
+      CRD list (`Accept: …as=PartialObjectMetadataList…`).
+- [ ] Agent `operator` mode: Lease kube-system/flowsdn-operator (lease.rs), registration when leading and every
+      5 min; `--skip-crd-creation`; POD_NAME identity.
+- [ ] Agent gate: required set from settings (identities, LB pools, L2 policies, endpoints, nodes, policy kinds as
+      enabled); flowsdn.io watchers start only after all are present; `kubernetes.crd-wait-timeout` (s, 300) fatal.
+- [ ] Manifest 64-flowsdn-operator.yaml: Deployment, hostNetwork (the agent waits on it), tolerate all,
+      system-cluster-critical, `image: flowsdn`, `/flowsdn-agent operator`.
+- [ ] Docs, changelog, sc-build, stage; tell stormcos#303 (applying crds/ becomes optional) and #446.
+
 ### flowsdn.io endpoint, identity and node kinds — #332 (P1), 2026-11-20
 
 Operator parts (identity GC, node GC, FlowsdnEndpointSlice batching) need the operator executable (gap #446):
