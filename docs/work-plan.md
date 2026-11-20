@@ -8,7 +8,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] `crds/SCHEMA_VERSIONS` (version  sha256-of-SHA256SUMS lines), T-CRD-1b + refusal unit test in
       crates/flowsdn-k8s/tests/crds.rs, vendor-crds.sh prints the digest, spec 12 (same line count), crds.md, changelog.
-- [ ] sc-build; close.
+- [x] 5754463, fmt 2d921c0; strict sc-build at 2d921c0 (fmt --check, `cargo xtask check`, 982 tests 0 failed). Closed.
 
 ### Mutual authentication gap — #472 (P3), 2026-11-20
 
