@@ -20,8 +20,13 @@ flowsdn backend must mean what the Cilium host firewall means) needs:
   packet to the node's other addresses (an admin NIC, a SLAAC IPv6 on the uplink) was never judged. With the host
   firewall on: every global address on the node's interfaces is host, and the programs attach to every interface
   holding one (not lo, not a bridge/bond port).
-- [ ] BPF + ABI + agent + tests (policy-live pod-to-host steps; compiler tests), docs, changelog.
-- [ ] sc-build + kernel-check; stage; the live run on a flowsdn node still waits on stormcos#303 (comment on #384).
+- [x] BPF + ABI + agent + tests (policy-live pod-to-host steps; compiler tests), docs, changelog (277deb7 BPF, object +
+      lock from sc-build at 277deb7 in e084a5b, HostFirewall Event 1b1dabb, fmt 16a2f29, docs bf822fb).
+- [x] sc-build at 16a2f29: fmt, `cargo xtask check` (Clippy -D warnings, 927 tests, 0 failed, 1 ignored, incl. the 2 new).
+      kernel-check at e084a5b (same lock as HEAD) on 7.3.4-200.fc44: 21 pass, 0 fail, 2 skip; policy-live 16 PASS incl.
+      3 new local-Pod steps.
+- [x] Filed gap #477 (host egress) and #478 (first live run, needs stormcos#303). Stage efbada592d08 requested; shipped
+      with proof: the `HostFirewall` Event; #384 closed.
 
 ### LoadBalancer Services end to end — #475 (P0), 2026-11-19
 
