@@ -191,7 +191,9 @@ fn server(
                 // The FlowsdnNodeConfig source (#480): this Node's labels and
                 // the configs of kube-system.
                 if line.starts_with("GET /api/v1/nodes/local ")
-                    || line.starts_with("GET /apis/flowsdn.io/v1alpha1/namespaces/kube-system/flowsdnnodeconfigs ")
+                    || line.starts_with(
+                        "GET /apis/flowsdn.io/v1alpha1/namespaces/kube-system/flowsdnnodeconfigs ",
+                    )
                 {
                     let body = if line.contains("/nodes/local") {
                         json!({"metadata": {"name": "local", "labels": {"edge": "yes"}}})
@@ -449,12 +451,10 @@ fn controller_lists_watches_and_derives_the_pool() {
     let (labels, configs) =
         flowsdn_agent::node_config::fetch(&settings, "kube-system").expect("node configuration");
     assert_eq!(labels.get("edge").map(String::as_str), Some("yes"));
-    let (merged, report) = flowsdn_agent::node_config::apply(
-        &json!({"kubernetes": {}}),
-        &configs,
-        &labels,
-        &|_| Ok(()),
-    );
+    let (merged, report) =
+        flowsdn_agent::node_config::apply(&json!({"kubernetes": {}}), &configs, &labels, &|_| {
+            Ok(())
+        });
     assert_eq!(report.selected, ["edge"]);
     assert_eq!(merged.pointer("/kubernetes/lb-mode"), Some(&json!("dsr")));
     let controller = Controller::connect(settings, &dir).expect("connect");
