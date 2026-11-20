@@ -12,7 +12,7 @@ two 25G ports: ConnectX-4 Lx 15b3:1015, eth0 5c:06:22:06:f9:6c (g16 reservation 
 5c:06:22:06:f9:6d (192.168.30.2, the machine's address), both on 192.168.16.0/20 and both receiving (stormdrive
 readings). server1-8 have one ixgbe + one mlx4 port each, not 25G pairs. 12.97-flowsdn already carries #408 (8480160).
 - [x] Master note: `testhost edit C2NR0Q2 --set flavor=flowsdn`, then install the newest flowsdn release on it.
-- [ ] Proposed `--after-install flowsdn>=8480160@C2NR0Q2`.
+- [x] Proposed `--after-install flowsdn>=8480160@C2NR0Q2`.
 - [ ] Then `wait-owner --action`: pull/replug eth0 (30.1) twice and eth1 (30.2) once, 30 s apart.
 - [ ] Proof: Node Events UplinkLeft/UplinkJoined on C2NR0Q2 ("2 of 2 carrying" after each return); ship, close #417
       and #408's done-when (2x25G throughput: a measurement on the same run, perf suite).
