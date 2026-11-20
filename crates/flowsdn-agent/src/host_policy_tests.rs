@@ -95,11 +95,66 @@ fn peers_ports_and_denies() {
     ])));
     let deny = got.rules.get(3).expect("deny");
     assert!(deny.deny);
-    assert!(
-        got.problems
-            .iter()
-            .any(|p| p.contains("host egress rules are not enforced"))
+    // Egress rules are host egress rules (#477), not a problem.
+    assert!(got.enforce_egress);
+    assert_eq!(got.egress_rules.len(), 1);
+    assert!(got.problems.is_empty(), "{:?}", got.problems);
+}
+
+#[test]
+fn host_egress_rules_and_their_default_deny() {
+    let node = labels(&[]);
+    let objects = [policy(
+        "out",
+        json!({"nodeSelector":{},
+            "egress":[
+                {"toCIDR":["203.0.113.0/24"],"toPorts":[{"ports":[{"port":"443","protocol":"TCP"}]}]},
+                {"toEntities":["kube-apiserver","remote-node"]},
+                {"toEndpoints":[{"matchLabels":{"app":"db"}}],"toPorts":[{"ports":[{"port":"5432"}]}]},
+                {"toFQDNs":[{"matchName":"example.com"}]},
+                {"toServices":[{"k8sService":{"serviceName":"x","namespace":"y"}}]}
+            ],
+            "egressDeny":[{"toEntities":["world"],"toPorts":[{"ports":[{"port":"25","protocol":"TCP"}]}]}]}),
+    )];
+    let got = select(&objects, &node, false);
+    assert!(got.enforce_egress);
+    assert!(!got.enforce_ingress, "no ingress rules: ingress untouched");
+    assert!(got.rules.is_empty());
+    // CIDR + 443, entities, endpoints + 5432 (TCP, UDP, SCTP), the deny.
+    assert_eq!(got.egress_rules.len(), 4, "{:?}", got.egress_rules);
+    let cidr = got.egress_rules.first().expect("cidr");
+    assert_eq!(
+        cidr.peers,
+        Some(vec![Peer::Cidr {
+            cidr: "203.0.113.0/24".into(),
+            except: Vec::new()
+        }])
     );
+    assert_eq!(cidr.ports.len(), 1);
+    assert_eq!(
+        got.egress_rules.get(1).and_then(|r| r.peers.clone()),
+        Some(vec![
+            Peer::Identities(vec![KUBE_APISERVER]),
+            Peer::Identities(vec![REMOTE_NODE])
+        ])
+    );
+    assert!(got.egress_rules.last().is_some_and(|r| r.deny));
+    for field in ["toFQDNs", "toServices"] {
+        assert!(
+            got.problems.iter().any(|p| p.contains(field)),
+            "{field}: {:?}",
+            got.problems
+        );
+    }
+
+    let open = [policy(
+        "open",
+        json!({"nodeSelector":{},"enableDefaultDeny":{"egress":false},
+            "egress":[{"toEntities":["world"]}]}),
+    )];
+    let got = select(&open, &node, false);
+    assert!(!got.enforce_egress, "default deny off: the rules add nothing");
+    assert_eq!(got.egress_rules.len(), 1);
 }
 
 #[test]

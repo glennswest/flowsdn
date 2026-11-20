@@ -112,7 +112,9 @@ pinning or subsystem libraries are absent are **not current status**.
   waits for that list. Since #384 (main, not in a golden yet): local Pods'
   traffic to the host is judged on their veths (`HOST_PODS`), and every global
   address of the node is the host's, on every interface holding one;
-  `policy-live` test-runs both. Host egress rules are gap #477; the first
+  `policy-live` test-runs both. Host egress rules since #477 (main): compiled
+  and enforced on `to_netdev` and the host-to-Pod path, `policy-live` steps
+  on 7.x by kernel-check; the first
   cluster run is #478. Since #484 (main): on an uplink with NodePort on, the
   NodePort programs hand what they do not redirect or drop to the firewall
   (`TCX_NEXT`); before, they ended the TCX chain and the firewall never ran
@@ -137,7 +139,7 @@ pinning or subsystem libraries are absent are **not current status**.
 - Masquerade is the node's (`egress: stack`), not flowsdn's.
 - Open gaps, each an issue with the `gap` label: operator identity GC (#332);
   L7, FQDN and ICMP policy rules (#448); node and group peers in policy rules
-  (#451); host egress policy (#477); policy verdict events (#452); Maglev in
+  (#451); policy verdict events (#452); Maglev in
   the socket LB (#453); DSR by IPIP or Geneve (#447); DSR ICMP errors (#449);
   NAT46/64 to local backends or in the socket LB (#450); the RFC 6052 gateway
   (#454); SCTP Services (#457); IPv4 fragments

@@ -88,7 +88,7 @@ two-node acceptance (#291) and live NetworkPolicy acceptance on a cluster
 The Kubernetes-mode agent also allocates cluster identities for its Pods
 (FlowsdnIdentity objects, #291). Masquerade is the node's (`egress: stack`),
 not flowsdn's. Open gaps, each an issue with the `gap` label: L7, FQDN and ICMP
-policy rules (#448), host egress policy (#477), DSR by IPIP or Geneve (#447),
+policy rules (#448), DSR by IPIP or Geneve (#447),
 DSR ICMP errors (#449), NAT46/64 to local backends or in the socket LB (#450),
 FlowsdnEndpointSlice batching (#479) and the
 Hubble observer/relay (#293). The operator (`flowsdn-agent operator`, #337)

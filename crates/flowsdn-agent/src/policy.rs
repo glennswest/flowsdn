@@ -22,9 +22,10 @@
 //! - The host firewall (#379, [`crate::host_policy`]): with
 //!   `kubernetes.host-firewall` on, the host endpoint ([`HOST_ENDPOINT`]) is
 //!   in `flowsdn_policy_ep` under each uplink's index and [`HOST_PODS`] (local
-//!   Pods' traffic to the host, #384), tracked always and
-//!   ingress-enforced (or audited) when a host policy selects this node and
-//!   the uplink's learning time is over. Denies win over allows they cover.
+//!   Pods' traffic to the host, #384), tracked always and enforced (or
+//!   audited) in each direction a selecting host policy has rules for
+//!   (egress since #477) once the uplink's learning time is over. Denies
+//!   win over allows they cover.
 //! - Pod rules of the flowsdn policy kinds (#292, `kubernetes.flowsdn-policy`,
 //!   [`host_policy::pod_policies`]) join a Pod's NetworkPolicy entries: a
 //!   direction is enforced when either selects it, default deny unless every
@@ -654,16 +655,14 @@ pub fn deny_over_allow(
     (kept, out_denies)
 }
 
-/// The host endpoint's entries and its uplinks' `flowsdn_policy_ep` rows.
-fn host_firewall(
-    view: &View,
+/// One direction's host rules as keys, denies over allows (spec 06 §3.5.3).
+fn host_rule_keys(
     compiler: &mut Compiler<'_>,
-    hosts: HostPolicies,
-    desired: &mut Desired,
-) {
+    rules: &[Rule],
+) -> (BTreeSet<HostKey>, BTreeSet<HostKey>) {
     let mut allows = BTreeSet::new();
     let mut denies = BTreeSet::new();
-    for rule in &hosts.rules {
+    for rule in rules {
         let peers = compiler.host_peers(&rule.policy, rule.peers.as_deref());
         let mut l4: Vec<(u8, u16, u8)> = Vec::new();
         if rule.ports.is_empty() {
@@ -688,15 +687,31 @@ fn host_firewall(
             }
         }
     }
-    let (allows, denies) = deny_over_allow(&allows, &denies);
-    let count = write_entries(
-        &mut desired.entries,
-        HOST_ENDPOINT,
-        false,
-        &allows,
-        &denies,
-        HOST_ALLOW_PRECEDENCE,
-    );
+    deny_over_allow(&allows, &denies)
+}
+
+/// The host endpoint's entries and its uplinks' `flowsdn_policy_ep` rows:
+/// ingress rules judge traffic to the node's addresses (`from_netdev`, and
+/// local Pods' on their veths), egress rules (#477) traffic from them
+/// (`to_netdev`, and the host's to local Pods on `to_container`).
+fn host_firewall(
+    view: &View,
+    compiler: &mut Compiler<'_>,
+    hosts: HostPolicies,
+    desired: &mut Desired,
+) {
+    let mut count = 0usize;
+    for (rules, egress) in [(&hosts.rules, false), (&hosts.egress_rules, true)] {
+        let (allows, denies) = host_rule_keys(compiler, rules);
+        count = count.saturating_add(write_entries(
+            &mut desired.entries,
+            HOST_ENDPOINT,
+            egress,
+            &allows,
+            &denies,
+            HOST_ALLOW_PRECEDENCE,
+        ));
+    }
     let audit = hosts.audit || view.host_firewall == HostFirewall::Audit;
     let mut enforced = Vec::new();
     // The uplinks, and HOST_PODS for local Pods' traffic to the host (#384).
@@ -704,8 +719,15 @@ fn host_firewall(
     for (name, ifindex) in view.host_interfaces.iter().chain([(&pods.0, &pods.1)]) {
         let learning = view.host_learning.contains(ifindex);
         let mut flags = 0;
-        if hosts.enforce_ingress && !learning {
-            flags = enforce::INGRESS;
+        if !learning {
+            if hosts.enforce_ingress {
+                flags |= enforce::INGRESS;
+            }
+            if hosts.enforce_egress {
+                flags |= enforce::EGRESS;
+            }
+        }
+        if flags != 0 {
             if audit {
                 flags |= enforce::AUDIT;
             }
@@ -721,7 +743,7 @@ fn host_firewall(
             },
         );
     }
-    let pods_state = if !hosts.enforce_ingress {
+    let pods_state = if !hosts.enforce_ingress && !hosts.enforce_egress {
         "tracking"
     } else if view.host_learning.contains(&HOST_PODS) {
         "learning"
@@ -739,6 +761,7 @@ fn host_firewall(
         },
         "policies": hosts.names,
         "ingress-enforced": hosts.enforce_ingress,
+        "egress-enforced": hosts.enforce_egress,
         "audit": audit,
         "interfaces": view.host_interfaces.keys().collect::<Vec<_>>(),
         "learning": view.host_interfaces.iter()

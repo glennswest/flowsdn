@@ -14,7 +14,10 @@
 //! started, audit mode, learning (no flags), and the verdict counters. Local
 //! Pods' traffic to the host (#384): the endpoint programs judge it by the
 //! host endpoint's `HOST_PODS` entry (pod port rules, replies of flows the
-//! host started to the Pod, audit, removal).
+//! host started to the Pod, audit, removal). Host egress (#477): `to_netdev`
+//! judges the host's own packets by egress rules (allow, drop, deny,
+//! forwarded traffic, replies both ways, audit) and `to_container` the
+//! host's packets to a local Pod.
 use flowsdn_bpf_abi::{
     IpCacheKey, RemoteEndpointInfo,
     policy::{
@@ -389,7 +392,8 @@ fn run(object: &[u8]) -> Result<()> {
         OK,
     )?;
     println!("PASS maps read back as written; removing the policy endpoint stops enforcement");
-    host(&mut lab)
+    host(&mut lab)?;
+    host_egress(&mut lab)
 }
 
 const HOST_ADDR: [u8; 4] = [192, 0, 2, 20];
@@ -420,7 +424,17 @@ fn host_rule(
     prefix: u8,
     deny: bool,
 ) -> Result<()> {
-    let key = PolicyKey::new(identity, false, proto, port, prefix).map_err(|_| "policy key")?;
+    host_rule_in(lab, false, (identity, proto, port, prefix), deny)
+}
+/// A host endpoint entry in either direction: (identity, protocol, port,
+/// port prefix).
+fn host_rule_in(
+    lab: &mut Lab,
+    egress: bool,
+    (identity, proto, port, prefix): (u32, u8, u16, u8),
+    deny: bool,
+) -> Result<()> {
+    let key = PolicyKey::new(identity, egress, proto, port, prefix).map_err(|_| "policy key")?;
     let lpm = if proto == 0 {
         0
     } else {
@@ -662,6 +676,118 @@ fn pods_to_host(lab: &mut Lab) -> Result<()> {
     lab.egress("HOST_PODS removed, pod to host:82", &to_host(42006, 82), OK)?;
     println!(
         "PASS host firewall on pods: audit passes and counts; removing HOST_PODS stops judging"
+    );
+    Ok(())
+}
+
+/// Host egress policy (#477): `to_netdev` judges packets from the node's
+/// addresses on the uplink, `to_container` the host's packets to a local
+/// Pod (`HOST_PODS`), by the host endpoint's egress entries.
+fn host_egress(lab: &mut Lab) -> Result<()> {
+    let up0 = ifindex("up0")?;
+    // World: TCP 443 only; every identity: never TCP 25; the local Pod
+    // (identity 400, from pods_to_host): TCP 8080.
+    host_rule_in(lab, true, (2, TCP, 443, 16), false)?;
+    host_rule_in(lab, true, (0, TCP, 25, 16), true)?;
+    host_rule_in(lab, true, (400, TCP, 8080, 16), false)?;
+    let set = |lab: &mut Lab, index: u32, flags| {
+        lab.delivery.policy().set_policy_endpoint(
+            index,
+            PolicyEndpoint {
+                endpoint: HOST_ENDPOINT,
+                flags,
+            },
+        )
+    };
+    let check = |lab: &mut Lab, what: &str, program: &str, frame: &[u8], want| -> Result<()> {
+        let got = host_verdict(lab, program, up0, frame)?;
+        if got != want {
+            let name = |v| if v == OK { "pass" } else { "drop" };
+            return Err(format!("host egress {what}: {} instead of {}", name(got), name(want)).into());
+        }
+        Ok(())
+    };
+    let out = |dst, sport, dport, flags| v4(TCP, HOST_ADDR, dst, 0, &tcp(sport, dport, flags));
+    set(lab, up0, enforce::INGRESS | enforce::EGRESS)?;
+    check(lab, "host to admin:443", "to_netdev", &out(ADMIN, 45000, 443, SYN), OK)?;
+    check(lab, "host to admin:80", "to_netdev", &out(ADMIN, 45001, 80, SYN), SHOT)?;
+    check(lab, "host to admin:25", "to_netdev", &out(ADMIN, 45002, 25, SYN), SHOT)?;
+    check(
+        lab,
+        "forwarded pod to admin:80",
+        "to_netdev",
+        &v4(TCP, POD, ADMIN, 0, &tcp(45003, 80, SYN)),
+        OK,
+    )?;
+    // A connection to the host that ingress allows: its replies leave.
+    check(
+        lab,
+        "admin to host:22",
+        "from_netdev",
+        &v4(TCP, ADMIN, HOST_ADDR, 0, &tcp(45004, 22, SYN)),
+        OK,
+    )?;
+    check(lab, "reply host:22 to admin", "to_netdev", &out(ADMIN, 22, 45004, SYN | ACK), OK)?;
+    // The reply of the allowed 443 flow comes back in.
+    check(
+        lab,
+        "reply admin:443 to host",
+        "from_netdev",
+        &v4(TCP, ADMIN, HOST_ADDR, 0, &tcp(443, 45000, SYN | ACK)),
+        OK,
+    )?;
+    println!(
+        "PASS host egress on the uplink: world TCP 443 allowed, 80 dropped, 25 denied; forwarded traffic not judged; replies of allowed flows pass both ways"
+    );
+
+    set(lab, HOST_PODS, enforce::EGRESS)?;
+    lab.ingress(
+        "host to pod:8080",
+        &v4(TCP, HOST_ADDR, POD, 0, &tcp(46000, 8080, SYN)),
+        OK,
+    )?;
+    lab.ingress(
+        "host to pod:81",
+        &v4(TCP, HOST_ADDR, POD, 0, &tcp(46001, 81, SYN)),
+        SHOT,
+    )?;
+    lab.egress(
+        "reply pod:8080 to host",
+        &v4(TCP, POD, HOST_ADDR, 0, &tcp(8080, 46000, SYN | ACK)),
+        OK,
+    )?;
+    println!(
+        "PASS host egress to local Pods: the host reaches the pod's allowed port, not another; the reply passes"
+    );
+
+    set(lab, up0, enforce::INGRESS | enforce::EGRESS | enforce::AUDIT)?;
+    check(lab, "audit host to admin:8443", "to_netdev", &out(ADMIN, 45010, 8443, SYN), OK)?;
+    let counted = lab
+        .delivery
+        .policy()
+        .policy_verdicts()?
+        .iter()
+        .any(|(k, v)| {
+            k.endpoint == HOST_ENDPOINT
+                && k.egress == 1
+                && k.dport.get() == 8443
+                && k.verdict == verdict::AUDIT
+                && v.packets >= 1
+        });
+    if !counted {
+        return Err("no egress audit verdict for host to admin:8443".into());
+    }
+    let denied = lab.delivery.policy().policy_verdicts()?.iter().any(|(k, _)| {
+        k.endpoint == HOST_ENDPOINT && k.egress == 1 && k.dport.get() == 80 && k.verdict == verdict::DENIED
+    });
+    if !denied {
+        return Err("no egress denied verdict for host to admin:80".into());
+    }
+    lab.delivery.policy().remove_policy_endpoint(up0)?;
+    lab.delivery.policy().remove_policy_endpoint(HOST_PODS)?;
+    check(lab, "removed host to admin:80", "to_netdev", &out(ADMIN, 45011, 80, SYN), OK)?;
+    println!(
+        "PASS host egress audit: a would-be drop passes and is counted; egress denied rows counted; removal stops judging"
     );
     Ok(())
 }

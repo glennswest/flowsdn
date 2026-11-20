@@ -313,15 +313,15 @@ fn host_view(mode: HostFirewall, learning: bool) -> View {
     }
     view
 }
-/// (identity, protocol, port, port prefix, deny) of every host entry.
-fn host_keys(desired: &Desired) -> BTreeSet<(u32, u8, u16, u32, bool)> {
+/// (identity, protocol, port, port prefix, deny) of every host entry of
+/// one direction.
+fn host_keys_of(desired: &Desired, egress: u8) -> BTreeSet<(u32, u8, u16, u32, bool)> {
     desired
         .entries
         .iter()
         .map(|(k, v)| (EndpointPolicyKey::from_bytes(*k), *v))
-        .filter(|(k, _)| k.endpoint == HOST_ENDPOINT)
+        .filter(|(k, _)| k.endpoint == HOST_ENDPOINT && k.egress == egress)
         .map(|(k, v)| {
-            assert_eq!(k.egress, 0, "host rules are ingress");
             (
                 k.sec_label,
                 k.protocol,
@@ -331,6 +331,73 @@ fn host_keys(desired: &Desired) -> BTreeSet<(u32, u8, u16, u32, bool)> {
             )
         })
         .collect()
+}
+/// The ingress host entries; `host_view` has no egress rules.
+fn host_keys(desired: &Desired) -> BTreeSet<(u32, u8, u16, u32, bool)> {
+    assert!(host_keys_of(desired, 1).is_empty(), "host_view has no egress rules");
+    host_keys_of(desired, 0)
+}
+
+#[test]
+fn host_egress_rules_are_egress_entries_enforced_after_learning() {
+    use flowsdn_bpf_abi::policy::HOST_PODS;
+    let mut view = host_view(HostFirewall::Enforce, false);
+    view.clusterwide_policies.push(json!({"metadata":{"name":"out"},"spec":{
+        "nodeSelector":{"matchLabels":{"role":"worker"}},
+        "egress":[
+            {"toEntities":["remote-node"]},
+            {"toEndpoints":[{"matchLabels":{"app":"client"}}],"toPorts":[{"ports":[{"port":"8080","protocol":"TCP"}]}]}
+        ],
+        "egressDeny":[{"toEntities":["all"],"toPorts":[{"ports":[{"port":"25","protocol":"TCP"}]}]}]
+    }}));
+    let desired = compile(&view, &[]);
+    let both = enforce::INGRESS | enforce::EGRESS;
+    assert_eq!(desired.endpoints.get(&5).map(|e| e.flags), Some(both));
+    assert_eq!(desired.endpoints.get(&HOST_PODS).map(|e| e.flags), Some(both));
+    let client = identity_of(&view, "client");
+    let out = host_keys_of(&desired, 1);
+    for want in [
+        (REMOTE_NODE, 0, 0, 0, false),
+        (REMOTE_NODE, 6, 25, 16, true),
+        (client, 6, 8080, 16, false),
+        (0, 6, 25, 16, true),
+    ] {
+        assert!(out.contains(&want), "{want:?} not in {out:?}");
+    }
+    assert_eq!(out.len(), 4, "{out:?}");
+    assert_eq!(host_keys_of(&desired, 0).len(), 5, "ingress unchanged");
+    assert_eq!(desired.host.pointer("/egress-enforced"), Some(&json!(true)));
+    assert!(desired.problems.is_empty(), "{:?}", desired.problems);
+
+    // Learning: nothing enforced in either direction yet.
+    view.host_learning.insert(5);
+    view.host_learning.insert(HOST_PODS);
+    let learning = compile(&view, &[]);
+    assert_eq!(learning.endpoints.get(&5).map(|e| e.flags), Some(0));
+    assert_eq!(learning.endpoints.get(&HOST_PODS).map(|e| e.flags), Some(0));
+
+    // Egress rules only: ingress stays open; audit applies to egress too.
+    let mut egress_only = host_view(HostFirewall::Audit, false);
+    if let Some(spec) = egress_only
+        .clusterwide_policies
+        .first_mut()
+        .and_then(|p| p.get_mut("spec"))
+        .and_then(Value::as_object_mut)
+    {
+        spec.remove("ingress");
+        spec.remove("ingressDeny");
+        spec.insert("egress".into(), json!([{"toEntities":["world"]}]));
+    }
+    let egress_only = compile(&egress_only, &[]);
+    assert_eq!(
+        egress_only.endpoints.get(&5).map(|e| e.flags),
+        Some(enforce::EGRESS | enforce::AUDIT)
+    );
+    assert_eq!(egress_only.host.pointer("/pods"), Some(&json!("enforcing")));
+    assert_eq!(
+        egress_only.host.pointer("/enforcing-on"),
+        Some(&json!(["eth0"]))
+    );
 }
 
 #[test]

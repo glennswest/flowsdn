@@ -7,10 +7,11 @@
 //! A spec selects this node when it has a `nodeSelector` that matches the
 //! Node's labels. Supported: `ingress` and `ingressDeny` rules with
 //! `fromEntities`, `fromCIDR`, `fromCIDRSet` (`cidr`, `except`),
-//! `fromEndpoints` and `toPorts` (`port`, `endPort`, `protocol`), and
-//! `enableDefaultDeny.ingress`. Everything else is reported and not
-//! enforced: egress rules, L7 rules, ICMP rules, `fromRequires`,
-//! `fromNodes`, `fromGroups`, `cidrGroupRef`, authentication and named
+//! `fromEndpoints` and `toPorts` (`port`, `endPort`, `protocol`), the same
+//! for `egress` and `egressDeny` with `to*` peers (#477), and
+//! `enableDefaultDeny.ingress`/`.egress`. Everything else is reported and
+//! not enforced: L7 rules, ICMP rules, `*Requires`, `*Nodes`, `*Groups`,
+//! `toServices`, `toFQDNs`, `cidrGroupRef`, authentication and named
 //! ports. The annotation [`AUDIT_ANNOTATION`] `"true"` puts the host in audit
 //! mode.
 //!
@@ -131,8 +132,14 @@ pub struct HostPolicies {
     pub names: Vec<String>,
     /// Some selecting spec turns on ingress default deny.
     pub enforce_ingress: bool,
+    /// Some selecting spec has egress rules and does not turn egress
+    /// default deny off (#477).
+    pub enforce_egress: bool,
     pub audit: bool,
+    /// Ingress rules.
     pub rules: Vec<Rule>,
+    /// Egress rules (#477): their peers are destinations.
+    pub egress_rules: Vec<Rule>,
     pub problems: BTreeSet<String>,
 }
 
@@ -665,6 +672,10 @@ pub fn select(
         prefix: "from",
         pods: None,
     };
+    let to_side = Side {
+        prefix: "to",
+        pods: None,
+    };
     for object in objects {
         let name = format!(
             "/{}",
@@ -702,11 +713,25 @@ pub fn select(
                 continue;
             }
             selected = true;
-            for field in ["egress", "egressDeny"] {
-                if spec.get(field).is_some_and(|v| !v.is_null()) {
-                    out.problems
-                        .insert(format!("{name}: host {field} rules are not enforced"));
+            let mut has_egress = false;
+            for (field, deny) in [("egress", false), ("egressDeny", true)] {
+                let Some(list) = spec.get(field).and_then(Value::as_array) else {
+                    continue;
+                };
+                has_egress = true;
+                for item in list {
+                    if let Some(rule) = rule(item, deny, &name, &mut out.problems, &to_side) {
+                        out.egress_rules.push(rule);
+                    }
                 }
+            }
+            if has_egress
+                && spec
+                    .pointer("/enableDefaultDeny/egress")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true)
+            {
+                out.enforce_egress = true;
             }
             let mut has_ingress = false;
             for (field, deny) in [("ingress", false), ("ingressDeny", true)] {

@@ -4,6 +4,15 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Host firewall egress rules — #477 (P3), 2026-11-20
+
+The datapath already enforces generically (`to_netdev` egress=1 SCOPE_HOST; `to_container` egress=1 SCOPE_HOST_PODS):
+only the agent was missing. Plan: parse egress/egressDeny with `to*` peers into `HostPolicies.egress_rules`
+(+ `enforce_egress` from enableDefaultDeny.egress), compile to HOST_ENDPOINT egress entries, set EGRESS after learning
+on the uplinks and HOST_PODS; `egress-enforced` in health; policy-live steps; docs (runtime, ADR-0022, status, README).
+- [ ] Code + unit tests + policy-live + docs: one commit. Then sc-build with kernel-check.
+- [ ] Stage, ship (proof: agent health), close; live run with #478.
+
 ### Host firewall first live run — #478 (P3), 2026-11-20
 
 Needs a flowsdn node whose golden has the operator (CRDs, 66daa9b; stormcos#303 closed for it) and the #484 fix

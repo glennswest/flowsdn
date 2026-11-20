@@ -32,8 +32,8 @@ programs serve Pods only.
   program) and `to_netdev` (uplink egress) in the `local-delivery` object run
   ADR-0021's enforcement with a host scope: only packets whose destination
   (ingress) or source (egress) has the host identity are judged. Host egress
-  policy is not enforced; `to_netdev` only remembers the node's own flows so
-  their replies pass.
+  rules are enforced since #477 (amendment below); before, `to_netdev` only
+  remembered the node's own flows so their replies pass.
 - **Precedence.** Host entries use spec 06 §3.5.2's tier-Normal values
   (allow `0xFFFFFF01`, deny `0xFFFFFFFF`). The compiler drops an allow a deny
   of its identity (or of every identity) covers and repeats a deny inside an
@@ -68,8 +68,12 @@ programs serve Pods only.
   mode. The edition manifests leave it off.
 - The flows table is shared with Pods (65536 LRU entries); tracking every
   host flow on a busy node shortens how long Pod flows stay remembered.
-- Host egress rules are not covered (gap #477; stormfw's HostFirewallPolicy
-  has none). The boot window is stormfw's boot-time program; flowsdn's part
+- Host egress rules (#477, 2026-11-20): `egress`/`egressDeny` of a selecting
+  spec compile to the host endpoint's egress entries; `enforce::EGRESS` is set
+  on the uplinks and `HOST_PODS` after the same 60 s learning (no datapath
+  change: `to_netdev` and `to_container` already ran the generic
+  enforcement). stormfw's HostFirewallPolicy has no egress rules, so stormfw
+  never sets them. The boot window is stormfw's boot-time program; flowsdn's part
   is the hand-over signal (`enforcing-on`, `pods` in `/v1/healthz`).
 
 ## Amendment: local Pods and every node address (#384, 2026-11-20)

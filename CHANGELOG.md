@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#477)
+- **feat:** Host firewall egress rules. `egress`/`egressDeny` of a FlowsdnClusterwideNetworkPolicy spec that selects this node (`toEntities`, `toCIDR`, `toCIDRSet`, `toEndpoints`, `toPorts`; `enableDefaultDeny.egress`) compile to the host endpoint's egress entries, denies over allows; `enforce::EGRESS` (with `AUDIT` in audit mode) is set on the uplinks and `HOST_PODS` after the same 60 s learning. `to_netdev` judges the node's own outgoing packets and `to_container` the node's packets to local Pods; replies of allowed or learned flows pass. `/v1/healthz` host firewall gets `egress-enforced`. No datapath change (the programs already enforced generically). `toServices`, `toFQDNs`, `toRequires`, `toNodes`, `toGroups` stay reported problems.
+- **test:** `policy-live` host egress steps: allow/drop/deny on `to_netdev`, forwarded traffic unjudged, replies both ways, host-to-Pod allow and drop, audit and denied counters, removal.
+
 ### 2026-11-20 (#446)
 - **test:** `node-operator` in every suite's node probe (flowsdn-flavor nodes): `flowsdn-perf operator` reads the Lease `kube-system/flowsdn-operator` (a holder that renewed it within three lease durations) and requires `flowsdnidentities.flowsdn.io` Established, through the apiserver with the suites' new declared cluster reads (`coordination.k8s.io/leases`, `apiextensions.k8s.io/customresourcedefinitions`). Skips without an apiserver. Completes #446 with the operator executable (#337) and its manifests.
 
