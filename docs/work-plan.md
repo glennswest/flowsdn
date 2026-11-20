@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Mutual authentication gap — #472 (P3), 2026-11-20
+
+Scope question, not code: needs SPIRE (no platform component runs it; stormcert workload identities are design only),
+deprecated upstream in 1.20, refusal already fails closed (#202). #202's resolution keeps it formally in scope.
+- [x] Asked the owner (A: out of scope, refusal permanent; B: reference build + SPIRE; C: own on stormcert), recommended
+      A; `wait-owner`.
+- [ ] On A: amend ADR-0013 #202 row and spec 16 §3.8/§12.10 (append), changelog; close. On B/C: plan the build.
+
 ### Review finding 9353481628e3 again — #487 (P0), 2026-11-20
 
 The service filed the finding fixed under #484 as a new issue: the line it names (`LinkOrder::first()`, correct: NodePort
