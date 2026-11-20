@@ -53,6 +53,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.l2-announcements` | `true` | Answer ARP and NDP for the load-balancer and external addresses FlowsdnL2AnnouncementPolicies give this node ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb` and `node-port`; nothing is announced without a policy. |
 | `kubernetes.endpoint-crd` | `true` | Keep a FlowsdnEndpoint for each local Pod endpoint ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). Nothing is written while the kind is not served. |
 | `kubernetes.node-crd` | `true` | Keep this node's FlowsdnNode ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). |
+| `kubernetes.lb-sock-terminate-all-protos` | `false` | Socket termination also ends TCP connections to a backend that leaves a Service ([socket LB](#clusterip-socket-lb-292); by backend address and port). |
 | `kubernetes.crd-wait-timeout` | `300` | Seconds the flowsdn.io watchers wait for the CRDs this configuration uses before the agent exits ([CRDs and the operator](#crds-and-the-operator-337)). 1 to 86400. |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
@@ -471,8 +472,8 @@ pinned: they detach when the agent exits, and the per-CPU
 `flowsdn_nodeport6_fib`, `flowsdn_nodeport6_scratch` and
 `flowsdn_nodeport4_xlate_scratch` scratch maps are not
 pinned either. The socket LB picks backends at random (Maglev there is gap
-#453); an existing TCP connection stays on its backend when it leaves (TCP
-socket termination, #392); SCTP ports get no translation (#457); IPv4
+#453); an existing TCP connection stays on its backend when it leaves unless
+`kubernetes.lb-sock-terminate-all-protos` is on (#392, below); SCTP ports get no translation (#457); IPv4
 fragments other than the first pass untouched (#458); backends are chosen
 without topology hints (#459); masquerading is the node's stack, not BPF
 (#460). Further gaps, each an issue: DSR by IPIP/Geneve (#447), NAT46/64 in
@@ -482,7 +483,7 @@ programs on a kernel, including the NodePort local and SNAT paths through
 `BPF_PROG_TEST_RUN` and Maglev picks against the planner's tables; no
 two-node cluster run yet.
 
-UDP socket termination (spec 05 §3.8): when a UDP backend leaves the
+Socket termination (spec 05 §3.8, #292, #392): when a UDP backend leaves the
 programmed services, the services thread finds the sockets the socket LB sent
 to it (their cookies in `flowsdn_lb{4,6}_reverse_sk` with that backend) and
 destroys them with netlink `SOCK_DESTROY` (`CONFIG_INET_DIAG_DESTROY`), so the
@@ -493,7 +494,17 @@ namespace and in each local Pod's: the CNI passes the observed `CNI_NETNS`
 HostToContainer propagation), and the agent enters it only when the
 namespace's cookie equals the endpoint's. A failure (a namespace it cannot
 enter, a kernel without `SOCK_DESTROY`) is a `socket-termination` error in
-`GET /v1/healthz`. Removals while the agent was down are not terminated.
+`GET /v1/healthz`. Removals come together in passes at most every 50 ms (a
+rollout's backends leaving at once are one pass). At its first programming
+after a start the agent also ends sockets to UDP backends that
+`_reverse_sk` (pinned, so kept across restarts) remembers and no Service has
+now: those backends left while it was down. With
+`kubernetes.lb-sock-terminate-all-protos` (default false, the reference's
+hidden option) a leaving TCP backend's connections are ended too (the
+application sees `ECONNABORTED` or a reset): the socket LB records no TCP
+translation, so every TCP connection to that backend address and port is
+ended, a direct one included. TCP backends that left while the agent was down
+are not known at start.
 
 Without Kubernetes mode the agent does no Node/Pod discovery, installs no
 remote routes and has no Service handling. The `local-delivery` object's uplink

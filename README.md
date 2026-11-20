@@ -63,8 +63,10 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
   FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy
   (`kubernetes.flowsdn-policy`, default off) use the same endpoint policy maps.
 - **Kubernetes NetworkPolicy in the datapath** (`kubernetes.network-policy`,
-  default on; ADR-0021) and **UDP socket termination** when a Service backend
-  leaves (netlink `SOCK_DESTROY`).
+  default on; ADR-0021) and **socket termination** when a Service backend
+  leaves (netlink `SOCK_DESTROY`; UDP, TCP with
+  `kubernetes.lb-sock-terminate-all-protos`; at start for UDP backends that
+  left while the agent was down; 50 ms passes).
 - **Kubernetes Events and pod tagging.** Events on Pods and the Node
   (`EndpointCreated`, `IPAllocationFailed`, `PodCIDRSelected`, …) and the
   `flowsdn.io/pod-networks` annotation on local Pods, with flowsdn's entry in
@@ -88,7 +90,7 @@ The Kubernetes-mode agent also allocates cluster identities for its Pods
 not flowsdn's. Open gaps, each an issue with the `gap` label: L7, FQDN and ICMP
 policy rules (#448), host egress policy (#477), DSR by IPIP or Geneve (#447),
 DSR ICMP errors (#449), NAT46/64 to local backends or in the socket LB (#450),
-TCP socket termination (#392), the operator's other controllers (#479) and the
+the operator's other controllers (#479) and the
 Hubble observer/relay (#293). The operator (`flowsdn-agent operator`, #337)
 registers the flowsdn.io CRDs under leader election, and the agent's flowsdn.io
 watchers wait for them. Libraries also implement configuration resolution,

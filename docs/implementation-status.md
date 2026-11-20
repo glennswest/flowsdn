@@ -88,8 +88,11 @@ pinning or subsystem libraries are absent are **not current status**.
 - Pod CIDRs of other nodes without `spec.podCIDRs` derived by the same rule
   as their agents (#296, option C), with overlapping CIDRs refused
   (`PodCIDRCollision`, `pod-cidrs` health); unit-tested, not on two nodes yet.
-- UDP socket termination when a Service backend leaves (spec 05 §3.8,
-  netlink `SOCK_DESTROY`, host and pod network namespaces; #292).
+- Socket termination when a Service backend leaves (spec 05 §3.8, netlink
+  `SOCK_DESTROY`, host and pod network namespaces; #292): UDP, and TCP with
+  `kubernetes.lb-sock-terminate-all-protos`; UDP backends that left while
+  the agent was down at its start; 50 ms passes (#392). `socket-lb-live`
+  checks UDP and TCP destroy on a kernel.
 - Host firewall (#379, ADR-0022): FlowsdnClusterwideNetworkPolicy host
   rules (`nodeSelector`; ingress/ingressDeny with entities, CIDRs, endpoints,
   ports) enforced by `from_netdev`/`to_netdev` on the uplinks, audit mode,
@@ -126,7 +129,7 @@ pinning or subsystem libraries are absent are **not current status**.
   (#451); host egress policy (#477); policy verdict events (#452); Maglev in
   the socket LB (#453); DSR by IPIP or Geneve (#447); DSR ICMP errors (#449);
   NAT46/64 to local backends or in the socket LB (#450); the RFC 6052 gateway
-  (#454); TCP socket termination (#392); SCTP Services (#457); IPv4 fragments
+  (#454); SCTP Services (#457); IPv4 fragments
   after the first (#458); topology hints (#459); BPF masquerade (#460); Pod
   policy audit mode (#461); flows open before a policy (#462); ICMP errors as
   related traffic (#463); the operator's GC and slice controllers (#479);

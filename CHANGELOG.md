@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#392)
+- **feat:** Socket termination gaps (spec 05 §3.8): TCP connections to a backend that leaves a Service are ended with `kubernetes.lb-sock-terminate-all-protos` (default false, the reference's hidden option; by backend address and port, as the socket LB records no TCP translation). At the first programming after a start, sockets to UDP backends `_reverse_sk` remembers and no Service has now are ended (they left while the agent was down). Termination runs in passes at most every 50 ms. `flowsdn_connector::sock_diag` dumps and destroys TCP too (abortable states only) and `destroy_to` is the selection the agent and `socket-lb-live` share; the fixture checks TCP termination on a kernel.
+
 ### 2026-11-20 (#337)
 - **feat:** The flowsdn operator: `flowsdn-agent operator` (Kubernetes builds) holds the Lease `kube-system/flowsdn-operator` and, while leading, registers the 22 flowsdn.io CRDs at start and every five minutes (spec 13 §3.2: create, update an absent schema or older schema-version label, leave a newer one, wait for `Established`; `NamesAccepted=False` is fatal). `--skip-crd-creation` leaves them to an administrator. The payloads are the generated `crds/` manifests embedded in the binary (`flowsdn_k8s::register`). Shipped as the host-network Deployment `64-flowsdn-operator.yaml` in the stormcos edition, from the same golden binary as the agent.
 - **feat:** The agent's CRD readiness gate: flowsdn.io watchers start only once the CRDs its configuration uses exist (metadata-only `PartialObjectMetadataList` list every second; `crds` part error while waiting; exit after `kubernetes.crd-wait-timeout`, default 300 s). `JsonClient::list_metadata`.
