@@ -7,18 +7,20 @@ Kept here whole, newest notes as they were. Write new intentions here.
 ### Operator GC and FlowsdnEndpointSlice batching — #479 (P2), 2026-11-20
 
 The operator exists now (#337). Parts:
-- [ ] FlowsdnIdentity GC (spec 03 §3.6, flowsdn names): every `--identity-gc-interval` (900 s; 0 off) while leading.
+- [x] FlowsdnIdentity GC (spec 03 §3.6, flowsdn names): every `--identity-gc-interval` (900 s; 0 off) while leading.
       Alive = some FlowsdnEndpoint `status.identity.id` or FlowsdnEndpointSlice `endpoints[].id` names it; lifesign =
       alive, or resourceVersion changed since the last list (an upsert), or operator start for one seen in the first
       list. Expired (> `--identity-heartbeat-timeout`, 1800 s) and not alive: pass 1 PUT `io.flowsdn.heartbeat=<now>`,
       a later pass DELETE with {uid, resourceVersion}; 409/404 skipped. `--identity-gc-rate-limit` (2500) deletes per
       `--identity-gc-rate-interval` (60 s); the rest wait for the next run (the operator loop also renews the Lease).
       No FlowsdnEndpoint GC exists (Pod-owned, cascaded), so it is not a precondition here (spec amendment).
-- [ ] FlowsdnNode GC (spec 12 §3.9): every `--nodes-gc-interval` (300 s; 0 off); no ownerReferences, no
+- [x] FlowsdnNode GC (spec 12 §3.9): every `--nodes-gc-interval` (300 s; 0 off); no ownerReferences, no
       `flowsdn.io/do-not-gc: true`, no Node of its name: candidate; still so one interval later: DELETE (404 ok).
-- [ ] RBAC: flowsdnnodes delete. Docs (runtime, spec 03/12 amendments, deploy README), changelog, tests.
+- [x] RBAC, docs (runtime, spec 03/12 amendments appended, README, crds, status), changelog: 144e595; test fix + fmt
+      52b381c. sc-build at 52b381c: fmt --check, `cargo xtask check` (Clippy -D warnings, 975 tests, 0 failed, 1 ignored;
+      9 operator_gc tests + operator flags). Stage requested at the next commit.
 - [ ] FlowsdnEndpointSlice batching: agents learn peers from the cluster-wide Pod watch and read no other node's
-      FlowsdnEndpoint, so slices would have no reader. Owner decision asked on the issue.
+      FlowsdnEndpoint, so slices would have no reader. Owner decision asked on the issue (recommended: A, close as not applicable); `wait-owner`.
 
 ### FlowsdnEndpoint/FlowsdnNode seen on a node — #482 (P2), 2026-11-20
 
