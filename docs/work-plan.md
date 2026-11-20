@@ -4,6 +4,25 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Host firewall follow-ups — #384 (P3), 2026-11-20
+
+Which of the four gaps stormfw's HostFirewallPolicy (stormfw#1: ingress rules only; one policy, two backends, so the
+flowsdn backend must mean what the Cilium host firewall means) needs:
+- host **egress** policy: not needed (HostFirewallPolicy has no egress rules). Stays absent; `to_netdev` only tracks.
+- **boot window**: stormfw's own boot program (stormfw#1 step 3). flowsdn's part is the hand-over signal, already in
+  `/v1/healthz` (`kubernetes.policy.host-firewall`: `learning`, `enforcing-on`); documented for stormfw.
+- **pod-to-node**: needed. Cilium judges local pods' traffic to the host by the host policy; without it any pod reaches
+  engine :9090 / registry :5100 / sshd :22 that the default policy limits to the node or admin network.
+  Design: `flowsdn_policy_ep` key 0 (`HOST_PODS`, no real ifindex) holds the host endpoint for the veth path;
+  `local_delivery` (after the pod's egress) judges packets to a host address as host ingress, `to_container`
+  remembers flows the host starts to pods (host egress, tracking only). Own 60 s learning, like an uplink.
+- **addresses/interfaces without an InternalIP**: needed. Only InternalIPs + gateways had the host identity, so a
+  packet to the node's other addresses (an admin NIC, a SLAAC IPv6 on the uplink) was never judged. With the host
+  firewall on: every global address on the node's interfaces is host, and the programs attach to every interface
+  holding one (not lo, not a bridge/bond port).
+- [ ] BPF + ABI + agent + tests (policy-live pod-to-host steps; compiler tests), docs, changelog.
+- [ ] sc-build + kernel-check; stage; the live run on a flowsdn node still waits on stormcos#303 (comment on #384).
+
 ### LoadBalancer Services end to end — #475 (P0), 2026-11-19
 
 stormlb#37 / stormstorefront#1 `edge-lb` (LoadBalancer, ETP Local). The datapath (uplink TCX node-local frontends for
