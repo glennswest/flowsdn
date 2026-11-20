@@ -4,6 +4,20 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### L2 neighbor management — #469 (P3), 2026-11-20
+
+Spec 10 §3.4/§5.7. Forwardable IPs: remote nodes' InternalIPs (backends feed the reference's table only with XDP
+acceleration, which flowsdn has not: out). Selected devices: uplinks (#408) with a MAC. Setting
+`kubernetes.l2-neigh-discovery` (reference `enable-l2-neigh-discovery`, default false). rtnetlink 0.23 /
+netlink-packet-route 0.33 have FibMatch|LookupTable, Oif, MultiPath, NeighbourFlags::ExtLearned,
+NeighbourExtFlags::Managed, NeighbourState::None (read from the crates.io sources, checksums = Cargo.lock).
+- [ ] connector `neighbor.rs`: `next_hops(ip, oif)` (RTM_GETROUTE FIB match; gateway / multipath gateways on oif /
+      on-link; ENETUNREACH/EHOSTUNREACH = none), `learned()`, `add_managed`, `delete_neighbor`, `probe_managed()`.
+- [ ] agent `neighbors.rs`: planner (forwardable, devices, desired, prune diff), calculator (15 s limit, 5 min
+      resync), thread `flowsdn-neighbors`, health part `neighbors`, start probe fatal when on.
+- [ ] fixture `neighbors-live` (kernel-check), unit tests, docs (runtime, agent API, spec 10 amendment, status),
+      changelog; sc-build + kernel-check; stage; ship; close.
+
 ### PacketDrop Events — #470 (P3), 2026-11-20
 
 Blocked on #452: the policy programs emit no per-flow events (no ring buffer or perf map in local-delivery); #452 builds
