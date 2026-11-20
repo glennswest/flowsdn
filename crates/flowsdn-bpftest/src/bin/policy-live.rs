@@ -18,7 +18,8 @@
 use flowsdn_bpf_abi::{
     IpCacheKey, RemoteEndpointInfo,
     policy::{
-        EndpointPolicyKey, HOST_ENDPOINT, HOST_PODS, PolicyEndpoint, PolicyEntry, PolicyKey, enforce, verdict,
+        EndpointPolicyKey, HOST_ENDPOINT, HOST_PODS, PolicyEndpoint, PolicyEntry, PolicyKey,
+        enforce, verdict,
     },
 };
 use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object};
@@ -596,7 +597,11 @@ fn pods_to_host(lab: &mut Lab) -> Result<()> {
     lab.identity(IpAddr::V4(Ipv4Addr::from(POD)), 400)?;
     host_rule(lab, 400, TCP, 9090, 16, false)?;
     let to_host = |sport, dport| v4(TCP, POD, HOST_ADDR, 0, &tcp(sport, dport, SYN));
-    lab.egress("no HOST_PODS entry, pod to host:80", &to_host(42000, 80), OK)?;
+    lab.egress(
+        "no HOST_PODS entry, pod to host:80",
+        &to_host(42000, 80),
+        OK,
+    )?;
     let set = |lab: &mut Lab, flags| {
         lab.delivery.policy().set_policy_endpoint(
             HOST_PODS,
@@ -638,13 +643,18 @@ fn pods_to_host(lab: &mut Lab) -> Result<()> {
     );
     set(lab, enforce::INGRESS | enforce::AUDIT)?;
     lab.egress("audit pod to host:81", &to_host(42005, 81), OK)?;
-    let counted = lab.delivery.policy().policy_verdicts()?.iter().any(|(k, v)| {
-        k.endpoint == HOST_ENDPOINT
-            && k.egress == 0
-            && k.dport.get() == 81
-            && k.verdict == verdict::AUDIT
-            && v.packets >= 1
-    });
+    let counted = lab
+        .delivery
+        .policy()
+        .policy_verdicts()?
+        .iter()
+        .any(|(k, v)| {
+            k.endpoint == HOST_ENDPOINT
+                && k.egress == 0
+                && k.dport.get() == 81
+                && k.verdict == verdict::AUDIT
+                && v.packets >= 1
+        });
     if !counted {
         return Err("no audit verdict for pod to host:81".into());
     }

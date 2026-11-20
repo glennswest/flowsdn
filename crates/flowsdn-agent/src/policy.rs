@@ -36,7 +36,10 @@ use crate::{
 };
 use flowsdn_bpf_abi::{
     IpCacheKey, MapBytes, RemoteEndpointInfo,
-    policy::{EndpointPolicyKey, HOST_ENDPOINT, HOST_PODS, PolicyEndpoint, PolicyEntry, PolicyKey, enforce},
+    policy::{
+        EndpointPolicyKey, HOST_ENDPOINT, HOST_PODS, PolicyEndpoint, PolicyEntry, PolicyKey,
+        enforce,
+    },
 };
 use flowsdn_identity::{cidr::CidrPrefix, filter::LabelFilter};
 use flowsdn_policy::{
