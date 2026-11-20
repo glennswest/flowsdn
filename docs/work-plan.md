@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Review finding 9353481628e3 again — #487 (P0), 2026-11-20
+
+The service filed the finding fixed under #484 as a new issue: the line it names (`LinkOrder::first()`, correct: NodePort
+must precede the firewall) is unchanged, so it did not close by itself. Fix already on main (8cf7cfb, object 6925607,
+test host-chain-live 8859ca6); host-chain-live 4 PASS again at 485fb99 (kernel-check 22/0/2). No new code.
+- [x] `shipped` (same proof as #484), #487 closed with the evidence.
+
 ### Host firewall egress rules — #477 (P3), 2026-11-20
 
 The datapath already enforces generically (`to_netdev` egress=1 SCOPE_HOST; `to_container` egress=1 SCOPE_HOST_PODS):
