@@ -4,6 +4,19 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Socket termination gaps — #392 (P3), 2026-11-20
+
+TCP: spec 05 §3.8 (flowsdn's own) already decides it: UDP always, TCP only with the reference's hidden
+`lb-sock-terminate-all-protos` (default false) -> `kubernetes.lb-sock-terminate-all-protos`, default false. The socket
+LB records only UDP translations in `_reverse_sk` (as the reference), so with it TCP sockets are matched by the
+removed backend's address and port (a direct connection to that port is ended too; documented).
+- [ ] connector `sock_diag`: protocol-generic dump/destroy (`sockets(proto)`), `destroy_to(gone, udp_cookies, tcp)`
+      shared by the agent and the fixture.
+- [ ] agent: startup reconcile (first successful programming: UDP backends in `_reverse_sk` that no Service has
+      now); 50 ms batching (`Batch`: gone backends collect, one pass per 50 ms); the setting.
+- [ ] socket-lb-live: TCP termination step + startup reconcile shape; unit tests for Batch and selection.
+- [ ] Docs (runtime, spec 05 amendment line count check), changelog, sc-build + kernel-check, stage, close.
+
 ### CRD registration by the operator, agent CRD readiness gate — #337 (P1), 2026-11-20
 
 Also builds the operator executable of gap #446. Packaging: `flowsdn-agent operator` (a mode of the agent binary, as
