@@ -4,6 +4,16 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### FlowsdnEndpoint/FlowsdnNode seen on a node — #482 (P2), 2026-11-20
+
+Verification only (no code). Needs a flowsdn-flavor node whose golden has the writers (d39aa94) and the operator that
+registers the CRDs (66daa9b, #337; stormcos#303 closed in its favour). pvetest2 (the only flowsdn-flavor test machine)
+runs 12.97-flowsdn: flowsdn golden at 2b801ce, which has the writers but not the operator, so the kinds are not served.
+- [x] Proposed `--after-install flowsdn>=66daa9b@pvetest2`.
+- [ ] Then: FlowsdnNode for the node (owner Node, InternalIPs, pod CIDRs); a FlowsdnEndpoint per non-host-network Pod
+      (owner Pod, addresses, identity); deleting a Pod removes it. `shipped` with proof
+      `api:/apis/flowsdn.io/v1alpha1/flowsdnnodes ~ "name":"{name}"`; close.
+
 ### NodePort TCX programs short-circuit the host firewall — #484 (P0), finding 9353481628e3, 2026-11-20
 
 `nodeport_ingress`/`nodeport_egress` attach first on the uplink's TCX hooks and return TC_ACT_OK (TCX_PASS) for
