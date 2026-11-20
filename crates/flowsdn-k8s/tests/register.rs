@@ -59,14 +59,20 @@ fn update_only_when_missing_or_older() {
     assert!(needs_update(&crd(Some("1.33.10"), true)));
     assert!(needs_update(&crd(Some("1.9.99"), true)));
     assert!(!needs_update(&crd(Some(SCHEMA_VERSION), true)));
-    assert!(!needs_update(&crd(Some("1.34.0"), true)), "a newer schema is left alone");
+    assert!(
+        !needs_update(&crd(Some("1.34.0"), true)),
+        "a newer schema is left alone"
+    );
     assert!(!needs_update(&crd(Some("2.0.0"), true)));
 
     let payload = json!({"metadata": {"labels": {SCHEMA_VERSION_LABEL: SCHEMA_VERSION}},
         "spec": {"group": "flowsdn.io"}});
     let body = update_body(&crd(Some("1.0.0"), true), &payload);
     assert_eq!(body.pointer("/metadata/resourceVersion"), Some(&json!("7")));
-    assert_eq!(body.pointer("/metadata/labels"), payload.pointer("/metadata/labels"));
+    assert_eq!(
+        body.pointer("/metadata/labels"),
+        payload.pointer("/metadata/labels")
+    );
     assert_eq!(
         body.get("spec"),
         Some(&json!({"group": "flowsdn.io", "preserveUnknownFields": false}))
@@ -90,7 +96,10 @@ fn names_not_accepted_is_fatal() {
         "{error}"
     );
     assert_eq!(established(&crd(Some(SCHEMA_VERSION), true)), Ok(true));
-    assert_eq!(established(&json!({"status": {"conditions": []}})), Ok(false));
+    assert_eq!(
+        established(&json!({"status": {"conditions": []}})),
+        Ok(false)
+    );
 }
 
 /// A scripted API: answers in order; every call is recorded.
@@ -105,10 +114,11 @@ fn run(answers: Vec<(u16, Value)>, payload: &Value) -> (Result<Registered, Error
     };
     let mut waits = 0u32;
     let result = {
-        let mut send = |m: http::Method, p: &str, b: Option<&Value>| -> Result<(u16, Value), Error> {
-            script.calls.push((m.to_string(), p.to_owned(), b.cloned()));
-            Ok(script.answers.pop_front().unwrap_or((404, Value::Null)))
-        };
+        let mut send =
+            |m: http::Method, p: &str, b: Option<&Value>| -> Result<(u16, Value), Error> {
+                script.calls.push((m.to_string(), p.to_owned(), b.cloned()));
+                Ok(script.answers.pop_front().unwrap_or((404, Value::Null)))
+            };
         let mut wait = |_: Duration| waits = waits.saturating_add(1);
         register("flowsdnnodes.flowsdn.io", payload, &mut send, &mut wait)
     };

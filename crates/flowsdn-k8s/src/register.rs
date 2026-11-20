@@ -31,11 +31,15 @@ pub const POLLS: u32 = 120;
 pub const SHIPPED: [(&str, &str); 22] = [
     (
         "flowsdnnetworkpolicies",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnnetworkpolicies.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnnetworkpolicies.yaml"
+        ),
     ),
     (
         "flowsdnclusterwidenetworkpolicies",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnclusterwidenetworkpolicies.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnclusterwidenetworkpolicies.yaml"
+        ),
     ),
     (
         "flowsdncidrgroups",
@@ -47,7 +51,9 @@ pub const SHIPPED: [(&str, &str); 22] = [
     ),
     (
         "flowsdnendpointslices",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnendpointslices.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnendpointslices.yaml"
+        ),
     ),
     (
         "flowsdnidentities",
@@ -63,11 +69,15 @@ pub const SHIPPED: [(&str, &str); 22] = [
     ),
     (
         "flowsdnlocalredirectpolicies",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnlocalredirectpolicies.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnlocalredirectpolicies.yaml"
+        ),
     ),
     (
         "flowsdnegressgatewaypolicies",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnegressgatewaypolicies.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnegressgatewaypolicies.yaml"
+        ),
     ),
     (
         "flowsdnenvoyconfigs",
@@ -75,15 +85,21 @@ pub const SHIPPED: [(&str, &str); 22] = [
     ),
     (
         "flowsdnclusterwideenvoyconfigs",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnclusterwideenvoyconfigs.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnclusterwideenvoyconfigs.yaml"
+        ),
     ),
     (
         "flowsdnloadbalancerippools",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnloadbalancerippools.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnloadbalancerippools.yaml"
+        ),
     ),
     (
         "flowsdnl2announcementpolicies",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnl2announcementpolicies.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnl2announcementpolicies.yaml"
+        ),
     ),
     (
         "flowsdnpodippools",
@@ -91,31 +107,45 @@ pub const SHIPPED: [(&str, &str); 22] = [
     ),
     (
         "flowsdnbgpclusterconfigs",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnbgpclusterconfigs.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnbgpclusterconfigs.yaml"
+        ),
     ),
     (
         "flowsdnbgppeerconfigs",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnbgppeerconfigs.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnbgppeerconfigs.yaml"
+        ),
     ),
     (
         "flowsdnbgpadvertisements",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnbgpadvertisements.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnbgpadvertisements.yaml"
+        ),
     ),
     (
         "flowsdnbgpnodeconfigs",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnbgpnodeconfigs.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnbgpnodeconfigs.yaml"
+        ),
     ),
     (
         "flowsdnbgpnodeconfigoverrides",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnbgpnodeconfigoverrides.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdnbgpnodeconfigoverrides.yaml"
+        ),
     ),
     (
         "flowsdngatewayclassconfigs",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdngatewayclassconfigs.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdngatewayclassconfigs.yaml"
+        ),
     ),
     (
         "flowsdndatapathplugins",
-        include_str!("../../../deploy/stormcos/manifests-kubernetes/crds/flowsdndatapathplugins.yaml"),
+        include_str!(
+            "../../../deploy/stormcos/manifests-kubernetes/crds/flowsdndatapathplugins.yaml"
+        ),
     ),
 ];
 
@@ -249,7 +279,11 @@ pub fn register(
                 updated = true;
                 break;
             }
-            match send(http::Method::PUT, &path, Some(&update_body(&current, payload)))? {
+            match send(
+                http::Method::PUT,
+                &path,
+                Some(&update_body(&current, payload)),
+            )? {
                 (200..=299, _) => {
                     updated = true;
                     break;
@@ -264,7 +298,9 @@ pub fn register(
             }
         }
         if !updated {
-            return Err(Error(format!("update {name}: still conflicting after 60 s")));
+            return Err(Error(format!(
+                "update {name}: still conflicting after 60 s"
+            )));
         }
         done = Registered::Updated;
     }
