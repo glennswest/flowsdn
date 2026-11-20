@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#489)
+- **fix:** New endpoints are isolated until their policy is installed (finding bd9892ebb241): with Pod policy enforced, the endpoint manager writes a quarantine row (both directions, no entries, flag bit 8) before attaching a new endpoint; the policy thread keeps it for endpoints whose Pod or labels it does not know yet, replaces it with the Pod's own, or removes it when no policy selects the Pod, and its sweep never removes a quarantine row of an endpoint it has not seen. Unsynced or failed lists leave the quarantine in place (fail closed). `/v1/healthz` `policy.quarantined`.
+- **test:** `cni-runtime`: a real CNI ADD under quarantine exchanges no UDP either way (IPv4/IPv6) until the row is lifted; policy unit tests for keep, release, replace and the sweep.
+
 ### 2026-11-20 (#488)
 - **fix:** DSR options are validated on the backend's node (finding 0252b1736f32): the option's frontend must be a DSR frontend there and the packet's destination one of its backends; any other option drops the packet, so a forged option cannot give a local backend's replies an arbitrary source. IPv4 and IPv6, each on its own BPF frame.
 - **fix:** A new DSR flow whose first packet cannot carry the option (UDP over the MTU with it, IPv4 options already present, TCP without SYN) is source-NATed instead of sent untracked (finding 08ad0c4a7dca).

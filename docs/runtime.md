@@ -884,6 +884,21 @@ fragmentation-needed and IPv6 packet-too-big, and traffic into a Pod from the
 node itself (kubelet probes). Where enforced, fragments other than the first
 (and IPv6 fragments) and malformed IP headers are dropped.
 
+**New endpoints start isolated** (#489). With `network-policy` or
+`flowsdn-policy` on (and the policy maps shared, so the policy thread runs),
+the endpoint manager writes a quarantine row for a new endpoint before its
+programs attach: both directions enforced with no entries and the flag bit
+`8`, which the datapath ignores. So from its first packet the Pod sends and
+receives only what is always passed (the node's own traffic to it, ARP,
+neighbour discovery). The policy thread replaces the row with the Pod's own
+once it knows the Pod and its labels, or removes it when no policy selects
+the Pod; until then (the lists not complete, the Pod not yet in the watch, a
+first list that never succeeds) the quarantine stays. Its sweep never removes
+a quarantine row of an endpoint it has not seen yet. Endpoints restored at
+agent start keep their pinned row (or get theirs from the policy thread).
+`policy.quarantined` in `/v1/healthz` lists the endpoint IDs still isolated.
+`cni-runtime` checks it on a kernel with real CNI ADDs.
+
 The policy thread compiles, every second once the NetworkPolicy, Pod, Node and
 Namespace lists are complete and the endpoints are published:
 
