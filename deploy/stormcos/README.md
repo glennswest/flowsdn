@@ -31,7 +31,9 @@ Kubernetes-mode agent and its runtime, and the edition ships this set with it
   object with the release's copy at start, and deletes it once its manifest
   has left `manifests.d` (flowsdn → cilium, rustkube#236). So a live edit does
   not last, `flowsdn-config` included: the applier restores the release's copy
-  at its next start. A setting that must stay belongs in the manifest here.
+  at its next start. A setting that must stay belongs in the manifest here,
+  or, for some nodes, in a FlowsdnNodeConfig in `kube-system` (#480: the
+  agent applies its `defaults` at its next start; see docs/runtime.md).
   `crds/` is not in the golden's `manifests/flowsdn.yaml` and carries no mode:
   the operator (`64-flowsdn-operator.yaml`, #337) registers those CRDs itself;
   stormcos may still apply them (stormcos#303), and the operator then finds
