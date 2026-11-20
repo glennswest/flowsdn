@@ -4,6 +4,19 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### FlowsdnNodeConfig as an agent configuration source — #480 (P2), 2026-11-20
+
+Decision (master 2026-11-20, on the issue, from the owner's standing rules): (A) — `spec.defaults` keys are flowsdn's own
+agent settings for the nodes `nodeSelector` picks; every key it accepts works; read at agent start.
+- [ ] `node_config.rs`: allowed keys (node-scoped settings: egress, device-mtu, pools/gateways, kubernetes.* except
+      node-name/kubeconfig/cgroup-root/cluster-name; no paths); configs selected by nodeSelector, applied in name
+      order (later wins); value JSON-parsed else string; each key validated by parsing the whole config with it,
+      refused (with the reason) otherwise; not served (404) = none.
+- [ ] api::run: before connect, fetch the Node's labels and `<POD_NAMESPACE|kube-system>` FlowsdnNodeConfigs (retry
+      60 s, then fail), re-parse. `/v1/healthz` `node-config` {applied: key -> config, refused}; refused keys are
+      Warning Events on the Node.
+- [ ] Tests, docs (runtime, crds, deploy README, agent API), changelog; sc-build; stage; close; drop needs-owner.
+
 ### Socket termination gaps — #392 (P3), 2026-11-20
 
 TCP: spec 05 §3.8 (flowsdn's own) already decides it: UDP always, TCP only with the reference's hidden
