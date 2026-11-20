@@ -281,7 +281,9 @@ fn ip6(text: &str) -> Result<[u8; 16]> {
 
 const UPLINK_MAC: &str = "02:00:00:00:00:20";
 const GATEWAY_MAC: [u8; 6] = [2, 0, 0, 0, 0, 0x30];
-const TC_ACT_OK: u32 = 0;
+/// What the NodePort programs return for a packet they neither redirect nor
+/// drop: TCX_NEXT (-1), so the host firewall after them runs (#484).
+const TCX_NEXT: u32 = u32::MAX;
 const TC_ACT_REDIRECT: u32 = 7;
 
 fn ip(args: &[&str]) -> Result<()> {
@@ -370,9 +372,9 @@ fn run(lb: &mut SocketLb, program: &str, frame: &[u8]) -> Result<Vec<u8>> {
         repeat: 1,
         ..Default::default()
     })?;
-    if result.return_value != TC_ACT_OK {
+    if result.return_value != TCX_NEXT {
         return Err(format!(
-            "{program}: verdict {}, expected TC_ACT_OK",
+            "{program}: verdict {}, expected TCX_NEXT",
             result.return_value
         )
         .into());
@@ -585,7 +587,7 @@ fn nat46x64(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         ("TTL 1", expiring),
         ("too big", big),
     ] {
-        if run_on(lb, "nodeport_ingress", &frame, up0, TC_ACT_OK)? != frame {
+        if run_on(lb, "nodeport_ingress", &frame, up0, TCX_NEXT)? != frame {
             return Err(format!("NAT46 changed a frame it must refuse: {name}").into());
         }
     }
@@ -685,16 +687,16 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         // The backend's node: nothing to rewrite before the option, then the
         // reply leaves with the frontend as its source.
         let reply = frame4(proto, remote, client, 8080, sport, udp_zero);
-        if run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)? != reply {
+        if run_on(lb, "nodeport_egress", &reply, up0, TCX_NEXT)? != reply {
             return Err(
                 format!("DSR proto {proto}: a reply was rewritten before its option").into(),
             );
         }
-        if run_on(lb, "nodeport_ingress", &out, up0, TC_ACT_OK)? != out {
+        if run_on(lb, "nodeport_ingress", &out, up0, TCX_NEXT)? != out {
             return Err(format!("DSR proto {proto}: the backend's node changed the packet").into());
         }
         let (src, dst, s, d, ip_ok, l4_ok) =
-            parse4(&run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)?)?;
+            parse4(&run_on(lb, "nodeport_egress", &reply, up0, TCX_NEXT)?)?;
         if (src, dst, s, d) != (front, client, 30095, sport) || !ip_ok || !l4_ok {
             return Err(format!(
                 "DSR reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}, ip {ip_ok} l4 {l4_ok}"
@@ -753,18 +755,18 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             .into());
         }
         let reply = frame6(proto, remote6, client6, 8080, sport, false);
-        if run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)? != reply {
+        if run_on(lb, "nodeport_egress", &reply, up0, TCX_NEXT)? != reply {
             return Err(
                 format!("DSR IPv6 proto {proto}: a reply was rewritten before its option").into(),
             );
         }
-        if run_on(lb, "nodeport_ingress", &out, up0, TC_ACT_OK)? != out {
+        if run_on(lb, "nodeport_ingress", &out, up0, TCX_NEXT)? != out {
             return Err(
                 format!("DSR IPv6 proto {proto}: the backend's node changed the packet").into(),
             );
         }
         let (src, dst, s, d, _, l4_ok) =
-            parse6(&run_on(lb, "nodeport_egress", &reply, up0, TC_ACT_OK)?)?;
+            parse6(&run_on(lb, "nodeport_egress", &reply, up0, TCX_NEXT)?)?;
         if (src, dst, s, d) != (front6, client6, 30095, sport) || !l4_ok {
             return Err(format!("DSR IPv6 reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}").into());
         }
@@ -998,12 +1000,12 @@ fn snat(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     // A reply to a NAT port no flow holds, and a TTL that forwarding would
     // expire: untouched, left to the stack.
     let stray = frame4(6, remote, front, 8081, 61000, false);
-    let stray = run_on(lb, "nodeport_ingress", &stray, up0, TC_ACT_OK)? == stray;
+    let stray = run_on(lb, "nodeport_ingress", &stray, up0, TCX_NEXT)? == stray;
     let mut expiring = frame4(6, client, front, 40100, 30090, false);
     if let Some(ttl) = expiring.get_mut(22) {
         *ttl = 1;
     }
-    let expiring_kept = run_on(lb, "nodeport_ingress", &expiring, up0, TC_ACT_OK)? == expiring;
+    let expiring_kept = run_on(lb, "nodeport_ingress", &expiring, up0, TCX_NEXT)? == expiring;
     if !stray || !expiring_kept {
         return Err(format!(
             "SNAT changed a frame it does not own (stray reply {stray}, TTL 1 {expiring_kept})"
@@ -1123,12 +1125,12 @@ fn snat6(
     // A reply to a NAT port no flow holds, and a hop limit that forwarding
     // would expire: untouched, left to the stack.
     let stray = frame6(6, remote, front, 8081, 61000, false);
-    let stray = run_on(lb, "nodeport_ingress", &stray, up0, TC_ACT_OK)? == stray;
+    let stray = run_on(lb, "nodeport_ingress", &stray, up0, TCX_NEXT)? == stray;
     let mut expiring = frame6(6, client, front, 40100, 30090, false);
     if let Some(hops) = expiring.get_mut(21) {
         *hops = 1;
     }
-    let expiring_kept = run_on(lb, "nodeport_ingress", &expiring, up0, TC_ACT_OK)? == expiring;
+    let expiring_kept = run_on(lb, "nodeport_ingress", &expiring, up0, TCX_NEXT)? == expiring;
     if !stray || !expiring_kept {
         return Err(format!(
             "SNAT IPv6 changed a frame it does not own (stray reply {stray}, hop limit 1 {expiring_kept})"

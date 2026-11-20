@@ -10,7 +10,8 @@
 //! the agent's affinity-match map still pairs the backend with the service.
 //! The `nodeport_*` tc programs serve NodePort, external and LoadBalancer
 //! addresses to clients outside the cluster (IPv4 and IPv6, with SNAT to
-//! backends on other nodes). A frontend whose master carries the Maglev
+//! backends on other nodes); what they neither redirect nor drop goes on to
+//! the next TCX program (`TCX_NEXT`), the host firewall. A frontend whose master carries the Maglev
 //! algorithm picks a new flow's backend from its lookup table in
 //! `flowsdn_lb{4,6}_maglev` by the flow hash, so every node sends a flow to
 //! the same backend (spec 05 §3.13, §5.1); without a table it picks at
@@ -2374,8 +2375,27 @@ fn egress6(skb: *mut __sk_buff) -> i32 {
     TC_ACT_OK
 }
 
+/// TCX's "run the next program on this hook" (`TCX_NEXT`). TCX ends the
+/// chain on any other verdict, `TC_ACT_OK` (`TCX_PASS`) included, and the host
+/// firewall (`from_netdev`/`to_netdev`, #379) is attached after these
+/// programs: a pass here must hand the packet on to it (finding
+/// 9353481628e3, #484). Redirects and drops stay final.
+const TCX_NEXT: i32 = -1;
+#[inline(always)]
+fn next(verdict: i32) -> i32 {
+    if verdict == TC_ACT_OK {
+        TCX_NEXT
+    } else {
+        verdict
+    }
+}
+
 #[classifier]
 pub fn nodeport_ingress(ctx: TcContext) -> i32 {
+    next(ingress(&ctx))
+}
+#[inline(always)]
+fn ingress(ctx: &TcContext) -> i32 {
     let skb = ctx.skb.skb;
     match ctx.load::<[u8; 2]>(12) {
         Ok(ETH_P_IPV6) => match ingress6(skb) {
@@ -2402,10 +2422,10 @@ pub fn nodeport_ingress(ctx: TcContext) -> i32 {
 }
 #[classifier]
 pub fn nodeport_egress(ctx: TcContext) -> i32 {
-    match ctx.load::<[u8; 2]>(12) {
+    next(match ctx.load::<[u8; 2]>(12) {
         Ok(ETH_P_IPV6) => egress6(ctx.skb.skb),
         _ => egress4(ctx.skb.skb),
-    }
+    })
 }
 
 // SAFETY: unique immutable ELF license declaration, required by the loader.

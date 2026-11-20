@@ -279,7 +279,9 @@ impl SocketLb {
             if program.fd().is_err() {
                 program.load()?;
             }
-            // First: the host firewall (#379) must see translated traffic.
+            // First: the host firewall (#379, attached last) must see
+            // translated traffic. The programs return TCX_NEXT for what they
+            // neither redirect nor drop, so it runs after them (#484).
             let id = program.attach_with_options(
                 interface,
                 direction,
