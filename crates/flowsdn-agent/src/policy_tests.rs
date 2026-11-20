@@ -887,13 +887,17 @@ fn a_new_endpoint_stays_quarantined_until_its_pod_is_known() {
     // The known, unselected web endpoint has no row: unenforced.
     assert!(!desired.endpoints.contains_key(&40));
     assert!(
-        !desired.entries.keys().any(|k| EndpointPolicyKey::from_bytes(*k).endpoint == 9),
+        !desired
+            .entries
+            .keys()
+            .any(|k| EndpointPolicyKey::from_bytes(*k).endpoint == 9),
         "a quarantined endpoint has no allow entry"
     );
 
     // The Pod arrives, no policy selects it: no row, and the sweep removes
     // the quarantine row the manager wrote.
-    view.pods.push(pod("newcomer", "n1", "10.1.0.9", &[("app", "new")]));
+    view.pods
+        .push(pod("newcomer", "n1", "10.1.0.9", &[("app", "new")]));
     let filter = LabelFilter::identity(&[]).expect("filter");
     let sets = view.pod_label_sets(&filter);
     for (pod, _, labels) in sets {
@@ -930,8 +934,14 @@ fn the_sweep_keeps_an_unknown_endpoints_quarantine() {
     let desired = compile(&view(Vec::new()), &[]);
     let row = quarantine(12).flags;
     assert!(!stale_row(&desired, 77, row), "unknown endpoint: kept");
-    assert!(stale_row(&desired, 77, enforce::INGRESS), "an ordinary row: removed");
-    assert!(stale_row(&desired, 40, row), "known endpoint without policy: removed");
+    assert!(
+        stale_row(&desired, 77, enforce::INGRESS),
+        "an ordinary row: removed"
+    );
+    assert!(
+        stale_row(&desired, 40, row),
+        "known endpoint without policy: removed"
+    );
 
     // Pod policy off: nothing is quarantined.
     let mut off = view(Vec::new());

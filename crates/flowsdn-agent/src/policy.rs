@@ -528,9 +528,7 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             // Its policy cannot be known yet: it stays isolated (#489,
             // finding bd9892ebb241) as the endpoint manager installed it.
             if (view.network_policy || view.flowsdn_policy) && *ifindex != 0 {
-                desired
-                    .endpoints
-                    .insert(*ifindex, quarantine(*id));
+                desired.endpoints.insert(*ifindex, quarantine(*id));
                 desired.quarantined.push(*id);
             }
             continue;

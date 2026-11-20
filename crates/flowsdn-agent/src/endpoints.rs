@@ -508,10 +508,11 @@ fn install(
         }
         // Isolated before the first packet can pass (#489).
         if quarantine {
-            kernel(driver.policy().set_policy_endpoint(
-                endpoint.ifindex,
-                crate::policy::quarantine(record.id),
-            ))?;
+            kernel(
+                driver
+                    .policy()
+                    .set_policy_endpoint(endpoint.ifindex, crate::policy::quarantine(record.id)),
+            )?;
         }
         kernel(driver.attach(text(&record.document, "IfName")))?;
         if egress == Egress::Stack {
