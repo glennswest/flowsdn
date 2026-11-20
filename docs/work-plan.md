@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### cgroup-dump-metadata and map events routes — #468 (P3), 2026-11-20
+
+Scope question: only cilium-dbg calls them; `/map/{name}/events` needs the `/map`, `/map/{name}` cache API flowsdn
+does not have (untracked) plus `bpf-map-event-buffers` (off by default in the reference); cgroup metadata needs
+rustkube-node's cgroup layout. Nothing in flowsdn consumes them.
+- [x] Asked (A: drop from scope; B: build all incl. /map family; C: cgroup route only), recommended A; `wait-owner`.
+- [ ] On A: spec 08 §2.2/§1 say permanently absent (same line count; append amendment), changelog, close.
+
 ### L2 neighbor management — #469 (P3), 2026-11-20
 
 Spec 10 §3.4/§5.7. Forwardable IPs: remote nodes' InternalIPs (backends feed the reference's table only with XDP
