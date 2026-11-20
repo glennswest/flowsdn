@@ -386,6 +386,8 @@ fn controller_lists_watches_and_derives_the_pool() {
         lb_ipam: true,
         // Needs node-port; answering ARP needs CAP_NET_RAW.
         l2_announcements: false,
+        // No endpoint is published here (no API thread), so nothing is written.
+        endpoint_crd: true,
     };
     let controller = Controller::connect(settings, &dir).expect("connect");
     let (pool4, pool6) = controller.wait_for_pools(true, true).expect("pools");

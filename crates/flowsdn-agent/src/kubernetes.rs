@@ -93,6 +93,9 @@ pub struct Settings {
     /// `node-port`: watch FlowsdnL2AnnouncementPolicies and answer ARP/NDP
     /// for the addresses they give this node. Nothing without a policy.
     pub l2_announcements: bool,
+    /// `kubernetes.endpoint-crd` (#332), default on: keep a FlowsdnEndpoint
+    /// for each local Pod endpoint ([`crate::endpoint_crd`]).
+    pub endpoint_crd: bool,
 }
 /// `kubernetes.host-firewall`: whether the agent filters traffic to the
 /// node itself from FlowsdnClusterwideNetworkPolicy host rules, and whether
@@ -221,6 +224,7 @@ impl Settings {
             uplinks: crate::uplinks::Settings::parse(object.get("uplinks"))?,
             lb_ipam: flag("lb-ipam", true)?,
             l2_announcements: flag("l2-announcements", true)?,
+            endpoint_crd: flag("endpoint-crd", true)?,
         }))
     }
 }
@@ -636,6 +640,9 @@ pub struct View {
     pub lb_pools: Vec<Value>,
     pub lb_pools_synced: bool,
     pub lb_ipam_status: Value,
+    /// The FlowsdnEndpoint writer (#332): `{served, objects}` after its
+    /// first pass, null before or when `kubernetes.endpoint-crd` is off.
+    pub endpoint_crd_status: Value,
     /// L2 announcements (#475): on, the FlowsdnL2AnnouncementPolicy
     /// objects, and what the announcer last answered for.
     pub l2_announcements: bool,
@@ -928,6 +935,7 @@ impl View {
             "auto-direct-node-routes":self.direct_routes,"service-lb":self.service_lb,
             "identity-allocation":self.identity,"network-policy":self.network_policy,"flowsdn-policy":self.flowsdn_policy,
             "lb-ipam":self.lb_ipam,"l2-announcements":self.l2_announcements,
+            "flowsdn-endpoints":self.endpoint_crd_status,
             "policy":self.policy_status,"uplinks":self.uplinks.summary()})
     }
 }

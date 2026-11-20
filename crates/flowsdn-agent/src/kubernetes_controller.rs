@@ -232,6 +232,13 @@ impl Controller {
                 .name("flowsdn-l2".into())
                 .spawn(move || lb::announce_loop(&l2_view))?;
         }
+        if self.settings.endpoint_crd {
+            let endpoint_view = Arc::clone(&view);
+            let kubeconfig = self.settings.kubeconfig.clone();
+            std::thread::Builder::new()
+                .name("flowsdn-endpoints".into())
+                .spawn(move || endpoint_crd_loop(&endpoint_view, kubeconfig.as_deref()))?;
+        }
         let annotate_view = Arc::clone(&view);
         let kubeconfig = self.settings.kubeconfig.clone();
         std::thread::Builder::new()
@@ -682,6 +689,82 @@ fn annotation_loop(view: &Shared, kubeconfig: Option<&Path>) {
                 view.errors
                     .insert("annotations".into(), failures.join("; "));
             }
+        }
+    }
+}
+
+/// The FlowsdnEndpoint writer (#332, [`crate::endpoint_crd`]), with its own
+/// client: every few seconds, bring each local Pod's FlowsdnEndpoint to the
+/// view. A write the server refuses is a `flowsdn-endpoints` part error and
+/// a Warning Event on the Pod.
+fn endpoint_crd_loop(view: &Shared, kubeconfig: Option<&Path>) {
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            lock(view)
+                .errors
+                .insert("flowsdn-endpoints".into(), error.to_string());
+            return;
+        }
+    };
+    let client = match runtime.block_on(JsonClient::load(kubeconfig, TransportLimits::default())) {
+        Ok(client) => client,
+        Err(error) => {
+            lock(view)
+                .errors
+                .insert("flowsdn-endpoints".into(), error.to_string());
+            return;
+        }
+    };
+    let mut writer = crate::endpoint_crd::Writer::default();
+    let mut said_unserved = false;
+    loop {
+        std::thread::sleep(ANNOTATE_INTERVAL);
+        let desired = crate::endpoint_crd::desired(&lock(view));
+        let mut send = |method: http::Method, path: &str, body: Option<&Value>| {
+            runtime
+                .block_on(client.send_json(method, path, body))
+                .map_err(|e| e.to_string())
+        };
+        let outcome = writer.sync(&desired, &mut send);
+        if outcome.unserved && !said_unserved {
+            crate::log::logln!(
+                "FlowsdnEndpoint is not served (its CRD is not applied); retrying every minute"
+            );
+        }
+        said_unserved = outcome.unserved;
+        for ((namespace, name), failure) in &outcome.failures {
+            let uid = desired
+                .get(&(namespace.clone(), name.clone()))
+                .map(|d| d.pod_uid.clone())
+                .unwrap_or_default();
+            crate::events::pod(
+                namespace,
+                name,
+                &uid,
+                Warning,
+                "FlowsdnEndpointFailed",
+                format!("FlowsdnEndpoint {namespace}/{name}: {failure}"),
+            );
+        }
+        let mut view = lock(view);
+        view.endpoint_crd_status = json!({
+            "served": !outcome.unserved,
+            "objects": writer.held(),
+        });
+        if outcome.failures.is_empty() {
+            view.errors.remove("flowsdn-endpoints");
+        } else {
+            let text: Vec<String> = outcome
+                .failures
+                .iter()
+                .map(|((ns, name), f)| format!("{ns}/{name}: {f}"))
+                .collect();
+            view.errors
+                .insert("flowsdn-endpoints".into(), text.join("; "));
         }
     }
 }

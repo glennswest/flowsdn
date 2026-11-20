@@ -10,7 +10,7 @@
 //! (an address pair, a named port, an identity tuple) are one type.
 //! `tests/kinds.rs` checks each type against its CRD's schema (spec 13
 //! T-CRD-3/4/5/7).
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+pub use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::collections::BTreeMap;
 
@@ -354,15 +354,15 @@ pub struct FlowsdnEndpointStatusNetworking {
 pub struct FlowsdnEndpointStatusPolicy {
     /// EndpointPolicyDirection is the list of allowed identities per direction.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub egress: Option<FlowsdnEndpointStatusPolicyEgress>,
+    pub egress: Option<FlowsdnEndpointStatusPolicyDirection>,
     /// EndpointPolicyDirection is the list of allowed identities per direction.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ingress: Option<FlowsdnEndpointStatusPolicyIngress>,
+    pub ingress: Option<FlowsdnEndpointStatusPolicyDirection>,
 }
 
 /// EndpointPolicyDirection is the list of allowed identities per direction.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
-pub struct FlowsdnEndpointStatusPolicyEgress {
+pub struct FlowsdnEndpointStatusPolicyDirection {
     /// Deprecated
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub adding: Option<Vec<IdentityTuple>>,
@@ -382,27 +382,6 @@ pub struct FlowsdnEndpointStatusPolicyEgress {
     pub state: Option<String>,
 }
 
-/// EndpointPolicyDirection is the list of allowed identities per direction.
-#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
-pub struct FlowsdnEndpointStatusPolicyIngress {
-    /// Deprecated
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub adding: Option<Vec<IdentityTuple>>,
-    /// AllowedIdentityList is a list of IdentityTuples that species peers that are allowed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub allowed: Option<Vec<IdentityTuple>>,
-    /// DenyIdentityList is a list of IdentityTuples that species peers that are denied.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub denied: Option<Vec<IdentityTuple>>,
-    pub enforcing: bool,
-    /// Deprecated
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub removing: Option<Vec<IdentityTuple>>,
-    /// EndpointPolicyState defines the state of the Policy mode: "enforcing", "non-enforcing",
-    /// "disabled"
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub state: Option<String>,
-}
 
 /// FlowsdnEndpointSlice contains a group of Coreflowsdnendpoints.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
