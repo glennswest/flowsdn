@@ -12,7 +12,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] fd362d87218c: egress named ports via `egress_named`: the wildcard peer expands to the identities whose Pods name
       the port; an identity's Pods must agree on the mapping, else nothing + a problem. Never identity 0.
 - [x] Tests (two nodes /32 + except; external, unnamed, same-identity different mapping); policy-live scope-2 step.
-      Code fcd35f7, docs fcd35f7, fmt 5e664b4. kernel-check at 5e664b4 on 7.3.4: 24 pass 0 fail 2 skip, 999 tests 0 failed,
+      Code 6a8b207, docs fcd35f7, fmt 5e664b4. kernel-check at 5e664b4 on 7.3.4: 24 pass 0 fail 2 skip, 999 tests 0 failed,
       policy-live 20 PASS. Stage, ship, close.
 
 ### New endpoints isolated until their policy is installed — #489 (P1), finding bd9892ebb241, 2026-11-20
