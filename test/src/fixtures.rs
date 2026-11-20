@@ -65,7 +65,12 @@ fn fixtures(env: &Env) -> Vec<(&'static str, PathBuf, Vec<PathBuf>)> {
         (
             "fixture-policy-live",
             env.fixture("policy-live"),
-            vec![delivery],
+            vec![delivery.clone()],
+        ),
+        (
+            "fixture-host-chain-live",
+            env.fixture("host-chain-live"),
+            vec![delivery, env.bpf("socket-lb")],
         ),
         (
             "fixture-uplinks-live",

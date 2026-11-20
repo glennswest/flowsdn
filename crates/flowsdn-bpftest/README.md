@@ -117,6 +117,16 @@ wildcard identities; a top-precedence deny over a broader allow; ICMP echo
 replies by conntrack only; maps reading back as written; and removal of
 enforcement.
 
+Run `host-chain-live` with the `local-delivery` and `socket-lb` BPF objects
+for the uplink's whole TCX chain (#484). It attaches the host firewall
+(`from_netdev`/`to_netdev`, last) and the NodePort programs
+(`nodeport_ingress`/`nodeport_egress`, first) to a veth uplink as the agent
+does, enforces host ingress with only world TCP 7001 allowed, and drives real
+connections from a peer in its own network namespace: 7001 connects, 7002 does
+not and its drop is counted, and a connection the host starts is in the policy
+flow map with its reply let in. Test-running either program alone cannot show
+that the first one hands packets on to the second.
+
 `socket-live` and `socket-lb-live` use the cgroup v2 hierarchy at
 `/sys/fs/cgroup`. Where a container has none there (stormcos's privileged test
 pods, #341), they mount cgroup2 at that path in a private mount namespace of
