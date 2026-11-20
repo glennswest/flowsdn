@@ -4,6 +4,29 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### LoadBalancer Services end to end — #475 (P0), 2026-11-19
+
+stormlb#37 / stormstorefront#1 `edge-lb` (LoadBalancer, ETP Local). The datapath (uplink TCX node-local frontends for
+`status.loadBalancer.ingress`, Local = this node's backends) exists; missing: the address and the announcement.
+Design (the operator executable is gap #446, so both run in the Kubernetes-mode agent):
+
+- [ ] watch: Service labels/creation/`loadBalancerClass`/`ipFamilies`/requested IPs (`spec.loadBalancerIP`,
+      `lbipam.flowsdn.io/ips`); Node Ready; scopes for FlowsdnLoadBalancerIPPool and FlowsdnL2AnnouncementPolicy.
+- [ ] `lb_ipam.rs` (pure): pools (blocks cidr|start-stop, allowFirstLastIPs, disabled, serviceSelector incl.
+      `io.kubernetes.service.{namespace,name}`, overlap -> PoolConflict on the newer), deterministic allocation
+      (keep valid ingress, then requested, then lowest free per family), pool conditions.
+- [ ] `lease.rs` (pure): client-go style Lease decisions (expiry by local observation, not peer clocks).
+- [ ] controller thread `flowsdn-lb-ipam`: holds Lease kube-system/flowsdn-lb-ipam, merge-patches `services/<n>/status`
+      (resourceVersion precondition) and pool `/status` conditions. Setting `kubernetes.lb-ipam` (default on).
+- [ ] `l2_announce.rs` (pure): policies (serviceSelector, nodeSelector, interfaces regex, loadBalancerIPs/externalIPs),
+      rendezvous election over Ready selected nodes (ETP Local: nodes with a ready local endpoint) -> this node's
+      (ip, interfaces). Setting `kubernetes.l2-announcements` (default on; nothing is announced without a policy).
+- [ ] connector `announce.rs`: AF_PACKET ARP responder + NDP NA responder (cBPF filter for NS, solicited-node
+      multicast membership), GARP/unsolicited NA on takeover; responder thread.
+- [ ] RBAC (services/status patch, leases, pools/status), docs (runtime, agent-api, crds, stormcos README with a pool +
+      policy example), CHANGELOG; kernel fixture `l2-announce-live` (veth pair: arping/NS answered by the responder).
+- [ ] sc-build `cargo xtask check` + kernel-check; stage; shipped with stormlb#37's proof.
+
 ### spec 21 stub marker — #445 (P0), 2026-11-19
 
 - [x] §2 exempt list: `HTTPRouteParentRefPort` stated as absent, gap #474
