@@ -1,7 +1,9 @@
 //! Endpoint programs: `local_delivery` on each endpoint's host veth ingress
 //! (pod egress: policy, then delivery or the host stack) and `to_container`
 //! on its egress (pod ingress: policy); `from_netdev`/`to_netdev` on the
-//! uplinks are the host firewall (#379). See `local-delivery/policy.rs`.
+//! uplinks are the host firewall (#379), which the endpoint programs also
+//! apply to local Pods' traffic to the host (#384). See
+//! `local-delivery/policy.rs`.
 #![no_std]
 #![no_main]
 
@@ -39,6 +41,10 @@ pub fn local_delivery(ctx: TcContext) -> i32 {
     if policy::enforce(&ctx, 1, policy::SCOPE_ENDPOINT) != TC_ACT_OK {
         return TC_ACT_SHOT;
     }
+    // A packet to the node itself: the host firewall's ingress (#384).
+    if policy::enforce(&ctx, 0, policy::SCOPE_HOST_PODS) != TC_ACT_OK {
+        return TC_ACT_SHOT;
+    }
     // SAFETY: valid immutable global; volatile prevents constant folding so
     // the loader's pre-load override is what the kernel program reads.
     if unsafe { core::ptr::read_volatile(&raw const __config_stack_egress) } != 0 {
@@ -58,9 +64,15 @@ pub fn local_delivery(ctx: TcContext) -> i32 {
 
 /// Traffic into an endpoint, on its host veth's egress: the endpoint's
 /// ingress policy. Delivery itself is the stack's or `local_delivery`'s.
+/// A flow the host starts to the endpoint is remembered for the host
+/// firewall, so the Pod's replies pass it (#384).
 #[classifier]
 pub fn to_container(ctx: TcContext) -> i32 {
-    policy::enforce(&ctx, 0, policy::SCOPE_ENDPOINT)
+    let verdict = policy::enforce(&ctx, 0, policy::SCOPE_ENDPOINT);
+    if verdict != TC_ACT_OK {
+        return verdict;
+    }
+    policy::enforce(&ctx, 1, policy::SCOPE_HOST_PODS)
 }
 
 /// The host firewall (#379) on an uplink's ingress: the host endpoint's

@@ -261,6 +261,10 @@ pub mod enforce {
 /// The host's endpoint ID in the policy maps (#379): above every Pod
 /// endpoint ID (16 bits), so it never collides with one.
 pub const HOST_ENDPOINT: u32 = 0x1_0000;
+/// The `flowsdn_policy_ep` key of the host endpoint for local Pods' traffic
+/// to and from the host (#384): no interface has index 0, so it never
+/// collides with an endpoint's or an uplink's entry.
+pub const HOST_PODS: u32 = 0;
 
 /// `flowsdn_policy_verdicts` verdicts: allowed by a rule, dropped, and
 /// would have been dropped (audit).

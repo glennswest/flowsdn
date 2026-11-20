@@ -8,7 +8,9 @@
 //! was allowed in, so a reply in the other direction passes without a policy
 //! lookup. The host is an endpoint too (#379): `from_netdev` and
 //! `to_netdev` run this on the uplinks for traffic to and from this node's
-//! own addresses only ([`SCOPE_HOST`]). An endpoint in audit mode passes
+//! own addresses only ([`SCOPE_HOST`]), and the endpoint programs run it
+//! for local Pods' traffic to and from the host ([`SCOPE_HOST_PODS`], #384).
+//! An endpoint in audit mode passes
 //! what its policy would drop. Each decision is counted in
 //! `flowsdn_policy_verdicts` (remembered flows are not). It does not do
 //! authentication (an entry that requires it drops), proxy redirects,
@@ -24,7 +26,7 @@ use aya_ebpf::{
 use flowsdn_bpf_abi::{
     Be16, FAMILY_V4, FAMILY_V6, RemoteEndpointInfo,
     policy::{
-        ENDPOINT_POLICY_FULL_PREFIX, POLICY_CT_CLOSING, PolicyCtKey, PolicyCtValue,
+        ENDPOINT_POLICY_FULL_PREFIX, HOST_PODS, POLICY_CT_CLOSING, PolicyCtKey, PolicyCtValue,
         PolicyEndpoint, PolicyEntry, PolicyStatsValue, PolicyVerdictKey, enforce, verdict,
     },
 };
@@ -70,6 +72,11 @@ pub const SCOPE_ENDPOINT: u8 = 0;
 /// [`enforce`] on an uplink for the host endpoint: only packets to (ingress)
 /// or from (egress) this node's own addresses; forwarded traffic passes.
 pub const SCOPE_HOST: u8 = 1;
+/// [`enforce`] on an endpoint's host veth for the host endpoint (#384): a
+/// local Pod's packets to the host (ingress, on `local_delivery`) and the
+/// host's to the Pod (egress, on `to_container`); the host endpoint is
+/// `flowsdn_policy_ep`'s [`HOST_PODS`] entry, not the interface's.
+pub const SCOPE_HOST_PODS: u8 = 2;
 
 /// This cluster's ID (0 without cluster mesh) for the aggregate identity.
 // SAFETY: unique immutable symbol in the loader configuration datasec.
@@ -436,11 +443,16 @@ fn refuse(ctx: &TcContext, endpoint: &PolicyEndpoint, egress: u8, flow: &Flow) -
 
 /// Enforce the endpoint behind this interface for one packet in `egress`
 /// (1: leaving the endpoint) or ingress (0). TC_ACT_OK lets it continue.
-/// `scope` is [`SCOPE_ENDPOINT`] or [`SCOPE_HOST`].
+/// `scope` is [`SCOPE_ENDPOINT`], [`SCOPE_HOST`] or [`SCOPE_HOST_PODS`].
 #[inline(always)]
 pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
+    let index = if scope == SCOPE_HOST_PODS {
+        HOST_PODS
+    } else {
+        ifindex(ctx)
+    };
     // SAFETY: NO_PREALLOC hash; the value is copied at once.
-    let Some(endpoint) = (unsafe { POLICY_EP.get(ifindex(ctx)).copied() }) else {
+    let Some(endpoint) = (unsafe { POLICY_EP.get(index).copied() }) else {
         return TC_ACT_OK;
     };
     let mut flow = Flow {
@@ -460,8 +472,8 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
         Some(Parsed::Pass) => return TC_ACT_OK,
         Some(Parsed::Flow) => {}
         // On an uplink a frame the parser cannot read is not known to be
-        // the host's: pass it.
-        Some(Parsed::Malformed) | None if scope == SCOPE_HOST => return TC_ACT_OK,
+        // the host's: pass it (on a veth the Pod's own policy judges it).
+        Some(Parsed::Malformed) | None if scope != SCOPE_ENDPOINT => return TC_ACT_OK,
         Some(Parsed::Malformed) | None => {
             return if enforced {
                 refuse(ctx, &endpoint, egress, &flow)
@@ -470,7 +482,7 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
             };
         }
     }
-    if scope == SCOPE_HOST {
+    if scope != SCOPE_ENDPOINT {
         let local = if egress != 0 {
             flow.key.saddr
         } else {
