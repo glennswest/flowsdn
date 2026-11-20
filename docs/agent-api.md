@@ -71,10 +71,13 @@ counts. `policy` is what the policy thread last programmed (#292):
 `{endpoints: [{id, pod, ingress-enforced, egress-enforced, entries}], ipcache,
 host-firewall, flowsdn-policies, problems}`, `null` before its first pass. `host-firewall` (#379)
 is `null` with `kubernetes.host-firewall: off`, else `{mode, policies,
-ingress-enforced, audit, interfaces, learning, enforcing-on, entries}`: the
-selecting FlowsdnClusterwideNetworkPolicy names, the uplinks it is on, those
-still in their first 60 s (flows learned, nothing enforced) and those
-enforcing (or auditing). Its unsupported rules are among `problems`; an uplink
+ingress-enforced, audit, interfaces, learning, enforcing-on, pods, addresses,
+entries}`: the selecting FlowsdnClusterwideNetworkPolicy names, the
+interfaces it is on (every one holding a global address of the node, and the
+uplink ports), those still in their first 60 s (flows learned, nothing
+enforced), those enforcing (or auditing), the local Pods' path to the host
+(`tracking` with no selecting policy, `learning`, `enforcing`; #384) and the
+node's global addresses, all with the host identity. Its unsupported rules are among `problems`; an uplink
 that cannot be found or attached is the `host-firewall` /
 `host-firewall-attach` part error. (Before #298 the member was named after the reference project;
 it is `agent` now.)

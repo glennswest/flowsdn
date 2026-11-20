@@ -93,7 +93,11 @@ pinning or subsystem libraries are absent are **not current status**.
   Compiler unit-tested, programs test-run by `policy-live` on 7.2 (kernel-check);
   in golden-flowsdn-e23d9621fbd6. Not on a cluster or a real uplink. Without the
   CRDs (stormcos#303) it has nothing to judge; since #402 NetworkPolicy no longer
-  waits for that list.
+  waits for that list. Since #384 (main, not in a golden yet): local Pods'
+  traffic to the host is judged on their veths (`HOST_PODS`), and every global
+  address of the node is the host's, on every interface holding one;
+  `policy-live` test-runs both. Host egress rules are gap #477; the first
+  cluster run is #478.
 - Several uplinks (#408): discovery, carrier monitor, per-flow ECMP direct
   routes, source rules and tables, failover host address with gratuitous ARP,
   per-port report (`GET /v1/uplinks`). The planner and the netlink messages are
@@ -113,7 +117,7 @@ pinning or subsystem libraries are absent are **not current status**.
 - Masquerade is the node's (`egress: stack`), not flowsdn's.
 - Open gaps, each an issue with the `gap` label: operator identity GC (#332);
   L7, FQDN and ICMP policy rules (#448); node and group peers in policy rules
-  (#451); host egress policy (#384); policy verdict events (#452); Maglev in
+  (#451); host egress policy (#477); policy verdict events (#452); Maglev in
   the socket LB (#453); DSR by IPIP or Geneve (#447); DSR ICMP errors (#449);
   NAT46/64 to local backends or in the socket LB (#450); the RFC 6052 gateway
   (#454); TCP socket termination (#392); SCTP Services (#457); IPv4 fragments

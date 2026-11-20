@@ -775,16 +775,28 @@ not held back (before #402 it was); `kubernetes.flowsdn-policy` still waits for 
   TCP/UDP/SCTP/ANY), and `enableDefaultDeny.ingress`. An L4-only rule allows
   every source; `ingress: [{}]` turns on default deny and allows nothing.
   Denies win over the allows they cover. Reported in `policy` problems and
-  not enforced: host egress rules, L7 rules, ICMP rules, `fromRequires`,
+  not enforced: host egress rules (#477), L7 rules, ICMP rules, `fromRequires`,
   `fromNodes`, `fromGroups`, `cidrGroupRef`, authentication and named ports.
   `endpointSelector` specs are [Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292);
   they are reported here too unless `kubernetes.flowsdn-policy` is on.
 - **Where.** The `from_netdev` program on the TCX ingress of every interface
-  holding one of this node's InternalIPs (after the NodePort program, so
-  NodePort traffic is judged as the Pod's after translation), and `to_netdev`
-  on its egress. Only packets to (ingress) or from (egress) the node's own
+  holding a global address of this node (InternalIP or not: an admin
+  network's NIC, a SLAAC IPv6 on the uplink; not `lo`, not a bridge or bond
+  port; #384) and every uplink port (#408), after the NodePort program, so
+  NodePort traffic is judged as the Pod's after translation, and `to_netdev`
+  on its egress. Every such address has the host identity while the
+  firewall is on. Only packets to (ingress) or from (egress) the node's own
   addresses are looked at; forwarded traffic passes. The host is endpoint
   65536 in the policy maps, under each uplink's interface index.
+- **Local Pods** (#384). A local Pod's traffic to the node arrives on its
+  veth, not an uplink: `local_delivery` judges it by the host's ingress
+  rules after the Pod's own egress policy, and `to_container` remembers the
+  flows the node starts to a Pod (kubelet probes) so the Pod's replies pass.
+  The host endpoint for this path is `flowsdn_policy_ep` key 0
+  (`HOST_PODS`, no interface has that index), with its own 60 s learning.
+  `fromEndpoints` and `fromEntities: cluster` select local Pods as they do
+  remote ones; a policy that allows the node only from the node network now
+  refuses Pods too, as the reference's host firewall does.
 - **State.** `to_netdev` remembers the flows the node starts, so their
   replies pass; `from_netdev` remembers allowed flows. On a new uplink the
   firewall only learns flows for its first 60 s, so connections the node
@@ -796,15 +808,22 @@ not held back (before #402 it was); `kubernetes.flowsdn-policy` still waits for 
 - **Always passed:** ARP, IPv6 neighbour/router discovery, ICMP
   fragmentation-needed and packet-too-big.
 - **Status.** `kubernetes.policy.host-firewall` in `GET /v1/healthz`: mode,
-  selecting policies, uplinks, those still learning and those enforcing. An
-  uplink that cannot be found or attached is a `host-firewall` /
-  `host-firewall-attach` part error.
+  selecting policies, uplinks, those still learning and those enforcing,
+  the local Pods' path (`pods`: `tracking`, `learning` or `enforcing`) and
+  the node's addresses. Each change of those is a `HostFirewall` node Event
+  and agent log line (`host firewall audit: interfaces eth0; enforcing on
+  none; local Pods tracking; 3 node addresses`). An uplink that cannot be
+  found or attached is a `host-firewall` / `host-firewall-attach` part error.
+- **Hand-over from the boot window.** The node is filtered before the agent
+  runs only by stormfw's boot-time program (stormfw#1, stormcos#558). That
+  program can stand down for an interface once `enforcing-on` lists it and
+  `pods` is `enforcing` (after the 60 s learning); while flowsdn only
+  learns, it judges nothing.
 
-Not covered: host egress policy, traffic from local Pods to the node (it
-arrives on their veths, not an uplink), interfaces without an InternalIP, and
-the window before the agent runs (stormfw's boot-time program covers it,
-stormcos#558). The links are not pinned: the firewall is off while the agent
-restarts. `policy-live` test-runs both programs; no cluster run yet.
+Not covered: host egress policy (#477). The links are not pinned: the
+firewall is off while the agent restarts, until stormfw's program covers it
+again. `policy-live` test-runs the uplink and the local-Pod paths; the first
+cluster run is #478 (it needs stormcos#303).
 
 ## Fedora TLS build boundary
 

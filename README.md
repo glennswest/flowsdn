@@ -57,7 +57,8 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
   Unit-tested; not yet run on a two-port node.
 - **Host firewall** (`kubernetes.host-firewall: audit|enforce`, default off,
   `audit` in the stormcos Kubernetes-mode config; ADR-0022): FlowsdnClusterwideNetworkPolicy host rules (`nodeSelector`)
-  filter traffic to the node on its uplinks in eBPF, with audit mode and
+  filter traffic to the node in eBPF, on every interface holding one of its
+  addresses and from local Pods on their veths (#384), with audit mode and
   verdict counters (`GET /v1/policy/verdicts`). The Pod rules of
   FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy
   (`kubernetes.flowsdn-policy`, default off) use the same endpoint policy maps.
@@ -85,7 +86,7 @@ two-node acceptance (#291) and live NetworkPolicy acceptance on a cluster
 The Kubernetes-mode agent also allocates cluster identities for its Pods
 (FlowsdnIdentity objects, #291). Masquerade is the node's (`egress: stack`),
 not flowsdn's. Open gaps, each an issue with the `gap` label: L7, FQDN and ICMP
-policy rules (#448), host egress policy (#384), DSR by IPIP or Geneve (#447),
+policy rules (#448), host egress policy (#477), DSR by IPIP or Geneve (#447),
 DSR ICMP errors (#449), NAT46/64 to local backends or in the socket LB (#450),
 TCP socket termination (#392), CRD registration (#337), the operator executable
 (#446) and the Hubble observer/relay (#293). Libraries also implement configuration resolution,

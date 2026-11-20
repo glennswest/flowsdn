@@ -68,5 +68,28 @@ programs serve Pods only.
   mode. The edition manifests leave it off.
 - The flows table is shared with Pods (65536 LRU entries); tracking every
   host flow on a busy node shortens how long Pod flows stay remembered.
-- Pod-to-host traffic on veths, host egress rules and the boot window are
-  not covered (the last is stormfw's boot-time program).
+- Host egress rules are not covered (gap #477; stormfw's HostFirewallPolicy
+  has none). The boot window is stormfw's boot-time program; flowsdn's part
+  is the hand-over signal (`enforcing-on`, `pods` in `/v1/healthz`).
+
+## Amendment: local Pods and every node address (#384, 2026-11-20)
+
+stormfw needs the flowsdn backend to mean what the Cilium backend means for
+one policy. Two of #384's gaps broke that: the reference judges a local
+Pod's traffic to the host by the host policy, and gives every address of the
+node the host identity. Without either, a Pod (or a client of an address
+that is not an InternalIP) reached ports the policy limits to the node
+network.
+
+- **Local Pods.** `flowsdn_policy_ep` key 0 (`HOST_PODS`; no interface has
+  index 0) holds the host endpoint for the veth path. `local_delivery` judges
+  a packet to a host address by the host's ingress rules after the Pod's own
+  egress; `to_container` remembers flows the host starts to a Pod (host
+  egress, tracking only), so replies pass. It learns for 60 s like an uplink.
+  The loader accepts index 0 only for the host endpoint.
+- **Addresses.** With the firewall on, every global address of the node's
+  interfaces (not `lo`, not a bridge or bond port, not link-local) is in the
+  ipcache as the host, and the programs attach to every interface holding
+  one.
+- **Status.** `pods` and `addresses` in the health document; a
+  `HostFirewall` node Event when the scope or state changes.

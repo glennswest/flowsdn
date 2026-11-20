@@ -179,8 +179,10 @@ configuration. The differences:
   stormfw's audit phase, stormcos#877; an edit there lasts only until the
   applier's next start, #388, so enforce comes as a change here): with
   `audit` or `enforce`, FlowsdnClusterwideNetworkPolicy specs whose
-  `nodeSelector` matches the Node filter traffic to the node on its uplinks
-  (the flowsdn backend of stormfw, stormcos#558). The agent RBAC already
+  `nodeSelector` matches the Node filter traffic to the node on every
+  interface holding one of its addresses, and from its local Pods (#384;
+  the flowsdn backend of stormfw, stormcos#558). Each change of where it
+  runs is a `HostFirewall` node Event. The agent RBAC already
   lists and watches that CRD; the CRD must be applied (`crds/`). New uplinks
   learn flows for 60 s before enforcing. `GET /v1/policy/verdicts` gives the
   counters ([runtime](../../docs/runtime.md#host-firewall-379)).
