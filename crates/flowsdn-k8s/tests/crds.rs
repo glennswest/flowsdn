@@ -60,9 +60,9 @@ fn schema_versions(text: &str) -> Vec<(String, String)> {
         .map(str::trim)
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .map(|line| {
-            let (version, digest) = line
-                .split_once("  ")
-                .unwrap_or_else(|| panic!("SCHEMA_VERSIONS line {line:?}: version, two spaces, digest"));
+            let (version, digest) = line.split_once("  ").unwrap_or_else(|| {
+                panic!("SCHEMA_VERSIONS line {line:?}: version, two spaces, digest")
+            });
             (version.to_owned(), digest.trim().to_owned())
         })
         .collect()
@@ -127,7 +127,10 @@ fn a_rehashed_manifest_without_a_version_bump_is_refused() {
     assert_eq!(binding_problem(&bound, "1.33.11", sums), None);
     // Re-vendored: new hashes, same version.
     let changed = binding_problem(&bound, "1.33.11", "bb  v2/a.yaml\n").expect("refused");
-    assert!(changed.contains("bump flowsdn_k8s::SCHEMA_VERSION"), "{changed}");
+    assert!(
+        changed.contains("bump flowsdn_k8s::SCHEMA_VERSION"),
+        "{changed}"
+    );
     // Version bumped but not bound.
     let unbound = binding_problem(&bound, "1.33.12", sums).expect("refused");
     assert!(unbound.contains("append `1.33.12"), "{unbound}");
