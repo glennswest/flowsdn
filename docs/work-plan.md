@@ -16,7 +16,7 @@ never ran on an uplink with NodePort on. Fix: both classifiers return TCX_NEXT (
       "peer to host TCP 7002: OK: the host firewall did not run after the NodePort program" (the finding reproduced).
 - [x] kernel-check at 6925607 on 7.3.4-200.fc44: 22 pass, 0 fail, 2 skip; host-chain-live 4 PASS, socket-lb-live 26 PASS,
       policy-live 16 PASS. Strict sc-build at 4fa00b0: fmt --check, `cargo xtask check` (966 tests, 0 failed), test/build.sh.
-- [ ] Stage, ship (proof: host-chain-live in the medium log), close #484.
+- [x] Stage 345b0b270728; `shipped` (proof: agent health OK in the install log); #484 closed.
 
 ### FlowsdnNodeConfig as an agent configuration source — #480 (P2), 2026-11-20
 
