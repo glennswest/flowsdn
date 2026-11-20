@@ -618,12 +618,16 @@ pub struct View {
     pub pod_policies_synced: bool,
     /// The host firewall (#379): its mode, the FlowsdnClusterwideNetworkPolicy
     /// objects, the uplinks (name -> ifindex) the policy thread wants it on
-    /// (the API thread attaches it), and those still learning flows.
+    /// (the API thread attaches it), and those still learning flows
+    /// (`HOST_PODS`, 0, for local Pods' traffic to the host, #384). With it
+    /// on, `host_addresses` are every global address of the node's
+    /// interfaces, all with the host identity (#384).
     pub host_firewall: HostFirewall,
     pub clusterwide_policies: Vec<Value>,
     pub clusterwide_synced: bool,
     pub host_interfaces: BTreeMap<String, u32>,
     pub host_learning: BTreeSet<u32>,
+    pub host_addresses: Vec<IpAddr>,
     /// The node's uplink ports, their carrier and failover (#408).
     pub uplinks: crate::uplinks::View,
     /// LB-IPAM (#475): on, the FlowsdnLoadBalancerIPPool objects, and what

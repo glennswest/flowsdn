@@ -27,6 +27,58 @@ use flowsdn_policy::{
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
+/// One network interface as the host firewall's scope sees it (#384).
+pub struct Link {
+    pub name: String,
+    pub index: u32,
+    /// A bridge or bond port: its master holds the addresses, not it.
+    pub has_master: bool,
+}
+
+/// Where the host firewall runs (#384): every interface (not `lo`, not a
+/// bridge or bond port) holding a global address of this node, and those
+/// addresses, which all get the host identity, InternalIP or not (an admin
+/// network's address, a SLAAC IPv6 on the uplink). `addresses` are netlink's
+/// (ifindex, address, prefix length).
+pub fn scope(
+    links: &[Link],
+    addresses: &[(u32, std::net::IpAddr, u8)],
+) -> (BTreeMap<String, u32>, Vec<std::net::IpAddr>) {
+    let mut interfaces = BTreeMap::new();
+    let mut held = Vec::new();
+    for link in links.iter().filter(|l| l.name != "lo" && !l.has_master) {
+        let mut any = false;
+        for (_, ip, _) in addresses.iter().filter(|(i, _, _)| *i == link.index) {
+            if global(*ip) {
+                any = true;
+                if !held.contains(ip) {
+                    held.push(*ip);
+                }
+            }
+        }
+        if any {
+            interfaces.insert(link.name.clone(), link.index);
+        }
+    }
+    held.sort();
+    (interfaces, held)
+}
+
+/// Not loopback, unspecified, IPv4 link-local, IPv6 link-local or multicast.
+fn global(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            !(v4.is_loopback() || v4.is_unspecified() || v4.is_link_local() || v4.is_multicast())
+        }
+        std::net::IpAddr::V6(v6) => {
+            !(v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                || v6.segments().first().is_some_and(|s| s & 0xffc0 == 0xfe80))
+        }
+    }
+}
+
 /// A selecting policy with this annotation set to `"true"` puts the host
 /// endpoint in audit mode: would-be drops are counted and passed.
 pub const AUDIT_ANNOTATION: &str = "policy.flowsdn.io/audit";

@@ -394,6 +394,66 @@ fn host_firewall_rules_enforcement_and_audit() {
 }
 
 #[test]
+fn host_firewall_judges_local_pods_and_every_node_address() {
+    use flowsdn_bpf_abi::policy::HOST_PODS;
+    let mut view = host_view(HostFirewall::Enforce, false);
+    // An admin network's address and a SLAAC IPv6: no InternalIP holds them.
+    view.host_addresses = vec![ip("10.9.0.10"), ip("2001:db8:9::10")];
+    let desired = compile(&view, &[]);
+    assert_eq!(
+        desired.endpoints.get(&HOST_PODS),
+        Some(&PolicyEndpoint {
+            endpoint: HOST_ENDPOINT,
+            flags: enforce::INGRESS
+        })
+    );
+    assert_eq!(desired.host.pointer("/pods"), Some(&json!("enforcing")));
+    assert_eq!(
+        desired.host.pointer("/enforcing-on"),
+        Some(&json!(["eth0"])),
+        "HOST_PODS is not an interface"
+    );
+    let host_of = |desired: &Desired, address: IpAddr| {
+        let full = match address {
+            IpAddr::V4(a) => IpCacheKey::v4(a.octets(), 32, 0),
+            IpAddr::V6(a) => IpCacheKey::v6(a.octets(), 128, 0),
+        }
+        .expect("full-length key")
+        .to_bytes();
+        desired
+            .ipcache
+            .iter()
+            .any(|(k, v)| *k == full && v.sec_identity == HOST)
+    };
+    assert!(host_of(&desired, ip("10.9.0.10")));
+    assert!(host_of(&desired, ip("2001:db8:9::10")));
+
+    view.host_learning.insert(HOST_PODS);
+    let learning = compile(&view, &[]);
+    assert_eq!(learning.endpoints.get(&HOST_PODS).map(|e| e.flags), Some(0));
+    assert_eq!(learning.host.pointer("/pods"), Some(&json!("learning")));
+
+    let audit = compile(&host_view(HostFirewall::Audit, false), &[]);
+    assert_eq!(
+        audit.endpoints.get(&HOST_PODS).map(|e| e.flags),
+        Some(enforce::INGRESS | enforce::AUDIT)
+    );
+    // Not selected: tracked only.
+    for node in &mut view.nodes {
+        node.labels.clear();
+    }
+    view.host_learning.clear();
+    let other = compile(&view, &[]);
+    assert_eq!(other.endpoints.get(&HOST_PODS).map(|e| e.flags), Some(0));
+    assert_eq!(other.host.pointer("/pods"), Some(&json!("tracking")));
+    // Off: no HOST_PODS entry, and the other addresses are not the host's.
+    view.host_firewall = HostFirewall::Off;
+    let off = compile(&view, &[]);
+    assert!(!off.endpoints.contains_key(&HOST_PODS));
+    assert!(!host_of(&off, ip("10.9.0.10")));
+}
+
+#[test]
 fn denies_win_over_the_allows_they_cover() {
     let allows: BTreeSet<_> = [
         (300, 0, 0, 0),    // everything from 300

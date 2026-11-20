@@ -130,3 +130,53 @@ fn unsupported_rules_are_skipped_and_reported() {
         );
     }
 }
+
+#[test]
+fn scope_is_every_interface_holding_a_global_address() {
+    use std::net::IpAddr;
+    let ip = |s: &str| s.parse::<IpAddr>().expect("address");
+    let link = |name: &str, index, has_master| Link {
+        name: name.to_owned(),
+        index,
+        has_master,
+    };
+    let links = [
+        link("lo", 1, false),
+        link("eth0", 2, false),
+        link("admin0", 3, false),
+        link("br0", 4, false),
+        link("eth1", 5, true),
+        link("veth1", 6, false),
+    ];
+    let addresses = [
+        (1, ip("127.0.0.1"), 8),
+        (1, ip("::1"), 128),
+        (2, ip("192.168.16.10"), 20),
+        (2, ip("2001:db8::10"), 64),
+        (2, ip("fe80::1"), 64),
+        (3, ip("10.0.0.10"), 24),
+        (4, ip("172.20.0.1"), 16),
+        // A bridge port and a veth with only a link-local address.
+        (5, ip("192.0.2.9"), 24),
+        (6, ip("fe80::2"), 64),
+        (6, ip("169.254.0.1"), 32),
+    ];
+    let (interfaces, held) = scope(&links, &addresses);
+    assert_eq!(
+        interfaces.into_iter().collect::<Vec<_>>(),
+        vec![
+            ("admin0".to_owned(), 3),
+            ("br0".to_owned(), 4),
+            ("eth0".to_owned(), 2)
+        ]
+    );
+    assert_eq!(
+        held,
+        vec![
+            ip("10.0.0.10"),
+            ip("172.20.0.1"),
+            ip("192.168.16.10"),
+            ip("2001:db8::10")
+        ]
+    );
+}

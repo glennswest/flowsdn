@@ -21,7 +21,8 @@
 //!   identities.
 //! - The host firewall (#379, [`crate::host_policy`]): with
 //!   `kubernetes.host-firewall` on, the host endpoint ([`HOST_ENDPOINT`]) is
-//!   in `flowsdn_policy_ep` under each uplink's index, tracked always and
+//!   in `flowsdn_policy_ep` under each uplink's index and [`HOST_PODS`] (local
+//!   Pods' traffic to the host, #384), tracked always and
 //!   ingress-enforced (or audited) when a host policy selects this node and
 //!   the uplink's learning time is over. Denies win over allows they cover.
 //! - Pod rules of the flowsdn policy kinds (#292, `kubernetes.flowsdn-policy`,
@@ -35,7 +36,7 @@ use crate::{
 };
 use flowsdn_bpf_abi::{
     IpCacheKey, MapBytes, RemoteEndpointInfo,
-    policy::{EndpointPolicyKey, HOST_ENDPOINT, PolicyEndpoint, PolicyEntry, PolicyKey, enforce},
+    policy::{EndpointPolicyKey, HOST_ENDPOINT, HOST_PODS, PolicyEndpoint, PolicyEntry, PolicyKey, enforce},
 };
 use flowsdn_identity::{cidr::CidrPrefix, filter::LabelFilter};
 use flowsdn_policy::{
@@ -431,6 +432,16 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
         .flat_map(|n| n.internal_ips.iter().copied())
         .collect();
     host.extend(gateways.iter().copied());
+    // With the host firewall on, every address of the node is the host's (#384).
+    for ip in view
+        .host_addresses
+        .iter()
+        .filter(|_| view.host_firewall != HostFirewall::Off)
+    {
+        if !host.contains(ip) {
+            host.push(*ip);
+        }
+    }
     let remote_nodes: Vec<IpAddr> = view
         .nodes
         .iter()
@@ -685,7 +696,9 @@ fn host_firewall(
     );
     let audit = hosts.audit || view.host_firewall == HostFirewall::Audit;
     let mut enforced = Vec::new();
-    for (name, ifindex) in &view.host_interfaces {
+    // The uplinks, and HOST_PODS for local Pods' traffic to the host (#384).
+    let pods = (String::new(), HOST_PODS);
+    for (name, ifindex) in view.host_interfaces.iter().chain([(&pods.0, &pods.1)]) {
         let learning = view.host_learning.contains(ifindex);
         let mut flags = 0;
         if hosts.enforce_ingress && !learning {
@@ -693,7 +706,9 @@ fn host_firewall(
             if audit {
                 flags |= enforce::AUDIT;
             }
-            enforced.push(name.clone());
+            if *ifindex != HOST_PODS {
+                enforced.push(name.clone());
+            }
         }
         desired.endpoints.insert(
             *ifindex,
@@ -703,6 +718,13 @@ fn host_firewall(
             },
         );
     }
+    let pods_state = if !hosts.enforce_ingress {
+        "tracking"
+    } else if view.host_learning.contains(&HOST_PODS) {
+        "learning"
+    } else {
+        "enforcing"
+    };
     compiler
         .problems
         .extend(hosts.problems.iter().map(|p| format!("host firewall: {p}")));
@@ -720,6 +742,8 @@ fn host_firewall(
             .filter(|(_, i)| view.host_learning.contains(i))
             .map(|(n, _)| n).collect::<Vec<_>>(),
         "enforcing-on": enforced,
+        "pods": pods_state,
+        "addresses": view.host_addresses.iter().map(ToString::to_string).collect::<Vec<_>>(),
         "entries": count,
     });
 }

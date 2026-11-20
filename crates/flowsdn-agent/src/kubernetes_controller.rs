@@ -12,6 +12,7 @@ use super::*;
 use crate::events::Type::Warning;
 use crate::identity::{self, Allocator, Outcome};
 use crate::services::{self, ServiceInfo, SliceInfo};
+use flowsdn_bpf_abi::policy::HOST_PODS;
 use flowsdn_bpf_loader::kernel::{Object, PolicyMaps, socket_lb::SocketLb};
 use flowsdn_connector::Connector;
 use flowsdn_k8s::{
@@ -834,37 +835,36 @@ fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
     loop {
         std::thread::sleep(POLICY_INTERVAL);
         let host_firewall = lock(view).host_firewall != HostFirewall::Off;
-        let uplinks = if host_firewall {
-            let addresses: Vec<IpAddr> = {
-                let view = lock(view);
-                view.nodes
-                    .iter()
-                    .filter(|n| n.name == view.local_node)
-                    .flat_map(|n| n.internal_ips.iter().copied())
-                    .collect()
-            };
-            match interfaces_holding(&addresses) {
-                Ok(mut found) => {
+        let (uplinks, host_addresses) = if host_firewall {
+            match host_scope() {
+                Ok((mut found, addresses)) => {
                     let mut view = lock(view);
                     view.errors.remove("host-firewall");
                     found.extend(uplink_ports(&view));
-                    found
+                    (found, addresses)
                 }
                 Err(error) => {
                     lock(view).errors.insert("host-firewall".into(), error);
-                    BTreeMap::new()
+                    (BTreeMap::new(), Vec::new())
                 }
             }
         } else {
-            BTreeMap::new()
+            (BTreeMap::new(), Vec::new())
         };
-        wanted.retain(|index, _| uplinks.values().any(|i| i == index));
+        // Local Pods' traffic to the host learns under HOST_PODS (#384).
+        wanted.retain(|index, _| {
+            (host_firewall && *index == HOST_PODS) || uplinks.values().any(|i| i == index)
+        });
+        if host_firewall {
+            wanted.entry(HOST_PODS).or_insert_with(Instant::now);
+        }
         for index in uplinks.values() {
             wanted.entry(*index).or_insert_with(Instant::now);
         }
         let desired = {
             let mut view = lock(view);
             view.host_interfaces = uplinks;
+            view.host_addresses = host_addresses;
             view.host_learning = wanted
                 .iter()
                 .filter(|(_, since)| since.elapsed() < HOST_LEARNING)
@@ -1182,6 +1182,31 @@ fn uplink_ports(view: &View) -> BTreeMap<String, u32> {
         .map(|u| (u.name.clone(), u.index))
         .collect()
 }
+/// The host firewall's interfaces (name -> ifindex) and the node's global
+/// addresses ([`crate::host_policy::scope`], #384).
+fn host_scope() -> std::result::Result<(BTreeMap<String, u32>, Vec<IpAddr>), String> {
+    let connector = Connector::open().map_err(|e| format!("netlink: {e}"))?;
+    let addresses = connector
+        .all_addresses()
+        .map_err(|e| format!("netlink addresses: {e}"))?;
+    let mut links = Vec::new();
+    for entry in fs::read_dir("/sys/class/net").map_err(|e| format!("/sys/class/net: {e}"))? {
+        let Ok(entry) = entry else { continue };
+        let Some(index) = fs::read_to_string(entry.path().join("ifindex"))
+            .ok()
+            .and_then(|i| i.trim().parse::<u32>().ok())
+        else {
+            continue;
+        };
+        links.push(crate::host_policy::Link {
+            name: entry.file_name().to_string_lossy().into_owned(),
+            index,
+            has_master: entry.path().join("master").exists(),
+        });
+    }
+    Ok(crate::host_policy::scope(&links, &addresses))
+}
+
 /// The interfaces (name -> ifindex) that hold one of `addresses`.
 fn interfaces_holding(addresses: &[IpAddr]) -> std::result::Result<BTreeMap<String, u32>, String> {
     let connector = Connector::open().map_err(|e| format!("netlink: {e}"))?;

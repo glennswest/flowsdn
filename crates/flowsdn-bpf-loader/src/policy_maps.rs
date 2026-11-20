@@ -11,8 +11,8 @@ use aya::{
 use flowsdn_bpf_abi::{
     IpCacheKey, MapBytes, RemoteEndpointInfo,
     policy::{
-        EndpointPolicyKey, PolicyCtKey, PolicyCtValue, PolicyEndpoint, PolicyEntry,
-        PolicyStatsValue, PolicyVerdictKey,
+        EndpointPolicyKey, HOST_ENDPOINT, HOST_PODS, PolicyCtKey, PolicyCtValue, PolicyEndpoint,
+        PolicyEntry, PolicyStatsValue, PolicyVerdictKey,
     },
 };
 
@@ -121,12 +121,14 @@ impl LocalDelivery {
 
 impl PolicyMaps {
     /// Enforce (or only track) the endpoint behind host interface `ifindex`.
+    /// Index 0 is [`HOST_PODS`]: the host endpoint for local Pods' traffic to
+    /// the host (#384), which only the host endpoint may hold.
     pub fn set_policy_endpoint(
         &mut self,
         ifindex: u32,
         endpoint: PolicyEndpoint,
     ) -> KernelResult<()> {
-        if ifindex == 0 {
+        if ifindex == HOST_PODS && endpoint.endpoint != HOST_ENDPOINT {
             return Err("policy endpoint needs an interface index".into());
         }
         self.endpoints.insert(ifindex, endpoint.to_bytes(), 0)?;

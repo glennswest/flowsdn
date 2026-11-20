@@ -11,11 +11,14 @@
 //! (#379): `from_netdev`/`to_netdev` as if on an uplink, for the host
 //! endpoint: only traffic to the host's own address is judged, remote-node,
 //! world and port rules, a deny over an allow, replies of flows the host
-//! started, audit mode, learning (no flags), and the verdict counters.
+//! started, audit mode, learning (no flags), and the verdict counters. Local
+//! Pods' traffic to the host (#384): the endpoint programs judge it by the
+//! host endpoint's `HOST_PODS` entry (pod port rules, replies of flows the
+//! host started to the Pod, audit, removal).
 use flowsdn_bpf_abi::{
     IpCacheKey, RemoteEndpointInfo,
     policy::{
-        EndpointPolicyKey, HOST_ENDPOINT, PolicyEndpoint, PolicyEntry, PolicyKey, enforce, verdict,
+        EndpointPolicyKey, HOST_ENDPOINT, HOST_PODS, PolicyEndpoint, PolicyEntry, PolicyKey, enforce, verdict,
     },
 };
 use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object};
@@ -584,6 +587,72 @@ fn host(lab: &mut Lab) -> Result<()> {
         OK,
     )?;
     println!("PASS host firewall removed: the uplink passes everything");
+    pods_to_host(lab)
+}
+
+/// Local Pods' traffic to the host (#384): `local_delivery` judges it by
+/// the `HOST_PODS` entry, `to_container` remembers flows the host starts.
+fn pods_to_host(lab: &mut Lab) -> Result<()> {
+    lab.identity(IpAddr::V4(Ipv4Addr::from(POD)), 400)?;
+    host_rule(lab, 400, TCP, 9090, 16, false)?;
+    let to_host = |sport, dport| v4(TCP, POD, HOST_ADDR, 0, &tcp(sport, dport, SYN));
+    lab.egress("no HOST_PODS entry, pod to host:80", &to_host(42000, 80), OK)?;
+    let set = |lab: &mut Lab, flags| {
+        lab.delivery.policy().set_policy_endpoint(
+            HOST_PODS,
+            PolicyEndpoint {
+                endpoint: HOST_ENDPOINT,
+                flags,
+            },
+        )
+    };
+    set(lab, enforce::INGRESS)?;
+    lab.egress("pod to host:9090", &to_host(42001, 9090), OK)?;
+    lab.egress("pod to host:80", &to_host(42002, 80), SHOT)?;
+    lab.egress("pod to host:9100", &to_host(42003, 9100), SHOT)?;
+    lab.egress(
+        "pod to a peer:80",
+        &v4(TCP, POD, PEER, 0, &tcp(42004, 80, SYN)),
+        OK,
+    )?;
+    println!(
+        "PASS host firewall on pods: a pod reaches the host's allowed port, other host ports drop, traffic to other pods is not judged"
+    );
+    lab.ingress(
+        "host to pod:8080",
+        &v4(TCP, HOST_ADDR, POD, 0, &tcp(43000, 8080, SYN)),
+        OK,
+    )?;
+    lab.egress(
+        "reply pod:8080 to host",
+        &v4(TCP, POD, HOST_ADDR, 0, &tcp(8080, 43000, SYN | ACK)),
+        OK,
+    )?;
+    lab.egress(
+        "unsolicited pod:8080 to host",
+        &v4(TCP, POD, HOST_ADDR, 0, &tcp(8080, 43001, SYN | ACK)),
+        SHOT,
+    )?;
+    println!(
+        "PASS host firewall on pods: replies to flows the host started to a pod pass; unsolicited ones do not"
+    );
+    set(lab, enforce::INGRESS | enforce::AUDIT)?;
+    lab.egress("audit pod to host:81", &to_host(42005, 81), OK)?;
+    let counted = lab.delivery.policy().policy_verdicts()?.iter().any(|(k, v)| {
+        k.endpoint == HOST_ENDPOINT
+            && k.egress == 0
+            && k.dport.get() == 81
+            && k.verdict == verdict::AUDIT
+            && v.packets >= 1
+    });
+    if !counted {
+        return Err("no audit verdict for pod to host:81".into());
+    }
+    lab.delivery.policy().remove_policy_endpoint(HOST_PODS)?;
+    lab.egress("HOST_PODS removed, pod to host:82", &to_host(42006, 82), OK)?;
+    println!(
+        "PASS host firewall on pods: audit passes and counts; removing HOST_PODS stops judging"
+    );
     Ok(())
 }
 
