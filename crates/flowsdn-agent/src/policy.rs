@@ -13,10 +13,12 @@
 //!   the ipcache holding those prefixes; the host is selected when one of
 //!   its addresses is inside the block. Port ranges are masked blocks
 //!   (spec 06 §5.2); named ports resolve to the subject's container ports
-//!   (ingress) or the peer Pods' (egress).
+//!   (ingress) or, per destination identity whose Pods agree on them, the
+//!   peer Pods' (egress; never the wildcard identity, #490).
 //! - The ipcache maps every Pod IP with an identity, this node's addresses
-//!   (host, 1), other nodes' InternalIPs (remote-node, 6) and the CIDR
-//!   prefixes. An `ipBlock` selects the host and remote nodes whose
+//!   (host, 1), each of other nodes' InternalIPs to an identity of its own
+//!   (scope 2, aggregated to remote-node by the datapath; #490) and the CIDR
+//!   prefixes. An `ipBlock` selects the host and exactly the remote node
 //!   addresses it holds, so node traffic is judged as before they had
 //!   identities.
 //! - The host firewall (#379, [`crate::host_policy`]): with
@@ -32,7 +34,7 @@
 //!   selecting spec turns it off (then a wildcard allow, spec 06 §3.6), and
 //!   denies win over the allows of both.
 use crate::{
-    host_policy::{self, HostPolicies, Peer as HostPeer, PodDirection, REMOTE_NODE, Rule},
+    host_policy::{self, HostPolicies, Peer as HostPeer, PodDirection, Rule},
     kubernetes::{HostFirewall, LocalEndpoint, PodInfo, View},
 };
 use flowsdn_bpf_abi::{
@@ -53,6 +55,10 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     net::IpAddr,
 };
+
+/// The identity scope of remote node addresses (#490): `2 << 24 | n`, which
+/// the datapath aggregates to remote-node (spec 03 `aggregate_for`).
+pub const REMOTE_NODE_SCOPE: u32 = 2 << 24;
 
 /// A `flowsdn_policy_ep` flag the datapath ignores: the row is a new
 /// endpoint's quarantine (#489), both directions enforced with no entries,
@@ -154,8 +160,10 @@ struct Compiler<'a> {
     cidrs: BTreeMap<CidrPrefix, u32>,
     /// This node's addresses (the host identity).
     host: Vec<IpAddr>,
-    /// Other nodes' addresses (the remote-node identity).
-    remote_nodes: Vec<IpAddr>,
+    /// Other nodes' addresses, each with its own identity (#490, finding
+    /// a84713ccfa49): scope 2, which the datapath aggregates to
+    /// remote-node, so a CIDR selects exactly the nodes inside it.
+    remote_nodes: BTreeMap<IpAddr, u32>,
     problems: BTreeSet<String>,
 }
 
@@ -228,16 +236,18 @@ impl Compiler<'_> {
                 .filter(|(p, _)| selected(**p))
                 .map(|(_, id)| *id),
         );
-        let holds = |ips: &[IpAddr]| {
-            ips.iter()
-                .any(|ip| CidrPrefix::new(*ip, host_bits(*ip)).is_ok_and(selected))
-        };
-        if holds(&self.host) {
+        let held = |ip: &IpAddr| CidrPrefix::new(*ip, host_bits(*ip)).is_ok_and(selected);
+        if self.host.iter().any(held) {
             out.insert(HOST);
         }
-        if holds(&self.remote_nodes) {
-            out.insert(REMOTE_NODE);
-        }
+        // Each node address inside the CIDR (and outside its exceptions) by
+        // its own identity: never every node for one.
+        out.extend(
+            self.remote_nodes
+                .iter()
+                .filter(|(ip, _)| held(ip))
+                .map(|(_, id)| *id),
+        );
         out
     }
 
@@ -277,14 +287,16 @@ impl Compiler<'_> {
             }
             for (protocol, name) in &rule.named {
                 // The destination's container ports name the port.
-                let named = if ingress {
-                    self.named_ports(&[subject])
+                if ingress {
+                    let named = self.named_ports(&[subject]);
+                    let key = (*protocol, name.clone());
+                    for port in named.get(&key).into_iter().flatten() {
+                        out.push((id, *protocol, *port, 16));
+                    }
                 } else {
-                    self.named_ports(&self.pods_of(id))
-                };
-                let key = (*protocol, name.clone());
-                for port in named.get(&key).into_iter().flatten() {
-                    out.push((id, *protocol, *port, 16));
+                    for (peer, port) in self.egress_named(&rule.policy, id, *protocol, name) {
+                        out.push((peer, *protocol, port, 16));
+                    }
                 }
             }
         }
@@ -300,6 +312,65 @@ impl Compiler<'_> {
                     .or_default()
                     .insert(*port);
             }
+        }
+        out
+    }
+
+    /// An egress named port's (destination identity, port) pairs (#490,
+    /// finding fd362d87218c). The wildcard peer (no `to`) becomes the
+    /// identities whose Pods declare the name, never identity 0: a port
+    /// number alone would open it on every destination. An identity's Pods
+    /// must agree on what the name maps to; when they do not (or only some
+    /// declare it), nothing is allowed to them and it is a problem, since
+    /// the datapath tells destinations apart only by identity.
+    fn egress_named(
+        &mut self,
+        policy: &str,
+        id: u32,
+        protocol: u8,
+        name: &str,
+    ) -> Vec<(u32, u16)> {
+        let declares = |p: &PodInfo| {
+            p.named_ports
+                .iter()
+                .any(|(pr, n, _)| *pr == protocol && n == name)
+        };
+        let ids: BTreeSet<u32> = if id == 0 {
+            self.view
+                .pods
+                .iter()
+                .filter(|p| !p.host_network && declares(p))
+                .filter_map(|p| self.view.pod_identity(&p.namespace, &p.name))
+                .collect()
+        } else {
+            BTreeSet::from([id])
+        };
+        let mut out = Vec::new();
+        for id in ids {
+            let mappings: Vec<BTreeSet<u16>> = self
+                .pods_of(id)
+                .iter()
+                .map(|p| {
+                    p.named_ports
+                        .iter()
+                        .filter(|(pr, n, _)| *pr == protocol && n == name)
+                        .map(|(_, _, port)| *port)
+                        .collect()
+                })
+                .collect();
+            let Some(first) = mappings.first() else {
+                continue;
+            };
+            if mappings.iter().all(BTreeSet::is_empty) {
+                continue;
+            }
+            if mappings.iter().any(|m| m != first) {
+                self.problems.insert(format!(
+                    "{policy}: the Pods of identity {id} do not all map named port {name} to the same port; it allows nothing to them"
+                ));
+                continue;
+            }
+            out.extend(first.iter().map(|port| (id, *port)));
         }
         out
     }
@@ -345,15 +416,23 @@ impl Compiler<'_> {
                 Err(_) => {
                     let key = (protocol, rule.port.clone());
                     for id in &peers {
-                        // The destination's container ports name the port.
-                        let named = if entry.ingress {
-                            self.named_ports(&[subject])
+                        // The destination's container ports name the port:
+                        // the subject's own on ingress; on egress each
+                        // destination identity's (never the wildcard).
+                        let resolved: Vec<(u32, u16)> = if entry.ingress {
+                            let named = self.named_ports(&[subject]);
+                            named
+                                .get(&key)
+                                .into_iter()
+                                .flatten()
+                                .map(|port| (*id, *port))
+                                .collect()
                         } else {
-                            self.named_ports(&self.pods_of(*id))
+                            self.egress_named(policy, *id, protocol, &rule.port)
                         };
-                        for port in named.get(&key).into_iter().flatten() {
-                            if let Ok(range) = PortRange::from_api(*port, None) {
-                                out.push((*id, protocol, range));
+                        for (peer, port) in resolved {
+                            if let Ok(range) = PortRange::from_api(port, None) {
+                                out.push((peer, protocol, range));
                             }
                         }
                     }
@@ -475,12 +554,18 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             host.push(*ip);
         }
     }
-    let remote_nodes: Vec<IpAddr> = view
+    // Each other node's address gets its own identity in scope 2 (#490):
+    // numbered in address order, so it is stable while the nodes are.
+    let remote_nodes: BTreeMap<IpAddr, u32> = view
         .nodes
         .iter()
         .filter(|n| n.name != view.local_node)
         .flat_map(|n| n.internal_ips.iter().copied())
         .filter(|ip| !host.contains(ip))
+        .collect::<BTreeSet<IpAddr>>()
+        .into_iter()
+        .zip(1u32..)
+        .map(|(ip, n)| (ip, REMOTE_NODE_SCOPE | n))
         .collect();
     let mut compiler = Compiler {
         view,
@@ -637,8 +722,8 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             }
         }
     }
-    for ip in &remote_nodes {
-        identity(ip_key(*ip, host_bits(*ip)), REMOTE_NODE);
+    for (ip, id) in &remote_nodes {
+        identity(ip_key(*ip, host_bits(*ip)), *id);
     }
     for ip in &host {
         identity(ip_key(*ip, host_bits(*ip)), HOST);

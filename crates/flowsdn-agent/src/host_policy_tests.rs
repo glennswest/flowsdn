@@ -135,7 +135,7 @@ fn host_egress_rules_and_their_default_deny() {
         got.egress_rules.get(1).and_then(|r| r.peers.clone()),
         Some(vec![
             Peer::Identities(vec![KUBE_APISERVER]),
-            Peer::Identities(vec![REMOTE_NODE])
+            Peer::Identities(vec![REMOTE_NODE, AGGREGATE_REMOTE_NODE])
         ])
     );
     assert!(got.egress_rules.last().is_some_and(|r| r.deny));

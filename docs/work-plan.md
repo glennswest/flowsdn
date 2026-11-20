@@ -4,6 +4,15 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Policy identity findings — #490 (P1), 2026-11-20
+
+- [x] a84713ccfa49: each remote node address gets its own identity `2<<24 | n` (address order) in the ipcache; the
+      datapath aggregates scope 2 to AGGREGATE_REMOTE_NODE (14); entities remote-node and cluster add 14; cidr_peer
+      inserts the identities of exactly the node addresses inside the CIDR minus exceptions.
+- [x] fd362d87218c: egress named ports via `egress_named`: the wildcard peer expands to the identities whose Pods name
+      the port; an identity's Pods must agree on the mapping, else nothing + a problem. Never identity 0.
+- [ ] Tests (two nodes /32 + except; external, unnamed, same-identity different mapping), sc-build, docs, close.
+
 ### New endpoints isolated until their policy is installed — #489 (P1), finding bd9892ebb241, 2026-11-20
 
 - [x] Manager `set_quarantine` (on in Kubernetes mode with network-policy or flowsdn-policy and shared policy maps):

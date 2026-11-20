@@ -1,4 +1,5 @@
 use super::*;
+use crate::host_policy::{AGGREGATE_REMOTE_NODE, REMOTE_NODE};
 use crate::kubernetes::{NodeInfo, PodInfo};
 use flowsdn_bpf_abi::policy::EndpointPolicyKey;
 
@@ -115,7 +116,9 @@ fn without_policies_nothing_is_enforced_and_the_ipcache_has_pods_and_host() {
             });
     // Three Pods, the host's InternalIP and gateway, and n2 (remote node).
     assert_eq!(ipcache.get(&HOST), Some(&2));
-    assert_eq!(ipcache.get(&REMOTE_NODE), Some(&1));
+    // n2's address has its own identity (#490), not the shared remote-node.
+    assert_eq!(ipcache.get(&(REMOTE_NODE_SCOPE | 1)), Some(&1));
+    assert_eq!(ipcache.get(&REMOTE_NODE), None);
     assert_eq!(desired.ipcache.len(), 6);
     assert!(desired.host.is_null());
     assert!(desired.problems.is_empty());
@@ -287,7 +290,7 @@ fn an_ip_block_still_selects_remote_nodes() {
     }))]);
     let desired = compile(&view, &[]);
     let identities: BTreeSet<u32> = keys_of(&desired).iter().map(|k| k.0).collect();
-    assert!(identities.contains(&REMOTE_NODE), "{identities:?}");
+    assert!(identities.contains(&(REMOTE_NODE_SCOPE | 1)), "{identities:?}");
     assert!(identities.contains(&HOST));
 }
 
@@ -365,13 +368,15 @@ fn host_egress_rules_are_egress_entries_enforced_after_learning() {
     for want in [
         (REMOTE_NODE, 0, 0, 0, false),
         (REMOTE_NODE, 6, 25, 16, true),
+        (AGGREGATE_REMOTE_NODE, 0, 0, 0, false),
+        (AGGREGATE_REMOTE_NODE, 6, 25, 16, true),
         (client, 6, 8080, 16, false),
         (0, 6, 25, 16, true),
     ] {
         assert!(out.contains(&want), "{want:?} not in {out:?}");
     }
-    assert_eq!(out.len(), 4, "{out:?}");
-    assert_eq!(host_keys_of(&desired, 0).len(), 5, "ingress unchanged");
+    assert_eq!(out.len(), 6, "{out:?}");
+    assert_eq!(host_keys_of(&desired, 0).len(), 7, "ingress unchanged");
     assert_eq!(desired.host.pointer("/egress-enforced"), Some(&json!(true)));
     assert!(desired.problems.is_empty(), "{:?}", desired.problems);
 
@@ -428,16 +433,20 @@ fn host_firewall_rules_enforcement_and_audit() {
     let client = identity_of(&view, "client");
     let tcp = |port| (6u8, port, 16u32);
     for want in [
-        // remote-node: every L4, with the wildcard deny repeated at it.
+        // remote-node (its identity and the aggregate every node's own
+        // identity falls back to, #490): every L4, the wildcard deny
+        // repeated at each.
         (REMOTE_NODE, 0, 0, 0, false),
         (REMOTE_NODE, tcp(9100).0, 9100, 16, true),
+        (AGGREGATE_REMOTE_NODE, 0, 0, 0, false),
+        (AGGREGATE_REMOTE_NODE, tcp(9100).0, 9100, 16, true),
         (cidr, tcp(22).0, 22, 16, false),
         (client, tcp(9090).0, 9090, 16, false),
         (0, 6, 9100, 16, true),
     ] {
         assert!(keys.contains(&want), "{want:?} not in {keys:?}");
     }
-    assert_eq!(keys.len(), 5, "{keys:?}");
+    assert_eq!(keys.len(), 7, "{keys:?}");
     assert_eq!(
         desired.host.pointer("/enforcing-on/0"),
         Some(&json!("eth0"))
@@ -954,4 +963,97 @@ fn the_sweep_keeps_an_unknown_endpoints_quarantine() {
         ..LocalEndpoint::default()
     });
     assert!(compile(&off, &[]).endpoints.is_empty());
+}
+
+/// Finding a84713ccfa49 (#490): each remote node address has its own
+/// identity, so a CIDR selects exactly the nodes inside it, and an exception
+/// keeps a node out even while another node stays selected.
+#[test]
+fn a_cidr_selects_only_the_remote_nodes_inside_it() {
+    let block = |cidr: &str, except: &[&str]| {
+        policy(json!({
+            "podSelector":{"matchLabels":{"app":"web"}},
+            "ingress":[{"from":[{"ipBlock":{"cidr":cidr,"except":except}}]}]
+        }))
+    };
+    let mut v = view(vec![block("192.0.2.2/32", &[])]);
+    v.nodes.push(NodeInfo {
+        name: "n3".into(),
+        internal_ips: vec![ip("192.0.2.3")],
+        ..NodeInfo::default()
+    });
+    let (n2, n3) = (REMOTE_NODE_SCOPE | 1, REMOTE_NODE_SCOPE | 2);
+    let identity_at = |d: &Desired, a: [u8; 4]| {
+        let key = IpCacheKey::v4(a, 32, 0).expect("key").to_bytes();
+        d.ipcache.get(&key).map(|info| info.sec_identity)
+    };
+    let peers = |d: &Desired| -> BTreeSet<u32> { keys_of(d).iter().map(|k| k.0).collect() };
+
+    let only_n2 = compile(&v, &[]);
+    assert_eq!(identity_at(&only_n2, [192, 0, 2, 2]), Some(n2));
+    assert_eq!(identity_at(&only_n2, [192, 0, 2, 3]), Some(n3));
+    let selected = peers(&only_n2);
+    assert!(selected.contains(&n2), "{selected:?}");
+    for not in [n3, REMOTE_NODE, AGGREGATE_REMOTE_NODE] {
+        assert!(!selected.contains(&not), "{not} selected: {selected:?}");
+    }
+
+    v.network_policies = vec![block("192.0.2.0/24", &["192.0.2.3/32"])];
+    let excepted = compile(&v, &[]);
+    let selected = peers(&excepted);
+    assert!(selected.contains(&n2) && selected.contains(&HOST), "{selected:?}");
+    assert!(!selected.contains(&n3), "the exception's node is selected: {selected:?}");
+    assert!(!selected.contains(&AGGREGATE_REMOTE_NODE));
+}
+
+/// Finding fd362d87218c (#490): an egress named port opens that port only on
+/// the destinations that name it, never on every destination; Pods of one
+/// identity that map the name differently get nothing (and a problem).
+#[test]
+fn egress_named_ports_are_scoped_to_the_pods_that_name_them() {
+    let rule = policy(json!({
+        "podSelector":{"matchLabels":{"app":"web"}},
+        "policyTypes":["Egress"],
+        "egress":[{"ports":[{"port":"http","protocol":"TCP"}]}]
+    }));
+    let v = view(vec![rule.clone()]);
+    let web = identity_of(&v, "web");
+    let db = identity_of(&v, "db");
+    let keys = compile(&v, &[]).entries.len();
+    let got = keys_of(&compile(&v, &[]));
+    assert!(got.contains(&(web, true, 6, 8080, 16)), "{got:?}");
+    assert!(
+        !got.iter().any(|k| k.0 == 0),
+        "no wildcard destination (external addresses): {got:?}"
+    );
+    assert!(
+        !got.iter().any(|k| k.0 == db),
+        "db does not name http: {got:?}"
+    );
+    assert_eq!(keys, got.len());
+
+    // web2: web's identity, http mapped to 9090: neither port is allowed to
+    // that identity, and it is reported.
+    let mut split = view(vec![rule]);
+    let mut web2 = pod("web2", "n2", "10.2.0.8", &[("app", "web")]);
+    web2.named_ports = vec![(6, "http".into(), 9090)];
+    split.pods.push(web2);
+    let shared = identity_of(&split, "web");
+    split
+        .pod_identities
+        .insert(("shop".into(), "web2".into()), shared);
+    let desired = compile(&split, &[]);
+    let got = keys_of(&desired);
+    assert!(
+        !got.iter().any(|k| k.0 == shared || k.0 == 0),
+        "same identity, different mappings: {got:?}"
+    );
+    assert!(
+        desired
+            .problems
+            .iter()
+            .any(|p| p.contains("do not all map named port http")),
+        "{:?}",
+        desired.problems
+    );
 }

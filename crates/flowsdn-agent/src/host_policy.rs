@@ -96,6 +96,8 @@ pub const INGRESS: u32 = 8;
 /// Aggregate identities the datapath derives (spec 03 `aggregate_for`).
 pub const AGGREGATE_CLUSTER: u32 = 11;
 pub const AGGREGATE_WORLD: u32 = 13;
+/// What every remote node's own identity (scope 2, #490) aggregates to.
+pub const AGGREGATE_REMOTE_NODE: u32 = 14;
 
 /// Where a rule allows (or denies) traffic from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -188,12 +190,15 @@ pub fn entity(name: &str) -> Option<Vec<u32>> {
             HEALTH,
             INIT,
             REMOTE_NODE,
+            AGGREGATE_REMOTE_NODE,
             KUBE_APISERVER,
             INGRESS,
             AGGREGATE_CLUSTER,
         ],
         "host" => vec![HOST],
-        "remote-node" => vec![REMOTE_NODE],
+        // Each remote node address has its own identity (#490), which the
+        // datapath aggregates to AGGREGATE_REMOTE_NODE.
+        "remote-node" => vec![REMOTE_NODE, AGGREGATE_REMOTE_NODE],
         "health" => vec![HEALTH],
         "init" => vec![INIT],
         "kube-apiserver" => vec![KUBE_APISERVER],
