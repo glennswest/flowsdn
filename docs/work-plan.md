@@ -11,8 +11,10 @@ Kept here whole, newest notes as they were. Write new intentions here.
       endpoints untouched). Compiler: a local endpoint whose Pod/labels are unknown keeps the quarantine row;
       `Desired.local` lists known endpoints; the sweep (`stale_row`) keeps a quarantine row of an unknown endpoint.
       No datapath change (unknown flag bits are ignored). Unsynced watches: no reconcile, quarantine holds.
-- [ ] Tests: policy_tests (quarantine kept / released / replaced; sweep), cni-runtime (real ADD: no UDP either way
+- [x] Tests: policy_tests (quarantine kept / released / replaced; sweep), cni-runtime (real ADD: no UDP either way
       until the row is lifted). sc-build + kernel-check; docs; stage; close.
+- [x] Code 3add1e8, fixture fix (cid3 is the forced-rollback case: endpoint 4), docs 7f1308a, fmt 3eeac0c. kernel-check
+      on 7.3.4: 24 pass 0 fail 2 skip, 997 tests 0 failed; cni-runtime quarantine PASS. Strict sc-build at 3eeac0c.
 
 ### socket-lb review findings — #488 (P1), 2026-11-20
 
