@@ -11,7 +11,8 @@ use serde_json::Value;
 use std::process::ExitCode;
 use std::time::SystemTime;
 
-pub const LEASE: &str = "/apis/coordination.k8s.io/v1/namespaces/kube-system/leases/flowsdn-operator";
+pub const LEASE: &str =
+    "/apis/coordination.k8s.io/v1/namespaces/kube-system/leases/flowsdn-operator";
 pub const CRD: &str =
     "/apis/apiextensions.k8s.io/v1/customresourcedefinitions/flowsdnidentities.flowsdn.io";
 /// The holder may be this many lease durations stale (clock skew between
@@ -31,7 +32,11 @@ pub fn unix_seconds(text: &str) -> Option<f64> {
         return None;
     }
     // Days from civil (Howard Hinnant's algorithm), checked arithmetic.
-    let y = if month <= 2 { year.checked_sub(1)? } else { year };
+    let y = if month <= 2 {
+        year.checked_sub(1)?
+    } else {
+        year
+    };
     let era = y.div_euclid(400);
     let yoe = y.checked_sub(era.checked_mul(400)?)?;
     let shifted = if month > 2 {
@@ -50,7 +55,10 @@ pub fn unix_seconds(text: &str) -> Option<f64> {
         .checked_add(yoe.checked_div(4)?)?
         .checked_sub(yoe.checked_div(100)?)?
         .checked_add(doy)?;
-    let days = era.checked_mul(146_097)?.checked_add(doe)?.checked_sub(719_468)?;
+    let days = era
+        .checked_mul(146_097)?
+        .checked_add(doe)?
+        .checked_sub(719_468)?;
     let seconds = days
         .checked_mul(86_400)?
         .checked_add(hour.checked_mul(3600)?)?
@@ -74,7 +82,9 @@ pub fn verdict(lease: (u16, &Value), crd: (u16, &Value), now: f64) -> Result<Str
     };
     let lease = match lease {
         (200, body) => body,
-        (404, _) => return Err("no Lease kube-system/flowsdn-operator: the operator never led".into()),
+        (404, _) => {
+            return Err("no Lease kube-system/flowsdn-operator: the operator never led".into());
+        }
         (status, body) => return Err(format!("Lease: HTTP {status} {}", message(body))),
     };
     let spec = lease.get("spec").ok_or("Lease without spec")?;
@@ -182,7 +192,11 @@ mod tests {
     #[test]
     fn a_stale_absent_or_unregistered_operator_fails() {
         let now = 1_795_168_800.0 + 91.0;
-        let stale = verdict((200, &lease("2026-11-20T10:00:00Z")), (200, &crd("True")), now);
+        let stale = verdict(
+            (200, &lease("2026-11-20T10:00:00Z")),
+            (200, &crd("True")),
+            now,
+        );
         assert!(stale.expect_err("stale").contains("not running"));
         let none = verdict((404, &Value::Null), (200, &crd("True")), now);
         assert!(none.expect_err("absent").contains("never led"));

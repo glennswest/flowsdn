@@ -168,7 +168,10 @@ fn operator(report: &mut Report, env: &Env) {
             if start.elapsed() > LIMIT {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(format!("flowsdn-perf operator: no answer in {}s", LIMIT.as_secs()));
+                return Err(format!(
+                    "flowsdn-perf operator: no answer in {}s",
+                    LIMIT.as_secs()
+                ));
             }
             std::thread::sleep(Duration::from_millis(100));
         };
