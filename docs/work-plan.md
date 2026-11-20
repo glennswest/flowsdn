@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### PacketDrop Events — #470 (P3), 2026-11-20
+
+Blocked on #452: the policy programs emit no per-flow events (no ring buffer or perf map in local-delivery); #452 builds
+that event and the agent reader. #470 then adds the pod-UID lookup, the emitter on the Event writer
+(`flowsdn-hubble::drop_events` admission), the `hubble-drop-events*` settings and a kernel test (a policy-denied flow:
+one rate-limited PacketDrop Event).
+- [x] Proposed `--after flowsdn#452`.
+
 ### CRD hash manifest bound to SCHEMA_VERSION — #471 (P3), 2026-11-20
 
 - [x] `crds/SCHEMA_VERSIONS` (version  sha256-of-SHA256SUMS lines), T-CRD-1b + refusal unit test in
