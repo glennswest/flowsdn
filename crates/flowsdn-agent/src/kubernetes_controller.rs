@@ -1431,7 +1431,9 @@ fn terminate(
         .reverse_sockets()
         .map_err(|e| format!("read reverse socket maps: {e}"))?
         .into_iter()
-        .filter(|(_, ip, port)| gone.contains(&(socket::PROTO_UDP, sock_diag::unmapped(*ip), *port)))
+        .filter(|(_, ip, port)| {
+            gone.contains(&(socket::PROTO_UDP, sock_diag::unmapped(*ip), *port))
+        })
         .map(|(cookie, _, _)| cookie)
         .collect();
     if cookies.is_empty() && !tcp {

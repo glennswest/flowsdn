@@ -362,8 +362,17 @@ mod tests {
             &socket.id,
         );
         assert_eq!(destroy.get(16..20), Some(&[AF_INET, 17, 0, 0][..]));
-        let tcp = request(SOCK_DIAG_BY_FAMILY, NLM_F_REQUEST | NLM_F_DUMP, AF_INET, IPPROTO_TCP, &[0; SOCKID]);
-        assert_eq!(tcp.get(20..24), Some(&0b1011_0011_1110u32.to_ne_bytes()[..]));
+        let tcp = request(
+            SOCK_DIAG_BY_FAMILY,
+            NLM_F_REQUEST | NLM_F_DUMP,
+            AF_INET,
+            IPPROTO_TCP,
+            &[0; SOCKID],
+        );
+        assert_eq!(
+            tcp.get(20..24),
+            Some(&0b1011_0011_1110u32.to_ne_bytes()[..])
+        );
         assert_eq!(destroy.get(24..72), Some(&id[..]));
         assert_eq!(found[1].0, NLMSG_DONE);
     }
@@ -384,16 +393,56 @@ mod tests {
         let gone: BTreeSet<_> = [(IPPROTO_UDP, backend, 53u16), (IPPROTO_TCP, backend, 53)].into();
         let cookies: BTreeSet<u64> = [7].into();
         // UDP: the backend and a recorded cookie, IPv4-mapped too.
-        assert!(ends(&socket(IPPROTO_UDP, "10.2.0.9", 53, 7), &gone, &cookies, false));
-        assert!(ends(&socket(IPPROTO_UDP, "::ffff:10.2.0.9", 53, 7), &gone, &cookies, false));
-        assert!(!ends(&socket(IPPROTO_UDP, "10.2.0.9", 53, 8), &gone, &cookies, true));
-        assert!(!ends(&socket(IPPROTO_UDP, "10.2.0.9", 54, 7), &gone, &cookies, false));
+        assert!(ends(
+            &socket(IPPROTO_UDP, "10.2.0.9", 53, 7),
+            &gone,
+            &cookies,
+            false
+        ));
+        assert!(ends(
+            &socket(IPPROTO_UDP, "::ffff:10.2.0.9", 53, 7),
+            &gone,
+            &cookies,
+            false
+        ));
+        assert!(!ends(
+            &socket(IPPROTO_UDP, "10.2.0.9", 53, 8),
+            &gone,
+            &cookies,
+            true
+        ));
+        assert!(!ends(
+            &socket(IPPROTO_UDP, "10.2.0.9", 54, 7),
+            &gone,
+            &cookies,
+            false
+        ));
         // TCP: only with all protocols, by backend address and port.
-        assert!(!ends(&socket(IPPROTO_TCP, "10.2.0.9", 53, 0), &gone, &cookies, false));
-        assert!(ends(&socket(IPPROTO_TCP, "10.2.0.9", 53, 0), &gone, &cookies, true));
-        assert!(!ends(&socket(IPPROTO_TCP, "10.2.0.8", 53, 0), &gone, &cookies, true));
+        assert!(!ends(
+            &socket(IPPROTO_TCP, "10.2.0.9", 53, 0),
+            &gone,
+            &cookies,
+            false
+        ));
+        assert!(ends(
+            &socket(IPPROTO_TCP, "10.2.0.9", 53, 0),
+            &gone,
+            &cookies,
+            true
+        ));
+        assert!(!ends(
+            &socket(IPPROTO_TCP, "10.2.0.8", 53, 0),
+            &gone,
+            &cookies,
+            true
+        ));
         // A protocol whose backend stays is not ended.
         let udp_only: BTreeSet<_> = [(IPPROTO_UDP, backend, 53u16)].into();
-        assert!(!ends(&socket(IPPROTO_TCP, "10.2.0.9", 53, 0), &udp_only, &cookies, true));
+        assert!(!ends(
+            &socket(IPPROTO_TCP, "10.2.0.9", 53, 0),
+            &udp_only,
+            &cookies,
+            true
+        ));
     }
 }

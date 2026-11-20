@@ -1215,7 +1215,11 @@ fn terminate_tcp(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     program(lb, services)?;
     let mut through = TcpStream::connect_timeout(&sa("192.0.2.12:80")?, TIMEOUT)?;
     if through.peer_addr()? != sa("127.0.0.1:18081")? {
-        return Err(format!("TCP through 192.0.2.12:80 reached {:?}", through.peer_addr()).into());
+        return Err(format!(
+            "TCP through 192.0.2.12:80 reached {:?}",
+            through.peer_addr()
+        )
+        .into());
     }
     let (_held, _) = leaving.accept()?;
     let mut other = TcpStream::connect_timeout(&sa("127.0.0.1:18082")?, TIMEOUT)?;
@@ -1236,7 +1240,9 @@ fn terminate_tcp(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     }
     let ended = sock_diag::destroy_to(&gone, &none, true).map_err(|e| e.to_string())?;
     if ended != 1 {
-        return Err(format!("{ended} TCP sockets ended, expected the one through the frontend").into());
+        return Err(
+            format!("{ended} TCP sockets ended, expected the one through the frontend").into(),
+        );
     }
     through.set_read_timeout(Some(TIMEOUT))?;
     let mut buffer = [0u8; 4];

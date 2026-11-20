@@ -512,7 +512,11 @@ fn termination_passes_are_at_most_every_50_ms() {
     assert_eq!(batch.wait(start), None);
     assert_eq!(batch.take(start), None, "nothing pending");
     batch.add([(PROTO_UDP, ip, 53)]);
-    assert_eq!(batch.wait(start), Some(Duration::ZERO), "the first is due at once");
+    assert_eq!(
+        batch.wait(start),
+        Some(Duration::ZERO),
+        "the first is due at once"
+    );
     assert_eq!(batch.take(start).map(|g| g.len()), Some(1));
     // Two more within 50 ms: held, then ended in one pass.
     batch.add([(PROTO_UDP, ip, 54)]);

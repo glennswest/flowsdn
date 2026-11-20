@@ -406,7 +406,13 @@ pub fn terminable_backends(
         .iter()
         .flat_map(|s| &s.backends)
         .filter(|b| b.proto == PROTO_UDP || (tcp && b.proto == PROTO_TCP))
-        .map(|b| (b.proto, flowsdn_connector::sock_diag::unmapped(b.ip), b.port))
+        .map(|b| {
+            (
+                b.proto,
+                flowsdn_connector::sock_diag::unmapped(b.ip),
+                b.port,
+            )
+        })
         .collect()
 }
 
@@ -419,7 +425,13 @@ pub fn stale_udp_backends(
 ) -> BTreeSet<flowsdn_connector::sock_diag::Backend> {
     reverse
         .iter()
-        .map(|(_, ip, port)| (PROTO_UDP, flowsdn_connector::sock_diag::unmapped(*ip), *port))
+        .map(|(_, ip, port)| {
+            (
+                PROTO_UDP,
+                flowsdn_connector::sock_diag::unmapped(*ip),
+                *port,
+            )
+        })
         .filter(|backend| !now.contains(backend))
         .collect()
 }
