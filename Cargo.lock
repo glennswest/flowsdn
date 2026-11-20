@@ -584,6 +584,7 @@ dependencies = [
  "libc",
  "openssl",
  "regex",
+ "serde",
  "serde_json",
  "sha2",
  "tokio",

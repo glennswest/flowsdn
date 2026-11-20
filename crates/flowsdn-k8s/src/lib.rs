@@ -4,6 +4,7 @@
 
 pub mod client;
 pub mod crd;
+pub mod kinds;
 pub mod patch;
 pub mod plan;
 pub mod schema;

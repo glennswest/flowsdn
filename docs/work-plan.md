@@ -4,6 +4,23 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### flowsdn.io endpoint, identity and node kinds — #332 (P1), 2026-11-20
+
+Operator parts (identity GC, node GC, FlowsdnEndpointSlice batching) need the operator executable (gap #446):
+split to #479, proposed after #446. FlowsdnIdentity allocation itself shipped with #291. Here:
+- [ ] `flowsdn_k8s::kinds`: serde types for FlowsdnEndpoint, FlowsdnEndpointSlice, FlowsdnIdentity, FlowsdnNode,
+      FlowsdnNodeConfig (one field per schema property, ObjectMeta, `Kind` trait with paths). Drafted from the
+      vendored schemas by a throwaway script in tmp/ (not committed), then kept by hand. Deviation from spec 13
+      §11.2: no `#[derive(CustomResource)]` (three of the five kinds have no `spec`) and no schemars/proptest:
+      T-CRD-3 is schema-driven (an every-field and a required-only instance round-trip, the type's own output is
+      admitted by `flowsdn_k8s::schema` strict validation); T-CRD-7 is seeded random schema-valid documents.
+- [ ] Agent: FlowsdnEndpoint per local Pod (POST with ownerReference -> Pod controller: true; status by JSON patch
+      with a UID `test` op; DELETE on removal), carrying #328's pod facts; 404 (CRD absent, stormcos#303) is not
+      an error. Events on the Pod for endpoint failures.
+- [ ] Agent: its own FlowsdnNode (addresses, health, pod CIDRs, bootid; ownerReference -> Node).
+- [ ] FlowsdnNodeConfig as an agent configuration source (spec 00 §3.3).
+- [ ] Docs, changelog, sc-build, stage, close.
+
 ### Host firewall follow-ups — #384 (P3), 2026-11-20
 
 Which of the four gaps stormfw's HostFirewallPolicy (stormfw#1: ingress rules only; one policy, two backends, so the
