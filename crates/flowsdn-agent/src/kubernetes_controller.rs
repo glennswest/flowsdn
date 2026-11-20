@@ -147,6 +147,7 @@ impl Controller {
             lb_ipam: self.settings.lb_ipam_on(),
             l2_announcements: self.settings.l2_on(),
             derive: self.derive,
+            node_config: self.settings.node_config.clone(),
             ..View::default()
         }));
         let host_firewall = self.settings.host_firewall != HostFirewall::Off;

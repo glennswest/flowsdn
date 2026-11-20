@@ -66,6 +66,14 @@ fn string<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
         None => fail(400, format!("missing or invalid {key}")),
     }
 }
+/// Whether `value` is an agent configuration this agent accepts (#480).
+#[cfg_attr(not(feature = "kubernetes"), allow(dead_code))]
+pub(crate) fn validate_config(value: &Value) -> std::result::Result<(), String> {
+    Config::from_value(value)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 fn optional<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
     match value.get(key) {
         None | Some(Value::Null) => Ok(""),
@@ -108,13 +116,22 @@ struct Config {
     auto6: bool,
 }
 impl Config {
-    fn read(path: &Path) -> Result<Self> {
+    /// The configuration file as JSON.
+    fn read_value(path: &Path) -> Result<Value> {
         let mut bytes = Vec::new();
         File::open(path)?.take(1_048_577).read_to_end(&mut bytes)?;
         if bytes.len() > 1_048_576 {
             return fail(400, "agent configuration exceeds 1 MiB");
         }
-        let value: Value = serde_json::from_slice(&bytes)?;
+        Ok(serde_json::from_slice(&bytes)?)
+    }
+    #[cfg(test)]
+    fn read(path: &Path) -> Result<Self> {
+        Self::from_value(&Self::read_value(path)?)
+    }
+    /// Parse and validate a configuration document.
+    pub(crate) fn from_value(value: &Value) -> Result<Self> {
+        let value = value.clone();
         let socket = PathBuf::from(string(&value, "socket-path")?);
         let state = PathBuf::from(string(&value, "state-dir")?);
         // No authentication on TCP: loopback only, and read-only (see `read_only`).
@@ -1369,8 +1386,37 @@ fn spawn_kubernetes(
 
 pub fn run(config_path: &Path) -> Result<()> {
     let started = Instant::now();
-    let mut config = Config::read(config_path)?;
+    let value = Config::read_value(config_path)?;
+    let mut config = Config::from_value(&value)?;
+    // FlowsdnNodeConfigs selecting this node override settings (#480).
+    #[cfg(feature = "kubernetes")]
+    let node_report = match config.kubernetes.clone() {
+        Some(settings) => {
+            let (labels, configs) =
+                crate::node_config::fetch(&settings, &crate::node_config::namespace())?;
+            let valid = |candidate: &Value| validate_config(candidate);
+            let (merged, report) = crate::node_config::apply(&value, &configs, &labels, &valid);
+            config = Config::from_value(&merged)?;
+            for (key, source) in &report.applied {
+                crate::log::logln!("node configuration: {key} from FlowsdnNodeConfig {source}");
+            }
+            if let Some(kubernetes) = config.kubernetes.as_mut() {
+                kubernetes.node_config = report.json();
+            }
+            Some(report)
+        }
+        None => None,
+    };
     let kubernetes = connect_kubernetes(&mut config)?;
+    #[cfg(feature = "kubernetes")]
+    for refused in node_report.iter().flat_map(|r| &r.refused) {
+        let text = format!(
+            "FlowsdnNodeConfig {}: {} refused: {}",
+            refused.config, refused.key, refused.reason
+        );
+        crate::log::logln!("node configuration: {text}");
+        events::node(events::Type::Warning, "NodeConfigRefused", text);
+    }
     // The manager's exclusive state lock is acquired before inspecting or
     // removing a stale socket, preventing a second owner of this state tree.
     let object = match &config.object {

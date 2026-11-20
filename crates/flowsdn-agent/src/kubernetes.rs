@@ -105,6 +105,9 @@ pub struct Settings {
     /// `kubernetes.lb-sock-terminate-all-protos` (#392, default false):
     /// socket termination ends TCP sockets to a removed backend too.
     pub terminate_tcp: bool,
+    /// What FlowsdnNodeConfigs changed at start (#480), for `/v1/healthz`;
+    /// null when none was read.
+    pub node_config: Value,
 }
 /// `kubernetes.host-firewall`: whether the agent filters traffic to the
 /// node itself from FlowsdnClusterwideNetworkPolicy host rules, and whether
@@ -263,6 +266,7 @@ impl Settings {
             endpoint_crd: flag("endpoint-crd", true)?,
             node_crd: flag("node-crd", true)?,
             terminate_tcp: flag("lb-sock-terminate-all-protos", false)?,
+            node_config: Value::Null,
             crd_wait_timeout: match object.get("crd-wait-timeout") {
                 None | Some(Value::Null) => std::time::Duration::from_secs(300),
                 Some(value) => value
@@ -696,6 +700,8 @@ pub struct View {
     /// that writer's last result (`{served}`, null before or when off).
     pub derive: Derive,
     pub node_crd_status: Value,
+    /// The FlowsdnNodeConfig report of this start (#480).
+    pub node_config: Value,
     /// L2 announcements (#475): on, the FlowsdnL2AnnouncementPolicy
     /// objects, and what the announcer last answered for.
     pub l2_announcements: bool,
@@ -989,6 +995,7 @@ impl View {
             "identity-allocation":self.identity,"network-policy":self.network_policy,"flowsdn-policy":self.flowsdn_policy,
             "lb-ipam":self.lb_ipam,"l2-announcements":self.l2_announcements,
             "flowsdn-endpoints":self.endpoint_crd_status,"flowsdn-node":self.node_crd_status,
+            "node-config":self.node_config,
             "policy":self.policy_status,"uplinks":self.uplinks.summary()})
     }
 }
