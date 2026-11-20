@@ -1880,3 +1880,14 @@ Batch 6 extension keys (immutable): `egress-gateway-selection` String defaults
 validator rejects unknown algorithms and requires explicit homogeneous-flowsdn
 cohort confirmation before rendezvous. These parser entries do not activate a
 running egress controller.
+
+## FlowsdnNodeConfig amendment — #480, 2026-11-20
+
+§3.3.1 source 5 as flowsdn implements it: there is no `build-config` resolver
+over the reference key registry. A FlowsdnNodeConfig's `spec.defaults` keys are
+flowsdn's own agent settings (an allow-list of node-scoped ones), applied by
+the agent at start over its configuration file on the nodes `nodeSelector`
+picks, in config-name order; each is validated by the agent's own parse and
+refused (Warning Event on the Node) otherwise. Reference option names are not
+accepted: a key that is accepted and does nothing is not allowed. See
+`docs/runtime.md` (per-node settings).

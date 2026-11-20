@@ -69,7 +69,8 @@ error (`msg` then lists `<part>: <error>`, for example `annotations`,
 `services`, `node-port`, `policy`), otherwise `Ok` with node, pod and frontend
 counts. `flowsdn-endpoints` (`{served, objects}`) and `flowsdn-node`
 (`{served}`) are the FlowsdnEndpoint and FlowsdnNode writers' last pass
-(#332; `null` before it or when off); a refused write is the
+(#332; `null` before it or when off); `node-config` is what FlowsdnNodeConfigs
+changed at start (#480: `{selected, applied, refused}`); a refused write is the
 `flowsdn-endpoints` / `flowsdn-node` part error. `policy` is what the policy thread last programmed (#292):
 `{endpoints: [{id, pod, ingress-enforced, egress-enforced, entries}], ipcache,
 host-firewall, flowsdn-policies, problems}`, `null` before its first pass. `host-firewall` (#379)

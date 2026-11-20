@@ -54,7 +54,7 @@ enforces it. Each of these is tracked per group in the issues linked from #325.
 | FlowsdnEndpointSlice | `fses` | Cluster | — | batches of endpoints for large clusters | operator |
 | FlowsdnIdentity | `fsid` | Cluster | yes | a numeric security identity and its labels | agent / operator |
 | FlowsdnNode | `fsn` | Cluster | yes | per-node addresses, IPAM pools and health endpoint | agent; operator in cloud IPAM |
-| FlowsdnNodeConfig | `fsnc` | Namespaced | — | per-node agent configuration overrides by node selector | users |
+| FlowsdnNodeConfig | `fsnc` | Namespaced | — | per-node agent configuration overrides by node selector: flowsdn's own settings, read by the agent at start (#480) | users; the agent reads it |
 | FlowsdnLocalRedirectPolicy | `fslrp` | Namespaced | — | redirect a frontend (address or Service) to node-local backends | users |
 | FlowsdnEgressGatewayPolicy | `fsegp` | Cluster | — | send selected pods' egress through gateway nodes with a fixed IP | users |
 | FlowsdnEnvoyConfig | `fsec` | Namespaced | — | Envoy listeners/clusters for L7 traffic of selected Services | users, operator (Ingress/Gateway) |

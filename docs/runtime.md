@@ -660,8 +660,42 @@ The Kubernetes-mode agent publishes its endpoints and its node as
   `flowsdn-node` (`served`).
 - **Not here.** Deleting the FlowsdnNode of a removed Node, FlowsdnIdentity
   garbage collection and FlowsdnEndpointSlice batching are the operator's
-  (#479). What a FlowsdnNodeConfig
-  overrides is an open decision (#480); the agent does not read it.
+  (#479). FlowsdnNodeConfig: [below](#per-node-settings-flowsdnnodeconfig-480).
+
+### Per-node settings: FlowsdnNodeConfig (#480)
+
+A FlowsdnNodeConfig in the agent's namespace (`POD_NAMESPACE`, else
+`kube-system`) whose `spec.nodeSelector` matches this Node's labels
+overrides this agent's own settings with its `spec.defaults`: each key is a
+setting of this page, dotted for the `kubernetes` section
+(`kubernetes.host-firewall: enforce`). The value is taken as JSON when it
+parses (`"true"`, `"1400"`, `'{"mode":"single"}'`) and as text otherwise.
+
+- **Which keys.** `egress`, `device-mtu`, `route-mtu`, `ipv4-pool`,
+  `ipv6-pool`, `ipv4-gateway`, `ipv6-gateway`, and the `kubernetes` settings
+  `auto-direct-node-routes`, `direct-routing-skip-unreachable`,
+  `service-lb`, `node-port`, `lb-algorithm`, `lb-mode`, `nat46x64`,
+  `lb-ipam`, `l2-announcements`, `identity-allocation`, `network-policy`,
+  `flowsdn-policy`, `host-firewall`, `uplinks`, `endpoint-crd`, `node-crd`,
+  `crd-wait-timeout`, `lb-sock-terminate-all-protos`. Not the paths the
+  manifest mounts (`socket-path`, `state-dir`, …), `node-name`,
+  `kubeconfig`, `cgroup-root` or the cluster-wide `cluster-name`; the
+  reference's own option names (`enable-…`) are not flowsdn settings.
+- **When.** Read once at agent start, after the configuration file and
+  before anything else; a change takes effect at the agent's next start, as
+  the reference's do. Several selecting configs apply in name order, a later
+  one overriding an earlier one's key. While the kind is not served there
+  is none. The agent retries reading the Node and the configs for 60 s,
+  then exits.
+- **Refusals.** A config's keys apply together when the configuration
+  parses with all of them (a pool and its gateway are valid only as a
+  pair); otherwise each one that keeps it valid applies. A key not in the
+  list, a value that makes the configuration invalid, a non-string value or
+  a bad `nodeSelector` is refused: logged and a `NodeConfigRefused` Warning
+  Event on the Node. Nothing refused stops the agent.
+- **Status.** `kubernetes.node-config` in `/v1/healthz`: `selected`
+  configs, `applied` (key → config) and `refused` (config, key, reason).
+  The live ConfigMap is not changed.
 
 ### LoadBalancer Services (#475)
 

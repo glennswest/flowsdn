@@ -72,7 +72,12 @@ pinning or subsystem libraries are absent are **not current status**.
   endpoint, identity and node kinds checked against their schemas
   (T-CRD-3/4/5/7 by schema-driven tests). Unit-tested against a recording
   API; not on a cluster (the CRDs wait on stormcos#303). Operator GC and
-  slices: #479; FlowsdnNodeConfig: decision #480.
+  slices: #479.
+- FlowsdnNodeConfig (#480): on the nodes it selects, `spec.defaults`
+  override the agent's own settings at start (an allow-list of node
+  settings; each validated by the agent's parse, refusals as Node Events,
+  `node-config` in `/v1/healthz`). Unit-tested and against a loopback API
+  server; not on a cluster.
 - Cluster identities for local Pods over FlowsdnIdentity objects (spec 03
   §3.3, #291): oldest-object lookup, create on a free number, heartbeat
   removal, recreate; `GET /v1/identity` and identities on `/v1/ip` and
