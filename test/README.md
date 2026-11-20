@@ -29,6 +29,15 @@ Every suite starts with a read-only **node probe**. `node-cni` checks for
 `/v1/config` and `/v1/endpoint` on the node agent's socket: the first socket one directory below the host's `/var/run` or `/run` (`flowsdn/` first; both declared read-only) that answers `GET /v1/healthz`, since a node's release may predate the current socket path. A node without the
 flowsdn CNI is not the flowsdn flavor, and both checks report skip.
 
+On a flowsdn node, `node-operator` (#446) checks the flowsdn operator through
+the apiserver: `flowsdn-perf operator` (the image's GNU binary, which has the
+API client) reads the Lease `kube-system/flowsdn-operator` and passes when it
+has a holder that renewed it within three lease durations and
+`flowsdnidentities.flowsdn.io`, a CRD the operator registers, is Established.
+It uses the suites' two declared cluster reads (`leases`,
+`customresourcedefinitions`; get only). Without an apiserver (kernel-check's
+VM) it reports skip.
+
 On a flowsdn node with a healthy agent, the probe then checks ClusterIP
 Services from the test pod's own network (#292), before the suite isolates
 itself: `node-service-dns` queries kube-dns at the pod's nameserver (its

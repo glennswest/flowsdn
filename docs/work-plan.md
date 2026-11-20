@@ -4,6 +4,15 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Operator executable gap — #446 (P2), 2026-11-20
+
+Binary and manifests done by #337 (`flowsdn-agent operator`, 64-flowsdn-operator.yaml). Left: a test-standard test.
+- [ ] `node-operator` in the node probe: `flowsdn-perf operator` (GNU, API client) reads Lease
+      kube-system/flowsdn-operator (holder, renewed within 3 durations) and CRD flowsdnidentities Established;
+      requires.toml cluster_read leases + customresourcedefinitions; skip without STORM_API. Unit tests for the verdict.
+- [ ] sc-build (+ test/build.sh), then a short run on pvetest2 once it runs a release with the operator (#482 waits
+      for the same install); ship with the Lease proof; close.
+
 ### Operator GC and FlowsdnEndpointSlice batching — #479 (P2), 2026-11-20
 
 The operator exists now (#337). Parts:

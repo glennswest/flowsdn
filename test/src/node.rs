@@ -1,8 +1,9 @@
 //! The node's own flowsdn, read-only through the host mounts the suite
 //! declares (`/opt/cni/bin`, `/run`). flowsdn is a flavor: a node without its
 //! CNI does not run it, and that is a skip, never a pass. The agent is only
-//! probed where flowsdn's CNI is installed, and then its ClusterIP Services
-//! (`services`, #292) from this pod's network.
+//! probed where flowsdn's CNI is installed, then the flowsdn operator
+//! (`node-operator`, #446, through the apiserver), and then its ClusterIP
+//! Services (`services`, #292) from this pod's network.
 use crate::{env::Env, report::Report};
 use flowsdn_api_client::Client;
 use std::time::{Duration, Instant};
@@ -129,7 +130,62 @@ pub fn probe(report: &mut Report, env: &Env) {
             format!("agent healthy at {}; {count} endpoints", socket.display()),
         ))
     });
+    operator(report, env);
     if healthy.is_some() {
         crate::services::probe(report, &socket);
     }
+}
+
+/// The flowsdn operator (#446) on a flowsdn-flavor node: `flowsdn-perf
+/// operator` (the image's GNU binary, which has the API client) reads the
+/// Lease `kube-system/flowsdn-operator` and the CRD it registers, with the
+/// suite's declared cluster reads. Without an apiserver (kernel-check's VM)
+/// it is a skip.
+fn operator(report: &mut Report, env: &Env) {
+    const LIMIT: Duration = Duration::from_secs(60);
+    if std::env::var_os("STORM_API").is_none()
+        && std::env::var_os("KUBERNETES_SERVICE_HOST").is_none()
+    {
+        report.skip(
+            "node-operator",
+            "requires: an apiserver (STORM_API); none in this environment",
+        );
+        return;
+    }
+    let perf = env.root.join("bin/flowsdn-perf");
+    report.check("node-operator", || {
+        let mut child = std::process::Command::new(&perf)
+            .arg("operator")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("cannot start {}: {e}", perf.display()))?;
+        let start = Instant::now();
+        let status = loop {
+            if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+                break status;
+            }
+            if start.elapsed() > LIMIT {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("flowsdn-perf operator: no answer in {}s", LIMIT.as_secs()));
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        };
+        let mut line = String::new();
+        if let Some(mut out) = child.stdout.take() {
+            use std::io::Read;
+            let _ = out.read_to_string(&mut line);
+        }
+        let line = line.trim().to_owned();
+        if status.success() {
+            Ok(((), line))
+        } else {
+            Err(if line.is_empty() {
+                format!("flowsdn-perf operator: {status}")
+            } else {
+                line
+            })
+        }
+    });
 }

@@ -4,10 +4,13 @@
 //! - `flowsdn-perf run`: the `perf` suite (this pod is the client);
 //! - `flowsdn-perf run-scale`: the `perf-scale` ramp (steps of 100 pods);
 //! - `flowsdn-perf server`: the RR/stream/accept server a worker pod runs;
-//! - `flowsdn-perf sleep`: an idle pod for the network-readiness timing.
+//! - `flowsdn-perf sleep`: an idle pod for the network-readiness timing;
+//! - `flowsdn-perf operator`: whether the flowsdn operator is up (#446), for
+//!   `flowsdn-test`'s `node-operator` check.
 mod dns;
 mod host;
 mod kube;
+mod operator;
 mod report;
 mod stats;
 mod suite;
@@ -27,11 +30,12 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
+        Some("operator") => operator::run(),
         Some("sleep") => loop {
             std::thread::sleep(std::time::Duration::from_secs(3600));
         },
         _ => {
-            eprintln!("usage: flowsdn-perf run|run-scale|server|sleep");
+            eprintln!("usage: flowsdn-perf run|run-scale|server|sleep|operator");
             ExitCode::from(2)
         }
     }
