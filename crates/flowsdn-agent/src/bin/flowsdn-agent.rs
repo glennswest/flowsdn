@@ -22,8 +22,7 @@ not provided by this daemon.
 ";
 /// Only an agent built with the `kubernetes` feature has the operator (#337).
 #[cfg(feature = "kubernetes")]
-const OPERATOR_USAGE: &str =
-    "\nOperator (Kubernetes builds): flowsdn-agent operator --help\n";
+const OPERATOR_USAGE: &str = "\nOperator (Kubernetes builds): flowsdn-agent operator --help\n";
 #[cfg(not(feature = "kubernetes"))]
 const OPERATOR_USAGE: &str = "";
 

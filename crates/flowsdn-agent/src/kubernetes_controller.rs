@@ -261,11 +261,15 @@ impl Controller {
                 } = self;
                 let (lb_ipam_on, l2_on) = (settings.lb_ipam_on(), settings.l2_on());
                 // flowsdn.io watchers start once their CRDs exist (#337).
-                let required: BTreeSet<String> =
-                    settings.required_crds().into_iter().map(str::to_owned).collect();
-                let gate = wait_for_crds(&client, &required, settings.crd_wait_timeout, &watch_view)
-                    .boxed_local()
-                    .shared();
+                let required: BTreeSet<String> = settings
+                    .required_crds()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect();
+                let gate =
+                    wait_for_crds(&client, &required, settings.crd_wait_timeout, &watch_view)
+                        .boxed_local()
+                        .shared();
                 let local = settings.node_name;
                 let node_view = Arc::clone(&watch_view);
                 let node_lb = lb.clone();
@@ -383,9 +387,8 @@ impl Controller {
                                 view.pod_policies = rows;
                                 view.pod_policies_synced = true;
                             },
-                        )
                         ),
-                    );
+                    ));
                 }
                 if host_firewall || settings.flowsdn_policy {
                     let cw_view = Arc::clone(&watch_view);
@@ -402,9 +405,8 @@ impl Controller {
                                 view.clusterwide_policies = rows;
                                 view.clusterwide_synced = true;
                             },
-                        )
                         ),
-                    );
+                    ));
                 }
                 if settings.identity_allocation {
                     let id_view = Arc::clone(&watch_view);
@@ -421,9 +423,8 @@ impl Controller {
                                 view.identity_objects = rows;
                                 view.identities_synced = true;
                             },
-                        )
                         ),
-                    );
+                    ));
                 }
                 if settings.service_lb {
                     let (svc_view, svc_lb) = (Arc::clone(&watch_view), lb.clone());
@@ -488,9 +489,8 @@ impl Controller {
                                 view.lb_pools = rows;
                                 view.lb_pools_synced = true;
                             },
-                        )
                         ),
-                    );
+                    ));
                 }
                 if l2_on {
                     let l2_view = Arc::clone(&watch_view);
@@ -507,9 +507,8 @@ impl Controller {
                                 view.l2_policies = rows;
                                 view.l2_policies_synced = true;
                             },
-                        )
                         ),
-                    );
+                    ));
                 }
                 runtime.block_on(futures::future::join_all(parts));
             })?;

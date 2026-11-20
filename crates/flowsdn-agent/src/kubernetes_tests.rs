@@ -533,7 +533,10 @@ fn the_crd_gate_waits_for_what_the_settings_use() {
             .expect("enabled")
     };
     let defaults = parse(json!({}));
-    assert_eq!(defaults.crd_wait_timeout, std::time::Duration::from_secs(300));
+    assert_eq!(
+        defaults.crd_wait_timeout,
+        std::time::Duration::from_secs(300)
+    );
     assert_eq!(
         defaults.required_crds().into_iter().collect::<Vec<_>>(),
         [

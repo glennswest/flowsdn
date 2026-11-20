@@ -97,7 +97,11 @@ pub fn run(options: &Options) -> Result<(), String> {
         ))
         .map_err(|e| e.to_string())?;
     let hostname = std::fs::read_to_string("/proc/sys/kernel/hostname").unwrap_or_default();
-    let me = identity(std::env::var("POD_NAME").ok(), &hostname, std::process::id());
+    let me = identity(
+        std::env::var("POD_NAME").ok(),
+        &hostname,
+        std::process::id(),
+    );
     crate::log::logln!(
         "operator {me}: lease {LEASE_NAMESPACE}/{LEASE_NAME}{}",
         if options.skip_crd_creation {
@@ -112,19 +116,19 @@ pub fn run(options: &Options) -> Result<(), String> {
     loop {
         let now = Instant::now();
         let wall = micro_time(SystemTime::now());
-        let step = match runtime.block_on(client.send_json(http::Method::GET, &elector.path(), None))
-        {
-            Ok((200, lease)) => Some(elector.step(now, &wall, Some(&lease))),
-            Ok((404, _)) => Some(elector.step(now, &wall, None)),
-            Ok((status, body)) => {
-                crate::log::logln!("operator lease: HTTP {status} {}", message(&body));
-                None
-            }
-            Err(error) => {
-                crate::log::logln!("operator lease: {error}");
-                None
-            }
-        };
+        let step =
+            match runtime.block_on(client.send_json(http::Method::GET, &elector.path(), None)) {
+                Ok((200, lease)) => Some(elector.step(now, &wall, Some(&lease))),
+                Ok((404, _)) => Some(elector.step(now, &wall, None)),
+                Ok((status, body)) => {
+                    crate::log::logln!("operator lease: HTTP {status} {}", message(&body));
+                    None
+                }
+                Err(error) => {
+                    crate::log::logln!("operator lease: {error}");
+                    None
+                }
+            };
         let write = match step {
             Some(Step::Create(body)) => Some((http::Method::POST, elector.collection(), body)),
             Some(Step::Update(body)) => Some((http::Method::PUT, elector.path(), body)),
