@@ -8,14 +8,17 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] policy.rs: a known local endpoint no policy selects gets a tracking row (flags 0) when Pod policy is on;
       `Desired.tracking` + status. Tests updated/new; policy-live tracking step. runtime.md, implementation-status.
-- [ ] sc-build + kernel-check; stage; shipped; close.
+- [x] d7c8fd4, tests eb3163b/bf28423/702ec0b. Build at 702ec0b: 1013 tests 0 failed, kernel-check 24/0/2; policy-live 22
+      PASS incl. the tracking-row step. Golden golden-flowsdn-ac66536240cb; shipped; closed.
 
 ### Three minor findings — #500 (P3), 07c7d1dd3eec 48b8dc5f6c4b 921b14b1e023, 2026-11-20
 
 - [x] bgp-proto: ROUTE-REFRESH length → 7/1 with the complete message (decode, receive, message). cloud-fixture canon:
       re-escape `%&=` after decoding. agent: `Manager::restore_held` on the `open_waiting` Store (api::run), cni-runtime
       restart uses it and checks the lock is held. Tests per finding; runtime.md state-dir row.
-- [ ] sc-build + kernel-check; stage; shipped; close.
+- [x] 28aa30b, wire test + fmt 259002a. Build at 702ec0b (with #462): fmt clean, `cargo xtask check` (1013 tests, 0
+      failed), kernel-check on 7.3.4: 24 pass 0 fail 2 skip; cni-runtime restores on the state lock it waited for. Golden
+      golden-flowsdn-ac66536240cb (built from 702ec0b); shipped; closed.
 
 ### External ClusterIP access with Maglev — #465 (P3), 2026-11-20
 
