@@ -14,8 +14,11 @@
 //! what its policy would drop. Each decision is counted in
 //! `flowsdn_policy_verdicts` (remembered flows are not). It does not do
 //! authentication (an entry that requires it drops), proxy redirects,
-//! verdict events, ICMP error classification as related, and fragments
-//! other than the first (dropped where enforced).
+//! verdict events, and fragments other than the first (dropped where
+//! enforced). An ICMP or ICMPv6 error (destination unreachable, time
+//! exceeded, parameter problem) about a remembered flow is related traffic
+//! and passes without a policy lookup (#463); one about no remembered flow
+//! is judged as new ICMP traffic.
 use aya_ebpf::{
     bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, TC_ACT_SHOT},
     helpers::bpf_ktime_get_ns,
@@ -115,6 +118,10 @@ pub struct Flow {
     tcp_flags: u8,
     /// A fragment other than the first: no L4 header.
     fragment: bool,
+    /// An ICMP error whose embedded packet was parsed into `inner` (#463).
+    related: bool,
+    /// The embedded packet's flow, as its sender sent it (egress unset).
+    inner: PolicyCtKey,
 }
 
 enum Parsed {
@@ -174,6 +181,10 @@ fn parse4(ctx: &TcContext, flow: &mut Flow) -> Option<Parsed> {
         if kind == 3 && code == 4 {
             return Some(Parsed::Pass);
         }
+        // Destination unreachable, time exceeded, parameter problem.
+        if matches!(kind, 3 | 11 | 12) {
+            flow.related = inner4(ctx, flow, l4.checked_add(8)?).is_some();
+        }
         return icmp_echo(ctx, flow, l4, kind, 8, 0);
     }
     l4_ports(ctx, flow, l4)
@@ -196,6 +207,10 @@ fn parse6(ctx: &TcContext, flow: &mut Flow) -> Option<Parsed> {
             if kind == 2 || (133..=137).contains(&kind) {
                 return Some(Parsed::Pass);
             }
+            // Destination unreachable, time exceeded, parameter problem.
+            if matches!(kind, 1 | 3 | 4) {
+                flow.related = inner6(ctx, flow).is_some();
+            }
             icmp_echo(ctx, flow, L4, kind, 128, 129)
         }
         // A fragment header: the first fragment's ports are not parsed either.
@@ -206,6 +221,92 @@ fn parse6(ctx: &TcContext, flow: &mut Flow) -> Option<Parsed> {
         // Other extension headers are not walked: protocol is the next header, port 0.
         _ => l4_ports(ctx, flow, L4),
     }
+}
+
+/// The IPv4 packet an ICMP error at `at` carries (#463): its flow into
+/// `flow.inner`. None when it is not a first fragment of IPv4, was not sent
+/// by the error's destination, or carries no ports to match.
+#[inline(always)]
+fn inner4(ctx: &TcContext, flow: &mut Flow, at: usize) -> Option<()> {
+    let version_ihl = ctx.load::<u8>(at).ok()?;
+    if version_ihl >> 4 != 4 || version_ihl & 15 < 5 {
+        return None;
+    }
+    if u16::from_be_bytes(ctx.load::<[u8; 2]>(at.checked_add(6)?).ok()?) & 0x1fff != 0 {
+        return None;
+    }
+    let protocol = ctx.load::<u8>(at.checked_add(9)?).ok()?;
+    let [a, b, c, d] = ctx.load::<[u8; 4]>(at.checked_add(12)?).ok()?;
+    let saddr = [a, b, c, d, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    // An error goes back to the sender of the packet it is about.
+    if saddr != flow.key.daddr {
+        return None;
+    }
+    let [a, b, c, d] = ctx.load::<[u8; 4]>(at.checked_add(16)?).ok()?;
+    flow.inner.saddr = saddr;
+    flow.inner.daddr = [a, b, c, d, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    flow.inner.protocol = protocol;
+    flow.inner.family = FAMILY_V4;
+    let l4 = usize::from(version_ihl & 15)
+        .checked_mul(4)?
+        .checked_add(at)?;
+    inner_ports(ctx, flow, l4, ICMP, 8, 0)
+}
+
+/// The IPv6 packet an ICMPv6 error carries (#463), as [`inner4`]; extension
+/// headers are not walked, so a fragment is not matched.
+#[inline(always)]
+fn inner6(ctx: &TcContext, flow: &mut Flow) -> Option<()> {
+    // The embedded header after the outer 40 and the ICMPv6 header's 8.
+    const AT: usize = 62;
+    const NEXT: usize = 68;
+    const SOURCE: usize = 70;
+    const DESTINATION: usize = 86;
+    const L4: usize = 102;
+    if ctx.load::<u8>(AT).ok()? >> 4 != 6 {
+        return None;
+    }
+    let protocol = ctx.load::<u8>(NEXT).ok()?;
+    let saddr = ctx.load::<[u8; 16]>(SOURCE).ok()?;
+    if saddr != flow.key.daddr || protocol == 44 {
+        return None;
+    }
+    flow.inner.saddr = saddr;
+    flow.inner.daddr = ctx.load::<[u8; 16]>(DESTINATION).ok()?;
+    flow.inner.protocol = protocol;
+    flow.inner.family = FAMILY_V6;
+    inner_ports(ctx, flow, L4, ICMPV6, 128, 129)
+}
+
+/// The embedded packet's ports, as [`l4_ports`] and [`icmp_echo`] key them;
+/// an ICMP packet other than an echo (an error about an error) is not
+/// matched.
+#[inline(always)]
+fn inner_ports(
+    ctx: &TcContext,
+    flow: &mut Flow,
+    l4: usize,
+    icmp: u8,
+    request: u8,
+    reply: u8,
+) -> Option<()> {
+    let protocol = flow.inner.protocol;
+    if matches!(protocol, TCP | UDP | SCTP) {
+        let [s0, s1, d0, d1] = ctx.load::<[u8; 4]>(l4).ok()?;
+        flow.inner.sport = Be16([s0, s1]);
+        flow.inner.dport = Be16([d0, d1]);
+    } else if protocol == icmp {
+        let kind = ctx.load::<u8>(l4).ok()?;
+        let id = ctx.load::<[u8; 2]>(l4.checked_add(4)?).ok()?;
+        if kind == request {
+            flow.inner.sport = Be16(id);
+        } else if kind == reply {
+            flow.inner.dport = Be16(id);
+        } else {
+            return None;
+        }
+    }
+    Some(())
 }
 
 /// ICMP: the echo identifier keeps request and reply in one flow; the
@@ -402,6 +503,37 @@ fn tracked(key: &PolicyCtKey, flow: &Flow, now: u64) -> bool {
     true
 }
 
+/// A live entry for `key`, read only: an ICMP error does not refresh the
+/// flow it is about (#463).
+#[inline(always)]
+fn live(key: &PolicyCtKey, now: u64) -> bool {
+    // SAFETY: an LRU value reference valid for this program run; the
+    // expiry is copied at once.
+    unsafe { POLICY_CT.get(key) }.is_some_and(|value| value.expires >= now)
+}
+
+/// Whether the ICMP error in `flow`, seen in `egress`, is about a
+/// remembered flow (#463). Its embedded packet went the other way: it was
+/// either that flow's first direction or a reply to it.
+#[inline(always)]
+fn related(flow: &Flow, egress: u8, now: u64) -> bool {
+    if !flow.related {
+        return false;
+    }
+    let mut sent = flow.inner;
+    sent.egress = egress ^ 1;
+    if live(&sent, now) {
+        return true;
+    }
+    let mut first = sent;
+    first.saddr = sent.daddr;
+    first.daddr = sent.saddr;
+    first.sport = sent.dport;
+    first.dport = sent.sport;
+    first.egress = egress;
+    live(&first, now)
+}
+
 /// Count one decision.
 #[inline(always)]
 fn count(ctx: &TcContext, endpoint: u32, egress: u8, flow: &Flow, kind: u8) {
@@ -460,6 +592,8 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
         port: [0, 0],
         tcp_flags: 0,
         fragment: false,
+        related: false,
+        inner: PolicyCtKey::default(),
     };
     let enforced = endpoint.flags
         & if egress != 0 {
@@ -500,6 +634,9 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
         };
     }
     let now = now();
+    if related(&flow, egress, now) {
+        return TC_ACT_OK;
+    }
     flow.key.egress = egress;
     if tracked(&flow.key, &flow, now) {
         return TC_ACT_OK;

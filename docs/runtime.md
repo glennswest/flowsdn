@@ -957,8 +957,12 @@ drop, an audit pass) is counted in `flowsdn_policy_verdicts` (LRU per-CPU,
 16384 rows): `GET /v1/policy/verdicts`. Deny and entity rules for Pods come
 from the flowsdn policy kinds (below). Pod policy always enforces (audit
 mode for Pods is gap #461); a flow already open when a policy first selects
-a Pod has its replies judged as new flows (#462); an ICMP error about an
-allowed flow is judged as new traffic (#463). L7, FQDN and ICMP rules
+a Pod has its replies judged as new flows (#462). An ICMP or ICMPv6 error
+(destination unreachable, time exceeded, parameter problem) whose embedded
+packet was sent by its destination and belongs to a remembered flow, in either
+direction, is related traffic: it passes without a policy lookup and does not
+refresh the flow (#463). One about no remembered flow is judged as new ICMP
+traffic. Fragmentation-needed and packet-too-big always pass. L7, FQDN and ICMP rules
 (#448) and per-flow policy verdict events (#452) are gaps, each an issue.
 `policy-live` (medium test suite) checks the programs
 on a kernel through `BPF_PROG_TEST_RUN`; no cluster run yet.

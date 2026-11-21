@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#463)
+- **feat:** ICMP errors are related traffic in Pod and host policy. The endpoint programs now parse the packet embedded in an ICMP error (destination unreachable, time exceeded, parameter problem) and in an ICMPv6 error (destination unreachable, time exceeded, parameter problem). The error passes without a policy lookup when that packet was sent by the error's destination and its flow is in `flowsdn_policy_ct`, as the flow's first direction or as its reply. Matching uses ports for TCP, UDP and SCTP and the echo identifier for echo. The lookup is read-only, so an error never extends a flow. An error about no remembered flow, an embedded fragment or an error about an error is judged as new ICMP traffic, as before. Fragmentation-needed and packet-too-big still always pass. The local-delivery object and lock are rebuilt.
+- **test:** `policy-live` related-error cases: unreachable and time exceeded about a tracked echo (pass), about an untracked echo or an embedded packet the Pod did not send (drop), egress port unreachable about a tracked or an untracked TCP flow, and ICMPv6 errors about a tracked flow's first direction and its reply, or an untracked flow.
+
 ### 2026-11-20 (#499)
 - **fix:** Every live uplink that reaches a node carries its route (finding 607157057c7a). `uplinks::nexthops` pairs gateway k with port k and drops pairs whose port is not on the gateway's subnet. It fell back to other pairs only when no pair at all worked. With G1 reachable on both ports and G2 only on port A, the pairs G1/A and G2/B gave only G1/A, and port B carried nothing for that route. A live port left without a path now takes the first gateway it reaches.
 - **test:** `every_live_carrier_that_reaches_a_gateway_gets_a_path`: the G1/G2 case, the reversed order (both cyclic pairs kept) and a port that reaches no gateway (no path).

@@ -7,7 +7,8 @@
 //! discovery and ARP, identity + protocol + port and port-range (LPM) allows,
 //! the aggregate cluster identity and the wildcard identity, a top-precedence
 //! deny, replies of allowed flows in the other direction (conntrack), ICMP
-//! echo, IPv6, fragments, and removing enforcement. The host firewall
+//! echo, ICMP and ICMPv6 errors about remembered flows as related traffic
+//! (#463), IPv6, fragments, and removing enforcement. The host firewall
 //! (#379): `from_netdev`/`to_netdev` as if on an uplink, for the host
 //! endpoint: only traffic to the host's own address is judged, remote-node,
 //! world and port rules, a deny over an allow, replies of flows the host
@@ -115,6 +116,13 @@ fn udp(sport: u16, dport: u16) -> Vec<u8> {
     l4.extend_from_slice(&sport.to_be_bytes());
     l4.extend_from_slice(&dport.to_be_bytes());
     l4.extend_from_slice(&[0, 12, 0, 0, b'p', b'o', b'l', b'i']);
+    l4
+}
+/// An ICMP or ICMPv6 error `kind`/`code` carrying `inner` (an IP frame,
+/// Ethernet header stripped).
+fn icmp_error(kind: u8, code: u8, inner: &[u8]) -> Vec<u8> {
+    let mut l4 = vec![kind, code, 0, 0, 0, 0, 0, 0];
+    l4.extend_from_slice(inner.get(14..).unwrap_or_default());
     l4
 }
 fn icmp(kind: u8, id: u16) -> Vec<u8> {
@@ -372,6 +380,7 @@ fn run(object: &[u8]) -> Result<()> {
         SHOT,
     )?;
     println!("PASS ICMP echo: the request is allowed by protocol, its reply by conntrack");
+    related_errors(&lab)?;
 
     let entries = lab.delivery.policy().policy_entries()?;
     if entries.len() != 4
@@ -395,6 +404,73 @@ fn run(object: &[u8]) -> Result<()> {
     host(&mut lab)?;
     host_egress(&mut lab)?;
     remote_node_aggregate(&mut lab)
+}
+
+/// ICMP errors as related traffic (#463). Ingress is enforced with no ICMP
+/// rule; egress allows ICMP (not ICMPv6) to identity 300 only. Tracked: the
+/// ingress TCP flows PEER6:40000 -> POD6:80 and OTHER:40000 -> POD:8082 and
+/// the echo POD -> PEER id 77.
+fn related_errors(lab: &Lab) -> Result<()> {
+    let echo77 = v4(ICMP, POD, PEER, 0, &icmp(8, 77));
+    lab.ingress(
+        "host unreachable from a router about the tracked echo",
+        &v4(ICMP, OTHER, POD, 0, &icmp_error(3, 1, &echo77)),
+        OK,
+    )?;
+    lab.ingress(
+        "time exceeded about the tracked echo",
+        &v4(ICMP, WORLD, POD, 0, &icmp_error(11, 0, &echo77)),
+        OK,
+    )?;
+    lab.ingress(
+        "host unreachable about an echo nobody sent",
+        &v4(ICMP, OTHER, POD, 0, &icmp_error(3, 1, &v4(ICMP, POD, PEER, 0, &icmp(8, 99)))),
+        SHOT,
+    )?;
+    lab.ingress(
+        "an error whose embedded packet the Pod did not send",
+        &v4(ICMP, OTHER, POD, 0, &icmp_error(3, 1, &v4(ICMP, OTHER, PEER, 0, &icmp(8, 77)))),
+        SHOT,
+    )?;
+    // Egress ICMP to 301 has no rule: only a related error passes.
+    let tcp8082 = v4(TCP, OTHER, POD, 0, &tcp(40000, 8082, ACK));
+    lab.egress(
+        "port unreachable to 301 about the tracked TCP 8082 flow's packet",
+        &v4(ICMP, POD, OTHER, 0, &icmp_error(3, 3, &tcp8082)),
+        OK,
+    )?;
+    let untracked = v4(TCP, OTHER, POD, 0, &tcp(40000, 9, ACK));
+    lab.egress(
+        "port unreachable to 301 about an untracked flow",
+        &v4(ICMP, POD, OTHER, 0, &icmp_error(3, 3, &untracked)),
+        SHOT,
+    )?;
+    let tcp80_6 = v6(TCP, PEER6, POD6, &tcp(40000, 80, ACK));
+    lab.egress(
+        "ICMPv6 port unreachable about the tracked IPv6 TCP 80 flow",
+        &v6(58, POD6, PEER6, &icmp_error(1, 4, &tcp80_6)),
+        OK,
+    )?;
+    let other6 = v6(TCP, PEER6, POD6, &tcp(40001, 80, ACK));
+    lab.egress(
+        "ICMPv6 port unreachable about an untracked IPv6 flow",
+        &v6(58, POD6, PEER6, &icmp_error(1, 4, &other6)),
+        SHOT,
+    )?;
+    lab.ingress(
+        "ICMPv6 time exceeded (no rule) about an untracked flow",
+        &v6(58, PEER6, POD6, &icmp_error(3, 0, &v6(TCP, POD6, PEER6, &tcp(80, 40001, ACK)))),
+        SHOT,
+    )?;
+    lab.ingress(
+        "ICMPv6 time exceeded about the tracked flow's reply",
+        &v6(58, PEER6, POD6, &icmp_error(3, 0, &v6(TCP, POD6, PEER6, &tcp(80, 40000, ACK)))),
+        OK,
+    )?;
+    println!(
+        "PASS ICMP and ICMPv6 errors about tracked flows pass as related, both directions; errors about other flows are judged as new"
+    );
+    Ok(())
 }
 
 const HOST_ADDR: [u8; 4] = [192, 0, 2, 20];

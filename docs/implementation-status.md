@@ -153,8 +153,8 @@ pinning or subsystem libraries are absent are **not current status**.
   NAT46/64 to local backends or in the socket LB (#450); the RFC 6052 gateway
   (#454); SCTP Services (#457); IPv4 fragments
   after the first (#458); topology hints (#459); BPF masquerade (#460); Pod
-  policy audit mode (#461); flows open before a policy (#462); ICMP errors as
-  related traffic (#463); the Hubble observer/relay (#293).
+  policy audit mode (#461); flows open before a policy (#462); the Hubble
+  observer/relay (#293).
 
 ### Cloud fixtures (ADR-0007)
 

@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### ICMP errors as related traffic — #463 (P3), 2026-11-20
+
+- [x] policy.rs: `inner4`/`inner6`/`inner_ports` parse the embedded packet (sender must be the outer destination);
+      `related` checks `flowsdn_policy_ct` read-only for the flow both ways before the normal lookup. policy-live cases.
+- [ ] sc-build: build-bpf + lock write, object back as base64; commit object + lock.
+- [ ] Strict sc-build + kernel-check; stage; shipped; close.
+
 ### ECMP pairing keeps every reachable carrier — #499 (P1), finding 607157057c7a, 2026-11-20
 
 - [x] `nexthops`: after the cyclic pairs (and the all-pairs fallback), a carrier without a path takes the first gateway it
