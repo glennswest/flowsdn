@@ -8,7 +8,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] `kubernetes.policy-audit-mode` → View.policy_audit: AUDIT on enforced Pod rows and quarantine rows; no endpoint
       manager quarantine in audit mode; `policy.audit` status; node-config key. Unit test; policy-live `pod_audit`.
-- [ ] sc-build + kernel-check; stage; shipped; close.
+- [x] 568ab53, fmt 58ed7ff. Strict sc-build at 58ed7ff: fmt --check, `cargo xtask check` (1014 tests, 0 failed),
+      kernel-check on 7.3.4: 24 pass 0 fail 2 skip; policy-live Pod audit step passed. Stage 1c8f8bd571a8; shipped; closed.
 
 ### Flows open before a policy selects a Pod — #462 (P3), 2026-11-20
 
