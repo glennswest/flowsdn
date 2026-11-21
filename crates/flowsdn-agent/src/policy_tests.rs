@@ -471,7 +471,15 @@ fn host_firewall_rules_enforcement_and_audit() {
     assert_eq!(learning.host.pointer("/learning/0"), Some(&json!("eth0")));
     // Off: nothing of the host, whatever the policies say.
     let off = compile(&host_view(HostFirewall::Off, false), &[]);
-    assert!(off.endpoints.is_empty() && host_keys(&off).is_empty());
+    assert!(
+        !off.endpoints.contains_key(&5)
+            && !off
+                .endpoints
+                .contains_key(&flowsdn_bpf_abi::policy::HOST_PODS)
+            && host_keys(&off).is_empty()
+    );
+    // The Pod itself is only tracked (#462).
+    assert_eq!(off.endpoints.get(&40).map(|e| e.flags), Some(0));
     // Not selected: tracked only.
     let mut other = host_view(HostFirewall::Enforce, false);
     for node in &mut other.nodes {
@@ -643,7 +651,12 @@ fn flowsdn_policy_is_ignored_with_the_setting_off() {
     );
     view.flowsdn_policy = false;
     let desired = compile(&view, &[]);
-    assert!(desired.endpoints.is_empty(), "{:?}", desired.endpoints);
+    // NetworkPolicy is still on: tracked, not enforced (#462).
+    assert!(
+        desired.endpoints.values().all(|e| e.flags == 0),
+        "{:?}",
+        desired.endpoints
+    );
     assert!(desired.pod_policies.is_empty());
 }
 
@@ -797,7 +810,7 @@ fn a_bad_combination_fails_the_whole_resource() {
         ]}),
     );
     let desired = compile(&view, &[]);
-    assert!(desired.endpoints.is_empty());
+    assert!(desired.endpoints.values().all(|e| e.flags == 0));
     assert!(desired.entries.is_empty());
     assert!(
         desired
@@ -900,8 +913,8 @@ fn a_new_endpoint_stays_quarantined_until_its_pod_is_known() {
     );
     assert_eq!(desired.quarantined, vec![9]);
     assert!(desired.local.contains(&41) && desired.local.contains(&40));
-    // The known, unselected web endpoint has no row: unenforced.
-    assert!(!desired.endpoints.contains_key(&40));
+    // The known, unselected web endpoint is tracked, not enforced (#462).
+    assert_eq!(desired.endpoints.get(&40).map(|e| e.flags), Some(0));
     assert!(
         !desired
             .entries
