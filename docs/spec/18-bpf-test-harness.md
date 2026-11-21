@@ -698,7 +698,7 @@ over Markdown**, and the reasons are worth stating because ADR-0005 leaves the
 choice open:
 
 - it is *input*, not documentation: `flowsdn-bpftest`'s build step is to read
-  it and count every unported case (§11.3, gap #473), so none is forgotten;
+  it and count every unported case (§11.3, #473: its `build.rs`), so none is forgotten;
 - CI computes coverage from it (`ported / total`, per milestone, per pipeline)
   and gates on the M1 denominator;
 - re-harvesting at a newer reference tag produces a diffable file, so
@@ -1172,15 +1172,15 @@ tests, at the tiers of §10.3.
 
 ### 9.4 Harvest consistency, unprivileged
 
-- [ ] `CASES.toml` parses, and its `[meta]` counts equal the sums of its rows.
-- [ ] Every `PORTED.toml` key resolves to a `CASES.toml` case.
-- [ ] Every `status = "ported"` entry names a Rust test path that exists (the
+- [x] `CASES.toml` parses, and its `[meta]` counts equal the sums of its rows.
+- [x] Every `PORTED.toml` key resolves to a `CASES.toml` case.
+- [x] Every `status = "ported"` entry names a Rust test path that exists (the
       §11.3 compile-time check is the oracle).
-- [ ] Every `retargeted` / `replaced` / `dropped` entry has a `disposition`.
-- [ ] Coverage is monotonic against the previous commit (§5.3).
+- [x] Every `retargeted` / `replaced` / `dropped` entry has a `disposition`.
+- [ ] Coverage is monotonic against the previous commit (§5.3). Gap #544.
 - [ ] Re-running `tools/harvest-bpf-cases (Rust)` against the pinned reference
       commit reproduces `CASES.toml` byte-for-byte (guards silent hand edits).
-      Skipped with a clear message when the reference clone is absent.
+      Skipped with a clear message when the reference clone is absent. Gap #544.
 
 ### 9.5 The corpus itself
 
@@ -1354,18 +1354,18 @@ harness stays safe Rust.
 
 ### 11.3 Test generation from the harvest
 
-The generator is gap #473: there is no `build.rs`, generated corpus or §9.4 test.
+The generator (#473) is `flowsdn-bpftest`'s `build.rs`, which shares `src/corpus.rs` with `tests/corpus.rs` (§9.4) and `cargo xtask cases`.
 
 Its `build.rs` reads `tests/bpf/CASES.toml` and `tests/bpf/PORTED.toml` and,
 per reference file and case:
 
 - `status = "ported"` → nothing (the hand-written test already exists in
   `tests/<file_stem>.rs`; the generator emits a compile-time assertion that a
-  function with that path exists, so a rename breaks the build);
+  function with that path exists (`rust = "<stem>::<fn>"`; that file includes `$OUT_DIR/ported/<stem>.rs`), so a rename breaks the build);
 - every other case (`deferred`, `retargeted`, `replaced`, `dropped`, unlisted)
   → no test item: an ignored test with an empty body would be a stub. The build
-  prints the unported count and writes it, with each name, to the coverage report
-  per file, milestone and pipeline, so it is visible in every run; the
+  writes the unported count, with each name, to `$OUT_DIR/coverage.txt`, by
+  file, milestone and pipeline, and `cargo xtask check` prints it in every run; the
   `disposition` keeps a retargeted or replaced name discoverable by `grep`.
 
 This is the mechanism that makes "625 cases" a checklist the build enforces and

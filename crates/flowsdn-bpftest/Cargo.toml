@@ -24,6 +24,12 @@ flowsdn-connector = { path = "../flowsdn-connector", version = "=0.14.0" }
 flowsdn-agent = { path = "../flowsdn-agent", version = "=0.14.0" }
 flowsdn-api-client = { path = "../flowsdn-api-client", version = "=0.14.0" }
 
+[build-dependencies]
+toml.workspace = true
+
+[dev-dependencies]
+toml.workspace = true
+
 [[bin]]
 name = "flowsdn-endpoint-test"
 path = "src/bin/endpoint.rs"

@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### BPF corpus generator and §9.4 checks — #473 (P3), 2026-11-21
+
+- [x] `crates/flowsdn-bpftest/src/corpus.rs` (parse + §9.4 checks, generated assertions, §5.3 summary), shared by
+      `build.rs` (fails the build, writes `$OUT_DIR/ported/<stem>.rs` and `coverage.txt`), `tests/corpus.rs` and
+      `cargo xtask cases` (also printed by `cargo xtask check`). toml as build/dev dep (Cargo.lock edited by hand).
+      Spec 18 §9.4/§11.3 and PORTED.toml header updated; monotonic + re-harvest split to #544.
+- [ ] sc-build; shipped; close.
+
 ### IPv6 BPF masquerade — #513 (P3), 2026-11-21
 
 - [x] socket-lb `flowsdn_masq6_*`; egress in three frames (`masq6` classify, `masq_new6` claim, `masq_out6` rewrite:

@@ -431,6 +431,7 @@ dependencies = [
  "httparse",
  "nix",
  "serde_json",
+ "toml",
 ]
 
 [[package]]
@@ -2427,6 +2428,7 @@ dependencies = [
  "flowsdn-scripttest",
  "regex",
  "serde_json",
+ "toml",
 ]
 
 [[package]]

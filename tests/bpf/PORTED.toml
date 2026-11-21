@@ -8,7 +8,10 @@
 #
 # status       ported | deferred | retargeted | replaced | dropped
 # tier         progrun | netns | direct | tier0     (spec 18 §10.3)
-# rust         the Rust test path, required when status = "ported"
+# rust         the Rust test, required when status = "ported": "<stem>::<fn>",
+#              a fn of crates/flowsdn-bpftest/tests/<stem>.rs, which must
+#              include!(concat!(env!("OUT_DIR"), "/ported/<stem>.rs")) so a
+#              rename fails the build (spec 18 §11.3, #473)
 # disposition  prose, required for retargeted | replaced | dropped
 #
 # Seeded 2026-09-07 with the dispositions decided in spec 18 §3.10. Entries

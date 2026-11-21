@@ -1,4 +1,7 @@
 //! Initial Linux build driver. Packaging and BPF commands arrive with their crates.
+#[allow(dead_code)]
+#[path = "../../crates/flowsdn-bpftest/src/corpus.rs"]
+mod cases;
 mod changed;
 mod chart;
 mod cloud;
@@ -15,12 +18,29 @@ fn run(args: &[&str]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// `cargo xtask cases --summary` (spec 18 §8.4, #473): the BPF test
+/// corpus's coverage, after the §9.4 consistency checks.
+fn print_cases() -> Result<(), Box<dyn Error>> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("workspace")?;
+    let tests = root.join("crates/flowsdn-bpftest/tests");
+    let corpus = cases::Corpus::parse(
+        &std::fs::read_to_string(root.join("tests/bpf/CASES.toml"))?,
+        &std::fs::read_to_string(root.join("tests/bpf/PORTED.toml"))?,
+        |stem| std::fs::read_to_string(tests.join(format!("{stem}.rs"))).ok(),
+    )
+    .map_err(|problems| problems.join("\n"))?;
+    print!("{}", corpus.summary());
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().skip(1).collect();
     let command = args.first().map(String::as_str).unwrap_or("help");
     if command == "help" || command == "--help" {
         println!(
-            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|ci-plan|check-changed> BASE\ncargo xtask audit-corpus [--check]\ncargo xtask chart-check\ncargo xtask cloud-scan\ncargo xtask kernel-check [SUITE]\nRun build tasks on Linux; see README.md."
+            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|ci-plan|check-changed> BASE\ncargo xtask audit-corpus [--check]\ncargo xtask cases [--summary]\ncargo xtask chart-check\ncargo xtask cloud-scan\ncargo xtask kernel-check [SUITE]\nRun build tasks on Linux; see README.md."
         );
         return Ok(());
     }
@@ -51,6 +71,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             .ok_or("workspace")?;
         let suite = args.get(1).map_or("medium", String::as_str);
         return kernel::run(root, suite);
+    }
+    if command == "cases" {
+        if args.len() > 2 || args.get(1).is_some_and(|s| s != "--summary") {
+            return Err("expected cases [--summary]".into());
+        }
+        return print_cases();
     }
     if command == "audit-corpus" {
         if args.len() > 2 || args.get(1).is_some_and(|s| s != "--check") {
@@ -143,6 +169,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "warnings",
             ])?;
             run(&["test", "--workspace", "--all-features", "--locked"])?;
+            // The BPF corpus coverage (spec 18 §8.4, #473), on every check.
+            print_cases()?;
             let packages = changed::musl_packages(None)?;
             for target in ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"] {
                 if packages.is_empty() {
