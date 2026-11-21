@@ -11,8 +11,10 @@ Kept here whole, newest notes as they were. Write new intentions here.
       (echo reply, ICMP errors). Loader: maps pinned, `set_masquerade`/`masquerade`. Agent: `bpf-masquerade`,
       `non-masquerade-cidrs`, `masquerade_prefixes`, services thread keeps the maps and attaches uplinks. Tests.
       IPv6 filed as #513.
-- [ ] sc-build: build-bpf + lock write, socket-lb object back as base64; commit object + lock.
-- [ ] Strict sc-build + kernel-check; stage; shipped; close.
+- [x] Code 6968504; Prefix4 alias f4d8bf1; first object failed the verifier (combined stack 608: masq_icmp_in nested
+      in ingress4), dispatch moved to the top level 866ce17; object + lock + fmt 64fb465 (socket-lb sha256 cb1faad6…).
+- [x] Strict sc-build at 64fb465: fmt --check, `cargo xtask check` (1016 tests, 0 failed), lock check, kernel-check on
+      7.3.4: 24 pass 0 fail 2 skip; socket-lb-live 31 PASS incl. BPF masquerade. Staged; shipped; closed. IPv6: #513.
 
 ### IPv4 fragments in Service translation — #458 (P3), 2026-11-21
 
