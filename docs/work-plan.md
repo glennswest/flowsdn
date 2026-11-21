@@ -15,8 +15,9 @@ Reference: pkg/hubble/dropeventemitter (7d68cfb394), read into tmp/ref470.
       the Pod (UID), reference message (`Incoming packet dropped (r) from ns/pod (ip) TCP/80.`), `-extended` adds
       `Applied policies: …`; `flowsdn_hubble::drop_events::Gate` (interval dedupe, per-second limit). Settings
       `kubernetes.hubble-drop-events{,-interval,-reasons,-extended,-rate-limit}`.
-- [ ] Tests (emitter unit, compile, policy-live reason); docs (runtime, agent-api, spec 11 §11/table, README/status);
-      object + lock; strict sc-build + kernel-check; stage; shipped; close.
+- [x] Tests, docs; ecd1e15 feature, 6243beb object + lock, 690e18f test fix. Strict sc-build at 690e18f: 1032
+      passed 0 failed (emitter, settings, applied tests), lock matches, kernel-check 24/0/2, policy-live `reason
+      (policy_denied)` and `its drop event says policy_deny`. Stage requested; shipped; closed.
 
 ### Flows on the loopback listener — #485 (P3), 2026-11-21
 
