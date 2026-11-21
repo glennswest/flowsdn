@@ -97,6 +97,8 @@ pub struct SocketLb {
 type Masq4 = LpmTrie<MapData, [u8; 4], u8>;
 /// IPv4 prefixes (address, length) for the masquerade maps.
 pub type Prefix4 = ([u8; 4], u8);
+/// IPv6 prefixes (address, length) for the RFC 6052 gateway's sources.
+pub type Prefix6 = ([u8; 16], u8);
 fn prefixes(map: &Masq4) -> KernelResult<std::collections::BTreeSet<Prefix4>> {
     let mut out = std::collections::BTreeSet::new();
     for item in map.iter() {
@@ -413,7 +415,7 @@ impl SocketLb {
     pub fn set_gateway64(
         &mut self,
         prefix: Option<[u8; 12]>,
-        sources: &[([u8; 16], u8)],
+        sources: &[Prefix6],
     ) -> KernelResult<()> {
         // `Gateway64`: enabled, three bytes of padding, the prefix.
         let mut value = [0u8; 16];
@@ -425,7 +427,7 @@ impl SocketLb {
                 *slot = byte;
             }
         }
-        let have: std::collections::BTreeSet<([u8; 16], u8)> = self
+        let have: std::collections::BTreeSet<Prefix6> = self
             .gw64_sources
             .iter()
             .map(|item| {
@@ -453,7 +455,7 @@ impl SocketLb {
         Ok(())
     }
     /// What [`Self::set_gateway64`] last wrote: (prefix when on, sources).
-    pub fn gateway64(&self) -> KernelResult<(Option<[u8; 12]>, Vec<([u8; 16], u8)>)> {
+    pub fn gateway64(&self) -> KernelResult<(Option<[u8; 12]>, Vec<Prefix6>)> {
         let prefix = match self.gw64_config.get(&0, 0) {
             Ok(value) if value.first() == Some(&1) => {
                 let mut prefix = [0u8; 12];
