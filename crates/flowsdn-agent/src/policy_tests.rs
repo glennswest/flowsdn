@@ -716,7 +716,10 @@ fn icmp_type_rules_are_port_rules_of_the_type() {
             json!({"icmps":[{"fields":[{"type":8}]}],"toPorts":[{"ports":[{"port":"80"}]}]}),
             "icmps cannot be combined with toPorts",
         ),
-        (json!({"icmps":[{"fields":[{"type":"Ping"}]}]}), "is not known"),
+        (
+            json!({"icmps":[{"fields":[{"type":"Ping"}]}]}),
+            "is not known",
+        ),
         (
             json!({"icmps":[{"fields":[{"family":"IPv5","type":8}]}]}),
             "is not IPv4 or IPv6",

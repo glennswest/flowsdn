@@ -301,7 +301,11 @@ const ICMP_FIELDS: usize = 40;
 /// type, by number or by the reference's frozen name. `None` (the rule is
 /// skipped, reported) for a rule that also has `toPorts`, more than 40
 /// fields, an unknown family or an unknown type.
-fn icmps(rule: &Value, policy: &str, problems: &mut BTreeSet<String>) -> Option<Vec<(u8, PortRange)>> {
+fn icmps(
+    rule: &Value,
+    policy: &str,
+    problems: &mut BTreeSet<String>,
+) -> Option<Vec<(u8, PortRange)>> {
     let Some(list) = rule.get("icmps").filter(|v| !v.is_null()) else {
         return Some(Vec::new());
     };
@@ -342,7 +346,10 @@ fn icmps(rule: &Value, policy: &str, problems: &mut BTreeSet<String>) -> Option<
         }
     }
     if out.len() > ICMP_FIELDS {
-        return refuse(format!("{} ICMP fields, the most is {ICMP_FIELDS}", out.len()));
+        return refuse(format!(
+            "{} ICMP fields, the most is {ICMP_FIELDS}",
+            out.len()
+        ));
     }
     Some(out)
 }
