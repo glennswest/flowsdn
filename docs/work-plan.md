@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### SCTP Services — #457 (P3), blocked 2026-11-20
+
+- [ ] Blocked: no `sctp.ko` on nodes (stormcos stages no `kernel-modules-extra`, stormcos#1512) nor on build VMs, so
+      kernel-check cannot run SCTP cases (stormcentral#1631). Proposed `--after stormcos#1512`; when it returns, check
+      #1631 too. Then: SCTP in services.rs/planner, `IPPROTO_SCTP` in socket-LB connect4/6 (verify the hook fires for
+      SCTP), uplink address + port rewrite (CRC32c update for ports), socket-lb-live SCTP cases. Nothing built before.
+
 ### Pod policy audit mode — #461 (P3), 2026-11-20
 
 - [x] `kubernetes.policy-audit-mode` → View.policy_audit: AUDIT on enforced Pod rows and quarantine rows; no endpoint
