@@ -392,7 +392,8 @@ fn endpoint_slices_parse_conditions_and_ports() {
             "labels":{"kubernetes.io/service-name":"kube-dns"}},
         "addressType":"IPv4",
         "endpoints":[
-            {"addresses":["10.172.0.5"],"conditions":{"ready":true},"nodeName":"pvetest1"},
+            {"addresses":["10.172.0.5"],"conditions":{"ready":true},"nodeName":"pvetest1",
+             "hints":{"forZones":[{"name":"z1"}],"forNodes":[{"name":"pvetest1"}]}},
             {"addresses":["10.172.0.6"],"conditions":{"ready":false,"serving":true,"terminating":true}},
             {"addresses":["10.172.0.7"]}],
         "ports":[{"name":"dns","protocol":"UDP","port":53},{"name":"all"}]});
@@ -419,6 +420,11 @@ fn endpoint_slices_parse_conditions_and_ports() {
         parsed.endpoints.first().map(|e| e.node_name.as_str()),
         Some("pvetest1")
     );
+    // Topology hints (#459); none on the others.
+    let first = parsed.endpoints.first().expect("first");
+    assert_eq!(first.zone_hints, ["z1"]);
+    assert_eq!(first.node_hints, ["pvetest1"]);
+    assert!(parsed.endpoints.iter().skip(1).all(|e| e.zone_hints.is_empty() && e.node_hints.is_empty()));
     assert_eq!(parsed.ports.first().and_then(|p| p.port), Some(53));
     assert_eq!(parsed.ports.get(1).and_then(|p| p.port), None);
     assert!(Scope::EndpointSlices.namespaced());

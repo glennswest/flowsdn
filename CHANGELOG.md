@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-21 (#459)
+- **feat:** Topology-aware routing in Service backend selection. EndpointSlice endpoints' `hints.forZones` and `hints.forNodes` are parsed (`flowsdn-k8s`). With traffic policy Cluster, the planner chooses among a port's ready endpoints as kube-proxy does. If every one has node hints and one names this node, it uses those (`trafficDistribution: PreferSameNode`). Otherwise, if every one has zone hints and one names this node's `topology.kubernetes.io/zone`, it uses those. Otherwise it uses all. `internalTrafficPolicy`/`externalTrafficPolicy: Local`, the serving-terminating fallback and NAT46/64-translated backends ignore hints. Applies to the socket LB and the uplink copies alike. No BPF change.
+- **test:** `topology_hints_choose_ready_backends_for_cluster_policy` (zone match, no zone match or no node zone, a hint-less ready endpoint, a not-ready one, node hints over zone hints, Local policy, terminating fallback) and hint parsing in `endpoint_slices_parse_conditions_and_ports`.
+
 ### 2026-11-20 (#461)
 - **feat:** Pod policy audit mode: `kubernetes.policy-audit-mode` (default false; the reference's `policy-audit-mode`, also settable per node by FlowsdnNodeConfig). With it every enforced Pod endpoint row carries the AUDIT flag the datapath already honours. What a NetworkPolicy or flowsdn policy refuses (default deny, a deny rule) passes and is counted as `audit` in `/v1/policy/verdicts`, never dropped. An unknown Pod's quarantine row is audit too, and the endpoint manager does not quarantine new endpoints, since nothing is dropped. `policy.audit` in `/v1/healthz` reports the mode. Tracking rows (no policy) are unchanged. No BPF change.
 - **test:** `policy_audit_mode_marks_pod_rows_audit` and the node-config key sample. New `policy-live` kernel step with an AUDIT endpoint row: default deny on TCP 81 and the deny rule on TCP 22 pass and are counted as audit, TCP 80 as allowed, and without AUDIT the drop returns.

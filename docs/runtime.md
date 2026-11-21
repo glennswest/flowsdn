@@ -531,7 +531,13 @@ node's endpoints (an empty set fails `connect`, as Kubernetes drops such
 traffic). Backends are the addresses of the Service's
 EndpointSlices of the same family on the slice port with the same name and
 protocol, `ready` endpoints first, serving-terminating ones only when none is
-ready. A services thread owns the maps. Once both lists are complete, on each
+ready. With traffic policy Cluster, ready endpoints are chosen by their
+EndpointSlice hints as kube-proxy does (#459): when every one has
+`hints.forNodes` and one names this node, those naming it
+(`trafficDistribution: PreferSameNode`); else when every one has
+`hints.forZones` and one names this node's `topology.kubernetes.io/zone`,
+those naming it; else all of them. `Local` policies and the serving-terminating
+fallback ignore hints. A services thread owns the maps. Once both lists are complete, on each
 change and every 30 s, it reads the maps, plans the difference
 (`flowsdn_lb::socket`: service IDs and backend IDs are kept from what the
 maps hold, and new IDs never reuse a live one) and writes in spec 05 §3.4
@@ -551,8 +557,7 @@ pinned: they detach when the agent exits, and the per-CPU
 pinned either. The socket LB picks backends at random (Maglev there is gap
 #453); an existing TCP connection stays on its backend when it leaves unless
 `kubernetes.lb-sock-terminate-all-protos` is on (#392, below); SCTP ports get no translation (#457); IPv4
-fragments other than the first pass untouched (#458); backends are chosen
-without topology hints (#459); masquerading is the node's stack, not BPF
+fragments other than the first pass untouched (#458); masquerading is the node's stack, not BPF
 (#460). Further gaps, each an issue: DSR by IPIP/Geneve (#447), NAT46/64 in
 the socket LB (#450), and skip-LB, which comes with local redirect policy
 (#336). `socket-lb-live` (medium test suite) checks the

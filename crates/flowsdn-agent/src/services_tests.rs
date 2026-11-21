@@ -25,6 +25,8 @@ fn endpoint(address: &str, ready: bool, serving: bool, terminating: bool) -> End
         serving,
         terminating,
         node_name: String::new(),
+        zone_hints: Vec::new(),
+        node_hints: Vec::new(),
     }
 }
 fn kube_dns() -> ServiceInfo {
@@ -90,6 +92,7 @@ fn dsr_applies_to_node_local_frontends_of_the_port_protocol() {
     let nodes = [NodeAddresses {
         name: "n1".into(),
         ips: vec![ip("192.0.2.1")],
+        zone: String::new(),
     }];
     let out = frontends(&[service], &[], "n1", &nodes);
     assert!(!out.is_empty());
@@ -120,6 +123,8 @@ fn nat46x64_translates_a_node_local_frontend_with_no_backend_of_its_family() {
         serving: true,
         terminating: false,
         node_name: node.into(),
+        zone_hints: Vec::new(),
+        node_hints: Vec::new(),
     };
     let slices = [SliceInfo {
         namespace: "default".into(),
@@ -136,6 +141,7 @@ fn nat46x64_translates_a_node_local_frontend_with_no_backend_of_its_family() {
     let nodes = [NodeAddresses {
         name: "n1".into(),
         ips: vec![ip("192.0.2.1"), ip("2001:db8::1")],
+        zone: String::new(),
     }];
     let find = |out: &[Frontend], at: &str, scope: u8| {
         out.iter()
@@ -335,10 +341,12 @@ fn node_ports_external_and_load_balancer_addresses_and_traffic_policies() {
         NodeAddresses {
             name: "n1".into(),
             ips: vec![ip("192.168.0.1")],
+            zone: String::new(),
         },
         NodeAddresses {
             name: "n2".into(),
             ips: vec![ip("192.168.0.2"), ip("fd00::2")],
+            zone: String::new(),
         },
     ];
     let find = |out: &[Frontend], address: &str, port: u16| -> (&'static str, Vec<String>) {
@@ -476,6 +484,7 @@ fn maglev_applies_to_the_node_local_copies_only() {
     let nodes = [NodeAddresses {
         name: "n1".into(),
         ips: vec![ip("192.168.0.1")],
+        zone: String::new(),
     }];
     let out = frontends(std::slice::from_ref(&web), &[], "n1", &nodes);
     assert_eq!(out.len(), 3, "cluster IP, NodePort and its node-local copy");
@@ -608,6 +617,7 @@ fn external_clusterip_adds_node_local_cluster_ip_copies() {
     let nodes = [NodeAddresses {
         name: "n1".into(),
         ips: vec![ip("192.0.2.1")],
+        zone: String::new(),
     }];
     let copy = |out: &[Frontend], kind: &str| -> Option<(Vec<String>, bool)> {
         out.iter()
@@ -663,4 +673,104 @@ fn external_clusterip_adds_node_local_cluster_ip_copies() {
         Some((vec!["10.9.0.5:8080".into()], false)),
         "internalTrafficPolicy Local: this node's backends"
     );
+}
+
+/// #459: topology-aware routing as kube-proxy does it. With traffic policy
+/// Cluster, ready endpoints are chosen by node hints when all have them and
+/// one names this node, else by zone hints the same way, else all; Local
+/// policies and the serving-terminating fallback ignore hints.
+#[test]
+fn topology_hints_choose_ready_backends_for_cluster_policy() {
+    let hinted = |address: &str, zones: &[&str], nodes: &[&str]| Endpoint {
+        zone_hints: zones.iter().map(|z| (*z).to_owned()).collect(),
+        node_hints: nodes.iter().map(|n| (*n).to_owned()).collect(),
+        node_name: "elsewhere".into(),
+        ..endpoint(address, true, true, false)
+    };
+    let service = ServiceInfo {
+        namespace: "ns".into(),
+        name: "web".into(),
+        service_type: "ClusterIP".into(),
+        cluster_ips: vec![ip("10.96.0.20")],
+        ports: vec![port("http", "TCP", 80)],
+        ..ServiceInfo::default()
+    };
+    let slice = |endpoints: Vec<Endpoint>| SliceInfo {
+        namespace: "ns".into(),
+        name: "web-x".into(),
+        service: "web".into(),
+        address_type: "IPv4".into(),
+        endpoints,
+        ports: vec![slice_port("http", "TCP", 8080)],
+    };
+    let nodes = |zone: &str| {
+        [NodeAddresses {
+            name: "n1".into(),
+            ips: vec![ip("192.0.2.1")],
+            zone: zone.into(),
+        }]
+    };
+    let run = |service: &ServiceInfo, endpoints: Vec<Endpoint>, zone: &str| {
+        let out = frontends(
+            std::slice::from_ref(service),
+            &[slice(endpoints)],
+            "n1",
+            &nodes(zone),
+        );
+        backends(&out, 80, PROTO_TCP)
+    };
+    let zoned = || {
+        vec![
+            hinted("10.1.0.1", &["z1"], &[]),
+            hinted("10.1.0.2", &["z2"], &[]),
+            hinted("10.1.0.3", &["z1"], &[]),
+        ]
+    };
+    // Zone hints, this node in z1: the z1 endpoints.
+    assert_eq!(
+        run(&service, zoned(), "z1"),
+        ["10.1.0.1:8080", "10.1.0.3:8080"]
+    );
+    // No endpoint for this zone, or the node has no zone: all of them.
+    assert_eq!(run(&service, zoned(), "z9").len(), 3);
+    assert_eq!(run(&service, zoned(), "").len(), 3);
+    // One ready endpoint without hints: hints are not used.
+    let mut partial = zoned();
+    partial.push(hinted("10.1.0.4", &[], &[]));
+    assert_eq!(run(&service, partial, "z1").len(), 4);
+    // A not-ready endpoint without hints does not count.
+    let mut with_unready = zoned();
+    with_unready.push(endpoint("10.1.0.5", false, false, false));
+    assert_eq!(run(&service, with_unready, "z1").len(), 2);
+    // Node hints (PreferSameNode) win over zone hints.
+    let by_node = vec![
+        hinted("10.1.0.1", &["z1"], &["n1"]),
+        hinted("10.1.0.3", &["z1"], &["n2"]),
+    ];
+    assert_eq!(run(&service, by_node, "z1"), ["10.1.0.1:8080"]);
+    // Node hints naming other nodes only: zone hints decide.
+    let other_nodes = vec![
+        hinted("10.1.0.1", &["z1"], &["n2"]),
+        hinted("10.1.0.2", &["z2"], &["n3"]),
+    ];
+    assert_eq!(run(&service, other_nodes, "z1"), ["10.1.0.1:8080"]);
+    // internalTrafficPolicy: Local ignores hints (this node's endpoints).
+    let local = ServiceInfo {
+        internal_local: true,
+        ..service.clone()
+    };
+    let mut on_n1 = zoned();
+    if let Some(e) = on_n1.get_mut(1) {
+        e.node_name = "n1".into();
+    }
+    assert_eq!(run(&local, on_n1, "z1"), ["10.1.0.2:8080"]);
+    // No ready endpoint: the serving-terminating fallback, hints ignored.
+    let terminating = vec![
+        Endpoint {
+            zone_hints: vec!["z2".into()],
+            ..endpoint("10.1.0.6", false, true, true)
+        },
+        endpoint("10.1.0.7", false, true, true),
+    ];
+    assert_eq!(run(&service, terminating, "z1").len(), 2);
 }

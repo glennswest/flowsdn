@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Topology-aware routing hints — #459 (P3), 2026-11-21
+
+- [x] k8s: parse `hints.forZones`/`forNodes`; services: `Topology` + `by_topology` (kube-proxy rules) on ready endpoints
+      for traffic policy Cluster; node zone from `topology.kubernetes.io/zone`. Unit tests; runtime.md, status.
+- [ ] sc-build; stage; shipped; close.
+
 ### SCTP Services — #457 (P3), blocked 2026-11-20
 
 - [ ] Blocked: no `sctp.ko` on nodes (stormcos stages no `kernel-modules-extra`, stormcos#1512) nor on build VMs, so

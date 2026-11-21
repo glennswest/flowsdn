@@ -141,6 +141,10 @@ pub struct Endpoint {
     pub serving: bool,
     pub terminating: bool,
     pub node_name: String,
+    /// `hints.forZones[].name` (topology-aware routing, #459).
+    pub zone_hints: Vec<String>,
+    /// `hints.forNodes[].name` (`trafficDistribution: PreferSameNode`).
+    pub node_hints: Vec<String>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EndpointSlice {
@@ -688,6 +692,14 @@ fn requested_ips(value: &Value) -> Vec<IpAddr> {
     }
     out
 }
+/// The names of an endpoint's `hints.<field>` entries.
+fn hint_names(endpoint: &Value, field: &str) -> Result<Vec<String>, Error> {
+    let mut names = Vec::new();
+    for hint in array(endpoint.pointer(&format!("/hints/{field}")))? {
+        names.push(required(hint, "name")?.to_owned());
+    }
+    Ok(names)
+}
 fn parse_slice(value: &Value, metadata: Metadata) -> Result<EndpointSlice, Error> {
     let service_name = match value.pointer("/metadata/labels/kubernetes.io~1service-name") {
         None | Some(Value::Null) => "",
@@ -709,6 +721,8 @@ fn parse_slice(value: &Value, metadata: Metadata) -> Result<EndpointSlice, Error
             serving: condition(endpoint, "serving", ready)?,
             terminating: condition(endpoint, "terminating", false)?,
             node_name: optional_text(endpoint, "nodeName", "")?.into(),
+            zone_hints: hint_names(endpoint, "forZones")?,
+            node_hints: hint_names(endpoint, "forNodes")?,
         });
     }
     let mut ports = Vec::new();

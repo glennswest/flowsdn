@@ -491,6 +491,8 @@ fn external_clusterip(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<
             serving: true,
             terminating: false,
             node_name: "n1".into(),
+            zone_hints: Vec::new(),
+            node_hints: Vec::new(),
         }],
         ports: vec![SlicePort {
             name: "http".into(),
@@ -501,6 +503,7 @@ fn external_clusterip(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<
     let nodes = [NodeAddresses {
         name: "n1".into(),
         ips: vec![IpAddr::from([192, 0, 2, 20])],
+        zone: String::new(),
     }];
     let before = services.len();
     let request = frame4(6, client, cluster_ip, 40000, 80, false);

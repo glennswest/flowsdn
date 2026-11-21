@@ -1202,6 +1202,8 @@ fn slice_rows(state: &WatchState) -> Vec<SliceInfo> {
                         serving: e.serving,
                         terminating: e.terminating,
                         node_name: e.node_name.clone(),
+                        zone_hints: e.zone_hints.clone(),
+                        node_hints: e.node_hints.clone(),
                     })
                     .collect(),
                 ports: slice

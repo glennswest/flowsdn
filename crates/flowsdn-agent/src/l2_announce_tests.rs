@@ -45,6 +45,8 @@ fn edge_slice(nodes: &[(&str, bool)]) -> SliceInfo {
                 serving: *ready,
                 terminating: false,
                 node_name: (*n).into(),
+                zone_hints: Vec::new(),
+                node_hints: Vec::new(),
             })
             .collect(),
         ports: Vec::new(),

@@ -6,7 +6,9 @@
 //! Backends are the addresses of that Service's EndpointSlices of the same
 //! family, on the slice port with the Service port's name and protocol.
 //! Ready endpoints serve; when none is ready, serving-terminating ones do
-//! (KEP-1669). `internalTrafficPolicy: Local` limits a cluster IP to this
+//! (KEP-1669). With traffic policy Cluster, ready endpoints are chosen by
+//! their topology hints as kube-proxy does (#459, [`Topology`]).
+//! `internalTrafficPolicy: Local` limits a cluster IP to this
 //! node's endpoints, and `externalTrafficPolicy: Local` limits a NodePort on a
 //! node's address to that node's endpoints, as for a packet arriving there.
 //! Each NodePort, external and LoadBalancer frontend also has a node-local
@@ -76,12 +78,19 @@ pub struct Endpoint {
     pub serving: bool,
     pub terminating: bool,
     pub node_name: String,
+    /// `hints.forZones` and `hints.forNodes` (#459).
+    pub zone_hints: Vec<String>,
+    pub node_hints: Vec<String>,
 }
-/// A node's name and InternalIPs (NodePort frontends).
+/// The Node label topology-aware routing compares zone hints with.
+pub const ZONE_LABEL: &str = "topology.kubernetes.io/zone";
+/// A node's name and InternalIPs (NodePort frontends), and its zone (the
+/// [`ZONE_LABEL`], empty without it).
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct NodeAddresses {
     pub name: String,
     pub ips: Vec<IpAddr>,
+    pub zone: String,
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct SlicePort {
@@ -123,8 +132,37 @@ fn protocol(name: &str) -> Option<u8> {
     }
 }
 
+/// Topology-aware routing (#459), as kube-proxy chooses among a port's ready
+/// endpoints: when every one has node hints and one names `node`, those
+/// naming it; else when every one has zone hints and one names `zone`, those
+/// naming it; else all of them.
+#[derive(Clone, Copy)]
+pub struct Topology<'a> {
+    pub node: &'a str,
+    pub zone: &'a str,
+}
+fn by_topology<'a>(
+    ready: Vec<(&'a Endpoint, u16)>,
+    topology: Topology<'_>,
+) -> Vec<(&'a Endpoint, u16)> {
+    let node_hints: fn(&Endpoint) -> &[String] = |e| e.node_hints.as_slice();
+    let zone_hints: fn(&Endpoint) -> &[String] = |e| e.zone_hints.as_slice();
+    for (hints, name) in [(node_hints, topology.node), (zone_hints, topology.zone)] {
+        let names = |e: &Endpoint| hints(e).iter().any(|h| h == name);
+        if !name.is_empty()
+            && ready.iter().all(|(e, _)| !hints(e).is_empty())
+            && ready.iter().any(|(e, _)| names(e))
+        {
+            return ready.into_iter().filter(|(e, _)| names(e)).collect();
+        }
+    }
+    ready
+}
+
 /// The backends of `service`'s `port` in `family` (true: IPv6), limited to
 /// endpoints on node `only` when given and not on node `not_on` when given.
+/// With `topology` (traffic policy Cluster), ready endpoints are chosen by
+/// their hints ([`Topology`]).
 fn backends(
     port: &ServicePort,
     proto: u8,
@@ -132,10 +170,11 @@ fn backends(
     slices: &[&SliceInfo],
     only: Option<&str>,
     not_on: Option<&str>,
+    topology: Option<Topology<'_>>,
 ) -> Vec<Address> {
     let family = if v6 { "IPv6" } else { "IPv4" };
-    let mut ready = BTreeSet::new();
-    let mut terminating = BTreeSet::new();
+    let mut ready = Vec::new();
+    let mut terminating = Vec::new();
     for slice in slices.iter().filter(|s| s.address_type == family) {
         let Some(target) = slice
             .ports
@@ -151,24 +190,30 @@ fn backends(
             {
                 continue;
             }
-            let set = if endpoint.ready {
-                &mut ready
+            if endpoint.ready {
+                ready.push((endpoint, target));
             } else if endpoint.serving && endpoint.terminating {
-                &mut terminating
-            } else {
-                continue;
-            };
-            for address in endpoint.addresses.iter().filter(|a| a.is_ipv6() == v6) {
-                set.insert(Address {
-                    ip: *address,
-                    port: target,
-                    proto,
-                });
+                terminating.push((endpoint, target));
             }
         }
     }
+    // Hints choose among ready endpoints only; the serving-terminating
+    // fallback ignores them, as kube-proxy does.
+    if let Some(topology) = topology {
+        ready = by_topology(ready, topology);
+    }
     let chosen = if ready.is_empty() { terminating } else { ready };
-    chosen.into_iter().collect()
+    let mut set = BTreeSet::new();
+    for (endpoint, target) in chosen {
+        for address in endpoint.addresses.iter().filter(|a| a.is_ipv6() == v6) {
+            set.insert(Address {
+                ip: *address,
+                port: target,
+                proto,
+            });
+        }
+    }
+    set.into_iter().collect()
 }
 
 /// The frontends for `services` as seen from node `local`, sorted by
@@ -186,6 +231,13 @@ pub fn frontends(
             .or_default()
             .push(slice);
     }
+    let topology = Topology {
+        node: local,
+        zone: nodes
+            .iter()
+            .find(|n| n.name == local)
+            .map_or("", |n| n.zone.as_str()),
+    };
     let mut out: BTreeMap<(Address, u8), Frontend> = BTreeMap::new();
     for service in services {
         let slices = by_service
@@ -245,7 +297,16 @@ pub fn frontends(
                     } else {
                         only
                     };
-                    let same = backends(port, proto, ip.is_ipv6(), slices, only, None);
+                    // Topology hints for traffic policy Cluster only (#459).
+                    let same = backends(
+                        port,
+                        proto,
+                        ip.is_ipv6(),
+                        slices,
+                        only,
+                        None,
+                        only.is_none().then_some(topology),
+                    );
                     // Translated backends must be on other nodes: a local pod's
                     // reply to this node's address never reaches the uplink. So
                     // `externalTrafficPolicy: Local` never translates.
@@ -254,7 +315,7 @@ pub fn frontends(
                         && same.is_empty()
                         && only.is_none()
                     {
-                        backends(port, proto, !ip.is_ipv6(), slices, None, Some(local))
+                        backends(port, proto, !ip.is_ipv6(), slices, None, Some(local), None)
                     } else {
                         Vec::new()
                     };
