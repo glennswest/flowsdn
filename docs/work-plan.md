@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Whole-resource validation for host and Pod rules — #496 (P1), finding 5c9e6d072bfa, 2026-11-20
+
+- [x] `host_policy::resource_error` validates every spec of an object once; `pod_policies` and `select` both skip the
+      object whole on an error (select reports it only when `pod_rules` is off, else pod_policies does). Test in
+      host_policy_tests.rs; runtime.md (Pod rules Refused, host firewall Policies).
+- [ ] sc-build; stage golden; shipped.
+
 ### Cloud fixture scan decodes bodies — #493 (P1), finding b48aa19bda04, 2026-11-20
 
 - [x] `scan_text`: the raw rules, plus every rule over each escaped JSON string literal decoded (recursive, depth 8),

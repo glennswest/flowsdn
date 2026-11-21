@@ -564,24 +564,29 @@ fn pod_direction(
     out
 }
 
-/// A spec that fails the reference's validation fails its whole resource
-/// (spec 06 §3.2.9 step 6).
-fn pod_spec(
-    spec: &Value,
-    name: &str,
-    namespace: Option<&str>,
-    cluster: &str,
-    problems: &mut BTreeSet<String>,
-) -> Result<Option<PodPolicy>, String> {
-    let has = |field: &str| spec.get(field).is_some_and(|v| !v.is_null());
-    match (has("endpointSelector"), has("nodeSelector")) {
-        // A host rule: the host firewall reads it.
-        (false, true) if namespace.is_none() => return Ok(None),
-        (false, true) => return Err("nodeSelector is cluster-scoped".into()),
-        (true, true) => return Err("both endpointSelector and nodeSelector".into()),
-        (false, false) => return Err("neither endpointSelector nor nodeSelector".into()),
-        (true, false) => {}
+/// The specs of a policy object: `spec` and every entry of `specs`.
+fn specs(object: &Value) -> Vec<&Value> {
+    let mut specs: Vec<&Value> = Vec::new();
+    if let Some(spec) = object.get("spec").filter(|v| !v.is_null()) {
+        specs.push(spec);
     }
+    if let Some(list) = object.get("specs").and_then(Value::as_array) {
+        specs.extend(list);
+    }
+    specs
+}
+
+/// The reference's validation of one spec (spec 06 §3.2.9 step 6): its
+/// subject selector and the combination matrix of its rules.
+fn spec_error(spec: &Value, namespace: Option<&str>) -> Option<String> {
+    let has = |field: &str| spec.get(field).is_some_and(|v| !v.is_null());
+    let subject = match (has("endpointSelector"), has("nodeSelector")) {
+        (false, true) if namespace.is_none() => "nodeSelector",
+        (false, true) => return Some("nodeSelector is cluster-scoped".into()),
+        (true, true) => return Some("both endpointSelector and nodeSelector".into()),
+        (false, false) => return Some("neither endpointSelector nor nodeSelector".into()),
+        (true, false) => "endpointSelector",
+    };
     for (fields, prefix) in [
         (["ingress", "ingressDeny"], "from"),
         (["egress", "egressDeny"], "to"),
@@ -594,31 +599,53 @@ fn pod_spec(
                 .flatten()
             {
                 if let Some(error) = bad_combination(item, prefix) {
-                    return Err(error);
+                    return Some(error);
                 }
             }
         }
     }
-    let subject = LabelSelector::parse(spec.get("endpointSelector"))
-        .map_err(|error| format!("endpointSelector {error}"))?;
+    LabelSelector::parse(spec.get(subject))
+        .err()
+        .map(|error| format!("{subject} {error}"))
+}
+
+/// A spec that fails the reference's validation fails its whole resource,
+/// host and Pod rules alike (spec 06 §3.2.9 step 6; #496): the first error
+/// among `specs`.
+fn resource_error(specs: &[&Value], namespace: Option<&str>) -> Option<String> {
+    specs.iter().find_map(|spec| spec_error(spec, namespace))
+}
+
+/// The Pod policy of one validated spec ([`resource_error`]); `None` for a
+/// host rule (the host firewall reads it).
+fn pod_spec(
+    spec: &Value,
+    name: &str,
+    namespace: Option<&str>,
+    cluster: &str,
+    problems: &mut BTreeSet<String>,
+) -> Option<PodPolicy> {
+    // Validated: a spec without an endpointSelector is a host rule, and the
+    // selector parses.
+    let subject = LabelSelector::parse(spec.get("endpointSelector").filter(|v| !v.is_null())?).ok()?;
     let mut subject = rekey(subject, sourced_key);
     if has_reserved(&subject) {
         problems.insert(format!(
             "{name}: an endpointSelector with a reserved: label selects no Pod"
         ));
-        return Ok(None);
+        return None;
     }
     if let Some(namespace) = namespace {
         subject
             .match_labels
             .insert(format!("k8s:{POD_NAMESPACE}"), namespace.to_owned());
     }
-    Ok(Some(PodPolicy {
+    Some(PodPolicy {
         name: name.to_owned(),
         subject,
         ingress: pod_direction(spec, false, name, problems, namespace, cluster),
         egress: pod_direction(spec, true, name, problems, namespace, cluster),
-    }))
+    })
 }
 
 /// The Pod policies of FlowsdnNetworkPolicy (`namespaced`) and
@@ -635,29 +662,13 @@ pub fn pod_policies(
             let text = |p: &str| object.pointer(p).and_then(Value::as_str).unwrap_or("");
             let namespace = scoped.then(|| text("/metadata/namespace"));
             let name = format!("{}/{}", namespace.unwrap_or(""), text("/metadata/name"));
-            let mut specs: Vec<&Value> = Vec::new();
-            if let Some(spec) = object.get("spec").filter(|v| !v.is_null()) {
-                specs.push(spec);
+            let specs = specs(object);
+            if let Some(error) = resource_error(&specs, namespace) {
+                problems.insert(format!("{name}: not enforced, {error}"));
+                continue;
             }
-            if let Some(list) = object.get("specs").and_then(Value::as_array) {
-                specs.extend(list);
-            }
-            let mut found = Vec::new();
-            let mut failed = None;
             for spec in specs {
-                match pod_spec(spec, &name, namespace, cluster, &mut problems) {
-                    Ok(policy) => found.extend(policy),
-                    Err(error) => {
-                        failed = Some(error);
-                        break;
-                    }
-                }
-            }
-            match failed {
-                Some(error) => {
-                    problems.insert(format!("{name}: not enforced, {error}"));
-                }
-                None => out.extend(found),
+                out.extend(pod_spec(spec, &name, namespace, cluster, &mut problems));
             }
         }
     }
@@ -689,31 +700,30 @@ pub fn select(
                 .and_then(Value::as_str)
                 .unwrap_or("")
         );
-        let mut specs: Vec<&Value> = Vec::new();
-        if let Some(spec) = object.get("spec").filter(|v| !v.is_null()) {
-            specs.push(spec);
-        }
-        if let Some(list) = object.get("specs").and_then(Value::as_array) {
-            specs.extend(list);
+        let specs = specs(object);
+        // An invalid spec fails the whole resource (#496). With `pod_rules`,
+        // [`pod_policies`] reports it.
+        if let Some(error) = resource_error(&specs, None) {
+            if !pod_rules {
+                out.problems
+                    .insert(format!("{name}: not enforced, {error}"));
+            }
+            continue;
         }
         let mut selected = false;
         for spec in specs {
             let Some(node_selector) = spec.get("nodeSelector").filter(|v| !v.is_null()) else {
-                if !pod_rules && spec.get("endpointSelector").is_some_and(|v| !v.is_null()) {
+                if !pod_rules {
                     out.problems.insert(format!(
                         "{name}: endpointSelector rules (Pod policy) are not enforced"
                     ));
                 }
                 continue;
             };
-            let selector = match LabelSelector::parse(Some(node_selector)) {
-                Ok(selector) => rekey(selector, plain_key),
-                Err(error) => {
-                    out.problems
-                        .insert(format!("{name}: nodeSelector {error}; not enforced"));
-                    continue;
-                }
+            let Ok(selector) = LabelSelector::parse(Some(node_selector)) else {
+                continue;
             };
+            let selector = rekey(selector, plain_key);
             if !selector.matches(labels) {
                 continue;
             }

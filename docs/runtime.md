@@ -970,8 +970,9 @@ stormcos does not apply the CRDs yet (stormcos#303).
 - **`ingress: [{}]`** turns on default deny and allows nothing, as for the host
   firewall. An L4-only rule allows every peer on those ports.
 - **Refused.** A spec the reference's validation refuses fails its whole object,
-  which then enforces nothing: L3 members that may not be combined (only
-  Endpoints + Entities and CIDR + CIDRSet may), no selector, or both.
+  which then enforces nothing, its host-firewall (`nodeSelector`) specs too
+  (#496): L3 members that may not be combined (only Endpoints + Entities and
+  CIDR + CIDRSet may), no selector, both, or a selector that does not parse.
 - **Skipped and reported** in `policy` problems: L7 rules, ICMP rules, FQDN,
   `toServices`, `from/toRequires`, `from/toNodes`, `from/toGroups`,
   `cidrGroupRef`, authentication, and `reserved:` labels in a selector. A skipped
@@ -1015,6 +1016,10 @@ not held back (before #402 it was); `kubernetes.flowsdn-policy` still waits for 
   authentication and named ports.
   `endpointSelector` specs are [Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292);
   they are reported here too unless `kubernetes.flowsdn-policy` is on.
+  A spec the reference's validation refuses (see Pod rules, **Refused**; a
+  `nodeSelector` that does not parse) fails its whole object, Pod and host
+  rules alike (#496): it reports `<policy>: not enforced, <reason>` and
+  installs nothing.
 - **Where.** The `from_netdev` program on the TCX ingress of every interface
   holding a global address of this node (InternalIP or not: an admin
   network's NIC, a SLAAC IPv6 on the uplink; not `lo`, not a bridge or bond

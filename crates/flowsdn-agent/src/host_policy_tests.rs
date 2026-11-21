@@ -238,3 +238,57 @@ fn scope_is_every_interface_holding_a_global_address() {
         ]
     );
 }
+
+/// #496 (finding 5c9e6d072bfa): one invalid spec fails the whole resource,
+/// so neither its host rules nor its Pod rules are published.
+#[test]
+fn an_invalid_spec_fails_host_and_pod_rules_together() {
+    let node = labels(&[("role", "worker")]);
+    let host = json!({"nodeSelector":{"matchLabels":{"role":"worker"}},
+        "ingress":[{"fromEntities":["cluster"]}]});
+    let pods = json!({"endpointSelector":{},"ingress":[{"fromEntities":["world"]}]});
+    let bad_pods = json!({"endpointSelector":{},
+        "ingress":[{"fromEndpoints":[{}],"fromCIDR":["10.0.0.0/8"]}]});
+    let bad_host = json!({"nodeSelector":{"matchExpressions":[{"key":"role","operator":"Bogus"}]},
+        "ingress":[{"fromEntities":["world"]}]});
+    let mixed = |name: &str, specs: Vec<Value>| json!({"metadata":{"name":name},"specs":specs});
+    let objects = [
+        mixed("bad-pod-spec", vec![host.clone(), bad_pods]),
+        mixed("bad-host-spec", vec![bad_host, pods.clone()]),
+        mixed("good", vec![host, pods]),
+    ];
+    for pod_rules in [true, false] {
+        let got = select(&objects, &node, pod_rules);
+        assert_eq!(got.names, ["/good"], "pod_rules {pod_rules}");
+        assert_eq!(got.rules.len(), 1, "only the valid resource's host rule");
+        assert!(got.enforce_ingress);
+        let reported = |needle: &str| got.problems.iter().any(|p| p.contains(needle));
+        // With Pod rules on, pod_policies reports the resource (once).
+        assert_eq!(
+            reported("/bad-pod-spec: not enforced, combining fromEndpoints and fromCIDR"),
+            !pod_rules,
+            "{:?}",
+            got.problems
+        );
+        assert_eq!(
+            reported("/bad-host-spec: not enforced, nodeSelector"),
+            !pod_rules,
+            "{:?}",
+            got.problems
+        );
+    }
+    let (policies, problems) = pod_policies(&[], &objects, "default");
+    assert_eq!(
+        policies.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+        ["/good"]
+    );
+    for needle in [
+        "/bad-pod-spec: not enforced, combining fromEndpoints and fromCIDR",
+        "/bad-host-spec: not enforced, nodeSelector",
+    ] {
+        assert!(
+            problems.iter().any(|p| p.contains(needle)),
+            "{needle}: {problems:?}"
+        );
+    }
+}

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#496)
+- **fix:** One invalid spec fails its whole policy, host and Pod rules alike (finding 5c9e6d072bfa). A FlowsdnClusterwideNetworkPolicy mixing `nodeSelector` and `endpointSelector` specs was refused by `pod_policies` when an `endpointSelector` spec failed validation, but the host firewall (`host_policy::select`) still installed the valid `nodeSelector` specs of the same object, so a policy reported as not enforced could drop node traffic. Both passes now run one validation over every spec of the object first (selector presence, the §3.2.1 combination matrix, the subject selector parsing) and either compile it or skip it whole with `<policy>: not enforced, <reason>`. A `nodeSelector` that does not parse now fails the object too (before: only that spec was skipped).
+- **test:** `an_invalid_spec_fails_host_and_pod_rules_together`: a bad Pod spec and a bad host spec each beside a valid one; neither the host firewall (Pod rules on and off) nor the Pod pass publishes anything from them, each reported once.
+
 ### 2026-11-20 (#493)
 - **fix:** The cloud fixture scan decodes bodies before matching (finding b48aa19bda04). An interaction body is a JSON string, so a JSON credential in it (`{"client_secret":"plainsecret"}`) is stored with escaped quotes and the credential-key rule never matched it. `write`, `load` and `cargo xtask cloud-scan` accepted it. The scan still runs over the raw file text. It now also runs every rule over the decoded value of each escaped JSON string in it, recursively (to 8 levels, so JSON nested in a body is covered). A hit is reported at the string's opening quote, never with its value. The scrubber is unchanged: a credential it misses inside a doubly encoded body is now refused at `write` (fail closed).
 - **test:** Scan tests for a pretty-printed fixture with a JSON `client_secret` body (one finding, at the body string), IMDS/OAuth/header credentials once and twice encoded, clean escaped bodies, and a public address. A fixture test shows `write` refusing such a body and removing its files, and `load` refusing a hand-placed one.
