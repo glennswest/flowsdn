@@ -424,7 +424,13 @@ fn endpoint_slices_parse_conditions_and_ports() {
     let first = parsed.endpoints.first().expect("first");
     assert_eq!(first.zone_hints, ["z1"]);
     assert_eq!(first.node_hints, ["pvetest1"]);
-    assert!(parsed.endpoints.iter().skip(1).all(|e| e.zone_hints.is_empty() && e.node_hints.is_empty()));
+    assert!(
+        parsed
+            .endpoints
+            .iter()
+            .skip(1)
+            .all(|e| e.zone_hints.is_empty() && e.node_hints.is_empty())
+    );
     assert_eq!(parsed.ports.first().and_then(|p| p.port), Some(53));
     assert_eq!(parsed.ports.get(1).and_then(|p| p.port), None);
     assert!(Scope::EndpointSlices.namespaced());

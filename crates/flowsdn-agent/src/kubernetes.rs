@@ -946,7 +946,11 @@ impl View {
             .map(|n| crate::services::NodeAddresses {
                 name: n.name.clone(),
                 ips: n.internal_ips.clone(),
-                zone: n.labels.get(crate::services::ZONE_LABEL).cloned().unwrap_or_default(),
+                zone: n
+                    .labels
+                    .get(crate::services::ZONE_LABEL)
+                    .cloned()
+                    .unwrap_or_default(),
             })
             .collect();
         self.frontends =
