@@ -647,3 +647,41 @@ fn malformed_recognized_open_parameter_differs_from_unknown_parameter() {
         assert_eq!(session.state(), State::Idle);
     }
 }
+
+/// Finding 07c7d1dd3eec: a complete ROUTE-REFRESH frame whose length is not
+/// 23 closes the session with 7/1 carrying the complete message (RFC 7313
+/// §5), on the wire path and on a directly handed frame.
+#[test]
+fn malformed_route_refresh_length_is_route_refresh_error() {
+    for body in [vec![0u8, 1, 0, 1, 0], vec![0, 1, 0]] {
+        let mut session = established(config(), 30);
+        let length = u16::try_from(19 + body.len()).expect("length");
+        let mut wire = vec![255; 16];
+        wire.extend_from_slice(&length.to_be_bytes());
+        wire.push(5);
+        wire.extend_from_slice(&body);
+        let (actions, consumed) = session
+            .receive(session.generation(), &wire, 10, 0)
+            .expect("receive")
+            .expect("complete frame");
+        let mut expected = vec![7, 1];
+        expected.extend_from_slice(&wire);
+        assert_eq!(notification_body(&actions), expected, "length {length}");
+        assert_eq!(consumed, wire.len());
+        assert_eq!(session.state(), State::Idle);
+
+        let mut direct = established(config(), 30);
+        let actions = message(&mut direct, Kind::RouteRefresh, &body, 10);
+        assert_eq!(notification_body(&actions), expected, "frame length {length}");
+        assert_eq!(direct.state(), State::Idle);
+    }
+    // A valid one still asks for an export.
+    let mut session = established(config(), 30);
+    let wire = encode(Kind::RouteRefresh, &[0, 1, 0, 1]).expect("refresh");
+    let (actions, _) = session
+        .receive(session.generation(), &wire, 10, 0)
+        .expect("receive")
+        .expect("frame");
+    assert!(actions.iter().any(|a| matches!(a, Action::Export { .. })));
+    assert_eq!(session.state(), State::Established);
+}

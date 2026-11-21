@@ -78,6 +78,15 @@ pub fn decode(bytes: &[u8]) -> Result<(Frame<'_>, usize), DecodeError> {
         Some(5) => Kind::RouteRefresh,
         _ => return Err(DecodeError::Protocol(framing(3))),
     };
+    // RFC 7313 §5: a ROUTE-REFRESH whose length is not 23 is its own error,
+    // 7/1, not a header error (finding 07c7d1dd3eec).
+    if kind == Kind::RouteRefresh && length != 23 {
+        return Err(DecodeError::Protocol(ProtocolError {
+            code: 7,
+            subcode: 1,
+            scope: ErrorScope::Framing,
+        }));
+    }
     let valid = match kind {
         Kind::Open => length >= 29,
         Kind::Update => length >= 23,

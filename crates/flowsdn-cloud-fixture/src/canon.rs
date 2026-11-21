@@ -42,7 +42,15 @@ pub fn decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// Sorted, decoded `k=v` pairs joined by `&`, without volatile parameters.
+/// A decoded key or value with the canonical form's delimiters escaped
+/// again (`%` first), so `a=x%26b%3Dy` and `a=x&b=y` stay different
+/// (finding 48b8dc5f6c4b).
+fn escape(s: &str) -> String {
+    s.replace('%', "%25").replace('&', "%26").replace('=', "%3D")
+}
+
+/// Sorted, decoded `k=v` pairs joined by `&`, without volatile parameters;
+/// a decoded `%`, `&` or `=` is escaped again.
 pub fn pairs(s: &str) -> String {
     let mut pairs: Vec<(String, String)> = s
         .split('&')
@@ -56,7 +64,7 @@ pub fn pairs(s: &str) -> String {
     pairs.sort();
     pairs
         .iter()
-        .map(|(k, v)| format!("{k}={v}"))
+        .map(|(k, v)| format!("{}={}", escape(k), escape(v)))
         .collect::<Vec<_>>()
         .join("&")
 }
@@ -114,6 +122,26 @@ mod tests {
         assert_ne!(target("/?a=1"), target("/?a=2"));
         assert_eq!(decode("100%"), "100%");
         assert_eq!(decode("%zz%41"), "%zzA");
+    }
+
+    /// Finding 48b8dc5f6c4b: an encoded delimiter is not a parameter
+    /// boundary.
+    #[test]
+    fn encoded_delimiters_keep_parameters_apart() {
+        assert_ne!(target("/?a=x%26b%3Dy"), target("/?a=x&b=y"));
+        assert_eq!(target("/?a=x%26b%3Dy"), "/?a=x%26b%3Dy");
+        assert_ne!(pairs("k%3D1=v"), pairs("k=1%3Dv"));
+        assert_ne!(pairs("a=100%25"), pairs("a=100%2525"));
+        // Equivalent encodings still match.
+        assert_eq!(pairs("a=x%26b"), pairs("a=x%26%62"));
+        assert_eq!(
+            body(Some("application/x-www-form-urlencoded"), "a=x%26b%3Dy"),
+            "a=x%26b%3Dy"
+        );
+        assert_ne!(
+            body(Some("application/x-www-form-urlencoded"), "a=x%26b%3Dy"),
+            body(Some("application/x-www-form-urlencoded"), "a=x&b=y")
+        );
     }
 
     #[test]

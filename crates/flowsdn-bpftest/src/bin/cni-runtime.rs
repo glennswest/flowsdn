@@ -256,11 +256,21 @@ impl State {
         // Drop all old BPF/map/IPAM/store-lock ownership. The Unix fake API
         // remains alive, but no endpoint state is copied into the new manager.
         drop(self.manager.take().ok_or("manager before restart")?);
-        self.manager = Some(managed(Manager::restore(
-            &self.store,
-            &self.object,
+        // As the agent's `api::run` does (finding 921b14b1e023): wait for the
+        // state lock, then restore on that same Store, never releasing it.
+        let held = managed(flowsdn_agent::state::Store::open_waiting(&self.store, |_| {}))?;
+        self.manager = Some(managed(Manager::restore_held(
+            held,
+            flowsdn_bpf_loader::kernel::Object::File(&self.object),
             fresh_ipam()?,
+            u32::from(flowsdn_agent::state::DEFAULT_ENDPOINT_ID_MAX),
+            None,
+            flowsdn_bpf_loader::kernel::Egress::Fib,
         ))?);
+        ensure(
+            flowsdn_agent::state::Store::open(&self.store).is_err(),
+            "the restored manager holds the state lock it waited for",
+        )?;
         ensure(
             self.manager()?.len() == ids.len(),
             "restored endpoint count",
@@ -753,7 +763,7 @@ fn run(binary: &Path, object: &Path) -> Result<()> {
         exchange(&mut second, &mut first, v6)?;
     }
     println!(
-        "PASS: real endpoint manager restored persisted IDs, IPAM and fresh BPF ownership; CHECK and bidirectional dual-stack UDP survive manager restart inside the fixture API"
+        "PASS: real endpoint manager restored persisted IDs, IPAM and fresh BPF ownership on the state lock it waited for; CHECK and bidirectional dual-stack UDP survive manager restart inside the fixture API"
     );
     // Additional CHECK depth is diagnostic, even after a real interface change.
     let netns = fs::File::open(first.netns())?;

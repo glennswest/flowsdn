@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Three minor findings — #500 (P3), 07c7d1dd3eec 48b8dc5f6c4b 921b14b1e023, 2026-11-20
+
+- [x] bgp-proto: ROUTE-REFRESH length → 7/1 with the complete message (decode, receive, message). cloud-fixture canon:
+      re-escape `%&=` after decoding. agent: `Manager::restore_held` on the `open_waiting` Store (api::run), cni-runtime
+      restart uses it and checks the lock is held. Tests per finding; runtime.md state-dir row.
+- [ ] sc-build + kernel-check; stage; shipped; close.
+
 ### External ClusterIP access with Maglev — #465 (P3), 2026-11-20
 
 - [x] `kubernetes.lb-external-clusterip` → `ServiceInfo.external_clusterip`; `frontends` adds a scope-1 ClusterIP copy

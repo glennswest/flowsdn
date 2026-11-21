@@ -1486,14 +1486,14 @@ pub fn run(config_path: &Path) -> Result<()> {
     };
     // Another agent holding the state (one still stopping, or the agent of a
     // node's former single-node cluster) is waited out, saying who it is, not
-    // a bare `Error: EAGAIN` and a crash loop (#404). Released at once: the
-    // restore below takes it again, and an agent that slips in between makes
-    // the restore fail with the same named error.
-    drop(crate::state::Store::open_waiting(&config.state, |held| {
+    // a bare `Error: EAGAIN` and a crash loop (#404). The lock it takes is
+    // the one restoration and the runtime keep (finding 921b14b1e023): it is
+    // never released in between, so another waiting agent cannot slip in.
+    let store = crate::state::Store::open_waiting(&config.state, |held| {
         crate::log::logln!("waiting for the state lock: {held}");
-    })?);
-    let manager = Manager::restore_with_egress(
-        &config.state,
+    })?;
+    let manager = Manager::restore_held(
+        store,
         object,
         config.ipam()?,
         config.endpoint_id_max,

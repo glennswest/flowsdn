@@ -141,7 +141,31 @@ impl Manager {
         egress: Egress,
     ) -> Result<Self> {
         let ids = IdPool::new(id_max)?;
-        let store = Store::open(path)?;
+        Self::restore_store(Store::open(path)?, ids, object, ipam, pin_root, egress)
+    }
+    /// [`Self::restore_with_egress`] on a [`Store`] the caller already holds
+    /// (finding 921b14b1e023): the agent waits for the lock with
+    /// [`Store::open_waiting`] and keeps it through restoration and runtime,
+    /// so no other agent can take it in between.
+    pub fn restore_held(
+        store: Store,
+        object: Object<'_>,
+        ipam: Ipam,
+        id_max: u32,
+        pin_root: Option<&Path>,
+        egress: Egress,
+    ) -> Result<Self> {
+        let ids = IdPool::new(id_max)?;
+        Self::restore_store(store, ids, object, ipam, pin_root, egress)
+    }
+    fn restore_store(
+        store: Store,
+        ids: IdPool,
+        object: Object<'_>,
+        ipam: Ipam,
+        pin_root: Option<&Path>,
+        egress: Egress,
+    ) -> Result<Self> {
         let records = store.restore()?;
         validate_interface_owners(&records)?;
         let mut unique_addresses = BTreeSet::new();

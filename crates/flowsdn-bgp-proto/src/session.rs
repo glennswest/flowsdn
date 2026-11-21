@@ -448,9 +448,17 @@ impl Session {
                         State::OpenSent | State::OpenConfirm | State::Established
                     )
                 {
-                    let data = match error.subcode {
-                        2 => bytes.get(16..18).unwrap_or_default().to_vec(),
-                        3 => bytes.get(18..19).unwrap_or_default().to_vec(),
+                    let data = match (error.code, error.subcode) {
+                        // RFC 7313 §5: the complete ROUTE-REFRESH message.
+                        (7, _) => {
+                            let length = bytes
+                                .get(16..18)
+                                .and_then(|l| <[u8; 2]>::try_from(l).ok())
+                                .map_or(0, |l| usize::from(u16::from_be_bytes(l)));
+                            bytes.get(..length.min(bytes.len())).unwrap_or_default().to_vec()
+                        }
+                        (_, 2) => bytes.get(16..18).unwrap_or_default().to_vec(),
+                        (_, 3) => bytes.get(18..19).unwrap_or_default().to_vec(),
                         _ => vec![],
                     };
                     next.reset_notification(
@@ -480,12 +488,22 @@ impl Session {
         if let Err(error) = crate::encode(frame.kind, frame.body) {
             let length = u16::try_from(crate::HEADER_LENGTH.saturating_add(frame.body.len()))
                 .unwrap_or(u16::MAX);
+            let data = if error.code == 7 {
+                // RFC 7313 §5: the complete ROUTE-REFRESH message.
+                let mut message = vec![0xff; 16];
+                message.extend_from_slice(&length.to_be_bytes());
+                message.push(frame.kind as u8);
+                message.extend_from_slice(frame.body);
+                message
+            } else {
+                length.to_be_bytes().to_vec()
+            };
             self.reset_notification(
                 now,
                 Some(crate::messages::Notification {
                     code: error.code,
                     subcode: error.subcode,
-                    data: length.to_be_bytes().to_vec(),
+                    data,
                 }),
                 out,
             )?;
