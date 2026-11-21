@@ -579,7 +579,11 @@ fn icmp_frame4(src: [u8; 4], dst: [u8; 4], icmp: &[u8]) -> Vec<u8> {
     if let Some(proto) = f.get_mut(23) {
         *proto = 1;
     }
-    let mut ip = f.get(14..34).ok_or("ip").map(<[u8]>::to_vec).unwrap_or_default();
+    let mut ip = f
+        .get(14..34)
+        .ok_or("ip")
+        .map(<[u8]>::to_vec)
+        .unwrap_or_default();
     ip.splice(10..12, [0, 0]);
     let check = !(sum(&ip, 0) as u16);
     if let Some(field) = f.get_mut(24..26) {
@@ -605,7 +609,12 @@ fn masquerade(lb: &mut SocketLb) -> Result<()> {
     let up0 = ifindex("up0")?;
     let (pod, server, node) = ([10, 9, 0, 7], [198, 51, 100, 9], [192, 0, 2, 20]);
     lb.set_masquerade(&[([10, 9, 0, 0], 24)], &[([10, 9, 0, 0], 16), (node, 32)])?;
-    if lb.masquerade()? != (vec![([10, 9, 0, 0], 24)], vec![([10, 9, 0, 0], 16), (node, 32)]) {
+    if lb.masquerade()?
+        != (
+            vec![([10, 9, 0, 0], 24)],
+            vec![([10, 9, 0, 0], 16), (node, 32)],
+        )
+    {
         return Err("masquerade maps do not read back as written".into());
     }
     for (proto, sport) in [(17u8, 5000u16), (6, 5001)] {

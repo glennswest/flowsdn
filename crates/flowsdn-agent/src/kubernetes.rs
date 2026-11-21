@@ -308,7 +308,9 @@ impl Settings {
                             .and_then(crate::prefilter::parse_cidr)
                             .filter(|(ip, _)| ip.is_ipv4())
                             .ok_or_else(|| {
-                                format!("kubernetes.non-masquerade-cidrs: {item} is not an IPv4 CIDR")
+                                format!(
+                                    "kubernetes.non-masquerade-cidrs: {item} is not an IPv4 CIDR"
+                                )
                             })
                     })
                     .collect::<std::result::Result<_, _>>()?,

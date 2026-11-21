@@ -77,7 +77,11 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
             ("10.200.0.0".parse().expect("ip"), 16)
         ]
     );
-    for bad in [json!(["2001:db8::/64"]), json!(["nonsense"]), json!("192.0.2.0/24")] {
+    for bad in [
+        json!(["2001:db8::/64"]),
+        json!(["nonsense"]),
+        json!("192.0.2.0/24"),
+    ] {
         assert!(
             Settings::parse(
                 Some(&json!({"node-name":"n1","non-masquerade-cidrs":bad})),
@@ -617,12 +621,8 @@ fn masquerade_prefixes_cover_the_cluster() {
         ),
         node("n2", vec![(ip("10.2.0.0"), 24)], vec![ip("192.168.16.2")]),
     ];
-    let (sources, exclude) = masquerade_prefixes(
-        "n1",
-        &nodes,
-        Derive::default(),
-        &[(ip("172.16.0.0"), 12)],
-    );
+    let (sources, exclude) =
+        masquerade_prefixes("n1", &nodes, Derive::default(), &[(ip("172.16.0.0"), 12)]);
     assert_eq!(sources, [([10, 1, 0, 0], 24)]);
     assert_eq!(
         exclude,
@@ -635,5 +635,9 @@ fn masquerade_prefixes_cover_the_cluster() {
         ]
     );
     // An unknown local node masquerades nothing.
-    assert!(masquerade_prefixes("n9", &nodes, Derive::default(), &[]).0.is_empty());
+    assert!(
+        masquerade_prefixes("n9", &nodes, Derive::default(), &[])
+            .0
+            .is_empty()
+    );
 }
