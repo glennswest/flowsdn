@@ -627,7 +627,8 @@ fn pod_spec(
 ) -> Option<PodPolicy> {
     // Validated: a spec without an endpointSelector is a host rule, and the
     // selector parses.
-    let subject = LabelSelector::parse(spec.get("endpointSelector").filter(|v| !v.is_null())?).ok()?;
+    let selector = spec.get("endpointSelector").filter(|v| !v.is_null())?;
+    let subject = LabelSelector::parse(Some(selector)).ok()?;
     let mut subject = rekey(subject, sourced_key);
     if has_reserved(&subject) {
         problems.insert(format!(
