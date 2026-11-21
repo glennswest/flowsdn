@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Direct routes: per-path reachability, delete by destination — #498 (P1), findings 4bc7cb209712 8299a1f6238f, 2026-11-20
+
+- [x] `reachable_hops` (each hop's gateway, first InternalIP only for the plain route); `stale_routes` + delete by
+      destination (owned kernel route, any gateway). Unit tests; uplinks-live one-hop step. runtime.md.
+- [ ] sc-build with kernel-check; stage; shipped; close.
+
 ### Uplink monitor: IPv6 NA, sysctl retry, failover retry — #497 (P1), findings 0cf4d2dfd14d 19c970eb0774 aa68f32f5233, 2026-11-20
 
 - [x] `multihome::unsolicited_na`; monitor queues IPv6 (not link-local); `apply::tune_pending` (tuned only on success);

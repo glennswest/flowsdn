@@ -1769,9 +1769,13 @@ fn reconcile(
 ) -> (BTreeMap<String, (DesiredRoute, String)>, Option<String>) {
     let mut failures = Vec::new();
     let want: BTreeSet<Key> = desired.iter().map(key).collect();
-    let stale: Vec<Key> = installed.difference(&want).copied().collect();
+    let (stale, forget) = stale_routes(installed, &want);
+    // Still desired under another key: the install below replaces it.
+    for key in forget {
+        installed.remove(&key);
+    }
     for (destination, prefix, gateway) in stale {
-        match delete_direct_route(connector, destination, prefix, gateway) {
+        match delete_direct_route(connector, destination, prefix) {
             Ok(()) => {
                 installed.remove(&(destination, prefix, gateway));
             }
@@ -1808,32 +1812,70 @@ fn reconcile(
     (states, error)
 }
 
-/// Delete a direct route, plain or ECMP: an ECMP route is deleted whole
-/// (protocol kernel, no gateway), and only when it is one flowsdn installs.
-fn delete_direct_route(
-    connector: &Connector,
-    destination: IpAddr,
-    prefix: u8,
-    gateway: IpAddr,
-) -> Result<()> {
-    let ecmp = connector
+/// The persisted routes no longer desired (#498): `stale` ones, whose
+/// destination is wanted by no key, are deleted; the others (`forget`) are
+/// still wanted with another gateway, so only their key goes.
+fn stale_routes(installed: &BTreeSet<Key>, want: &BTreeSet<Key>) -> (Vec<Key>, Vec<Key>) {
+    installed
+        .difference(want)
+        .copied()
+        .partition(|(destination, prefix, _)| {
+            !want
+                .iter()
+                .any(|(d, p, _)| d == destination && p == prefix)
+        })
+}
+
+/// Delete a direct route, plain, one hop or ECMP (#498): the route flowsdn
+/// installed for the destination (protocol kernel, with a gateway or paths),
+/// whatever gateway it uses, so a one-hop route through a later InternalIP
+/// goes too. A route of another protocol, or a connected one, is never
+/// touched; no such route is success.
+fn delete_direct_route(connector: &Connector, destination: IpAddr, prefix: u8) -> Result<()> {
+    let owned = connector
         .table_routes(254, destination.is_ipv6())?
         .into_iter()
         .any(|r| {
             r.destination == destination
                 && r.prefix == prefix
-                && r.multipath
                 && flowsdn_connector::multihome::owned(&r)
         });
-    if ecmp {
+    if owned {
         connector.delete_owned_route(destination, prefix, 254, None)
     } else {
-        connector.delete_gateway_route(destination, prefix, gateway)
+        Ok(())
     }
 }
 
+/// The hops whose gateway is directly reachable (#498; spec 10 §3.2.3 step
+/// 1 per path): `direct` says whether the main table reaches an address
+/// without a router. A hop without a gateway is on-link.
+fn reachable_hops(
+    hops: &[flowsdn_connector::multihome::NextHop],
+    mut direct: impl FnMut(IpAddr) -> Result<bool>,
+) -> Result<Vec<flowsdn_connector::multihome::NextHop>> {
+    let mut out = Vec::new();
+    for hop in hops {
+        let ok = match hop.gateway {
+            Some(gateway) => direct(gateway)?,
+            None => true,
+        };
+        if ok {
+            out.push(*hop);
+        }
+    }
+    Ok(out)
+}
+
+/// Whether the main table reaches `address` without a router.
+fn directly_reachable(connector: &Connector, address: IpAddr) -> Result<bool> {
+    let (gateway, _) = connector.lookup(address)?;
+    Ok(gateway.is_none_or(|g| g.is_unspecified() || g == address))
+}
+
 /// Install one direct route: with `hops` (several uplinks, #408) an ECMP
-/// route over them, else the plain route via the node's first address.
+/// route over those whose gateway is directly reachable (#498), else the
+/// plain route via the node's first address, which must be.
 fn install(
     connector: &Connector,
     route: &DesiredRoute,
@@ -1842,8 +1884,19 @@ fn install(
     file: &Path,
     skip_unreachable: bool,
 ) -> Result<String> {
-    // Spec 10 §3.2.3 step 1: the node must be directly reachable.
-    let (gateway, _) = connector.lookup(route.gateway)?;
+    // Spec 10 §3.2.3 step 1: the node must be directly reachable; with
+    // several paths each is checked, and the first InternalIP only for the
+    // plain route.
+    let hops = match hops {
+        Some(hops) => Some(reachable_hops(hops, |g| directly_reachable(connector, g))?)
+            .filter(|usable| !usable.is_empty()),
+        None => None,
+    };
+    let (gateway, _) = if hops.is_some() {
+        (None, None)
+    } else {
+        connector.lookup(route.gateway)?
+    };
     if let Some(gateway) = gateway.filter(|g| !g.is_unspecified() && *g != route.gateway) {
         if skip_unreachable {
             return Ok(format!(
@@ -1866,7 +1919,7 @@ fn install(
     if installed.insert(key(route)) {
         save_routes(file, installed)?;
     }
-    match hops {
+    match hops.as_deref() {
         Some(hops) => {
             connector.replace_multipath_route(
                 route.destination,
@@ -1986,5 +2039,58 @@ mod tests {
         fs::write(&file, b"{}").expect("corrupt");
         assert!(load_routes(&file).is_err());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn hop(gateway: Option<&str>, index: u32) -> flowsdn_connector::multihome::NextHop {
+        flowsdn_connector::multihome::NextHop {
+            gateway: gateway.map(|g| g.parse().expect("ip")),
+            index,
+            weight: 1,
+        }
+    }
+
+    /// #498 (finding 4bc7cb209712): each selected path's gateway is checked;
+    /// a routed first InternalIP does not reject a later direct one.
+    #[test]
+    fn only_reachable_hops_are_installed() {
+        let routed: IpAddr = "10.0.0.5".parse().expect("ip");
+        let hops = [hop(Some("10.0.0.5"), 3), hop(Some("192.0.2.21"), 4), hop(None, 5)];
+        let mut asked = Vec::new();
+        let usable = reachable_hops(&hops, |g| {
+            asked.push(g);
+            Ok(g != routed)
+        })
+        .expect("hops");
+        assert_eq!(usable, [hops[1], hops[2]]);
+        assert_eq!(asked.len(), 2, "a hop without a gateway is on-link");
+        assert!(
+            reachable_hops(&hops[..1], |_| Ok(false))
+                .expect("hops")
+                .is_empty(),
+            "none reachable: the plain route's check decides"
+        );
+        assert!(reachable_hops(&hops, |_| Err("netlink".into())).is_err());
+    }
+
+    /// #498 (finding 8299a1f6238f): a persisted route no longer wanted is
+    /// deleted by destination (whatever gateway it was installed with), and
+    /// one still wanted under another gateway only loses its key.
+    #[test]
+    fn stale_routes_are_deleted_by_destination() {
+        let ip = |s: &str| -> IpAddr { s.parse().expect("ip") };
+        let installed: BTreeSet<Key> = [
+            (ip("10.9.0.0"), 16, ip("192.0.2.20")),
+            (ip("10.8.0.0"), 16, ip("192.0.2.30")),
+            (ip("10.7.0.0"), 16, ip("192.0.2.40")),
+        ]
+        .into();
+        let want: BTreeSet<Key> = [
+            (ip("10.8.0.0"), 16, ip("192.0.2.31")),
+            (ip("10.7.0.0"), 16, ip("192.0.2.40")),
+        ]
+        .into();
+        let (stale, forget) = stale_routes(&installed, &want);
+        assert_eq!(stale, [(ip("10.9.0.0"), 16, ip("192.0.2.20"))]);
+        assert_eq!(forget, [(ip("10.8.0.0"), 16, ip("192.0.2.30"))]);
     }
 }

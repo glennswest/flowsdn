@@ -7,6 +7,8 @@
 //! * a port that loses carrier is skipped at once, and its address is held as
 //!   a /32 by the live port with a gratuitous ARP;
 //! * a port whose carrier returns spreads flows again, twice over;
+//! * a one-hop route through a later gateway survives a delete by the first
+//!   gateway, and the owned delete by destination removes it (#498);
 //! * `single` removes every rule and table entry flowsdn made.
 //!
 //! It needs iproute2 and root, as kernel-check gives it.
@@ -49,6 +51,8 @@ const SECOND: &str = "192.0.2.204";
 const GATEWAY: &str = "192.0.2.1";
 const PEER: &str = "192.0.2.21";
 const POD_CIDR: &str = "10.9.0.0";
+/// A one-hop direct route's destination (#498).
+const ONE_HOP: &str = "10.11.0.0";
 
 fn addr(text: &str) -> Result<IpAddr> {
     Ok(text.parse()?)
@@ -324,6 +328,42 @@ fn run() -> Result<()> {
         spread.len() == 2,
         "flows spread over both after the last return",
     )?;
+
+    // #498: a one-hop direct route through a later gateway (u1, PEER) is
+    // not removed by deleting the persisted first gateway's route, and the
+    // owned delete by destination removes it.
+    let u1 = found
+        .iter()
+        .find(|u| u.name == "u1")
+        .map_or(0, |u| u.index);
+    let one = [multihome::NextHop {
+        gateway: Some(addr(PEER)?),
+        index: u1,
+        weight: 1,
+    }];
+    let one_hop = addr(ONE_HOP)?;
+    connector.replace_multipath_route(one_hop, 16, &one, 254, None, None)?;
+    connector.delete_gateway_route(addr(ONE_HOP)?, 16, addr(GATEWAY)?)?;
+    let shown = ip(&["-4", "route", "show", &format!("{ONE_HOP}/16")])?;
+    ensure(
+        shown.contains(&format!("via {PEER} dev u1")),
+        &format!("delete by the first gateway leaves the route (the old bug): {shown}"),
+    )?;
+    ensure(
+        connector
+            .table_routes(254, false)?
+            .iter()
+            .any(|r| r.destination == one_hop && r.prefix == 16 && multihome::owned(r)),
+        "the one-hop route is flowsdn's (protocol kernel, gateway)",
+    )?;
+    connector.delete_owned_route(addr(ONE_HOP)?, 16, 254, None)?;
+    ensure(
+        ip(&["-4", "route", "show", &format!("{ONE_HOP}/16")])?
+            .trim()
+            .is_empty(),
+        "the owned delete removes the one-hop route",
+    )?;
+    println!("one-hop route via {PEER} on u1: survives a first-gateway delete, owned delete removes it");
 
     // FEC on a veth: no FEC, not an error.
     ensure(multihome::fec("u0")?.is_none(), "a veth has no FEC")?;

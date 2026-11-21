@@ -226,9 +226,15 @@ With the `kubernetes` feature and section the agent:
   cleared when the collision goes. Refusing is chosen over routing pods to the
   wrong node. Before installing it checks that the kernel reaches
   the InternalIP without another gateway, and refuses to replace a route of
-  another protocol to the same prefix. Installed routes are recorded in
+  another protocol to the same prefix. With several uplinks each path's
+  InternalIP is checked, and only the directly reachable paths are installed;
+  the first InternalIP is checked only for the plain route, used when no path
+  is (#498). Installed routes are recorded in
   `<state-dir>/direct-routes.json` before they are added, so routes for nodes
-  that left while the agent was down are deleted on the next reconcile. It
+  that left while the agent was down are deleted on the next reconcile. A
+  stale route is deleted by destination (flowsdn's protocol-kernel route with
+  a gateway or paths, whatever gateway it uses), never a route of another
+  protocol (#498). It
   reconciles on every change of the desired set and every 30 s;
 - with `service-lb` (default on), lists and watches Services and
   EndpointSlices and load balances ClusterIPs at the socket (below);
