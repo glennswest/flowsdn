@@ -31,10 +31,10 @@ use std::{
 
 #[path = "health_api.rs"]
 mod health_api;
-#[path = "policy_events.rs"]
-mod policy_events;
 #[path = "metrics.rs"]
 mod metrics;
+#[path = "policy_events.rs"]
+mod policy_events;
 
 const BODY_LIMIT: usize = 4_194_304;
 const HEADER_LIMIT: usize = 16_384;

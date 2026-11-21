@@ -149,7 +149,11 @@ mod tests {
     fn events_are_kept_and_rendered() {
         let events = Events::default();
         let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
-        events.push(vec![event(1, verdict::ALLOWED), event(2, verdict::DENIED)], now, 3_000_000_000);
+        events.push(
+            vec![event(1, verdict::ALLOWED), event(2, verdict::DENIED)],
+            now,
+            3_000_000_000,
+        );
         let out = events.json(10);
         assert_eq!(out.get("seen"), Some(&json!(2)));
         let first = out.pointer("/events/0").expect("newest");
@@ -163,8 +167,17 @@ mod tests {
         assert_eq!(first.get("direction"), Some(&json!("ingress")));
         // Stamped 2 s before the read: 2 s before `now`.
         assert_eq!(first.get("time"), Some(&json!("2027-01-15T07:59:58Z")));
-        assert_eq!(events.json(1).get("events").and_then(Value::as_array).map(Vec::len), Some(1));
-        let many: Vec<PolicyEvent> = (0..KEPT.saturating_add(5)).map(|_| event(3, verdict::AUDIT)).collect();
+        assert_eq!(
+            events
+                .json(1)
+                .get("events")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(1)
+        );
+        let many: Vec<PolicyEvent> = (0..KEPT.saturating_add(5))
+            .map(|_| event(3, verdict::AUDIT))
+            .collect();
         events.push(many, now, 3_000_000_000);
         let out = events.json(usize::MAX);
         assert_eq!(out.get("kept"), Some(&json!(KEPT)));
