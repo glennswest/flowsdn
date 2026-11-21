@@ -7,13 +7,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 ### ICMP type rules in network policy — #448 (P3), 2026-11-21
 
 Split: toFQDNs and DNS rules -> #536 (DNS proxy), HTTP/Kafka L7 -> #537 (L7 proxy). #448 is the ICMP part.
-- [ ] Datapath (local-delivery policy): an ICMP/ICMPv6 packet's policy port is its type (spec 06 §3.2.6,
-      `enable_icmp_rule`; the reference's `enable-icmp-rules` defaults to true). Protocol-only rules still match (port
-      wildcard).
-- [ ] Agent: `icmps[].fields[]` (`family` IPv4|IPv6, `type` number or frozen name, max 40, not with `toPorts`) become
-      port rules ICMP/ICMPv6 with port = type, in Pod and host rules, allow and deny. Tests.
-- [ ] policy-live: echo request by type allowed, another type dropped, IPv4 and IPv6; docs; object + lock; strict
-      sc-build + kernel-check; stage; shipped; close.
+- [x] Datapath: ICMP/ICMPv6 policy port = type (always; reference default true). Agent: `icmps` fields -> port rules
+      (number or frozen name, IPv4/IPv6, max 40, not with toPorts), Pod and host, allow and deny; `PortRange::single`.
+- [x] e69dc15 feature, 3687de2 object + lock, c29f814 test fix. Strict sc-build at c29f814: `cargo xtask check` 1025
+      passed 0 failed, lock matches, kernel-check 24/0/2 (host CNI skips), `PASS ICMP type rules`. Stage requested;
+      shipped; closed.
 
 ### DSR ICMP error translation — #449 (P3), 2026-11-21
 
