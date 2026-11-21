@@ -36,12 +36,20 @@ fn view() -> View {
     view.nodes = vec![
         NodeInfo {
             name: "n1".into(),
-            internal_ips: vec!["192.0.2.1".parse().unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED))],
+            internal_ips: vec![
+                "192.0.2.1"
+                    .parse()
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
+            ],
             ..NodeInfo::default()
         },
         NodeInfo {
             name: "n2".into(),
-            internal_ips: vec!["192.0.2.2".parse().unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED))],
+            internal_ips: vec![
+                "192.0.2.2"
+                    .parse()
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
+            ],
             ..NodeInfo::default()
         },
     ];
@@ -105,8 +113,14 @@ fn records_name_both_sides_and_say_the_verdict() {
     assert_eq!(dropped.get("traffic_direction"), Some(&json!("EGRESS")));
     assert_eq!(dropped.pointer("/source/namespace"), Some(&json!("shop")));
     assert_eq!(dropped.pointer("/source/ID"), Some(&json!(7)));
-    assert_eq!(dropped.pointer("/destination/namespace"), Some(&json!("data")));
-    assert_eq!(dropped.pointer("/destination/pod_name"), Some(&json!("db-0")));
+    assert_eq!(
+        dropped.pointer("/destination/namespace"),
+        Some(&json!("data"))
+    );
+    assert_eq!(
+        dropped.pointer("/destination/pod_name"),
+        Some(&json!("db-0"))
+    );
     assert_eq!(dropped.pointer("/destination/identity"), Some(&json!(400)));
     assert_eq!(dropped.pointer("/destination/ID"), None);
     // Node addresses are host or remote-node; ICMP has no ports; audit.
@@ -127,12 +141,21 @@ fn records_name_both_sides_and_say_the_verdict() {
     // Without a Kubernetes view: the identity only.
     let mut v6 = event(false, [0; 4], [0; 4], 58, verdict::ALLOWED);
     v6.family = FAMILY_V6;
-    v6.saddr = "2001:db8::9".parse::<Ipv6Addr>().map(|a| a.octets()).unwrap_or([0; 16]);
-    v6.daddr = "fd00::7".parse::<Ipv6Addr>().map(|a| a.octets()).unwrap_or([0; 16]);
+    v6.saddr = "2001:db8::9"
+        .parse::<Ipv6Addr>()
+        .map(|a| a.octets())
+        .unwrap_or([0; 16]);
+    v6.daddr = "fd00::7"
+        .parse::<Ipv6Addr>()
+        .map(|a| a.octets())
+        .unwrap_or([0; 16]);
     v6.remote = 1234;
     let v6 = record(None, time, &v6);
     assert_eq!(v6.get("protocol"), Some(&json!("ICMPv6")));
-    assert_eq!(v6.get("source"), Some(&json!({"identity": 1234, "ip": "2001:db8::9"})));
+    assert_eq!(
+        v6.get("source"),
+        Some(&json!({"identity": 1234, "ip": "2001:db8::9"}))
+    );
     assert_eq!(v6.get("destination"), Some(&json!({"ip": "fd00::7"})));
 }
 
@@ -169,11 +192,17 @@ fn flows_are_newest_first_bounded_and_since() {
         .unwrap_or_default();
     assert_eq!(ports, vec![json!(90), json!(40), json!(0)]);
     let one = json(&events, None, 1, None);
-    assert_eq!(one.get("flows").and_then(Value::as_array).map(Vec::len), Some(1));
+    assert_eq!(
+        one.get("flows").and_then(Value::as_array).map(Vec::len),
+        Some(1)
+    );
     // Since 2026-11-18T11:07:20Z (now - 60 s): the two newest.
     let since = parse_time("2026-11-18T11:07:20Z");
     let recent = json(&events, None, 10, since);
-    assert_eq!(recent.get("flows").and_then(Value::as_array).map(Vec::len), Some(2));
+    assert_eq!(
+        recent.get("flows").and_then(Value::as_array).map(Vec::len),
+        Some(2)
+    );
 }
 
 #[test]
@@ -181,8 +210,14 @@ fn rfc3339_times_parse() {
     let at = |s: u64, n: u32| UNIX_EPOCH.checked_add(Duration::new(s, n));
     assert_eq!(parse_time("1970-01-01T00:00:00Z"), at(0, 0));
     assert_eq!(parse_time("2026-11-18T11:06:40Z"), at(1_795_000_000, 0));
-    assert_eq!(parse_time("2026-11-18T12:06:40.5+01:00"), at(1_795_000_000, 500_000_000));
-    assert_eq!(parse_time("2026-11-18t06:06:40-05:00"), at(1_795_000_000, 0));
+    assert_eq!(
+        parse_time("2026-11-18T12:06:40.5+01:00"),
+        at(1_795_000_000, 500_000_000)
+    );
+    assert_eq!(
+        parse_time("2026-11-18t06:06:40-05:00"),
+        at(1_795_000_000, 0)
+    );
     assert_eq!(parse_time("2024-02-29T00:00:00Z"), at(1_709_164_800, 0));
     for bad in [
         "",

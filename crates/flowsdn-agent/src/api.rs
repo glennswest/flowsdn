@@ -29,14 +29,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "flows.rs"]
+mod flows;
 #[path = "health_api.rs"]
 mod health_api;
 #[path = "metrics.rs"]
 mod metrics;
 #[path = "policy_events.rs"]
 mod policy_events;
-#[path = "flows.rs"]
-mod flows;
 
 const BODY_LIMIT: usize = 4_194_304;
 const HEADER_LIMIT: usize = 16_384;
@@ -642,7 +642,10 @@ impl Api {
                     })?),
                 };
                 let view = self.kubernetes.as_ref().map(crate::kubernetes::lock);
-                return Ok((200, flows::json(&self.events, view.as_deref(), limit, since)));
+                return Ok((
+                    200,
+                    flows::json(&self.events, view.as_deref(), limit, since),
+                ));
             }
             ("GET", "/v1/endpoint") => {
                 let view = self.kubernetes.as_ref().map(crate::kubernetes::lock);

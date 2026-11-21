@@ -195,7 +195,12 @@ pub(super) fn parse_time(text: &str) -> Option<SystemTime> {
     }
     let (year, month, day) = (number(0..4)?, number(5..7)?, number(8..10)?);
     let (hour, minute, second) = (number(11..13)?, number(14..16)?, number(17..19)?);
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 || second > 60 {
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 60
+    {
         return None;
     }
     let mut rest = text.get(19..)?;
@@ -226,8 +231,14 @@ pub(super) fn parse_time(text: &str) -> Option<SystemTime> {
             if hours > 23 || minutes > 59 {
                 return None;
             }
-            let total = hours.checked_mul(3600)?.checked_add(minutes.checked_mul(60)?)?;
-            if negative { total.checked_neg()? } else { total }
+            let total = hours
+                .checked_mul(3600)?
+                .checked_add(minutes.checked_mul(60)?)?;
+            if negative {
+                total.checked_neg()?
+            } else {
+                total
+            }
         }
     };
     let days = days_from_civil(year, month, day)?;
@@ -243,7 +254,11 @@ pub(super) fn parse_time(text: &str) -> Option<SystemTime> {
 /// Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's
 /// `days_from_civil`).
 fn days_from_civil(year: i64, month: i64, day: i64) -> Option<i64> {
-    let y = if month <= 2 { year.checked_sub(1)? } else { year };
+    let y = if month <= 2 {
+        year.checked_sub(1)?
+    } else {
+        year
+    };
     let era = y.checked_div_euclid(400)?;
     let yoe = y.checked_sub(era.checked_mul(400)?)?;
     let shifted = if month > 2 {
