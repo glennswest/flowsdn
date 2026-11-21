@@ -1820,9 +1820,7 @@ fn stale_routes(installed: &BTreeSet<Key>, want: &BTreeSet<Key>) -> (Vec<Key>, V
         .difference(want)
         .copied()
         .partition(|(destination, prefix, _)| {
-            !want
-                .iter()
-                .any(|(d, p, _)| d == destination && p == prefix)
+            !want.iter().any(|(d, p, _)| d == destination && p == prefix)
         })
 }
 
@@ -2054,7 +2052,11 @@ mod tests {
     #[test]
     fn only_reachable_hops_are_installed() {
         let routed: IpAddr = "10.0.0.5".parse().expect("ip");
-        let hops = [hop(Some("10.0.0.5"), 3), hop(Some("192.0.2.21"), 4), hop(None, 5)];
+        let hops = [
+            hop(Some("10.0.0.5"), 3),
+            hop(Some("192.0.2.21"), 4),
+            hop(None, 5),
+        ];
         let mut asked = Vec::new();
         let usable = reachable_hops(&hops, |g| {
             asked.push(g);

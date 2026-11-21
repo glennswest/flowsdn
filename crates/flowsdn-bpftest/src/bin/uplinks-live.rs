@@ -332,10 +332,7 @@ fn run() -> Result<()> {
     // #498: a one-hop direct route through a later gateway (u1, PEER) is
     // not removed by deleting the persisted first gateway's route, and the
     // owned delete by destination removes it.
-    let u1 = found
-        .iter()
-        .find(|u| u.name == "u1")
-        .map_or(0, |u| u.index);
+    let u1 = found.iter().find(|u| u.name == "u1").map_or(0, |u| u.index);
     let one = [multihome::NextHop {
         gateway: Some(addr(PEER)?),
         index: u1,
@@ -363,7 +360,9 @@ fn run() -> Result<()> {
             .is_empty(),
         "the owned delete removes the one-hop route",
     )?;
-    println!("one-hop route via {PEER} on u1: survives a first-gateway delete, owned delete removes it");
+    println!(
+        "one-hop route via {PEER} on u1: survives a first-gateway delete, owned delete removes it"
+    );
 
     // FEC on a veth: no FEC, not an error.
     ensure(multihome::fec("u0")?.is_none(), "a veth has no FEC")?;
