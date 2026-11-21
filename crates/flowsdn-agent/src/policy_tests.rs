@@ -692,14 +692,14 @@ fn flowsdn_policy_selects_in_its_namespace_with_named_ports() {
 /// unknown name or family, or more than 40 fields is skipped and reported.
 #[test]
 fn icmp_type_rules_are_port_rules_of_the_type() {
-    let view = flowsdn_view(
+    let typed = flowsdn_view(
         view(Vec::new()),
         json!({"endpointSelector":web_selector(),
             "ingress":[{"fromEntities":["world"],"icmps":[{"fields":[
                 {"type":8},{"type":"EchoReply"},{"family":"IPv6","type":"EchoRequest"}]}]}],
             "ingressDeny":[{"fromEntities":["world"],"icmps":[{"fields":[{"type":"Timestamp"}]}]}]}),
     );
-    let desired = compile(&view, &[]);
+    let desired = compile(&typed, &[]);
     assert_eq!(desired.problems, Vec::<String>::new());
     let mut want = BTreeSet::new();
     for identity in crate::host_policy::entity("world").unwrap_or_default() {
