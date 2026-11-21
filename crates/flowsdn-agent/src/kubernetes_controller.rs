@@ -208,6 +208,7 @@ impl Controller {
                         .settings
                         .bpf_masquerade
                         .then(|| self.settings.non_masquerade.clone());
+                    let gateway64 = self.settings.gateway64;
                     std::thread::Builder::new()
                         .name("flowsdn-services".into())
                         .spawn(move || {
@@ -219,6 +220,7 @@ impl Controller {
                                 node_port,
                                 terminate_tcp,
                                 masquerade.as_deref(),
+                                gateway64,
                             );
                         })?;
                     Some(sender)
@@ -1262,6 +1264,7 @@ fn service_loop(
     node_port: bool,
     terminate_tcp: bool,
     masquerade: Option<&[crate::kubernetes::Cidr]>,
+    gateway64: Option<[u8; 12]>,
 ) {
     let mut desired: Option<Vec<socket::Service>> = None;
     // The terminable backends last programmed; None until the first success.
@@ -1353,7 +1356,22 @@ fn service_loop(
                 Err(error) => view.errors.insert("masquerade".into(), error),
             };
         }
-        if node_port || masquerade.is_some() {
+        // The RFC 6052 gateway (#454): its sources follow the Node list.
+        if gateway64.is_some() {
+            let sources = {
+                let view = lock(view);
+                crate::kubernetes::gateway64_sources(&view.local_node, &view.nodes, view.derive)
+            };
+            let result = lb
+                .set_gateway64(gateway64, &sources)
+                .map_err(|e| format!("NAT46/64 gateway maps: {e}"));
+            let mut view = lock(view);
+            match result {
+                Ok(()) => view.errors.remove("nat46x64-gateway"),
+                Err(error) => view.errors.insert("nat46x64-gateway".into(), error),
+            };
+        }
+        if node_port || masquerade.is_some() || gateway64.is_some() {
             let (addresses, ports) = {
                 let view = lock(view);
                 (

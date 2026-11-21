@@ -45,6 +45,7 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(!parsed.maglev);
     assert!(!parsed.external_clusterip, "off by default (#465)");
     assert!(!parsed.bpf_masquerade && parsed.non_masquerade.is_empty());
+    assert_eq!(parsed.gateway64, None);
     assert_eq!(parsed.lb_mode, LbMode::Snat);
     assert_eq!(parsed.host_firewall, HostFirewall::Off);
     assert!(!parsed.flowsdn_policy);
@@ -55,7 +56,8 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
             "direct-routing-skip-unreachable":true,"service-lb":false,"node-port":false,
             "cgroup-root":"/run/flowsdn/cgroupv2","lb-algorithm":"maglev","lb-mode":"hybrid",
             "host-firewall":"audit","l2-neigh-discovery":true,"lb-external-clusterip":true,
-            "bpf-masquerade":true,"non-masquerade-cidrs":["192.0.2.0/24","10.200.1.7/16"]}),
+            "bpf-masquerade":true,"non-masquerade-cidrs":["192.0.2.0/24","10.200.1.7/16"],
+            "nat46x64-gateway":true}),
         ),
         &env(&[("K8S_NODE_NAME", "a")]),
     )
@@ -70,6 +72,31 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(parsed.maglev);
     assert!(parsed.external_clusterip);
     assert!(parsed.bpf_masquerade);
+    assert_eq!(
+        parsed.gateway64,
+        Some([0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0]),
+        "the RFC 6052 well-known prefix by default"
+    );
+    for bad in ["64:ff9b::/64", "192.0.2.0/24", "nonsense"] {
+        assert!(
+            Settings::parse(
+                Some(&json!({"node-name":"n1","nat46x64-gateway":true,"nat46x64-gateway-prefix":bad})),
+                &env(&[])
+            )
+            .is_err(),
+            "{bad}"
+        );
+    }
+    let custom = Settings::parse(
+        Some(&json!({"node-name":"n1","nat46x64-gateway":true,"nat46x64-gateway-prefix":"2001:db8:64::/96"})),
+        &env(&[]),
+    )
+    .expect("custom")
+    .expect("enabled");
+    assert_eq!(
+        custom.gateway64,
+        Some([0x20, 0x01, 0x0d, 0xb8, 0, 0x64, 0, 0, 0, 0, 0, 0])
+    );
     assert_eq!(
         parsed.non_masquerade,
         [
@@ -640,4 +667,25 @@ fn masquerade_prefixes_cover_the_cluster() {
             .0
             .is_empty()
     );
+}
+
+/// #454: the gateway translates this node's IPv6 pod CIDRs only.
+#[test]
+fn gateway64_sources_are_the_local_ipv6_pod_cidrs() {
+    let ip = |s: &str| -> IpAddr { s.parse().expect("ip") };
+    let nodes = [
+        NodeInfo {
+            name: "n1".into(),
+            pod_cidrs: vec![(ip("10.1.0.0"), 24), (ip("fd00:1::"), 64)],
+            ..NodeInfo::default()
+        },
+        NodeInfo {
+            name: "n2".into(),
+            pod_cidrs: vec![(ip("fd00:2::"), 64)],
+            ..NodeInfo::default()
+        },
+    ];
+    let fd00_1 = [0xfd, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    assert_eq!(gateway64_sources("n1", &nodes, Derive::default()), [(fd00_1, 64)]);
+    assert!(gateway64_sources("n9", &nodes, Derive::default()).is_empty());
 }

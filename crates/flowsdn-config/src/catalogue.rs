@@ -183,7 +183,7 @@ impl Definition {
             "bpf-lb-map-max" => "docs/spec/05-service-loadbalancing.md:961",
             "bpf-lb-mode" => "docs/spec/05-service-loadbalancing.md:967",
             "bpf-map-event-buffers" => "docs/spec/03-identity-ipcache.md:980",
-            "bpf-nat-global-max" => "docs/spec/04-conntrack-nat.md:807",
+            "bpf-nat-global-max" => "docs/spec/04-conntrack-nat.md:820",
             "bpf-neigh-global-max" => "docs/spec/01-bpf-map-abi-loader.md:1064",
             "bpf-node-map-max" => "docs/spec/14-encryption-egress.md:1751",
             "clustermesh-service-v2" => "docs/spec/20-clustermesh-kvstore.md:1585",

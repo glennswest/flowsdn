@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### RFC 6052 NAT46/64 gateway — #454 (P3), 2026-11-21
+
+- [x] socket-lb.rs: `flowsdn_gw64_config`/`_sources`; egress `gateway64` (classifies into INGRESS6, creates the
+      NAT64-style flow) dispatched to `to_v4` from the top level; replies via the existing XLATE4 path. Loader:
+      `set_gateway64`/`gateway64`. Agent: `nat46x64-gateway`(+`-prefix`), `gateway64_sources`, services thread.
+      Spec 04 §3.15 amended (catalogue citation +13). Tests.
+- [ ] sc-build: object + lock; strict sc-build + kernel-check; stage; shipped; close.
+
 ### Health probes and history — #456 (P3), 2026-11-21
 
 - [x] flowsdn-health `collector` (Collector, Thresholds 5/15/60 s, stale, ran_once, spawn) and `history` (History

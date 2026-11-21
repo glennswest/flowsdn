@@ -633,6 +633,19 @@ Service translation is scheduled with milestone 2 load balancing (#79);
 stateless RFC 6052 gateway support belongs to milestone 3. This scope
 paragraph is not a complete translation algorithm or implementation claim.
 
+flowsdn amendment (2026-11-21, #454): the RFC 6052 gateway.
+`kubernetes.nat46x64-gateway` (default off) with `nat46x64-gateway-prefix`
+(an IPv6 /96, default `64:ff9b::/96`). At an uplink's egress, as the
+reference's to-netdev path, an IPv6 TCP/UDP packet from this node's IPv6 pod
+CIDRs to the prefix is translated to IPv4: the destination is the address the
+prefix embeds (last 32 bits), same port; the source is this node's address on
+that uplink (FIB source) and a NAT port claimed as for Service NAT64, in the
+same maps (`flowsdn_nodeport4_nat` reservation, `flowsdn_nodeport4_xlate`
+reply entry, `flowsdn_nodeport6_nat` forward entry). The IPv4 reply is
+translated back to IPv6 from `prefix + server`, to the Pod, by the Service
+NAT64 reply path. The prefix must route out an uplink (an IPv6 default route).
+Reservations live until the LRU evicts them, as Service NAT64's do.
+
 ## 4. Data model
 
 ### 4.1 In-program state

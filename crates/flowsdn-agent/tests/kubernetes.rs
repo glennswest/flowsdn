@@ -450,6 +450,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         terminate_tcp: false,
         bpf_masquerade: false,
         non_masquerade: Vec::new(),
+        gateway64: None,
         node_config: serde_json::Value::Null,
     };
     // FlowsdnNodeConfig (#480): the agent reads its Node's labels and the

@@ -133,6 +133,12 @@ pub struct Settings {
     /// `non-masquerade-cidrs` (IPv4 CIDRs). Needs `service-lb`.
     pub bpf_masquerade: bool,
     pub non_masquerade: Vec<Cidr>,
+    /// `nat46x64-gateway` (#454; the reference's `enable-nat46x64-gateway`,
+    /// default false): the uplink programs translate local Pods' IPv6
+    /// TCP/UDP to `nat46x64-gateway-prefix` (a /96, default `64:ff9b::/96`,
+    /// RFC 6052) into IPv4 from this node's address, and the replies back.
+    /// Needs `service-lb`. The prefix's first 12 bytes when on.
+    pub gateway64: Option<[u8; 12]>,
     /// What FlowsdnNodeConfigs changed at start (#480), for `/v1/healthz`;
     /// null when none was read.
     pub node_config: Value,
@@ -299,6 +305,29 @@ impl Settings {
             node_crd: flag("node-crd", true)?,
             terminate_tcp: flag("lb-sock-terminate-all-protos", false)?,
             bpf_masquerade: flag("bpf-masquerade", false)?,
+            gateway64: if flag("nat46x64-gateway", false)? {
+                let text = match text("nat46x64-gateway-prefix")?.as_str() {
+                    "" => "64:ff9b::/96".to_owned(),
+                    other => other.to_owned(),
+                };
+                match crate::prefilter::parse_cidr(&text) {
+                    Some((IpAddr::V6(prefix), 96)) => {
+                        let mut out = [0u8; 12];
+                        for (slot, byte) in out.iter_mut().zip(prefix.octets()) {
+                            *slot = byte;
+                        }
+                        Some(out)
+                    }
+                    _ => {
+                        return Err(format!(
+                            "kubernetes.nat46x64-gateway-prefix: {text} is not an IPv6 /96"
+                        )
+                        .into());
+                    }
+                }
+            } else {
+                None
+            },
             non_masquerade: match object.get("non-masquerade-cidrs") {
                 None | Some(Value::Null) => Vec::new(),
                 Some(Value::Array(list)) => list
@@ -574,6 +603,19 @@ pub fn node_cidrs(node: &NodeInfo, derive: Derive) -> Vec<(IpAddr, u8)> {
         }
     }
     cidrs
+}
+
+/// The RFC 6052 gateway's sources (#454): this node's IPv6 pod CIDRs.
+pub fn gateway64_sources(local: &str, nodes: &[NodeInfo], derive: Derive) -> Vec<([u8; 16], u8)> {
+    nodes
+        .iter()
+        .filter(|n| n.name == local)
+        .flat_map(|n| node_cidrs(n, derive))
+        .filter_map(|(ip, prefix)| match ip {
+            IpAddr::V6(v6) => Some((v6.octets(), prefix)),
+            IpAddr::V4(_) => None,
+        })
+        .collect()
 }
 
 /// An IPv4 prefix (address octets, length).

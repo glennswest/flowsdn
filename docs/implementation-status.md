@@ -150,8 +150,7 @@ pinning or subsystem libraries are absent are **not current status**.
   L7, FQDN and ICMP policy rules (#448); node and group peers in policy rules
   (#451); policy verdict events (#452); Maglev in
   the socket LB (#453); DSR by IPIP or Geneve (#447); DSR ICMP errors (#449);
-  NAT46/64 to local backends or in the socket LB (#450); the RFC 6052 gateway
-  (#454); SCTP Services (#457); IPv6 BPF masquerade (#513); the
+  NAT46/64 to local backends or in the socket LB (#450); SCTP Services (#457); IPv6 BPF masquerade (#513); the
   Hubble observer/relay (#293).
 
 ### Cloud fixtures (ADR-0007)

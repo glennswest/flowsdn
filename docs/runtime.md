@@ -57,6 +57,8 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.endpoint-crd` | `true` | Keep a FlowsdnEndpoint for each local Pod endpoint ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). Nothing is written while the kind is not served. |
 | `kubernetes.node-crd` | `true` | Keep this node's FlowsdnNode ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). |
 | `kubernetes.bpf-masquerade` | `false` | BPF masquerade (#460; the reference's `enable-bpf-masquerade`), IPv4: the uplink programs source-NAT local Pods' traffic leaving the cluster ([BPF masquerade](#bpf-masquerade-460)). Needs `service-lb`; attaches the uplink programs even with `node-port` off. |
+| `kubernetes.nat46x64-gateway` | `false` | The RFC 6052 NAT46/64 gateway (#454; the reference's `enable-nat46x64-gateway`): local Pods' IPv6 TCP/UDP to `nat46x64-gateway-prefix` leaves the uplink as IPv4 from this node's address ([RFC 6052 gateway](#rfc-6052-gateway-454)). Needs `service-lb`. |
+| `kubernetes.nat46x64-gateway-prefix` | `64:ff9b::/96` | The gateway's prefix: an IPv6 /96 whose last 32 bits are the IPv4 destination. Anything else is refused at startup. |
 | `kubernetes.non-masquerade-cidrs` | `[]` | IPv4 CIDRs the BPF masquerade never masquerades to, beside the cluster's pod CIDRs and node addresses. An IPv6 entry is refused (IPv6 masquerade is #513). |
 | `kubernetes.lb-sock-terminate-all-protos` | `false` | Socket termination also ends TCP connections to a backend that leaves a Service ([socket LB](#clusterip-socket-lb-292); by backend address and port). |
 | `kubernetes.crd-wait-timeout` | `300` | Seconds the flowsdn.io watchers wait for the CRDs this configuration uses before the agent exits ([CRDs and the operator](#crds-and-the-operator-337)). 1 to 86400. |
@@ -531,6 +533,20 @@ address both ways. Fragments follow the IPv4 fragment table above. If the
 node also masquerades (a netfilter rule), it does so before these programs
 run and they see the node's address: turn the node's rule off to use this one.
 IPv6 masquerade is gap #513.
+
+#### RFC 6052 gateway (#454)
+
+With `kubernetes.nat46x64-gateway: true` the services thread writes the
+prefix and this node's IPv6 pod CIDRs to `flowsdn_gw64_config` and
+`flowsdn_gw64_sources`. At an uplink's TCX egress, an IPv6 TCP or UDP packet
+from those CIDRs to the prefix is translated to IPv4: destination the address
+in the prefix's last 32 bits, same port; source this node's address on that
+uplink and a NAT port from the 61000-65535 range, claimed and kept as Service
+NAT64 flows are. It is redirected out of the uplink. The IPv4 reply is
+translated back to IPv6 from `prefix + server`, to the Pod. The node must route
+the prefix out of an uplink (an IPv6 default route); a Pod reaches the
+gateway like any IPv6 destination. ICMP and fragments are not translated;
+reservations last until the LRU evicts them.
 IPv4 fragments (#458): each first fragment (offset 0, more fragments) the
 uplink programs see, in either direction, records its datagram's ports in the
 LRU `flowsdn_nodeport4_frags` (8192 entries, by source, destination, IP ID
@@ -682,7 +698,8 @@ Limits:
   with `externalTrafficPolicy: Local`: send that traffic to another node.
 - **Client's address hidden, no DSR.** The backend sees this node's address.
 - **Uplink only.** The socket LB does not translate, so a pod or host client of the
-  frontend gets no backend. The stateless RFC 6052 gateway is milestone 3.
+  frontend gets no backend. Pod traffic to IPv4 by an RFC 6052 address is the
+  gateway below (#454).
 - **Passes untouched, with no ICMP error:** IPv4 options, a fragment, UDP without a
   checksum (IPv6 requires one), TTL 1, a packet too big for the device once translated
   (an IPv4 packet grows by 20 bytes). TCP is not affected by that last one in practice:

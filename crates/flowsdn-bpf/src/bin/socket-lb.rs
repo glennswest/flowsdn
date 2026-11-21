@@ -2012,6 +2012,21 @@ pub struct Ingress6 {
 #[map(name = "flowsdn_nodeport6_scratch")]
 static INGRESS6: PerCpuArray<Ingress6> = PerCpuArray::with_max_entries(1, 0);
 
+/// The RFC 6052 NAT46/64 gateway (#454, the reference's
+/// `enable-nat46x64-gateway`): its /96 prefix, when on.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Gateway64 {
+    enabled: u8,
+    pad: [u8; 3],
+    prefix: [u8; 12],
+}
+#[map(name = "flowsdn_gw64_config")]
+static GW64_CONFIG: HashMap<u32, Gateway64> = HashMap::with_max_entries(1, BPF_F_NO_PREALLOC);
+/// The IPv6 sources the gateway translates: this node's pod CIDRs.
+#[map(name = "flowsdn_gw64_sources")]
+static GW64_SOURCES: LpmTrie<[u8; 16], u8> = LpmTrie::with_max_entries(256, BPF_F_NO_PREALLOC);
+
 /// [`ingress6`]'s steps: not ours, a reply of an SNAT flow, a new flow, a
 /// known forward flow.
 const STEP_PASS: i32 = 0;
@@ -3046,8 +3061,105 @@ fn masq_icmp_in(skb: *mut __sk_buff) -> i32 {
 }
 #[inline(never)]
 fn egress6(skb: *mut __sk_buff) -> i32 {
-    let _ = nodeport6_out(&TcContext::new(skb));
-    TC_ACT_OK
+    match nodeport6_out(&TcContext::new(skb)) {
+        Some(()) => TC_ACT_OK,
+        None => NOT_NODEPORT,
+    }
+}
+/// At the uplink's egress, a local Pod's IPv6 TCP/UDP packet to the RFC 6052
+/// prefix (#454): its gateway flow found or made, the frame's tuple and flow
+/// in the [`INGRESS6`] slot, and [`STEP_XLATE_FORWARD`] for the caller to
+/// translate it ([`to_v4`], from its own frame). Anything else is
+/// [`STEP_PASS`].
+#[inline(never)]
+fn gateway64(skb: *mut __sk_buff) -> i32 {
+    gateway64_out(&TcContext::new(skb)).unwrap_or(STEP_PASS)
+}
+#[inline(always)]
+fn gateway64_out(ctx: &TcContext) -> Option<i32> {
+    // SAFETY: NO_PREALLOC hash; the value is copied at once.
+    let config = unsafe { GW64_CONFIG.get(&0).copied() }?;
+    if config.enabled == 0 {
+        return None;
+    }
+    let tuple = tuple6(ctx)?;
+    let (proto, client, front, client_port, front_port) = tuple;
+    let [f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, a, b, c, d] = front;
+    if [f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11] != config.prefix
+        || GW64_SOURCES.get(Key::new(128, client)).is_none()
+    {
+        return None;
+    }
+    let state = INGRESS6.get_ptr_mut(0)?;
+    let key = Nodeport6Key {
+        a: client,
+        b: front,
+        ap: client_port,
+        bp: front_port,
+        proto,
+        direction: FORWARD,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let flow = match unsafe { NODEPORT6.get(&key).copied() }.filter(|f| f.flags & FLOW_XLATE != 0) {
+        Some(known) => known,
+        None => {
+            // The IPv4 server the prefix embeds, on the same port.
+            let server = ([a, b, c, d], front_port);
+            let (result, fib) = fib4(ctx, proto, [0; 4], server.0, BPF_FIB_LOOKUP_SRC);
+            if !forwarded(result) || fib.ifindex != uplink(ctx) {
+                return None;
+            }
+            // SAFETY: the active member after an IPv4 lookup.
+            let nat = unsafe { fib.__bindgen_anon_3.ipv4_src }.to_ne_bytes();
+            let reservation = Nodeport4Value {
+                address: [0; 4],
+                port: [0; 2],
+                flags: FLOW_XLATE,
+                pad: 0,
+                other: [0; 4],
+                other_port: [0; 2],
+                pad2: [0; 2],
+            };
+            let nat_port = claim_port(server, nat, proto, &reservation)?;
+            let reply_key = Nodeport4Key {
+                a: server.0,
+                b: nat,
+                ap: server.1,
+                bp: nat_port,
+                proto,
+                direction: SNAT_REPLY,
+                pad: [0; 2],
+            };
+            let reply = Nodeport6Value {
+                address: front,
+                port: front_port,
+                flags: FLOW_XLATE,
+                pad: 0,
+                other: client,
+                other_port: client_port,
+                pad2: [0; 2],
+            };
+            // The reply entry first: a reply must never find a flow it
+            // cannot undo.
+            XLATE4.insert(&reply_key, &reply, 0).ok()?;
+            let flow = Nodeport6Value {
+                address: mapped6(server.0),
+                port: server.1,
+                flags: FLOW_XLATE,
+                pad: 0,
+                other: mapped6(nat),
+                other_port: nat_port,
+                pad2: [0; 2],
+            };
+            NODEPORT6.insert(&key, &flow, 0).ok()?;
+            flow
+        }
+    };
+    // SAFETY: this CPU's slot, valid for the whole invocation and used by
+    // nothing else meanwhile (see fib6).
+    unsafe { state.write(Ingress6 { tuple, flow }) };
+    Some(STEP_XLATE_FORWARD)
 }
 
 /// TCX's "run the next program on this hook" (`TCX_NEXT`). TCX ends the
@@ -3121,7 +3233,13 @@ fn ingress(ctx: &TcContext) -> i32 {
 #[classifier]
 pub fn nodeport_egress(ctx: TcContext) -> i32 {
     next(match ctx.load::<[u8; 2]>(12) {
-        Ok(ETH_P_IPV6) => egress6(ctx.skb.skb),
+        Ok(ETH_P_IPV6) => match egress6(ctx.skb.skb) {
+            NOT_NODEPORT => match gateway64(ctx.skb.skb) {
+                STEP_XLATE_FORWARD => to_v4(ctx.skb.skb, false),
+                _ => TC_ACT_OK,
+            },
+            verdict => verdict,
+        },
         _ => match egress4(ctx.skb.skb) {
             NOT_NODEPORT => masq_out(ctx.skb.skb),
             verdict => verdict,

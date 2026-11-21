@@ -14,7 +14,8 @@
 //! `lb-sock-terminate-all-protos` (#392); and external access to a ClusterIP
 //! (`lb-external-clusterip`, #465) from the agent's own frontends, with Maglev;
 //! and BPF masquerade (#460) on the uplink: TCP, UDP and ICMP echo of a local
-//! Pod leaving the cluster, their replies, and an ICMP error about a flow.
+//! Pod leaving the cluster, their replies, and an ICMP error about a flow;
+//! and the RFC 6052 NAT46/64 gateway (#454) for a Pod's IPv6 TCP and UDP.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_lb::socket::{self, Address, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
@@ -453,6 +454,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     maglev(lb, services)?;
     dsr(lb, services)?;
     nat46x64(lb, services)?;
+    gateway64(lb)?;
     nat_expiry(lb, services)?;
     external_clusterip(lb, services)?;
     services.retain(|s| s.scope != SCOPE_NODE_LOCAL);
@@ -562,6 +564,75 @@ fn external_clusterip(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<
     program(lb, services)?;
     println!(
         "PASS external ClusterIP: untouched on the uplink without lb-external-clusterip; with it 10.96.5.7:80 reaches the backend and replies leave from the cluster IP, Maglev table picks match"
+    );
+    Ok(())
+}
+
+/// The RFC 6052 gateway (#454) on uplink `up0`: a local Pod (fd00:9::7)
+/// reaching 64:ff9b::198.51.100.9 leaves as IPv4 from 192.0.2.20 and a NAT
+/// port, the same for the flow's next packet; the IPv4 reply comes back to
+/// the Pod as IPv6 from 64:ff9b::198.51.100.9. Other destinations and other
+/// sources are untouched, and with the gateway off nothing is translated.
+fn gateway64(lb: &mut SocketLb) -> Result<()> {
+    let up0 = ifindex("up0")?;
+    ip(&["-6", "route", "add", "fd00:9::/64", "dev", "pod0"])?;
+    let (pod6, front6) = (ip6("fd00:9::7")?, ip6("64:ff9b::c633:6409")?);
+    let (server, node) = ([198, 51, 100, 9], [192, 0, 2, 20]);
+    let prefix = [0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0];
+    let sources = [(ip6("fd00:9::")?, 64)];
+    lb.set_gateway64(Some(prefix), &sources)?;
+    if lb.gateway64()? != (Some(prefix), sources.to_vec()) {
+        return Err("gateway maps do not read back as written".into());
+    }
+    for (proto, sport) in [(17u8, 5100u16), (6, 5101)] {
+        let request = frame6(proto, pod6, front6, sport, 53, false);
+        let mut nat = None;
+        for _ in 0..2 {
+            let out = run_on(lb, "nodeport_egress", &request, up0, TC_ACT_REDIRECT)?;
+            let (src, dst, s, d, ip_ok, l4_ok) = parse4(&out)?;
+            if out.get(12..14) != Some(&[0x08, 0x00][..])
+                || (src, dst, d) != (node, server, 53)
+                || !(61000..=65535).contains(&s)
+                || nat.is_some_and(|n| n != s)
+                || !ip_ok
+                || !l4_ok
+            {
+                return Err(format!(
+                    "gateway forward proto {proto}: {src:?}:{s} -> {dst:?}:{d}, checksums ip {ip_ok} l4 {l4_ok}"
+                )
+                .into());
+            }
+            nat = Some(s);
+        }
+        let nat = nat.ok_or("no NAT port")?;
+        let reply = frame4(proto, server, node, 53, nat, false);
+        let out = run_on(lb, "nodeport_ingress", &reply, up0, TC_ACT_REDIRECT)?;
+        let (src, dst, s, d, _, l4_ok) = parse6(&out)?;
+        if out.get(12..14) != Some(&[0x86, 0xdd][..])
+            || (src, dst, s, d) != (front6, pod6, 53, sport)
+            || !l4_ok
+        {
+            return Err(format!(
+                "gateway reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}, checksum {l4_ok}"
+            )
+            .into());
+        }
+    }
+    for frame in [
+        frame6(17, pod6, ip6("2001:db8:3::9")?, 5102, 53, false),
+        frame6(17, ip6("2001:db8:5::1")?, front6, 5103, 53, false),
+    ] {
+        if run_on(lb, "nodeport_egress", &frame, up0, TCX_NEXT)? != frame {
+            return Err("the gateway changed a packet it must not".into());
+        }
+    }
+    lb.set_gateway64(None, &[])?;
+    let frame = frame6(17, pod6, front6, 5104, 53, false);
+    if run_on(lb, "nodeport_egress", &frame, up0, TCX_NEXT)? != frame {
+        return Err("gateway off, yet a new flow was translated".into());
+    }
+    println!(
+        "PASS RFC 6052 gateway: a Pod's IPv6 TCP and UDP to 64:ff9b::198.51.100.9 leave as IPv4 from 192.0.2.20 and a NAT port, replies come back as IPv6, checksums valid; other traffic untouched; off when cleared"
     );
     Ok(())
 }

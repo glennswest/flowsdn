@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### 2026-11-21 (#454)
+- **feat:** The RFC 6052 NAT46/64 gateway, the reference's `enable-nat46x64-gateway`: `kubernetes.nat46x64-gateway` (default false; settable per node by FlowsdnNodeConfig) and `kubernetes.nat46x64-gateway-prefix` (an IPv6 /96, default `64:ff9b::/96`).
+  - **Forward:** at the uplink's egress, a local Pod's IPv6 TCP/UDP packet to the prefix leaves as IPv4. Its destination is the embedded address, and its source is this node's address with a NAT port, using Service NAT64's port claim and maps.
+  - **Reply:** the IPv4 reply returns to the Pod as IPv6 from `prefix + server`.
+  - **Maps:** `flowsdn_gw64_config` and `flowsdn_gw64_sources` (this node's IPv6 pod CIDRs), pinned.
+  - **Limits:** needs `service-lb`, and the node must route the prefix out of an uplink. ICMP and fragments are not translated.
+  - Spec 04 §3.15 is amended. The socket-lb object and lock are rebuilt.
+- **test:** New `socket-lb-live` kernel step:
+  - A Pod's IPv6 UDP and TCP to `64:ff9b::198.51.100.9` leave as IPv4 from 192.0.2.20 with a stable NAT port.
+  - Replies come back to the Pod as IPv6, with checksums valid.
+  - Other destinations and sources are untouched, and turning the gateway off stops it.
+  - Unit tests cover the settings (default prefix, a custom /96, refused prefixes) and `gateway64_sources_are_the_local_ipv6_pod_cidrs`.
+
 ### 2026-11-21 (#456)
 - **feat:** Health probe scheduling with staleness detection (`flowsdn_health::collector`, spec 00 §3.4.2). Probes run on their own threads every 5 s. One outstanding, or without a result, for 15 s is a warning, for 60 s a failure, and readiness waits until every probe ran once. The agent's Kubernetes health is now such a probe, so `/v1/healthz` and the `agent.kubernetes` row show its last result and a stuck controller no longer blocks the API.
   - **`/v1/healthz`:** answers 500 `Warning` before the first probe result, `Warning` past 15 s, and 500 `Failure` past 60 s.

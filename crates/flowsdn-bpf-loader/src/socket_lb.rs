@@ -41,7 +41,7 @@ pub const PROGRAMS: [&str; 8] = [
 /// names and §4.3 layouts; flowsdn sizes the reverse and affinity maps at
 /// 64Ki. The affinity maps are the programs' own; the agent writes the
 /// match map.
-const MAPS: [(&str, MapType, u32, u32, u32, u32); 17] = [
+const MAPS: [(&str, MapType, u32, u32, u32, u32); 19] = [
     ("flowsdn_lb4_services", MapType::Hash, 12, 12, 65536, 1),
     ("flowsdn_lb4_backends", MapType::Hash, 4, 12, 65536, 1),
     ("flowsdn_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
@@ -56,6 +56,8 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 17] = [
     ("flowsdn_nodeport4_frags", MapType::LruHash, 12, 4, 8192, 0),
     ("flowsdn_masq4_sources", MapType::LpmTrie, 8, 1, 256, 1),
     ("flowsdn_masq4_exclude", MapType::LpmTrie, 8, 1, 1024, 1),
+    ("flowsdn_gw64_config", MapType::Hash, 4, 16, 1, 1),
+    ("flowsdn_gw64_sources", MapType::LpmTrie, 20, 1, 256, 1),
     (
         "flowsdn_nodeport4_xlate",
         MapType::LruHash,
@@ -81,6 +83,9 @@ pub struct SocketLb {
     /// destinations.
     masq4_sources: Masq4,
     masq4_exclude: Masq4,
+    /// The RFC 6052 gateway (#454): its prefix and IPv6 sources.
+    gw64_config: HashMap<MapData, u32, [u8; 16]>,
+    gw64_sources: LpmTrie<MapData, [u8; 16], u8>,
     pin_root: Option<PathBuf>,
     /// Owned links; unpinned ones detach when this owner drops.
     links: Vec<FdLink>,
@@ -236,6 +241,16 @@ impl SocketLb {
         let maglev6 = take_maglev(&mut bpf, "flowsdn_lb6_maglev")?;
         let masq4_sources = take_lpm(&mut bpf, "flowsdn_masq4_sources")?;
         let masq4_exclude = take_lpm(&mut bpf, "flowsdn_masq4_exclude")?;
+        let gw64_config = take(&mut bpf, "flowsdn_gw64_config")?;
+        let gw64_sources = {
+            let map = bpf
+                .take_map("flowsdn_gw64_sources")
+                .ok_or("socket-lb object has no map flowsdn_gw64_sources")?;
+            match map {
+                Map::LpmTrie(_) => LpmTrie::try_from(map)?,
+                _ => return Err("socket-lb map flowsdn_gw64_sources is not an LPM trie".into()),
+            }
+        };
         for name in PROGRAMS {
             let program: &mut CgroupSockAddr = bpf
                 .program_mut(name)
@@ -254,6 +269,8 @@ impl SocketLb {
             maglev6,
             masq4_sources,
             masq4_exclude,
+            gw64_config,
+            gw64_sources,
             pin_root: pin_root.map(Path::to_owned),
             links: Vec::new(),
             uplinks: std::collections::BTreeMap::new(),
@@ -390,6 +407,65 @@ impl SocketLb {
     pub fn set_masquerade(&mut self, sources: &[Prefix4], exclude: &[Prefix4]) -> KernelResult<()> {
         sync_prefixes(&mut self.masq4_exclude, exclude)?;
         sync_prefixes(&mut self.masq4_sources, sources)
+    }
+    /// The RFC 6052 gateway (#454): `prefix` (the first 12 bytes of its /96)
+    /// on, for IPv6 packets from `sources` (IPv6 prefixes); None turns it off.
+    pub fn set_gateway64(
+        &mut self,
+        prefix: Option<[u8; 12]>,
+        sources: &[([u8; 16], u8)],
+    ) -> KernelResult<()> {
+        // `Gateway64`: enabled, three bytes of padding, the prefix.
+        let mut value = [0u8; 16];
+        if let Some(prefix) = prefix {
+            if let Some(enabled) = value.first_mut() {
+                *enabled = 1;
+            }
+            for (slot, byte) in value.iter_mut().skip(4).zip(prefix) {
+                *slot = byte;
+            }
+        }
+        let have: std::collections::BTreeSet<([u8; 16], u8)> = self
+            .gw64_sources
+            .iter()
+            .map(|item| item.map(|(key, _)| (key.data(), u8::try_from(key.prefix_len()).unwrap_or(0))))
+            .collect::<Result<_, _>>()?;
+        for (address, length) in sources {
+            if !have.contains(&(*address, *length)) {
+                self.gw64_sources
+                    .insert(&Key::new(u32::from(*length), *address), 1, 0)?;
+            }
+        }
+        for (address, length) in have.iter().filter(|p| !sources.contains(p)) {
+            match self.gw64_sources.remove(&Key::new(u32::from(*length), *address)) {
+                Ok(()) | Err(MapError::KeyNotFound) => {}
+                Err(MapError::SyscallError(error))
+                    if error.io_error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        self.gw64_config.insert(0, value, 0)?;
+        Ok(())
+    }
+    /// What [`Self::set_gateway64`] last wrote: (prefix when on, sources).
+    pub fn gateway64(&self) -> KernelResult<(Option<[u8; 12]>, Vec<([u8; 16], u8)>)> {
+        let prefix = match self.gw64_config.get(&0, 0) {
+            Ok(value) if value.first() == Some(&1) => {
+                let mut prefix = [0u8; 12];
+                for (slot, byte) in prefix.iter_mut().zip(value.iter().skip(4)) {
+                    *slot = *byte;
+                }
+                Some(prefix)
+            }
+            Ok(_) | Err(MapError::KeyNotFound) => None,
+            Err(error) => return Err(error.into()),
+        };
+        let sources = self
+            .gw64_sources
+            .iter()
+            .map(|item| item.map(|(key, _)| (key.data(), u8::try_from(key.prefix_len()).unwrap_or(0))))
+            .collect::<Result<_, _>>()?;
+        Ok((prefix, sources))
     }
     /// What [`Self::set_masquerade`] last wrote: (sources, exclude).
     pub fn masquerade(&self) -> KernelResult<(Vec<Prefix4>, Vec<Prefix4>)> {
