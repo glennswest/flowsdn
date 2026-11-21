@@ -31,8 +31,9 @@ Split: toFQDNs and DNS rules -> #536 (DNS proxy), HTTP/Kafka L7 -> #537 (L7 prox
 - [x] sc-build: object + lock (ae3f058). Strict run at 8c86141: fmt, `cargo xtask check`, test/build.sh and kernel-check
       `PASS policy events` passed, then policy-live failed at the host firewall load ("fd 12 is not pointing to valid
       bpf_map"): the test dropped the ring and closed the map fd the later-loaded programs use. Fixed at 92ecf56.
-- [ ] Strict sc-build + kernel-check at 92ecf56: two attempts never started ("404 no such build job"; every project
-      from about 06:00, stormcentral#1638 /home full). Item proposed after stormcentral#1638. Then image, shipped, close.
+- [x] Strict sc-build + kernel-check covering 92ecf56: at c29f814 (#448's), `documented_routes_are_the_served_routes`
+      and `events_are_kept_and_rendered` ok, policy-live `PASS policy events` and every host-firewall step after it,
+      kernel-check 24/0/2. Images requested with #449/#448; shipped; closed.
 
 ### Node peers in policy rules — #451 (P3), 2026-11-21
 
