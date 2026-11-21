@@ -8,7 +8,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] k8s: parse `hints.forZones`/`forNodes`; services: `Topology` + `by_topology` (kube-proxy rules) on ready endpoints
       for traffic policy Cluster; node zone from `topology.kubernetes.io/zone`. Unit tests; runtime.md, status.
-- [ ] sc-build; stage; shipped; close.
+- [x] 357b09e, fmt 316c831. Strict sc-build at 316c831: fmt --check, `cargo xtask check` (1015 tests, 0 failed),
+      kernel-check on 7.3.4: 24 pass 0 fail 2 skip. Stage 0e2222ff69f6; shipped; closed.
 
 ### SCTP Services — #457 (P3), blocked 2026-11-20
 
