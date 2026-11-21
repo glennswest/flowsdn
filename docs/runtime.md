@@ -503,6 +503,14 @@ renewed by every packet of its flow, in either direction, and expires after
 protocols (#488). A new flow that finds an expired reservation on the port
 it tries takes it over, and the old flow's forward entry is dropped; a
 known flow whose reservation another flow took starts again as a new flow.
+IPv4 fragments (#458): each first fragment (offset 0, more fragments) the
+uplink programs see, in either direction, records its datagram's ports in the
+LRU `flowsdn_nodeport4_frags` (8192 entries, by source, destination, IP ID
+and protocol). A later fragment takes them from there and follows its
+datagram's flow; only its IP header is rewritten (address and header
+checksum), since the first fragment carries the L4 header and checksum. A
+later fragment whose first was not seen, or whose datagram has no flow, passes
+untouched. IPv6 fragments pass untouched.
 So closed connections never hold the 4536 ports of a backend. NAT46/64
 reservations do not expire yet (#494). A packet the FIB cannot route,
 with TTL 1, or for which no NAT port is free within eight tries passes
@@ -556,8 +564,8 @@ pinned: they detach when the agent exits, and the per-CPU
 `flowsdn_nodeport4_xlate_scratch` scratch maps are not
 pinned either. The socket LB picks backends at random (Maglev there is gap
 #453); an existing TCP connection stays on its backend when it leaves unless
-`kubernetes.lb-sock-terminate-all-protos` is on (#392, below); SCTP ports get no translation (#457); IPv4
-fragments other than the first pass untouched (#458); masquerading is the node's stack, not BPF
+`kubernetes.lb-sock-terminate-all-protos` is on (#392, below); SCTP ports get no translation (#457); IPv6
+fragments pass untouched; masquerading is the node's stack, not BPF
 (#460). Further gaps, each an issue: DSR by IPIP/Geneve (#447), NAT46/64 in
 the socket LB (#450), and skip-LB, which comes with local redirect policy
 (#336). `socket-lb-live` (medium test suite) checks the

@@ -444,6 +444,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     println!(
         "PASS NodePort uplink: TCP, UDP and checksum-less UDP to 192.0.2.20:30080 rewritten to the node-local backend and replies back to the frontend, checksums valid; other frames untouched"
     );
+    fragments(lb)?;
     nodeport6(lb, services)?;
     snat(lb, services)?;
     maglev(lb, services)?;
@@ -558,6 +559,106 @@ fn external_clusterip(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<
     program(lb, services)?;
     println!(
         "PASS external ClusterIP: untouched on the uplink without lb-external-clusterip; with it 10.96.5.7:80 reaches the backend and replies leave from the cluster IP, Maglev table picks match"
+    );
+    Ok(())
+}
+
+/// An Ethernet + IPv4 fragment: `flags_offset` is the header's flags and
+/// fragment offset word, `payload` what follows the 20-byte header.
+fn fragment4(src: [u8; 4], dst: [u8; 4], id: u16, flags_offset: u16, payload: &[u8]) -> Vec<u8> {
+    let mut f = vec![0u8; 14];
+    f.splice(12..14, [0x08, 0x00]);
+    let total = u16::try_from(payload.len().saturating_add(20)).unwrap_or(u16::MAX);
+    let mut ip = vec![0x45, 0];
+    ip.extend_from_slice(&total.to_be_bytes());
+    ip.extend_from_slice(&id.to_be_bytes());
+    ip.extend_from_slice(&flags_offset.to_be_bytes());
+    ip.extend_from_slice(&[64, 17, 0, 0]);
+    ip.extend_from_slice(&src);
+    ip.extend_from_slice(&dst);
+    let check = !(sum(&ip, 0) as u16);
+    ip.splice(10..12, check.to_be_bytes());
+    f.extend(ip);
+    f.extend_from_slice(payload);
+    f
+}
+/// A UDP datagram of `sport -> dport` with 16 bytes of data, split after 8
+/// of them: (first fragment, second fragment).
+fn fragmented_udp(src: [u8; 4], dst: [u8; 4], sport: u16, dport: u16, id: u16) -> (Vec<u8>, Vec<u8>) {
+    let mut udp = Vec::new();
+    udp.extend_from_slice(&sport.to_be_bytes());
+    udp.extend_from_slice(&dport.to_be_bytes());
+    udp.extend_from_slice(&24u16.to_be_bytes());
+    udp.extend_from_slice(&[0, 0]);
+    udp.extend_from_slice(b"flowsdn-fragment");
+    let check = !(l4_sum(17, &src, &dst, &udp) as u16);
+    udp.splice(6..8, check.to_be_bytes());
+    let (head, tail) = udp.split_at(16);
+    (
+        fragment4(src, dst, id, 0x2000, head),
+        fragment4(src, dst, id, 2, tail),
+    )
+}
+/// (src, dst, IPv4 checksum ok) of a fragment, and what follows its header.
+fn fragment_parts(f: &[u8]) -> Result<([u8; 4], [u8; 4], bool, Vec<u8>)> {
+    let ip = f.get(14..34).ok_or("short fragment")?;
+    Ok((
+        ip.get(12..16).ok_or("ip")?.try_into()?,
+        ip.get(16..20).ok_or("ip")?.try_into()?,
+        sum(ip, 0) == 0xffff,
+        f.get(34..).ok_or("short fragment")?.to_vec(),
+    ))
+}
+
+/// IPv4 fragments (#458): a fragmented UDP datagram to the NodePort reaches
+/// the backend whole, the first fragment's ports carried to the second, and
+/// the backend's fragmented reply comes back from the frontend; the
+/// reassembled UDP checksum is right at both ends. A later fragment whose
+/// first was never seen passes untouched.
+fn fragments(lb: &mut SocketLb) -> Result<()> {
+    let (front, client, backend) = ([192, 0, 2, 20], [198, 51, 100, 9], [10, 9, 0, 5]);
+    let check = |what: &str,
+                 first: &[u8],
+                 second: &[u8],
+                 want: ([u8; 4], [u8; 4], u16, u16)|
+     -> Result<()> {
+        let (s1, d1, ok1, head) = fragment_parts(first)?;
+        let (s2, d2, ok2, tail) = fragment_parts(second)?;
+        let mut udp = head.clone();
+        udp.extend_from_slice(&tail);
+        let ports = |at: usize| u16::from_be_bytes([udp.get(at).copied().unwrap_or(0), udp.get(at.saturating_add(1)).copied().unwrap_or(0)]);
+        let checksum = l4_sum(17, &want.0, &want.1, &udp) == 0xffff;
+        if (s1, d1) != (want.0, want.1)
+            || (s2, d2) != (want.0, want.1)
+            || (ports(0), ports(2)) != (want.2, want.3)
+            || !ok1
+            || !ok2
+            || !checksum
+            || tail.as_slice() != b"fragment"
+        {
+            return Err(format!(
+                "{what}: first {s1:?}->{d1:?} second {s2:?}->{d2:?} ports {}:{}, ip checksums {ok1} {ok2}, udp checksum {checksum}",
+                ports(0),
+                ports(2)
+            )
+            .into());
+        }
+        Ok(())
+    };
+    let (first, second) = fragmented_udp(client, front, 40100, 30080, 0x4a58);
+    let first = run(lb, "nodeport_ingress", &first)?;
+    let second = run(lb, "nodeport_ingress", &second)?;
+    check("request", &first, &second, (client, backend, 40100, 8080))?;
+    let (first, second) = fragmented_udp(backend, client, 8080, 40100, 0x4a59);
+    let first = run(lb, "nodeport_egress", &first)?;
+    let second = run(lb, "nodeport_egress", &second)?;
+    check("reply", &first, &second, (front, client, 30080, 40100))?;
+    let (_, orphan) = fragmented_udp(client, front, 40101, 30080, 0x4a5a);
+    if run(lb, "nodeport_ingress", &orphan)? != orphan {
+        return Err("a fragment whose first fragment was never seen was changed".into());
+    }
+    println!(
+        "PASS IPv4 fragments: a fragmented UDP datagram to 192.0.2.20:30080 reaches the backend whole and its fragmented reply leaves from the frontend, checksums valid; an orphan fragment is untouched"
     );
     Ok(())
 }

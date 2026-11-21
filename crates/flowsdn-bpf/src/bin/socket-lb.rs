@@ -682,6 +682,33 @@ pub struct Nodeport4Value {
 #[map(name = "flowsdn_nodeport4_nat")]
 static NODEPORT4: LruHashMap<Nodeport4Key, Nodeport4Value> = LruHashMap::with_max_entries(65536, 0);
 
+/// An IPv4 datagram being fragmented (#458, the reference's
+/// `ENABLE_IPV4_FRAGMENTS`): source, destination, IP ID and protocol.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Frag4Key {
+    src: [u8; 4],
+    dst: [u8; 4],
+    id: [u8; 2],
+    proto: u8,
+    pad: u8,
+}
+/// The ports the datagram's first fragment carried.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Frag4Ports {
+    sport: [u8; 2],
+    dport: [u8; 2],
+}
+/// Filled from each first fragment (offset 0, more fragments) the uplink
+/// programs see, in either direction; later fragments take their ports
+/// from it.
+#[map(name = "flowsdn_nodeport4_frags")]
+static FRAGS4: LruHashMap<Frag4Key, Frag4Ports> = LruHashMap::with_max_entries(8192, 0);
+/// [`tuple4`]'s L4 offset for a fragment after the first: it has no L4
+/// header, so only its IP header is rewritten.
+const NO_L4: usize = 0;
+
 const ETH_P_IPV4: [u8; 2] = [0x08, 0x00];
 const BPF_F_PSEUDO_HDR: u64 = 1 << 4;
 const BPF_F_MARK_MANGLED_0: u64 = 1 << 5;
@@ -731,6 +758,7 @@ fn expired(flags: u8, seen: [u8; 2], proto: u8, now: u16) -> bool {
 #[inline(always)]
 fn closes(ctx: &TcContext, l4: usize, proto: u8) -> bool {
     proto == 6
+        && l4 != NO_L4
         && l4
             .checked_add(13)
             .and_then(|at| ctx.load::<u8>(at).ok())
@@ -738,7 +766,9 @@ fn closes(ctx: &TcContext, l4: usize, proto: u8) -> bool {
 }
 
 /// The IPv4 TCP/UDP 5-tuple of a frame: (L4 offset, proto, src, dst,
-/// sport, dport). Fragments other than the first carry no ports: skipped.
+/// sport, dport). A first fragment records its ports in [`FRAGS4`]; a later
+/// fragment takes them from there with L4 offset [`NO_L4`] (#458), or is
+/// skipped when its first fragment was not seen.
 #[inline(always)]
 fn tuple4(ctx: &TcContext) -> Option<(usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8; 2])> {
     if ctx.load::<[u8; 2]>(12).ok()? != ETH_P_IPV4 {
@@ -748,26 +778,38 @@ fn tuple4(ctx: &TcContext) -> Option<(usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8;
     if version_ihl >> 4 != 4 || version_ihl & 15 < 5 {
         return None;
     }
-    let fragment = u16::from_be_bytes(ctx.load::<[u8; 2]>(20).ok()?);
-    if fragment & 0x1fff != 0 {
-        return None;
-    }
     let proto = ctx.load::<u8>(23).ok()?;
     if proto != 6 && proto != 17 {
         return None;
+    }
+    let src = ctx.load::<[u8; 4]>(26).ok()?;
+    let dst = ctx.load::<[u8; 4]>(30).ok()?;
+    let fragment = u16::from_be_bytes(ctx.load::<[u8; 2]>(20).ok()?);
+    let key = Frag4Key {
+        src,
+        dst,
+        id: ctx.load::<[u8; 2]>(18).ok()?,
+        proto,
+        pad: 0,
+    };
+    if fragment & 0x1fff != 0 {
+        // SAFETY: LRU value copied at once, never written through.
+        let ports = unsafe { FRAGS4.get(&key).copied() }?;
+        return Some((NO_L4, proto, src, dst, ports.sport, ports.dport));
     }
     let l4 = usize::from(version_ihl & 15)
         .checked_mul(4)?
         .checked_add(14)?;
     let [s0, s1, d0, d1] = ctx.load::<[u8; 4]>(l4).ok()?;
-    Some((
-        l4,
-        proto,
-        ctx.load::<[u8; 4]>(26).ok()?,
-        ctx.load::<[u8; 4]>(30).ok()?,
-        [s0, s1],
-        [d0, d1],
-    ))
+    if fragment & 0x2000 != 0 {
+        let ports = Frag4Ports {
+            sport: [s0, s1],
+            dport: [d0, d1],
+        };
+        // A full table only leaves this datagram's later fragments untouched.
+        let _ = FRAGS4.insert(&key, &ports, 0);
+    }
+    Some((l4, proto, src, dst, [s0, s1], [d0, d1]))
 }
 
 /// Rewrite the address at `ip_offset` (26 source, 30 destination) and the
@@ -784,6 +826,13 @@ fn rewrite4(
     new: ([u8; 4], [u8; 2]),
 ) -> Option<()> {
     let (old_ip, new_ip) = (u32::from_ne_bytes(old.0), u32::from_ne_bytes(new.0));
+    // A fragment after the first (#458): no ports, no L4 checksum (the
+    // first fragment's covers the whole datagram), only the IP header.
+    if l4 == NO_L4 {
+        ctx.l3_csum_replace(24, u64::from(old_ip), u64::from(new_ip), 4)
+            .ok()?;
+        return ctx.store(ip_offset, &new.0, 0).ok();
+    }
     let (old_port, new_port) = (u16::from_ne_bytes(old.1), u16::from_ne_bytes(new.1));
     let (checksum, mangled) = if proto == 6 {
         (l4.checked_add(16)?, 0)
@@ -1276,6 +1325,8 @@ fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
         .filter(|f| f.flags & FLOW_SNAT == 0 || live4(f, (client, client_port), proto, fin));
     let flow = match known {
         Some(known) => known,
+        // A later fragment follows its datagram's flow; it never starts one.
+        None if l4 == NO_L4 => return None,
         None => {
             let mut service_key = Lb4Key {
                 address: Be32(front),
