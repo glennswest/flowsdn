@@ -9,7 +9,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] host_policy: `Peer::Nodes` from `{from,to}Nodes` (plain-key selectors); policy: `node_peers` (local -> HOST,
       remote -> per-address scope-2 identities). Tests; policy-live node-peer case. `toGroups` split to #530 (decision
       posted, wait-owner: AWS only).
-- [ ] sc-build + kernel-check; stage; shipped; close.
+- [x] 490ee68, test fix + fmt cd36143. sc-build at cd36143 (no fmt diff): `cargo xtask check` (1023 tests, 0 failed),
+      kernel-check on 7.3.4: 24/0/2; policy-live node-peer case passed. Staged; shipped; closed.
 
 ### RFC 6052 NAT46/64 gateway — #454 (P3), 2026-11-21
 
