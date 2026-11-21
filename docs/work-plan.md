@@ -9,7 +9,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] flowsdn-health `collector` (Collector, Thresholds 5/15/60 s, stale, ran_once, spawn) and `history` (History
       append/rotate 10 MB x3, read). Agent: kubernetes probe thread; `/v1/healthz` from `healthz_agent`; Facts from the
       probe; ModuleHealth history file + `GET /v1/health/history`. Tests; agent-api.md, runtime.md.
-- [ ] sc-build; stage; shipped; close.
+- [x] 11283ef, fmt + clippy 9b0baa6. sc-build at 9b0baa6 (no fmt diff): `cargo xtask check` (1021 tests, 0 failed),
+      kernel-check on 7.3.4: 24 pass 0 fail 2 skip. Staged; shipped; closed.
 
 ### scripttest subsystem adapters — #455 split, 2026-11-21
 
