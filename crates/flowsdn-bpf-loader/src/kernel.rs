@@ -3,7 +3,7 @@
 //! and startup is refused, never replaced.
 use aya::{
     Ebpf, EbpfLoader,
-    maps::{HashMap, Map, MapData, MapError, MapInfo, MapType},
+    maps::{HashMap, Map, MapData, MapError, MapInfo, MapType, RingBuf},
     programs::{
         LinkOrder, SchedClassifier, TcAttachType, Xdp,
         links::{FdLink, Link, PinnedLink},
@@ -54,8 +54,32 @@ pub struct LocalDelivery {
     /// The XDP prefilter's links on uplinks (#467), by interface, with the
     /// mode it attached in: never pinned, they detach when this owner drops.
     prefilters: BTreeMap<String, (XdpLink, &'static str)>,
+    /// The policy decision events (#452), until [`Self::take_policy_events`]
+    /// hands them to a reader; None for an object without them.
+    events: Option<PolicyEvents>,
     pin_root: Option<PathBuf>,
     map_id: u32,
+}
+/// The `flowsdn_policy_events` ring buffer (#452): the endpoint programs'
+/// policy decisions, read by one owner.
+pub struct PolicyEvents {
+    ring: RingBuf<MapData>,
+}
+impl PolicyEvents {
+    /// The events waiting, oldest first, at most `max`.
+    pub fn drain(&mut self, max: usize) -> Vec<flowsdn_bpf_abi::policy::PolicyEvent> {
+        use flowsdn_bpf_abi::MapBytes;
+        let mut out = Vec::new();
+        while out.len() < max {
+            let Some(item) = self.ring.next() else {
+                break;
+            };
+            if let Ok(bytes) = <[u8; 64]>::try_from(&*item) {
+                out.push(flowsdn_bpf_abi::policy::PolicyEvent::from_bytes(bytes));
+            }
+        }
+        out
+    }
 }
 struct Attached {
     ingress: OwnedLink,
@@ -184,6 +208,12 @@ impl LocalDelivery {
         } else {
             None
         };
+        let events = match bpf.take_map("flowsdn_policy_events") {
+            Some(map) => Some(PolicyEvents {
+                ring: RingBuf::try_from(map)?,
+            }),
+            None => None,
+        };
         for name in ["local_delivery", "to_container"] {
             let program: &mut SchedClassifier = bpf
                 .program_mut(name)
@@ -199,9 +229,15 @@ impl LocalDelivery {
             hosts: BTreeMap::new(),
             prefilter,
             prefilters: BTreeMap::new(),
+            events,
             pin_root,
             map_id,
         })
+    }
+    /// The policy decision events, for one reader (#452); None after the
+    /// first call or for an object without them.
+    pub fn take_policy_events(&mut self) -> Option<PolicyEvents> {
+        self.events.take()
     }
 
     /// Reuse a validated endpoint map and preserve TCX links across owner drop.

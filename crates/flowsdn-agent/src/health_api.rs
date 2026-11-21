@@ -274,7 +274,7 @@ fn level_text(level: Level) -> &'static str {
         Level::Stopped => "Stopped",
     }
 }
-fn timestamp(value: Option<SystemTime>) -> Result<String> {
+pub(super) fn timestamp(value: Option<SystemTime>) -> Result<String> {
     let Some(value) = value else {
         return Ok("0001-01-01T00:00:00Z".into());
     };

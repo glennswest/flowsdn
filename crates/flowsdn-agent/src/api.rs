@@ -31,6 +31,8 @@ use std::{
 
 #[path = "health_api.rs"]
 mod health_api;
+#[path = "policy_events.rs"]
+mod policy_events;
 #[path = "metrics.rs"]
 mod metrics;
 
@@ -352,7 +354,7 @@ struct Lease {
 /// Every route the agent serves, as the first column of docs/agent-api.md's
 /// "Supported methods" table; a test keeps the two equal (#298: the API is a
 /// supported boundary for `sc net` and the console plugin).
-pub const ROUTES: [&str; 28] = [
+pub const ROUTES: [&str; 29] = [
     "`GET /v1/config`",
     "`GET /v1/healthz`",
     "`GET /v1/health/modules`",
@@ -375,6 +377,7 @@ pub const ROUTES: [&str; 28] = [
     "`GET /v1/lb-ipam`",
     "`GET /v1/l2-announcements`",
     "`GET /v1/policy/verdicts`",
+    "`GET /v1/policy/events`",
     "`GET /v1/prefilter`",
     "`PATCH /v1/prefilter`",
     "`DELETE /v1/prefilter`",
@@ -402,6 +405,8 @@ struct Api {
     /// its own thread so a stuck controller shows as a stale probe instead
     /// of hanging the API.
     probes: flowsdn_health::collector::Collector<Value>,
+    /// The policy decision events the reader keeps (#452).
+    events: policy_events::Events,
 }
 impl Api {
     /// Once a second, with the XDP prefilter on (#467): attach it to the
@@ -597,6 +602,25 @@ impl Api {
             }
             ("GET", "/v1/policy/verdicts") => {
                 return Ok((200, verdict_list(&self.manager.policy_verdicts()?)));
+            }
+            ("GET", "/v1/policy/events") => {
+                let limit = request
+                    .target
+                    .split_once('?')
+                    .and_then(|(_, query)| {
+                        query
+                            .split('&')
+                            .find_map(|pair| pair.strip_prefix("limit="))
+                    })
+                    .map(str::parse::<usize>)
+                    .transpose()
+                    .map_err(|_| Failure {
+                        status: 400,
+                        message: "limit must be a number".into(),
+                    })?
+                    .unwrap_or(100)
+                    .min(policy_events::KEPT);
+                return Ok((200, self.events.json(limit)));
             }
             ("GET", "/v1/endpoint") => {
                 let view = self.kubernetes.as_ref().map(crate::kubernetes::lock);
@@ -1597,7 +1621,11 @@ pub fn run(config_path: &Path) -> Result<()> {
         timing: crate::cni_timing::Timing::default(),
         policy_maps_error,
         probes: flowsdn_health::collector::Collector::new(),
+        events: policy_events::Events::default(),
     };
+    if let Some(ring) = api.manager.take_policy_events() {
+        policy_events::spawn(ring, api.events.clone())?;
+    }
     if let Some(view) = api.kubernetes.clone() {
         api.probes.spawn(
             "kubernetes",

@@ -149,7 +149,7 @@ pinning or subsystem libraries are absent are **not current status**.
   (IPv4, #460) is on.
 - Open gaps, each an issue with the `gap` label: operator identity GC (#332);
   L7, FQDN and ICMP policy rules (#448); `toGroups` peers in policy rules
-  (#530); policy verdict events (#452); Maglev in
+  (#530); Maglev in
   the socket LB (#453); DSR by IPIP or Geneve (#447); DSR ICMP errors (#449);
   NAT46/64 to local backends or in the socket LB (#450); SCTP Services (#457); IPv6 BPF masquerade (#513); the
   Hubble observer/relay (#293).

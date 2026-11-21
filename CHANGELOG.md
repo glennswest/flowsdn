@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-21 (#452)
+- **feat:** Policy verdict events. Every decision the endpoint policy programs count (a rule allowed a new flow, a drop, an audit pass), for Pods and the host firewall alike, is also emitted into the new `flowsdn_policy_events` ring buffer (256 KiB). An event (`PolicyEvent`, 64 bytes) carries time, endpoint, direction, verdict, remote identity, interface and the packet's tuple. The agent reads the buffer every 100 ms, keeps the newest 4096 with their wall-clock time, and serves them at the new `GET /v1/policy/events` (`?limit=`). Packets of a remembered flow add no event. A full buffer only loses events; the counters stay. This is the event source for flows (#485) and the Hubble observer (#293). The local-delivery object and lock are rebuilt.
+- **test:** `events_are_kept_and_rendered` (decoding, wall time, newest first, bounded) and the `PolicyEvent` layout asserts. New `policy-live` kernel step: the TCP 80 allow and the TCP 81 drop from identity 300 are in the ring buffer with tuple, verdict, remote identity and interface, and a remembered flow's packet adds none.
+
 ### 2026-11-21 (#451)
 - **feat:** Node peers in policy rules. `fromNodes`/`toNodes` in the flowsdn policy kinds' Pod rules and in host-firewall rules select Nodes by their labels: this node is the host identity, another node each of its InternalIPs' own identity (#490). A selector matching no Node allows nothing. They no longer skip the rule. No BPF change: the datapath already judges by those identities. `toGroups` (AWS security groups) stays refused and reported; it is split to #530 with a decision question (no AWS on the platform).
 - **test:** `node_peers_resolve_to_node_identities` (ingress from labelled remote nodes, egress to the local node, a selector matching nothing). The host-policy unsupported-rule test now uses `fromGroups`. The `policy-live` remote-node step now also checks that a rule at one node's own identity allows that node and not another.

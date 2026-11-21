@@ -330,6 +330,7 @@ fn run(object: &[u8]) -> Result<()> {
     lab.ingress("identity 301 TCP 8082 (8080/14)", &syn(OTHER, 8082), OK)?;
     lab.ingress("identity 301 TCP 8084", &syn(OTHER, 8084), SHOT)?;
     println!("PASS identity, protocol, port and port-range (LPM) allows; everything else dropped");
+    policy_events(&mut lab)?;
 
     let syn6 = |dport| v6(TCP, PEER6, POD6, &tcp(40000, dport, SYN));
     lab.ingress("IPv6 identity 300 TCP 80", &syn6(80), OK)?;
@@ -566,6 +567,51 @@ fn related_errors(lab: &Lab) -> Result<()> {
     )?;
     println!(
         "PASS ICMP and ICMPv6 errors about tracked flows pass as related, both directions; errors about other flows are judged as new"
+    );
+    Ok(())
+}
+
+/// Policy decision events (#452): the decisions above are in the
+/// `flowsdn_policy_events` ring buffer with their tuple, verdict and remote
+/// identity; packets of a remembered flow add none.
+fn policy_events(lab: &mut Lab) -> Result<()> {
+    let mut ring = lab
+        .delivery
+        .take_policy_events()
+        .ok_or("the object has no flowsdn_policy_events")?;
+    let events = ring.drain(4096);
+    let find = |dport: u16, verdict_kind: u8, remote: u32| {
+        events.iter().any(|e| {
+            e.endpoint == u32::from(ENDPOINT)
+                && e.egress == 0
+                && e.protocol == TCP
+                && e.saddr.get(..4) == Some(&PEER[..])
+                && e.daddr.get(..4) == Some(&POD[..])
+                && e.dport.get() == dport
+                && e.verdict == verdict_kind
+                && e.remote == remote
+                && e.ifindex == lab.ifindex
+                && e.time_ns > 0
+        })
+    };
+    if !find(80, verdict::ALLOWED, 300) || !find(81, verdict::DENIED, 300) {
+        return Err(format!(
+            "policy events lack the TCP 80 allow or the TCP 81 drop from identity 300: {events:?}"
+        )
+        .into());
+    }
+    // A packet of a remembered flow is not a decision: no event.
+    lab.ingress(
+        "established TCP 80 flow (no event)",
+        &v4(TCP, PEER, POD, 0, &tcp(40000, 80, ACK)),
+        OK,
+    )?;
+    let after = ring.drain(4096);
+    if !after.is_empty() {
+        return Err(format!("a remembered flow's packet emitted {after:?}").into());
+    }
+    println!(
+        "PASS policy events: the allow of TCP 80 and the drop of TCP 81 from identity 300 are in the ring buffer with tuple, verdict and remote identity; a remembered flow's packet adds none"
     );
     Ok(())
 }

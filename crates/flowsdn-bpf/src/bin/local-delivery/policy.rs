@@ -23,14 +23,15 @@ use aya_ebpf::{
     bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, TC_ACT_SHOT},
     helpers::bpf_ktime_get_ns,
     macros::map,
-    maps::{HashMap, LpmTrie, LruHashMap, LruPerCpuHashMap, lpm_trie::Key},
+    maps::{HashMap, LpmTrie, LruHashMap, LruPerCpuHashMap, RingBuf, lpm_trie::Key},
     programs::TcContext,
 };
 use flowsdn_bpf_abi::{
     Be16, FAMILY_V4, FAMILY_V6, RemoteEndpointInfo,
     policy::{
         ENDPOINT_POLICY_FULL_PREFIX, HOST_PODS, POLICY_CT_CLOSING, PolicyCtKey, PolicyCtValue,
-        PolicyEndpoint, PolicyEntry, PolicyStatsValue, PolicyVerdictKey, enforce, verdict,
+        PolicyEndpoint, PolicyEntry, PolicyEvent, PolicyStatsValue, PolicyVerdictKey, enforce,
+        verdict,
     },
 };
 
@@ -64,6 +65,12 @@ static IPCACHE: LpmTrie<IpcacheData, RemoteEndpointInfo> = LpmTrie::with_max_ent
 
 #[map(name = "flowsdn_policy_ct")]
 static POLICY_CT: LruHashMap<PolicyCtKey, PolicyCtValue> = LruHashMap::with_max_entries(65536, 0);
+
+/// One event per decision (#452): what [`VERDICTS`] counts, with the flow's
+/// tuple and remote identity, for the agent's reader. A full buffer only
+/// loses events; the counts stay.
+#[map(name = "flowsdn_policy_events")]
+static EVENTS: RingBuf = RingBuf::with_byte_size(256 * 1024, 0);
 
 /// Policy decisions per endpoint, direction, verdict, protocol and port.
 #[map(name = "flowsdn_policy_verdicts")]
@@ -118,6 +125,8 @@ pub struct Flow {
     tcp_flags: u8,
     /// A fragment other than the first: no L4 header.
     fragment: bool,
+    /// The remote identity once looked up (0 before).
+    remote: u32,
     /// An ICMP error whose embedded packet was parsed into `inner` (#463).
     related: bool,
     /// The embedded packet's flow, as its sender sent it (egress unset).
@@ -534,9 +543,28 @@ fn related(flow: &Flow, egress: u8, now: u64) -> bool {
     live(&first, now)
 }
 
-/// Count one decision.
+/// Count one decision, and emit it as an event (#452).
 #[inline(always)]
 fn count(ctx: &TcContext, endpoint: u32, egress: u8, flow: &Flow, kind: u8) {
+    if let Some(mut entry) = EVENTS.reserve::<PolicyEvent>(0) {
+        entry.write(PolicyEvent {
+            // SAFETY: no arguments; returns the monotonic clock.
+            time_ns: unsafe { bpf_ktime_get_ns() },
+            endpoint,
+            remote: flow.remote,
+            ifindex: ifindex(ctx),
+            saddr: flow.key.saddr,
+            daddr: flow.key.daddr,
+            sport: flow.key.sport,
+            dport: flow.key.dport,
+            protocol: flow.key.protocol,
+            family: flow.key.family,
+            egress,
+            verdict: kind,
+            pad: [0; 4],
+        });
+        entry.submit(0);
+    }
     let key = PolicyVerdictKey {
         endpoint,
         dport: Be16(flow.port),
@@ -592,6 +620,7 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
         port: [0, 0],
         tcp_flags: 0,
         fragment: false,
+        remote: 0,
         related: false,
         inner: PolicyCtKey::default(),
     };
@@ -656,6 +685,7 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
         } else {
             identity(flow.key.family, flow.key.saddr)
         };
+        flow.remote = remote;
         // The node itself (kubelet probes) always reaches its pods.
         if !(egress == 0 && remote == HOST) {
             if !allowed(endpoint.endpoint, remote, egress, &flow) {

@@ -374,6 +374,68 @@ impl MapBytes<40> for PolicyCtKey {
         }
     }
 }
+/// One policy decision, as the endpoint programs emit it into the
+/// `flowsdn_policy_events` ring buffer (#452): when (`bpf_ktime_get_ns`,
+/// monotonic), which endpoint and direction, the verdict ([`verdict`]), the
+/// remote identity (0 when not looked up: a malformed packet or a later
+/// fragment) and the packet's tuple, the ports in network order (the echo
+/// identifier for ICMP echo, as `flowsdn_policy_ct` keys it).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PolicyEvent {
+    pub time_ns: u64,
+    pub endpoint: u32,
+    pub remote: u32,
+    pub ifindex: u32,
+    pub saddr: [u8; 16],
+    pub daddr: [u8; 16],
+    pub sport: Be16,
+    pub dport: Be16,
+    pub protocol: u8,
+    pub family: u8,
+    pub egress: u8,
+    pub verdict: u8,
+    pub pad: [u8; 4],
+}
+impl MapBytes<64> for PolicyEvent {
+    fn to_bytes(self) -> [u8; 64] {
+        let mut out = [0; 64];
+        put(&mut out, 0, self.time_ns.to_ne_bytes());
+        put(&mut out, 8, self.endpoint.to_ne_bytes());
+        put(&mut out, 12, self.remote.to_ne_bytes());
+        put(&mut out, 16, self.ifindex.to_ne_bytes());
+        put(&mut out, 20, self.saddr);
+        put(&mut out, 36, self.daddr);
+        put(&mut out, 52, self.sport.0);
+        put(&mut out, 54, self.dport.0);
+        put(
+            &mut out,
+            56,
+            [self.protocol, self.family, self.egress, self.verdict],
+        );
+        put(&mut out, 60, self.pad);
+        out
+    }
+    fn from_bytes(b: [u8; 64]) -> Self {
+        let [protocol, family, egress, verdict] = take::<4, 64>(&b, 56);
+        Self {
+            time_ns: u64::from_ne_bytes(take(&b, 0)),
+            endpoint: u32::from_ne_bytes(take(&b, 8)),
+            remote: u32::from_ne_bytes(take(&b, 12)),
+            ifindex: u32::from_ne_bytes(take(&b, 16)),
+            saddr: take(&b, 20),
+            daddr: take(&b, 36),
+            sport: Be16(take(&b, 52)),
+            dport: Be16(take(&b, 54)),
+            protocol,
+            family,
+            egress,
+            verdict,
+            pad: take(&b, 60),
+        }
+    }
+}
+
 /// `flowsdn_policy_ct` value flag: a FIN or RST was seen.
 pub const POLICY_CT_CLOSING: u32 = 1;
 /// `flowsdn_policy_ct` value: monotonic second after which the entry is dead.
@@ -442,6 +504,10 @@ const _: () = {
     assert!(offset_of!(PolicyCtKey, egress) == 38);
     assert!(size_of::<PolicyCtValue>() == 16);
     assert!(size_of::<PolicyVerdictKey>() == 12);
+    assert!(size_of::<PolicyEvent>() == 64);
+    assert!(offset_of!(PolicyEvent, saddr) == 20);
+    assert!(offset_of!(PolicyEvent, sport) == 52);
+    assert!(offset_of!(PolicyEvent, protocol) == 56);
     assert!(offset_of!(PolicyVerdictKey, dport) == 4);
     assert!(offset_of!(PolicyVerdictKey, verdict) == 8);
 };

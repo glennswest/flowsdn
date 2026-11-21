@@ -331,6 +331,10 @@ impl Manager {
             .collect();
         (attached, failed)
     }
+    /// The policy decision events, for one reader (#452).
+    pub fn take_policy_events(&mut self) -> Option<flowsdn_bpf_loader::kernel::PolicyEvents> {
+        self.driver.take_policy_events()
+    }
     /// The policy decisions counted so far (#379), summed over CPUs.
     pub fn policy_verdicts(
         &mut self,

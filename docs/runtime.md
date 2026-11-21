@@ -1034,8 +1034,12 @@ these endpoints. An ICMP or ICMPv6 error
 packet was sent by its destination and belongs to a remembered flow, in either
 direction, is related traffic: it passes without a policy lookup and does not
 refresh the flow (#463). One about no remembered flow is judged as new ICMP
-traffic. Fragmentation-needed and packet-too-big always pass. L7, FQDN and ICMP rules
-(#448) and per-flow policy verdict events (#452) are gaps, each an issue.
+traffic. Fragmentation-needed and packet-too-big always pass. Each counted
+decision is also an event in the `flowsdn_policy_events` ring buffer (256 KiB,
+#452): time, endpoint, direction, verdict, remote identity, interface and the
+packet's tuple. The agent reads it every 100 ms, keeps the newest 4096 and
+serves them at `GET /v1/policy/events` (a full buffer only loses events, the
+counts stay). L7, FQDN and ICMP rules (#448) are a gap, an issue.
 `policy-live` (medium test suite) checks the programs
 on a kernel through `BPF_PROG_TEST_RUN`; no cluster run yet.
 

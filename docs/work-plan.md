@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Policy verdict events — #452 (P3), 2026-11-21
+
+- [x] bpf-abi `PolicyEvent` (64 B); local-delivery `flowsdn_policy_events` RingBuf, emitted in `count` (Flow.remote);
+      loader `PolicyEvents::drain`, `take_policy_events`; agent `policy_events` reader thread (100 ms, 4096 kept) and
+      `GET /v1/policy/events`. Tests; agent-api.md, runtime.md. Consumers: #485 (flows), #293.
+- [ ] sc-build: object + lock; strict sc-build + kernel-check; stage; shipped; close.
+
 ### Node peers in policy rules — #451 (P3), 2026-11-21
 
 - [x] host_policy: `Peer::Nodes` from `{from,to}Nodes` (plain-key selectors); policy: `node_peers` (local -> HOST,
