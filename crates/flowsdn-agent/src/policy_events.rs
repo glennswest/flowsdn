@@ -18,9 +18,10 @@ const POLL: Duration = Duration::from_millis(100);
 
 /// The kept events with their wall-clock time, oldest first, and how many
 /// the reader has seen.
+type Kept = (VecDeque<(SystemTime, PolicyEvent)>, u64);
 #[derive(Clone, Default)]
 pub(super) struct Events {
-    inner: Arc<Mutex<(VecDeque<(SystemTime, PolicyEvent)>, u64)>>,
+    inner: Arc<Mutex<Kept>>,
 }
 impl Events {
     /// Keep `events`, read at `now` (`monotonic`: the clock the programs
