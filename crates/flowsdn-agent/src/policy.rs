@@ -118,6 +118,23 @@ pub struct Desired {
     pub host: Value,
     /// Names of the flowsdn policies with Pod rules.
     pub pod_policies: BTreeSet<String>,
+    /// Per local endpoint and direction (true: ingress), the policies that
+    /// select it there, `Kind/name` with whether the kind is clusterwide
+    /// (the drop Events' `hubble-drop-events-extended`, #470).
+    pub applied: Applied,
+}
+/// See [`Desired::applied`].
+pub type Applied = BTreeMap<(u16, bool), BTreeSet<(bool, String)>>;
+/// `Kind/name` of a policy as [`Desired::applied`] lists it: a NetworkPolicy
+/// (`namespace/name`), or a flowsdn policy kind (`/name` when clusterwide).
+fn applied_name(network_policy: bool, name: &str) -> (bool, String) {
+    let (namespace, short) = name.split_once('/').unwrap_or(("", name));
+    let kind = match (network_policy, namespace.is_empty()) {
+        (true, _) => "NetworkPolicy",
+        (false, false) => "FlowsdnNetworkPolicy",
+        (false, true) => "FlowsdnClusterwideNetworkPolicy",
+    };
+    (namespace.is_empty(), format!("{kind}/{short}"))
 }
 impl Desired {
     pub fn status(&self) -> Value {
@@ -655,15 +672,25 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
                 .iter()
                 .filter(|(_, e)| e.ingress == ingress && e.subject.matches(labels))
                 .collect();
-            let directions: Vec<&PodDirection> = pod_policies
+            let selecting: Vec<(&str, &PodDirection)> = pod_policies
                 .iter()
                 .filter(|p| p.subject.matches(labels))
-                .map(|p| if ingress { &p.ingress } else { &p.egress })
-                .filter(|d| d.selects)
+                .map(|p| (p.name.as_str(), if ingress { &p.ingress } else { &p.egress }))
+                .filter(|(_, d)| d.selects)
                 .collect();
-            if selected.is_empty() && directions.is_empty() {
+            if selected.is_empty() && selecting.is_empty() {
                 continue;
             }
+            let names = selected
+                .iter()
+                .map(|(policy, _)| applied_name(true, policy))
+                .chain(selecting.iter().map(|(name, _)| applied_name(false, name)));
+            desired
+                .applied
+                .entry((*id, ingress))
+                .or_default()
+                .extend(names);
+            let directions: Vec<&PodDirection> = selecting.iter().map(|(_, d)| *d).collect();
             flags |= bit;
             let mut allows = BTreeSet::new();
             let mut denies = BTreeSet::new();

@@ -62,6 +62,11 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.non-masquerade-cidrs` | `[]` | IPv4 CIDRs the BPF masquerade never masquerades to, beside the cluster's pod CIDRs and node addresses. An IPv6 entry is refused (IPv6 masquerade is #513). |
 | `kubernetes.lb-sock-terminate-all-protos` | `false` | Socket termination also ends TCP connections to a backend that leaves a Service ([socket LB](#clusterip-socket-lb-292); by backend address and port). |
 | `kubernetes.crd-wait-timeout` | `300` | Seconds the flowsdn.io watchers wait for the CRDs this configuration uses before the agent exits ([CRDs and the operator](#crds-and-the-operator-337)). 1 to 86400. |
+| `kubernetes.hubble-drop-events` | `false` | `PacketDrop` Events on local Pods for policy drops (#470, the reference's `hubble-drop-events`; [PacketDrop Events](#packetdrop-events-470)). |
+| `kubernetes.hubble-drop-events-interval` | `120` | The same Pod, reason and message are written at most once per interval: seconds, or `90s`/`2m`/`1h`; 1 s to 24 h. |
+| `kubernetes.hubble-drop-events-reasons` | `["auth_required","policy_denied"]` | The drop reasons that get an Event: `policy_denied` (no rule allows it), `policy_deny` (a deny rule) and `auth_required` (the allowing entry needs authentication). Any other name is refused at startup: the policy programs drop for no other reason. |
+| `kubernetes.hubble-drop-events-extended` | `false` | The message also lists the policies applied to the Pod in that direction. |
+| `kubernetes.hubble-drop-events-rate-limit` | `1` | At most this many Events a second, 0 for no limit. |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
 | `kubernetes.policy-audit-mode` | `false` | Pod policy audit mode (#461; the reference's `policy-audit-mode`): Pod endpoints judge and count what their policy refuses (`audit` in `/v1/policy/verdicts`) but never drop it, and new endpoints are not quarantined. The host firewall's own audit mode is `host-firewall: audit`. |
@@ -1071,6 +1076,24 @@ counts of ICMP are per type. A rule that combines `icmps` with `toPorts`, has mo
 rules (#537) and `toFQDNs`/DNS rules (#536) are gaps, each an issue.
 `policy-live` (medium test suite) checks the programs
 on a kernel through `BPF_PROG_TEST_RUN`; no cluster run yet.
+
+### PacketDrop Events (#470)
+
+Each drop event says why the policy refused the packet: `policy_denied` (no rule allows
+it), `policy_deny` (a deny rule) or `auth_required` (the allowing entry needs
+authentication, which the datapath does not do). A malformed packet or a later fragment
+has no reason. With `kubernetes.hubble-drop-events`, the agent turns the drops of local
+Pods' traffic whose reason is listed into a Warning Event `PacketDrop` on the Pod. An
+ingress drop goes on the destination Pod, an egress drop on the source Pod. The message is
+the reference's: `Incoming packet dropped (policy_denied) from shop/client (10.1.0.9)
+TCP/80.` or `Outgoing packet dropped (policy_denied) to world (198.51.100.9) UDP/53.`. A
+peer is `namespace/pod (ip)`, a reserved identity's name and address, or the address.
+With `-extended` it adds `Applied policies: NetworkPolicy/a,FlowsdnNetworkPolicy/b.` and
+`Applied clusterwide policies: …`, the policies that select the Pod in that direction (the
+reference lists the denying policy instead when it can correlate one; flowsdn cannot).
+One Event per Pod, reason and message per interval, and at most `-rate-limit` a second; the
+agent's Event writer then aggregates repeats as the kubelet does. The host firewall's
+drops and audit-mode passes get no Event.
 
 ### Pod rules of the flowsdn policy kinds (#292)
 

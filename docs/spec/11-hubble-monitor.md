@@ -84,7 +84,7 @@ Out of scope (owned elsewhere):
   unmodified against flowsdn's Observer service — which is why `flow.proto` and
   `observer.proto` are frozen field-for-field.
 - CEL filters — **deferred**, §12.5. The Kubernetes `PacketDrop` event emitter
-  — **deferred**, alpha upstream; its flags are accepted and ignored (§6.5).
+  — implemented by the agent from the policy programs' drop events (#470, `kubernetes.hubble-drop-events*`).
 
 ## 2. Compatibility contract
 
@@ -2545,7 +2545,7 @@ flow (§3.19.5), with the timestamp excluded.
 | Key | Reason |
 |---|---|
 | `hubble-prefer-ipv6` | deprecated upstream in favour of the global `prefer-ipv6`; flowsdn accepts it and warns whenever explicitly supplied; explicit global `prefer-ipv6` wins even when false, otherwise this legacy value is used, otherwise false (§12.10) |
-| `hubble-drop-events`, `hubble-drop-events-interval`, `hubble-drop-events-reasons`, `hubble-drop-events-extended`, `hubble-drop-events-rate-limit` | the Kubernetes `PacketDrop` event emitter: absent in flowsdn (§1), the agent has no such settings; gap #470. Reference defaults are `false`, `2m`, `[auth_required, policy_denied]`, `false`, `1`. |
+| `hubble-drop-events`, `hubble-drop-events-interval`, `hubble-drop-events-reasons`, `hubble-drop-events-extended`, `hubble-drop-events-rate-limit` | the Kubernetes `PacketDrop` event emitter, as `kubernetes.hubble-drop-events*` (#470, docs/runtime.md): Warning `PacketDrop` Events on local Pods for the policy programs' drops whose reason is listed (`policy_denied`, `policy_deny`, `auth_required`), the reference's message, dedupe per interval and a per-second limit. Reference defaults kept: `false`, `2m`, `[auth_required, policy_denied]`, `false`, `1`. |
 | `FlowFilter.experimental.cel_expression` | CEL is deferred; a request carrying it MUST be rejected with `InvalidArgument` naming the unsupported field rather than silently ignored (a silently-ignored filter returns *more* data than asked for, which is a disclosure risk) |
 
 ### 6.6 Relay flags
@@ -3352,8 +3352,8 @@ The planning helper does not generate certificates or render the chart.
 
 **12.13 Resolved #153: stage PacketDrop after the Kubernetes writer.** Keep
 the event feature in scope after a real client/recorder exists; Prometheus drop
-metrics are complementary, not a replacement. The current feature flag still
-warns and performs no Kubernetes write. Initial `drop_events::Gate` work provides
+metrics are complementary, not a replacement. The feature flag now
+writes through the agent's Event writer (#470). Initial `drop_events::Gate` work provides
 bounded deduplication/admission with a two-minute configurable interval, an
 optional one-second attempt limit (zero disables only that limit), and explicit
 failed-write completion. Key on stable pod UID, event reason and full message

@@ -1039,6 +1039,7 @@ fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
         let result = apply_policy(maps, &desired);
         let mut view = lock(view);
         view.policy_status = desired.status();
+        view.applied_policies = desired.applied.clone();
         match result {
             Ok(()) if desired.problems.is_empty() => {
                 view.errors.remove("policy");

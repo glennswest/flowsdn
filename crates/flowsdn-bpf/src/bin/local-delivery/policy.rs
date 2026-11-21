@@ -32,7 +32,7 @@ use flowsdn_bpf_abi::{
     policy::{
         ENDPOINT_POLICY_FULL_PREFIX, HOST_PODS, POLICY_CT_CLOSING, PolicyCtKey, PolicyCtValue,
         PolicyEndpoint, PolicyEntry, PolicyEvent, PolicyStatsValue, PolicyVerdictKey, enforce,
-        verdict,
+        drop_reason, verdict,
     },
 };
 
@@ -429,12 +429,17 @@ fn entry(endpoint: u32, identity: u32, egress: u8, flow: &Flow) -> Hit {
 }
 
 /// spec 02 §3.10: the specific entry, the aggregate's, then the wildcard
-/// identity; the winner by precedence, then L4 prefix length.
+/// identity; the winner by precedence, then L4 prefix length. 0 when it
+/// allows the flow, else why not ([`drop_reason`], #470).
 #[inline(always)]
-fn allowed(endpoint: u32, remote: u32, egress: u8, flow: &Flow) -> bool {
+fn refused(endpoint: u32, remote: u32, egress: u8, flow: &Flow) -> u8 {
     let specific = entry(endpoint, remote, egress, flow);
     if specific.found && specific.entry.precedence == MAX_PRECEDENCE {
-        return !specific.entry.denies();
+        return if specific.entry.denies() {
+            drop_reason::POLICY_DENY
+        } else {
+            0
+        };
     }
     let group = aggregate(remote);
     let mut broader = Hit {
@@ -448,7 +453,7 @@ fn allowed(endpoint: u32, remote: u32, egress: u8, flow: &Flow) -> bool {
         broader = entry(endpoint, 0, egress, flow);
     }
     if !specific.found && !broader.found {
-        return false;
+        return drop_reason::POLICY_DENIED;
     }
     let (chosen, other) = if !specific.found
         || (broader.found
@@ -461,7 +466,7 @@ fn allowed(endpoint: u32, remote: u32, egress: u8, flow: &Flow) -> bool {
         (specific.entry, broader)
     };
     if chosen.denies() {
-        return false;
+        return drop_reason::POLICY_DENY;
     }
     let mut auth = chosen.auth_type();
     if other.found
@@ -472,7 +477,11 @@ fn allowed(endpoint: u32, remote: u32, egress: u8, flow: &Flow) -> bool {
         auth = other.entry.auth_type();
     }
     // No authentication map: an entry that requires it is not satisfied.
-    auth == 0
+    if auth == 0 {
+        0
+    } else {
+        drop_reason::AUTH_REQUIRED
+    }
 }
 
 #[inline(always)]
@@ -549,7 +558,7 @@ fn related(flow: &Flow, egress: u8, now: u64) -> bool {
 
 /// Count one decision, and emit it as an event (#452).
 #[inline(always)]
-fn count(ctx: &TcContext, endpoint: u32, egress: u8, flow: &Flow, kind: u8) {
+fn count(ctx: &TcContext, endpoint: u32, egress: u8, flow: &Flow, kind: u8, reason: u8) {
     if let Some(mut entry) = EVENTS.reserve::<PolicyEvent>(0) {
         entry.write(PolicyEvent {
             // SAFETY: no arguments; returns the monotonic clock.
@@ -565,7 +574,8 @@ fn count(ctx: &TcContext, endpoint: u32, egress: u8, flow: &Flow, kind: u8) {
             family: flow.key.family,
             egress,
             verdict: kind,
-            pad: [0; 4],
+            reason,
+            pad: [0; 3],
         });
         entry.submit(0);
     }
@@ -592,15 +602,16 @@ fn count(ctx: &TcContext, endpoint: u32, egress: u8, flow: &Flow, kind: u8) {
     }
 }
 
-/// A packet the endpoint's policy refuses: dropped, or in audit mode
-/// counted as such and passed.
+/// A packet the endpoint's policy refuses for `reason` ([`drop_reason`]; 0
+/// for a packet it cannot judge): dropped, or in audit mode counted as such
+/// and passed.
 #[inline(always)]
-fn refuse(ctx: &TcContext, endpoint: &PolicyEndpoint, egress: u8, flow: &Flow) -> i32 {
+fn refuse(ctx: &TcContext, endpoint: &PolicyEndpoint, egress: u8, flow: &Flow, reason: u8) -> i32 {
     if endpoint.flags & enforce::AUDIT != 0 {
-        count(ctx, endpoint.endpoint, egress, flow, verdict::AUDIT);
+        count(ctx, endpoint.endpoint, egress, flow, verdict::AUDIT, reason);
         TC_ACT_OK
     } else {
-        count(ctx, endpoint.endpoint, egress, flow, verdict::DENIED);
+        count(ctx, endpoint.endpoint, egress, flow, verdict::DENIED, reason);
         TC_ACT_SHOT
     }
 }
@@ -643,7 +654,7 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
         Some(Parsed::Malformed) | None if scope != SCOPE_ENDPOINT => return TC_ACT_OK,
         Some(Parsed::Malformed) | None => {
             return if enforced {
-                refuse(ctx, &endpoint, egress, &flow)
+                refuse(ctx, &endpoint, egress, &flow, 0)
             } else {
                 TC_ACT_OK
             };
@@ -661,7 +672,7 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
     }
     if flow.fragment {
         return if enforced {
-            refuse(ctx, &endpoint, egress, &flow)
+            refuse(ctx, &endpoint, egress, &flow, 0)
         } else {
             TC_ACT_OK
         };
@@ -692,13 +703,14 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
         flow.remote = remote;
         // The node itself (kubelet probes) always reaches its pods.
         if !(egress == 0 && remote == HOST) {
-            if !allowed(endpoint.endpoint, remote, egress, &flow) {
-                let verdict = refuse(ctx, &endpoint, egress, &flow);
+            let reason = refused(endpoint.endpoint, remote, egress, &flow);
+            if reason != 0 {
+                let verdict = refuse(ctx, &endpoint, egress, &flow, reason);
                 if verdict != TC_ACT_OK {
                     return verdict;
                 }
             } else {
-                count(ctx, endpoint.endpoint, egress, &flow, verdict::ALLOWED);
+                count(ctx, endpoint.endpoint, egress, &flow, verdict::ALLOWED, 0);
             }
         }
     }

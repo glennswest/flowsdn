@@ -31,6 +31,8 @@ use std::{
 
 #[path = "flows.rs"]
 mod flows;
+#[path = "drop_emitter.rs"]
+mod drop_emitter;
 #[path = "health_api.rs"]
 mod health_api;
 #[path = "metrics.rs"]
@@ -1649,7 +1651,17 @@ pub fn run(config_path: &Path) -> Result<()> {
         events: policy_events::Events::default(),
     };
     if let Some(ring) = api.manager.take_policy_events() {
-        policy_events::spawn(ring, api.events.clone())?;
+        let drops = match (
+            api.config
+                .kubernetes
+                .as_ref()
+                .and_then(|k| k.drop_events.clone()),
+            api.kubernetes.clone(),
+        ) {
+            (Some(settings), Some(view)) => Some((drop_emitter::Emitter::new(settings)?, view)),
+            _ => None,
+        };
+        policy_events::spawn(ring, api.events.clone(), drops)?;
     }
     if let Some(view) = api.kubernetes.clone() {
         api.probes.spawn(

@@ -694,3 +694,57 @@ fn gateway64_sources_are_the_local_ipv6_pod_cidrs() {
     );
     assert!(gateway64_sources("n9", &nodes, Derive::default()).is_empty());
 }
+
+/// #470: `hubble-drop-events` and its settings, with the reference's
+/// defaults; bad values are refused.
+#[test]
+fn drop_event_settings_parse() {
+    use flowsdn_bpf_abi::policy::drop_reason;
+    let parse = |value: Value| {
+        Settings::parse(Some(&value), &env(&[("NODE_NAME", "n1")]))
+            .expect("settings")
+            .expect("enabled")
+    };
+    assert_eq!(parse(json!({})).drop_events, None);
+    assert_eq!(
+        parse(json!({"hubble-drop-events": true})).drop_events,
+        Some(DropEvents {
+            interval: std::time::Duration::from_secs(120),
+            reasons: vec![drop_reason::AUTH_REQUIRED, drop_reason::POLICY_DENIED],
+            extended: false,
+            rate_limit: 1,
+        })
+    );
+    assert_eq!(
+        parse(json!({"hubble-drop-events": true, "hubble-drop-events-interval": "5m",
+            "hubble-drop-events-reasons": ["policy_deny"], "hubble-drop-events-extended": true,
+            "hubble-drop-events-rate-limit": 0}))
+        .drop_events,
+        Some(DropEvents {
+            interval: std::time::Duration::from_secs(300),
+            reasons: vec![drop_reason::POLICY_DENY],
+            extended: true,
+            rate_limit: 0,
+        })
+    );
+    assert_eq!(
+        parse(json!({"hubble-drop-events": true, "hubble-drop-events-interval": 30}))
+            .drop_events
+            .map(|d| d.interval),
+        Some(std::time::Duration::from_secs(30))
+    );
+    for bad in [
+        json!({"hubble-drop-events": "yes"}),
+        json!({"hubble-drop-events": true, "hubble-drop-events-interval": 0}),
+        json!({"hubble-drop-events": true, "hubble-drop-events-interval": "2d"}),
+        json!({"hubble-drop-events": true, "hubble-drop-events-reasons": ["ct_map_insertion_failed"]}),
+        json!({"hubble-drop-events": true, "hubble-drop-events-reasons": "policy_denied"}),
+        json!({"hubble-drop-events": true, "hubble-drop-events-extended": 1}),
+        json!({"hubble-drop-events": true, "hubble-drop-events-rate-limit": -1}),
+    ] {
+        assert!(
+            Settings::parse(Some(&bad), &env(&[("NODE_NAME", "n1")])).is_err(),
+            "{bad}"
+        );
+    }
+}

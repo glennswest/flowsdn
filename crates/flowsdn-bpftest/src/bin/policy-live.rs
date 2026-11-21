@@ -24,7 +24,7 @@ use flowsdn_bpf_abi::{
     IpCacheKey, RemoteEndpointInfo,
     policy::{
         EndpointPolicyKey, HOST_ENDPOINT, HOST_PODS, PolicyEndpoint, PolicyEntry, PolicyKey,
-        enforce, verdict,
+        drop_reason, enforce, verdict,
     },
 };
 use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object, PolicyEvents};
@@ -332,7 +332,7 @@ fn run(object: &[u8]) -> Result<()> {
     println!("PASS identity, protocol, port and port-range (LPM) allows; everything else dropped");
     // Kept to the end: programs loaded later (the host firewall) reference
     // the ring's map fd, which dropping it would close.
-    let _events = policy_events(&mut lab)?;
+    let mut events = policy_events(&mut lab)?;
 
     let syn6 = |dport| v6(TCP, PEER6, POD6, &tcp(40000, dport, SYN));
     lab.ingress("IPv6 identity 300 TCP 80", &syn6(80), OK)?;
@@ -398,8 +398,18 @@ fn run(object: &[u8]) -> Result<()> {
         SHOT,
     )?;
     lab.ingress("aggregate allow for 302 on port 22", &syn(CLUSTER, 22), OK)?;
+    // A deny rule's drop is policy_deny (#470), not policy_denied.
+    let denied = events.drain(4096);
+    if !denied.iter().any(|e| {
+        e.verdict == verdict::DENIED
+            && e.dport.get() == 22
+            && e.remote == 300
+            && e.reason == drop_reason::POLICY_DENY
+    }) {
+        return Err(format!("no policy_deny event for the deny rule's drop: {denied:?}").into());
+    }
     println!(
-        "PASS aggregate-cluster and wildcard identities; a top-precedence deny wins over a broader allow"
+        "PASS aggregate-cluster and wildcard identities; a top-precedence deny wins over a broader allow, its drop event says policy_deny"
     );
 
     for (identity, egress) in [(0, true), (11, false)] {
@@ -628,7 +638,7 @@ fn policy_events(lab: &mut Lab) -> Result<PolicyEvents> {
         .take_policy_events()
         .ok_or("the object has no flowsdn_policy_events")?;
     let events = ring.drain(4096);
-    let find = |dport: u16, verdict_kind: u8, remote: u32| {
+    let find = |dport: u16, verdict_kind: u8, remote: u32, reason: u8| {
         events.iter().any(|e| {
             e.endpoint == u32::from(ENDPOINT)
                 && e.egress == 0
@@ -638,13 +648,17 @@ fn policy_events(lab: &mut Lab) -> Result<PolicyEvents> {
                 && e.dport.get() == dport
                 && e.verdict == verdict_kind
                 && e.remote == remote
+                && e.reason == reason
                 && e.ifindex == lab.ifindex
                 && e.time_ns > 0
         })
     };
-    if !find(80, verdict::ALLOWED, 300) || !find(81, verdict::DENIED, 300) {
+    // The drop says why (#470): no rule allows TCP 81.
+    if !find(80, verdict::ALLOWED, 300, 0)
+        || !find(81, verdict::DENIED, 300, drop_reason::POLICY_DENIED)
+    {
         return Err(format!(
-            "policy events lack the TCP 80 allow or the TCP 81 drop from identity 300: {events:?}"
+            "policy events lack the TCP 80 allow or the TCP 81 policy_denied drop from identity 300: {events:?}"
         )
         .into());
     }
@@ -659,7 +673,7 @@ fn policy_events(lab: &mut Lab) -> Result<PolicyEvents> {
         return Err(format!("a remembered flow's packet emitted {after:?}").into());
     }
     println!(
-        "PASS policy events: the allow of TCP 80 and the drop of TCP 81 from identity 300 are in the ring buffer with tuple, verdict and remote identity; a remembered flow's packet adds none"
+        "PASS policy events: the allow of TCP 80 and the drop of TCP 81 from identity 300 are in the ring buffer with tuple, verdict, reason (policy_denied) and remote identity; a remembered flow's packet adds none"
     );
     Ok(ring)
 }

@@ -4,7 +4,7 @@
 //! [`KEPT`] in memory with their wall-clock time, for `GET
 //! /v1/policy/events`.
 use super::*;
-use flowsdn_bpf_abi::policy::{HOST_ENDPOINT, PolicyEvent, verdict};
+use flowsdn_bpf_abi::policy::{HOST_ENDPOINT, PolicyEvent, drop_reason, verdict};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex, PoisonError},
@@ -72,6 +72,18 @@ impl Events {
     }
 }
 
+/// A refusal's reason as the reference names it (`hubble-drop-events-reasons`,
+/// Hubble's `DropReason` in lower case); None for 0 (not judged: malformed,
+/// a later fragment) and allowed packets.
+pub(super) fn reason_name(reason: u8) -> Option<&'static str> {
+    match reason {
+        drop_reason::POLICY_DENIED => Some("policy_denied"),
+        drop_reason::POLICY_DENY => Some("policy_deny"),
+        drop_reason::AUTH_REQUIRED => Some("auth_required"),
+        _ => None,
+    }
+}
+
 fn address(family: u8, bytes: [u8; 16]) -> String {
     if family == flowsdn_bpf_abi::FAMILY_V4 {
         let [a, b, c, d, ..] = bytes;
@@ -89,7 +101,7 @@ fn event_json(time: SystemTime, event: &PolicyEvent) -> Value {
         (58, false) => json!("ICMPv6"),
         (other, _) => json!(other),
     };
-    json!({
+    let mut value = json!({
         "time": super::health_api::timestamp(Some(time)).unwrap_or_default(),
         "endpoint": if event.endpoint == HOST_ENDPOINT { json!("host") } else { json!(event.endpoint) },
         "direction": if event.egress != 0 { "egress" } else { "ingress" },
@@ -106,7 +118,11 @@ fn event_json(time: SystemTime, event: &PolicyEvent) -> Value {
         "destination": address(event.family, event.daddr),
         "source-port": event.sport.get(),
         "destination-port": event.dport.get(),
-    })
+    });
+    if let (Some(reason), Some(object)) = (reason_name(event.reason), value.as_object_mut()) {
+        object.insert("reason".into(), json!(reason));
+    }
+    value
 }
 
 /// The monotonic clock in ns (what `bpf_ktime_get_ns` reads).
@@ -122,9 +138,12 @@ fn monotonic() -> u64 {
 }
 
 /// Read `ring` into `events` for the life of the process.
+/// With `drops` (`kubernetes.hubble-drop-events`, #470), each batch also
+/// goes to the `PacketDrop` emitter, which reads the Pods from the view.
 pub(super) fn spawn(
     mut ring: flowsdn_bpf_loader::kernel::PolicyEvents,
     events: Events,
+    mut drops: Option<(super::drop_emitter::Emitter, crate::kubernetes::Shared)>,
 ) -> std::io::Result<()> {
     std::thread::Builder::new()
         .name("policy-events".into())
@@ -132,7 +151,24 @@ pub(super) fn spawn(
             loop {
                 let batch = ring.drain(KEPT);
                 if !batch.is_empty() {
-                    events.push(batch, SystemTime::now(), monotonic());
+                    let now = monotonic();
+                    if let Some((emitter, view)) = drops.as_mut() {
+                        let written = {
+                            let view = crate::kubernetes::lock(view);
+                            emitter.process(Duration::from_nanos(now), &batch, &view)
+                        };
+                        for drop in written {
+                            crate::events::pod(
+                                &drop.namespace,
+                                &drop.name,
+                                &drop.uid,
+                                crate::events::Type::Warning,
+                                super::drop_emitter::REASON,
+                                drop.message,
+                            );
+                        }
+                    }
+                    events.push(batch, SystemTime::now(), now);
                 }
                 std::thread::sleep(POLL);
             }
@@ -158,7 +194,8 @@ mod tests {
             family: flowsdn_bpf_abi::FAMILY_V4,
             egress: 0,
             verdict: verdict_kind,
-            pad: [0; 4],
+            reason: 0,
+            pad: [0; 3],
         }
     }
 

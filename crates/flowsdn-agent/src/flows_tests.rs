@@ -24,7 +24,8 @@ fn event(egress: bool, saddr: [u8; 4], daddr: [u8; 4], protocol: u8, kind: u8) -
         family: FAMILY_V4,
         egress: u8::from(egress),
         verdict: kind,
-        pad: [0; 4],
+        reason: 0,
+        pad: [0; 3],
     }
 }
 
@@ -107,6 +108,7 @@ fn records_name_both_sides_and_say_the_verdict() {
     // The web Pod's UDP to the remote db Pod, dropped: namespace on both sides.
     let mut dropped = event(true, [10, 1, 0, 5], [10, 2, 0, 9], 17, verdict::DENIED);
     dropped.remote = 400;
+    dropped.reason = flowsdn_bpf_abi::policy::drop_reason::POLICY_DENIED;
     let dropped = record(Some(&view), time, &dropped);
     assert_eq!(dropped.get("verdict"), Some(&json!("DROPPED")));
     assert_eq!(dropped.get("drop_reason"), Some(&json!("POLICY_DENIED")));

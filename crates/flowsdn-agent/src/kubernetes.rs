@@ -37,6 +37,24 @@ pub enum LbMode {
     Hybrid,
 }
 
+/// `kubernetes.hubble-drop-events` (#470, the reference's names and
+/// defaults): `PacketDrop` Events on Pods for policy drops.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DropEvents {
+    /// `hubble-drop-events-interval` (default 2 minutes): the same Pod,
+    /// reason and message are written at most once per interval.
+    pub interval: std::time::Duration,
+    /// `hubble-drop-events-reasons` (default `auth_required`,
+    /// `policy_denied`), as `flowsdn_bpf_abi::policy::drop_reason` codes.
+    pub reasons: Vec<u8>,
+    /// `hubble-drop-events-extended` (default false): the message lists the
+    /// policies applied to the Pod in that direction.
+    pub extended: bool,
+    /// `hubble-drop-events-rate-limit` (default 1): Events a second at most,
+    /// 0 for no limit.
+    pub rate_limit: usize,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Settings {
     pub node_name: String,
@@ -124,6 +142,8 @@ pub struct Settings {
     /// `kubernetes.crd-wait-timeout` (#337, seconds, default 300): how long
     /// the flowsdn.io watchers wait for their CRDs before the agent exits.
     pub crd_wait_timeout: std::time::Duration,
+    /// `kubernetes.hubble-drop-events` (#470, default off).
+    pub drop_events: Option<DropEvents>,
     /// `kubernetes.lb-sock-terminate-all-protos` (#392, default false):
     /// socket termination ends TCP sockets to a removed backend too.
     pub terminate_tcp: bool,
@@ -348,6 +368,11 @@ impl Settings {
                 }
             },
             node_config: Value::Null,
+            drop_events: if flag("hubble-drop-events", false)? {
+                Some(drop_events(object)?)
+            } else {
+                None
+            },
             crd_wait_timeout: match object.get("crd-wait-timeout") {
                 None | Some(Value::Null) => std::time::Duration::from_secs(300),
                 Some(value) => value
@@ -358,6 +383,70 @@ impl Settings {
             },
         }))
     }
+}
+
+/// The `hubble-drop-events-*` settings (see [`DropEvents`]).
+fn drop_events(object: &serde_json::Map<String, Value>) -> Result<DropEvents> {
+    use flowsdn_bpf_abi::policy::drop_reason;
+    let interval = match object.get("hubble-drop-events-interval") {
+        None | Some(Value::Null) => std::time::Duration::from_secs(120),
+        Some(value) => duration(value)
+            .filter(|d| (1..=86_400).contains(&d.as_secs()))
+            .ok_or(
+                "kubernetes.hubble-drop-events-interval must be seconds or a duration (90s, 2m, 1h), 1 s to 24 h",
+            )?,
+    };
+    let reasons = match object.get("hubble-drop-events-reasons") {
+        None | Some(Value::Null) => vec![drop_reason::AUTH_REQUIRED, drop_reason::POLICY_DENIED],
+        Some(Value::Array(list)) => list
+            .iter()
+            .map(|item| match item.as_str().map(str::to_lowercase).as_deref() {
+                Some("policy_denied") => Ok(drop_reason::POLICY_DENIED),
+                Some("policy_deny") => Ok(drop_reason::POLICY_DENY),
+                Some("auth_required") => Ok(drop_reason::AUTH_REQUIRED),
+                _ => Err(format!(
+                    "kubernetes.hubble-drop-events-reasons: {item} is not policy_denied, policy_deny or auth_required (the reasons the policy programs drop for)"
+                )),
+            })
+            .collect::<std::result::Result<_, _>>()?,
+        Some(_) => return Err("kubernetes.hubble-drop-events-reasons must be a list".into()),
+    };
+    let extended = match object.get("hubble-drop-events-extended") {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(value)) => *value,
+        Some(_) => return Err("kubernetes.hubble-drop-events-extended must be boolean".into()),
+    };
+    let rate_limit = match object.get("hubble-drop-events-rate-limit") {
+        None | Some(Value::Null) => 1,
+        Some(value) => value
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .filter(|n| *n <= 1_000_000)
+            .ok_or("kubernetes.hubble-drop-events-rate-limit must be events a second, 0 to 1000000")?,
+    };
+    Ok(DropEvents {
+        interval,
+        reasons,
+        extended,
+        rate_limit,
+    })
+}
+
+/// Seconds (a number) or a duration of one unit (`90s`, `2m`, `1h`).
+fn duration(value: &Value) -> Option<std::time::Duration> {
+    if let Some(seconds) = value.as_u64() {
+        return Some(std::time::Duration::from_secs(seconds));
+    }
+    let text = value.as_str()?;
+    let (number, unit) = text.split_at(text.find(|c: char| !c.is_ascii_digit())?);
+    let number: u64 = number.parse().ok()?;
+    let seconds = match unit {
+        "s" => number,
+        "m" => number.checked_mul(60)?,
+        "h" => number.checked_mul(3600)?,
+        _ => return None,
+    };
+    Some(std::time::Duration::from_secs(seconds))
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -790,6 +879,9 @@ pub struct View {
     pub network_policies: Vec<Value>,
     pub policies_synced: bool,
     pub policy_status: Value,
+    /// The policies selecting each local endpoint, per direction, from the
+    /// last policy pass (PacketDrop Events, #470).
+    pub applied_policies: crate::policy::Applied,
     /// Pod rules of the flowsdn policy kinds (#292): the setting and the
     /// FlowsdnNetworkPolicy objects (the clusterwide kind is below).
     pub flowsdn_policy: bool,

@@ -7,11 +7,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 ### PacketDrop Events — #470 (P3), 2026-11-21
 
 Reference: pkg/hubble/dropeventemitter (7d68cfb394), read into tmp/ref470.
-- [ ] ABI/BPF: `PolicyEvent.reason` (pad byte): no rule (policy_denied), deny rule (policy_deny), auth (auth_required),
+- [x] ABI/BPF: `PolicyEvent.reason` (pad byte): no rule (policy_denied), deny rule (policy_deny), auth (auth_required),
       from `allowed()`; `/v1/policy/events` `reason`, `/v1/flows` `drop_reason` by it.
-- [ ] policy compile: per endpoint and direction the applied policies (`Kind/name`, namespaced and clusterwide), into
+- [x] policy compile: per endpoint and direction the applied policies (`Kind/name`, namespaced and clusterwide), into
       the View for `-extended`.
-- [ ] Agent emitter (`drop_events.rs`): DENIED (not audit) Pod drops whose reason is listed -> Warning `PacketDrop` on
+- [x] Agent emitter (`drop_events.rs`): DENIED (not audit) Pod drops whose reason is listed -> Warning `PacketDrop` on
       the Pod (UID), reference message (`Incoming packet dropped (r) from ns/pod (ip) TCP/80.`), `-extended` adds
       `Applied policies: …`; `flowsdn_hubble::drop_events::Gate` (interval dedupe, per-second limit). Settings
       `kubernetes.hubble-drop-events{,-interval,-reasons,-extended,-rate-limit}`.

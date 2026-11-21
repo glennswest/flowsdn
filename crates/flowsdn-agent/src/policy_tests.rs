@@ -150,6 +150,14 @@ fn ingress_from_a_selected_peer_on_one_port() {
     assert_eq!(entry.lpm_prefix_length(), 24);
     assert_eq!(entry.precedence, ALLOW_PRECEDENCE);
     assert!(!entry.denies());
+    // #470: the policies applied to the endpoint, per direction.
+    assert_eq!(
+        desired.applied,
+        Applied::from([(
+            (7, true),
+            BTreeSet::from([(false, "NetworkPolicy/p".to_owned())])
+        )])
+    );
 }
 
 #[test]
@@ -685,6 +693,11 @@ fn flowsdn_policy_selects_in_its_namespace_with_named_ports() {
         desired.status().pointer("/flowsdn-policies/0"),
         Some(&json!("shop/fp"))
     );
+    assert_eq!(
+        desired.applied.get(&(7, true)),
+        Some(&BTreeSet::from([(false, "FlowsdnNetworkPolicy/fp".to_owned())]))
+    );
+    assert_eq!(desired.applied.get(&(7, false)), None);
 }
 
 /// #448: `icmps` fields are ICMP/ICMPv6 port rules whose port is the type,

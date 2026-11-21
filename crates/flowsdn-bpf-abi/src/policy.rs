@@ -395,7 +395,19 @@ pub struct PolicyEvent {
     pub family: u8,
     pub egress: u8,
     pub verdict: u8,
-    pub pad: [u8; 4],
+    /// Why a [`verdict::DENIED`] or [`verdict::AUDIT`] packet was refused
+    /// ([`drop_reason`], #470); 0 for an allowed one.
+    pub reason: u8,
+    pub pad: [u8; 3],
+}
+/// [`PolicyEvent::reason`] values: the reference's drop reasons
+/// `policy_denied` (no rule allows it), `policy_deny` (a deny rule) and
+/// `auth_required` (the allowing entry needs authentication, which the
+/// datapath does not do).
+pub mod drop_reason {
+    pub const POLICY_DENIED: u8 = 1;
+    pub const POLICY_DENY: u8 = 2;
+    pub const AUTH_REQUIRED: u8 = 3;
 }
 impl MapBytes<64> for PolicyEvent {
     fn to_bytes(self) -> [u8; 64] {
@@ -413,11 +425,13 @@ impl MapBytes<64> for PolicyEvent {
             56,
             [self.protocol, self.family, self.egress, self.verdict],
         );
-        put(&mut out, 60, self.pad);
+        put(&mut out, 60, [self.reason]);
+        put(&mut out, 61, self.pad);
         out
     }
     fn from_bytes(b: [u8; 64]) -> Self {
         let [protocol, family, egress, verdict] = take::<4, 64>(&b, 56);
+        let [reason] = take::<1, 64>(&b, 60);
         Self {
             time_ns: u64::from_ne_bytes(take(&b, 0)),
             endpoint: u32::from_ne_bytes(take(&b, 8)),
@@ -431,7 +445,8 @@ impl MapBytes<64> for PolicyEvent {
             family,
             egress,
             verdict,
-            pad: take(&b, 60),
+            reason,
+            pad: take(&b, 61),
         }
     }
 }
@@ -508,6 +523,7 @@ const _: () = {
     assert!(offset_of!(PolicyEvent, saddr) == 20);
     assert!(offset_of!(PolicyEvent, sport) == 52);
     assert!(offset_of!(PolicyEvent, protocol) == 56);
+    assert!(offset_of!(PolicyEvent, reason) == 60);
     assert!(offset_of!(PolicyVerdictKey, dport) == 4);
     assert!(offset_of!(PolicyVerdictKey, verdict) == 8);
 };

@@ -154,7 +154,9 @@ fn record(view: Option<&View>, time: SystemTime, event: &PolicyEvent) -> Value {
     if event.verdict == verdict::DENIED
         && let Some(object) = value.as_object_mut()
     {
-        object.insert("drop_reason".into(), json!("POLICY_DENIED"));
+        let reason = super::policy_events::reason_name(event.reason)
+            .map_or_else(|| "DROP_REASON_UNKNOWN".to_owned(), str::to_uppercase);
+        object.insert("drop_reason".into(), json!(reason));
     }
     value
 }
