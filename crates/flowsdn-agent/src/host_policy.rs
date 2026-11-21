@@ -7,10 +7,10 @@
 //! A spec selects this node when it has a `nodeSelector` that matches the
 //! Node's labels. Supported: `ingress` and `ingressDeny` rules with
 //! `fromEntities`, `fromCIDR`, `fromCIDRSet` (`cidr`, `except`),
-//! `fromEndpoints` and `toPorts` (`port`, `endPort`, `protocol`), the same
-//! for `egress` and `egressDeny` with `to*` peers (#477), and
-//! `enableDefaultDeny.ingress`/`.egress`. Everything else is reported and
-//! not enforced: L7 rules, ICMP rules, `*Requires`, `*Nodes`, `*Groups`,
+//! `fromEndpoints`, `fromNodes` (#451) and `toPorts` (`port`, `endPort`,
+//! `protocol`), the same for `egress` and `egressDeny` with `to*` peers
+//! (#477), and `enableDefaultDeny.ingress`/`.egress`. Everything else is
+//! reported and not enforced: L7 rules, ICMP rules, `*Requires`, `*Groups`,
 //! `toServices`, `toFQDNs`, `cidrGroupRef`, authentication and named
 //! ports. The annotation [`AUDIT_ANNOTATION`] `"true"` puts the host in audit
 //! mode.
@@ -110,6 +110,9 @@ pub enum Peer {
     },
     /// Pods whose identity labels match.
     Endpoints(LabelSelector),
+    /// Nodes whose labels match (`fromNodes`/`toNodes`, #451): their
+    /// addresses' identities (this node: the host).
+    Nodes(LabelSelector),
 }
 
 /// One ingress rule of a host policy.
@@ -391,7 +394,6 @@ fn rule(
     let prefix = side.prefix;
     let mut unsupported = vec![
         format!("{prefix}Requires"),
-        format!("{prefix}Nodes"),
         format!("{prefix}Groups"),
         "icmps".to_owned(),
         "authentication".to_owned(),
@@ -477,6 +479,23 @@ fn rule(
                 Err(error) => {
                     problems.insert(format!(
                         "{policy}: {prefix}Endpoints {error}; it allows nothing"
+                    ));
+                }
+            }
+        }
+    }
+    // Node peers (#451): selectors on the Nodes' own labels.
+    if let Some(list) = value
+        .get(format!("{prefix}Nodes"))
+        .filter(|v| !v.is_null())
+    {
+        any_l3 = true;
+        for item in list.as_array()? {
+            match LabelSelector::parse(Some(item)) {
+                Ok(selector) => peers.push(Peer::Nodes(rekey(selector, plain_key))),
+                Err(error) => {
+                    problems.insert(format!(
+                        "{policy}: {prefix}Nodes {error}; it allows nothing"
                     ));
                 }
             }

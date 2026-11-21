@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-21 (#451)
+- **feat:** Node peers in policy rules. `fromNodes`/`toNodes` in the flowsdn policy kinds' Pod rules and in host-firewall rules select Nodes by their labels: this node is the host identity, another node each of its InternalIPs' own identity (#490). A selector matching no Node allows nothing. They no longer skip the rule. No BPF change: the datapath already judges by those identities. `toGroups` (AWS security groups) stays refused and reported; it is split to #530 with a decision question (no AWS on the platform).
+- **test:** `node_peers_resolve_to_node_identities` (ingress from labelled remote nodes, egress to the local node, a selector matching nothing). The host-policy unsupported-rule test now uses `fromGroups`. The `policy-live` remote-node step now also checks that a rule at one node's own identity allows that node and not another.
+
 ### 2026-11-21 (#454)
 - **feat:** The RFC 6052 NAT46/64 gateway, the reference's `enable-nat46x64-gateway`: `kubernetes.nat46x64-gateway` (default false; settable per node by FlowsdnNodeConfig) and `kubernetes.nat46x64-gateway-prefix` (an IPv6 /96, default `64:ff9b::/96`).
   - **Forward:** at the uplink's egress, a local Pod's IPv6 TCP/UDP packet to the prefix leaves as IPv4. Its destination is the embedded address, and its source is this node's address with a NAT port, using Service NAT64's port claim and maps.

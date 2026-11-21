@@ -168,7 +168,7 @@ fn unsupported_rules_are_skipped_and_reported() {
         json!({"nodeSelector":{},"enableDefaultDeny":{"ingress":false},
         "ingress":[
             {"fromEntities":["world"],"toPorts":[{"ports":[{"port":"80"}],"rules":{"http":[{}]}}]},
-            {"fromNodes":[{}]},
+            {"fromGroups":[{"aws":{"securityGroupsIds":["sg-1"]}}]},
             {"fromEntities":["nonsense"],"toPorts":[{"ports":[{"port":"ssh"}]}]}
         ]}),
     )];
@@ -177,7 +177,7 @@ fn unsupported_rules_are_skipped_and_reported() {
     assert!(got.rules.is_empty());
     for needle in [
         "L7 rules",
-        "fromNodes",
+        "fromGroups",
         "unknown entity nonsense",
         "named port ssh",
     ] {

@@ -275,6 +275,25 @@ impl Compiler<'_> {
                         .filter(|(_, labels)| selector.matches(labels))
                         .map(|(id, _)| *id),
                 ),
+                HostPeer::Nodes(selector) => out.extend(self.node_peers(selector)),
+            }
+        }
+        out
+    }
+    /// The identities of the Nodes `selector` selects by their labels
+    /// (#451): this node is the host identity, another node each of its
+    /// addresses' own (scope 2, #490).
+    fn node_peers(&self, selector: &k8s::LabelSelector) -> BTreeSet<u32> {
+        let mut out = BTreeSet::new();
+        for node in self.view.nodes.iter().filter(|n| selector.matches(&n.labels)) {
+            if node.name == self.view.local_node {
+                out.insert(HOST);
+                continue;
+            }
+            for ip in &node.internal_ips {
+                if let Some(id) = self.remote_nodes.get(ip) {
+                    out.insert(*id);
+                }
             }
         }
         out
@@ -502,7 +521,7 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
                 HostPeer::Endpoints(_) => {
                     selector_policies.insert(rule.policy.clone());
                 }
-                HostPeer::Identities(_) => {}
+                HostPeer::Identities(_) | HostPeer::Nodes(_) => {}
             }
         }
     }

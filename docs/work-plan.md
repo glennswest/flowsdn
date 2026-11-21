@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Node peers in policy rules — #451 (P3), 2026-11-21
+
+- [x] host_policy: `Peer::Nodes` from `{from,to}Nodes` (plain-key selectors); policy: `node_peers` (local -> HOST,
+      remote -> per-address scope-2 identities). Tests; policy-live node-peer case. `toGroups` split to #530 (decision
+      posted, wait-owner: AWS only).
+- [ ] sc-build + kernel-check; stage; shipped; close.
+
 ### RFC 6052 NAT46/64 gateway — #454 (P3), 2026-11-21
 
 - [x] socket-lb.rs: `flowsdn_gw64_config`/`_sources`; egress `gateway64` (classifies into INGRESS6, creates the

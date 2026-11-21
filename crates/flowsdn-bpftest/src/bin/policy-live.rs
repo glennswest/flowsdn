@@ -1033,20 +1033,34 @@ fn remote_node_aggregate(lab: &mut Lab) -> Result<()> {
             flags: enforce::INGRESS,
         },
     )?;
+    const NODE_C: [u8; 4] = [192, 0, 2, 32];
+    lab.identity(IpAddr::V4(Ipv4Addr::from(NODE_C)), (2 << 24) | 2)?;
     let frame = v4(TCP, NODE_B, HOST_ADDR, 0, &tcp(47000, 5555, SYN));
     let got = host_verdict(lab, "from_netdev", up0, &frame)?;
     if got != SHOT {
         return Err(format!("node B without a remote-node rule: verdict {got}").into());
     }
+    // A node peer (#451, `fromNodes`): node B's own identity, not node C's.
+    host_rule(lab, (2 << 24) | 1, 0, 0, 0, false)?;
+    let peer = v4(TCP, NODE_B, HOST_ADDR, 0, &tcp(47002, 5555, SYN));
+    let got = host_verdict(lab, "from_netdev", up0, &peer)?;
+    if got != OK {
+        return Err(format!("node B with its own (node peer) rule: verdict {got}").into());
+    }
+    let other = v4(TCP, NODE_C, HOST_ADDR, 0, &tcp(47003, 5555, SYN));
+    let got = host_verdict(lab, "from_netdev", up0, &other)?;
+    if got != SHOT {
+        return Err(format!("node C under node B's peer rule: verdict {got}").into());
+    }
     host_rule(lab, 14, 0, 0, 0, false)?;
-    let again = v4(TCP, NODE_B, HOST_ADDR, 0, &tcp(47001, 5555, SYN));
+    let again = v4(TCP, NODE_C, HOST_ADDR, 0, &tcp(47001, 5555, SYN));
     let got = host_verdict(lab, "from_netdev", up0, &again)?;
     if got != OK {
-        return Err(format!("node B with a remote-node (14) rule: verdict {got}").into());
+        return Err(format!("node C with a remote-node (14) rule: verdict {got}").into());
     }
     lab.delivery.policy().remove_policy_endpoint(up0)?;
     println!(
-        "PASS a remote node address's own identity (scope 2) is dropped without a rule and allowed by one at the remote-node aggregate (14)"
+        "PASS a remote node address's own identity (scope 2) is dropped without a rule, allowed by a node peer rule at it (another node's is not), and by one at the remote-node aggregate (14)"
     );
     Ok(())
 }
