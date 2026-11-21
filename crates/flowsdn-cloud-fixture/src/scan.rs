@@ -40,16 +40,60 @@ fn position(text: &str, offset: usize) -> (usize, usize) {
     (line, column)
 }
 
-/// Unscrubbed values in `text`, as (line, column, class), in text order.
-pub fn scan_text(text: &str) -> Vec<(usize, usize, Class)> {
+/// How deep [`scan_text`] follows JSON string values that hold escaped text
+/// (a body string inside an interaction, a JSON document inside that body).
+const MAX_DEPTH: usize = 8;
+
+/// The JSON string literals of `text` that hold an escape, as (offset of the
+/// opening quote, the literal with its quotes). Unescaped literals decode to
+/// themselves, so the raw scan already covers them.
+fn escaped_literals(text: &str) -> Vec<(usize, &str)> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while let Some(open) = bytes.get(i..).and_then(|b| b.iter().position(|&c| c == b'"')) {
+        let open = i.saturating_add(open);
+        let mut j = open.saturating_add(1);
+        let mut escaped = false;
+        let mut close = None;
+        while let Some(&c) = bytes.get(j) {
+            match c {
+                b'\\' => {
+                    escaped = true;
+                    j = j.saturating_add(2);
+                    continue;
+                }
+                b'"' => {
+                    close = Some(j);
+                    break;
+                }
+                _ => {}
+            }
+            j = j.saturating_add(1);
+        }
+        let Some(close) = close else { break };
+        if escaped && let Some(literal) = text.get(open..=close) {
+            out.push((open, literal));
+        }
+        i = close.saturating_add(1);
+    }
+    out
+}
+
+/// Hits in `text` as (byte offset, class): the rules over the text itself,
+/// then over the decoded value of every escaped JSON string in it (finding
+/// b48aa19bda04: a body `{"client_secret":"x"}` is stored as
+/// `"{\"client_secret\":\"x\"}"`, which the credential rule cannot match
+/// raw). A hit inside a decoded value is reported at its string's opening
+/// quote.
+fn hits(text: &str, depth: usize) -> Vec<(usize, Class)> {
     let mut hits = Vec::new();
     for rule in RULES.iter() {
         for caps in rule.re.captures_iter(text) {
             if let Some(value) = caps.get(rule.group)
                 && !is_placeholder(rule.form, value.as_str())
             {
-                let (line, column) = position(text, value.start());
-                hits.push((line, column, rule.class));
+                hits.push((value.start(), rule.class));
             }
         }
     }
@@ -58,16 +102,40 @@ pub fn scan_text(text: &str) -> Vec<(usize, usize, Class)> {
             .parse::<Ipv4Addr>()
             .is_ok_and(rules::is_public_v4)
         {
-            let (line, column) = position(text, m.start());
-            hits.push((line, column, Class::PublicIp));
+            hits.push((m.start(), Class::PublicIp));
         }
     }
     for m in IPV6.find_iter(text) {
         if rules::parse_v6(m.as_str()).is_some_and(rules::is_public_v6) {
-            let (line, column) = position(text, m.start());
-            hits.push((line, column, Class::PublicIp));
+            hits.push((m.start(), Class::PublicIp));
         }
     }
+    if depth < MAX_DEPTH {
+        for (offset, literal) in escaped_literals(text) {
+            if let Ok(decoded) = serde_json::from_str::<String>(literal) {
+                let inner = hits_at(&decoded, depth.saturating_add(1));
+                hits.extend(inner.into_iter().map(|class| (offset, class)));
+            }
+        }
+    }
+    hits
+}
+
+fn hits_at(text: &str, depth: usize) -> Vec<Class> {
+    hits(text, depth).into_iter().map(|(_, c)| c).collect()
+}
+
+/// Unscrubbed values in `text`, as (line, column, class), in text order:
+/// the text as it is, and every escaped JSON string in it decoded (to
+/// [`MAX_DEPTH`] levels).
+pub fn scan_text(text: &str) -> Vec<(usize, usize, Class)> {
+    let mut hits = hits(text, 0)
+        .into_iter()
+        .map(|(offset, class)| {
+            let (line, column) = position(text, offset);
+            (line, column, class)
+        })
+        .collect::<Vec<_>>();
     hits.sort();
     hits.dedup();
     hits
@@ -150,6 +218,60 @@ mod tests {
         ] {
             assert_eq!(scan_text(text), Vec::new(), "{text}");
         }
+    }
+
+    /// Finding b48aa19bda04: credentials inside a JSON body string are found
+    /// once decoded, at the body string's opening quote; nested encodings too.
+    #[test]
+    fn credentials_inside_escaped_json_bodies() {
+        let body = r#"{"client_secret":"plainsecret"}"#;
+        let fixture = serde_json::to_string_pretty(&serde_json::json!({
+            "request": {"method": "POST", "path": "/", "headers": {}, "body": ""},
+            "response": {"status": 200, "headers": {}, "body": body},
+        }))
+        .expect("json");
+        assert!(fixture.contains(r#"\"client_secret\""#), "{fixture}");
+        let hits = scan_text(&fixture);
+        assert_eq!(hits.len(), 1, "{fixture}: {hits:?}");
+        let &(line, column, class) = hits.first().expect("a hit");
+        assert_eq!(class, Class::Credential);
+        let at = fixture.lines().nth(line.saturating_sub(1)).expect("line");
+        assert_eq!(at.chars().nth(column.saturating_sub(1)), Some('"'));
+        assert!(at.contains("\"body\": "), "{at}");
+        // Each credential key, a token in an IMDS-style response, a header
+        // object inside a body, and a body encoded twice.
+        for inner in [
+            r#"{"AccessKeyId":"x","SecretAccessKey":"y","Token":"z"}"#,
+            r#"{"access_token":"abc.def","expires_in":"3599"}"#,
+            r#"{"headers":{"authorization":"Basic dXNlcjpwYXNz"}}"#,
+        ] {
+            let once = serde_json::to_string(inner).expect("once");
+            let twice = serde_json::to_string(&format!(r#"{{"body":{once}}}"#)).expect("twice");
+            for text in [once, twice] {
+                let wrapped = format!(r#"{{"body":{text}}}"#);
+                assert!(
+                    scan_text(&wrapped).iter().any(|h| h.2 == Class::Credential),
+                    "{wrapped}"
+                );
+            }
+        }
+        // Escaped bodies that are clean stay clean.
+        for inner in [
+            r#"{"client_secret":"scrubbed","token":"","privateIpAddress":"10.0.1.5"}"#,
+            "line one\nline \"two\" \u{e9}",
+        ] {
+            let text = format!(
+                r#"{{"body":{}}}"#,
+                serde_json::to_string(inner).expect("json")
+            );
+            assert_eq!(scan_text(&text), Vec::new(), "{text}");
+        }
+        // The raw scan still runs: a public address in an escaped body.
+        let text = format!(
+            r#"{{"body":{}}}"#,
+            serde_json::to_string(r#"{"ip":"54.12.0.9"}"#).expect("json")
+        );
+        assert!(scan_text(&text).iter().any(|h| h.2 == Class::PublicIp));
     }
 
     #[test]

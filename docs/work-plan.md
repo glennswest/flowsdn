@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Cloud fixture scan decodes bodies — #493 (P1), finding b48aa19bda04, 2026-11-20
+
+- [x] `scan_text`: the raw rules, plus every rule over each escaped JSON string literal decoded (recursive, depth 8),
+      hit at the literal's opening quote. Tests in scan.rs (JSON body credential, nested, clean, IP) and fixture.rs
+      (`write` refuses and removes, `load` refuses). Scrubber unchanged (a miss is now refused at write).
+- [ ] sc-build (fmt --check, `cargo xtask check`); close. Developer tooling only (fixture crate, xtask), no image.
+
 ### Cloud fixture writer validates before deleting — #492 (P1), finding 580a411b7925, 2026-11-20
 
 - [x] `fixture::write`: metadata must survive `Meta::parse(to_toml())` unchanged (name `[a-z0-9-]+`, date, operations),

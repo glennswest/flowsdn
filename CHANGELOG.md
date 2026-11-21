@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#493)
+- **fix:** The cloud fixture scan decodes bodies before matching (finding b48aa19bda04). An interaction body is a JSON string, so a JSON credential in it (`{"client_secret":"plainsecret"}`) is stored with escaped quotes and the credential-key rule never matched it. `write`, `load` and `cargo xtask cloud-scan` accepted it. The scan still runs over the raw file text. It now also runs every rule over the decoded value of each escaped JSON string in it, recursively (to 8 levels, so JSON nested in a body is covered). A hit is reported at the string's opening quote, never with its value. The scrubber is unchanged: a credential it misses inside a doubly encoded body is now refused at `write` (fail closed).
+- **test:** Scan tests for a pretty-printed fixture with a JSON `client_secret` body (one finding, at the body string), IMDS/OAuth/header credentials once and twice encoded, clean escaped bodies, and a public address. A fixture test shows `write` refusing such a body and removing its files, and `load` refusing a hand-placed one.
+
 ### 2026-11-20 (#492)
 - **fix:** The cloud fixture writer validates a scenario before touching any path (finding 580a411b7925): its metadata must read back unchanged through `Meta::parse` (name `[a-z0-9-]+`, so never `..`, a path or empty; date; operations), every operation name must be valid and the destination exactly `<root>/<provider>/<name>`; a refused scenario deletes and writes nothing, so a bad name can no longer remove another provider's fixtures or a directory outside the root.
 

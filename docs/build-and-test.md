@@ -57,7 +57,9 @@ establish multi-node Kubernetes acceptance.
 
 `cargo xtask cloud-scan` scans the recorded cloud fixtures under
 `tests/cloud/**` for unscrubbed credentials and identifiers (ADR-0007 §2) and
-loads each scenario. The xtask's unit test runs the same scan, so every
+loads each scenario. It scans each file as it is and every escaped JSON string
+in it decoded (a request or response body, and JSON nested in it, to 8 levels),
+so a JSON credential inside a body is found (#493). The xtask's unit test runs the same scan, so every
 `sc-build` gates them. No build holds cloud credentials.
 
 `tools/aya-kfunc-watch.sh` checks whether the latest aya release, aya main or

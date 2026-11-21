@@ -549,6 +549,33 @@ pub(crate) mod tests {
         std::fs::remove_dir_all(&root).expect("cleanup");
     }
 
+    /// Finding b48aa19bda04: a JSON credential in a body is serialized with
+    /// escaped quotes; `write` and `load` still refuse it.
+    #[test]
+    fn json_credential_bodies_are_refused() {
+        let root = temp_root("jsonbody");
+        let mut s = scenario();
+        if let Some(i) = s.interactions.first_mut() {
+            i.response.body = r#"{"client_secret":"plainsecret"}"#.to_string();
+        }
+        match write(&root, &s) {
+            Err(Error::Scan(f)) => {
+                assert_eq!(f.len(), 1, "{f:?}");
+                let found = f.first().expect("a finding");
+                assert_eq!(found.class, crate::Class::Credential);
+                assert!(!found.to_string().contains("plainsecret"));
+            }
+            other => panic!("expected a scan refusal, got {other:?}"),
+        }
+        assert!(!root.join("aws").join("happy-path").exists());
+        let dir = write(&root, &scenario()).expect("write");
+        let bad = s.interactions.first().expect("an interaction");
+        let text = serde_json::to_string_pretty(&bad.to_json()).expect("json");
+        std::fs::write(dir.join("003-bad.json"), text).expect("write");
+        assert!(matches!(load(&dir), Err(Error::Scan(_))));
+        std::fs::remove_dir_all(&root).expect("cleanup");
+    }
+
     #[test]
     fn layout_is_enforced() {
         let root = temp_root("layout");
