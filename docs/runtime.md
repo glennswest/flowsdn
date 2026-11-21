@@ -1057,7 +1057,8 @@ decision is also an event in the `flowsdn_policy_events` ring buffer (256 KiB,
 #452): time, endpoint, direction, verdict, remote identity, interface and the
 packet's tuple. The agent reads it every 100 ms, keeps the newest 4096 and
 serves them at `GET /v1/policy/events` (a full buffer only loses events, the
-counts stay).
+counts stay), and as flow records with both sides named (Pod, node or reserved
+peer) at `GET /v1/flows` (#485, for the console's Flows tab).
 
 ICMP type rules (#448, spec 06 §3.2.6) work in Pod and host rules, allow and deny. An
 `icmps[].fields[]` entry (`family` IPv4, the default, or IPv6; `type` a number or the

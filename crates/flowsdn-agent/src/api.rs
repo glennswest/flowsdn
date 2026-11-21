@@ -35,6 +35,8 @@ mod health_api;
 mod metrics;
 #[path = "policy_events.rs"]
 mod policy_events;
+#[path = "flows.rs"]
+mod flows;
 
 const BODY_LIMIT: usize = 4_194_304;
 const HEADER_LIMIT: usize = 16_384;
@@ -354,7 +356,7 @@ struct Lease {
 /// Every route the agent serves, as the first column of docs/agent-api.md's
 /// "Supported methods" table; a test keeps the two equal (#298: the API is a
 /// supported boundary for `sc net` and the console plugin).
-pub const ROUTES: [&str; 29] = [
+pub const ROUTES: [&str; 30] = [
     "`GET /v1/config`",
     "`GET /v1/healthz`",
     "`GET /v1/health/modules`",
@@ -377,6 +379,7 @@ pub const ROUTES: [&str; 29] = [
     "`GET /v1/lb-ipam`",
     "`GET /v1/l2-announcements`",
     "`GET /v1/policy/events`",
+    "`GET /v1/flows`",
     "`GET /v1/policy/verdicts`",
     "`GET /v1/prefilter`",
     "`PATCH /v1/prefilter`",
@@ -621,6 +624,25 @@ impl Api {
                     .unwrap_or(100)
                     .min(policy_events::KEPT);
                 return Ok((200, self.events.json(limit)));
+            }
+            ("GET", "/v1/flows") => {
+                let limit = match query.get("limit") {
+                    None => flows::DEFAULT_LIMIT,
+                    Some(text) => text.parse::<usize>().map_err(|_| Failure {
+                        status: 400,
+                        message: "limit must be a number".into(),
+                    })?,
+                }
+                .min(policy_events::KEPT);
+                let since = match query.get("since") {
+                    None => None,
+                    Some(text) => Some(flows::parse_time(text).ok_or_else(|| Failure {
+                        status: 400,
+                        message: "since must be an RFC 3339 time".into(),
+                    })?),
+                };
+                let view = self.kubernetes.as_ref().map(crate::kubernetes::lock);
+                return Ok((200, flows::json(&self.events, view.as_deref(), limit, since)));
             }
             ("GET", "/v1/endpoint") => {
                 let view = self.kubernetes.as_ref().map(crate::kubernetes::lock);

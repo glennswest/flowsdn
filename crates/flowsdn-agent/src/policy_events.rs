@@ -39,6 +39,24 @@ impl Events {
             inner.1 = inner.1.saturating_add(1);
         }
     }
+    /// The newest `limit` at or after `since`, newest first, with how many
+    /// were seen and are kept (for `GET /v1/flows`, #485).
+    pub(super) fn newest(
+        &self,
+        limit: usize,
+        since: Option<SystemTime>,
+    ) -> (u64, usize, Vec<(SystemTime, PolicyEvent)>) {
+        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        let newest = inner
+            .0
+            .iter()
+            .rev()
+            .take_while(|(time, _)| since.is_none_or(|since| *time >= since))
+            .take(limit)
+            .copied()
+            .collect();
+        (inner.1, inner.0.len(), newest)
+    }
     /// `GET /v1/policy/events`: the newest `limit`, newest first, and how
     /// many were seen since the agent started.
     pub(super) fn json(&self, limit: usize) -> Value {

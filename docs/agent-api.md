@@ -152,6 +152,7 @@ on recognized endpoint detail/IPAM address routes return HTTP 405.
 | `GET /v1/lb-ipam` | Kubernetes mode with `lb-ipam` (flowsdn, #475): `{enabled, leader, synced, pools[], services[]}`. `enabled` is the setting; `leader` is whether this agent holds the Lease `kube-system/flowsdn-lb-ipam` and so writes Service and pool status; every agent plans the same. `pools[]` is `{name, used, available, conflict}` (counts as decimal strings; `conflict` names the older pool it overlaps, or null); `services[]` is `{namespace, name, ips, problem}` for every Service LB-IPAM decides (`problem` says why it has fewer addresses than it asks for). Empty until the Service and FlowsdnLoadBalancerIPPool lists are complete. 404 when Kubernetes mode is off. |
 | `GET /v1/l2-announcements` | Kubernetes mode with `l2-announcements` (flowsdn, #475): `{enabled, policies[{name, invalid}], announcing[{ip, service, interfaces}], errors[]}` (`enabled` is the setting): the FlowsdnL2AnnouncementPolicies, and the addresses this node answers ARP/NDP for and on which interfaces. Empty until the policy, Service, EndpointSlice and Node lists are complete. 404 when Kubernetes mode is off. |
 | `GET /v1/policy/events` | flowsdn (#452): the newest policy decisions, one per decision `/v1/policy/verdicts` counts, newest first: `{"seen":n,"kept":k,"events":[…]}` with each event's `time` (RFC 3339), `endpoint` (ID or `host`), `direction`, `verdict` (`allowed`/`denied`/`audit`), `remote-identity` (0 when not looked up), `ifindex`, `protocol` (`TCP`/`UDP`/`SCTP`/`ICMPv4`/`ICMPv6` or the number), `source`, `destination`, `source-port`, `destination-port` (the echo identifier for ICMP echo). `?limit=` (default 100, at most 4096, the number kept). Kept in memory since the agent started. Read-only, also on the TCP listener. |
+| `GET /v1/flows` | flowsdn (#485): the policy decisions of `GET /v1/policy/events` as flow records for the console's Flows tab, newest first: `{"seen":n,"kept":k,"flows":[…]}`, shape in [Flow record shape](#flow-record-shape). `?limit=` (default 100, at most 4096) and `?since=` (RFC 3339, `Z` or a `%2B`/`-` offset: only flows at or after it). 400 for a limit that is not a number or a `since` that is not RFC 3339. Read-only, also on the TCP listener. |
 | `GET /v1/policy/verdicts` | flowsdn (#379): the policy decisions the endpoint programs counted, one row per `{endpoint, direction, verdict, protocol, port}` with `packets` and `bytes` summed over CPUs. `endpoint` is the Pod endpoint ID or `host` (the host firewall); `verdict` is `allowed` (a rule allowed a new flow), `denied` (dropped) or `audit` (audit mode: would have been dropped, passed); `port` is the destination port (0 without one). Packets of a remembered flow are not counted. LRU, 16384 rows; counters reset when the agent's object is reloaded. Read-only, also on the TCP listener. |
 | `GET /v1/prefilter` | Kubernetes mode with `kubernetes.xdp-prefilter` (#467; reference `GetPrefilter`): the XDP prefilter's deny list, `{spec: {revision, deny}, status: {realized: {revision, deny}}}`; `deny` holds network CIDRs (`198.51.100.0/24`). The revision starts at 1. 500 `the XDP prefilter is not enabled` while the setting is off. |
 | `PATCH /v1/prefilter` | Add the body's `PrefilterSpec` (`{revision, deny: [CIDR]}`) to the deny list; answers the new `Prefilter` with the revision incremented. A `revision` other than the current one (0 skips the check) is 500 `Latest revision is N not M`; a CIDR that does not parse is 461; a failed map write is 500 and undoes the request. Unix socket only (the TCP listener is read-only). |
@@ -191,6 +192,39 @@ is read when scraped; nothing is cached or estimated.
 | `flowsdn_metrics_source_failing{source}` | gauge | 1 for `policy-verdicts` or `bpf-map-pressure` when that map could not be read this scrape; its series are then absent, not zero. |
 
 The operator (`flowsdn-agent operator`, #337) serves no HTTP and has no metrics.
+
+## Flow record shape
+
+`GET /v1/flows` (#485). A record is one decision of the endpoint policy programs:
+the first packet of a flow allowed, dropped or passed in audit mode on an endpoint
+whose policy is enforced or tracked (Pods, and the host firewall's uplinks). Packets
+of a remembered flow add no record, and traffic of endpoints no policy selects is not
+judged, so it has none. Kept in memory, the newest 4096, since the agent started.
+
+| Field | Value |
+|---|---|
+| `time` | RFC 3339, when the program decided |
+| `verdict` | `FORWARDED` (a rule allowed it), `DROPPED`, or `AUDIT` (audit mode: it would have been dropped and passed) |
+| `drop_reason` | `POLICY_DENIED`, on `DROPPED` only |
+| `traffic_direction` | `INGRESS` (into the endpoint) or `EGRESS` (out of it) |
+| `protocol` | `TCP`, `UDP`, `SCTP`, `ICMPv4`, `ICMPv6`, or the protocol number |
+| `source`, `destination` | one side each, below |
+
+A side is Hubble's flow `Endpoint` in its JSON form when the address is a Pod's
+(`flowsdn_hubble::endpoint::EndpointInfo`): `namespace`, `pod_name`, `node_name`,
+`labels`, `workloads` (`[{name, kind}]`), `identity` once the Pod has one, and `ID` for
+this node's endpoint. A node's address is `{"reserved":"host"}` for this node or
+`{"reserved":"remote-node","node_name":…}` for another. Any other address is named by
+the identity the datapath judged it as, on the remote side only: `{"reserved":"world"}`
+(or another reserved name: `host`, `remote-node`, `unmanaged`, `health`, `init`,
+`kube-apiserver`, `ingress`) with `identity`, or `{"identity":n}` for a CIDR identity.
+Every side has `ip` and, for TCP, UDP and SCTP, `port`. The Pod and node names come from
+the agent's Kubernetes view (Kubernetes mode); without it a side has only its identity,
+`ip` and `port`. The host endpoint's own side is `{"reserved":"host"}`.
+
+Not in a record: `bytes` and `packets`, which the datapath counts per endpoint and port
+(`GET /v1/policy/verdicts`), not per flow, and the policy that decided, which the
+programs do not record.
 
 ## Endpoint inventory shape
 

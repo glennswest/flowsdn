@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Flows on the loopback listener — #485 (P3), 2026-11-21
+
+- [x] `GET /v1/flows` (`flows.rs`): policy events (#452) as flow records, sides resolved from the Kubernetes view (Pod,
+      node, reserved/CIDR identity), `?limit=`, `?since=` (RFC 3339 parser). Tests; agent-api.md "Flow record shape",
+      runtime.md, CHANGELOG. #452 closed first (verified by #448's build).
+- [ ] Strict sc-build; image; shipped; close.
+
 ### ICMP type rules in network policy — #448 (P3), 2026-11-21
 
 Split: toFQDNs and DNS rules -> #536 (DNS proxy), HTTP/Kafka L7 -> #537 (L7 proxy). #448 is the ICMP part.
