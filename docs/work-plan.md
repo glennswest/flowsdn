@@ -8,8 +8,9 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] policy.rs: `inner4`/`inner6`/`inner_ports` parse the embedded packet (sender must be the outer destination);
       `related` checks `flowsdn_policy_ct` read-only for the flow both ways before the normal lookup. policy-live cases.
-- [ ] sc-build: build-bpf + lock write, object back as base64; commit object + lock.
-- [ ] Strict sc-build + kernel-check; stage; shipped; close.
+- [x] Code 5f56e70; object + lock + fmt 9e2215c (local-delivery sha256 53c3c98b…, 849072 bytes).
+- [x] Strict sc-build at 9e2215c: fmt --check, `cargo xtask check` (1009 tests, 0 failed), lock check, kernel-check on
+      7.3.4: 24 pass 0 fail 2 skip; policy-live 21 PASS incl. the related-errors step. Stage 3b17a213133a; shipped; closed.
 
 ### ECMP pairing keeps every reachable carrier — #499 (P1), finding 607157057c7a, 2026-11-20
 
