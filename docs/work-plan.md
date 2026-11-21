@@ -4,6 +4,17 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### DSR ICMP error translation — #449 (P3), 2026-11-21
+
+- [ ] socket-lb: backend node's uplink egress, an ICMP/ICMPv6 error about a packet of a flow with a REPLY entry (DSR or
+      a node-local backend). Inner destination backend -> frontend (and the outer source when it is the backend), with
+      the inner header and ICMP checksums.
+- [ ] LB node's uplink ingress: an error about a reply (inner source = the frontend = outer destination) of a DSR or
+      node-local FORWARD flow. Outer destination and inner source frontend -> backend. DSR: redirect by the FIB;
+      local: to the stack. IPv4 and IPv6. Masquerade's ICMP error rewrite shares the inner helper.
+- [ ] socket-lb-live DSR cases; docs (README, implementation-status, runtime); object + lock; strict sc-build; stage;
+      shipped; close.
+
 ### Policy verdict events — #452 (P3), 2026-11-21
 
 - [x] bpf-abi `PolicyEvent` (64 B); local-delivery `flowsdn_policy_events` RingBuf, emitted in `count` (Flow.remote);
