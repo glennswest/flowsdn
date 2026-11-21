@@ -293,21 +293,28 @@ any number of times.
   answered only on its own port, the same as stormpump's path NIC), and
   `rp_filter=0` (a reply may come back on the other port). Also
   `ignore_routes_with_linkdown=1` (also `all`) and IPv6 `ndisc_notify=1`.
+  An uplink counts as tuned only once every write succeeded; a failed write
+  is tried again each tick and stays in the `uplinks` error until it
+  succeeds (#497).
   An address held on `lo` and answered over an uplink through ARP flux is no
   longer answered.
 
 **A port leaves.** The kernel stops using its paths at once
 (`ignore_routes_with_linkdown`). Within one tick, its addresses are added
 as host addresses (`/32`, `/128`) on the most preferred live uplink on that
-subnet, followed by three gratuitous ARPs (IPv6: the kernel's unsolicited NA).
+subnet, followed by three gratuitous ARPs (IPv6: three unsolicited Neighbor
+Advertisements with the override flag to all nodes, #497; `ndisc_notify` only
+announces on link or MAC changes).
 Its source rules' tables point at that port, and the ECMP routes are
 rewritten over the ports left. Peers keep reaching every node address.
 
 **It returns.** The host addresses are removed, its own addresses are
-announced from it with three gratuitous ARPs, and the routes spread over both
-ports again. The moved addresses are recorded in
+announced from it with three gratuitous ARPs or unsolicited NAs, and the
+routes spread over both ports again. The moved addresses are recorded in
 `<state-dir>/uplink-moves.json`, so a restarted agent removes them when they
-are no longer wanted.
+are no longer wanted. Only an address change that succeeded is recorded: a
+failed add or removal stays in the `uplinks` error and is tried again each
+tick until the host matches the plan (#497).
 
 `mode: active-backup` carries the balanced routes on the most preferred live
 uplink only. Failover is the same. `weights` (1–255, default 1) become path
@@ -851,7 +858,8 @@ address). A pool and a policy for a LAN are in
 
 Verified by unit tests, the loopback API-server test (Lease taken, Service
 status patched) and the `l2-announce-live` kernel run (another namespace's
-kernel resolves the addresses to the answering interface); it has not served a
+kernel resolves the addresses to the answering interface, and an unsolicited
+NA moves its entry to another MAC); it has not served a
 Service on a node yet.
 
 ### NetworkPolicy enforcement (#292)

@@ -295,6 +295,61 @@ impl Move {
     }
 }
 
+/// The outcome of applying `wanted` failover moves over the `current` ones
+/// (#497): what the host holds now, the moves newly added (to announce) and
+/// the failures.
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct MoveResult {
+    pub held: Vec<Move>,
+    pub added: Vec<Move>,
+    pub failures: Vec<String>,
+}
+
+/// Apply `wanted` over `current` with `delete` and `add` (netlink in the
+/// agent). Only a change that succeeded counts: a move whose removal failed
+/// stays held and one whose addition failed is not held, so the next tick
+/// (which compares `held` with the plan) tries again until the host matches.
+pub fn reconcile_moves(
+    current: &[Move],
+    wanted: &[Move],
+    mut delete: impl FnMut(&Move) -> std::result::Result<(), String>,
+    mut add: impl FnMut(&Move) -> std::result::Result<(), String>,
+) -> MoveResult {
+    let mut out = MoveResult::default();
+    for held in current {
+        if wanted.contains(held) {
+            out.held.push(held.clone());
+        } else if let Err(error) = delete(held) {
+            out.failures.push(format!(
+                "remove {}/{} from {}: {error}",
+                held.address,
+                held.prefix(),
+                held.to
+            ));
+            out.held.push(held.clone());
+        }
+    }
+    for new in wanted.iter().filter(|m| !current.contains(m)) {
+        match add(new) {
+            Ok(()) => {
+                out.held.push(new.clone());
+                out.added.push(new.clone());
+            }
+            Err(error) => out.failures.push(format!(
+                "add {}/{} on {}: {error}",
+                new.address,
+                new.prefix(),
+                new.to
+            )),
+        }
+    }
+    if out.failures.is_empty() {
+        // In the plan's order, so an unchanged plan compares equal.
+        out.held = wanted.to_vec();
+    }
+    out
+}
+
 /// Every address of a down uplink moves to the most preferred live uplink on
 /// its subnet; with no such uplink it stays where it is.
 pub fn moves(uplinks: &[Uplink], mode: Mode) -> Vec<Move> {

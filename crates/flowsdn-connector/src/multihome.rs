@@ -448,6 +448,14 @@ pub fn gratuitous_arp(index: u32, mac: [u8; 6], ip: Ipv4Addr) -> Result<()> {
     Ok(())
 }
 
+/// Send an unsolicited Neighbor Advertisement (override, to all nodes) that
+/// `ip` is at `mac` on interface `index`: the IPv6 gratuitous ARP, so peers
+/// move the address to this port at once (#497).
+pub fn unsolicited_na(index: u32, mac: [u8; 6], ip: std::net::Ipv6Addr) -> Result<()> {
+    use crate::announce::{ALL_NODES, ALL_NODES_MAC, ETH_P_IPV6, Socket, advertisement};
+    Socket::open(index, ETH_P_IPV6)?.send(ALL_NODES_MAC, &advertisement(ip, mac, ALL_NODES, false))
+}
+
 /// `ETHTOOL_GFECPARAM`: the configured and active FEC bit sets of a port
 /// (`ETHTOOL_FEC_*_BIT`), or None when the driver has no FEC.
 #[allow(unsafe_code)]

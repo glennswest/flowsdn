@@ -12,7 +12,7 @@ use flowsdn_connector::{
 };
 use serde_json::{Value, json};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
     net::IpAddr,
@@ -117,6 +117,31 @@ pub fn tune(root: &Path, uplink: &str, node_ips: &[IpAddr]) -> Vec<String> {
         }
     }
     failed
+}
+
+/// [`tune`] every uplink in `names` not yet in `tuned` (#497). An uplink
+/// joins `tuned` only once all its writes succeeded; one that failed is
+/// tried again on the next call, and its failures are returned each time
+/// until then.
+pub fn tune_pending<'a>(
+    root: &Path,
+    names: impl IntoIterator<Item = &'a str>,
+    node_ips: &[IpAddr],
+    tuned: &mut BTreeSet<String>,
+) -> Vec<String> {
+    let mut failures = Vec::new();
+    for name in names {
+        if tuned.contains(name) {
+            continue;
+        }
+        let failed = tune(root, name, node_ips);
+        if failed.is_empty() {
+            tuned.insert(name.to_owned());
+        } else {
+            failures.extend(failed.into_iter().map(|f| format!("{name}: {f}")));
+        }
+    }
+    failures
 }
 
 /// The main table's default gateways, one per family.
@@ -385,6 +410,44 @@ mod tests {
         assert_eq!(
             parse_mac("e8:eb:d3:94:a2:81\n"),
             [0xe8, 0xeb, 0xd3, 0x94, 0xa2, 0x81]
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// #497 (finding 19c970eb0774): an uplink whose sysctls could not be
+    /// written is not marked tuned, so the next tick writes them again and
+    /// reports the failure until they succeed.
+    #[test]
+    fn failed_sysctl_writes_are_retried() {
+        let dir = std::env::temp_dir().join(format!("flowsdn-tune-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("net/ipv4/conf/all")).expect("dir");
+        let node: Vec<IpAddr> = vec!["192.168.16.203".parse().expect("ip")];
+        let mut tuned = BTreeSet::new();
+        // u1's conf directory is missing: its per-port writes fail.
+        let failed = tune_pending(&dir, ["u1"], &node, &mut tuned);
+        assert!(tuned.is_empty(), "a failed port is not tuned");
+        assert!(
+            failed.iter().any(|f| f.starts_with("u1: net.ipv4.conf.u1.rp_filter=0")),
+            "{failed:?}"
+        );
+        let again = tune_pending(&dir, ["u1"], &node, &mut tuned);
+        assert!(!again.is_empty(), "still failing, still reported");
+        assert!(tuned.is_empty());
+        fs::create_dir_all(dir.join("net/ipv4/conf/u1")).expect("dir");
+        let ok = tune_pending(&dir, ["u1"], &node, &mut tuned);
+        assert!(ok.is_empty(), "{ok:?}");
+        assert!(tuned.contains("u1"));
+        assert_eq!(
+            fs::read_to_string(dir.join("net/ipv4/conf/u1/rp_filter")).ok().as_deref(),
+            Some("0")
+        );
+        // Tuned once: no further writes (the file is not rewritten).
+        fs::write(dir.join("net/ipv4/conf/u1/rp_filter"), "1").expect("write");
+        assert!(tune_pending(&dir, ["u1"], &node, &mut tuned).is_empty());
+        assert_eq!(
+            fs::read_to_string(dir.join("net/ipv4/conf/u1/rp_filter")).ok().as_deref(),
+            Some("1")
         );
         let _ = fs::remove_dir_all(&dir);
     }

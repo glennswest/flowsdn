@@ -86,16 +86,32 @@ fn apply_plan(
     moves: &[uplinks::Move],
     held: &mut Vec<uplinks::Move>,
 ) -> Result<()> {
-    for gone in held.iter().filter(|m| !moves.contains(m)) {
-        connector.delete_address(gone.to_index, gone.address, gone.prefix())?;
-    }
-    for new in moves.iter().filter(|m| !held.contains(m)) {
-        connector.add_address(new.to_index, new.address, new.prefix())?;
+    // The monitor's own reconciliation (#497): only changes that succeeded
+    // are held.
+    let result = uplinks::reconcile_moves(
+        held,
+        moves,
+        |gone| {
+            connector
+                .delete_address(gone.to_index, gone.address, gone.prefix())
+                .map_err(|e| e.to_string())
+        },
+        |new| {
+            connector
+                .add_address(new.to_index, new.address, new.prefix())
+                .map_err(|e| e.to_string())
+        },
+    );
+    ensure(
+        result.failures.is_empty(),
+        &format!("failover changes: {:?}", result.failures),
+    )?;
+    for new in &result.added {
         if let IpAddr::V4(v4) = new.address {
             multihome::gratuitous_arp(new.to_index, new.to_mac, v4)?;
         }
     }
-    *held = moves.to_vec();
+    *held = result.held;
     let desired = uplinks::desired(found, moves, settings, &apply::default_gateways(connector));
     apply::reconcile_kernel(connector, settings, &desired)?;
     let view = View {

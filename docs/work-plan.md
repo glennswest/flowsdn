@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Uplink monitor: IPv6 NA, sysctl retry, failover retry — #497 (P1), findings 0cf4d2dfd14d 19c970eb0774 aa68f32f5233, 2026-11-20
+
+- [x] `multihome::unsolicited_na`; monitor queues IPv6 (not link-local); `apply::tune_pending` (tuned only on success);
+      `uplinks::reconcile_moves` (held = succeeded changes), also in uplinks-live. Unit tests; l2-announce-live NA step.
+- [ ] sc-build with kernel-check; stage; shipped; close.
+
 ### Whole-resource validation for host and Pod rules — #496 (P1), finding 5c9e6d072bfa, 2026-11-20
 
 - [x] `host_policy::resource_error` validates every spec of an object once; `pod_policies` and `select` both skip the

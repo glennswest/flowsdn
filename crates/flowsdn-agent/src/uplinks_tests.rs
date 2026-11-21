@@ -324,3 +324,61 @@ fn the_view_reports_ports_failover_and_history() {
         Some(vec![4])
     );
 }
+
+/// #497 (finding aa68f32f5233): only failover changes that succeeded are
+/// held, so a failed add or delete is tried again on the next tick.
+#[test]
+fn failed_failover_changes_are_retried() {
+    let mv = |address: &str, to: &str, to_index: u32| Move {
+        address: ip(address),
+        from: "u1".into(),
+        to: to.into(),
+        to_index,
+        to_mac: [2; 6],
+    };
+    let stale = mv("192.0.2.204", "u2", 4);
+    let v4 = mv("192.0.2.204", "u0", 3);
+    let v6 = mv("2001:db8::204", "u0", 3);
+    let wanted = vec![v4.clone(), v6.clone()];
+    // The add of the IPv6 address and the removal of the stale one fail.
+    let result = reconcile_moves(
+        std::slice::from_ref(&stale),
+        &wanted,
+        |_| Err("busy".into()),
+        |m| if m.address.is_ipv6() { Err("busy".into()) } else { Ok(()) },
+    );
+    assert_eq!(result.held, [stale.clone(), v4.clone()]);
+    assert_eq!(result.added, [v4.clone()]);
+    assert_eq!(
+        result.failures,
+        [
+            "remove 192.0.2.204/32 from u2: busy",
+            "add 2001:db8::204/128 on u0: busy"
+        ]
+    );
+    assert_ne!(result.held, wanted, "the next tick sees work left");
+    // Next tick: only the missing changes are tried, and they succeed.
+    let mut tried = Vec::new();
+    let mut deleted = Vec::new();
+    let next = reconcile_moves(
+        &result.held,
+        &wanted,
+        |m| {
+            deleted.push(m.clone());
+            Ok(())
+        },
+        |m| {
+            tried.push(m.clone());
+            Ok(())
+        },
+    );
+    assert_eq!(deleted, [stale]);
+    assert_eq!(tried, [v6.clone()]);
+    assert_eq!(next.added, [v6]);
+    assert!(next.failures.is_empty());
+    assert_eq!(next.held, wanted, "held in the plan's order");
+    // Nothing left: no changes at all.
+    let idle = reconcile_moves(&next.held, &wanted, |_| Err("no".into()), |_| Err("no".into()));
+    assert_eq!(idle.held, wanted);
+    assert!(idle.added.is_empty() && idle.failures.is_empty());
+}

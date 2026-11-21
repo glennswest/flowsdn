@@ -8,10 +8,16 @@
 //! * the worker's kernel takes the ARP reply and the Neighbor Advertisement
 //!   (hop limit, checksum, option) and holds `a0`'s MAC for both addresses;
 //! * an address that is not announced (192.0.2.241) stays unresolved;
-//! * `a0`'s own kernel never holds the addresses.
+//! * `a0`'s own kernel never holds the addresses;
+//! * an unsolicited Neighbor Advertisement (`multihome::unsolicited_na`, the
+//!   uplink monitor's IPv6 failover announcement, #497) with another MAC
+//!   moves the worker's entry for 2001:db8:30::f0 to that MAC.
 //!
 //! It needs iproute2 and root, as kernel-check gives it.
-use flowsdn_connector::announce::{self, ETH_P_ARP, ETH_P_IPV6, Socket};
+use flowsdn_connector::{
+    announce::{self, ETH_P_ARP, ETH_P_IPV6, Socket},
+    multihome,
+};
 use nix::sched::{CloneFlags, unshare};
 use std::{
     error::Error,
@@ -55,6 +61,9 @@ fn isolate() -> Result<()> {
 
 const ANNOUNCED: [&str; 2] = ["192.0.2.240", "2001:db8:30::f0"];
 const NOT_ANNOUNCED: &str = "192.0.2.241";
+/// The MAC the unsolicited NA moves 2001:db8:30::f0 to (#497).
+const MOVED_MAC: [u8; 6] = [0x02, 0, 0, 0, 0x04, 0x97];
+const MOVED_TEXT: &str = "02:00:00:00:04:97";
 
 /// `ip link show` of `name`'s MAC, as text.
 fn mac_text(name: &str) -> Result<String> {
@@ -110,6 +119,29 @@ fn worker() -> Result<()> {
         writeln!(out, "NEIGH {target} {neigh}")?;
         out.flush()?;
     }
+    // The unsolicited NA (#497): the parent sends it, then says which MAC
+    // the entry must now hold.
+    writeln!(out, "RESOLVED")?;
+    out.flush()?;
+    line.clear();
+    std::io::stdin().read_line(&mut line)?;
+    let moved = line
+        .trim()
+        .strip_prefix("CHECK ")
+        .ok_or("worker: expected CHECK")?
+        .to_owned();
+    let start = Instant::now();
+    let mut neigh = String::new();
+    while start.elapsed() < Duration::from_secs(3) {
+        neigh = ip(&["neigh", "show", ANNOUNCED[1], "dev", "b0"])?
+            .trim()
+            .to_owned();
+        if neigh.contains(&format!("lladdr {moved}")) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    writeln!(out, "AFTER {neigh}")?;
     writeln!(out, "DONE")?;
     out.flush()?;
     Ok(())
@@ -194,6 +226,7 @@ fn run() -> Result<()> {
     writeln!(input, "GO")?;
     input.flush()?;
     let mut neighbours = Vec::new();
+    let mut after = None;
     for line in lines.by_ref() {
         let line = line?;
         if line == "DONE" {
@@ -201,6 +234,18 @@ fn run() -> Result<()> {
         }
         if let Some(rest) = line.strip_prefix("NEIGH ") {
             neighbours.push(rest.to_owned());
+        }
+        if line == "RESOLVED" {
+            let target: std::net::Ipv6Addr = ANNOUNCED[1].parse()?;
+            for _ in 0..3 {
+                multihome::unsolicited_na(index, MOVED_MAC, target)?;
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            writeln!(input, "CHECK {MOVED_TEXT}")?;
+            input.flush()?;
+        }
+        if let Some(rest) = line.strip_prefix("AFTER ") {
+            after = Some(rest.to_owned());
         }
     }
     stop.store(true, Ordering::SeqCst);
@@ -238,6 +283,18 @@ fn run() -> Result<()> {
             &format!("{target} must not be a host address"),
         )?;
     }
+    let after = after.ok_or("no neighbour line after the unsolicited NA")?;
+    ensure(
+        after.contains(&format!("lladdr {MOVED_TEXT}")),
+        &format!(
+            "the unsolicited NA must move {} to {MOVED_TEXT}: {after}",
+            ANNOUNCED[1]
+        ),
+    )?;
+    println!(
+        "{}: an unsolicited NA moved the worker's entry to {MOVED_TEXT} ({after})",
+        ANNOUNCED[1]
+    );
     println!("{NOT_ANNOUNCED}: unresolved; answers sent (ARP, NA): {counts:?}; no address added");
     Ok(())
 }
