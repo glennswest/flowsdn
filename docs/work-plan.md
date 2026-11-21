@@ -130,7 +130,9 @@ on the uplinks and HOST_PODS; `egress-enforced` in health; policy-live steps; do
       check` 980 tests 0 failed, test/build.sh, kernel-check on 7.3.4: 22 pass 0 fail 2 skip; policy-live 19 PASS incl.
       the 3 host egress steps.
 - [x] Strict sc-build at b543e7b passed: fmt --check, `cargo xtask check` (980 tests, 0 failed), test/build.sh.
-- [ ] Paused for P0 #487 (2026-11-20). On resume: stage, ship (proof: agent health), close #477; live run with #478.
+- [x] Resumed after #487. No new stage: golden-flowsdn-69cac9dd7617 (flowsdn@7f1308a) already carries 485fb99. Later
+      kernel-check at 5e664b4 (7.3.4): 24 pass 0 fail 2 skip, policy-live 20 PASS incl. the 3 host egress steps.
+      `shipped` (proof: agent health OK in the install log); #477 closed. Live run with a nodeSelector egress policy: #478.
 
 ### Host firewall first live run — #478 (P3), 2026-11-20
 
