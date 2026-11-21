@@ -413,21 +413,27 @@ fn every_live_carrier_that_reaches_a_gateway_gets_a_path() {
     let g2 = ip("10.1.0.21");
     let hops = nexthops(&[g1, g2], &[&a, &b]);
     assert_eq!(
-        hops.iter().map(|h| (h.gateway, h.index)).collect::<Vec<_>>(),
+        hops.iter()
+            .map(|h| (h.gateway, h.index))
+            .collect::<Vec<_>>(),
         [(Some(g1), 3), (Some(g1), 4)],
         "G2/B is unreachable, so B takes G1"
     );
     // Reversed carriers: the cyclic pairs G1/B and G2/A both work.
     let hops = nexthops(&[g1, g2], &[&b, &a]);
     assert_eq!(
-        hops.iter().map(|h| (h.gateway, h.index)).collect::<Vec<_>>(),
+        hops.iter()
+            .map(|h| (h.gateway, h.index))
+            .collect::<Vec<_>>(),
         [(Some(g1), 4), (Some(g2), 3)]
     );
     // A carrier that reaches no gateway still gets no path.
     let c = uplink("c", 5, &[("172.16.0.9", 24)]);
     let hops = nexthops(&[g1], &[&a, &c]);
     assert_eq!(
-        hops.iter().map(|h| (h.gateway, h.index)).collect::<Vec<_>>(),
+        hops.iter()
+            .map(|h| (h.gateway, h.index))
+            .collect::<Vec<_>>(),
         [(Some(g1), 3)]
     );
 }
