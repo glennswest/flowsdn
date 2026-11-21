@@ -100,7 +100,11 @@ fn a_policy_denied_flow_is_one_rate_limited_event() {
         }]
     );
     // The same drop again within the interval: deduplicated.
-    assert!(emitter.process(at.saturating_add(Duration::from_secs(5)), &[denied], &view).is_empty());
+    assert!(
+        emitter
+            .process(at.saturating_add(Duration::from_secs(5)), &[denied], &view)
+            .is_empty()
+    );
     // An egress drop to the world in the same second as another: the
     // one-a-second limit holds the second back; a second later it goes.
     let mut egress = event(true, [198, 51, 100, 9], 17, 53, drop_reason::POLICY_DENIED);
@@ -118,7 +122,11 @@ fn a_policy_denied_flow_is_one_rate_limited_event() {
     // After the interval the first drop is written again.
     assert_eq!(
         emitter
-            .process(at.saturating_add(Duration::from_secs(121)), &[denied], &view)
+            .process(
+                at.saturating_add(Duration::from_secs(121)),
+                &[denied],
+                &view
+            )
             .len(),
         1
     );

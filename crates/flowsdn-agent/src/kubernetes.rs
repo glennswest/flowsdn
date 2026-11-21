@@ -422,7 +422,9 @@ fn drop_events(object: &serde_json::Map<String, Value>) -> Result<DropEvents> {
             .as_u64()
             .and_then(|n| usize::try_from(n).ok())
             .filter(|n| *n <= 1_000_000)
-            .ok_or("kubernetes.hubble-drop-events-rate-limit must be events a second, 0 to 1000000")?,
+            .ok_or(
+                "kubernetes.hubble-drop-events-rate-limit must be events a second, 0 to 1000000",
+            )?,
     };
     Ok(DropEvents {
         interval,

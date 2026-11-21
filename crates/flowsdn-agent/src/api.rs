@@ -29,10 +29,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[path = "flows.rs"]
-mod flows;
 #[path = "drop_emitter.rs"]
 mod drop_emitter;
+#[path = "flows.rs"]
+mod flows;
 #[path = "health_api.rs"]
 mod health_api;
 #[path = "metrics.rs"]

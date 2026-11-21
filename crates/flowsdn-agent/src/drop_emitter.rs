@@ -43,7 +43,12 @@ impl Emitter {
     }
     /// The Events `events` call for at `now` (monotonic), as the gate admits
     /// them.
-    pub(super) fn process(&mut self, now: Duration, events: &[PolicyEvent], view: &View) -> Vec<Drop> {
+    pub(super) fn process(
+        &mut self,
+        now: Duration,
+        events: &[PolicyEvent],
+        view: &View,
+    ) -> Vec<Drop> {
         let mut out = Vec::new();
         for event in events {
             let Some(drop) = self.render(event, view) else {
@@ -79,7 +84,10 @@ impl Emitter {
         let id = u16::try_from(event.endpoint).ok()?;
         let endpoint = view.endpoints.iter().find(|e| e.id == id)?;
         let ingress = event.egress == 0;
-        let remote_ip = address(event.family, if ingress { event.saddr } else { event.daddr });
+        let remote_ip = address(
+            event.family,
+            if ingress { event.saddr } else { event.daddr },
+        );
         let peer = peer(view, remote_ip, event.remote);
         let l4 = match event.protocol {
             6 => format!("TCP/{}", event.dport.get()),

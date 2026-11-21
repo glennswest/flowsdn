@@ -695,7 +695,10 @@ fn flowsdn_policy_selects_in_its_namespace_with_named_ports() {
     );
     assert_eq!(
         desired.applied.get(&(7, true)),
-        Some(&BTreeSet::from([(false, "FlowsdnNetworkPolicy/fp".to_owned())]))
+        Some(&BTreeSet::from([(
+            false,
+            "FlowsdnNetworkPolicy/fp".to_owned()
+        )]))
     );
     assert_eq!(desired.applied.get(&(7, false)), None);
 }

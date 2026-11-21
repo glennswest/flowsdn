@@ -716,9 +716,11 @@ fn drop_event_settings_parse() {
         })
     );
     assert_eq!(
-        parse(json!({"hubble-drop-events": true, "hubble-drop-events-interval": "5m",
+        parse(
+            json!({"hubble-drop-events": true, "hubble-drop-events-interval": "5m",
             "hubble-drop-events-reasons": ["policy_deny"], "hubble-drop-events-extended": true,
-            "hubble-drop-events-rate-limit": 0}))
+            "hubble-drop-events-rate-limit": 0})
+        )
         .drop_events,
         Some(DropEvents {
             interval: std::time::Duration::from_secs(300),

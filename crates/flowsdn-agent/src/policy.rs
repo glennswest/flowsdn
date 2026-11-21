@@ -675,7 +675,12 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             let selecting: Vec<(&str, &PodDirection)> = pod_policies
                 .iter()
                 .filter(|p| p.subject.matches(labels))
-                .map(|p| (p.name.as_str(), if ingress { &p.ingress } else { &p.egress }))
+                .map(|p| {
+                    (
+                        p.name.as_str(),
+                        if ingress { &p.ingress } else { &p.egress },
+                    )
+                })
                 .filter(|(_, d)| d.selects)
                 .collect();
             if selected.is_empty() && selecting.is_empty() {
