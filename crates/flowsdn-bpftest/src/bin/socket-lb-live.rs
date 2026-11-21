@@ -453,6 +453,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     masquerade(lb)?;
     maglev(lb, services)?;
     dsr(lb, services)?;
+    icmp_errors(lb)?;
     nat46x64(lb, services)?;
     gateway64(lb)?;
     nat_expiry(lb, services)?;
@@ -1370,6 +1371,231 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     }
     println!(
         "PASS DSR: to a backend on another node the client's source is kept and the frontend travels in the IPv4 option or IPv6 Destination Options header on a TCP SYN and each UDP packet (not on a later TCP segment); a new flow whose first packet cannot carry it (UDP over the MTU with it, TCP without SYN) is source-NATed instead; checksums valid; the backend's node leaves a valid packet alone and its egress rewrites the reply's source to the frontend, and it drops an option naming a frontend not in DSR mode or a destination not among its backends"
+    );
+    Ok(())
+}
+
+/// An Ethernet + IPv6 ICMPv6 frame carrying `icmp` (its checksum, with the
+/// pseudo-header, filled in).
+fn icmp_frame6(src: [u8; 16], dst: [u8; 16], icmp: &[u8]) -> Vec<u8> {
+    let mut message = icmp.to_vec();
+    if let Some(check) = message.get_mut(2..4) {
+        check.copy_from_slice(&[0, 0]);
+    }
+    let check = !(l4_sum(58, &src, &dst, &message) as u16);
+    message.splice(2..4, check.to_be_bytes());
+    let mut f = vec![0u8; 14];
+    f.splice(12..14, [0x86, 0xdd]);
+    f.extend_from_slice(&[0x60, 0, 0, 0]);
+    f.extend_from_slice(&u16::try_from(message.len()).unwrap_or(0).to_be_bytes());
+    f.extend_from_slice(&[58, 64]);
+    f.extend_from_slice(&src);
+    f.extend_from_slice(&dst);
+    f.extend(message);
+    f
+}
+/// An ICMP(v6) error of `kind` and `code` quoting the IP packet of `frame`.
+fn error_message(kind: u8, code: u8, frame: &[u8]) -> Result<Vec<u8>> {
+    let mut message = vec![kind, code, 0, 0, 0, 0, 0, 0];
+    message.extend_from_slice(frame.get(14..).ok_or("short frame")?);
+    Ok(message)
+}
+/// The quote of an IPv4 ICMP error frame: (source, destination, source
+/// port, destination port, its header checksum ok), and whether the outer
+/// header's and the ICMP checksums are ok.
+fn quote4(f: &[u8]) -> Result<(([u8; 4], [u8; 4], u16, u16, bool), bool)> {
+    let icmp = f.get(34..).ok_or("icmp")?;
+    let inner = icmp.get(8..).ok_or("inner")?;
+    let ihl = usize::from(inner.first().ok_or("inner")? & 15).saturating_mul(4);
+    let port = |at: usize| -> Result<u16> {
+        Ok(u16::from_be_bytes(
+            inner.get(at..at.saturating_add(2)).ok_or("ports")?.try_into()?,
+        ))
+    };
+    Ok((
+        (
+            inner.get(12..16).ok_or("inner")?.try_into()?,
+            inner.get(16..20).ok_or("inner")?.try_into()?,
+            port(ihl)?,
+            port(ihl.saturating_add(2))?,
+            sum(inner.get(..ihl).ok_or("inner")?, 0) == 0xffff,
+        ),
+        sum(f.get(14..34).ok_or("ip")?, 0) == 0xffff && sum(icmp, 0) == 0xffff,
+    ))
+}
+/// [`quote4`] for IPv6: the quote's L4 follows one Destination Options
+/// header when it has one; the checksum is the ICMPv6 one.
+fn quote6(f: &[u8]) -> Result<(([u8; 16], [u8; 16], u16, u16), bool)> {
+    let src: [u8; 16] = f.get(22..38).ok_or("ip")?.try_into()?;
+    let dst: [u8; 16] = f.get(38..54).ok_or("ip")?.try_into()?;
+    let icmp = f.get(54..).ok_or("icmp")?;
+    let l4 = if f.get(68) == Some(&60) {
+        102usize.saturating_add(usize::from(*f.get(103).ok_or("options")?).saturating_add(1) * 8)
+    } else {
+        102
+    };
+    let port = |at: usize| -> Result<u16> {
+        Ok(u16::from_be_bytes(
+            f.get(at..at.saturating_add(2)).ok_or("ports")?.try_into()?,
+        ))
+    };
+    Ok((
+        (
+            f.get(70..86).ok_or("inner")?.try_into()?,
+            f.get(86..102).ok_or("inner")?.try_into()?,
+            port(l4)?,
+            port(l4.saturating_add(2))?,
+        ),
+        l4_sum(58, &src, &dst, icmp) == 0xffff,
+    ))
+}
+
+/// ICMP errors of Service flows (#449), for a DSR frontend (192.0.2.20:30095,
+/// its backend 10.9.1.5 on another node) and a node-local one (:30080,
+/// 10.9.0.5), TCP and UDP, IPv4 and IPv6. On the backend's node, an error
+/// about the client's packet as the backend got it (a DSR packet with its
+/// option) leaves `nodeport_egress` quoting the frontend, and from the
+/// frontend when the backend sent it (a router's keeps its source). On the
+/// frontend's node, a client's error about a reply goes to the backend: a DSR
+/// flow's redirected (TTL 63), a local one to the stack. Checksums valid;
+/// errors about other flows untouched.
+fn icmp_errors(lb: &mut SocketLb) -> Result<()> {
+    let up0 = ifindex("up0")?;
+    let (front, client) = ([192, 0, 2, 20], [198, 51, 100, 9]);
+    let router = [10, 9, 1, 1];
+    for proto in [6u8, 17] {
+        for (front_port, backend, dsr) in [(30095u16, [10, 9, 1, 5], true), (30080, [10, 9, 0, 5], false)] {
+            let sport = 41200u16.saturating_add(u16::from(proto)).saturating_add(if dsr { 0 } else { 100 });
+            let what = format!("proto {proto} {}", if dsr { "DSR" } else { "local" });
+            let request = frame4(proto, client, front, sport, front_port, false);
+            let received = if dsr {
+                let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+                // The backend's node takes the option: the reply entry.
+                run_on(lb, "nodeport_ingress", &out, up0, TCX_NEXT)?;
+                out
+            } else {
+                run(lb, "nodeport_ingress", &request)?
+            };
+            for (sender, kind, code) in [(backend, 3u8, 3u8), (router, 3, 4)] {
+                let error = icmp_frame4(sender, client, &error_message(kind, code, &received)?);
+                let out = run_on(lb, "nodeport_egress", &error, up0, TCX_NEXT)?;
+                let (quote, sums) = quote4(&out)?;
+                let source = if sender == backend { front } else { sender };
+                if out.get(26..30) != Some(&source[..])
+                    || out.get(30..34) != Some(&client[..])
+                    || quote != (client, front, sport, front_port, true)
+                    || !sums
+                {
+                    return Err(format!(
+                        "ICMP error {what} from {sender:?} on the backend's node: {:?} -> {:?}, quote {quote:?}, checksums {sums}",
+                        out.get(26..30),
+                        out.get(30..34)
+                    )
+                    .into());
+                }
+            }
+            let reply = frame4(proto, front, client, front_port, sport, false);
+            let error = icmp_frame4(client, front, &error_message(3, 3, &reply)?);
+            let out = if dsr {
+                run_on(lb, "nodeport_ingress", &error, up0, TC_ACT_REDIRECT)?
+            } else {
+                run(lb, "nodeport_ingress", &error)?
+            };
+            let (quote, sums) = quote4(&out)?;
+            let ttl = if dsr { 63 } else { 64 };
+            if out.get(26..30) != Some(&client[..])
+                || out.get(30..34) != Some(&backend[..])
+                || quote != (backend, client, 8080, sport, true)
+                || out.get(22) != Some(&ttl)
+                || !sums
+            {
+                return Err(format!(
+                    "ICMP error {what} on the frontend's node: to {:?}, quote {quote:?}, ttl {:?}, checksums {sums}",
+                    out.get(30..34),
+                    out.get(22)
+                )
+                .into());
+            }
+        }
+    }
+    // Errors about flows never seen pass untouched.
+    let unknown = frame4(17, [10, 9, 1, 5], client, 8080, 41999, false);
+    let error = icmp_frame4([10, 9, 1, 5], client, &error_message(3, 3, &unknown)?);
+    if run_on(lb, "nodeport_egress", &error, up0, TCX_NEXT)? != error {
+        return Err("an ICMP error about an unknown flow was rewritten on egress".into());
+    }
+    let unknown = frame4(17, front, client, 30095, 41999, false);
+    let error = icmp_frame4(client, front, &error_message(3, 3, &unknown)?);
+    if run_on(lb, "nodeport_ingress", &error, up0, TCX_NEXT)? != error {
+        return Err("an ICMP error about an unknown flow was rewritten on ingress".into());
+    }
+
+    let (front6, client6) = (ip6("2001:db8:2::20")?, ip6("2001:db8:64::9")?);
+    let router6 = ip6("fd00:9:1::1")?;
+    for proto in [6u8, 17] {
+        for (front_port, backend, dsr) in [
+            (30095u16, ip6("fd00:9:1::5")?, true),
+            (30080, ip6("fd00:9::5")?, false),
+        ] {
+            let sport = 41400u16.saturating_add(u16::from(proto)).saturating_add(if dsr { 0 } else { 100 });
+            let what = format!("IPv6 proto {proto} {}", if dsr { "DSR" } else { "local" });
+            let request = frame6(proto, client6, front6, sport, front_port, false);
+            let received = if dsr {
+                let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+                run_on(lb, "nodeport_ingress", &out, up0, TCX_NEXT)?;
+                out
+            } else {
+                run(lb, "nodeport_ingress", &request)?
+            };
+            // Port unreachable from the backend; packet too big from a router.
+            for (sender, kind, code) in [(backend, 1u8, 4u8), (router6, 2, 0)] {
+                let error = icmp_frame6(sender, client6, &error_message(kind, code, &received)?);
+                let out = run_on(lb, "nodeport_egress", &error, up0, TCX_NEXT)?;
+                let (quote, sum_ok) = quote6(&out)?;
+                let source = if sender == backend { front6 } else { sender };
+                if out.get(22..38) != Some(&source[..])
+                    || out.get(38..54) != Some(&client6[..])
+                    || quote != (client6, front6, sport, front_port)
+                    || !sum_ok
+                {
+                    return Err(format!(
+                        "ICMPv6 error {what} on the backend's node: from {:?}, quote {quote:?}, checksum {sum_ok}",
+                        out.get(22..38)
+                    )
+                    .into());
+                }
+            }
+            let reply = frame6(proto, front6, client6, front_port, sport, false);
+            let error = icmp_frame6(client6, front6, &error_message(1, 4, &reply)?);
+            let out = if dsr {
+                run_on(lb, "nodeport_ingress", &error, up0, TC_ACT_REDIRECT)?
+            } else {
+                run(lb, "nodeport_ingress", &error)?
+            };
+            let (quote, sum_ok) = quote6(&out)?;
+            let hops = if dsr { 63 } else { 64 };
+            if out.get(22..38) != Some(&client6[..])
+                || out.get(38..54) != Some(&backend[..])
+                || quote != (backend, client6, 8080, sport)
+                || out.get(21) != Some(&hops)
+                || !sum_ok
+            {
+                return Err(format!(
+                    "ICMPv6 error {what} on the frontend's node: to {:?}, quote {quote:?}, hops {:?}, checksum {sum_ok}",
+                    out.get(38..54),
+                    out.get(21)
+                )
+                .into());
+            }
+        }
+    }
+    let unknown = frame6(17, front6, client6, 30095, 41999, false);
+    let error = icmp_frame6(client6, front6, &error_message(1, 4, &unknown)?);
+    if run_on(lb, "nodeport_ingress", &error, up0, TCX_NEXT)? != error {
+        return Err("an ICMPv6 error about an unknown flow was rewritten".into());
+    }
+    println!(
+        "PASS ICMP errors of Service flows: for a DSR and a node-local frontend, TCP and UDP, IPv4 and IPv6, an error about the client's packet (the DSR one quoted with its option) leaves the backend's node quoting the frontend, from the frontend when the backend sent it; a client's error about a reply goes to the backend, a DSR flow's redirected toward its node; checksums valid; errors about other flows untouched"
     );
     Ok(())
 }

@@ -736,6 +736,24 @@ packet of a DSR flow that the option would push over the MTU is sent
 without it; the backend's node already has the frontend. Verified by kernel test runs only (`socket-lb-live`); it has not
 carried traffic between two nodes.
 
+ICMP and ICMPv6 errors about DSR flows, and about flows to a node-local backend, are
+translated (#449), since a client matches an error to its connection by the
+packet the error quotes. Errors handled: destination unreachable (with
+fragmentation needed and packet too big), time exceeded and parameter problem,
+quoting TCP or UDP.
+- **Backend's node, `nodeport_egress`:** an error about the client's packet (quoted as the backend got
+it, with the DSR option or Destination Options header) leaves quoting the
+frontend. Its source becomes the frontend too when the backend sent it. A router's error keeps the
+router's source.
+- **Frontend's node, `nodeport_ingress`:** an error a client sends about a reply
+from the frontend goes to the backend, with its destination and the quote's
+source rewritten. A DSR flow's error is redirected toward the backend's node like the flow's
+packets; a local one goes to the stack.
+
+The quote's IP header checksum and the ICMP
+checksum are kept right. The quoted TCP/UDP checksum is left alone: a quote may be cut short, and receivers do
+not check it. Errors about source-NATed flows still pass untouched (#534).
+
 ### CRDs and the operator (#337)
 
 - **The operator** is `flowsdn-agent operator` (Kubernetes builds; the

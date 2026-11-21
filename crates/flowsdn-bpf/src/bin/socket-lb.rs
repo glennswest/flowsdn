@@ -621,7 +621,8 @@ pub fn sock6_getpeername(ctx: SockAddrContext) -> i32 {
 // that fits the device's MTU. The backend's node reads the option at its
 // uplink's ingress into a reply entry, and its uplink's egress rewrites the
 // reply's source to the frontend, so replies skip this node. A too-big UDP
-// packet goes without the option: DSR ICMP errors are not handled.
+// packet of a known flow goes without the option. ICMP errors about the
+// flow are translated both ways (#449, "ICMP errors of Service flows").
 //
 // A frontend whose master carries `NAT46X64` (spec 04 §3.15, spec 05 §3.1) has
 // backends of the other family, on other nodes: see "Service NAT46/64" below.
@@ -1607,6 +1608,81 @@ fn set_echo_id(ctx: &TcContext, l4: usize, old: [u8; 2], new: [u8; 2]) -> Option
     ctx.store(l4.checked_add(4)?, &new, 0).ok()
 }
 
+/// The packet an ICMP error at `l4` quotes, TCP or UDP with its ports:
+/// (inner header offset, its L4 offset, protocol, source, destination,
+/// source port, destination port).
+#[inline(always)]
+fn icmp4_inner(
+    ctx: &TcContext,
+    l4: usize,
+) -> Option<(usize, usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8; 2])> {
+    let inner = l4.checked_add(8)?;
+    let version_ihl = ctx.load::<u8>(inner).ok()?;
+    if version_ihl >> 4 != 4 || version_ihl & 15 < 5 {
+        return None;
+    }
+    let proto = ctx.load::<u8>(inner.checked_add(9)?).ok()?;
+    if proto != 6 && proto != 17 {
+        return None;
+    }
+    let inner_l4 = usize::from(version_ihl & 15)
+        .checked_mul(4)?
+        .checked_add(inner)?;
+    let [s0, s1, d0, d1] = ctx.load::<[u8; 4]>(inner_l4).ok()?;
+    Some((
+        inner,
+        inner_l4,
+        proto,
+        ctx.load::<[u8; 4]>(inner.checked_add(12)?).ok()?,
+        ctx.load::<[u8; 4]>(inner.checked_add(16)?).ok()?,
+        [s0, s1],
+        [d0, d1],
+    ))
+}
+
+/// Rewrite the address `offset` bytes into the quoted header at `inner` (12
+/// its source, 16 its destination) and the port at `port_at` from `old` to
+/// `new`, with the quoted header's checksum and the ICMP checksum at
+/// `l4 + 2`, which covers both. The quoted TCP/UDP checksum is left: the
+/// quote may be cut short, and receivers do not check it.
+#[inline(always)]
+fn set_inner4(
+    ctx: &TcContext,
+    l4: usize,
+    inner: usize,
+    offset: usize,
+    port_at: usize,
+    old: ([u8; 4], [u8; 2]),
+    new: ([u8; 4], [u8; 2]),
+) -> Option<()> {
+    let (old_ip, new_ip) = (
+        u64::from(u32::from_ne_bytes(old.0)),
+        u64::from(u32::from_ne_bytes(new.0)),
+    );
+    let check_at = inner.checked_add(10)?;
+    let before = ctx.load::<[u8; 2]>(check_at).ok()?;
+    ctx.l3_csum_replace(check_at, old_ip, new_ip, 4).ok()?;
+    let after = ctx.load::<[u8; 2]>(check_at).ok()?;
+    let icmp_check = l4.checked_add(2)?;
+    for (old, new, size) in [
+        (old_ip, new_ip, 4),
+        (
+            u64::from(u16::from_ne_bytes(before)),
+            u64::from(u16::from_ne_bytes(after)),
+            2,
+        ),
+        (
+            u64::from(u16::from_ne_bytes(old.1)),
+            u64::from(u16::from_ne_bytes(new.1)),
+            2,
+        ),
+    ] {
+        ctx.l4_csum_replace(icmp_check, old, new, size).ok()?;
+    }
+    ctx.store(inner.checked_add(offset)?, &new.0, 0).ok()?;
+    ctx.store(port_at, &new.1, 0).ok()
+}
+
 #[inline(always)]
 fn masquerade4(ctx: &TcContext) -> Option<()> {
     let Some((l4, proto, src, dst, sport, dport)) = tuple4(ctx) else {
@@ -1684,58 +1760,126 @@ fn masq_icmp4_in(ctx: &TcContext) -> Option<i32> {
     if !matches!(kind, 3 | 11 | 12) {
         return None;
     }
-    let inner = l4.checked_add(8)?;
-    let version_ihl = ctx.load::<u8>(inner).ok()?;
-    if version_ihl >> 4 != 4 || version_ihl & 15 < 5 {
+    let (inner, inner_l4, proto, inner_src, server, sport, dport) = icmp4_inner(ctx, l4)?;
+    if inner_src != dst {
         return None;
     }
-    let proto = ctx.load::<u8>(inner.checked_add(9)?).ok()?;
-    let inner_src = ctx.load::<[u8; 4]>(inner.checked_add(12)?).ok()?;
-    if (proto != 6 && proto != 17) || inner_src != dst {
-        return None;
-    }
-    let server = ctx.load::<[u8; 4]>(inner.checked_add(16)?).ok()?;
-    let inner_l4 = usize::from(version_ihl & 15)
-        .checked_mul(4)?
-        .checked_add(inner)?;
-    let [s0, s1, d0, d1] = ctx.load::<[u8; 4]>(inner_l4).ok()?;
-    let flow = masq_reservation4((server, [d0, d1]), (dst, [s0, s1]), proto)?;
-    let icmp_check = l4.checked_add(2)?;
+    let flow = masq_reservation4((server, dport), (dst, sport), proto)?;
     set_address4(ctx, 30, dst, flow.other)?;
-    // The embedded header's checksum, then its address: the ICMP checksum
-    // covers both, and the embedded source port.
-    let check_at = inner.checked_add(10)?;
-    let before = ctx.load::<[u8; 2]>(check_at).ok()?;
-    ctx.l3_csum_replace(
-        check_at,
-        u64::from(u32::from_ne_bytes(dst)),
-        u64::from(u32::from_ne_bytes(flow.other)),
-        4,
-    )
-    .ok()?;
-    let after = ctx.load::<[u8; 2]>(check_at).ok()?;
-    for (old, new, size) in [
-        (
-            u64::from(u32::from_ne_bytes(dst)),
-            u64::from(u32::from_ne_bytes(flow.other)),
-            4,
-        ),
-        (
-            u64::from(u16::from_ne_bytes(before)),
-            u64::from(u16::from_ne_bytes(after)),
-            2,
-        ),
-        (
-            u64::from(u16::from_ne_bytes([s0, s1])),
-            u64::from(u16::from_ne_bytes(flow.other_port)),
-            2,
-        ),
-    ] {
-        ctx.l4_csum_replace(icmp_check, old, new, size).ok()?;
-    }
-    ctx.store(inner.checked_add(12)?, &flow.other, 0).ok()?;
-    ctx.store(inner_l4, &flow.other_port, 0).ok()?;
+    set_inner4(
+        ctx,
+        l4,
+        inner,
+        12,
+        inner_l4,
+        (dst, sport),
+        (flow.other, flow.other_port),
+    )?;
     Some(TC_ACT_OK)
+}
+
+// ICMP errors of Service flows (#449). A client matches an ICMP error to its
+// connection by the packet it quotes, so the quote must name the frontend it
+// talks to, never the backend.
+//
+// On the backend's node, at the uplink's egress: an error about a packet of
+// a flow whose replies are rewritten there (a REPLY entry: a DSR flow, or a
+// node-local backend's) has the quote's destination (and the error's source,
+// when the backend sent it) rewritten from the backend to the frontend.
+//
+// On the frontend's node, at the uplink's ingress: an error about a reply
+// (the quote's source, and the error's destination, is the frontend) of a
+// DSR or node-local flow goes to the backend: the error's destination and
+// the quote's source become the backend. A DSR flow's is redirected toward
+// the backend's node as the flow's packets are; a local one goes to the
+// stack. Errors about source-NATed flows pass untouched.
+
+/// Whether ICMP `kind` is an error that quotes the packet it is about:
+/// destination unreachable (fragmentation needed among them), time exceeded
+/// or parameter problem.
+#[inline(always)]
+fn icmp4_error(kind: u8) -> bool {
+    matches!(kind, 3 | 11 | 12)
+}
+
+/// On the backend's node: an ICMP error about a packet a client sent to a
+/// frontend, leaving toward the client.
+#[inline(always)]
+fn icmp_error4_out(ctx: &TcContext) -> Option<()> {
+    let (l4, src, _, kind, _) = icmp4(ctx)?;
+    if !icmp4_error(kind) {
+        return None;
+    }
+    let (inner, inner_l4, proto, client, backend, client_port, backend_port) =
+        icmp4_inner(ctx, l4)?;
+    let reverse = Nodeport4Key {
+        a: backend,
+        b: client,
+        ap: backend_port,
+        bp: client_port,
+        proto,
+        direction: REPLY,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let front = unsafe { NODEPORT4.get(&reverse).copied() }?;
+    if src == backend {
+        set_address4(ctx, 26, backend, front.address)?;
+    }
+    set_inner4(
+        ctx,
+        l4,
+        inner,
+        16,
+        inner_l4.checked_add(2)?,
+        (backend, backend_port),
+        (front.address, front.port),
+    )
+}
+
+/// On the frontend's node: an ICMP error about a reply the frontend sent,
+/// to the flow's backend.
+#[inline(always)]
+fn icmp_error4_in(ctx: &TcContext) -> Option<i32> {
+    let (l4, src, dst, kind, _) = icmp4(ctx)?;
+    if !icmp4_error(kind) {
+        return None;
+    }
+    let (inner, inner_l4, proto, front, client, front_port, client_port) = icmp4_inner(ctx, l4)?;
+    if front != dst {
+        return None;
+    }
+    let key = Nodeport4Key {
+        a: client,
+        b: front,
+        ap: client_port,
+        bp: front_port,
+        proto,
+        direction: FORWARD,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let flow = unsafe { NODEPORT4.get(&key).copied() }?;
+    if flow.flags & !(FLOW_DSR | FLOW_CLOSING) != 0 {
+        return None;
+    }
+    let backend = (flow.address, flow.port);
+    let route = if flow.flags & FLOW_DSR != 0 {
+        ttl_ok(ctx)?;
+        let (result, fib) = fib4(ctx, ICMP4, src, backend.0, 0);
+        if !forwarded(result) {
+            return None;
+        }
+        Some((result, fib))
+    } else {
+        None
+    };
+    set_address4(ctx, 30, front, backend.0)?;
+    set_inner4(ctx, l4, inner, 12, inner_l4, (front, front_port), backend)?;
+    match route {
+        Some((result, fib)) => redirect(ctx, result, &fib),
+        None => Some(TC_ACT_OK),
+    }
 }
 
 // IPv6: the same flows, keyed and translated the same way. There is no
@@ -2496,6 +2640,169 @@ fn nodeport6_out(ctx: &TcContext) -> Option<()> {
     )
 }
 
+// ICMPv6 errors of Service flows (#449): see "ICMP errors of Service flows"
+// for IPv4. The ICMPv6 checksum covers a pseudo-header: a rewrite of the
+// outer header's address is a pseudo-header change, one of the quoted
+// packet's is not. Only a message right after the fixed header, quoting a
+// TCP/UDP packet right after its fixed header, is translated.
+const ICMP6: u8 = 58;
+const ICMP6_CHECK: usize = 56;
+/// The quoted packet: its next header, source, destination, and what
+/// follows its fixed header.
+const INNER6_NEXT: usize = 68;
+const INNER6_SRC: usize = 70;
+const INNER6_DST: usize = 86;
+const INNER6_L4: usize = 102;
+
+/// An ICMPv6 error (destination unreachable, packet too big, time exceeded,
+/// parameter problem) quoting a TCP/UDP packet: (protocol, its source,
+/// destination, the quoted L4 offset, source port, destination port). The
+/// quote may carry one Destination Options header (a DSR packet's, as the
+/// backend received it).
+#[inline(always)]
+fn icmp6_error(ctx: &TcContext) -> Option<(u8, [u8; 16], [u8; 16], usize, [u8; 2], [u8; 2])> {
+    if ctx.load::<[u8; 2]>(12).ok()? != ETH_P_IPV6
+        || ctx.load::<u8>(14).ok()? >> 4 != 6
+        || ctx.load::<u8>(IP6_NEXT).ok()? != ICMP6
+    {
+        return None;
+    }
+    if !matches!(ctx.load::<u8>(IP6_SPORT).ok()?, 1..=4) {
+        return None;
+    }
+    if ctx.load::<u8>(INNER6_NEXT.checked_sub(6)?).ok()? >> 4 != 6 {
+        return None;
+    }
+    let (proto, inner_l4) = match ctx.load::<u8>(INNER6_NEXT).ok()? {
+        IPPROTO_DSTOPTS => {
+            let [next, length] = ctx.load::<[u8; 2]>(INNER6_L4).ok()?;
+            let size = usize::from(length).checked_add(1)?.checked_mul(8)?;
+            (next, INNER6_L4.checked_add(size)?)
+        }
+        next => (next, INNER6_L4),
+    };
+    if proto != 6 && proto != 17 {
+        return None;
+    }
+    let [s0, s1, d0, d1] = ctx.load::<[u8; 4]>(inner_l4).ok()?;
+    Some((
+        proto,
+        ctx.load::<[u8; 16]>(INNER6_SRC).ok()?,
+        ctx.load::<[u8; 16]>(INNER6_DST).ok()?,
+        inner_l4,
+        [s0, s1],
+        [d0, d1],
+    ))
+}
+
+/// Replace the address at `at` and the port at `port_at` (none when
+/// `port_at` is 0) in an ICMPv6 message, with its checksum; `outer` when the
+/// address is the outer header's (a pseudo-header word).
+#[inline(always)]
+fn set_icmp6(
+    ctx: &TcContext,
+    at: usize,
+    port_at: usize,
+    outer: bool,
+    old: ([u8; 16], [u8; 2]),
+    new: ([u8; 16], [u8; 2]),
+) -> Option<()> {
+    let flags = if outer { BPF_F_PSEUDO_HDR | 4 } else { 4 };
+    let [o0, o1, o2, o3] = ip6_words(old.0);
+    let [n0, n1, n2, n3] = ip6_words(new.0);
+    for (o, n) in [(o0, n0), (o1, n1), (o2, n2), (o3, n3)] {
+        ctx.l4_csum_replace(ICMP6_CHECK, u64::from(o), u64::from(n), flags)
+            .ok()?;
+    }
+    ctx.store(at, &new.0, 0).ok()?;
+    if port_at != 0 {
+        ctx.l4_csum_replace(
+            ICMP6_CHECK,
+            u64::from(u16::from_ne_bytes(old.1)),
+            u64::from(u16::from_ne_bytes(new.1)),
+            2,
+        )
+        .ok()?;
+        ctx.store(port_at, &new.1, 0).ok()?;
+    }
+    Some(())
+}
+
+/// [`icmp_error4_out`] for IPv6.
+#[inline(always)]
+fn icmp_error6_out(ctx: &TcContext) -> Option<()> {
+    let (proto, client, backend, inner_l4, client_port, backend_port) = icmp6_error(ctx)?;
+    let reverse = Nodeport6Key {
+        a: backend,
+        b: client,
+        ap: backend_port,
+        bp: client_port,
+        proto,
+        direction: REPLY,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let front = unsafe { NODEPORT6.get(&reverse).copied() }?;
+    if ctx.load::<[u8; 16]>(IP6_SRC).ok()? == backend {
+        set_icmp6(ctx, IP6_SRC, 0, true, (backend, [0; 2]), (front.address, [0; 2]))?;
+    }
+    set_icmp6(
+        ctx,
+        INNER6_DST,
+        inner_l4.checked_add(2)?,
+        false,
+        (backend, backend_port),
+        (front.address, front.port),
+    )
+}
+
+/// [`icmp_error4_in`] for IPv6.
+#[inline(always)]
+fn icmp_error6_in(ctx: &TcContext) -> Option<i32> {
+    let (proto, front, client, inner_l4, front_port, client_port) = icmp6_error(ctx)?;
+    if ctx.load::<[u8; 16]>(IP6_DST).ok()? != front {
+        return None;
+    }
+    let key = Nodeport6Key {
+        a: client,
+        b: front,
+        ap: client_port,
+        bp: front_port,
+        proto,
+        direction: FORWARD,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let flow = unsafe { NODEPORT6.get(&key).copied() }?;
+    if flow.flags & !(FLOW_DSR | FLOW_CLOSING) != 0 {
+        return None;
+    }
+    let route = if flow.flags & FLOW_DSR != 0 {
+        hops_ok(ctx)?;
+        let src = ctx.load::<[u8; 16]>(IP6_SRC).ok()?;
+        let (result, fib) = fib6(ctx, ICMP6, src, flow.address, 0)?;
+        if !forwarded(result) {
+            return None;
+        }
+        Some((result, fib))
+    } else {
+        None
+    };
+    set_icmp6(ctx, IP6_DST, 0, true, (front, [0; 2]), (flow.address, [0; 2]))?;
+    set_icmp6(
+        ctx,
+        INNER6_SRC,
+        inner_l4,
+        false,
+        (front, front_port),
+        (flow.address, flow.port),
+    )?;
+    match route {
+        Some((result, fib)) => redirect6(ctx, result, fib),
+        None => Some(TC_ACT_OK),
+    }
+}
+
 // Service NAT46/64 (spec 04 §3.15; ADR-0011 #79; the RFC 6052 gateway is
 // milestone 3). A frontend's master with `NAT46X64` means its backend IDs are
 // in the other family's backend map. Its flows are always source-NATed to this
@@ -3055,9 +3362,35 @@ fn masq_out(skb: *mut __sk_buff) -> i32 {
     let _ = masquerade4(&TcContext::new(skb));
     TC_ACT_OK
 }
+/// [`icmp_error4_out`] on its own frame; [`NOT_NODEPORT`] when not ours.
+#[inline(never)]
+fn icmp_out4(skb: *mut __sk_buff) -> i32 {
+    match icmp_error4_out(&TcContext::new(skb)) {
+        Some(()) => TC_ACT_OK,
+        None => NOT_NODEPORT,
+    }
+}
+/// [`icmp_error4_in`] on its own frame; [`NOT_NODEPORT`] when not ours.
+#[inline(never)]
+fn icmp_in4(skb: *mut __sk_buff) -> i32 {
+    icmp_error4_in(&TcContext::new(skb)).unwrap_or(NOT_NODEPORT)
+}
 #[inline(never)]
 fn masq_icmp_in(skb: *mut __sk_buff) -> i32 {
     masq_icmp4_in(&TcContext::new(skb)).unwrap_or(TC_ACT_OK)
+}
+/// [`icmp_error6_out`] on its own frame; [`NOT_NODEPORT`] when not ours.
+#[inline(never)]
+fn icmp_out6(skb: *mut __sk_buff) -> i32 {
+    match icmp_error6_out(&TcContext::new(skb)) {
+        Some(()) => TC_ACT_OK,
+        None => NOT_NODEPORT,
+    }
+}
+/// [`icmp_error6_in`] on its own frame; anything else passes.
+#[inline(never)]
+fn icmp_in6(skb: *mut __sk_buff) -> i32 {
+    icmp_error6_in(&TcContext::new(skb)).unwrap_or(TC_ACT_OK)
 }
 #[inline(never)]
 fn egress6(skb: *mut __sk_buff) -> i32 {
@@ -3249,6 +3582,7 @@ fn ingress(ctx: &TcContext) -> i32 {
                 DSR_REJECT => TC_ACT_SHOT,
                 _ => TC_ACT_OK,
             },
+            STEP_PASS => icmp_in6(skb),
             _ => TC_ACT_OK,
         },
         _ => match xlate4(skb) {
@@ -3258,7 +3592,10 @@ fn ingress(ctx: &TcContext) -> i32 {
             STEP_FORWARD => to_v6(skb, false),
             _ => match dsr4(skb) {
                 DSR_NONE => match ingress4(skb) {
-                    NOT_NODEPORT => masq_icmp_in(skb),
+                    NOT_NODEPORT => match icmp_in4(skb) {
+                        NOT_NODEPORT => masq_icmp_in(skb),
+                        verdict => verdict,
+                    },
                     verdict => verdict,
                 },
                 DSR_ACCEPT => TC_ACT_OK,
@@ -3271,15 +3608,21 @@ fn ingress(ctx: &TcContext) -> i32 {
 pub fn nodeport_egress(ctx: TcContext) -> i32 {
     next(match ctx.load::<[u8; 2]>(12) {
         Ok(ETH_P_IPV6) => match egress6(ctx.skb.skb) {
-            NOT_NODEPORT => match gateway64(ctx.skb.skb) {
-                STEP_XLATE_FORWARD => to_v4(ctx.skb.skb, false),
-                STEP_NEW if gateway64_new(ctx.skb.skb) != 0 => to_v4(ctx.skb.skb, false),
-                _ => TC_ACT_OK,
+            NOT_NODEPORT => match icmp_out6(ctx.skb.skb) {
+                NOT_NODEPORT => match gateway64(ctx.skb.skb) {
+                    STEP_XLATE_FORWARD => to_v4(ctx.skb.skb, false),
+                    STEP_NEW if gateway64_new(ctx.skb.skb) != 0 => to_v4(ctx.skb.skb, false),
+                    _ => TC_ACT_OK,
+                },
+                verdict => verdict,
             },
             verdict => verdict,
         },
         _ => match egress4(ctx.skb.skb) {
-            NOT_NODEPORT => masq_out(ctx.skb.skb),
+            NOT_NODEPORT => match icmp_out4(ctx.skb.skb) {
+                NOT_NODEPORT => masq_out(ctx.skb.skb),
+                verdict => verdict,
+            },
             verdict => verdict,
         },
     })
