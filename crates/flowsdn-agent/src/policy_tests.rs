@@ -1156,7 +1156,10 @@ fn policy_audit_mode_marks_pod_rows_audit() {
     let mut unselected = view(Vec::new());
     unselected.policy_audit = true;
     assert_eq!(
-        compile(&unselected, &[]).endpoints.get(&40).map(|e| e.flags),
+        compile(&unselected, &[])
+            .endpoints
+            .get(&40)
+            .map(|e| e.flags),
         Some(0)
     );
 }
