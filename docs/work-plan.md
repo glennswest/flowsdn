@@ -10,7 +10,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
       every operation name valid, interactions non-empty, destination exactly `<root>/<provider>/<name>` — all before
       any remove/create. Test: `..`, `../gcp`, `a/b`, empty, uppercase, an absolute path; bad operation/date keep the
       old copy.
-- [ ] sc-build; changelog; close.
+- [x] 2f53bc3, fmt d313458; strict sc-build at d313458: fmt --check, `cargo xtask check` (1000 tests, 0 failed). Developer
+      tooling only (xtask), no image. Closed.
 
 ### Policy identity findings — #490 (P1), 2026-11-20
 
