@@ -10,7 +10,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
       `build.rs` (fails the build, writes `$OUT_DIR/ported/<stem>.rs` and `coverage.txt`), `tests/corpus.rs` and
       `cargo xtask cases` (also printed by `cargo xtask check`). toml as build/dev dep (Cargo.lock edited by hand).
       Spec 18 §9.4/§11.3 and PORTED.toml header updated; monotonic + re-harvest split to #544.
-- [ ] sc-build; shipped; close.
+- [x] 0fef694 + rustfmt 0fcfb63. sc-build at 0fcfb63: 1035 passed 0 failed (3 corpus tests), `cargo xtask check` prints
+      the report (M1 10/279, M2 16/417, M3 16/625, 609 unported). Test tooling only: no image; closed.
 
 ### IPv6 BPF masquerade — #513 (P3), 2026-11-21
 
