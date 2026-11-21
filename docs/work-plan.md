@@ -6,14 +6,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### DSR ICMP error translation — #449 (P3), 2026-11-21
 
-- [ ] socket-lb: backend node's uplink egress, an ICMP/ICMPv6 error about a packet of a flow with a REPLY entry (DSR or
-      a node-local backend). Inner destination backend -> frontend (and the outer source when it is the backend), with
-      the inner header and ICMP checksums.
-- [ ] LB node's uplink ingress: an error about a reply (inner source = the frontend = outer destination) of a DSR or
-      node-local FORWARD flow. Outer destination and inner source frontend -> backend. DSR: redirect by the FIB;
-      local: to the stack. IPv4 and IPv6. Masquerade's ICMP error rewrite shares the inner helper.
-- [ ] socket-lb-live DSR cases; docs (README, implementation-status, runtime); object + lock; strict sc-build; stage;
-      shipped; close.
+- [x] socket-lb: backend node's egress (`icmp_error4_out`/`6_out`, REPLY entry: DSR or node-local) and frontend node's
+      ingress (`icmp_error4_in`/`6_in`, FORWARD entry; DSR redirected by the FIB, local to the stack); quoted IPv6
+      Destination Options header skipped; masquerade shares `icmp4_inner`/`set_inner4`. SNAT flows split to #534.
+- [x] socket-lb-live `icmp_errors`; README, implementation-status, runtime.md; object + lock e3c462a; clippy 3468d3f.
+- [x] Strict sc-build at 3468d3f: fmt, `cargo xtask check` (1024 tests, 0 failed), test/build.sh (lock matches),
+      kernel-check 24 pass / 0 fail / 2 skip (host CNI paths), `PASS ICMP errors of Service flows`. Stage requested
+      (b0a74be2bbe6); shipped; closed.
 
 ### Policy verdict events — #452 (P3), 2026-11-21
 
