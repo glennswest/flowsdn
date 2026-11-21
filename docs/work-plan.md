@@ -9,7 +9,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] bpf-abi `PolicyEvent` (64 B); local-delivery `flowsdn_policy_events` RingBuf, emitted in `count` (Flow.remote);
       loader `PolicyEvents::drain`, `take_policy_events`; agent `policy_events` reader thread (100 ms, 4096 kept) and
       `GET /v1/policy/events`. Tests; agent-api.md, runtime.md. Consumers: #485 (flows), #293.
-- [ ] sc-build: object + lock; strict sc-build + kernel-check; stage; shipped; close.
+- [x] sc-build: object + lock (ae3f058). Strict run at 8c86141: fmt, `cargo xtask check`, test/build.sh and kernel-check
+      `PASS policy events` passed, then policy-live failed at the host firewall load ("fd 12 is not pointing to valid
+      bpf_map"): the test dropped the ring and closed the map fd the later-loaded programs use. Fixed at 92ecf56.
+- [ ] Strict sc-build + kernel-check at 92ecf56: two attempts never started ("404 no such build job"; every project
+      from about 06:00, stormcentral#1638 /home full). Item proposed after stormcentral#1638. Then image, shipped, close.
 
 ### Node peers in policy rules — #451 (P3), 2026-11-21
 
