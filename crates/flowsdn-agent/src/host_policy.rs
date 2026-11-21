@@ -485,10 +485,7 @@ fn rule(
         }
     }
     // Node peers (#451): selectors on the Nodes' own labels.
-    if let Some(list) = value
-        .get(format!("{prefix}Nodes"))
-        .filter(|v| !v.is_null())
-    {
+    if let Some(list) = value.get(format!("{prefix}Nodes")).filter(|v| !v.is_null()) {
         any_l3 = true;
         for item in list.as_array()? {
             match LabelSelector::parse(Some(item)) {

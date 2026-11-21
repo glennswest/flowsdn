@@ -285,7 +285,12 @@ impl Compiler<'_> {
     /// addresses' own (scope 2, #490).
     fn node_peers(&self, selector: &k8s::LabelSelector) -> BTreeSet<u32> {
         let mut out = BTreeSet::new();
-        for node in self.view.nodes.iter().filter(|n| selector.matches(&n.labels)) {
+        for node in self
+            .view
+            .nodes
+            .iter()
+            .filter(|n| selector.matches(&n.labels))
+        {
             if node.name == self.view.local_node {
                 out.insert(HOST);
                 continue;

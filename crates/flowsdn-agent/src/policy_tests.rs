@@ -1168,14 +1168,17 @@ fn policy_audit_mode_marks_pod_rows_audit() {
 /// the host identity, another node its address's own identity (#490).
 #[test]
 fn node_peers_resolve_to_node_identities() {
-    let mut base = view(Vec::new());
-    for node in &mut base.nodes {
-        let role = if node.name == "n1" { "worker" } else { "db" };
-        node.labels.insert("role".into(), role.into());
-    }
+    let base = || {
+        let mut base = view(Vec::new());
+        for node in &mut base.nodes {
+            let role = if node.name == "n1" { "worker" } else { "db" };
+            node.labels.insert("role".into(), role.into());
+        }
+        base
+    };
     let remote = (2u32 << 24) | 1; // n2's 192.0.2.2, the only remote node address
     let view = flowsdn_view(
-        base.clone(),
+        base(),
         json!({"endpointSelector":web_selector(),
             "ingress":[{"fromNodes":[{"matchLabels":{"role":"db"}}],
                 "toPorts":[{"ports":[{"port":"9100","protocol":"TCP"}]}]}],
@@ -1184,7 +1187,10 @@ fn node_peers_resolve_to_node_identities() {
     let desired = compile(&view, &[]);
     assert!(desired.problems.is_empty(), "{:?}", desired.problems);
     let got = verdicts(&desired);
-    assert!(got.contains(&(remote, false, 6, 9100, 16, false)), "{got:?}");
+    assert!(
+        got.contains(&(remote, false, 6, 9100, 16, false)),
+        "{got:?}"
+    );
     assert!(got.contains(&(HOST, true, 0, 0, 0, false)), "{got:?}");
     assert!(
         !got.iter().any(|(id, egress, ..)| !*egress && *id == HOST),
@@ -1192,11 +1198,14 @@ fn node_peers_resolve_to_node_identities() {
     );
     // A selector matching no Node allows nothing (default deny stays).
     let none = flowsdn_view(
-        base,
+        base(),
         json!({"endpointSelector":web_selector(),
             "ingress":[{"fromNodes":[{"matchLabels":{"role":"gpu"}}]}]}),
     );
     let desired = compile(&none, &[]);
     assert!(verdicts(&desired).is_empty(), "{:?}", verdicts(&desired));
-    assert_eq!(desired.endpoints.get(&40).map(|e| e.flags), Some(enforce::INGRESS));
+    assert_eq!(
+        desired.endpoints.get(&40).map(|e| e.flags),
+        Some(enforce::INGRESS)
+    );
 }
