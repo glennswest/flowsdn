@@ -428,7 +428,9 @@ mod tests {
         let failed = tune_pending(&dir, ["u1"], &node, &mut tuned);
         assert!(tuned.is_empty(), "a failed port is not tuned");
         assert!(
-            failed.iter().any(|f| f.starts_with("u1: net.ipv4.conf.u1.rp_filter=0")),
+            failed
+                .iter()
+                .any(|f| f.starts_with("u1: net.ipv4.conf.u1.rp_filter=0")),
             "{failed:?}"
         );
         let again = tune_pending(&dir, ["u1"], &node, &mut tuned);
@@ -439,14 +441,18 @@ mod tests {
         assert!(ok.is_empty(), "{ok:?}");
         assert!(tuned.contains("u1"));
         assert_eq!(
-            fs::read_to_string(dir.join("net/ipv4/conf/u1/rp_filter")).ok().as_deref(),
+            fs::read_to_string(dir.join("net/ipv4/conf/u1/rp_filter"))
+                .ok()
+                .as_deref(),
             Some("0")
         );
         // Tuned once: no further writes (the file is not rewritten).
         fs::write(dir.join("net/ipv4/conf/u1/rp_filter"), "1").expect("write");
         assert!(tune_pending(&dir, ["u1"], &node, &mut tuned).is_empty());
         assert_eq!(
-            fs::read_to_string(dir.join("net/ipv4/conf/u1/rp_filter")).ok().as_deref(),
+            fs::read_to_string(dir.join("net/ipv4/conf/u1/rp_filter"))
+                .ok()
+                .as_deref(),
             Some("1")
         );
         let _ = fs::remove_dir_all(&dir);

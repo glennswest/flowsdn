@@ -345,10 +345,16 @@ fn failed_failover_changes_are_retried() {
         std::slice::from_ref(&stale),
         &wanted,
         |_| Err("busy".into()),
-        |m| if m.address.is_ipv6() { Err("busy".into()) } else { Ok(()) },
+        |m| {
+            if m.address.is_ipv6() {
+                Err("busy".into())
+            } else {
+                Ok(())
+            }
+        },
     );
     assert_eq!(result.held, [stale.clone(), v4.clone()]);
-    assert_eq!(result.added, [v4.clone()]);
+    assert_eq!(result.added, std::slice::from_ref(&v4));
     assert_eq!(
         result.failures,
         [
@@ -373,12 +379,17 @@ fn failed_failover_changes_are_retried() {
         },
     );
     assert_eq!(deleted, [stale]);
-    assert_eq!(tried, [v6.clone()]);
+    assert_eq!(tried, std::slice::from_ref(&v6));
     assert_eq!(next.added, [v6]);
     assert!(next.failures.is_empty());
     assert_eq!(next.held, wanted, "held in the plan's order");
     // Nothing left: no changes at all.
-    let idle = reconcile_moves(&next.held, &wanted, |_| Err("no".into()), |_| Err("no".into()));
+    let idle = reconcile_moves(
+        &next.held,
+        &wanted,
+        |_| Err("no".into()),
+        |_| Err("no".into()),
+    );
     assert_eq!(idle.held, wanted);
     assert!(idle.added.is_empty() && idle.failures.is_empty());
 }

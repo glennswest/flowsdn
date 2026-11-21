@@ -252,17 +252,36 @@ mod tests {
         let v4: IpAddr = "192.0.2.204".parse().expect("ip");
         let v6: IpAddr = "2001:db8::204".parse().expect("ip");
         let local: IpAddr = "fe80::1".parse().expect("ip");
-        queue(&mut announce, 3, [2; 6], &[(v4, 32), (v6, 128), (local, 64)]);
+        queue(
+            &mut announce,
+            3,
+            [2; 6],
+            &[(v4, 32), (v6, 128), (local, 64)],
+        );
         assert_eq!(
             announce,
             [
-                Announce { index: 3, mac: [2; 6], ip: v4, left: ANNOUNCEMENTS },
-                Announce { index: 3, mac: [2; 6], ip: v6, left: ANNOUNCEMENTS },
+                Announce {
+                    index: 3,
+                    mac: [2; 6],
+                    ip: v4,
+                    left: ANNOUNCEMENTS
+                },
+                Announce {
+                    index: 3,
+                    mac: [2; 6],
+                    ip: v6,
+                    left: ANNOUNCEMENTS
+                },
             ]
         );
         // The original port rejoins: it announces from itself.
         queue(&mut announce, 4, [4; 6], &[(v6, 64)]);
         assert_eq!(announce.len(), 2);
-        assert!(announce.iter().any(|a| a.ip == v6 && a.index == 4 && a.mac == [4; 6]));
+        assert!(
+            announce
+                .iter()
+                .any(|a| a.ip == v6 && a.index == 4 && a.mac == [4; 6])
+        );
     }
 }
