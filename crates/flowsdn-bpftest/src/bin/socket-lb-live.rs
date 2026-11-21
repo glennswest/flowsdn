@@ -584,7 +584,13 @@ fn fragment4(src: [u8; 4], dst: [u8; 4], id: u16, flags_offset: u16, payload: &[
 }
 /// A UDP datagram of `sport -> dport` with 16 bytes of data, split after 8
 /// of them: (first fragment, second fragment).
-fn fragmented_udp(src: [u8; 4], dst: [u8; 4], sport: u16, dport: u16, id: u16) -> (Vec<u8>, Vec<u8>) {
+fn fragmented_udp(
+    src: [u8; 4],
+    dst: [u8; 4],
+    sport: u16,
+    dport: u16,
+    id: u16,
+) -> (Vec<u8>, Vec<u8>) {
     let mut udp = Vec::new();
     udp.extend_from_slice(&sport.to_be_bytes());
     udp.extend_from_slice(&dport.to_be_bytes());
@@ -626,7 +632,12 @@ fn fragments(lb: &mut SocketLb) -> Result<()> {
         let (s2, d2, ok2, tail) = fragment_parts(second)?;
         let mut udp = head.clone();
         udp.extend_from_slice(&tail);
-        let ports = |at: usize| u16::from_be_bytes([udp.get(at).copied().unwrap_or(0), udp.get(at.saturating_add(1)).copied().unwrap_or(0)]);
+        let ports = |at: usize| {
+            u16::from_be_bytes([
+                udp.get(at).copied().unwrap_or(0),
+                udp.get(at.saturating_add(1)).copied().unwrap_or(0),
+            ])
+        };
         let checksum = l4_sum(17, &want.0, &want.1, &udp) == 0xffff;
         if (s1, d1) != (want.0, want.1)
             || (s2, d2) != (want.0, want.1)
