@@ -1403,7 +1403,11 @@ fn error_message(kind: u8, code: u8, frame: &[u8]) -> Result<Vec<u8>> {
 /// The quote of an IPv4 ICMP error frame: (source, destination, source
 /// port, destination port, its header checksum ok), and whether the outer
 /// header's and the ICMP checksums are ok.
-fn quote4(f: &[u8]) -> Result<(([u8; 4], [u8; 4], u16, u16, bool), bool)> {
+/// A quote: (source, destination, source port, destination port, and for
+/// IPv4 its header checksum ok).
+type Quote4 = ([u8; 4], [u8; 4], u16, u16, bool);
+type Quote6 = ([u8; 16], [u8; 16], u16, u16);
+fn quote4(f: &[u8]) -> Result<(Quote4, bool)> {
     let icmp = f.get(34..).ok_or("icmp")?;
     let inner = icmp.get(8..).ok_or("inner")?;
     let ihl = usize::from(inner.first().ok_or("inner")? & 15).saturating_mul(4);
@@ -1428,12 +1432,13 @@ fn quote4(f: &[u8]) -> Result<(([u8; 4], [u8; 4], u16, u16, bool), bool)> {
 }
 /// [`quote4`] for IPv6: the quote's L4 follows one Destination Options
 /// header when it has one; the checksum is the ICMPv6 one.
-fn quote6(f: &[u8]) -> Result<(([u8; 16], [u8; 16], u16, u16), bool)> {
+fn quote6(f: &[u8]) -> Result<(Quote6, bool)> {
     let src: [u8; 16] = f.get(22..38).ok_or("ip")?.try_into()?;
     let dst: [u8; 16] = f.get(38..54).ok_or("ip")?.try_into()?;
     let icmp = f.get(54..).ok_or("icmp")?;
     let l4 = if f.get(68) == Some(&60) {
-        102usize.saturating_add(usize::from(*f.get(103).ok_or("options")?).saturating_add(1) * 8)
+        let length = usize::from(*f.get(103).ok_or("options")?);
+        102usize.saturating_add(length.saturating_add(1).saturating_mul(8))
     } else {
         102
     };
