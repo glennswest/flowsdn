@@ -56,6 +56,8 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.l2-announcements` | `true` | Answer ARP and NDP for the load-balancer and external addresses FlowsdnL2AnnouncementPolicies give this node ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb` and `node-port`; nothing is announced without a policy. |
 | `kubernetes.endpoint-crd` | `true` | Keep a FlowsdnEndpoint for each local Pod endpoint ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). Nothing is written while the kind is not served. |
 | `kubernetes.node-crd` | `true` | Keep this node's FlowsdnNode ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). |
+| `kubernetes.bpf-masquerade` | `false` | BPF masquerade (#460; the reference's `enable-bpf-masquerade`), IPv4: the uplink programs source-NAT local Pods' traffic leaving the cluster ([BPF masquerade](#bpf-masquerade-460)). Needs `service-lb`; attaches the uplink programs even with `node-port` off. |
+| `kubernetes.non-masquerade-cidrs` | `[]` | IPv4 CIDRs the BPF masquerade never masquerades to, beside the cluster's pod CIDRs and node addresses. An IPv6 entry is refused (IPv6 masquerade is #513). |
 | `kubernetes.lb-sock-terminate-all-protos` | `false` | Socket termination also ends TCP connections to a backend that leaves a Service ([socket LB](#clusterip-socket-lb-292); by backend address and port). |
 | `kubernetes.crd-wait-timeout` | `300` | Seconds the flowsdn.io watchers wait for the CRDs this configuration uses before the agent exits ([CRDs and the operator](#crds-and-the-operator-337)). 1 to 86400. |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
@@ -503,6 +505,27 @@ renewed by every packet of its flow, in either direction, and expires after
 protocols (#488). A new flow that finds an expired reservation on the port
 it tries takes it over, and the old flow's forward entry is dropped; a
 known flow whose reservation another flow took starts again as a new flow.
+
+#### BPF masquerade (#460)
+
+With `kubernetes.bpf-masquerade: true` the services thread keeps two LPM maps
+from the Node list: `flowsdn_masq4_sources` (this node's IPv4 pod CIDRs) and
+`flowsdn_masq4_exclude` (every node's pod CIDRs and InternalIPs, and
+`non-masquerade-cidrs`). At an uplink's TCX egress (`nodeport_egress`), a
+packet from a source in the first to a destination in neither, TCP, UDP or an
+ICMP echo request, leaves from the FIB's source address for that destination
+on this uplink, and a NAT port (an echo: a NAT identifier) from the same
+61000-65535 range, map (`flowsdn_nodeport4_nat`) and expiry as NodePort's SNAT
+ports. A packet the FIB would send out of another uplink is left to that
+uplink. At the ingress, the reply, an echo reply, and an ICMP destination
+unreachable, time exceeded or parameter problem about such a TCP/UDP flow
+(outer destination, embedded source address, port and header checksum, ICMP
+checksum) are translated back to the Pod and passed to the host stack, so the
+Pod's own programs judge them, and netfilter's conntrack sees the Pod's
+address both ways. Fragments follow the IPv4 fragment table above. If the
+node also masquerades (a netfilter rule), it does so before these programs
+run and they see the node's address: turn the node's rule off to use this one.
+IPv6 masquerade is gap #513.
 IPv4 fragments (#458): each first fragment (offset 0, more fragments) the
 uplink programs see, in either direction, records its datagram's ports in the
 LRU `flowsdn_nodeport4_frags` (8192 entries, by source, destination, IP ID
@@ -565,8 +588,8 @@ pinned: they detach when the agent exits, and the per-CPU
 pinned either. The socket LB picks backends at random (Maglev there is gap
 #453); an existing TCP connection stays on its backend when it leaves unless
 `kubernetes.lb-sock-terminate-all-protos` is on (#392, below); SCTP ports get no translation (#457); IPv6
-fragments pass untouched; masquerading is the node's stack, not BPF
-(#460). Further gaps, each an issue: DSR by IPIP/Geneve (#447), NAT46/64 in
+fragments pass untouched; IPv6 masquerade is the node's stack, not BPF
+(#513). Further gaps, each an issue: DSR by IPIP/Geneve (#447), NAT46/64 in
 the socket LB (#450), and skip-LB, which comes with local redirect policy
 (#336). `socket-lb-live` (medium test suite) checks the
 programs on a kernel, including the NodePort local and SNAT paths through

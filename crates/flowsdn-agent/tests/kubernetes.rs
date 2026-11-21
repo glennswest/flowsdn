@@ -448,6 +448,8 @@ fn controller_lists_watches_and_derives_the_pool() {
         node_crd: true,
         crd_wait_timeout: Duration::from_secs(60),
         terminate_tcp: false,
+        bpf_masquerade: false,
+        non_masquerade: Vec::new(),
         node_config: serde_json::Value::Null,
     };
     // FlowsdnNodeConfig (#480): the agent reads its Node's labels and the

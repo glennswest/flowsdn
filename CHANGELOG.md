@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### 2026-11-21 (#460)
+- **feat:** BPF masquerade for IPv4, the reference's `enable-bpf-masquerade`: `kubernetes.bpf-masquerade` (default false; settable per node by FlowsdnNodeConfig) and `kubernetes.non-masquerade-cidrs` (IPv4).
+  - **Maps:** the services thread keeps `flowsdn_masq4_sources` (this node's pod CIDRs) and `flowsdn_masq4_exclude` (every node's pod CIDRs and InternalIPs, plus the configured CIDRs), both pinned.
+  - **Forward:** at the uplink's egress, a local Pod's TCP, UDP or ICMP echo packet leaving the cluster is source-NATed to the FIB's source address on that uplink and a NAT port or identifier. It uses the NodePort SNAT range, map and expiry, so ports never collide.
+  - **Return:** at the ingress, the reply, the echo reply and ICMP errors about the flow (embedded source, port and header checksum, ICMP checksum) are translated back to the Pod and handed to the host stack, so Pod policy and conntrack still apply.
+  - **Prerequisites:** needs `service-lb`, and attaches the uplink programs even with `node-port` off. A node netfilter masquerade still runs first.
+  - IPv6 is gap #513. The socket-lb object and lock are rebuilt.
+- **test:** New `socket-lb-live` kernel step on the `up0` uplink:
+  - Pod UDP and TCP to 198.51.100.9 leave from 192.0.2.20 with one NAT port per flow, and their replies return to the Pod.
+  - A port unreachable about the UDP flow, and an echo with its reply, come back to the Pod with every checksum valid.
+  - Cluster and node-sourced traffic is untouched, and clearing the maps turns masquerade off.
+  - Unit tests: `masquerade_prefixes_cover_the_cluster` and settings parse and refuse cases.
+
 ### 2026-11-21 (#458)
 - **feat:** IPv4 fragments after the first are translated on the uplink NodePort/LoadBalancer/externalIP path (the reference's `ENABLE_IPV4_FRAGMENTS`). Every first fragment (offset 0, more fragments) the programs see, in either direction, records its datagram's ports in the new LRU map `flowsdn_nodeport4_frags`: 8192 entries keyed by source, destination, IP ID and protocol, pinned with the other maps. A later fragment takes its ports from there and follows the datagram's flow (local DNAT, SNAT and its reply, DSR forward, the local backend's reply). Only its IP header is rewritten: address and header checksum, since the first fragment carries the L4 header and checksum. A later fragment never starts a flow, and one whose first fragment was not seen passes untouched as before. IPv6 fragments and NAT46/64 are unchanged. The socket-lb object and lock are rebuilt.
 - **test:** New `socket-lb-live` kernel step: a UDP datagram to 192.0.2.20:30080 split into two fragments reaches the backend on both fragments, and the backend's fragmented reply leaves from the frontend. IP header checksums and the reassembled UDP checksum are valid at both ends, and an orphan later fragment is untouched.

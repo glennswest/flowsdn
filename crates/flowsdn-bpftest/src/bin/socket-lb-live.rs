@@ -12,7 +12,9 @@
 //! checked against the planner's tables; service NAT46/64; and UDP socket termination
 //! through SOCK_DIAG when a backend leaves, and TCP termination only with
 //! `lb-sock-terminate-all-protos` (#392); and external access to a ClusterIP
-//! (`lb-external-clusterip`, #465) from the agent's own frontends, with Maglev.
+//! (`lb-external-clusterip`, #465) from the agent's own frontends, with Maglev;
+//! and BPF masquerade (#460) on the uplink: TCP, UDP and ICMP echo of a local
+//! Pod leaving the cluster, their replies, and an ICMP error about a flow.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_lb::socket::{self, Address, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
@@ -447,6 +449,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     fragments(lb)?;
     nodeport6(lb, services)?;
     snat(lb, services)?;
+    masquerade(lb)?;
     maglev(lb, services)?;
     dsr(lb, services)?;
     nat46x64(lb, services)?;
@@ -559,6 +562,154 @@ fn external_clusterip(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<
     program(lb, services)?;
     println!(
         "PASS external ClusterIP: untouched on the uplink without lb-external-clusterip; with it 10.96.5.7:80 reaches the backend and replies leave from the cluster IP, Maglev table picks match"
+    );
+    Ok(())
+}
+
+/// An Ethernet + IPv4 ICMP frame carrying `icmp` (its checksum filled in).
+fn icmp_frame4(src: [u8; 4], dst: [u8; 4], icmp: &[u8]) -> Vec<u8> {
+    let mut message = icmp.to_vec();
+    if let Some(check) = message.get_mut(2..4) {
+        check.copy_from_slice(&[0, 0]);
+    }
+    let check = !(sum(&message, 0) as u16);
+    message.splice(2..4, check.to_be_bytes());
+    let mut f = fragment4(src, dst, 0, 0x4000, &message);
+    // fragment4 writes UDP's protocol: ICMP, and the header checksum again.
+    if let Some(proto) = f.get_mut(23) {
+        *proto = 1;
+    }
+    let mut ip = f.get(14..34).ok_or("ip").map(<[u8]>::to_vec).unwrap_or_default();
+    ip.splice(10..12, [0, 0]);
+    let check = !(sum(&ip, 0) as u16);
+    if let Some(field) = f.get_mut(24..26) {
+        field.copy_from_slice(&check.to_be_bytes());
+    }
+    f
+}
+/// An echo request (8) or reply (0) with `id`.
+fn echo(kind: u8, id: u16) -> Vec<u8> {
+    let mut m = vec![kind, 0, 0, 0];
+    m.extend_from_slice(&id.to_be_bytes());
+    m.extend_from_slice(&[0, 1, b'p', b'i', b'n', b'g']);
+    m
+}
+
+/// BPF masquerade (#460) on uplink `up0` (192.0.2.20): a local Pod
+/// (10.9.0.7) reaching 198.51.100.9 leaves from 192.0.2.20 and a NAT port
+/// (an echo: NAT identifier), the same one for the flow's later packets;
+/// replies and an ICMP error about the flow come back to the Pod, checksums
+/// valid. Cluster destinations and the node's own traffic are untouched, and
+/// with the prefixes cleared nothing is masqueraded.
+fn masquerade(lb: &mut SocketLb) -> Result<()> {
+    let up0 = ifindex("up0")?;
+    let (pod, server, node) = ([10, 9, 0, 7], [198, 51, 100, 9], [192, 0, 2, 20]);
+    lb.set_masquerade(&[([10, 9, 0, 0], 24)], &[([10, 9, 0, 0], 16), (node, 32)])?;
+    if lb.masquerade()? != (vec![([10, 9, 0, 0], 24)], vec![([10, 9, 0, 0], 16), (node, 32)]) {
+        return Err("masquerade maps do not read back as written".into());
+    }
+    for (proto, sport) in [(17u8, 5000u16), (6, 5001)] {
+        let request = frame4(proto, pod, server, sport, 53, false);
+        let mut nat = None;
+        for _ in 0..2 {
+            let (src, dst, s, d, ip_ok, l4_ok) =
+                parse4(&run_on(lb, "nodeport_egress", &request, up0, TCX_NEXT)?)?;
+            if (src, dst, d) != (node, server, 53)
+                || !(61000..=65535).contains(&s)
+                || nat.is_some_and(|n| n != s)
+                || !ip_ok
+                || !l4_ok
+            {
+                return Err(format!(
+                    "masquerade proto {proto}: {src:?}:{s} -> {dst:?}:{d}, checksums ip {ip_ok} l4 {l4_ok}"
+                )
+                .into());
+            }
+            nat = Some(s);
+        }
+        let nat = nat.ok_or("no NAT port")?;
+        let reply = frame4(proto, server, node, 53, nat, false);
+        let (src, dst, s, d, ip_ok, l4_ok) =
+            parse4(&run_on(lb, "nodeport_ingress", &reply, up0, TCX_NEXT)?)?;
+        if (src, dst, s, d) != (server, pod, 53, sport) || !ip_ok || !l4_ok {
+            return Err(format!(
+                "masquerade reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}, checksums ip {ip_ok} l4 {l4_ok}"
+            )
+            .into());
+        }
+        if proto == 17 {
+            // Port unreachable from a router about the masqueraded packet.
+            let sent = frame4(17, node, server, nat, 53, false);
+            let mut error = vec![3, 3, 0, 0, 0, 0, 0, 0];
+            error.extend_from_slice(sent.get(14..).ok_or("sent")?);
+            let frame = icmp_frame4([192, 0, 2, 1], node, &error);
+            let out = run_on(lb, "nodeport_ingress", &frame, up0, TCX_NEXT)?;
+            let dst = out.get(30..34);
+            let icmp = out.get(34..).ok_or("icmp")?;
+            let inner = icmp.get(8..28).ok_or("inner")?;
+            let inner_src = inner.get(12..16);
+            let inner_port = icmp.get(28..30);
+            if dst != Some(&pod[..])
+                || inner_src != Some(&pod[..])
+                || inner_port != Some(&sport.to_be_bytes()[..])
+                || sum(icmp, 0) != 0xffff
+                || sum(inner, 0) != 0xffff
+                || sum(out.get(14..34).ok_or("ip")?, 0) != 0xffff
+            {
+                return Err(format!(
+                    "ICMP error about a masqueraded flow: dst {dst:?}, inner {inner_src:?}:{inner_port:?}, icmp sum {:x}, inner sum {:x}",
+                    sum(icmp, 0),
+                    sum(inner, 0)
+                )
+                .into());
+            }
+        }
+    }
+    // An echo request and its reply.
+    let out = run_on(
+        lb,
+        "nodeport_egress",
+        &icmp_frame4(pod, server, &echo(8, 0x1234)),
+        up0,
+        TCX_NEXT,
+    )?;
+    let nat_id = u16::from_be_bytes(out.get(38..40).ok_or("id")?.try_into()?);
+    if out.get(26..30) != Some(&node[..])
+        || !(61000..=65535).contains(&nat_id)
+        || sum(out.get(34..).ok_or("icmp")?, 0) != 0xffff
+        || sum(out.get(14..34).ok_or("ip")?, 0) != 0xffff
+    {
+        return Err(format!("masqueraded echo: {:?}", out.get(26..40)).into());
+    }
+    let back = run_on(
+        lb,
+        "nodeport_ingress",
+        &icmp_frame4(server, node, &echo(0, nat_id)),
+        up0,
+        TCX_NEXT,
+    )?;
+    if back.get(30..34) != Some(&pod[..])
+        || back.get(38..40) != Some(&0x1234u16.to_be_bytes()[..])
+        || sum(back.get(34..).ok_or("icmp")?, 0) != 0xffff
+    {
+        return Err(format!("echo reply to the Pod: {:?}", back.get(26..40)).into());
+    }
+    // Untouched: to another node's pod, from the node itself.
+    for frame in [
+        frame4(17, pod, [10, 9, 1, 5], 5002, 53, false),
+        frame4(17, node, server, 5003, 53, false),
+    ] {
+        if run_on(lb, "nodeport_egress", &frame, up0, TCX_NEXT)? != frame {
+            return Err("masquerade changed a packet it must not".into());
+        }
+    }
+    lb.set_masquerade(&[], &[])?;
+    let frame = frame4(17, pod, server, 5004, 53, false);
+    if run_on(lb, "nodeport_egress", &frame, up0, TCX_NEXT)? != frame {
+        return Err("masquerade off, yet a new flow was translated".into());
+    }
+    println!(
+        "PASS BPF masquerade: Pod TCP, UDP and echo to 198.51.100.9 leave from 192.0.2.20 and a NAT port, replies and an ICMP error come back to the Pod, checksums valid; cluster and node traffic untouched; off when cleared"
     );
     Ok(())
 }

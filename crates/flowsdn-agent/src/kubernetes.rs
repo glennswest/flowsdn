@@ -127,6 +127,12 @@ pub struct Settings {
     /// `kubernetes.lb-sock-terminate-all-protos` (#392, default false):
     /// socket termination ends TCP sockets to a removed backend too.
     pub terminate_tcp: bool,
+    /// `bpf-masquerade` (#460; the reference's `enable-bpf-masquerade`,
+    /// default false): the uplink programs masquerade local Pods' IPv4
+    /// traffic leaving the cluster ([`masquerade_prefixes`]), except to
+    /// `non-masquerade-cidrs` (IPv4 CIDRs). Needs `service-lb`.
+    pub bpf_masquerade: bool,
+    pub non_masquerade: Vec<Cidr>,
     /// What FlowsdnNodeConfigs changed at start (#480), for `/v1/healthz`;
     /// null when none was read.
     pub node_config: Value,
@@ -292,6 +298,24 @@ impl Settings {
             endpoint_crd: flag("endpoint-crd", true)?,
             node_crd: flag("node-crd", true)?,
             terminate_tcp: flag("lb-sock-terminate-all-protos", false)?,
+            bpf_masquerade: flag("bpf-masquerade", false)?,
+            non_masquerade: match object.get("non-masquerade-cidrs") {
+                None | Some(Value::Null) => Vec::new(),
+                Some(Value::Array(list)) => list
+                    .iter()
+                    .map(|item| {
+                        item.as_str()
+                            .and_then(crate::prefilter::parse_cidr)
+                            .filter(|(ip, _)| ip.is_ipv4())
+                            .ok_or_else(|| {
+                                format!("kubernetes.non-masquerade-cidrs: {item} is not an IPv4 CIDR")
+                            })
+                    })
+                    .collect::<std::result::Result<_, _>>()?,
+                Some(_) => {
+                    return Err("kubernetes.non-masquerade-cidrs must be a list".into());
+                }
+            },
             node_config: Value::Null,
             crd_wait_timeout: match object.get("crd-wait-timeout") {
                 None | Some(Value::Null) => std::time::Duration::from_secs(300),
@@ -548,6 +572,34 @@ pub fn node_cidrs(node: &NodeInfo, derive: Derive) -> Vec<(IpAddr, u8)> {
         }
     }
     cidrs
+}
+
+/// The BPF masquerade's IPv4 prefixes (#460): (sources, never masqueraded).
+/// Sources are this node's pod CIDRs. Not masqueraded: every node's pod
+/// CIDRs and InternalIPs (traffic inside the cluster, as the reference
+/// leaves it), and `non_masquerade`.
+pub fn masquerade_prefixes(
+    local: &str,
+    nodes: &[NodeInfo],
+    derive: Derive,
+    non_masquerade: &[Cidr],
+) -> (Vec<([u8; 4], u8)>, Vec<([u8; 4], u8)>) {
+    let v4 = |(ip, prefix): (IpAddr, u8)| match ip {
+        IpAddr::V4(v4) => Some((v4.octets(), prefix)),
+        IpAddr::V6(_) => None,
+    };
+    let mut sources = BTreeSet::new();
+    let mut exclude: BTreeSet<([u8; 4], u8)> =
+        non_masquerade.iter().copied().filter_map(v4).collect();
+    for node in nodes {
+        let cidrs = node_cidrs(node, derive);
+        if node.name == local {
+            sources.extend(cidrs.iter().copied().filter_map(v4));
+        }
+        exclude.extend(cidrs.into_iter().filter_map(v4));
+        exclude.extend(node.internal_ips.iter().map(|ip| (*ip, 32)).filter_map(v4));
+    }
+    (sources.into_iter().collect(), exclude.into_iter().collect())
 }
 
 /// Whether two CIDRs share an address (same family, equal under the shorter

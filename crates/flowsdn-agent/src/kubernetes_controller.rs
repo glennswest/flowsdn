@@ -204,11 +204,22 @@ impl Controller {
                     let lb_view = Arc::clone(&view);
                     let node_port = self.settings.node_port;
                     let terminate_tcp = self.settings.terminate_tcp;
+                    let masquerade = self
+                        .settings
+                        .bpf_masquerade
+                        .then(|| self.settings.non_masquerade.clone());
                     std::thread::Builder::new()
                         .name("flowsdn-services".into())
                         .spawn(move || {
                             let mut lb = lb;
-                            service_loop(&receiver, &lb_view, &mut lb, node_port, terminate_tcp);
+                            service_loop(
+                                &receiver,
+                                &lb_view,
+                                &mut lb,
+                                node_port,
+                                terminate_tcp,
+                                masquerade.as_deref(),
+                            );
                         })?;
                     Some(sender)
                 }
@@ -1250,6 +1261,7 @@ fn service_loop(
     lb: &mut SocketLb,
     node_port: bool,
     terminate_tcp: bool,
+    masquerade: Option<&[crate::kubernetes::Cidr]>,
 ) {
     let mut desired: Option<Vec<socket::Service>> = None;
     // The terminable backends last programmed; None until the first success.
@@ -1321,7 +1333,27 @@ fn service_loop(
                 }
             }
         }
-        if node_port {
+        // BPF masquerade (#460): its prefixes follow the Node list.
+        if let Some(non_masquerade) = masquerade {
+            let (sources, exclude) = {
+                let view = lock(view);
+                crate::kubernetes::masquerade_prefixes(
+                    &view.local_node,
+                    &view.nodes,
+                    view.derive,
+                    non_masquerade,
+                )
+            };
+            let result = lb
+                .set_masquerade(&sources, &exclude)
+                .map_err(|e| format!("masquerade maps: {e}"));
+            let mut view = lock(view);
+            match result {
+                Ok(()) => view.errors.remove("masquerade"),
+                Err(error) => view.errors.insert("masquerade".into(), error),
+            };
+        }
+        if node_port || masquerade.is_some() {
             let (addresses, ports) = {
                 let view = lock(view);
                 (

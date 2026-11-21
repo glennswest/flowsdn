@@ -30,7 +30,7 @@ use aya_ebpf::{
     },
     btf_maps::{Array as BtfArray, HashOfMaps},
     macros::{btf_map, cgroup_sock_addr, classifier, map},
-    maps::{HashMap, LruHashMap, PerCpuArray},
+    maps::{HashMap, LpmTrie, LruHashMap, PerCpuArray, lpm_trie::Key},
     programs::{SockAddrContext, TcContext},
 };
 use flowsdn_bpf_abi::{
@@ -656,6 +656,8 @@ const FLOW_SNAT: u8 = 1;
 const FLOW_DSR: u8 = 2;
 /// A flow translated between IPv4 and IPv6.
 const FLOW_XLATE: u8 = 4;
+/// A masqueraded flow (#460): a local Pod's to outside the cluster.
+const FLOW_MASQ: u8 = 16;
 /// The IPv4 DSR option's type (`IPOPT_COPY | 0x1a`) and length.
 const DSR_OPT4: [u8; 2] = [0x9a, 8];
 /// The IPv6 DSR Destination Options header's length and its option's type and
@@ -708,6 +710,16 @@ static FRAGS4: LruHashMap<Frag4Key, Frag4Ports> = LruHashMap::with_max_entries(8
 /// [`tuple4`]'s L4 offset for a fragment after the first: it has no L4
 /// header, so only its IP header is rewritten.
 const NO_L4: usize = 0;
+
+/// BPF masquerade (#460, the reference's `enable-bpf-masquerade`), IPv4:
+/// sources masqueraded (this node's pod CIDRs) and destinations never
+/// masqueraded (the cluster's pod CIDRs and `non-masquerade-cidrs`). Both
+/// empty (the agent's default) masquerade nothing.
+#[map(name = "flowsdn_masq4_sources")]
+static MASQ4_SOURCES: LpmTrie<[u8; 4], u8> = LpmTrie::with_max_entries(256, BPF_F_NO_PREALLOC);
+#[map(name = "flowsdn_masq4_exclude")]
+static MASQ4_EXCLUDE: LpmTrie<[u8; 4], u8> = LpmTrie::with_max_entries(1024, BPF_F_NO_PREALLOC);
+const ICMP4: u8 = 1;
 
 const ETH_P_IPV4: [u8; 2] = [0x08, 0x00];
 const BPF_F_PSEUDO_HDR: u64 = 1 << 4;
@@ -1314,6 +1326,9 @@ fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
                 }
             }
         }
+        if flow.flags & FLOW_MASQ != 0 {
+            return masq_reply4(ctx, tuple, flow);
+        }
         return snat_reply4(ctx, tuple, flow);
     }
     key.direction = FORWARD;
@@ -1462,6 +1477,265 @@ fn nodeport4_out(ctx: &TcContext) -> Option<()> {
         (backend, backend_port),
         (front.address, front.port),
     )
+}
+
+// ---------------------------------------------------------------------------
+// BPF masquerade (#460), IPv4. At the uplink's egress, a local Pod's TCP, UDP
+// or ICMP echo packet to a destination outside the cluster ([`MASQ4_SOURCES`],
+// [`MASQ4_EXCLUDE`]) leaves from this node's address on that uplink (the FIB's
+// source) and a NAT port (an echo: a NAT identifier) from the NodePort SNAT
+// range, claimed and expired as NodePort's SNAT ports are, in the same map.
+// At the ingress, the reply (and an ICMP error about the flow) is reverse
+// translated to the Pod and handed to the host stack, so the Pod's own
+// programs judge it. Netfilter's conntrack saw the Pod's address on the way
+// out and sees it on the way back.
+
+/// Whether `src -> dst` is masqueraded.
+#[inline(always)]
+fn masqueraded4(src: [u8; 4], dst: [u8; 4]) -> bool {
+    MASQ4_SOURCES.get(Key::new(32, src)).is_some() && MASQ4_EXCLUDE.get(Key::new(32, dst)).is_none()
+}
+
+/// The masqueraded flow `src:sport -> dst:dport`: its NAT address and port,
+/// claimed by its first packet. A later fragment never starts one.
+#[inline(always)]
+fn masq_flow4(
+    ctx: &TcContext,
+    l4: usize,
+    proto: u8,
+    from: ([u8; 4], [u8; 2]),
+    to: ([u8; 4], [u8; 2]),
+    fin: bool,
+) -> Option<([u8; 4], [u8; 2])> {
+    let key = Nodeport4Key {
+        a: from.0,
+        b: to.0,
+        ap: from.1,
+        bp: to.1,
+        proto,
+        direction: FORWARD,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    if let Some(flow) = unsafe { NODEPORT4.get(&key).copied() }
+        .filter(|f| f.flags & FLOW_MASQ != 0 && live4(f, from, proto, fin))
+    {
+        return Some((flow.other, flow.other_port));
+    }
+    if l4 == NO_L4 {
+        return None;
+    }
+    let (result, fib) = fib4(ctx, proto, [0; 4], to.0, BPF_FIB_LOOKUP_SRC);
+    // Only out of the uplink it leaves by, from that uplink's address.
+    if !forwarded(result) || fib.ifindex != uplink(ctx) {
+        return None;
+    }
+    // SAFETY: the active member after an IPv4 lookup.
+    let nat = unsafe { fib.__bindgen_anon_3.ipv4_src }.to_ne_bytes();
+    let reply = Nodeport4Value {
+        address: to.0,
+        port: to.1,
+        flags: FLOW_MASQ | if fin { FLOW_CLOSING } else { 0 },
+        pad: 0,
+        other: from.0,
+        other_port: from.1,
+        pad2: now16().to_ne_bytes(),
+    };
+    let port = claim_port(to, nat, proto, &reply)?;
+    let flow = Nodeport4Value {
+        address: to.0,
+        port: to.1,
+        flags: FLOW_SNAT | FLOW_MASQ,
+        pad: 0,
+        other: nat,
+        other_port: port,
+        pad2: [0; 2],
+    };
+    NODEPORT4.insert(&key, &flow, 0).ok()?;
+    Some((nat, port))
+}
+
+/// An IPv4 ICMP message that is not a fragment: (L4 offset, src, dst, type,
+/// echo identifier).
+#[inline(always)]
+fn icmp4(ctx: &TcContext) -> Option<(usize, [u8; 4], [u8; 4], u8, [u8; 2])> {
+    if ctx.load::<[u8; 2]>(12).ok()? != ETH_P_IPV4 {
+        return None;
+    }
+    let version_ihl = ctx.load::<u8>(14).ok()?;
+    if version_ihl >> 4 != 4 || version_ihl & 15 < 5 || ctx.load::<u8>(23).ok()? != ICMP4 {
+        return None;
+    }
+    if u16::from_be_bytes(ctx.load::<[u8; 2]>(20).ok()?) & 0x3fff != 0 {
+        return None;
+    }
+    let l4 = usize::from(version_ihl & 15)
+        .checked_mul(4)?
+        .checked_add(14)?;
+    Some((
+        l4,
+        ctx.load::<[u8; 4]>(26).ok()?,
+        ctx.load::<[u8; 4]>(30).ok()?,
+        ctx.load::<u8>(l4).ok()?,
+        ctx.load::<[u8; 2]>(l4.checked_add(4)?).ok()?,
+    ))
+}
+
+/// Replace IPv4 address `old` at `at` by `new`, with the header checksum.
+#[inline(always)]
+fn set_address4(ctx: &TcContext, at: usize, old: [u8; 4], new: [u8; 4]) -> Option<()> {
+    ctx.l3_csum_replace(
+        24,
+        u64::from(u32::from_ne_bytes(old)),
+        u64::from(u32::from_ne_bytes(new)),
+        4,
+    )
+    .ok()?;
+    ctx.store(at, &new, 0).ok()
+}
+/// Replace the echo identifier at `l4 + 4`, with the ICMP checksum (no
+/// pseudo-header).
+#[inline(always)]
+fn set_echo_id(ctx: &TcContext, l4: usize, old: [u8; 2], new: [u8; 2]) -> Option<()> {
+    ctx.l4_csum_replace(
+        l4.checked_add(2)?,
+        u64::from(u16::from_ne_bytes(old)),
+        u64::from(u16::from_ne_bytes(new)),
+        2,
+    )
+    .ok()?;
+    ctx.store(l4.checked_add(4)?, &new, 0).ok()
+}
+
+#[inline(always)]
+fn masquerade4(ctx: &TcContext) -> Option<()> {
+    let Some((l4, proto, src, dst, sport, dport)) = tuple4(ctx) else {
+        // An echo request: its identifier is the port.
+        let (l4, src, dst, kind, id) = icmp4(ctx)?;
+        if kind != 8 || !masqueraded4(src, dst) {
+            return None;
+        }
+        let (nat, nat_id) = masq_flow4(ctx, l4, ICMP4, (src, id), (dst, [0; 2]), false)?;
+        set_address4(ctx, 26, src, nat)?;
+        return set_echo_id(ctx, l4, id, nat_id);
+    };
+    if !masqueraded4(src, dst) {
+        return None;
+    }
+    let fin = closes(ctx, l4, proto);
+    let nat = masq_flow4(ctx, l4, proto, (src, sport), (dst, dport), fin)?;
+    rewrite4(ctx, l4, proto, 26, l4, (src, sport), nat)
+}
+
+/// The reply of a masqueraded TCP/UDP flow: to the Pod, through the stack.
+#[inline(always)]
+fn masq_reply4(
+    ctx: &TcContext,
+    tuple: (usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8; 2]),
+    flow: Nodeport4Value,
+) -> Option<i32> {
+    let (l4, proto, _, nat, _, nat_port) = tuple;
+    rewrite4(
+        ctx,
+        l4,
+        proto,
+        30,
+        l4.checked_add(2)?,
+        (nat, nat_port),
+        (flow.other, flow.other_port),
+    )?;
+    Some(TC_ACT_OK)
+}
+
+/// A masqueraded flow's reservation `server:server_port -> nat:nat_port`.
+#[inline(always)]
+fn masq_reservation4(
+    server: ([u8; 4], [u8; 2]),
+    nat: ([u8; 4], [u8; 2]),
+    proto: u8,
+) -> Option<Nodeport4Value> {
+    let key = Nodeport4Key {
+        a: server.0,
+        b: nat.0,
+        ap: server.1,
+        bp: nat.1,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    unsafe { NODEPORT4.get(&key).copied() }.filter(|f| f.flags & FLOW_MASQ != 0)
+}
+
+/// At the uplink's ingress: an echo reply to a masqueraded echo, or an ICMP
+/// error (destination unreachable, time exceeded, parameter problem) about a
+/// masqueraded TCP/UDP flow, to the Pod. For an error, the embedded packet's
+/// source (address, port and header checksum) is translated too, with the
+/// ICMP checksum.
+#[inline(always)]
+fn masq_icmp4_in(ctx: &TcContext) -> Option<i32> {
+    let (l4, src, dst, kind, id) = icmp4(ctx)?;
+    if kind == 0 {
+        let flow = masq_reservation4((src, [0; 2]), (dst, id), ICMP4)?;
+        set_address4(ctx, 30, dst, flow.other)?;
+        set_echo_id(ctx, l4, id, flow.other_port)?;
+        return Some(TC_ACT_OK);
+    }
+    if !matches!(kind, 3 | 11 | 12) {
+        return None;
+    }
+    let inner = l4.checked_add(8)?;
+    let version_ihl = ctx.load::<u8>(inner).ok()?;
+    if version_ihl >> 4 != 4 || version_ihl & 15 < 5 {
+        return None;
+    }
+    let proto = ctx.load::<u8>(inner.checked_add(9)?).ok()?;
+    let inner_src = ctx.load::<[u8; 4]>(inner.checked_add(12)?).ok()?;
+    if (proto != 6 && proto != 17) || inner_src != dst {
+        return None;
+    }
+    let server = ctx.load::<[u8; 4]>(inner.checked_add(16)?).ok()?;
+    let inner_l4 = usize::from(version_ihl & 15)
+        .checked_mul(4)?
+        .checked_add(inner)?;
+    let [s0, s1, d0, d1] = ctx.load::<[u8; 4]>(inner_l4).ok()?;
+    let flow = masq_reservation4((server, [d0, d1]), (dst, [s0, s1]), proto)?;
+    let icmp_check = l4.checked_add(2)?;
+    set_address4(ctx, 30, dst, flow.other)?;
+    // The embedded header's checksum, then its address: the ICMP checksum
+    // covers both, and the embedded source port.
+    let check_at = inner.checked_add(10)?;
+    let before = ctx.load::<[u8; 2]>(check_at).ok()?;
+    ctx.l3_csum_replace(
+        check_at,
+        u64::from(u32::from_ne_bytes(dst)),
+        u64::from(u32::from_ne_bytes(flow.other)),
+        4,
+    )
+    .ok()?;
+    let after = ctx.load::<[u8; 2]>(check_at).ok()?;
+    for (old, new, size) in [
+        (
+            u64::from(u32::from_ne_bytes(dst)),
+            u64::from(u32::from_ne_bytes(flow.other)),
+            4,
+        ),
+        (
+            u64::from(u16::from_ne_bytes(before)),
+            u64::from(u16::from_ne_bytes(after)),
+            2,
+        ),
+        (
+            u64::from(u16::from_ne_bytes([s0, s1])),
+            u64::from(u16::from_ne_bytes(flow.other_port)),
+            2,
+        ),
+    ] {
+        ctx.l4_csum_replace(icmp_check, old, new, size).ok()?;
+    }
+    ctx.store(inner.checked_add(12)?, &flow.other, 0).ok()?;
+    ctx.store(inner_l4, &flow.other_port, 0).ok()?;
+    Some(TC_ACT_OK)
 }
 
 // IPv6: the same flows, keyed and translated the same way. There is no
@@ -2749,12 +3023,26 @@ fn to_v4_in(
 // gets its own stack frame: inlined together they exceed the 512-byte stack.
 #[inline(never)]
 fn ingress4(skb: *mut __sk_buff) -> i32 {
-    nodeport4_in(&TcContext::new(skb)).unwrap_or(TC_ACT_OK)
+    match nodeport4_in(&TcContext::new(skb)) {
+        Some(verdict) => verdict,
+        None => masq_icmp_in(skb),
+    }
 }
 #[inline(never)]
 fn egress4(skb: *mut __sk_buff) -> i32 {
-    let _ = nodeport4_out(&TcContext::new(skb));
+    if nodeport4_out(&TcContext::new(skb)).is_none() {
+        masq_out(skb);
+    }
     TC_ACT_OK
+}
+#[inline(never)]
+fn masq_out(skb: *mut __sk_buff) -> i32 {
+    let _ = masquerade4(&TcContext::new(skb));
+    TC_ACT_OK
+}
+#[inline(never)]
+fn masq_icmp_in(skb: *mut __sk_buff) -> i32 {
+    masq_icmp4_in(&TcContext::new(skb)).unwrap_or(TC_ACT_OK)
 }
 #[inline(never)]
 fn egress6(skb: *mut __sk_buff) -> i32 {

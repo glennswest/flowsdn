@@ -4,6 +4,16 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### BPF masquerade (IPv4) — #460 (P3), 2026-11-21
+
+- [x] socket-lb.rs: `flowsdn_masq4_sources`/`_exclude` LPM; egress `masquerade4` (TCP/UDP via `tuple4`, echo via
+      `icmp4`) with `masq_flow4` on `claim_port`; ingress `masq_reply4` (SNAT_REPLY + FLOW_MASQ) and `masq_icmp4_in`
+      (echo reply, ICMP errors). Loader: maps pinned, `set_masquerade`/`masquerade`. Agent: `bpf-masquerade`,
+      `non-masquerade-cidrs`, `masquerade_prefixes`, services thread keeps the maps and attaches uplinks. Tests.
+      IPv6 filed as #513.
+- [ ] sc-build: build-bpf + lock write, socket-lb object back as base64; commit object + lock.
+- [ ] Strict sc-build + kernel-check; stage; shipped; close.
+
 ### IPv4 fragments in Service translation — #458 (P3), 2026-11-21
 
 - [x] socket-lb.rs: `FRAGS4` (`flowsdn_nodeport4_frags`, LRU 8192), `tuple4` records first-fragment ports and gives

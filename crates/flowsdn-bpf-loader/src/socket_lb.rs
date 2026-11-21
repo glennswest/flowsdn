@@ -8,7 +8,10 @@
 use super::{KernelResult, Object};
 use aya::{
     Ebpf, EbpfLoader,
-    maps::{Array, HashMap, HashOfMaps, Map, MapData, MapError, MapInfo, MapType},
+    maps::{
+        Array, HashMap, HashOfMaps, LpmTrie, Map, MapData, MapError, MapInfo, MapType,
+        lpm_trie::Key,
+    },
     programs::{
         CgroupAttachMode, CgroupSockAddr, LinkOrder, SchedClassifier, TcAttachType,
         links::{FdLink, PinnedLink},
@@ -38,7 +41,7 @@ pub const PROGRAMS: [&str; 8] = [
 /// names and §4.3 layouts; flowsdn sizes the reverse and affinity maps at
 /// 64Ki. The affinity maps are the programs' own; the agent writes the
 /// match map.
-const MAPS: [(&str, MapType, u32, u32, u32, u32); 15] = [
+const MAPS: [(&str, MapType, u32, u32, u32, u32); 17] = [
     ("flowsdn_lb4_services", MapType::Hash, 12, 12, 65536, 1),
     ("flowsdn_lb4_backends", MapType::Hash, 4, 12, 65536, 1),
     ("flowsdn_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
@@ -51,6 +54,8 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 15] = [
     ("flowsdn_nodeport4_nat", MapType::LruHash, 16, 16, 65536, 0),
     ("flowsdn_nodeport6_nat", MapType::LruHash, 40, 40, 65536, 0),
     ("flowsdn_nodeport4_frags", MapType::LruHash, 12, 4, 8192, 0),
+    ("flowsdn_masq4_sources", MapType::LpmTrie, 8, 1, 256, 1),
+    ("flowsdn_masq4_exclude", MapType::LpmTrie, 8, 1, 1024, 1),
     (
         "flowsdn_nodeport4_xlate",
         MapType::LruHash,
@@ -72,11 +77,46 @@ pub struct SocketLb {
     affinity_match: HashMap<MapData, [u8; 8], u8>,
     maglev4: MaglevMap,
     maglev6: MaglevMap,
+    /// BPF masquerade (#460): IPv4 sources and never-masqueraded
+    /// destinations.
+    masq4_sources: Masq4,
+    masq4_exclude: Masq4,
     pin_root: Option<PathBuf>,
     /// Owned links; unpinned ones detach when this owner drops.
     links: Vec<FdLink>,
     /// The NodePort programs' TCX links on uplinks (#292), by interface.
     uplinks: std::collections::BTreeMap<String, Vec<SchedClassifierLink>>,
+}
+
+/// An IPv4 prefix set of the masquerade (#460).
+type Masq4 = LpmTrie<MapData, [u8; 4], u8>;
+/// IPv4 prefixes (address, length) for the masquerade maps.
+pub type Prefix4 = ([u8; 4], u8);
+fn prefixes(map: &Masq4) -> KernelResult<std::collections::BTreeSet<Prefix4>> {
+    let mut out = std::collections::BTreeSet::new();
+    for item in map.iter() {
+        let (key, _) = item?;
+        out.insert((key.data(), u8::try_from(key.prefix_len())?));
+    }
+    Ok(out)
+}
+/// Bring `map` to `want` (additions first, removals last).
+fn sync_prefixes(map: &mut Masq4, want: &[Prefix4]) -> KernelResult<()> {
+    let have = prefixes(map)?;
+    for (address, length) in want {
+        if !have.contains(&(*address, *length)) {
+            map.insert(&Key::new(u32::from(*length), *address), 1, 0)?;
+        }
+    }
+    for (address, length) in have.iter().filter(|p| !want.contains(p)) {
+        match map.remove(&Key::new(u32::from(*length), *address)) {
+            Ok(()) | Err(MapError::KeyNotFound) => {}
+            Err(MapError::SyscallError(error))
+                if error.io_error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
 }
 
 /// A Maglev lookup table: one inner-map value (spec 01 §2.2).
@@ -115,6 +155,15 @@ fn write_maglev(map: &mut MaglevMap, id: u16, table: &[u32]) -> KernelResult<()>
     Ok(())
 }
 
+fn take_lpm(bpf: &mut Ebpf, name: &str) -> KernelResult<Masq4> {
+    let map = bpf
+        .take_map(name)
+        .ok_or_else(|| format!("socket-lb object has no map {name}"))?;
+    match map {
+        Map::LpmTrie(_) => Ok(LpmTrie::try_from(map)?),
+        _ => Err(format!("socket-lb map {name} is not an LPM trie").into()),
+    }
+}
 fn take<K: aya::Pod, V: aya::Pod>(
     bpf: &mut Ebpf,
     name: &str,
@@ -185,6 +234,8 @@ impl SocketLb {
         let affinity_match = take(&mut bpf, "flowsdn_lb_affinity_match")?;
         let maglev4 = take_maglev(&mut bpf, "flowsdn_lb4_maglev")?;
         let maglev6 = take_maglev(&mut bpf, "flowsdn_lb6_maglev")?;
+        let masq4_sources = take_lpm(&mut bpf, "flowsdn_masq4_sources")?;
+        let masq4_exclude = take_lpm(&mut bpf, "flowsdn_masq4_exclude")?;
         for name in PROGRAMS {
             let program: &mut CgroupSockAddr = bpf
                 .program_mut(name)
@@ -201,6 +252,8 @@ impl SocketLb {
             affinity_match,
             maglev4,
             maglev6,
+            masq4_sources,
+            masq4_exclude,
             pin_root: pin_root.map(Path::to_owned),
             links: Vec::new(),
             uplinks: std::collections::BTreeMap::new(),
@@ -331,6 +384,20 @@ impl SocketLb {
     }
 
     /// The service and backend maps as the kernel holds them now.
+    /// BPF masquerade (#460): the uplink programs source-NAT a packet from
+    /// one of `sources` to a destination outside `exclude` (both IPv4
+    /// prefixes); both empty turn it off.
+    pub fn set_masquerade(&mut self, sources: &[Prefix4], exclude: &[Prefix4]) -> KernelResult<()> {
+        sync_prefixes(&mut self.masq4_exclude, exclude)?;
+        sync_prefixes(&mut self.masq4_sources, sources)
+    }
+    /// What [`Self::set_masquerade`] last wrote: (sources, exclude).
+    pub fn masquerade(&self) -> KernelResult<(Vec<Prefix4>, Vec<Prefix4>)> {
+        Ok((
+            prefixes(&self.masq4_sources)?.into_iter().collect(),
+            prefixes(&self.masq4_exclude)?.into_iter().collect(),
+        ))
+    }
     pub fn dump(&self) -> KernelResult<Maps> {
         let mut maps = Maps::default();
         for row in self.services4.iter() {

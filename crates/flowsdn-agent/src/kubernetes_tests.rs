@@ -44,6 +44,7 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     );
     assert!(!parsed.maglev);
     assert!(!parsed.external_clusterip, "off by default (#465)");
+    assert!(!parsed.bpf_masquerade && parsed.non_masquerade.is_empty());
     assert_eq!(parsed.lb_mode, LbMode::Snat);
     assert_eq!(parsed.host_firewall, HostFirewall::Off);
     assert!(!parsed.flowsdn_policy);
@@ -53,7 +54,8 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
             &json!({"node-name":"n1","kubeconfig":"/k","auto-direct-node-routes":false,
             "direct-routing-skip-unreachable":true,"service-lb":false,"node-port":false,
             "cgroup-root":"/run/flowsdn/cgroupv2","lb-algorithm":"maglev","lb-mode":"hybrid",
-            "host-firewall":"audit","l2-neigh-discovery":true,"lb-external-clusterip":true}),
+            "host-firewall":"audit","l2-neigh-discovery":true,"lb-external-clusterip":true,
+            "bpf-masquerade":true,"non-masquerade-cidrs":["192.0.2.0/24","10.200.1.7/16"]}),
         ),
         &env(&[("K8S_NODE_NAME", "a")]),
     )
@@ -67,6 +69,24 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(parsed.l2_neigh_discovery);
     assert!(parsed.maglev);
     assert!(parsed.external_clusterip);
+    assert!(parsed.bpf_masquerade);
+    assert_eq!(
+        parsed.non_masquerade,
+        [
+            ("192.0.2.0".parse().expect("ip"), 24),
+            ("10.200.0.0".parse().expect("ip"), 16)
+        ]
+    );
+    for bad in [json!(["2001:db8::/64"]), json!(["nonsense"]), json!("192.0.2.0/24")] {
+        assert!(
+            Settings::parse(
+                Some(&json!({"node-name":"n1","non-masquerade-cidrs":bad})),
+                &env(&[])
+            )
+            .is_err(),
+            "{bad}"
+        );
+    }
     assert_eq!(parsed.lb_mode, LbMode::Hybrid);
     assert_eq!(parsed.host_firewall, HostFirewall::Audit);
     assert!(
@@ -575,4 +595,45 @@ fn the_crd_gate_waits_for_what_the_settings_use() {
             "{bad}"
         );
     }
+}
+
+/// #460: the masquerade's sources are this node's IPv4 pod CIDRs; every
+/// node's pod CIDRs and InternalIPs and the configured CIDRs are never
+/// masqueraded. IPv6 is left out.
+#[test]
+fn masquerade_prefixes_cover_the_cluster() {
+    let ip = |s: &str| -> IpAddr { s.parse().expect("ip") };
+    let node = |name: &str, cidrs: Vec<(IpAddr, u8)>, ips: Vec<IpAddr>| NodeInfo {
+        name: name.into(),
+        pod_cidrs: cidrs,
+        internal_ips: ips,
+        ..NodeInfo::default()
+    };
+    let nodes = [
+        node(
+            "n1",
+            vec![(ip("10.1.0.0"), 24), (ip("fd00:1::"), 64)],
+            vec![ip("192.168.16.1"), ip("2001:db8::1")],
+        ),
+        node("n2", vec![(ip("10.2.0.0"), 24)], vec![ip("192.168.16.2")]),
+    ];
+    let (sources, exclude) = masquerade_prefixes(
+        "n1",
+        &nodes,
+        Derive::default(),
+        &[(ip("172.16.0.0"), 12)],
+    );
+    assert_eq!(sources, [([10, 1, 0, 0], 24)]);
+    assert_eq!(
+        exclude,
+        [
+            ([10, 1, 0, 0], 24),
+            ([10, 2, 0, 0], 24),
+            ([172, 16, 0, 0], 12),
+            ([192, 168, 16, 1], 32),
+            ([192, 168, 16, 2], 32),
+        ]
+    );
+    // An unknown local node masquerades nothing.
+    assert!(masquerade_prefixes("n9", &nodes, Derive::default(), &[]).0.is_empty());
 }
