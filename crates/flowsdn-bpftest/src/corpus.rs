@@ -164,7 +164,9 @@ impl Corpus {
             }
             let status = text(port, "status").unwrap_or_default();
             if !STATUSES.contains(&status) {
-                problems.push(format!("{what}: status {status:?} is not one of {STATUSES:?}"));
+                problems.push(format!(
+                    "{what}: status {status:?} is not one of {STATUSES:?}"
+                ));
                 continue;
             }
             if let Some(tier) = text(port, "tier")
@@ -213,7 +215,9 @@ impl Corpus {
             }
         }
         for (case, status) in &mut corpus.cases {
-            *status = statuses.get(&(case.file.clone(), case.name.clone())).cloned();
+            *status = statuses
+                .get(&(case.file.clone(), case.name.clone()))
+                .cloned();
         }
         if problems.is_empty() {
             Ok(corpus)
@@ -243,11 +247,8 @@ impl Corpus {
     /// milestone (cumulative), and the unported cases per milestone, file
     /// and pipeline, with their names.
     pub fn summary(&self) -> String {
-        let covered = |status: &Option<String>| {
-            status
-                .as_deref()
-                .is_some_and(|s| COVERED.contains(&s))
-        };
+        let covered =
+            |status: &Option<String>| status.as_deref().is_some_and(|s| COVERED.contains(&s));
         let dropped = |status: &Option<String>| status.as_deref() == Some("dropped");
         let unported: Vec<&Case> = self
             .cases
@@ -289,7 +290,11 @@ impl Corpus {
             by_file.entry(&case.file).or_default().push(&case.name);
         }
         for (file, names) in by_file {
-            out.push_str(&format!("    {file} ({}): {}\n", names.len(), names.join(" ")));
+            out.push_str(&format!(
+                "    {file} ({}): {}\n",
+                names.len(),
+                names.join(" ")
+            ));
         }
         out
     }

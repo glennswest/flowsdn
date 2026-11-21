@@ -19,16 +19,25 @@ fn source(stem: &str) -> Option<String> {
 /// rows, every PORTED key resolves, and the report counts all 625 cases.
 #[test]
 fn the_harvest_is_consistent() {
-    let corpus = Corpus::parse(CASES, PORTED, source).unwrap_or_else(|p| panic!("{}", p.join("\n")));
+    let corpus =
+        Corpus::parse(CASES, PORTED, source).unwrap_or_else(|p| panic!("{}", p.join("\n")));
     assert_eq!(corpus.cases.len(), 625);
     let summary = corpus.summary();
     assert!(summary.contains("BPF test corpus coverage"), "{summary}");
     let unported = corpus
         .cases
         .iter()
-        .filter(|(_, s)| !matches!(s.as_deref(), Some("ported" | "retargeted" | "replaced" | "dropped")))
+        .filter(|(_, s)| {
+            !matches!(
+                s.as_deref(),
+                Some("ported" | "retargeted" | "replaced" | "dropped")
+            )
+        })
         .count();
-    assert!(summary.contains(&format!("  unported: {unported}\n")), "{summary}");
+    assert!(
+        summary.contains(&format!("  unported: {unported}\n")),
+        "{summary}"
+    );
     println!("{summary}");
 }
 
@@ -70,7 +79,8 @@ tier = "progrun"
 rust = "tc_demo::first_case"
 "#;
     let with_include = |s: &str| (s == "tc_demo").then(|| include_line("tc_demo"));
-    let corpus = Corpus::parse(&cases("", 1), ported, with_include).unwrap_or_else(|p| panic!("{p:?}"));
+    let corpus =
+        Corpus::parse(&cases("", 1), ported, with_include).unwrap_or_else(|p| panic!("{p:?}"));
     let generated = corpus.generated();
     assert_eq!(generated.len(), 1);
     assert!(
@@ -79,13 +89,20 @@ rust = "tc_demo::first_case"
             .is_some_and(|code| code.contains("const _: fn() = first_case;\n")),
         "{generated:?}"
     );
-    assert!(corpus.summary().contains("M1: 1/1 covered"), "{}", corpus.summary());
+    assert!(
+        corpus.summary().contains("M1: 1/1 covered"),
+        "{}",
+        corpus.summary()
+    );
     // Without the include, or without the file, the build is refused.
     for source in [None, Some("fn first_case() {}".to_owned())] {
         let problems = Corpus::parse(&cases("", 1), ported, |_| source.clone())
             .err()
             .unwrap_or_default();
-        assert!(problems.iter().any(|p| p.contains("tests/tc_demo.rs")), "{problems:?}");
+        assert!(
+            problems.iter().any(|p| p.contains("tests/tc_demo.rs")),
+            "{problems:?}"
+        );
     }
     assert_eq!(stem("bpf/tests/tc_demo.c"), "tc_demo");
 }
@@ -137,7 +154,8 @@ fn inconsistencies_are_refused() {
         assert!(problems.iter().any(|p| p.contains(want)), "{want}: {problems:?}");
     }
     // Deferred, unlisted: counted as unported, by milestone, pipeline, file.
-    let deferred = "[[port]]\nfile = \"bpf/tests/tc_demo.c\"\nname = \"1_first\"\nstatus = \"deferred\"\n";
+    let deferred =
+        "[[port]]\nfile = \"bpf/tests/tc_demo.c\"\nname = \"1_first\"\nstatus = \"deferred\"\n";
     let summary = Corpus::parse(&cases("", 1), deferred, none)
         .map(|c| c.summary())
         .unwrap_or_default();
