@@ -8,7 +8,10 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] `multihome::unsolicited_na`; monitor queues IPv6 (not link-local); `apply::tune_pending` (tuned only on success);
       `uplinks::reconcile_moves` (held = succeeded changes), also in uplinks-live. Unit tests; l2-announce-live NA step.
-- [ ] sc-build with kernel-check; stage; shipped; close.
+- [x] fdee984, fmt/clippy 5d0ad60. Strict sc-build at 5d0ad60: fmt --check, `cargo xtask check` (2012 tests, 0 failed,
+      incl. the 3 new), kernel-check on 7.3.4: 24 pass 0 fail 2 skip; l2-announce-live: NA moved the entry to
+      02:00:00:00:04:97 (STALE); uplinks-live passes with reconcile_moves. First run: qemu abort on the build VM before any
+      guest output (stormcentral#1626), rerun passed. Stage e795736f321d; shipped; closed.
 
 ### Whole-resource validation for host and Pod rules — #496 (P1), finding 5c9e6d072bfa, 2026-11-20
 
