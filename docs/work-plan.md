@@ -10,7 +10,10 @@ Kept here whole, newest notes as they were. Write new intentions here.
       NAT64-style flow) dispatched to `to_v4` from the top level; replies via the existing XLATE4 path. Loader:
       `set_gateway64`/`gateway64`. Agent: `nat46x64-gateway`(+`-prefix`), `gateway64_sources`, services thread.
       Spec 04 §3.15 amended (catalogue citation +13). Tests.
-- [ ] sc-build: object + lock; strict sc-build + kernel-check; stage; shipped; close.
+- [x] b57e845; clippy 14fb341; the first object failed the verifier (gateway64 stack 504 + caller = 528), split into
+      classify + new-flow frames bce31d8; object + lock 6cc9417 (socket-lb sha256 9c40fef9…). Strict sc-build at 6cc9417:
+      `cargo xtask check` (1022 tests, 0 failed), lock check, kernel-check on 7.3.4: 24/0/2; socket-lb-live gateway step
+      passed. Staged; shipped; closed.
 
 ### Health probes and history — #456 (P3), 2026-11-21
 
