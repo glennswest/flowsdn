@@ -606,7 +606,8 @@ fn fragmented_udp(
     )
 }
 /// (src, dst, IPv4 checksum ok) of a fragment, and what follows its header.
-fn fragment_parts(f: &[u8]) -> Result<([u8; 4], [u8; 4], bool, Vec<u8>)> {
+type FragmentParts = ([u8; 4], [u8; 4], bool, Vec<u8>);
+fn fragment_parts(f: &[u8]) -> Result<FragmentParts> {
     let ip = f.get(14..34).ok_or("short fragment")?;
     Ok((
         ip.get(12..16).ok_or("ip")?.try_into()?,
