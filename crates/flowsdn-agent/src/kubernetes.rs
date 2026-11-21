@@ -593,8 +593,7 @@ pub fn masquerade_prefixes(
         IpAddr::V6(_) => None,
     };
     let mut sources = BTreeSet::new();
-    let mut exclude: BTreeSet<Prefix4> =
-        non_masquerade.iter().copied().filter_map(v4).collect();
+    let mut exclude: BTreeSet<Prefix4> = non_masquerade.iter().copied().filter_map(v4).collect();
     for node in nodes {
         let cidrs = node_cidrs(node, derive);
         if node.name == local {
