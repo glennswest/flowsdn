@@ -102,6 +102,22 @@ removal (`health agent.kubernetes OK: …`). Nothing is reported that was not
 observed. Module rows and endpoint health are separate
 from `/v1/healthz`.
 
+**Probes and staleness (#456).** With Kubernetes, the controller's health is
+a status probe read on its own thread every 5 s; `/v1/healthz`'s
+`kubernetes` member and the `agent.kubernetes` row show its last result, so a
+stuck controller never blocks the API. `/v1/healthz`'s `agent` member and
+status follow the probes (spec 00 §3.4.2): 500 `Warning` `Not all probes
+executed at least once` until every probe ran once; `Warning` (200) when a
+probe has not completed, or has no result, for 15 s; `Failure` and 500 past
+60 s. Without Kubernetes there are no probes and it is `Ok`.
+
+**History (#456).** Every change of a module row (`update`, and `close` when
+it is removed) is appended as one JSON line (`time`, `event`, `id`, `level`,
+`message`, `error`) to `<state-dir>/flowsdn-agent-health-history.log`, rotated
+at 10 MB with three files kept (`.log`, `.log.1`, `.log.2`). An unwritable
+file is logged once and history stops; the rows are unaffected. `GET
+/v1/health/history` returns the newest 1000 entries, oldest first.
+
 The server processes one request per connection, then closes it. Request headers
 are limited to 16 KiB, request bodies to 4 MiB, with a 2-second request budget.
 Chunked transfer encoding is unsupported. Endpoint listing is all-or-error:
@@ -115,8 +131,9 @@ on recognized endpoint detail/IPAM address routes return HTTP 405.
 | Method and path | Behavior |
 |---|---|
 | `GET /v1/config` | Initial datapath/IPAM mode, MTUs and configured host addressing. |
-| `GET /v1/healthz` | Initial API availability, as described above. |
+| `GET /v1/healthz` | Initial API availability and probe staleness, as described above (500 before every probe ran, or past the failure threshold). |
 | `GET /v1/health/modules` | Module health rows; `/health/modules` is also accepted. |
+| `GET /v1/health/history` | The newest 1000 health-history entries, oldest first (#456). |
 | `GET` or `POST /v1/statedb/query` | Read-only health-table query; `/statedb/query` is also accepted. Other tables are unavailable. |
 | `GET /v1/endpoint` | Endpoint response array sorted by ascending numeric ID. Empty state returns `[]`. |
 | `GET /v1/endpoint/{id}` | Read a numeric endpoint ID or URL-encoded CNI attachment identifier. Unknown IDs return 404. |

@@ -552,3 +552,36 @@ fn documented_routes_are_the_served_routes() {
         "docs/agent-api.md and api::ROUTES differ"
     );
 }
+
+/// #456: `/v1/healthz` from the probes: 500 `Warning` before every probe ran
+/// once, `Ok` while fresh, `Warning` past 15 s and 500 `Failure` past 60 s
+/// for a probe that does not complete.
+#[test]
+fn healthz_follows_probe_staleness() {
+    use flowsdn_health::collector::Collector;
+    let start = Instant::now();
+    let at = |secs| start + Duration::from_secs(secs);
+    let probes: Collector<Value> = Collector::new();
+    probes.register("kubernetes", start);
+    let state = |(code, agent): (u16, Value)| {
+        (
+            code,
+            agent.get("state").and_then(Value::as_str).unwrap_or_default().to_owned(),
+            agent.get("msg").and_then(Value::as_str).unwrap_or_default().to_owned(),
+        )
+    };
+    assert_eq!(
+        state(healthz_agent(&probes, at(1))),
+        (500, "Warning".into(), "Not all probes executed at least once".into())
+    );
+    probes.begin("kubernetes", at(1));
+    probes.finish("kubernetes", at(1), json!({"state":"Ok"}));
+    assert_eq!(state(healthz_agent(&probes, at(2))).0, 200);
+    assert_eq!(state(healthz_agent(&probes, at(2))).1, "Ok");
+    probes.begin("kubernetes", at(6));
+    let warning = state(healthz_agent(&probes, at(22)));
+    assert_eq!((warning.0, warning.1.as_str()), (200, "Warning"));
+    assert!(warning.2.contains("probe kubernetes has not completed"), "{warning:?}");
+    let failure = state(healthz_agent(&probes, at(67)));
+    assert_eq!((failure.0, failure.1.as_str()), (500, "Failure"));
+}

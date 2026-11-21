@@ -1,5 +1,10 @@
-//! Module health and readiness evaluation from foundation spec §§3.4.2–3.4.3.
-//! History files, metrics exporters, active probes and HTTP serving are separate.
+//! Module health and readiness evaluation from foundation spec §§3.4.2–3.4.3,
+//! probe scheduling with staleness detection ([`collector`]) and the health
+//! history file ([`history`], #456). Metrics exporters and HTTP serving are
+//! the agent's.
+
+pub mod collector;
+pub mod history;
 use flowsdn_table::{Key, Keyed, Snapshot, Table, TableError};
 use std::{collections::BTreeMap, fmt, sync::Arc, time::SystemTime};
 

@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Health probes and history — #456 (P3), 2026-11-21
+
+- [x] flowsdn-health `collector` (Collector, Thresholds 5/15/60 s, stale, ran_once, spawn) and `history` (History
+      append/rotate 10 MB x3, read). Agent: kubernetes probe thread; `/v1/healthz` from `healthz_agent`; Facts from the
+      probe; ModuleHealth history file + `GET /v1/health/history`. Tests; agent-api.md, runtime.md.
+- [ ] sc-build; stage; shipped; close.
+
 ### scripttest subsystem adapters — #455 split, 2026-11-21
 
 - [x] #455 covered all of spec 17 §3.3's subsystem command groups (168 scripts, 12 areas). Split along §3.9's porting

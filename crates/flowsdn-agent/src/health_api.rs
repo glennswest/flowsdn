@@ -18,10 +18,13 @@ impl Facts {
     pub(super) fn of(api: &Api) -> Self {
         Self {
             endpoints: api.manager.records().count(),
-            kubernetes: api
-                .kubernetes
-                .as_ref()
-                .map(|view| crate::kubernetes::lock(view).health()),
+            // As the kubernetes probe last read it (#456): a stuck controller
+            // never blocks the API here.
+            kubernetes: api.kubernetes.as_ref().map(|_| {
+                api.probes.last("kubernetes").unwrap_or_else(
+                    || json!({"state":"Warning","msg":"the kubernetes probe has not run yet"}),
+                )
+            }),
             policy_maps: api.policy_maps_error.clone(),
         }
     }
@@ -72,17 +75,87 @@ impl Facts {
     }
 }
 
+/// The agent's health history file under its state directory (spec 00
+/// §3.4.3, #456).
+pub(super) fn history_path(state: &std::path::Path) -> std::path::PathBuf {
+    state.join("flowsdn-agent-health-history.log")
+}
+/// Entries `GET /v1/health/history` returns: the newest.
+const HISTORY_LIMIT: usize = 1000;
+
 pub(super) struct ModuleHealth {
     registry: Registry,
     runtime: tokio::runtime::Runtime,
+    /// The history file (#456); None without one or after it failed (then
+    /// warned once; the table is unaffected).
+    history: std::sync::Mutex<Option<flowsdn_health::history::History>>,
+    history_path: Option<std::path::PathBuf>,
 }
 impl ModuleHealth {
     /// Empty until the first [`Self::refresh`]: unknown is absent, not OK.
-    pub(super) fn new() -> Result<Self> {
+    /// With `history`, every row change is appended there.
+    pub(super) fn new(history: Option<std::path::PathBuf>) -> Result<Self> {
+        let file = match &history {
+            Some(path) => {
+                match flowsdn_health::history::History::open(path, flowsdn_health::history::MAX_BYTES) {
+                    Ok(file) => Some(file),
+                    Err(error) => {
+                        crate::log::logln!(
+                            "health history {} unwritable: {error}; history not kept",
+                            path.display()
+                        );
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
         Ok(Self {
             registry: Registry::new(),
             runtime: tokio::runtime::Builder::new_current_thread().build()?,
+            history: std::sync::Mutex::new(file),
+            history_path: history,
         })
+    }
+    /// Append one change to the history; a failure warns once and stops it.
+    fn record(&self, event: &str, id: &str, level: Level, message: &str, error: &str) {
+        let mut guard = self
+            .history
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(file) = guard.as_mut() else {
+            return;
+        };
+        let line = json!({
+            "time": timestamp(Some(SystemTime::now())).unwrap_or_default(),
+            "event": event,
+            "id": id,
+            "level": level_text(level),
+            "message": message,
+            "error": error,
+        })
+        .to_string();
+        if let Err(failure) = file.append(&line) {
+            crate::log::logln!(
+                "health history {} unwritable: {failure}; history not kept",
+                file.path().display()
+            );
+            *guard = None;
+        }
+    }
+    /// `GET /v1/health/history`: the newest [`HISTORY_LIMIT`] entries,
+    /// oldest first.
+    pub(super) fn history(&self) -> Result<Value> {
+        let Some(path) = &self.history_path else {
+            return Ok(Value::Array(Vec::new()));
+        };
+        let lines = flowsdn_health::history::read(path, HISTORY_LIMIT)?;
+        Ok(Value::Array(
+            lines
+                .iter()
+                .filter_map(|line| serde_json::from_str(line).ok())
+                .collect(),
+        ))
     }
     /// Bring the rows to `facts`. A row is written only when its level,
     /// message or error changed, so `Count` and `Updated` mean real changes;
@@ -117,12 +190,14 @@ impl ModuleHealth {
                     Level::Degraded => reporter.degraded(message.clone(), error.clone()).await?,
                     _ => reporter.ok(message.clone()).await?,
                 }
+                self.record("update", reporter.id(), *level, message, error);
             }
             for (row, _) in snapshot.all() {
                 let scope = row.id.strip_prefix("agent.").unwrap_or_default();
                 if !rows.iter().any(|(name, ..)| *name == scope) {
                     crate::log::logln!("health {} removed", row.id);
                     root.new_scope(scope)?.close().await?;
+                    self.record("close", &row.id, row.level, &row.message, &row.error);
                 }
             }
             Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
@@ -265,7 +340,7 @@ mod tests {
     use super::*;
     #[test]
     fn state_db_query_is_ordered_ndjson_with_reference_identifier_and_time_shapes() {
-        let health = ModuleHealth::new().expect("registry");
+        let health = ModuleHealth::new(None).expect("registry");
         health
             .refresh(&Facts {
                 endpoints: 2,
@@ -325,7 +400,7 @@ mod tests {
     }
     #[test]
     fn health_queries_validate_scope_and_base64_before_reading_rows() {
-        let health = ModuleHealth::new().expect("registry");
+        let health = ModuleHealth::new(None).expect("registry");
         for (body, expected) in [
             (
                 json!({"table":"secrets","index":"id","key":"","lowerbound":true}),
@@ -385,7 +460,7 @@ mod tests {
     }
     #[test]
     fn rows_follow_the_live_state_and_change_only_when_it_does() {
-        let health = ModuleHealth::new().expect("registry");
+        let health = ModuleHealth::new(None).expect("registry");
         assert!(levels(&health).is_empty(), "nothing before the first look");
         let alone = Facts {
             endpoints: 0,
@@ -452,5 +527,55 @@ mod tests {
                 .all(|r| !r.2.contains("implement") && !r.3.contains("implement")),
             "{rows:?}"
         );
+    }
+
+    /// #456: every row change goes to the history file (update and close),
+    /// unchanged rows do not, and `GET /v1/health/history` reads it back.
+    #[test]
+    fn row_changes_are_kept_in_the_history() {
+        let dir = std::env::temp_dir().join(format!("flowsdn-health-api-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("dir");
+        let health = ModuleHealth::new(Some(history_path(&dir))).expect("registry");
+        let facts = |policy: Option<&str>| Facts {
+            endpoints: 0,
+            kubernetes: Some(json!({"state":"Ok","msg":"synced"})),
+            policy_maps: policy.map(str::to_owned),
+        };
+        health.refresh(&facts(Some("map pin missing"))).expect("refresh");
+        health.refresh(&facts(Some("map pin missing"))).expect("same");
+        health.refresh(&facts(None)).expect("policy row goes");
+        let history = health.history().expect("history");
+        let entries: Vec<(String, String, String)> = history
+            .as_array()
+            .expect("array")
+            .iter()
+            .map(|e| {
+                let text = |k: &str| e.get(k).and_then(Value::as_str).unwrap_or_default().to_owned();
+                (text("event"), text("id"), text("level"))
+            })
+            .collect();
+        let update = |id: &str, level: &str| ("update".to_owned(), id.to_owned(), level.to_owned());
+        assert_eq!(
+            entries,
+            [
+                update("agent.api", "OK"),
+                update("agent.restore", "OK"),
+                update("agent.kubernetes", "OK"),
+                update("agent.policy", "Degraded"),
+                ("close".to_owned(), "agent.policy".to_owned(), "Degraded".to_owned()),
+            ]
+        );
+        assert!(
+            history
+                .as_array()
+                .and_then(|a| a.first())
+                .and_then(|e| e.get("time"))
+                .and_then(Value::as_str)
+                .is_some_and(|t| t.ends_with('Z')),
+            "{history}"
+        );
+        assert_eq!(ModuleHealth::new(None).expect("none").history().expect("empty"), json!([]));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

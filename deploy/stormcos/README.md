@@ -285,7 +285,8 @@ listener on 4244, or relay endpoint to expose, so the flow view waits for
 Hubble. No Service manifest is included.
 
 `GET /v1/healthz` on the Unix socket is the present liveness check after startup
-restore and offline-deletion replay complete. It is **not** an assertion of
+restore and offline-deletion replay complete; with Kubernetes it answers 500
+when the controller's status probe has not completed for 60 s (#456). It is **not** an assertion of
 Kubernetes/network readiness. `/v1/health/modules` reports the missing
 controllers as degraded. A TCP HTTP probe must use `GET /v1/healthz` on the
 loopback port; bare `/healthz` does not exist, and a probe pointed at it would

@@ -352,10 +352,11 @@ struct Lease {
 /// Every route the agent serves, as the first column of docs/agent-api.md's
 /// "Supported methods" table; a test keeps the two equal (#298: the API is a
 /// supported boundary for `sc net` and the console plugin).
-pub const ROUTES: [&str; 27] = [
+pub const ROUTES: [&str; 28] = [
     "`GET /v1/config`",
     "`GET /v1/healthz`",
     "`GET /v1/health/modules`",
+    "`GET /v1/health/history`",
     "`GET` or `POST /v1/statedb/query`",
     "`GET /v1/endpoint`",
     "`GET /v1/endpoint/{id}`",
@@ -397,6 +398,10 @@ struct Api {
     /// Why the policy maps could not be shared (NetworkPolicy not enforced);
     /// a degraded health row while it holds (#418).
     policy_maps_error: Option<String>,
+    /// The status probes (#456): the Kubernetes controller's health, read on
+    /// its own thread so a stuck controller shows as a stale probe instead
+    /// of hanging the API.
+    probes: flowsdn_health::collector::Collector<Value>,
 }
 impl Api {
     /// Once a second, with the XDP prefilter on (#467): attach it to the
@@ -545,13 +550,7 @@ impl Api {
                 "device-mtu":self.config.device_mtu,"route-mtu":self.config.route_mtu,"host-addressing":self.config.addressing()}}),
                 ));
             }
-            ("GET", "/v1/healthz") => {
-                let mut status = json!({"agent":{"state":"Ok","msg":"initial endpoint API ready"}});
-                if let (Some(view), Some(object)) = (&self.kubernetes, status.as_object_mut()) {
-                    object.insert("kubernetes".into(), crate::kubernetes::lock(view).health());
-                }
-                return Ok((200, status));
-            }
+            ("GET", "/v1/healthz") => return Ok(self.healthz(Instant::now())),
             (
                 "GET",
                 "/v1/ip"
@@ -1324,6 +1323,44 @@ impl Drop for SocketGuard {
         }
     }
 }
+impl Api {
+    /// `GET /v1/healthz` (spec 00 §3.4.2, #456): the agent, and with
+    /// Kubernetes the controller's health as its probe last read it. Before
+    /// every probe ran once: 500, `Warning`. A probe outstanding past the
+    /// warning threshold makes the agent `Warning`, past the failure
+    /// threshold `Failure` and 500.
+    fn healthz(&self, now: Instant) -> (u16, Value) {
+        let (code, agent) = healthz_agent(&self.probes, now);
+        let mut status = json!({ "agent": agent });
+        if self.kubernetes.is_some()
+            && let Some(object) = status.as_object_mut()
+        {
+            object.insert(
+                "kubernetes".into(),
+                self.probes.last("kubernetes").unwrap_or_else(
+                    || json!({"state":"Warning","msg":"the kubernetes probe has not run yet"}),
+                ),
+            );
+        }
+        (code, status)
+    }
+}
+/// The `agent` member of `/v1/healthz` and its HTTP status, from the probes.
+fn healthz_agent(probes: &flowsdn_health::collector::Collector<Value>, now: Instant) -> (u16, Value) {
+    use flowsdn_health::{State, collector::Thresholds};
+    if !probes.ran_once() {
+        return (
+            500,
+            json!({"state":"Warning","msg":"Not all probes executed at least once"}),
+        );
+    }
+    match probes.stale(now, &Thresholds::default()) {
+        Some((State::Failure, msg)) => (500, json!({"state":"Failure","msg":msg})),
+        Some((_, msg)) => (200, json!({"state":"Warning","msg":msg})),
+        None => (200, json!({"state":"Ok","msg":"initial endpoint API ready"})),
+    }
+}
+
 fn bind(path: &Path) -> Result<(UnixListener, SocketGuard)> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -1553,7 +1590,15 @@ pub fn run(config_path: &Path) -> Result<()> {
         prefilter_synced: None,
         timing: crate::cni_timing::Timing::default(),
         policy_maps_error,
+        probes: flowsdn_health::collector::Collector::new(),
     };
+    if let Some(view) = api.kubernetes.clone() {
+        api.probes.spawn(
+            "kubernetes",
+            flowsdn_health::collector::Thresholds::default().interval,
+            move || crate::kubernetes::lock(&view).health(),
+        )?;
+    }
     api.manager.set_quarantine(quarantine);
     if quarantine {
         crate::log::logln!("new endpoints are isolated until their policy is installed");
@@ -1602,7 +1647,7 @@ pub fn run(config_path: &Path) -> Result<()> {
     // Writers that waited for replay recheck a now-listening API under their
     // shared lock, so they cannot enqueue a deletion missed by this replay.
     drop(replay);
-    let health = health_api::ModuleHealth::new()?;
+    let health = health_api::ModuleHealth::new(Some(health_api::history_path(&api.config.state)))?;
     crate::log::logln!(
         "initial endpoint API listening; Kubernetes node discovery {}",
         if enabled { "enabled" } else { "not enabled" }
@@ -1751,6 +1796,7 @@ fn serve(
                 health.refresh(&health_api::Facts::of(api))?;
                 Ok((200, serde_json::to_vec(&health.modules()?)?))
             }
+            ("GET", "/v1/health/history") => Ok((200, serde_json::to_vec(&health.history()?)?)),
             _ => api
                 .handle(request)
                 .and_then(|(status, body)| Ok((status, serde_json::to_vec(&body)?))),

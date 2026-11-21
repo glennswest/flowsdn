@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 2026-11-21 (#456)
+- **feat:** Health probe scheduling with staleness detection (`flowsdn_health::collector`, spec 00 §3.4.2). Probes run on their own threads every 5 s. One outstanding, or without a result, for 15 s is a warning, for 60 s a failure, and readiness waits until every probe ran once. The agent's Kubernetes health is now such a probe, so `/v1/healthz` and the `agent.kubernetes` row show its last result and a stuck controller no longer blocks the API.
+  - **`/v1/healthz`:** answers 500 `Warning` before the first probe result, `Warning` past 15 s, and 500 `Failure` past 60 s.
+  - **CNI STATUS:** it calls `/v1/healthz`, so it also fails then.
+- **feat:** Health history (`flowsdn_health::history`, spec 00 §3.4.3). Every module-row change is appended as a JSON line to `<state-dir>/flowsdn-agent-health-history.log`, rotated at 10 MB with three files kept. An unwritable file is logged once and history stops. The new `GET /v1/health/history` returns the newest 1000 entries.
+- **test:** `staleness_follows_the_thresholds`, `spawned_probes_run_repeatedly`, `appends_rotates_and_reads_back` (flowsdn-health), `row_changes_are_kept_in_the_history`, `healthz_follows_probe_staleness` (agent).
+
 ### 2026-11-21 (#455)
 - **docs:** The scripttest subsystem-adapter gap (#455) is split along spec 17 §3.9's porting order into one gap issue per step, #516–#526. The first is #516 (table store, agent lifecycle and fake Kubernetes adapters), which every other area builds on. The work plan lists them. No adapter is built yet.
 

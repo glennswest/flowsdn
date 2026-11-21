@@ -160,10 +160,15 @@ expiration time out after 600 seconds.
 deletion replay; in Kubernetes mode it adds a `kubernetes` member (`Ok` once
 the Node and Pod lists, with `service-lb` the Service and EndpointSlice
 lists, and with `identity-allocation` the Namespace and FlowsdnIdentity lists,
-are synced and nothing failed). `/healthz` and `/readyz`
-do not exist (404). Module health (`/v1/health/modules`) is built from the live
-state on each request: API and restore rows, and with Kubernetes the controller
-and policy-map rows (see `docs/agent-api.md`). The config response's `ipam-mode: kubernetes` is a compatibility
+are synced and nothing failed), as the controller's status probe last read it
+every 5 s. Its status follows probe staleness (#456): 500 until every probe ran
+once, `Warning` after 15 s without a probe result and 500 `Failure` after 60 s,
+so a stuck controller fails the check instead of hanging it. `/healthz` and
+`/readyz` do not exist (404). Module health (`/v1/health/modules`) is built
+from the live state on each request: API and restore rows, and with Kubernetes
+the controller and policy-map rows; every row change is kept in
+`<state-dir>/flowsdn-agent-health-history.log` (10 MB, three files), read back
+by `GET /v1/health/history` (see `docs/agent-api.md`). The config response's `ipam-mode: kubernetes` is a compatibility
 value: allocation uses the configured pools, or with `auto` the pool resolved
 from the Node at startup.
 
