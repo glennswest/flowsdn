@@ -8,7 +8,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] `nexthops`: after the cyclic pairs (and the all-pairs fallback), a carrier without a path takes the first gateway it
       reaches. Unit test; runtime.md.
-- [ ] sc-build with kernel-check (uplinks-live runs nexthops via View::hops); stage; shipped; close.
+- [x] 4a12712, fmt 77ed6fa (#504). Strict sc-build at 77ed6fa: fmt --check, `cargo xtask check` (1009 tests, 0 failed),
+      kernel-check on 7.3.4: 24 pass 0 fail 2 skip (uplinks-live passes). Stage 50a9f9c9fcc7; shipped; closed.
 
 ### Direct routes: per-path reachability, delete by destination — #498 (P1), findings 4bc7cb209712 8299a1f6238f, 2026-11-20
 
