@@ -9,7 +9,9 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] `kubernetes.lb-external-clusterip` → `ServiceInfo.external_clusterip`; `frontends` adds a scope-1 ClusterIP copy
       (internalTrafficPolicy, Maglev). Node-config key. Unit tests; socket-lb-live `external_clusterip` step. runtime.md,
       spec 05 §3.13 amendment.
-- [ ] sc-build + kernel-check; stage; shipped; close.
+- [x] 1be85d6, key count + fmt 3645bf0 (#505), spec 05 catalogue citations +4 2de4fcd (#506). Strict sc-build at
+      2de4fcd: fmt --check, `cargo xtask check` (1010 tests, 0 failed), kernel-check on 7.3.4: 24 pass 0 fail 2 skip;
+      socket-lb-live 29 PASS incl. external ClusterIP. Stage 244abe9f7de1; shipped; closed.
 
 ### ICMP errors as related traffic — #463 (P3), 2026-11-20
 
