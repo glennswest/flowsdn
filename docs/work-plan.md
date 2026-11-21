@@ -6,12 +6,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### IPv6 BPF masquerade — #513 (P3), 2026-11-21
 
-- [ ] socket-lb: `flowsdn_masq6_sources`/`_exclude` LPM maps; egress `masq_out6` (after gateway64): TCP/UDP SNAT by
-      `claim_port6` in `flowsdn_nodeport6_nat` (FLOW_SNAT|FLOW_MASQ), ICMPv6 echo (identifier); ingress
-      `STEP_MASQ_REPLY` -> `masq_reply6` (to the Pod via the stack), `masq_icmp6_in` (echo reply; errors 1-4 with the
-      quote translated). Each its own frame from the classifier.
-- [ ] loader `set_masquerade6`/`masquerade6`; agent IPv6 sources/exclude, IPv6 `non-masquerade-cidrs` accepted.
-- [ ] socket-lb-live IPv6 masquerade; docs; object + lock; strict sc-build + kernel-check; stage; shipped; close.
+- [x] socket-lb `flowsdn_masq6_*`; egress in three frames (`masq6` classify, `masq_new6` claim, `masq_out6` rewrite:
+      one frame overflowed 512 B); ingress `STEP_MASQ_REPLY`, `masq_icmp_in6`. Loader `set_masquerade6`; agent
+      `masquerade_prefixes6`, IPv6 `non-masquerade-cidrs`.
+- [x] 100eed7 feature, d0ccf9f split + fmt, e91c2c8 object + lock. Strict sc-build at e91c2c8: 1032 passed 0 failed,
+      lock matches, kernel-check 24/0/2, `PASS IPv6 BPF masquerade` (IPv4 masquerade and the gateway still pass).
+      Stage requested; shipped; closed.
 
 ### PacketDrop Events — #470 (P3), 2026-11-21
 
