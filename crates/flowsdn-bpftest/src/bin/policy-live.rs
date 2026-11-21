@@ -424,12 +424,24 @@ fn related_errors(lab: &Lab) -> Result<()> {
     )?;
     lab.ingress(
         "host unreachable about an echo nobody sent",
-        &v4(ICMP, OTHER, POD, 0, &icmp_error(3, 1, &v4(ICMP, POD, PEER, 0, &icmp(8, 99)))),
+        &v4(
+            ICMP,
+            OTHER,
+            POD,
+            0,
+            &icmp_error(3, 1, &v4(ICMP, POD, PEER, 0, &icmp(8, 99))),
+        ),
         SHOT,
     )?;
     lab.ingress(
         "an error whose embedded packet the Pod did not send",
-        &v4(ICMP, OTHER, POD, 0, &icmp_error(3, 1, &v4(ICMP, OTHER, PEER, 0, &icmp(8, 77)))),
+        &v4(
+            ICMP,
+            OTHER,
+            POD,
+            0,
+            &icmp_error(3, 1, &v4(ICMP, OTHER, PEER, 0, &icmp(8, 77))),
+        ),
         SHOT,
     )?;
     // Egress ICMP to 301 has no rule: only a related error passes.
@@ -459,12 +471,22 @@ fn related_errors(lab: &Lab) -> Result<()> {
     )?;
     lab.ingress(
         "ICMPv6 time exceeded (no rule) about an untracked flow",
-        &v6(58, PEER6, POD6, &icmp_error(3, 0, &v6(TCP, POD6, PEER6, &tcp(80, 40001, ACK)))),
+        &v6(
+            58,
+            PEER6,
+            POD6,
+            &icmp_error(3, 0, &v6(TCP, POD6, PEER6, &tcp(80, 40001, ACK))),
+        ),
         SHOT,
     )?;
     lab.ingress(
         "ICMPv6 time exceeded about the tracked flow's reply",
-        &v6(58, PEER6, POD6, &icmp_error(3, 0, &v6(TCP, POD6, PEER6, &tcp(80, 40000, ACK)))),
+        &v6(
+            58,
+            PEER6,
+            POD6,
+            &icmp_error(3, 0, &v6(TCP, POD6, PEER6, &tcp(80, 40000, ACK))),
+        ),
         OK,
     )?;
     println!(
