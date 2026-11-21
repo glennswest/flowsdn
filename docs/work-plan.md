@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Flows open before a policy selects a Pod — #462 (P3), 2026-11-20
+
+- [x] policy.rs: a known local endpoint no policy selects gets a tracking row (flags 0) when Pod policy is on;
+      `Desired.tracking` + status. Tests updated/new; policy-live tracking step. runtime.md, implementation-status.
+- [ ] sc-build + kernel-check; stage; shipped; close.
+
 ### Three minor findings — #500 (P3), 07c7d1dd3eec 48b8dc5f6c4b 921b14b1e023, 2026-11-20
 
 - [x] bgp-proto: ROUTE-REFRESH length → 7/1 with the complete message (decode, receive, message). cloud-fixture canon:

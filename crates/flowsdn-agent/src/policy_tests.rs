@@ -104,7 +104,9 @@ fn keys_of(desired: &Desired) -> BTreeSet<(u32, bool, u8, u16, u32)> {
 fn without_policies_nothing_is_enforced_and_the_ipcache_has_pods_and_host() {
     let view = view(Vec::new());
     let desired = compile(&view, &[ip("10.1.0.1")]);
-    assert!(desired.endpoints.is_empty());
+    // Tracked, not judged (#462).
+    assert!(desired.endpoints.values().all(|e| e.flags == 0));
+    assert!(desired.enforced.is_empty());
     assert!(desired.entries.is_empty());
     let ipcache: BTreeMap<u32, usize> =
         desired
@@ -172,7 +174,9 @@ fn a_policy_for_other_pods_does_not_enforce_this_one() {
     let view = view(vec![policy(json!({
         "podSelector":{"matchLabels":{"app":"db"}}, "policyTypes":["Ingress"]
     }))]);
-    assert!(compile(&view, &[]).endpoints.is_empty());
+    let desired = compile(&view, &[]);
+    assert!(desired.endpoints.values().all(|e| e.flags == 0));
+    assert!(desired.enforced.is_empty());
 }
 
 #[test]
@@ -274,7 +278,7 @@ fn a_policy_that_cannot_be_read_is_reported() {
         "spec":{"podSelector":{"matchExpressions":[{"key":"a","operator":"Bogus"}]}}}),
     ]);
     let desired = compile(&view, &[]);
-    assert!(desired.endpoints.is_empty());
+    assert!(desired.endpoints.values().all(|e| e.flags == 0));
     assert!(
         desired.problems.iter().any(|p| p.starts_with("shop/bad:")),
         "{:?}",
@@ -951,8 +955,13 @@ fn the_sweep_keeps_an_unknown_endpoints_quarantine() {
         "an ordinary row: removed"
     );
     assert!(
-        stale_row(&desired, 40, row),
-        "known endpoint without policy: removed"
+        !stale_row(&desired, 40, row),
+        "known endpoint without policy: its quarantine is replaced, not removed"
+    );
+    assert_eq!(
+        desired.endpoints.get(&40).map(|e| e.flags),
+        Some(0),
+        "by its tracking row (#462)"
     );
 
     // Pod policy off: nothing is quarantined.
@@ -1065,4 +1074,32 @@ fn egress_named_ports_are_scoped_to_the_pods_that_name_them() {
         "{:?}",
         desired.problems
     );
+}
+
+/// #462: a Pod no policy selects keeps a tracking row (flags 0) so its flows
+/// are remembered; once a policy selects it the row enforces. Reported as
+/// `tracking` in the policy status.
+#[test]
+fn unselected_pods_are_tracked_until_a_policy_selects_them() {
+    let unselected = compile(&view(Vec::new()), &[]);
+    assert_eq!(unselected.endpoints.get(&40).map(|e| e.flags), Some(0));
+    assert_eq!(unselected.tracking, [7]);
+    assert!(unselected.enforced.is_empty());
+    assert_eq!(unselected.status()["tracking"], json!([7]));
+    let selected = compile(
+        &view(vec![policy(json!({
+            "podSelector":{"matchLabels":{"app":"web"}}, "policyTypes":["Ingress"]
+        }))]),
+        &[],
+    );
+    assert_eq!(
+        selected.endpoints.get(&40).map(|e| e.flags),
+        Some(enforce::INGRESS)
+    );
+    assert!(selected.tracking.is_empty());
+    // Pod policy off: no rows at all.
+    let mut off = view(Vec::new());
+    off.network_policy = false;
+    let off = compile(&off, &[]);
+    assert!(off.endpoints.is_empty() && off.tracking.is_empty());
 }

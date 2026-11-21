@@ -916,8 +916,8 @@ programs attach: both directions enforced with no entries and the flag bit
 `8`, which the datapath ignores. So from its first packet the Pod sends and
 receives only what is always passed (the node's own traffic to it, ARP,
 neighbour discovery). The policy thread replaces the row with the Pod's own
-once it knows the Pod and its labels, or removes it when no policy selects
-the Pod; until then (the lists not complete, the Pod not yet in the watch, a
+once it knows the Pod and its labels, a tracking row when no policy selects
+the Pod (#462); until then (the lists not complete, the Pod not yet in the watch, a
 first list that never succeeds) the quarantine stays. Its sweep never removes
 a quarantine row of an endpoint it has not seen yet. Endpoints restored at
 agent start keep their pinned row (or get theirs from the policy thread).
@@ -961,8 +961,13 @@ peers and policies without peers do not wait. Each decision of an enforcing prog
 drop, an audit pass) is counted in `flowsdn_policy_verdicts` (LRU per-CPU,
 16384 rows): `GET /v1/policy/verdicts`. Deny and entity rules for Pods come
 from the flowsdn policy kinds (below). Pod policy always enforces (audit
-mode for Pods is gap #461); a flow already open when a policy first selects
-a Pod has its replies judged as new flows (#462). An ICMP or ICMPv6 error
+mode for Pods is gap #461). A Pod no policy selects keeps a tracking row
+(flags 0, #462): nothing is judged but its flows are remembered, so a
+connection open when a policy first selects the Pod keeps working (its
+replies and later packets pass as remembered flows; only new flows are
+judged). Flows idle past their lifetime, or opened before the agent first
+wrote the row, are not remembered. `policy.tracking` in `/v1/healthz` lists
+these endpoints. An ICMP or ICMPv6 error
 (destination unreachable, time exceeded, parameter problem) whose embedded
 packet was sent by its destination and belongs to a remembered flow, in either
 direction, is related traffic: it passes without a policy lookup and does not

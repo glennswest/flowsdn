@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#462)
+- **feat:** Flows open when a policy first selects a Pod keep working. The policy thread now gives every known local endpoint that no policy selects a tracking row in `flowsdn_policy_ep` (flags 0: nothing judged, flows remembered in `flowsdn_policy_ct`), as the host firewall's local-Pod path does. Before, it removed the row, so nothing was tracked. When a policy then selects the Pod, the replies and later packets of connections it already had pass as remembered flows, and only new flows are judged. A new endpoint's quarantine is now replaced by this tracking row instead of being removed. `policy.tracking` in `/v1/healthz` lists these endpoints. Only with `network-policy` or `flowsdn-policy` on. No BPF change. Not covered: flows idle past their lifetime, or opened before the agent first wrote the row.
+- **test:** `unselected_pods_are_tracked_until_a_policy_selects_them`, plus updated compile tests (an unselected Pod has a flags-0 row, nothing enforced). New `policy-live` kernel step: under a tracking row the Pod opens TCP 443 and a peer opens TCP 5432. Once ingress is enforced with no rules, the 443 reply and the 5432 flow pass and a new 5432 SYN is dropped.
+
 ### 2026-11-20 (#500)
 - **fix:** A ROUTE-REFRESH whose length is not 23 is answered with 7/1, ROUTE-REFRESH message error / invalid message length, carrying the complete message as RFC 7313 §5 requires (finding 07c7d1dd3eec). It used to get the generic 1/2 header-length error, and the 7/1 path was unreachable. Both `Session::receive` (wire bytes) and a directly handed frame now send it.
 - **fix:** Canonical replay keys keep parameter boundaries (finding 48b8dc5f6c4b). The cloud fixture decoded query and form pairs, then joined them with plain `=` and `&`, so `a=x%26b%3Dy` and `a=x&b=y` matched. A decoded `%`, `&` or `=` is now escaped again before joining. Equivalent encodings still match.

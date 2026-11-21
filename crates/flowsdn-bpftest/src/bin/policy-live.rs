@@ -3,7 +3,8 @@
 //! (pod ingress) programs test-run on frames as if on an endpoint's host
 //! veth (a dummy device in a private network namespace), with the policy,
 //! ipcache and policy-endpoint maps written through the loader. Covers an
-//! unenforced endpoint, default deny, the host exception, neighbour
+//! unenforced endpoint, a tracking row whose flows survive enforcement
+//! (#462), default deny, the host exception, neighbour
 //! discovery and ARP, identity + protocol + port and port-range (LPM) allows,
 //! the aggregate cluster identity and the wildcard identity, a top-precedence
 //! deny, replies of allowed flows in the other direction (conntrack), ICMP
@@ -254,6 +255,43 @@ fn run(object: &[u8]) -> Result<()> {
         return Err("an endpoint without a policy entry was tracked".into());
     }
     println!("PASS endpoint without a policy entry: both programs pass, nothing tracked");
+
+    // #462: a tracking row (flags 0, a Pod no policy selects) judges nothing
+    // but remembers flows, so connections opened before a policy first
+    // selects the Pod keep working once it does.
+    lab.enforce(0)?;
+    lab.egress(
+        "tracking: the Pod opens TCP 443",
+        &v4(TCP, POD, PEER, 0, &tcp(43000, 443, SYN)),
+        OK,
+    )?;
+    lab.ingress(
+        "tracking: a peer opens TCP 5432",
+        &v4(TCP, OTHER, POD, 0, &tcp(44000, 5432, SYN)),
+        OK,
+    )?;
+    if lab.delivery.policy().policy_flows()?.len() < 2 {
+        return Err("a tracking row did not remember its flows".into());
+    }
+    lab.enforce(enforce::INGRESS)?;
+    lab.ingress(
+        "enforced: the reply of the TCP 443 flow opened while tracking",
+        &v4(TCP, PEER, POD, 0, &tcp(443, 43000, SYN | ACK)),
+        OK,
+    )?;
+    lab.ingress(
+        "enforced: the TCP 5432 flow opened while tracking",
+        &v4(TCP, OTHER, POD, 0, &tcp(44000, 5432, ACK)),
+        OK,
+    )?;
+    lab.ingress(
+        "enforced: a new TCP 5432 flow",
+        &v4(TCP, OTHER, POD, 0, &tcp(44001, 5432, SYN)),
+        SHOT,
+    )?;
+    println!(
+        "PASS tracking row: flows opened before enforcement keep working once ingress is enforced; new ones are judged"
+    );
 
     lab.identity(IpAddr::V4(Ipv4Addr::from(PEER)), 300)?;
     lab.identity(IpAddr::V4(Ipv4Addr::from(OTHER)), 301)?;
