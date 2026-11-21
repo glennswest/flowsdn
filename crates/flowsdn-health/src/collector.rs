@@ -127,7 +127,10 @@ impl<T: Clone + Send + 'static> Collector<T> {
                 "has no result"
             };
             let message = format!("probe {name} {what} for {}s", age.as_secs());
-            if worst.as_ref().is_none_or(|(w, _)| state == State::Failure && *w != State::Failure) {
+            if worst
+                .as_ref()
+                .is_none_or(|(w, _)| state == State::Failure && *w != State::Failure)
+            {
                 worst = Some((state, message));
             }
         }

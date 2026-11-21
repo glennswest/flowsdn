@@ -40,7 +40,9 @@ impl History {
     /// Append `line` (a newline is added), rotating first when it would pass
     /// the limit. A line longer than the limit still fits in a fresh file.
     pub fn append(&mut self, line: &str) -> io::Result<()> {
-        let len = u64::try_from(line.len()).unwrap_or(u64::MAX).saturating_add(1);
+        let len = u64::try_from(line.len())
+            .unwrap_or(u64::MAX)
+            .saturating_add(1);
         if self.size > 0 && self.size.saturating_add(len) > self.max_bytes {
             self.rotate()?;
         }

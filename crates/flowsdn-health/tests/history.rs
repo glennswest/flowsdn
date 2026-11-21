@@ -15,7 +15,9 @@ fn appends_rotates_and_reads_back() {
     // 40 bytes per file: 3 lines of 12 (+ newline) each.
     let mut history = History::open(&path, 40).expect("open");
     for n in 0..12 {
-        history.append(&format!("{{\"n\":{n:05}}}")).expect("append");
+        history
+            .append(&format!("{{\"n\":{n:05}}}"))
+            .expect("append");
     }
     let files: Vec<_> = std::fs::read_dir(&dir)
         .expect("list")
@@ -40,6 +42,10 @@ fn appends_rotates_and_reads_back() {
         read(&path, 1).expect("read").first().map(String::as_str),
         Some("{\"n\":99999}")
     );
-    assert!(read(&dir.join("missing.log"), 10).expect("missing").is_empty());
+    assert!(
+        read(&dir.join("missing.log"), 10)
+            .expect("missing")
+            .is_empty()
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

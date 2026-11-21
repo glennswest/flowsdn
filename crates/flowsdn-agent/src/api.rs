@@ -1346,7 +1346,10 @@ impl Api {
     }
 }
 /// The `agent` member of `/v1/healthz` and its HTTP status, from the probes.
-fn healthz_agent(probes: &flowsdn_health::collector::Collector<Value>, now: Instant) -> (u16, Value) {
+fn healthz_agent(
+    probes: &flowsdn_health::collector::Collector<Value>,
+    now: Instant,
+) -> (u16, Value) {
     use flowsdn_health::{State, collector::Thresholds};
     if !probes.ran_once() {
         return (
@@ -1357,7 +1360,10 @@ fn healthz_agent(probes: &flowsdn_health::collector::Collector<Value>, now: Inst
     match probes.stale(now, &Thresholds::default()) {
         Some((State::Failure, msg)) => (500, json!({"state":"Failure","msg":msg})),
         Some((_, msg)) => (200, json!({"state":"Warning","msg":msg})),
-        None => (200, json!({"state":"Ok","msg":"initial endpoint API ready"})),
+        None => (
+            200,
+            json!({"state":"Ok","msg":"initial endpoint API ready"}),
+        ),
     }
 }
 

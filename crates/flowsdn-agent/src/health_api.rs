@@ -97,7 +97,10 @@ impl ModuleHealth {
     pub(super) fn new(history: Option<std::path::PathBuf>) -> Result<Self> {
         let file = match &history {
             Some(path) => {
-                match flowsdn_health::history::History::open(path, flowsdn_health::history::MAX_BYTES) {
+                match flowsdn_health::history::History::open(
+                    path,
+                    flowsdn_health::history::MAX_BYTES,
+                ) {
                     Ok(file) => Some(file),
                     Err(error) => {
                         crate::log::logln!(
@@ -542,8 +545,12 @@ mod tests {
             kubernetes: Some(json!({"state":"Ok","msg":"synced"})),
             policy_maps: policy.map(str::to_owned),
         };
-        health.refresh(&facts(Some("map pin missing"))).expect("refresh");
-        health.refresh(&facts(Some("map pin missing"))).expect("same");
+        health
+            .refresh(&facts(Some("map pin missing")))
+            .expect("refresh");
+        health
+            .refresh(&facts(Some("map pin missing")))
+            .expect("same");
         health.refresh(&facts(None)).expect("policy row goes");
         let history = health.history().expect("history");
         let entries: Vec<(String, String, String)> = history
@@ -551,7 +558,12 @@ mod tests {
             .expect("array")
             .iter()
             .map(|e| {
-                let text = |k: &str| e.get(k).and_then(Value::as_str).unwrap_or_default().to_owned();
+                let text = |k: &str| {
+                    e.get(k)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned()
+                };
                 (text("event"), text("id"), text("level"))
             })
             .collect();
@@ -563,7 +575,11 @@ mod tests {
                 update("agent.restore", "OK"),
                 update("agent.kubernetes", "OK"),
                 update("agent.policy", "Degraded"),
-                ("close".to_owned(), "agent.policy".to_owned(), "Degraded".to_owned()),
+                (
+                    "close".to_owned(),
+                    "agent.policy".to_owned(),
+                    "Degraded".to_owned()
+                ),
             ]
         );
         assert!(
@@ -575,7 +591,13 @@ mod tests {
                 .is_some_and(|t| t.ends_with('Z')),
             "{history}"
         );
-        assert_eq!(ModuleHealth::new(None).expect("none").history().expect("empty"), json!([]));
+        assert_eq!(
+            ModuleHealth::new(None)
+                .expect("none")
+                .history()
+                .expect("empty"),
+            json!([])
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

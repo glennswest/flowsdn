@@ -26,7 +26,11 @@ fn staleness_follows_the_thresholds() {
     c.begin("kubernetes", at(10));
     c.begin("api", at(10));
     c.finish("api", at(10), "ok");
-    assert_eq!(c.stale(at(20), &t), None, "10 s outstanding is under the warning");
+    assert_eq!(
+        c.stale(at(20), &t),
+        None,
+        "10 s outstanding is under the warning"
+    );
     c.begin("api", at(25));
     c.finish("api", at(25), "ok");
     let (state, message) = c.stale(at(26), &t).expect("warning");
@@ -34,7 +38,10 @@ fn staleness_follows_the_thresholds() {
     assert_eq!(message, "probe kubernetes has not completed for 16s");
     let (state, message) = c.stale(at(71), &t).expect("failure");
     assert_eq!(state, State::Failure);
-    assert!(message.starts_with("probe kubernetes has not completed for 61s"), "{message}");
+    assert!(
+        message.starts_with("probe kubernetes has not completed for 61s"),
+        "{message}"
+    );
     // The last result stays readable while the probe is stuck.
     assert_eq!(c.last("kubernetes"), Some("synced"));
     // A probe whose thread stopped running it: its result ages out.
@@ -43,13 +50,16 @@ fn staleness_follows_the_thresholds() {
     quiet.begin("p", at(0));
     quiet.finish("p", at(0), 1);
     assert_eq!(
-        quiet.stale(at(61), &t).map(|(s, m)| (s, m)),
+        quiet.stale(at(61), &t),
         Some((State::Failure, "probe p has no result for 61s".into()))
     );
     // Never finished at all: outstanding since registration.
     let never: Collector<u8> = Collector::new();
     never.register("p", start);
-    assert_eq!(never.stale(at(16), &t).map(|(s, _)| s), Some(State::Warning));
+    assert_eq!(
+        never.stale(at(16), &t).map(|(s, _)| s),
+        Some(State::Warning)
+    );
 }
 
 #[test]
@@ -63,7 +73,10 @@ fn spawned_probes_run_repeatedly() {
     .expect("spawn");
     let deadline = Instant::now() + Duration::from_secs(5);
     while c.last("count").unwrap_or(0) < 3 {
-        assert!(Instant::now() < deadline, "the probe thread did not run three times");
+        assert!(
+            Instant::now() < deadline,
+            "the probe thread did not run three times"
+        );
         std::thread::sleep(Duration::from_millis(5));
     }
     assert!(c.ran_once());

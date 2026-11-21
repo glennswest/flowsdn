@@ -566,13 +566,25 @@ fn healthz_follows_probe_staleness() {
     let state = |(code, agent): (u16, Value)| {
         (
             code,
-            agent.get("state").and_then(Value::as_str).unwrap_or_default().to_owned(),
-            agent.get("msg").and_then(Value::as_str).unwrap_or_default().to_owned(),
+            agent
+                .get("state")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            agent
+                .get("msg")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
         )
     };
     assert_eq!(
         state(healthz_agent(&probes, at(1))),
-        (500, "Warning".into(), "Not all probes executed at least once".into())
+        (
+            500,
+            "Warning".into(),
+            "Not all probes executed at least once".into()
+        )
     );
     probes.begin("kubernetes", at(1));
     probes.finish("kubernetes", at(1), json!({"state":"Ok"}));
@@ -581,7 +593,10 @@ fn healthz_follows_probe_staleness() {
     probes.begin("kubernetes", at(6));
     let warning = state(healthz_agent(&probes, at(22)));
     assert_eq!((warning.0, warning.1.as_str()), (200, "Warning"));
-    assert!(warning.2.contains("probe kubernetes has not completed"), "{warning:?}");
+    assert!(
+        warning.2.contains("probe kubernetes has not completed"),
+        "{warning:?}"
+    );
     let failure = state(healthz_agent(&probes, at(67)));
     assert_eq!((failure.0, failure.1.as_str()), (500, "Failure"));
 }
