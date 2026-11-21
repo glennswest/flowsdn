@@ -2831,32 +2831,76 @@ fn masqueraded6(src: [u8; 16], dst: [u8; 16]) -> bool {
         && MASQ6_EXCLUDE.get(Key::new(128, dst)).is_none()
 }
 
-/// [`masq_flow4`] for IPv6: the flow's NAT address and port, claimed by its
-/// first packet.
+/// At the uplink's egress: whether the frame is a Pod's packet leaving the
+/// cluster. Its tuple goes into the [`INGRESS6`] slot (an echo request's
+/// identifier as the source port, protocol [`ICMP6`]) with its known flow:
+/// [`STEP_FORWARD`], [`STEP_NEW`] for [`masq_new6`], or [`STEP_PASS`].
 #[inline(always)]
-fn masq_flow6(
-    ctx: &TcContext,
-    proto: u8,
-    from: ([u8; 16], [u8; 2]),
-    to: ([u8; 16], [u8; 2]),
-) -> Option<([u8; 16], [u8; 2])> {
+fn masq_classify6(ctx: &TcContext) -> Option<i32> {
+    let state = INGRESS6.get_ptr_mut(0)?;
+    let tuple = match tuple6(ctx) {
+        Some(tuple) => tuple,
+        None => {
+            // An echo request: its identifier is the port.
+            if ctx.load::<[u8; 2]>(12).ok()? != ETH_P_IPV6
+                || ctx.load::<u8>(14).ok()? >> 4 != 6
+                || ctx.load::<u8>(IP6_NEXT).ok()? != ICMP6
+                || ctx.load::<u8>(IP6_SPORT).ok()? != 128
+            {
+                return None;
+            }
+            (
+                ICMP6,
+                ctx.load::<[u8; 16]>(IP6_SRC).ok()?,
+                ctx.load::<[u8; 16]>(IP6_DST).ok()?,
+                ctx.load::<[u8; 2]>(ICMP6_ID).ok()?,
+                [0; 2],
+            )
+        }
+    };
+    let (proto, src, dst, sport, dport) = tuple;
+    if !masqueraded6(src, dst) {
+        return None;
+    }
     let key = Nodeport6Key {
-        a: from.0,
-        b: to.0,
-        ap: from.1,
-        bp: to.1,
+        a: src,
+        b: dst,
+        ap: sport,
+        bp: dport,
         proto,
         direction: FORWARD,
         pad: [0; 2],
     };
-    let tuple = (proto, from.0, to.0, from.1, to.1);
     // SAFETY: LRU value copied at once, never written through.
-    if let Some(flow) = unsafe { NODEPORT6.get(&key).copied() }
-        .filter(|f| f.flags & FLOW_MASQ != 0 && live6(ctx, &tuple, f))
-    {
-        return Some((flow.other, flow.other_port));
-    }
-    let (result, fib) = fib6(ctx, proto, [0; 16], to.0, BPF_FIB_LOOKUP_SRC)?;
+    let known = unsafe { NODEPORT6.get(&key).copied() }
+        .filter(|f| f.flags & FLOW_MASQ != 0 && live6(ctx, &tuple, f));
+    let step = if known.is_some() {
+        STEP_FORWARD
+    } else {
+        STEP_NEW
+    };
+    let flow = known.unwrap_or(Nodeport6Value {
+        address: [0; 16],
+        port: [0; 2],
+        flags: 0,
+        pad: 0,
+        other: [0; 16],
+        other_port: [0; 2],
+        pad2: [0; 2],
+    });
+    // SAFETY: this CPU's slot, valid for the whole invocation and used by
+    // nothing else meanwhile (see fib6).
+    unsafe { state.write(Ingress6 { tuple, flow }) };
+    Some(step)
+}
+
+/// [`masq_flow4`] for IPv6, on the [`INGRESS6`] slot: claim the new flow's
+/// NAT address and port, into the slot's flow.
+#[inline(always)]
+fn masq_new6_in(ctx: &TcContext, state: *mut Ingress6) -> Option<()> {
+    // SAFETY: the slot masq_classify6 filled; read here, written below.
+    let (proto, src, dst, sport, dport) = unsafe { (*state).tuple };
+    let (result, fib) = fib6(ctx, proto, [0; 16], dst, BPF_FIB_LOOKUP_SRC)?;
     // SAFETY: the per-CPU slot fib6 just filled; plain field reads.
     let (ifindex, source) = unsafe { ((*fib).ifindex, (*fib).__bindgen_anon_3.ipv6_src) };
     // Only out of the uplink it leaves by, from that uplink's address.
@@ -2864,57 +2908,47 @@ fn masq_flow6(
         return None;
     }
     let nat = ip6_bytes(source);
-    let fin = proto == 6 && closes(ctx, IP6_SPORT, proto);
+    let fin = closes(ctx, IP6_SPORT, proto);
     let reply = Nodeport6Value {
-        address: to.0,
-        port: to.1,
+        address: dst,
+        port: dport,
         flags: FLOW_MASQ | if fin { FLOW_CLOSING } else { 0 },
         pad: 0,
-        other: from.0,
-        other_port: from.1,
+        other: src,
+        other_port: sport,
         pad2: now16().to_ne_bytes(),
     };
-    let port = claim_port6(to, nat, proto, &reply)?;
-    let flow = Nodeport6Value {
-        address: to.0,
-        port: to.1,
-        flags: FLOW_SNAT | FLOW_MASQ,
-        pad: 0,
-        other: nat,
-        other_port: port,
-        pad2: [0; 2],
+    let port = claim_port6((dst, dport), nat, proto, &reply)?;
+    let key = Nodeport6Key {
+        a: src,
+        b: dst,
+        ap: sport,
+        bp: dport,
+        proto,
+        direction: FORWARD,
+        pad: [0; 2],
     };
-    NODEPORT6.insert(&key, &flow, 0).ok()?;
-    Some((nat, port))
+    // SAFETY: as above; the flow is written in place.
+    let flow = unsafe { &mut (*state).flow };
+    flow.address = dst;
+    flow.port = dport;
+    flow.flags = FLOW_SNAT | FLOW_MASQ;
+    flow.other = nat;
+    flow.other_port = port;
+    NODEPORT6.insert(&key, flow, 0).ok()?;
+    Some(())
 }
 
-/// At the uplink's egress: a Pod's packet leaving the cluster, from this
-/// node's address.
+/// On the [`INGRESS6`] slot: the packet leaves from the flow's NAT address
+/// and port (an echo: identifier).
 #[inline(always)]
-fn masquerade6(ctx: &TcContext) -> Option<()> {
-    if let Some((proto, src, dst, sport, dport)) = tuple6(ctx) {
-        if !masqueraded6(src, dst) {
-            return None;
-        }
-        let nat = masq_flow6(ctx, proto, (src, sport), (dst, dport))?;
-        return rewrite6(ctx, proto, IP6_SRC, IP6_SPORT, (src, sport), nat);
+fn masquerade6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Option<()> {
+    let (proto, src, _, sport, _) = *tuple;
+    let nat = (flow.other, flow.other_port);
+    if proto == ICMP6 {
+        return set_icmp6(ctx, IP6_SRC, ICMP6_ID, true, (src, sport), nat);
     }
-    // An echo request: its identifier is the port.
-    if ctx.load::<[u8; 2]>(12).ok()? != ETH_P_IPV6
-        || ctx.load::<u8>(14).ok()? >> 4 != 6
-        || ctx.load::<u8>(IP6_NEXT).ok()? != ICMP6
-        || ctx.load::<u8>(IP6_SPORT).ok()? != 128
-    {
-        return None;
-    }
-    let src = ctx.load::<[u8; 16]>(IP6_SRC).ok()?;
-    let dst = ctx.load::<[u8; 16]>(IP6_DST).ok()?;
-    if !masqueraded6(src, dst) {
-        return None;
-    }
-    let id = ctx.load::<[u8; 2]>(ICMP6_ID).ok()?;
-    let nat = masq_flow6(ctx, ICMP6, (src, id), (dst, [0; 2]))?;
-    set_icmp6(ctx, IP6_SRC, ICMP6_ID, true, (src, id), nat)
+    rewrite6(ctx, proto, IP6_SRC, IP6_SPORT, (src, sport), nat)
 }
 
 /// A masqueraded flow's reservation `server:server_port -> nat:nat_port`.
@@ -3596,10 +3630,28 @@ fn icmp_out6(skb: *mut __sk_buff) -> i32 {
 fn icmp_in6(skb: *mut __sk_buff) -> i32 {
     icmp_error6_in(&TcContext::new(skb)).unwrap_or(NOT_NODEPORT)
 }
-/// [`masquerade6`] on its own frame.
+/// [`masq_classify6`] on its own frame.
+#[inline(never)]
+fn masq6(skb: *mut __sk_buff) -> i32 {
+    masq_classify6(&TcContext::new(skb)).unwrap_or(STEP_PASS)
+}
+/// [`masq_new6_in`] on its own frame: 1 when the flow was claimed.
+#[inline(never)]
+fn masq_new6(skb: *mut __sk_buff) -> i32 {
+    let Some(state) = INGRESS6.get_ptr_mut(0) else {
+        return 0;
+    };
+    i32::from(masq_new6_in(&TcContext::new(skb), state).is_some())
+}
+/// [`masquerade6_in`] on the [`INGRESS6`] slot, on its own frame.
 #[inline(never)]
 fn masq_out6(skb: *mut __sk_buff) -> i32 {
-    let _ = masquerade6(&TcContext::new(skb));
+    let ctx = TcContext::new(skb);
+    if let Some(state) = INGRESS6.get_ptr_mut(0) {
+        // SAFETY: the slot masq6 (and masq_new6) filled; read only.
+        let state = unsafe { &*state };
+        let _ = masquerade6_in(&ctx, &state.tuple, &state.flow);
+    }
     TC_ACT_OK
 }
 /// [`masq_icmp6_in`] on its own frame; anything else passes.
@@ -3843,7 +3895,11 @@ pub fn nodeport_egress(ctx: TcContext) -> i32 {
                     STEP_XLATE_FORWARD => to_v4(ctx.skb.skb, false),
                     STEP_NEW if gateway64_new(ctx.skb.skb) != 0 => to_v4(ctx.skb.skb, false),
                     STEP_NEW => TC_ACT_OK,
-                    _ => masq_out6(ctx.skb.skb),
+                    _ => match masq6(ctx.skb.skb) {
+                        STEP_FORWARD => masq_out6(ctx.skb.skb),
+                        STEP_NEW if masq_new6(ctx.skb.skb) != 0 => masq_out6(ctx.skb.skb),
+                        _ => TC_ACT_OK,
+                    },
                 },
                 verdict => verdict,
             },

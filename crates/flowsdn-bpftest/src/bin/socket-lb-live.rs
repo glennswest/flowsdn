@@ -653,7 +653,11 @@ fn masquerade6(lb: &mut SocketLb) -> Result<()> {
         Ok(l4_sum(58, &src, &dst, f.get(54..).ok_or("icmp")?) == 0xffff)
     };
     if out.get(22..38) != Some(&node[..]) || !(61000..=65535).contains(&nat_id) || !icmp_ok(&out)? {
-        return Err(format!("IPv6 masquerade echo: from {:?} id {nat_id}", out.get(22..38)).into());
+        return Err(format!(
+            "IPv6 masquerade echo: from {:?} id {nat_id}",
+            out.get(22..38)
+        )
+        .into());
     }
     let out = run_on(
         lb,
@@ -662,7 +666,10 @@ fn masquerade6(lb: &mut SocketLb) -> Result<()> {
         up0,
         TCX_NEXT,
     )?;
-    if out.get(38..54) != Some(&pod[..]) || out.get(58..60) != Some(&[0x23, 0x45][..]) || !icmp_ok(&out)? {
+    if out.get(38..54) != Some(&pod[..])
+        || out.get(58..60) != Some(&[0x23, 0x45][..])
+        || !icmp_ok(&out)?
+    {
         return Err(format!("IPv6 masquerade echo reply: to {:?}", out.get(38..54)).into());
     }
     // A cluster destination, the node's own traffic: untouched.

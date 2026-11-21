@@ -106,7 +106,9 @@ type Masq4 = Masq<4>;
 pub type Prefix4 = ([u8; 4], u8);
 /// IPv6 prefixes (address, length) for the RFC 6052 gateway's sources.
 pub type Prefix6 = ([u8; 16], u8);
-fn prefixes<const N: usize>(map: &Masq<N>) -> KernelResult<std::collections::BTreeSet<([u8; N], u8)>> {
+fn prefixes<const N: usize>(
+    map: &Masq<N>,
+) -> KernelResult<std::collections::BTreeSet<([u8; N], u8)>> {
     let mut out = std::collections::BTreeSet::new();
     for item in map.iter() {
         let (key, _) = item?;
@@ -422,7 +424,11 @@ impl SocketLb {
         sync_prefixes(&mut self.masq4_sources, sources)
     }
     /// IPv6 masquerade (#513): [`Self::set_masquerade`] for IPv6 prefixes.
-    pub fn set_masquerade6(&mut self, sources: &[Prefix6], exclude: &[Prefix6]) -> KernelResult<()> {
+    pub fn set_masquerade6(
+        &mut self,
+        sources: &[Prefix6],
+        exclude: &[Prefix6],
+    ) -> KernelResult<()> {
         sync_prefixes(&mut self.masq6_exclude, exclude)?;
         sync_prefixes(&mut self.masq6_sources, sources)
     }
