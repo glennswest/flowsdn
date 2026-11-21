@@ -4,6 +4,15 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### scripttest subsystem adapters — #455 split, 2026-11-21
+
+- [x] #455 covered all of spec 17 §3.3's subsystem command groups (168 scripts, 12 areas). Split along §3.9's porting
+      order into #516 (A: `db/*`, `hive/*`, health/metrics, fake Kubernetes — first, everything builds on it), #517
+      IPAM, #518 policy/identity, #519 load balancer (+ redirect policy, needs #336), #520 privileged node model, #521
+      Hubble exporter (needs #293), #522 operator, #523 egress gateway (needs #336), #524 BGP, #525 Envoy (needs #335),
+      #526 ClusterMesh. #516 proposed; the rest proposed `--after flowsdn#516`. Nothing built under #455; closed as
+      superseded.
+
 ### BPF masquerade (IPv4) — #460 (P3), 2026-11-21
 
 - [x] socket-lb.rs: `flowsdn_masq4_sources`/`_exclude` LPM; egress `masquerade4` (TCP/UDP via `tuple4`, echo via

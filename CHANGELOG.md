@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-21 (#455)
+- **docs:** The scripttest subsystem-adapter gap (#455) is split along spec 17 §3.9's porting order into one gap issue per step, #516–#526. The first is #516 (table store, agent lifecycle and fake Kubernetes adapters), which every other area builds on. The work plan lists them. No adapter is built yet.
+
 ### 2026-11-21 (#460)
 - **feat:** BPF masquerade for IPv4, the reference's `enable-bpf-masquerade`: `kubernetes.bpf-masquerade` (default false; settable per node by FlowsdnNodeConfig) and `kubernetes.non-masquerade-cidrs` (IPv4).
   - **Maps:** the services thread keeps `flowsdn_masq4_sources` (this node's pod CIDRs) and `flowsdn_masq4_exclude` (every node's pod CIDRs and InternalIPs, plus the configured CIDRs), both pinned.
