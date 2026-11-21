@@ -1085,7 +1085,7 @@ fn unselected_pods_are_tracked_until_a_policy_selects_them() {
     assert_eq!(unselected.endpoints.get(&40).map(|e| e.flags), Some(0));
     assert_eq!(unselected.tracking, [7]);
     assert!(unselected.enforced.is_empty());
-    assert_eq!(unselected.status()["tracking"], json!([7]));
+    assert_eq!(unselected.status().get("tracking"), Some(&json!([7])));
     let selected = compile(
         &view(vec![policy(json!({
             "podSelector":{"matchLabels":{"app":"web"}}, "policyTypes":["Ingress"]
