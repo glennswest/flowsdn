@@ -923,8 +923,8 @@ fn a_new_endpoint_stays_quarantined_until_its_pod_is_known() {
         "a quarantined endpoint has no allow entry"
     );
 
-    // The Pod arrives, no policy selects it: no row, and the sweep removes
-    // the quarantine row the manager wrote.
+    // The Pod arrives, no policy selects it: its tracking row (#462)
+    // replaces the quarantine row the manager wrote.
     view.pods
         .push(pod("newcomer", "n1", "10.1.0.9", &[("app", "new")]));
     let filter = LabelFilter::identity(&[]).expect("filter");
@@ -937,9 +937,10 @@ fn a_new_endpoint_stays_quarantined_until_its_pod_is_known() {
         }
     }
     let released = compile(&view, &[]);
-    assert!(!released.endpoints.contains_key(&41));
+    assert_eq!(released.endpoints.get(&41).map(|e| e.flags), Some(0));
     assert!(released.quarantined.is_empty());
-    assert!(stale_row(&released, 41, quarantine(9).flags));
+    assert!(released.tracking.contains(&9));
+    assert!(!stale_row(&released, 41, quarantine(9).flags));
 
     // A default-deny policy selecting it: its own row replaces the quarantine.
     view.network_policies = vec![policy(json!({
