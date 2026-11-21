@@ -3021,19 +3021,19 @@ fn to_v4_in(
 
 // Each family's path is its own BPF function (a BPF-to-BPF call), so each
 // gets its own stack frame: inlined together they exceed the 512-byte stack.
+/// [`ingress4`]/[`egress4`]: not a NodePort packet, so the caller tries the
+/// masquerade (#460) from its own frame (nested, the stacks exceed 512 bytes).
+const NOT_NODEPORT: i32 = -2;
 #[inline(never)]
 fn ingress4(skb: *mut __sk_buff) -> i32 {
-    match nodeport4_in(&TcContext::new(skb)) {
-        Some(verdict) => verdict,
-        None => masq_icmp_in(skb),
-    }
+    nodeport4_in(&TcContext::new(skb)).unwrap_or(NOT_NODEPORT)
 }
 #[inline(never)]
 fn egress4(skb: *mut __sk_buff) -> i32 {
-    if nodeport4_out(&TcContext::new(skb)).is_none() {
-        masq_out(skb);
+    match nodeport4_out(&TcContext::new(skb)) {
+        Some(()) => TC_ACT_OK,
+        None => NOT_NODEPORT,
     }
-    TC_ACT_OK
 }
 #[inline(never)]
 fn masq_out(skb: *mut __sk_buff) -> i32 {
@@ -3108,7 +3108,10 @@ fn ingress(ctx: &TcContext) -> i32 {
             STEP_NEW => TC_ACT_OK,
             STEP_FORWARD => to_v6(skb, false),
             _ => match dsr4(skb) {
-                DSR_NONE => ingress4(skb),
+                DSR_NONE => match ingress4(skb) {
+                    NOT_NODEPORT => masq_icmp_in(skb),
+                    verdict => verdict,
+                },
                 DSR_ACCEPT => TC_ACT_OK,
                 _ => TC_ACT_SHOT,
             },
@@ -3119,7 +3122,10 @@ fn ingress(ctx: &TcContext) -> i32 {
 pub fn nodeport_egress(ctx: TcContext) -> i32 {
     next(match ctx.load::<[u8; 2]>(12) {
         Ok(ETH_P_IPV6) => egress6(ctx.skb.skb),
-        _ => egress4(ctx.skb.skb),
+        _ => match egress4(ctx.skb.skb) {
+            NOT_NODEPORT => masq_out(ctx.skb.skb),
+            verdict => verdict,
+        },
     })
 }
 
