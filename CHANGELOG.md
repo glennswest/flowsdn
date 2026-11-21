@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#461)
+- **feat:** Pod policy audit mode: `kubernetes.policy-audit-mode` (default false; the reference's `policy-audit-mode`, also settable per node by FlowsdnNodeConfig). With it every enforced Pod endpoint row carries the AUDIT flag the datapath already honours. What a NetworkPolicy or flowsdn policy refuses (default deny, a deny rule) passes and is counted as `audit` in `/v1/policy/verdicts`, never dropped. An unknown Pod's quarantine row is audit too, and the endpoint manager does not quarantine new endpoints, since nothing is dropped. `policy.audit` in `/v1/healthz` reports the mode. Tracking rows (no policy) are unchanged. No BPF change.
+- **test:** `policy_audit_mode_marks_pod_rows_audit` and the node-config key sample. New `policy-live` kernel step with an AUDIT endpoint row: default deny on TCP 81 and the deny rule on TCP 22 pass and are counted as audit, TCP 80 as allowed, and without AUDIT the drop returns.
+
 ### 2026-11-20 (#462)
 - **feat:** Flows open when a policy first selects a Pod keep working. The policy thread now gives every known local endpoint that no policy selects a tracking row in `flowsdn_policy_ep` (flags 0: nothing judged, flows remembered in `flowsdn_policy_ct`), as the host firewall's local-Pod path does. Before, it removed the row, so nothing was tracked. When a policy then selects the Pod, the replies and later packets of connections it already had pass as remembered flows, and only new flows are judged. A new endpoint's quarantine is now replaced by this tracking row instead of being removed. `policy.tracking` in `/v1/healthz` lists these endpoints. Only with `network-policy` or `flowsdn-policy` on. No BPF change. Not covered: flows idle past their lifetime, or opened before the agent first wrote the row.
 - **test:** `unselected_pods_are_tracked_until_a_policy_selects_them`, plus updated compile tests (an unselected Pod has a flags-0 row, nothing enforced). New `policy-live` kernel step: under a tracking row the Pod opens TCP 443 and a peer opens TCP 5432. Once ingress is enforced with no rules, the 443 reply and the 5432 flow pass and a new 5432 SYN is dropped.

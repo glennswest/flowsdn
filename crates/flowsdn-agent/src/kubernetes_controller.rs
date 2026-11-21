@@ -142,6 +142,7 @@ impl Controller {
             identity: self.settings.identity_allocation,
             network_policy: self.settings.network_policy,
             flowsdn_policy: self.settings.flowsdn_policy,
+            policy_audit: self.settings.policy_audit,
             host_firewall: self.settings.host_firewall,
             cluster_name: self.settings.cluster_name.clone(),
             lb_ipam: self.settings.lb_ipam_on(),

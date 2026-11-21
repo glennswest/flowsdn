@@ -98,6 +98,11 @@ pub struct Settings {
     /// Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy
     /// (#292; the CRDs must exist, the policy thread waits for their lists).
     pub flowsdn_policy: bool,
+    /// `policy-audit-mode` (#461; the reference's `policy-audit-mode`,
+    /// default false): Pod endpoints judge and count (`audit` in
+    /// `/v1/policy/verdicts`) but never drop. The host firewall has its own
+    /// `host-firewall: audit`.
+    pub policy_audit: bool,
     /// The host firewall (#379): `off` (default), `audit` or `enforce`.
     pub host_firewall: HostFirewall,
     /// `kubernetes.uplinks` (#408): how several uplink ports are used.
@@ -277,6 +282,7 @@ impl Settings {
             identity_allocation: flag("identity-allocation", true)?,
             network_policy: flag("network-policy", true)?,
             flowsdn_policy: flag("flowsdn-policy", false)?,
+            policy_audit: flag("policy-audit-mode", false)?,
             host_firewall,
             cluster_name,
             cgroup_root,
@@ -690,6 +696,8 @@ pub struct View {
     /// Pod rules of the flowsdn policy kinds (#292): the setting and the
     /// FlowsdnNetworkPolicy objects (the clusterwide kind is below).
     pub flowsdn_policy: bool,
+    /// `policy-audit-mode` (#461): Pod endpoint rows carry the AUDIT flag.
+    pub policy_audit: bool,
     pub pod_policies: Vec<Value>,
     pub pod_policies_synced: bool,
     /// The host firewall (#379): its mode, the FlowsdnClusterwideNetworkPolicy

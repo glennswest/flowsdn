@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Pod policy audit mode — #461 (P3), 2026-11-20
+
+- [x] `kubernetes.policy-audit-mode` → View.policy_audit: AUDIT on enforced Pod rows and quarantine rows; no endpoint
+      manager quarantine in audit mode; `policy.audit` status; node-config key. Unit test; policy-live `pod_audit`.
+- [ ] sc-build + kernel-check; stage; shipped; close.
+
 ### Flows open before a policy selects a Pod — #462 (P3), 2026-11-20
 
 - [x] policy.rs: a known local endpoint no policy selects gets a tracking row (flags 0) when Pod policy is on;

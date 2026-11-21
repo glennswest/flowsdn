@@ -1117,3 +1117,46 @@ fn unselected_pods_are_tracked_until_a_policy_selects_them() {
     let off = compile(&off, &[]);
     assert!(off.endpoints.is_empty() && off.tracking.is_empty());
 }
+
+/// #461: `policy-audit-mode` adds AUDIT to enforced Pod rows and to the
+/// quarantine of an unknown Pod; tracking rows stay flags 0.
+#[test]
+fn policy_audit_mode_marks_pod_rows_audit() {
+    let selecting = || {
+        view(vec![policy(json!({
+            "podSelector":{"matchLabels":{"app":"web"}}, "policyTypes":["Ingress"]
+        }))])
+    };
+    let enforcing = compile(&selecting(), &[]);
+    assert_eq!(
+        enforcing.endpoints.get(&40).map(|e| e.flags),
+        Some(enforce::INGRESS)
+    );
+    assert_eq!(enforcing.status().get("audit"), Some(&json!(false)));
+    let mut audit = selecting();
+    audit.policy_audit = true;
+    audit.endpoints.push(LocalEndpoint {
+        id: 9,
+        namespace: "shop".into(),
+        name: "newcomer".into(),
+        interface: "lxc9".into(),
+        ifindex: 41,
+        ..LocalEndpoint::default()
+    });
+    let desired = compile(&audit, &[]);
+    assert_eq!(
+        desired.endpoints.get(&40).map(|e| e.flags),
+        Some(enforce::INGRESS | enforce::AUDIT)
+    );
+    assert_eq!(
+        desired.endpoints.get(&41).map(|e| e.flags),
+        Some(enforce::INGRESS | enforce::EGRESS | QUARANTINE | enforce::AUDIT)
+    );
+    assert_eq!(desired.status().get("audit"), Some(&json!(true)));
+    let mut unselected = view(Vec::new());
+    unselected.policy_audit = true;
+    assert_eq!(
+        compile(&unselected, &[]).endpoints.get(&40).map(|e| e.flags),
+        Some(0)
+    );
+}

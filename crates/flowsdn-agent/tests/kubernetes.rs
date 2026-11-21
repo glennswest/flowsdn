@@ -432,6 +432,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         identity_allocation: true,
         network_policy: false,
         flowsdn_policy: false,
+        policy_audit: false,
         cluster_name: "default".into(),
         // The uplink monitor runs here too; `single` keeps it from touching
         // the build host's rules on a machine with several ports.

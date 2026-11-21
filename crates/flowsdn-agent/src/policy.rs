@@ -106,6 +106,8 @@ pub struct Desired {
     pub quarantined: Vec<u16>,
     /// Local endpoints no policy selects: tracked, not judged (#462).
     pub tracking: Vec<u16>,
+    /// `policy-audit-mode` (#461): Pod endpoints count, never drop.
+    pub audit: bool,
     pub entries: BTreeMap<[u8; 16], PolicyEntry>,
     pub ipcache: BTreeMap<[u8; 24], RemoteEndpointInfo>,
     /// What could not be enforced as written (one line each).
@@ -129,6 +131,7 @@ impl Desired {
             "flowsdn-policies": self.pod_policies,
             "quarantined": self.quarantined,
             "tracking": self.tracking,
+            "audit": self.audit,
             "problems": self.problems,
         })
     }
@@ -589,6 +592,7 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
         })
         .unwrap_or_default();
 
+    desired.audit = view.policy_audit;
     for endpoint in &view.endpoints {
         let LocalEndpoint {
             id,
@@ -610,7 +614,12 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             // Its policy cannot be known yet: it stays isolated (#489,
             // finding bd9892ebb241) as the endpoint manager installed it.
             if (view.network_policy || view.flowsdn_policy) && *ifindex != 0 {
-                desired.endpoints.insert(*ifindex, quarantine(*id));
+                let mut row = quarantine(*id);
+                // Audit mode never drops (#461): an unknown Pod is counted.
+                if view.policy_audit {
+                    row.flags |= enforce::AUDIT;
+                }
+                desired.endpoints.insert(*ifindex, row);
                 desired.quarantined.push(*id);
             }
             continue;
@@ -673,6 +682,10 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
         // A Pod no policy selects keeps a tracking row (flags 0, #462): its
         // flows are remembered though nothing is judged, so connections it
         // already has keep working when a policy first selects it.
+        // Audit mode (#461): what the policy refuses is counted and passed.
+        if flags != 0 && view.policy_audit {
+            flags |= enforce::AUDIT;
+        }
         if *ifindex != 0 && (flags != 0 || view.network_policy || view.flowsdn_policy) {
             desired.endpoints.insert(
                 *ifindex,

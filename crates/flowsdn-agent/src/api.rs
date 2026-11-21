@@ -1539,8 +1539,10 @@ pub fn run(config_path: &Path) -> Result<()> {
     };
     let enabled = kubernetes.is_some();
     // New endpoints wait isolated for their policy (#489) only where the
-    // policy thread runs to lift it.
-    let quarantine = pod_policy && enabled && policy_maps_error.is_none();
+    // policy thread runs to lift it, and not in audit mode (#461), where
+    // nothing is dropped.
+    let policy_audit = config.kubernetes.as_ref().is_some_and(|k| k.policy_audit);
+    let quarantine = pod_policy && enabled && policy_maps_error.is_none() && !policy_audit;
     let mut api = Api {
         config,
         manager,

@@ -9,7 +9,7 @@
 //! the aggregate cluster identity and the wildcard identity, a top-precedence
 //! deny, replies of allowed flows in the other direction (conntrack), ICMP
 //! echo, ICMP and ICMPv6 errors about remembered flows as related traffic
-//! (#463), IPv6, fragments, and removing enforcement. The host firewall
+//! (#463), Pod audit mode (#461), IPv6, fragments, and removing enforcement. The host firewall
 //! (#379): `from_netdev`/`to_netdev` as if on an uplink, for the host
 //! endpoint: only traffic to the host's own address is judged, remote-node,
 //! world and port rules, a deny over an allow, replies of flows the host
@@ -419,6 +419,7 @@ fn run(object: &[u8]) -> Result<()> {
     )?;
     println!("PASS ICMP echo: the request is allowed by protocol, its reply by conntrack");
     related_errors(&lab)?;
+    pod_audit(&mut lab)?;
 
     let entries = lab.delivery.policy().policy_entries()?;
     if entries.len() != 4
@@ -442,6 +443,42 @@ fn run(object: &[u8]) -> Result<()> {
     host(&mut lab)?;
     host_egress(&mut lab)?;
     remote_node_aggregate(&mut lab)
+}
+
+/// Pod policy audit mode (#461, `policy-audit-mode`): the endpoint row
+/// carries AUDIT, so what its policy refuses (default deny, a deny rule)
+/// passes and is counted as `audit`; enforcement resumes without it.
+fn pod_audit(lab: &mut Lab) -> Result<()> {
+    lab.enforce(enforce::INGRESS | enforce::EGRESS | enforce::AUDIT)?;
+    let syn = |src, sport, dport| v4(TCP, src, POD, 0, &tcp(sport, dport, SYN));
+    lab.ingress("audit: default deny on TCP 81", &syn(PEER, 45000, 81), OK)?;
+    lab.ingress("audit: the deny rule on TCP 22", &syn(PEER, 45001, 22), OK)?;
+    lab.ingress("audit: an allowed TCP 80", &syn(PEER, 45002, 80), OK)?;
+    let counts = lab.delivery.policy().policy_verdicts()?;
+    let seen = |port: u16, kind: u8| {
+        counts.iter().any(|(k, v)| {
+            k.endpoint == u32::from(ENDPOINT)
+                && k.egress == 0
+                && k.dport.get() == port
+                && k.verdict == kind
+                && v.packets >= 1
+        })
+    };
+    for (port, kind, what) in [
+        (81, verdict::AUDIT, "audit 81"),
+        (22, verdict::AUDIT, "audit 22"),
+        (80, verdict::ALLOWED, "allowed 80"),
+    ] {
+        if !seen(port, kind) {
+            return Err(format!("Pod verdict counters lack {what}: {counts:?}").into());
+        }
+    }
+    lab.enforce(enforce::INGRESS | enforce::EGRESS)?;
+    lab.ingress("enforcing again: TCP 81", &syn(PEER, 45003, 81), SHOT)?;
+    println!(
+        "PASS Pod audit mode: default deny and a deny rule pass and are counted as audit, an allow as allowed; without AUDIT the drop returns"
+    );
+    Ok(())
 }
 
 /// ICMP errors as related traffic (#463). Ingress is enforced with no ICMP

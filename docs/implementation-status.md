@@ -152,8 +152,8 @@ pinning or subsystem libraries are absent are **not current status**.
   the socket LB (#453); DSR by IPIP or Geneve (#447); DSR ICMP errors (#449);
   NAT46/64 to local backends or in the socket LB (#450); the RFC 6052 gateway
   (#454); SCTP Services (#457); IPv4 fragments
-  after the first (#458); topology hints (#459); BPF masquerade (#460); Pod
-  policy audit mode (#461); the Hubble observer/relay (#293).
+  after the first (#458); topology hints (#459); BPF masquerade (#460); the
+  Hubble observer/relay (#293).
 
 ### Cloud fixtures (ADR-0007)
 

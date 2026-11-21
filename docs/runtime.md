@@ -60,6 +60,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.crd-wait-timeout` | `300` | Seconds the flowsdn.io watchers wait for the CRDs this configuration uses before the agent exits ([CRDs and the operator](#crds-and-the-operator-337)). 1 to 86400. |
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
+| `kubernetes.policy-audit-mode` | `false` | Pod policy audit mode (#461; the reference's `policy-audit-mode`): Pod endpoints judge and count what their policy refuses (`audit` in `/v1/policy/verdicts`) but never drop it, and new endpoints are not quarantined. The host firewall's own audit mode is `host-firewall: audit`. |
 | `kubernetes.flowsdn-policy` | `false` | Enforce the Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy ([Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292)). The CRDs must exist: the policy thread waits for both lists, NetworkPolicy enforcement included. |
 | `kubernetes.host-firewall` | `off` | `off`, `audit` or `enforce`: filter traffic to the node itself from FlowsdnClusterwideNetworkPolicy host rules ([host firewall](#host-firewall-379)); `audit` counts would-be drops and passes them. The stormcos Kubernetes-mode config sets `audit` (#402). |
 | `kubernetes.cluster-name` | `default` | The cluster label on every Pod identity (`io.flowsdn.k8s.policy.cluster`); a DNS label of at most 32 bytes. |
@@ -786,7 +787,7 @@ parses (`"true"`, `"1400"`, `'{"mode":"single"}'`) and as text otherwise.
   `ipv6-pool`, `ipv4-gateway`, `ipv6-gateway`, and the `kubernetes` settings
   `auto-direct-node-routes`, `direct-routing-skip-unreachable`,
   `service-lb`, `node-port`, `lb-algorithm`, `lb-mode`, `nat46x64`,
-  `lb-external-clusterip`,
+  `lb-external-clusterip`, `policy-audit-mode`,
   `lb-ipam`, `l2-announcements`, `identity-allocation`, `network-policy`,
   `flowsdn-policy`, `host-firewall`, `uplinks`, `endpoint-crd`, `node-crd`,
   `crd-wait-timeout`, `lb-sock-terminate-all-protos`. Not the paths the
@@ -960,8 +961,11 @@ check `kubectl get crd flowsdnidentities.flowsdn.io` (stormcos#303). `ipBlock`
 peers and policies without peers do not wait. Each decision of an enforcing program (a rule allowed a new flow, a
 drop, an audit pass) is counted in `flowsdn_policy_verdicts` (LRU per-CPU,
 16384 rows): `GET /v1/policy/verdicts`. Deny and entity rules for Pods come
-from the flowsdn policy kinds (below). Pod policy always enforces (audit
-mode for Pods is gap #461). A Pod no policy selects keeps a tracking row
+from the flowsdn policy kinds (below). With `kubernetes.policy-audit-mode:
+true` (#461) every enforced Pod row also carries the AUDIT flag: what its
+policy refuses (default deny, a deny rule) passes and is counted as `audit` in
+`/v1/policy/verdicts`, and new endpoints are not quarantined (an unknown Pod's
+row is audit too). `policy.audit` in `/v1/healthz` says which mode is on. A Pod no policy selects keeps a tracking row
 (flags 0, #462): nothing is judged but its flows are remembered, so a
 connection open when a policy first selects the Pod keeps working (its
 replies and later packets pass as remembered flows; only new flows are
