@@ -9,8 +9,9 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] socket-lb.rs: `FRAGS4` (`flowsdn_nodeport4_frags`, LRU 8192), `tuple4` records first-fragment ports and gives
       later fragments `NO_L4`; `rewrite4` rewrites only the IP header for them; `closes` and new flows skip them.
       Loader pins the map. socket-lb-live `fragments` step.
-- [ ] sc-build: build-bpf + lock write, socket-lb object back as base64; commit object + lock.
-- [ ] Strict sc-build + kernel-check; stage; shipped; close.
+- [x] Code 4c06d52; object + lock + fmt 96cdb27 (socket-lb sha256 463e0c01…); clippy fix 052e21d (#512).
+- [x] Strict sc-build at 052e21d: fmt --check, `cargo xtask check` (1015 tests, 0 failed), lock check, kernel-check on
+      7.3.4: 24 pass 0 fail 2 skip; socket-lb-live 30 PASS incl. IPv4 fragments. Staged; shipped; closed.
 
 ### Topology-aware routing hints — #459 (P3), 2026-11-21
 
