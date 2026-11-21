@@ -51,7 +51,10 @@ fn escaped_literals(text: &str) -> Vec<(usize, &str)> {
     let bytes = text.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
-    while let Some(open) = bytes.get(i..).and_then(|b| b.iter().position(|&c| c == b'"')) {
+    while let Some(open) = bytes
+        .get(i..)
+        .and_then(|b| b.iter().position(|&c| c == b'"'))
+    {
         let open = i.saturating_add(open);
         let mut j = open.saturating_add(1);
         let mut escaped = false;
