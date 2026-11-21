@@ -78,6 +78,13 @@ pub struct Settings {
     /// frontend with no backend of its family through the other family's
     /// backends on other nodes.
     pub nat46x64: bool,
+    /// `lb-external-clusterip` (#465; the reference's
+    /// `bpf-lb-external-clusterip`, default false): ClusterIP frontends get
+    /// a node-local copy too, so traffic from outside the cluster routed to
+    /// a ClusterIP (a route or BGP advertisement to this node) reaches its
+    /// backends through the uplink programs, with Maglev under the same
+    /// selection as NodePort.
+    pub external_clusterip: bool,
     /// Cluster identity allocation (spec 03 §3.3, #291), default on: watch
     /// Namespaces and FlowsdnIdentity objects and hold an identity for each
     /// local Pod's labels.
@@ -266,6 +273,7 @@ impl Settings {
             maglev,
             lb_mode,
             nat46x64: flag("nat46x64", false)?,
+            external_clusterip: flag("lb-external-clusterip", false)?,
             identity_allocation: flag("identity-allocation", true)?,
             network_policy: flag("network-policy", true)?,
             flowsdn_policy: flag("flowsdn-policy", false)?,

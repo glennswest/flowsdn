@@ -438,8 +438,12 @@ impl Controller {
                 }
                 if settings.service_lb {
                     let (svc_view, svc_lb) = (Arc::clone(&watch_view), lb.clone());
-                    let (maglev, lb_mode, nat46x64) =
-                        (settings.maglev, settings.lb_mode, settings.nat46x64);
+                    let (maglev, lb_mode, nat46x64, external_clusterip) = (
+                        settings.maglev,
+                        settings.lb_mode,
+                        settings.nat46x64,
+                        settings.external_clusterip,
+                    );
                     parts.push(
                         watch_forever(
                             &client,
@@ -447,7 +451,13 @@ impl Controller {
                             "services-watch",
                             &watch_view,
                             move |state| {
-                                let rows = service_rows(state, maglev, lb_mode, nat46x64);
+                                let rows = service_rows(
+                                    state,
+                                    maglev,
+                                    lb_mode,
+                                    nat46x64,
+                                    external_clusterip,
+                                );
                                 let frontends = {
                                     let mut view = lock(&svc_view);
                                     view.services = rows;
@@ -1120,6 +1130,7 @@ fn service_rows(
     maglev: bool,
     lb_mode: LbMode,
     nat46x64: bool,
+    external_clusterip: bool,
 ) -> Vec<ServiceInfo> {
     state
         .snapshot()
@@ -1159,6 +1170,7 @@ fn service_rows(
                     None => lb_mode == LbMode::Dsr,
                 },
                 nat46x64,
+                external_clusterip,
                 labels: service.labels.clone(),
                 created: service.created.clone(),
                 load_balancer_class: service.load_balancer_class.clone(),

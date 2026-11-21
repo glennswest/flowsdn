@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### External ClusterIP access with Maglev — #465 (P3), 2026-11-20
+
+- [x] `kubernetes.lb-external-clusterip` → `ServiceInfo.external_clusterip`; `frontends` adds a scope-1 ClusterIP copy
+      (internalTrafficPolicy, Maglev). Node-config key. Unit tests; socket-lb-live `external_clusterip` step. runtime.md,
+      spec 05 §3.13 amendment.
+- [ ] sc-build + kernel-check; stage; shipped; close.
+
 ### ICMP errors as related traffic — #463 (P3), 2026-11-20
 
 - [x] policy.rs: `inner4`/`inner6`/`inner_ports` parse the embedded packet (sender must be the outer destination);

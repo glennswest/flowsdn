@@ -50,6 +50,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.uplinks` | `{}` (`mode: active-active`, `table: 2080`, `rule-priority: 9100`, no weights) | Several uplinks (#408): an object, every key optional. `mode` is `active-active`, `active-backup` or `single` (as before #408); `weights` is `{"<interface>": 1-255}`; `table` and `rule-priority` place flowsdn's per-address source rules. Uplinks are discovered, never listed ([several uplinks](#several-uplinks-408)). |
 | `kubernetes.lb-algorithm` | `random` | `random` or `maglev`: how the uplink programs pick a backend for a new flow from outside the cluster ([Maglev](#clusterip-socket-lb-292)). A Service's `service.flowsdn.io/lb-algorithm` annotation (`random` or `maglev`) overrides it. |
 | `kubernetes.lb-mode` | `snat` | `snat`, `dsr` or `hybrid` (DSR for TCP, SNAT otherwise): how traffic from outside the cluster reaches a backend on another node ([DSR](#direct-server-return)). A Service's `service.flowsdn.io/forwarding-mode: dsr\|snat` annotation overrides it. |
+| `kubernetes.lb-external-clusterip` | `false` | External access to ClusterIP Services (#465; the reference's `bpf-lb-external-clusterip`): each cluster IP also gets a node-local copy, so traffic from outside the cluster that is routed to a ClusterIP on this node (a static route or BGP advertisement) reaches its backends through the uplink programs, with `internalTrafficPolicy` and with Maglev as for NodePort. |
 | `kubernetes.nat46x64` | `false` | Service NAT46/64: a node-local frontend with no backend of its own family reaches the other family's backends on other nodes ([NAT46/64](#service-nat4664)). |
 | `kubernetes.lb-ipam` | `true` | LB-IPAM: give `type: LoadBalancer` Services addresses from FlowsdnLoadBalancerIPPools ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb`; nothing happens without a pool. |
 | `kubernetes.l2-announcements` | `true` | Answer ARP and NDP for the load-balancer and external addresses FlowsdnL2AnnouncementPolicies give this node ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb` and `node-port`; nothing is announced without a policy. |
@@ -471,8 +472,11 @@ the port; for types NodePort and LoadBalancer every node's InternalIP on the
 inside the cluster, pods and node processes, whichever node's address they
 use. Traffic arriving from outside the cluster (#292, IPv4 and IPv6): the agent
 also writes a node-local copy (key scope 1) of every NodePort, external and
-LoadBalancer frontend (not cluster IPs), with every backend (only this node's
-with `externalTrafficPolicy: Local`), and, with `kubernetes.node-port` (default
+LoadBalancer frontend, with every backend (only this node's with
+`externalTrafficPolicy: Local`). Cluster IPs get one only with
+`kubernetes.lb-external-clusterip` (#465), limited by `internalTrafficPolicy`
+(`Local`: this node's backends), the policy Kubernetes applies to a cluster
+IP. With `kubernetes.node-port` (default
 on), attaches the `nodeport_ingress`/`nodeport_egress` tc programs (TCX) to
 every interface holding this node's InternalIP, rechecked every pass of the
 services thread (an interface that no longer holds it is detached; none found
@@ -782,6 +786,7 @@ parses (`"true"`, `"1400"`, `'{"mode":"single"}'`) and as text otherwise.
   `ipv6-pool`, `ipv4-gateway`, `ipv6-gateway`, and the `kubernetes` settings
   `auto-direct-node-routes`, `direct-routing-skip-unreachable`,
   `service-lb`, `node-port`, `lb-algorithm`, `lb-mode`, `nat46x64`,
+  `lb-external-clusterip`,
   `lb-ipam`, `l2-announcements`, `identity-allocation`, `network-policy`,
   `flowsdn-policy`, `host-firewall`, `uplinks`, `endpoint-crd`, `node-crd`,
   `crd-wait-timeout`, `lb-sock-terminate-all-protos`. Not the paths the

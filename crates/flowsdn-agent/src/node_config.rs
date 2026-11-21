@@ -40,6 +40,7 @@ pub const ALLOWED: [&str; 25] = [
     "kubernetes.lb-algorithm",
     "kubernetes.lb-mode",
     "kubernetes.nat46x64",
+    "kubernetes.lb-external-clusterip",
     "kubernetes.lb-ipam",
     "kubernetes.l2-announcements",
     "kubernetes.identity-allocation",

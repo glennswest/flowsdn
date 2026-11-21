@@ -572,3 +572,92 @@ fn terminable_and_stale_backends() {
         [(PROTO_UDP, ip("10.2.0.8"), 53)].into()
     );
 }
+
+/// #465: with `lb-external-clusterip` a cluster IP gets a node-local copy
+/// (the uplink path) under internalTrafficPolicy, with Maglev as the
+/// Service asks; without it, none.
+#[test]
+fn external_clusterip_adds_node_local_cluster_ip_copies() {
+    let on = |address: &str, node: &str| Endpoint {
+        node_name: node.into(),
+        ..endpoint(address, true, true, false)
+    };
+    let slice = SliceInfo {
+        namespace: "default".into(),
+        name: "web-x".into(),
+        service: "web".into(),
+        address_type: "IPv4".into(),
+        endpoints: vec![on("10.9.0.5", "n1"), on("10.9.1.5", "n2")],
+        ports: vec![slice_port("http", "TCP", 8080)],
+    };
+    let web = ServiceInfo {
+        namespace: "default".into(),
+        name: "web".into(),
+        service_type: "NodePort".into(),
+        cluster_ips: vec![ip("10.96.5.7")],
+        ports: vec![ServicePort {
+            node_port: Some(30080),
+            ..port("http", "TCP", 80)
+        }],
+        maglev: true,
+        // externalTrafficPolicy: Local applies to the NodePort, not the
+        // cluster IP.
+        external_local: true,
+        ..ServiceInfo::default()
+    };
+    let nodes = [NodeAddresses {
+        name: "n1".into(),
+        ips: vec![ip("192.0.2.1")],
+    }];
+    let copy = |out: &[Frontend], kind: &str| -> Option<(Vec<String>, bool)> {
+        out.iter()
+            .find(|f| f.kind == kind && f.service.scope == SCOPE_NODE_LOCAL)
+            .map(|f| {
+                (
+                    f.service
+                        .backends
+                        .iter()
+                        .map(|b| format!("{}:{}", b.ip, b.port))
+                        .collect(),
+                    f.service.maglev,
+                )
+            })
+    };
+    let slices = [slice];
+    let off = frontends(std::slice::from_ref(&web), &slices, "n1", &nodes);
+    assert_eq!(copy(&off, "ClusterIP"), None, "off by default");
+    assert!(copy(&off, "NodePort").is_some());
+
+    let external = ServiceInfo {
+        external_clusterip: true,
+        ..web.clone()
+    };
+    let out = frontends(std::slice::from_ref(&external), &slices, "n1", &nodes);
+    assert_eq!(
+        copy(&out, "ClusterIP"),
+        Some((vec!["10.9.0.5:8080".into(), "10.9.1.5:8080".into()], true)),
+        "every backend (internalTrafficPolicy Cluster), Maglev"
+    );
+    assert_eq!(
+        copy(&out, "NodePort"),
+        Some((vec!["10.9.0.5:8080".into()], true)),
+        "the NodePort keeps externalTrafficPolicy Local"
+    );
+    let cluster = out
+        .iter()
+        .find(|f| f.kind == "ClusterIP" && f.service.scope == SCOPE_CLUSTER)
+        .expect("cluster-scope copy");
+    assert!(!cluster.service.maglev, "the socket LB copy never uses Maglev");
+
+    let internal = ServiceInfo {
+        internal_local: true,
+        maglev: false,
+        ..external
+    };
+    let out = frontends(&[internal], &slices, "n1", &nodes);
+    assert_eq!(
+        copy(&out, "ClusterIP"),
+        Some((vec!["10.9.0.5:8080".into()], false)),
+        "internalTrafficPolicy Local: this node's backends"
+    );
+}

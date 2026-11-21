@@ -12,8 +12,11 @@
 //! Each NodePort, external and LoadBalancer frontend also has a node-local
 //! copy (scope 1) for packets from outside the cluster arriving on this
 //! node's uplink: every backend (the uplink programs SNAT to other nodes'),
-//! or this node's only with `externalTrafficPolicy: Local`. Those copies
-//! use Maglev when the Service asks for it (spec 05 §3.13).
+//! or this node's only with `externalTrafficPolicy: Local`. With
+//! `lb-external-clusterip` (#465) a ClusterIP has one too, limited to this
+//! node's backends by `internalTrafficPolicy: Local` (the policy of a
+//! cluster IP). Those copies use Maglev when the Service asks for it (spec
+//! 05 §3.13).
 //! Pure data; the `kubernetes` controller feeds and applies it.
 use flowsdn_lb::socket::{Address, PROTO_TCP, PROTO_UDP, SCOPE_CLUSTER, SCOPE_NODE_LOCAL, Service};
 use serde_json::{Value, json};
@@ -53,6 +56,9 @@ pub struct ServiceInfo {
     /// backend of its own family balances over the other family's backends on
     /// other nodes.
     pub nat46x64: bool,
+    /// `kubernetes.lb-external-clusterip` (#465): its cluster IPs get a
+    /// node-local copy for traffic from outside the cluster.
+    pub external_clusterip: bool,
     /// For LB-IPAM and L2 announcements (#475): labels, creation time,
     /// `loadBalancerClass`, `ipFamilies`, the addresses it asks for and
     /// the resourceVersion a status patch is guarded by.
@@ -224,13 +230,17 @@ pub fn frontends(
                 // or LoadBalancer address on this node's uplink (scope 1): every
                 // backend, other nodes' through SNAT, or with
                 // `externalTrafficPolicy: Local` this node's only.
-                let scopes: &[u8] = if kind == "ClusterIP" {
+                // A cluster IP only with `lb-external-clusterip` (#465).
+                let scopes: &[u8] = if kind == "ClusterIP" && !service.external_clusterip {
                     &[SCOPE_CLUSTER]
                 } else {
                     &[SCOPE_CLUSTER, SCOPE_NODE_LOCAL]
                 };
                 for &scope in scopes {
-                    let only = if scope == SCOPE_NODE_LOCAL {
+                    let only = if scope == SCOPE_NODE_LOCAL && kind == "ClusterIP" {
+                        // A cluster IP's policy is internalTrafficPolicy.
+                        internal
+                    } else if scope == SCOPE_NODE_LOCAL {
                         service.external_local.then_some(local)
                     } else {
                         only
@@ -242,7 +252,7 @@ pub fn frontends(
                     let translated = if service.nat46x64
                         && scope == SCOPE_NODE_LOCAL
                         && same.is_empty()
-                        && !service.external_local
+                        && only.is_none()
                     {
                         backends(port, proto, !ip.is_ipv6(), slices, None, Some(local))
                     } else {

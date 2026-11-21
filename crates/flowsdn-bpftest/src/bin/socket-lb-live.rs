@@ -11,7 +11,8 @@
 //! on a dummy uplink in this netns; IPv4 and IPv6; Maglev backend selection
 //! checked against the planner's tables; service NAT46/64; and UDP socket termination
 //! through SOCK_DIAG when a backend leaves, and TCP termination only with
-//! `lb-sock-terminate-all-protos` (#392).
+//! `lb-sock-terminate-all-protos` (#392); and external access to a ClusterIP
+//! (`lb-external-clusterip`, #465) from the agent's own frontends, with Maglev.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_lb::socket::{self, Address, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
@@ -449,7 +450,110 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     dsr(lb, services)?;
     nat46x64(lb, services)?;
     nat_expiry(lb, services)?;
+    external_clusterip(lb, services)?;
     services.retain(|s| s.scope != SCOPE_NODE_LOCAL);
+    Ok(())
+}
+
+/// External access to a ClusterIP (#465): the agent's `services::frontends`
+/// for a ClusterIP Service, programmed as the agent does. Without
+/// `lb-external-clusterip` the uplink leaves a packet to the cluster IP
+/// alone; with it the packet reaches the backend and the reply leaves from
+/// the cluster IP, and with Maglev the kernel's pick is the table's.
+fn external_clusterip(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
+    use flowsdn_agent::services::{
+        Endpoint, NodeAddresses, ServiceInfo, ServicePort, SliceInfo, SlicePort, frontends,
+    };
+    let (cluster_ip, client, backend) = ([10, 96, 5, 7], [198, 51, 100, 9], [10, 9, 0, 5]);
+    let info = |external_clusterip: bool, maglev: bool| ServiceInfo {
+        namespace: "default".into(),
+        name: "web".into(),
+        service_type: "ClusterIP".into(),
+        cluster_ips: vec![IpAddr::from(cluster_ip)],
+        ports: vec![ServicePort {
+            name: "http".into(),
+            protocol: "TCP".into(),
+            port: 80,
+            node_port: None,
+        }],
+        maglev,
+        external_clusterip,
+        ..ServiceInfo::default()
+    };
+    let slices = [SliceInfo {
+        namespace: "default".into(),
+        name: "web-x".into(),
+        service: "web".into(),
+        address_type: "IPv4".into(),
+        endpoints: vec![Endpoint {
+            addresses: vec![IpAddr::from(backend)],
+            ready: true,
+            serving: true,
+            terminating: false,
+            node_name: "n1".into(),
+        }],
+        ports: vec![SlicePort {
+            name: "http".into(),
+            protocol: "TCP".into(),
+            port: Some(8080),
+        }],
+    }];
+    let nodes = [NodeAddresses {
+        name: "n1".into(),
+        ips: vec![IpAddr::from([192, 0, 2, 20])],
+    }];
+    let before = services.len();
+    let request = frame4(6, client, cluster_ip, 40000, 80, false);
+    for (external, maglev) in [(false, false), (true, false), (true, true)] {
+        services.truncate(before);
+        services.extend(
+            frontends(&[info(external, maglev)], &slices, "n1", &nodes)
+                .into_iter()
+                .map(|f| f.service),
+        );
+        program(lb, services)?;
+        let out = run(lb, "nodeport_ingress", &request)?;
+        if !external {
+            if out != request {
+                return Err("nodeport_ingress translated a ClusterIP without lb-external-clusterip".into());
+            }
+            continue;
+        }
+        let (src, dst, s, d, ip_ok, l4_ok) = parse4(&out)?;
+        if (src, dst, s, d) != (client, backend, 40000, 8080) || !ip_ok || !l4_ok {
+            return Err(format!(
+                "external ClusterIP (maglev {maglev}): {src:?}:{s} -> {dst:?}:{d}, checksums ip {ip_ok} l4 {l4_ok}"
+            )
+            .into());
+        }
+        let reply = frame4(6, backend, client, 8080, 40000, false);
+        let (src, dst, s, d, ip_ok, l4_ok) = parse4(&run(lb, "nodeport_egress", &reply)?)?;
+        if (src, dst, s, d) != (cluster_ip, client, 80, 40000) || !ip_ok || !l4_ok {
+            return Err(format!(
+                "external ClusterIP reply (maglev {maglev}): {src:?}:{s} -> {dst:?}:{d}"
+            )
+            .into());
+        }
+        if maglev {
+            let maps = lb.dump()?;
+            let pick = socket::maglev_pick(
+                &maps,
+                address("10.96.5.7:80", PROTO_TCP)?,
+                SCOPE_NODE_LOCAL,
+                IpAddr::from(client),
+                40000,
+            )
+            .ok_or("no Maglev table for the external ClusterIP")?;
+            if pick != address("10.9.0.5:8080", PROTO_TCP)? {
+                return Err(format!("Maglev picked {}:{}", pick.ip, pick.port).into());
+            }
+        }
+    }
+    services.truncate(before);
+    program(lb, services)?;
+    println!(
+        "PASS external ClusterIP: untouched on the uplink without lb-external-clusterip; with it 10.96.5.7:80 reaches the backend and replies leave from the cluster IP, Maglev table picks match"
+    );
     Ok(())
 }
 

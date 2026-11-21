@@ -417,6 +417,7 @@ fn controller_lists_watches_and_derives_the_pool() {
     let settings = Settings {
         lb_mode: Default::default(),
         nat46x64: false,
+        external_clusterip: false,
         node_name: "local".into(),
         kubeconfig: Some(PathBuf::from(&kubeconfig)),
         auto_direct_node_routes: false,

@@ -43,6 +43,7 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
         "neighbor management is off by default"
     );
     assert!(!parsed.maglev);
+    assert!(!parsed.external_clusterip, "off by default (#465)");
     assert_eq!(parsed.lb_mode, LbMode::Snat);
     assert_eq!(parsed.host_firewall, HostFirewall::Off);
     assert!(!parsed.flowsdn_policy);
@@ -52,7 +53,7 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
             &json!({"node-name":"n1","kubeconfig":"/k","auto-direct-node-routes":false,
             "direct-routing-skip-unreachable":true,"service-lb":false,"node-port":false,
             "cgroup-root":"/run/flowsdn/cgroupv2","lb-algorithm":"maglev","lb-mode":"hybrid",
-            "host-firewall":"audit","l2-neigh-discovery":true}),
+            "host-firewall":"audit","l2-neigh-discovery":true,"lb-external-clusterip":true}),
         ),
         &env(&[("K8S_NODE_NAME", "a")]),
     )
@@ -65,6 +66,7 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(!parsed.node_port);
     assert!(parsed.l2_neigh_discovery);
     assert!(parsed.maglev);
+    assert!(parsed.external_clusterip);
     assert_eq!(parsed.lb_mode, LbMode::Hybrid);
     assert_eq!(parsed.host_firewall, HostFirewall::Audit);
     assert!(
