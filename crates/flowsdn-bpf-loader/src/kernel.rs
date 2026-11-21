@@ -235,7 +235,9 @@ impl LocalDelivery {
         })
     }
     /// The policy decision events, for one reader (#452); None after the
-    /// first call or for an object without them.
+    /// first call or for an object without them. Keep it as long as the
+    /// object: programs loaded later (the host firewall, the prefilter)
+    /// reference its map's fd, which dropping it closes.
     pub fn take_policy_events(&mut self) -> Option<PolicyEvents> {
         self.events.take()
     }

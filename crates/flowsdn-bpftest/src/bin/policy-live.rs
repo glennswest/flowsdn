@@ -27,7 +27,7 @@ use flowsdn_bpf_abi::{
         enforce, verdict,
     },
 };
-use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object};
+use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object, PolicyEvents};
 use nix::sched::{CloneFlags, unshare};
 use std::{
     error::Error,
@@ -330,7 +330,9 @@ fn run(object: &[u8]) -> Result<()> {
     lab.ingress("identity 301 TCP 8082 (8080/14)", &syn(OTHER, 8082), OK)?;
     lab.ingress("identity 301 TCP 8084", &syn(OTHER, 8084), SHOT)?;
     println!("PASS identity, protocol, port and port-range (LPM) allows; everything else dropped");
-    policy_events(&mut lab)?;
+    // Kept to the end: programs loaded later (the host firewall) reference
+    // the ring's map fd, which dropping it would close.
+    let _events = policy_events(&mut lab)?;
 
     let syn6 = |dport| v6(TCP, PEER6, POD6, &tcp(40000, dport, SYN));
     lab.ingress("IPv6 identity 300 TCP 80", &syn6(80), OK)?;
@@ -574,7 +576,7 @@ fn related_errors(lab: &Lab) -> Result<()> {
 /// Policy decision events (#452): the decisions above are in the
 /// `flowsdn_policy_events` ring buffer with their tuple, verdict and remote
 /// identity; packets of a remembered flow add none.
-fn policy_events(lab: &mut Lab) -> Result<()> {
+fn policy_events(lab: &mut Lab) -> Result<PolicyEvents> {
     let mut ring = lab
         .delivery
         .take_policy_events()
@@ -613,7 +615,7 @@ fn policy_events(lab: &mut Lab) -> Result<()> {
     println!(
         "PASS policy events: the allow of TCP 80 and the drop of TCP 81 from identity 300 are in the ring buffer with tuple, verdict and remote identity; a remembered flow's packet adds none"
     );
-    Ok(())
+    Ok(ring)
 }
 
 const HOST_ADDR: [u8; 4] = [192, 0, 2, 20];
