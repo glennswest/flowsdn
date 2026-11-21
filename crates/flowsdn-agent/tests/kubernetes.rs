@@ -447,6 +447,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         endpoint_crd: true,
         node_crd: true,
         crd_wait_timeout: Duration::from_secs(60),
+        drop_events: None,
         terminate_tcp: false,
         bpf_masquerade: false,
         non_masquerade: Vec::new(),
