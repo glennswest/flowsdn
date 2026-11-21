@@ -8,7 +8,9 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] `reachable_hops` (each hop's gateway, first InternalIP only for the plain route); `stale_routes` + delete by
       destination (owned kernel route, any gateway). Unit tests; uplinks-live one-hop step. runtime.md.
-- [ ] sc-build with kernel-check; stage; shipped; close.
+- [x] 000ffb2, fmt 9b832cd. Strict sc-build at 9b832cd: fmt --check, `cargo xtask check` (1008 tests, 0 failed, incl. the
+      2 new), kernel-check on 7.3.4: 24 pass 0 fail 2 skip; uplinks-live one-hop step passed. Stage e38e6bea60a2; shipped;
+      closed.
 
 ### Uplink monitor: IPv6 NA, sysctl retry, failover retry — #497 (P1), findings 0cf4d2dfd14d 19c970eb0774 aa68f32f5233, 2026-11-20
 
