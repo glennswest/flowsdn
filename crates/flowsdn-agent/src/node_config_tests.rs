@@ -167,6 +167,7 @@ fn every_allowed_key_is_one_the_agent_reads() {
         ("kubernetes.lb-algorithm", "maglev"),
         ("kubernetes.lb-mode", "hybrid"),
         ("kubernetes.nat46x64", "true"),
+        ("kubernetes.lb-external-clusterip", "true"),
         ("kubernetes.lb-ipam", "false"),
         ("kubernetes.l2-announcements", "false"),
         ("kubernetes.identity-allocation", "false"),

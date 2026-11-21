@@ -647,7 +647,10 @@ fn external_clusterip_adds_node_local_cluster_ip_copies() {
         .iter()
         .find(|f| f.kind == "ClusterIP" && f.service.scope == SCOPE_CLUSTER)
         .expect("cluster-scope copy");
-    assert!(!cluster.service.maglev, "the socket LB copy never uses Maglev");
+    assert!(
+        !cluster.service.maglev,
+        "the socket LB copy never uses Maglev"
+    );
 
     let internal = ServiceInfo {
         internal_local: true,

@@ -515,7 +515,9 @@ fn external_clusterip(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<
         let out = run(lb, "nodeport_ingress", &request)?;
         if !external {
             if out != request {
-                return Err("nodeport_ingress translated a ClusterIP without lb-external-clusterip".into());
+                return Err(
+                    "nodeport_ingress translated a ClusterIP without lb-external-clusterip".into(),
+                );
             }
             continue;
         }
