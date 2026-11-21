@@ -293,6 +293,111 @@ fn ports(
     Some(out)
 }
 
+/// The most `icmps[].fields[]` one rule may have (spec 06 §3.2.6).
+const ICMP_FIELDS: usize = 40;
+
+/// A rule's `icmps` (spec 06 §3.2.6, #448): each field is a port rule of
+/// protocol ICMP (`family` absent or `IPv4`) or ICMPv6 whose port is the
+/// type, by number or by the reference's frozen name. `None` (the rule is
+/// skipped, reported) for a rule that also has `toPorts`, more than 40
+/// fields, an unknown family or an unknown type.
+fn icmps(rule: &Value, policy: &str, problems: &mut BTreeSet<String>) -> Option<Vec<(u8, PortRange)>> {
+    let Some(list) = rule.get("icmps").filter(|v| !v.is_null()) else {
+        return Some(Vec::new());
+    };
+    let mut refuse = |why: String| {
+        problems.insert(format!("{policy}: {why}; the rule is skipped"));
+        None
+    };
+    if rule
+        .get("toPorts")
+        .and_then(Value::as_array)
+        .is_some_and(|ports| !ports.is_empty())
+    {
+        return refuse("icmps cannot be combined with toPorts".to_owned());
+    }
+    let mut out = Vec::new();
+    for item in list.as_array()? {
+        let Some(fields) = item.get("fields").and_then(Value::as_array) else {
+            continue;
+        };
+        for field in fields {
+            let protocol = match field.get("family").and_then(Value::as_str) {
+                None | Some("IPv4") => 1,
+                Some("IPv6") => 58,
+                Some(other) => return refuse(format!("ICMP family {other} is not IPv4 or IPv6")),
+            };
+            let kind = match field.get("type") {
+                Some(Value::Number(n)) => n.as_u64().and_then(|n| u8::try_from(n).ok()),
+                Some(Value::String(name)) => name
+                    .parse::<u8>()
+                    .ok()
+                    .or_else(|| icmp_type(protocol, name)),
+                _ => None,
+            };
+            let Some(kind) = kind else {
+                return refuse(format!("ICMP type {:?} is not known", field.get("type")));
+            };
+            out.push((protocol, PortRange::single(u16::from(kind))));
+        }
+    }
+    if out.len() > ICMP_FIELDS {
+        return refuse(format!("{} ICMP fields, the most is {ICMP_FIELDS}", out.len()));
+    }
+    Some(out)
+}
+
+/// The reference's frozen ICMP (protocol 1) and ICMPv6 (58) type names.
+fn icmp_type(protocol: u8, name: &str) -> Option<u8> {
+    const V4: [(&str, u8); 14] = [
+        ("EchoReply", 0),
+        ("DestinationUnreachable", 3),
+        ("Redirect", 5),
+        ("Echo", 8),
+        ("EchoRequest", 8),
+        ("RouterAdvertisement", 9),
+        ("RouterSelection", 10),
+        ("TimeExceeded", 11),
+        ("ParameterProblem", 12),
+        ("Timestamp", 13),
+        ("TimestampReply", 14),
+        ("Photuris", 40),
+        ("ExtendedEchoRequest", 42),
+        ("ExtendedEchoReply", 43),
+    ];
+    const V6: [(&str, u8); 27] = [
+        ("DestinationUnreachable", 1),
+        ("PacketTooBig", 2),
+        ("TimeExceeded", 3),
+        ("ParameterProblem", 4),
+        ("EchoRequest", 128),
+        ("EchoReply", 129),
+        ("MulticastListenerQuery", 130),
+        ("MulticastListenerReport", 131),
+        ("MulticastListenerDone", 132),
+        ("RouterSolicitation", 133),
+        ("RouterAdvertisement", 134),
+        ("NeighborSolicitation", 135),
+        ("NeighborAdvertisement", 136),
+        ("RedirectMessage", 137),
+        ("RouterRenumbering", 138),
+        ("ICMPNodeInformationQuery", 139),
+        ("ICMPNodeInformationResponse", 140),
+        ("InverseNeighborDiscoverySolicitation", 141),
+        ("InverseNeighborDiscoveryAdvertisement", 142),
+        ("HomeAgentAddressDiscoveryRequest", 144),
+        ("HomeAgentAddressDiscoveryReply", 145),
+        ("MobilePrefixSolicitation", 146),
+        ("MobilePrefixAdvertisement", 147),
+        ("DuplicateAddressRequestCodeSuffix", 157),
+        ("DuplicateAddressConfirmationCodeSuffix", 158),
+        ("ExtendedEchoRequest", 160),
+        ("ExtendedEchoReply", 161),
+    ];
+    let table: &[(&str, u8)] = if protocol == 1 { &V4 } else { &V6 };
+    table.iter().find(|(n, _)| *n == name).map(|(_, t)| *t)
+}
+
 /// Which rule a parse reads: the peer fields' prefix (`from`, or `to` for
 /// egress) and, for Pod rules, the namespace and cluster peers get.
 struct Side<'a> {
@@ -395,7 +500,6 @@ fn rule(
     let mut unsupported = vec![
         format!("{prefix}Requires"),
         format!("{prefix}Groups"),
-        "icmps".to_owned(),
         "authentication".to_owned(),
     ];
     if prefix == "to" {
@@ -498,7 +602,8 @@ fn rule(
             }
         }
     }
-    let ports = ports(value, policy, problems, side.pods.is_some())?;
+    let mut ports = ports(value, policy, problems, side.pods.is_some())?;
+    ports.ranges.extend(icmps(value, policy, problems)?);
     let no_ports = ports.ranges.is_empty() && ports.named.is_empty();
     Some(Rule {
         policy: policy.to_owned(),

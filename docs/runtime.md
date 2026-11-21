@@ -1057,7 +1057,17 @@ decision is also an event in the `flowsdn_policy_events` ring buffer (256 KiB,
 #452): time, endpoint, direction, verdict, remote identity, interface and the
 packet's tuple. The agent reads it every 100 ms, keeps the newest 4096 and
 serves them at `GET /v1/policy/events` (a full buffer only loses events, the
-counts stay). L7, FQDN and ICMP rules (#448) are a gap, an issue.
+counts stay).
+
+ICMP type rules (#448, spec 06 §3.2.6) work in Pod and host rules, allow and deny. An
+`icmps[].fields[]` entry (`family` IPv4, the default, or IPv6; `type` a number or the
+reference's frozen name such as `EchoRequest`) is a port rule of protocol ICMP or
+ICMPv6 whose port is the type. The datapath judges an ICMP/ICMPv6 packet with its
+type as the port, always: the reference's `enable-icmp-rules` defaults to true, and
+there is no setting. A protocol-only ICMP rule still allows every type. Policy verdict
+counts of ICMP are per type. A rule that combines `icmps` with `toPorts`, has more than
+40 fields, or names an unknown type or family is skipped and reported. L7 HTTP/Kafka
+rules (#537) and `toFQDNs`/DNS rules (#536) are gaps, each an issue.
 `policy-live` (medium test suite) checks the programs
 on a kernel through `BPF_PROG_TEST_RUN`; no cluster run yet.
 

@@ -421,6 +421,7 @@ fn run(object: &[u8]) -> Result<()> {
         SHOT,
     )?;
     println!("PASS ICMP echo: the request is allowed by protocol, its reply by conntrack");
+    icmp_types(&mut lab)?;
     related_errors(&lab)?;
     pod_audit(&mut lab)?;
 
@@ -480,6 +481,51 @@ fn pod_audit(lab: &mut Lab) -> Result<()> {
     lab.ingress("enforcing again: TCP 81", &syn(PEER, 45003, 81), SHOT)?;
     println!(
         "PASS Pod audit mode: default deny and a deny rule pass and are counted as audit, an allow as allowed; without AUDIT the drop returns"
+    );
+    Ok(())
+}
+
+/// ICMP type rules (#448): the policy port of an ICMP/ICMPv6 packet is its
+/// type, so an ingress rule for identity 300 on ICMP type 8 (ICMPv6 128)
+/// allows an echo request and not a timestamp request (an ICMPv6 node
+/// information query); the rules are removed after.
+fn icmp_types(lab: &mut Lab) -> Result<()> {
+    const ICMPV6: u8 = 58;
+    lab.rule(allow(300, false, ICMP, 8, 16))?;
+    lab.rule(allow(300, false, ICMPV6, 128, 16))?;
+    lab.ingress(
+        "echo request from 300 (type 8 allowed)",
+        &v4(ICMP, PEER, POD, 0, &icmp(8, 90)),
+        OK,
+    )?;
+    lab.ingress(
+        "timestamp request from 300 (type 13)",
+        &v4(ICMP, PEER, POD, 0, &icmp(13, 91)),
+        SHOT,
+    )?;
+    lab.ingress(
+        "ICMPv6 echo request from 300 (type 128 allowed)",
+        &v6(ICMPV6, PEER6, POD6, &icmp(128, 92)),
+        OK,
+    )?;
+    lab.ingress(
+        "ICMPv6 node information query from 300 (type 139)",
+        &v6(ICMPV6, PEER6, POD6, &icmp(139, 93)),
+        SHOT,
+    )?;
+    for (proto, port) in [(ICMP, 8), (ICMPV6, 128)] {
+        lab.delivery.policy().remove_policy(EndpointPolicyKey::new(
+            ENDPOINT,
+            PolicyKey::new(300, false, proto, port, 16).map_err(|_| "key")?,
+        ))?;
+    }
+    lab.ingress(
+        "echo request from 300 once its rule is removed",
+        &v4(ICMP, PEER, POD, 0, &icmp(8, 94)),
+        SHOT,
+    )?;
+    println!(
+        "PASS ICMP type rules: type 8 and ICMPv6 128 allowed from 300 pass an echo request; a timestamp request and an ICMPv6 node information query drop"
     );
     Ok(())
 }

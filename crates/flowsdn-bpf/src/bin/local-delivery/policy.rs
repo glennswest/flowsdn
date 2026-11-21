@@ -12,10 +12,11 @@
 //! for local Pods' traffic to and from the host ([`SCOPE_HOST_PODS`], #384).
 //! An endpoint in audit mode passes
 //! what its policy would drop. Each decision is counted in
-//! `flowsdn_policy_verdicts` (remembered flows are not). It does not do
-//! authentication (an entry that requires it drops), proxy redirects,
-//! verdict events, and fragments other than the first (dropped where
-//! enforced). An ICMP or ICMPv6 error (destination unreachable, time
+//! `flowsdn_policy_verdicts` and emitted into `flowsdn_policy_events`
+//! (#452; remembered flows are neither). An ICMP or ICMPv6 packet's policy
+//! port is its type (#448), so rules can allow types. It does not do
+//! authentication (an entry that requires it drops), proxy redirects, and
+//! fragments other than the first (dropped where enforced). An ICMP or ICMPv6 error (destination unreachable, time
 //! exceeded, parameter problem) about a remembered flow is related traffic
 //! and passes without a policy lookup (#463); one about no remembered flow
 //! is judged as new ICMP traffic.
@@ -194,6 +195,7 @@ fn parse4(ctx: &TcContext, flow: &mut Flow) -> Option<Parsed> {
         if matches!(kind, 3 | 11 | 12) {
             flow.related = inner4(ctx, flow, l4.checked_add(8)?).is_some();
         }
+        flow.port = [0, kind];
         return icmp_echo(ctx, flow, l4, kind, 8, 0);
     }
     l4_ports(ctx, flow, l4)
@@ -220,6 +222,7 @@ fn parse6(ctx: &TcContext, flow: &mut Flow) -> Option<Parsed> {
             if matches!(kind, 1 | 3 | 4) {
                 flow.related = inner6(ctx, flow).is_some();
             }
+            flow.port = [0, kind];
             icmp_echo(ctx, flow, L4, kind, 128, 129)
         }
         // A fragment header: the first fragment's ports are not parsed either.
@@ -318,8 +321,9 @@ fn inner_ports(
     Some(())
 }
 
-/// ICMP: the echo identifier keeps request and reply in one flow; the
-/// policy port is 0 (spec 06 ICMP type rules are not enabled).
+/// ICMP: the echo identifier keeps request and reply in one flow. The
+/// policy port is the message's type (spec 06 ICMP type rules, the
+/// reference's `enable_icmp_rule`, #448), set by the caller.
 #[inline(always)]
 fn icmp_echo(
     ctx: &TcContext,

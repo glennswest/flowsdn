@@ -687,6 +687,56 @@ fn flowsdn_policy_selects_in_its_namespace_with_named_ports() {
     );
 }
 
+/// #448: `icmps` fields are ICMP/ICMPv6 port rules whose port is the type,
+/// by number or name, allow and deny; a rule mixing them with `toPorts`, an
+/// unknown name or family, or more than 40 fields is skipped and reported.
+#[test]
+fn icmp_type_rules_are_port_rules_of_the_type() {
+    let view = flowsdn_view(
+        view(Vec::new()),
+        json!({"endpointSelector":web_selector(),
+            "ingress":[{"fromEntities":["world"],"icmps":[{"fields":[
+                {"type":8},{"type":"EchoReply"},{"family":"IPv6","type":"EchoRequest"}]}]}],
+            "ingressDeny":[{"fromEntities":["world"],"icmps":[{"fields":[{"type":"Timestamp"}]}]}]}),
+    );
+    let desired = compile(&view, &[]);
+    assert_eq!(desired.problems, Vec::<String>::new());
+    let mut want = BTreeSet::new();
+    for identity in crate::host_policy::entity("world").unwrap_or_default() {
+        want.insert((identity, false, 1, 8, 16, false));
+        want.insert((identity, false, 1, 0, 16, false));
+        want.insert((identity, false, 58, 128, 16, false));
+        want.insert((identity, false, 1, 13, 16, true));
+    }
+    assert_eq!(verdicts(&desired), want);
+
+    let many: Vec<Value> = (0..41).map(|t| json!({"type": t})).collect();
+    for (rule, problem) in [
+        (
+            json!({"icmps":[{"fields":[{"type":8}]}],"toPorts":[{"ports":[{"port":"80"}]}]}),
+            "icmps cannot be combined with toPorts",
+        ),
+        (json!({"icmps":[{"fields":[{"type":"Ping"}]}]}), "is not known"),
+        (
+            json!({"icmps":[{"fields":[{"family":"IPv5","type":8}]}]}),
+            "is not IPv4 or IPv6",
+        ),
+        (json!({"icmps":[{"fields":many}]}), "the most is 40"),
+    ] {
+        let view = flowsdn_view(
+            view(Vec::new()),
+            json!({"endpointSelector":web_selector(),"ingress":[rule]}),
+        );
+        let desired = compile(&view, &[]);
+        assert!(desired.entries.is_empty(), "{:?}", desired.entries);
+        assert!(
+            desired.problems.iter().any(|p| p.contains(problem)),
+            "{problem}: {:?}",
+            desired.problems
+        );
+    }
+}
+
 #[test]
 fn flowsdn_policy_egress_entities_cidrs_and_their_ipcache() {
     let view = flowsdn_view(
@@ -784,7 +834,8 @@ fn empty_rule_and_skipped_rules_still_enforce_and_allow_nothing() {
         json!({"fromEndpoints":[]}),
         json!({"toPorts":[{"ports":[{"port":"80","protocol":"TCP"}],
                            "rules":{"http":[{"method":"GET"}]}}]}),
-        json!({"icmps":[{"fields":[{"type":8}]}]}),
+        json!({"icmps":[{"fields":[{"type":8}]}],
+               "toPorts":[{"ports":[{"port":"80","protocol":"TCP"}]}]}),
         json!({"fromEndpoints":[{"matchLabels":{"reserved:host":""}}]}),
     ] {
         let view = flowsdn_view(

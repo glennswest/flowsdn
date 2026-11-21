@@ -14,6 +14,13 @@ impl PortRange {
             end: u16::MAX,
         }
     }
+    /// Exactly `port`, zero included (an ICMP type rule for type 0, #448).
+    pub const fn single(port: u16) -> Self {
+        Self {
+            start: port,
+            end: port,
+        }
+    }
     pub fn from_api(port: u16, end_port: Option<u16>) -> Result<Self, Error> {
         if let Some(end) = end_port {
             if port == 0 {

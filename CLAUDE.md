@@ -32,8 +32,8 @@ firewall (`audit` in the stormcos config), socket termination (UDP; TCP opt-in, 
 IP option, NAT46/64 (the last three off by default, kernel test runs only), CNI
 ADD timing (`/v1/cni/timing`), `cargo xtask kernel-check`. Open gaps, each an
 issue (the operator registers CRDs, #337, and runs identity/node GC, #479): Hubble observer/relay
-(#293), DSR by IPIP/Geneve (#447), L7/FQDN/ICMP
-policy (#448). See
+(#293), DSR by IPIP/Geneve (#447), L7 HTTP/Kafka
+policy (#537), toFQDNs/DNS policy (#536). See
 `docs/runtime.md`, `docs/agent-api.md`, `docs/implementation-status.md` and
 `deploy/stormcos/README.md` before changing runtime behavior. Fixture traffic and
 cross-architecture compilation do not establish two-node pod networking. Docs
