@@ -56,7 +56,7 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
             "direct-routing-skip-unreachable":true,"service-lb":false,"node-port":false,
             "cgroup-root":"/run/flowsdn/cgroupv2","lb-algorithm":"maglev","lb-mode":"hybrid",
             "host-firewall":"audit","l2-neigh-discovery":true,"lb-external-clusterip":true,
-            "bpf-masquerade":true,"non-masquerade-cidrs":["192.0.2.0/24","10.200.1.7/16"],
+            "bpf-masquerade":true,"non-masquerade-cidrs":["192.0.2.0/24","10.200.1.7/16","2001:db8:5::/48"],
             "nat46x64-gateway":true}),
         ),
         &env(&[("K8S_NODE_NAME", "a")]),
@@ -103,11 +103,12 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
         parsed.non_masquerade,
         [
             ("192.0.2.0".parse().expect("ip"), 24),
-            ("10.200.0.0".parse().expect("ip"), 16)
+            ("10.200.0.0".parse().expect("ip"), 16),
+            ("2001:db8:5::".parse().expect("ip"), 48)
         ]
     );
     for bad in [
-        json!(["2001:db8::/64"]),
+        json!(["2001:db8::/129"]),
         json!(["nonsense"]),
         json!("192.0.2.0/24"),
     ] {
@@ -632,7 +633,7 @@ fn the_crd_gate_waits_for_what_the_settings_use() {
 
 /// #460: the masquerade's sources are this node's IPv4 pod CIDRs; every
 /// node's pod CIDRs and InternalIPs and the configured CIDRs are never
-/// masqueraded. IPv6 is left out.
+/// masqueraded. #513: the same for IPv6, each family on its own.
 #[test]
 fn masquerade_prefixes_cover_the_cluster() {
     let ip = |s: &str| -> IpAddr { s.parse().expect("ip") };
@@ -668,6 +669,26 @@ fn masquerade_prefixes_cover_the_cluster() {
         masquerade_prefixes("n9", &nodes, Derive::default(), &[])
             .0
             .is_empty()
+    );
+    let v6 = |s: &str| -> [u8; 16] {
+        s.parse::<std::net::Ipv6Addr>()
+            .map(|a| a.octets())
+            .unwrap_or([0; 16])
+    };
+    let (sources, exclude) = masquerade_prefixes6(
+        "n1",
+        &nodes,
+        Derive::default(),
+        &[(ip("172.16.0.0"), 12), (ip("2001:db8:5::"), 48)],
+    );
+    assert_eq!(sources, [(v6("fd00:1::"), 64)]);
+    assert_eq!(
+        exclude,
+        [
+            (v6("2001:db8::1"), 128),
+            (v6("2001:db8:5::"), 48),
+            (v6("fd00:1::"), 64),
+        ]
     );
 }
 

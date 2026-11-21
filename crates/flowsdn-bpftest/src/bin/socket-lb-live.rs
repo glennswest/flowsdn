@@ -451,6 +451,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     nodeport6(lb, services)?;
     snat(lb, services)?;
     masquerade(lb)?;
+    masquerade6(lb)?;
     maglev(lb, services)?;
     dsr(lb, services)?;
     icmp_errors(lb)?;
@@ -565,6 +566,121 @@ fn external_clusterip(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<
     program(lb, services)?;
     println!(
         "PASS external ClusterIP: untouched on the uplink without lb-external-clusterip; with it 10.96.5.7:80 reaches the backend and replies leave from the cluster IP, Maglev table picks match"
+    );
+    Ok(())
+}
+
+/// IPv6 BPF masquerade (#513) on uplink `up0` (2001:db8:2::20, default
+/// route out of it): a local Pod (fd00:9::7) reaching 2001:db8:64::9 leaves
+/// from 2001:db8:2::20 and a NAT port (an echo: NAT identifier), the same
+/// for the flow's next packet; the reply, an echo reply and an ICMPv6 error
+/// about the flow come back to the Pod, checksums valid. Cluster
+/// destinations and the node's own traffic are untouched, and with the
+/// prefixes cleared nothing is masqueraded.
+fn masquerade6(lb: &mut SocketLb) -> Result<()> {
+    let up0 = ifindex("up0")?;
+    let (pod, server, node) = (
+        ip6("fd00:9::7")?,
+        ip6("2001:db8:64::9")?,
+        ip6("2001:db8:2::20")?,
+    );
+    let sources = vec![(ip6("fd00:9::")?, 64)];
+    let exclude = vec![(node, 128), (ip6("fd00:9::")?, 32)];
+    lb.set_masquerade6(&sources, &exclude)?;
+    let (mut have_sources, mut have_exclude) = lb.masquerade6()?;
+    have_sources.sort_unstable();
+    have_exclude.sort_unstable();
+    let mut want_exclude = exclude.clone();
+    want_exclude.sort_unstable();
+    if (have_sources, have_exclude) != (sources, want_exclude) {
+        return Err("IPv6 masquerade maps do not read back as written".into());
+    }
+    for (proto, sport) in [(17u8, 5200u16), (6, 5201)] {
+        let request = frame6(proto, pod, server, sport, 53, false);
+        let mut nat = None;
+        for _ in 0..2 {
+            let (src, dst, s, d, _, l4_ok) =
+                parse6(&run_on(lb, "nodeport_egress", &request, up0, TCX_NEXT)?)?;
+            if (src, dst, d) != (node, server, 53)
+                || !(61000..=65535).contains(&s)
+                || nat.is_some_and(|n| n != s)
+                || !l4_ok
+            {
+                return Err(format!(
+                    "IPv6 masquerade proto {proto}: {src:?}:{s} -> {dst:?}:{d}, checksum {l4_ok}"
+                )
+                .into());
+            }
+            nat = Some(s);
+        }
+        let nat = nat.ok_or("no NAT port")?;
+        let reply = frame6(proto, server, node, 53, nat, false);
+        let (src, dst, s, d, _, l4_ok) =
+            parse6(&run_on(lb, "nodeport_ingress", &reply, up0, TCX_NEXT)?)?;
+        if (src, dst, s, d) != (server, pod, 53, sport) || !l4_ok {
+            return Err(format!(
+                "IPv6 masquerade reply proto {proto}: {src:?}:{s} -> {dst:?}:{d}, checksum {l4_ok}"
+            )
+            .into());
+        }
+        if proto == 17 {
+            // Port unreachable from a router about the masqueraded packet.
+            let sent = frame6(17, node, server, nat, 53, false);
+            let error = icmp_frame6(ip6("2001:db8:2::1")?, node, &error_message(1, 4, &sent)?);
+            let out = run_on(lb, "nodeport_ingress", &error, up0, TCX_NEXT)?;
+            let (quote, sum_ok) = quote6(&out)?;
+            if out.get(38..54) != Some(&pod[..]) || quote != (pod, server, sport, 53) || !sum_ok {
+                return Err(format!(
+                    "ICMPv6 error about a masqueraded flow: to {:?}, quote {quote:?}, checksum {sum_ok}",
+                    out.get(38..54)
+                )
+                .into());
+            }
+        }
+    }
+    // An echo request and its reply.
+    let out = run_on(
+        lb,
+        "nodeport_egress",
+        &icmp_frame6(pod, server, &echo(128, 0x2345)),
+        up0,
+        TCX_NEXT,
+    )?;
+    let nat_id = u16::from_be_bytes(out.get(58..60).ok_or("id")?.try_into()?);
+    let icmp_ok = |f: &[u8]| -> Result<bool> {
+        let src: [u8; 16] = f.get(22..38).ok_or("ip")?.try_into()?;
+        let dst: [u8; 16] = f.get(38..54).ok_or("ip")?.try_into()?;
+        Ok(l4_sum(58, &src, &dst, f.get(54..).ok_or("icmp")?) == 0xffff)
+    };
+    if out.get(22..38) != Some(&node[..]) || !(61000..=65535).contains(&nat_id) || !icmp_ok(&out)? {
+        return Err(format!("IPv6 masquerade echo: from {:?} id {nat_id}", out.get(22..38)).into());
+    }
+    let out = run_on(
+        lb,
+        "nodeport_ingress",
+        &icmp_frame6(server, node, &echo(129, nat_id)),
+        up0,
+        TCX_NEXT,
+    )?;
+    if out.get(38..54) != Some(&pod[..]) || out.get(58..60) != Some(&[0x23, 0x45][..]) || !icmp_ok(&out)? {
+        return Err(format!("IPv6 masquerade echo reply: to {:?}", out.get(38..54)).into());
+    }
+    // A cluster destination, the node's own traffic: untouched.
+    for frame in [
+        frame6(17, pod, ip6("fd00:9:1::5")?, 5202, 53, false),
+        frame6(17, node, server, 5203, 53, false),
+    ] {
+        if run_on(lb, "nodeport_egress", &frame, up0, TCX_NEXT)? != frame {
+            return Err("the IPv6 masquerade changed a packet it must not".into());
+        }
+    }
+    lb.set_masquerade6(&[], &[])?;
+    let frame = frame6(17, pod, server, 5204, 53, false);
+    if run_on(lb, "nodeport_egress", &frame, up0, TCX_NEXT)? != frame {
+        return Err("IPv6 masquerade off, yet a new flow was masqueraded".into());
+    }
+    println!(
+        "PASS IPv6 BPF masquerade: Pod TCP, UDP and echo to 2001:db8:64::9 leave from 2001:db8:2::20 and a NAT port, replies and an ICMPv6 error come back to the Pod, checksums valid; cluster and node traffic untouched; off when cleared"
     );
     Ok(())
 }

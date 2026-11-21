@@ -355,11 +355,8 @@ impl Settings {
                     .map(|item| {
                         item.as_str()
                             .and_then(crate::prefilter::parse_cidr)
-                            .filter(|(ip, _)| ip.is_ipv4())
                             .ok_or_else(|| {
-                                format!(
-                                    "kubernetes.non-masquerade-cidrs: {item} is not an IPv4 CIDR"
-                                )
+                                format!("kubernetes.non-masquerade-cidrs: {item} is not a CIDR")
                             })
                     })
                     .collect::<std::result::Result<_, _>>()?,
@@ -734,6 +731,34 @@ pub fn masquerade_prefixes(
         }
         exclude.extend(cidrs.into_iter().filter_map(v4));
         exclude.extend(node.internal_ips.iter().map(|ip| (*ip, 32)).filter_map(v4));
+    }
+    (sources.into_iter().collect(), exclude.into_iter().collect())
+}
+
+/// An IPv6 prefix (address octets, length).
+pub type Prefix6 = ([u8; 16], u8);
+/// [`masquerade_prefixes`] for IPv6 (#513): this node's IPv6 pod CIDRs, and
+/// every node's IPv6 pod CIDRs and InternalIPs and the IPv6 `non_masquerade`
+/// entries never masqueraded.
+pub fn masquerade_prefixes6(
+    local: &str,
+    nodes: &[NodeInfo],
+    derive: Derive,
+    non_masquerade: &[Cidr],
+) -> (Vec<Prefix6>, Vec<Prefix6>) {
+    let v6 = |(ip, prefix): (IpAddr, u8)| match ip {
+        IpAddr::V6(v6) => Some((v6.octets(), prefix)),
+        IpAddr::V4(_) => None,
+    };
+    let mut sources = BTreeSet::new();
+    let mut exclude: BTreeSet<Prefix6> = non_masquerade.iter().copied().filter_map(v6).collect();
+    for node in nodes {
+        let cidrs = node_cidrs(node, derive);
+        if node.name == local {
+            sources.extend(cidrs.iter().copied().filter_map(v6));
+        }
+        exclude.extend(cidrs.into_iter().filter_map(v6));
+        exclude.extend(node.internal_ips.iter().map(|ip| (*ip, 128)).filter_map(v6));
     }
     (sources.into_iter().collect(), exclude.into_iter().collect())
 }

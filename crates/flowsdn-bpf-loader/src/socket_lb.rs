@@ -41,7 +41,7 @@ pub const PROGRAMS: [&str; 8] = [
 /// names and §4.3 layouts; flowsdn sizes the reverse and affinity maps at
 /// 64Ki. The affinity maps are the programs' own; the agent writes the
 /// match map.
-const MAPS: [(&str, MapType, u32, u32, u32, u32); 19] = [
+const MAPS: [(&str, MapType, u32, u32, u32, u32); 21] = [
     ("flowsdn_lb4_services", MapType::Hash, 12, 12, 65536, 1),
     ("flowsdn_lb4_backends", MapType::Hash, 4, 12, 65536, 1),
     ("flowsdn_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
@@ -56,6 +56,8 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 19] = [
     ("flowsdn_nodeport4_frags", MapType::LruHash, 12, 4, 8192, 0),
     ("flowsdn_masq4_sources", MapType::LpmTrie, 8, 1, 256, 1),
     ("flowsdn_masq4_exclude", MapType::LpmTrie, 8, 1, 1024, 1),
+    ("flowsdn_masq6_sources", MapType::LpmTrie, 20, 1, 256, 1),
+    ("flowsdn_masq6_exclude", MapType::LpmTrie, 20, 1, 1024, 1),
     ("flowsdn_gw64_config", MapType::Hash, 4, 16, 1, 1),
     ("flowsdn_gw64_sources", MapType::LpmTrie, 20, 1, 256, 1),
     (
@@ -83,6 +85,10 @@ pub struct SocketLb {
     /// destinations.
     masq4_sources: Masq4,
     masq4_exclude: Masq4,
+    /// IPv6 masquerade (#513): its sources and never-masqueraded
+    /// destinations.
+    masq6_sources: Masq<16>,
+    masq6_exclude: Masq<16>,
     /// The RFC 6052 gateway (#454): its prefix and IPv6 sources.
     gw64_config: HashMap<MapData, u32, [u8; 16]>,
     gw64_sources: LpmTrie<MapData, [u8; 16], u8>,
@@ -93,13 +99,14 @@ pub struct SocketLb {
     uplinks: std::collections::BTreeMap<String, Vec<SchedClassifierLink>>,
 }
 
-/// An IPv4 prefix set of the masquerade (#460).
-type Masq4 = LpmTrie<MapData, [u8; 4], u8>;
+/// A prefix set of the masquerade (#460, #513), by address size.
+type Masq<const N: usize> = LpmTrie<MapData, [u8; N], u8>;
+type Masq4 = Masq<4>;
 /// IPv4 prefixes (address, length) for the masquerade maps.
 pub type Prefix4 = ([u8; 4], u8);
 /// IPv6 prefixes (address, length) for the RFC 6052 gateway's sources.
 pub type Prefix6 = ([u8; 16], u8);
-fn prefixes(map: &Masq4) -> KernelResult<std::collections::BTreeSet<Prefix4>> {
+fn prefixes<const N: usize>(map: &Masq<N>) -> KernelResult<std::collections::BTreeSet<([u8; N], u8)>> {
     let mut out = std::collections::BTreeSet::new();
     for item in map.iter() {
         let (key, _) = item?;
@@ -108,7 +115,7 @@ fn prefixes(map: &Masq4) -> KernelResult<std::collections::BTreeSet<Prefix4>> {
     Ok(out)
 }
 /// Bring `map` to `want` (additions first, removals last).
-fn sync_prefixes(map: &mut Masq4, want: &[Prefix4]) -> KernelResult<()> {
+fn sync_prefixes<const N: usize>(map: &mut Masq<N>, want: &[([u8; N], u8)]) -> KernelResult<()> {
     let have = prefixes(map)?;
     for (address, length) in want {
         if !have.contains(&(*address, *length)) {
@@ -162,7 +169,7 @@ fn write_maglev(map: &mut MaglevMap, id: u16, table: &[u32]) -> KernelResult<()>
     Ok(())
 }
 
-fn take_lpm(bpf: &mut Ebpf, name: &str) -> KernelResult<Masq4> {
+fn take_lpm<const N: usize>(bpf: &mut Ebpf, name: &str) -> KernelResult<Masq<N>> {
     let map = bpf
         .take_map(name)
         .ok_or_else(|| format!("socket-lb object has no map {name}"))?;
@@ -243,6 +250,8 @@ impl SocketLb {
         let maglev6 = take_maglev(&mut bpf, "flowsdn_lb6_maglev")?;
         let masq4_sources = take_lpm(&mut bpf, "flowsdn_masq4_sources")?;
         let masq4_exclude = take_lpm(&mut bpf, "flowsdn_masq4_exclude")?;
+        let masq6_sources = take_lpm(&mut bpf, "flowsdn_masq6_sources")?;
+        let masq6_exclude = take_lpm(&mut bpf, "flowsdn_masq6_exclude")?;
         let gw64_config = take(&mut bpf, "flowsdn_gw64_config")?;
         let gw64_sources = {
             let map = bpf
@@ -271,6 +280,8 @@ impl SocketLb {
             maglev6,
             masq4_sources,
             masq4_exclude,
+            masq6_sources,
+            masq6_exclude,
             gw64_config,
             gw64_sources,
             pin_root: pin_root.map(Path::to_owned),
@@ -409,6 +420,18 @@ impl SocketLb {
     pub fn set_masquerade(&mut self, sources: &[Prefix4], exclude: &[Prefix4]) -> KernelResult<()> {
         sync_prefixes(&mut self.masq4_exclude, exclude)?;
         sync_prefixes(&mut self.masq4_sources, sources)
+    }
+    /// IPv6 masquerade (#513): [`Self::set_masquerade`] for IPv6 prefixes.
+    pub fn set_masquerade6(&mut self, sources: &[Prefix6], exclude: &[Prefix6]) -> KernelResult<()> {
+        sync_prefixes(&mut self.masq6_exclude, exclude)?;
+        sync_prefixes(&mut self.masq6_sources, sources)
+    }
+    /// What [`Self::set_masquerade6`] last wrote: (sources, exclude).
+    pub fn masquerade6(&self) -> KernelResult<(Vec<Prefix6>, Vec<Prefix6>)> {
+        Ok((
+            prefixes(&self.masq6_sources)?.into_iter().collect(),
+            prefixes(&self.masq6_exclude)?.into_iter().collect(),
+        ))
     }
     /// The RFC 6052 gateway (#454): `prefix` (the first 12 bytes of its /96)
     /// on, for IPv6 packets from `sources` (IPv6 prefixes); None turns it off.

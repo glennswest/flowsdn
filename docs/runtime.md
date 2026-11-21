@@ -56,10 +56,10 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.l2-announcements` | `true` | Answer ARP and NDP for the load-balancer and external addresses FlowsdnL2AnnouncementPolicies give this node ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb` and `node-port`; nothing is announced without a policy. |
 | `kubernetes.endpoint-crd` | `true` | Keep a FlowsdnEndpoint for each local Pod endpoint ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). Nothing is written while the kind is not served. |
 | `kubernetes.node-crd` | `true` | Keep this node's FlowsdnNode ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). |
-| `kubernetes.bpf-masquerade` | `false` | BPF masquerade (#460; the reference's `enable-bpf-masquerade`), IPv4: the uplink programs source-NAT local Pods' traffic leaving the cluster ([BPF masquerade](#bpf-masquerade-460)). Needs `service-lb`; attaches the uplink programs even with `node-port` off. |
+| `kubernetes.bpf-masquerade` | `false` | BPF masquerade (#460, IPv6 #513; the reference's `enable-bpf-masquerade`), IPv4 and IPv6: the uplink programs source-NAT local Pods' traffic leaving the cluster ([BPF masquerade](#bpf-masquerade-460)). Needs `service-lb`; attaches the uplink programs even with `node-port` off. |
 | `kubernetes.nat46x64-gateway` | `false` | The RFC 6052 NAT46/64 gateway (#454; the reference's `enable-nat46x64-gateway`): local Pods' IPv6 TCP/UDP to `nat46x64-gateway-prefix` leaves the uplink as IPv4 from this node's address ([RFC 6052 gateway](#rfc-6052-gateway-454)). Needs `service-lb`. |
 | `kubernetes.nat46x64-gateway-prefix` | `64:ff9b::/96` | The gateway's prefix: an IPv6 /96 whose last 32 bits are the IPv4 destination. Anything else is refused at startup. |
-| `kubernetes.non-masquerade-cidrs` | `[]` | IPv4 CIDRs the BPF masquerade never masquerades to, beside the cluster's pod CIDRs and node addresses. An IPv6 entry is refused (IPv6 masquerade is #513). |
+| `kubernetes.non-masquerade-cidrs` | `[]` | CIDRs, IPv4 or IPv6, the BPF masquerade never masquerades to, beside the cluster's pod CIDRs and node addresses. |
 | `kubernetes.lb-sock-terminate-all-protos` | `false` | Socket termination also ends TCP connections to a backend that leaves a Service ([socket LB](#clusterip-socket-lb-292); by backend address and port). |
 | `kubernetes.crd-wait-timeout` | `300` | Seconds the flowsdn.io watchers wait for the CRDs this configuration uses before the agent exits ([CRDs and the operator](#crds-and-the-operator-337)). 1 to 86400. |
 | `kubernetes.hubble-drop-events` | `false` | `PacketDrop` Events on local Pods for policy drops (#470, the reference's `hubble-drop-events`; [PacketDrop Events](#packetdrop-events-470)). |
@@ -537,7 +537,18 @@ Pod's own programs judge them, and netfilter's conntrack sees the Pod's
 address both ways. Fragments follow the IPv4 fragment table above. If the
 node also masquerades (a netfilter rule), it does so before these programs
 run and they see the node's address: turn the node's rule off to use this one.
-IPv6 masquerade is gap #513.
+
+IPv6 (#513) works the same way with `flowsdn_masq6_sources` (this node's IPv6 pod
+CIDRs) and `flowsdn_masq6_exclude` (every node's IPv6 pod CIDRs and InternalIPs, and
+the IPv6 `non-masquerade-cidrs`). TCP, UDP or an ICMPv6 echo request leaves from the
+FIB's IPv6 source on this uplink and a NAT port (an echo: identifier) claimed in
+`flowsdn_nodeport6_nat`. The reply, an echo reply, and an ICMPv6 destination
+unreachable, packet too big, time exceeded or parameter problem about such a TCP/UDP
+flow come back to the Pod through the host stack: outer destination, quoted source
+address and port, and the ICMPv6 checksum with its pseudo-header. Only TCP/UDP/ICMPv6
+right after the fixed header: a packet with extension headers, a fragment among them,
+passes untouched. A destination in the RFC 6052 gateway's prefix (#454) goes to the
+gateway, not the masquerade.
 
 #### RFC 6052 gateway (#454)
 
@@ -614,8 +625,7 @@ pinned: they detach when the agent exits, and the per-CPU
 pinned either. The socket LB picks backends at random (Maglev there is gap
 #453); an existing TCP connection stays on its backend when it leaves unless
 `kubernetes.lb-sock-terminate-all-protos` is on (#392, below); SCTP ports get no translation (#457); IPv6
-fragments pass untouched; IPv6 masquerade is the node's stack, not BPF
-(#513). Further gaps, each an issue: DSR by IPIP/Geneve (#447), NAT46/64 in
+fragments pass untouched. Further gaps, each an issue: DSR by IPIP/Geneve (#447), NAT46/64 in
 the socket LB (#450), and skip-LB, which comes with local redirect policy
 (#336). `socket-lb-live` (medium test suite) checks the
 programs on a kernel, including the NodePort local and SNAT paths through

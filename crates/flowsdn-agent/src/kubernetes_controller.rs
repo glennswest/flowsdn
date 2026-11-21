@@ -1339,17 +1339,27 @@ fn service_loop(
         }
         // BPF masquerade (#460): its prefixes follow the Node list.
         if let Some(non_masquerade) = masquerade {
-            let (sources, exclude) = {
+            let ((sources, exclude), (sources6, exclude6)) = {
                 let view = lock(view);
-                crate::kubernetes::masquerade_prefixes(
-                    &view.local_node,
-                    &view.nodes,
-                    view.derive,
-                    non_masquerade,
+                (
+                    crate::kubernetes::masquerade_prefixes(
+                        &view.local_node,
+                        &view.nodes,
+                        view.derive,
+                        non_masquerade,
+                    ),
+                    // IPv6 (#513).
+                    crate::kubernetes::masquerade_prefixes6(
+                        &view.local_node,
+                        &view.nodes,
+                        view.derive,
+                        non_masquerade,
+                    ),
                 )
             };
             let result = lb
                 .set_masquerade(&sources, &exclude)
+                .and_then(|()| lb.set_masquerade6(&sources6, &exclude6))
                 .map_err(|e| format!("masquerade maps: {e}"));
             let mut view = lock(view);
             match result {
