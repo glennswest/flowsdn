@@ -393,3 +393,41 @@ fn failed_failover_changes_are_retried() {
     assert_eq!(idle.held, wanted);
     assert!(idle.added.is_empty() && idle.failures.is_empty());
 }
+
+/// #499 (finding 607157057c7a): a carrier whose paired gateway is not on its
+/// subnet takes another gateway it reaches, so it still carries the route.
+#[test]
+fn every_live_carrier_that_reaches_a_gateway_gets_a_path() {
+    let uplink = |name: &str, index: u32, addresses: &[(&str, u8)]| Uplink {
+        name: name.into(),
+        index,
+        up: true,
+        addresses: addresses.iter().map(|(a, p)| (ip(a), *p)).collect(),
+        weight: 1,
+        ..Uplink::default()
+    };
+    // A is on both subnets, B only on 192.168.16.0/20.
+    let a = uplink("a", 3, &[("192.168.16.203", 20), ("10.1.0.3", 24)]);
+    let b = uplink("b", 4, &[("192.168.16.204", 20)]);
+    let g1 = ip("192.168.16.21");
+    let g2 = ip("10.1.0.21");
+    let hops = nexthops(&[g1, g2], &[&a, &b]);
+    assert_eq!(
+        hops.iter().map(|h| (h.gateway, h.index)).collect::<Vec<_>>(),
+        [(Some(g1), 3), (Some(g1), 4)],
+        "G2/B is unreachable, so B takes G1"
+    );
+    // Reversed carriers: the cyclic pairs G1/B and G2/A both work.
+    let hops = nexthops(&[g1, g2], &[&b, &a]);
+    assert_eq!(
+        hops.iter().map(|h| (h.gateway, h.index)).collect::<Vec<_>>(),
+        [(Some(g1), 4), (Some(g2), 3)]
+    );
+    // A carrier that reaches no gateway still gets no path.
+    let c = uplink("c", 5, &[("172.16.0.9", 24)]);
+    let hops = nexthops(&[g1], &[&a, &c]);
+    assert_eq!(
+        hops.iter().map(|h| (h.gateway, h.index)).collect::<Vec<_>>(),
+        [(Some(g1), 3)]
+    );
+}

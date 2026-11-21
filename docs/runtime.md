@@ -275,7 +275,9 @@ any number of times.
 **Both carry (active-active, the default).**
 - Each other node's pod CIDR is one per-flow ECMP route, protocol kernel in
   the main table, with one path per live uplink. Path k pairs the node's k-th
-  InternalIP with the k-th live port (cycling the shorter list). Once peers
+  InternalIP with the k-th live port (cycling the shorter list); a pair whose
+  port is not on that address's subnet is dropped, and a live port left
+  without a path takes the first InternalIP on its subnet (#499). Once peers
   publish both addresses (rustkube-node#366), traffic is spread over both
   ports at both ends. `GET /v1/node/routes` says `installed: 2 paths`.
 - The kernel hashes per flow on the L4 tuple (`fib_multipath_hash_policy=1`,

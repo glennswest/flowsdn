@@ -377,7 +377,9 @@ pub fn moves(uplinks: &[Uplink], mode: Mode) -> Vec<Move> {
 /// family, primary first) over `carriers`: path k pairs gateway k and
 /// carrier k (cycling the shorter list), so two addresses on each side use
 /// both ports at both ends. A pair whose carrier is not on the gateway's
-/// subnet is dropped; if none is left, every reachable pair is used.
+/// subnet is dropped; if none is left, every reachable pair is used. A
+/// carrier left without a path then takes the first gateway it reaches
+/// (#499), so every live port that can carry the route does.
 pub fn nexthops(gateways: &[IpAddr], carriers: &[&Uplink]) -> Vec<NextHop> {
     let mut out: Vec<NextHop> = Vec::new();
     let push = |out: &mut Vec<NextHop>, gateway: IpAddr, uplink: &Uplink| {
@@ -410,6 +412,14 @@ pub fn nexthops(gateways: &[IpAddr], carriers: &[&Uplink]) -> Vec<NextHop> {
             for uplink in carriers.iter().filter(|u| u.reaches(*gateway)) {
                 push(&mut out, *gateway, uplink);
             }
+        }
+    }
+    for uplink in carriers {
+        if out.iter().any(|h| h.index == uplink.index) {
+            continue;
+        }
+        if let Some(gateway) = gateways.iter().find(|g| uplink.reaches(**g)) {
+            push(&mut out, *gateway, uplink);
         }
     }
     out

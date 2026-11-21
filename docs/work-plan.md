@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### ECMP pairing keeps every reachable carrier — #499 (P1), finding 607157057c7a, 2026-11-20
+
+- [x] `nexthops`: after the cyclic pairs (and the all-pairs fallback), a carrier without a path takes the first gateway it
+      reaches. Unit test; runtime.md.
+- [ ] sc-build with kernel-check (uplinks-live runs nexthops via View::hops); stage; shipped; close.
+
 ### Direct routes: per-path reachability, delete by destination — #498 (P1), findings 4bc7cb209712 8299a1f6238f, 2026-11-20
 
 - [x] `reachable_hops` (each hop's gateway, first InternalIP only for the plain route); `stale_routes` + delete by

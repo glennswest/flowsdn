@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-20 (#499)
+- **fix:** Every live uplink that reaches a node carries its route (finding 607157057c7a). `uplinks::nexthops` pairs gateway k with port k and drops pairs whose port is not on the gateway's subnet. It fell back to other pairs only when no pair at all worked. With G1 reachable on both ports and G2 only on port A, the pairs G1/A and G2/B gave only G1/A, and port B carried nothing for that route. A live port left without a path now takes the first gateway it reaches.
+- **test:** `every_live_carrier_that_reaches_a_gateway_gets_a_path`: the G1/G2 case, the reversed order (both cyclic pairs kept) and a port that reaches no gateway (no path).
+
 ### 2026-11-20 (#498)
 - **fix:** Direct routes check each path's gateway (finding 4bc7cb209712). The route installer checked the first remote InternalIP for direct reachability even when ECMP paths over every InternalIP were selected. A first address reached through a router therefore rejected the whole route, even when a later address was on a local uplink. Each selected path's gateway is now checked and only the reachable paths are installed. The first InternalIP is checked only for the plain route, which is used when no path is reachable.
 - **fix:** Stale direct routes are deleted by destination (finding 8299a1f6238f). A one-hop route installed through a later InternalIP was deleted by the persisted first gateway. The kernel answered ESRCH, which counted as success, so the key went and the route stayed. Cleanup now deletes flowsdn's protocol-kernel route for the destination (with a gateway or paths) whatever gateway it uses, and never a route of another protocol. A key still wanted under another gateway only loses its key; the install replaces the route.
