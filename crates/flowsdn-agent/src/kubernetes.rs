@@ -576,6 +576,8 @@ pub fn node_cidrs(node: &NodeInfo, derive: Derive) -> Vec<(IpAddr, u8)> {
     cidrs
 }
 
+/// An IPv4 prefix (address octets, length).
+pub type Prefix4 = ([u8; 4], u8);
 /// The BPF masquerade's IPv4 prefixes (#460): (sources, never masqueraded).
 /// Sources are this node's pod CIDRs. Not masqueraded: every node's pod
 /// CIDRs and InternalIPs (traffic inside the cluster, as the reference
@@ -585,13 +587,13 @@ pub fn masquerade_prefixes(
     nodes: &[NodeInfo],
     derive: Derive,
     non_masquerade: &[Cidr],
-) -> (Vec<([u8; 4], u8)>, Vec<([u8; 4], u8)>) {
+) -> (Vec<Prefix4>, Vec<Prefix4>) {
     let v4 = |(ip, prefix): (IpAddr, u8)| match ip {
         IpAddr::V4(v4) => Some((v4.octets(), prefix)),
         IpAddr::V6(_) => None,
     };
     let mut sources = BTreeSet::new();
-    let mut exclude: BTreeSet<([u8; 4], u8)> =
+    let mut exclude: BTreeSet<Prefix4> =
         non_masquerade.iter().copied().filter_map(v4).collect();
     for node in nodes {
         let cidrs = node_cidrs(node, derive);
