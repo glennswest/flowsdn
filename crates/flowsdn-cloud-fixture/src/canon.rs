@@ -46,7 +46,9 @@ pub fn decode(s: &str) -> String {
 /// again (`%` first), so `a=x%26b%3Dy` and `a=x&b=y` stay different
 /// (finding 48b8dc5f6c4b).
 fn escape(s: &str) -> String {
-    s.replace('%', "%25").replace('&', "%26").replace('=', "%3D")
+    s.replace('%', "%25")
+        .replace('&', "%26")
+        .replace('=', "%3D")
 }
 
 /// Sorted, decoded `k=v` pairs joined by `&`, without volatile parameters;

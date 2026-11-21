@@ -258,7 +258,10 @@ impl State {
         drop(self.manager.take().ok_or("manager before restart")?);
         // As the agent's `api::run` does (finding 921b14b1e023): wait for the
         // state lock, then restore on that same Store, never releasing it.
-        let held = managed(flowsdn_agent::state::Store::open_waiting(&self.store, |_| {}))?;
+        let held = managed(flowsdn_agent::state::Store::open_waiting(
+            &self.store,
+            |_| {},
+        ))?;
         self.manager = Some(managed(Manager::restore_held(
             held,
             flowsdn_bpf_loader::kernel::Object::File(&self.object),

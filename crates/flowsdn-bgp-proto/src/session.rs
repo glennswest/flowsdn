@@ -455,7 +455,10 @@ impl Session {
                                 .get(16..18)
                                 .and_then(|l| <[u8; 2]>::try_from(l).ok())
                                 .map_or(0, |l| usize::from(u16::from_be_bytes(l)));
-                            bytes.get(..length.min(bytes.len())).unwrap_or_default().to_vec()
+                            bytes
+                                .get(..length.min(bytes.len()))
+                                .unwrap_or_default()
+                                .to_vec()
                         }
                         (_, 2) => bytes.get(16..18).unwrap_or_default().to_vec(),
                         (_, 3) => bytes.get(18..19).unwrap_or_default().to_vec(),

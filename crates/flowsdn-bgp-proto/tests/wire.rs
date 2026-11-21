@@ -33,13 +33,26 @@ fn independent_keepalive_frame_partial_and_coalesced_messages() {
         ([16, 1, 2], 2),
         ([0, 19, 6], 3),
         ([0, 20, 4], 2),
-        ([0, 22, 5], 2),
     ] {
         let mut packet = vec![255; 16];
         packet.extend_from_slice(&tail);
         assert!(
             matches!(decode(&packet),Err(DecodeError::Protocol(ProtocolError {code:1,subcode:s,..})) if s==subcode)
         );
+    }
+    // A ROUTE-REFRESH of any length but 23 is 7/1 (RFC 7313 §5, finding
+    // 07c7d1dd3eec), not a header error.
+    for tail in [[0, 22, 5], [0, 24, 5]] {
+        let mut packet = vec![255; 16];
+        packet.extend_from_slice(&tail);
+        assert!(matches!(
+            decode(&packet),
+            Err(DecodeError::Protocol(ProtocolError {
+                code: 7,
+                subcode: 1,
+                ..
+            }))
+        ));
     }
     assert!(encode(Kind::Notification, &vec![0; 4077]).is_ok());
     assert!(encode(Kind::Notification, &vec![0; 4078]).is_err());

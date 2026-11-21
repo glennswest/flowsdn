@@ -672,7 +672,11 @@ fn malformed_route_refresh_length_is_route_refresh_error() {
 
         let mut direct = established(config(), 30);
         let actions = message(&mut direct, Kind::RouteRefresh, &body, 10);
-        assert_eq!(notification_body(&actions), expected, "frame length {length}");
+        assert_eq!(
+            notification_body(&actions),
+            expected,
+            "frame length {length}"
+        );
         assert_eq!(direct.state(), State::Idle);
     }
     // A valid one still asks for an export.
