@@ -9,7 +9,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] `GET /v1/flows` (`flows.rs`): policy events (#452) as flow records, sides resolved from the Kubernetes view (Pod,
       node, reserved/CIDR identity), `?limit=`, `?since=` (RFC 3339 parser). Tests; agent-api.md "Flow record shape",
       runtime.md, CHANGELOG. #452 closed first (verified by #448's build).
-- [ ] Strict sc-build; image; shipped; close.
+- [x] sc-build at a2c5f80 (fmt, `cargo xtask check` 1028 passed 0 failed incl. the three flow tests and
+      documented routes, test/build.sh lock matches). Image requested; shipped; closed.
 
 ### ICMP type rules in network policy — #448 (P3), 2026-11-21
 
