@@ -1409,7 +1409,10 @@ fn quote4(f: &[u8]) -> Result<(([u8; 4], [u8; 4], u16, u16, bool), bool)> {
     let ihl = usize::from(inner.first().ok_or("inner")? & 15).saturating_mul(4);
     let port = |at: usize| -> Result<u16> {
         Ok(u16::from_be_bytes(
-            inner.get(at..at.saturating_add(2)).ok_or("ports")?.try_into()?,
+            inner
+                .get(at..at.saturating_add(2))
+                .ok_or("ports")?
+                .try_into()?,
         ))
     };
     Ok((
@@ -1464,8 +1467,13 @@ fn icmp_errors(lb: &mut SocketLb) -> Result<()> {
     let (front, client) = ([192, 0, 2, 20], [198, 51, 100, 9]);
     let router = [10, 9, 1, 1];
     for proto in [6u8, 17] {
-        for (front_port, backend, dsr) in [(30095u16, [10, 9, 1, 5], true), (30080, [10, 9, 0, 5], false)] {
-            let sport = 41200u16.saturating_add(u16::from(proto)).saturating_add(if dsr { 0 } else { 100 });
+        for (front_port, backend, dsr) in [
+            (30095u16, [10, 9, 1, 5], true),
+            (30080, [10, 9, 0, 5], false),
+        ] {
+            let sport = 41200u16
+                .saturating_add(u16::from(proto))
+                .saturating_add(if dsr { 0 } else { 100 });
             let what = format!("proto {proto} {}", if dsr { "DSR" } else { "local" });
             let request = frame4(proto, client, front, sport, front_port, false);
             let received = if dsr {
@@ -1537,7 +1545,9 @@ fn icmp_errors(lb: &mut SocketLb) -> Result<()> {
             (30095u16, ip6("fd00:9:1::5")?, true),
             (30080, ip6("fd00:9::5")?, false),
         ] {
-            let sport = 41400u16.saturating_add(u16::from(proto)).saturating_add(if dsr { 0 } else { 100 });
+            let sport = 41400u16
+                .saturating_add(u16::from(proto))
+                .saturating_add(if dsr { 0 } else { 100 });
             let what = format!("IPv6 proto {proto} {}", if dsr { "DSR" } else { "local" });
             let request = frame6(proto, client6, front6, sport, front_port, false);
             let received = if dsr {
