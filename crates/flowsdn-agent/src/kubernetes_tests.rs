@@ -80,7 +80,9 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     for bad in ["64:ff9b::/64", "192.0.2.0/24", "nonsense"] {
         assert!(
             Settings::parse(
-                Some(&json!({"node-name":"n1","nat46x64-gateway":true,"nat46x64-gateway-prefix":bad})),
+                Some(
+                    &json!({"node-name":"n1","nat46x64-gateway":true,"nat46x64-gateway-prefix":bad})
+                ),
                 &env(&[])
             )
             .is_err(),
@@ -686,6 +688,9 @@ fn gateway64_sources_are_the_local_ipv6_pod_cidrs() {
         },
     ];
     let fd00_1 = [0xfd, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    assert_eq!(gateway64_sources("n1", &nodes, Derive::default()), [(fd00_1, 64)]);
+    assert_eq!(
+        gateway64_sources("n1", &nodes, Derive::default()),
+        [(fd00_1, 64)]
+    );
     assert!(gateway64_sources("n9", &nodes, Derive::default()).is_empty());
 }

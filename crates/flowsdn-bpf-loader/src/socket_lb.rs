@@ -428,7 +428,9 @@ impl SocketLb {
         let have: std::collections::BTreeSet<([u8; 16], u8)> = self
             .gw64_sources
             .iter()
-            .map(|item| item.map(|(key, _)| (key.data(), u8::try_from(key.prefix_len()).unwrap_or(0))))
+            .map(|item| {
+                item.map(|(key, _)| (key.data(), u8::try_from(key.prefix_len()).unwrap_or(0)))
+            })
             .collect::<Result<_, _>>()?;
         for (address, length) in sources {
             if !have.contains(&(*address, *length)) {
@@ -437,7 +439,10 @@ impl SocketLb {
             }
         }
         for (address, length) in have.iter().filter(|p| !sources.contains(p)) {
-            match self.gw64_sources.remove(&Key::new(u32::from(*length), *address)) {
+            match self
+                .gw64_sources
+                .remove(&Key::new(u32::from(*length), *address))
+            {
                 Ok(()) | Err(MapError::KeyNotFound) => {}
                 Err(MapError::SyscallError(error))
                     if error.io_error.kind() == std::io::ErrorKind::NotFound => {}
@@ -463,7 +468,9 @@ impl SocketLb {
         let sources = self
             .gw64_sources
             .iter()
-            .map(|item| item.map(|(key, _)| (key.data(), u8::try_from(key.prefix_len()).unwrap_or(0))))
+            .map(|item| {
+                item.map(|(key, _)| (key.data(), u8::try_from(key.prefix_len()).unwrap_or(0)))
+            })
             .collect::<Result<_, _>>()?;
         Ok((prefix, sources))
     }
