@@ -34,3 +34,13 @@ criteria already in the tree.
 Modifications
 -------------
 None. Byte-identical to the reference.
+
+Secret scan
+-----------
+The TLS Secrets in 13 gateway/ input files carry upstream's public Gateway API
+conformance test certificates and keys. Secret scanners flag them, so those
+files are listed by exact path in the repo-root `.gitleaks.toml` (flowsdn#546).
+They are not redacted as 06-bugtool-envoy-config's were: Cilium's reconciler
+parses the PEM (operator/pkg/gateway-api/helpers/certificates.go), so a
+placeholder would change the expected status. A test that needs its own key
+pair generates it at run time.

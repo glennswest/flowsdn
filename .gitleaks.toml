@@ -1,0 +1,40 @@
+# Secret-scan allowlist (stormcentral#1679, flowsdn#546): only false
+# positives, as tight as they can be. A real secret is never listed here:
+# rotate it and report it (stormcentral deploy/sessions-CLAUDE.md, "Test
+# secrets and secret scans").
+[allowlist]
+description = "flowsdn false positives"
+regexes = [
+  # socket-lb.rs `let key = Ipv4RevnatTuple { .. }`: a Rust struct name.
+  '''^Ipv[46]RevnatTuple$''',
+  # tests/golden/06-bugtool-envoy-config/PROVENANCE: the placeholder that
+  # replaced the upstream test keys; it holds no key bytes.
+  '''REDACTED-BY-FLOWSDN-HARVEST-NOT-A-KEY''',
+  # base64("Hello world\n"), upstream Cilium's deliberately invalid TLS pair
+  # (08-operator-gateway-api gateway-invalid-tls-configuration).
+  '''^SGVsbG8gd29ybGQK$''',
+  # base64("Cilium123"), upstream Cilium's BGP test password
+  # (tests/scripttest/corpus/bgp/peering-auth.txtar).
+  '''^Q2lsaXVtMTIz$''',
+]
+# Upstream Cilium v1.20.1 (7d68cfb394) Gateway API conformance fixtures,
+# byte-identical to operator/pkg/gateway-api/testdata (git blob ids checked
+# against the reference, flowsdn#546). Their TLS Secrets carry the public
+# conformance test certificates and keys. They stay verbatim because Cilium's
+# reconciler parses the PEM (helpers/certificates.go), so a placeholder would
+# change the expected status these fixtures exist to assert.
+paths = [
+  '''^tests/golden/08-operator-gateway-api/gateway/base/gateway-secrets\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/gateway-cross-protocol-same-hostname/input/cross-protocol-same-hostname\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/gateway-cross-protocol-same-port-same-hostname/input/cross-protocol-same-port-same-hostname\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/gateway-multi-port-https-with-multi-port-tls-passthrough/input/multi-port-https-with-multi-port-tls-passthrough\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/gateway-multi-port-https/input/multi-port-https\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/gateway-ns-restricted-same-hostname/input/ns-restricted-same-hostname\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/gateway-secret-reference-grant-all-in-namespace/input/gateway-secret-reference-grant-all-in-namespace\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/gateway-secret-reference-grant-specific/input/gateway-secret-reference-grant-specific\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/httproute-backendtlspolicy-multiparent/input/httproute-backendtlspolicy-reencrypt\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/httproute-backendtlspolicy-reencrypt/input/httproute-backendtlspolicy-reencrypt\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/httproute-backendtlspolicy-valid/input/httproute-and-backendtlspolicy\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/httproute-https-listener/input/httproute-https-listener\.yaml$''',
+  '''^tests/golden/08-operator-gateway-api/gateway/tlsroute-invalid-no-matching-listener/input/tlsroute-invalid-no-matching-listener\.yaml$''',
+]

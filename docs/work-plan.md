@@ -4,6 +4,15 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Secret scan false positives — #546 (P1), 2026-11-23
+
+- [x] gitleaks 8.30.1 (pinned sha256, scratch) reproduced the 29 findings at 5d3dc92. All are false positives: 5 Rust
+      `let key = Ipv[46]RevnatTuple`, 06 PROVENANCE placeholder, upstream base64 `Hello world` / `Cilium123`, and 13
+      upstream conformance TLS fixtures (blob ids == cilium 7d68cfb394). `.gitleaks.toml`: 4 anchored regexes plus 13
+      exact paths. The keys stay unredacted (Cilium parses the PEM). Re-scan with BASE+allowlist: no leaks. A planted
+      fake key in another file is still found.
+- [ ] push, sc-build, close.
+
 ### BPF corpus generator and §9.4 checks — #473 (P3), 2026-11-21
 
 - [x] `crates/flowsdn-bpftest/src/corpus.rs` (parse + §9.4 checks, generated assertions, §5.3 summary), shared by
