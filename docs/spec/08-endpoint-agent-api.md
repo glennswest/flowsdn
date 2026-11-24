@@ -60,8 +60,8 @@ Out of scope, with owner:
 - Proxy redirect creation and Envoy xDS — spec 11.
 - Hubble, monitor, `cilium-dbg` rewrite, bugtool.
 - The hive shell (`shell.sock`), StateDB dump, `dynamiclifecycle`,
-  `cgroup-dump-metadata`
-  and `map/{name}/events` (absent, gap #468; see 2.2).
+  `cgroup-dump-metadata`, `map`, `map/{name}`
+  and `map/{name}/events` (absent by decision, #468; see 2.2).
 
 ## 2. Compatibility contract
 
@@ -101,8 +101,8 @@ Out of scope, with owner:
 - Operations flowsdn has not built are absent: not in the router, so the
   agent answers `404` (`no such API route`) as for any unknown path (owner,
   stormcentral#1455, superseding the registered-`501` plan of #118). Absent:
-  `GET /cgroup-dump-metadata`
-  and `GET /map/{name}/events` (gap #468); `cilium-dbg` reports them as an
+  `GET /cgroup-dump-metadata`, `GET /map`, `GET /map/{name}`
+  and `GET /map/{name}/events` (permanently, owner #468); `cilium-dbg` reports them as an
   unknown API. `501` stays only where the reference answers it for a real
   state (BGP routes with the BGP control plane disabled).
 
@@ -1064,10 +1064,10 @@ unless the code is listed bare (empty body).
 | 29 | `PATCH /prefilter` | `PatchPrefilter` | body `PrefilterSpec` | → 200 `Prefilter` | 403, 461 `Error` (invalid CIDR), 500 `Error`; flowsdn #467 (no 403: no API access control) | dbg prefilter update | — |
 | 30 | `DELETE /prefilter` | `DeletePrefilter` | body `PrefilterSpec` | → 200 `Prefilter` | 403, 461 `Error`, 500 `Error`; flowsdn #467 (no 403: no API access control) | dbg prefilter delete | — |
 | 31 | `GET /debuginfo` | `GetDebuginfo` | — | → 200 `DebugInfo` | 500 `Error` | dbg debuginfo, dbg version, bugtool | — |
-| 32 | `GET /cgroup-dump-metadata` | `GetCgroupDumpMetadata` | — | → 200 `CgroupDumpMetadata` | 500 `Error`; flowsdn absent (404, gap #468) | dbg cgroups list | — |
-| 33 | `GET /map` | `GetMap` | — | → 200 `BPFMapList` | — | dbg map list (userspace cache view, spec 01 §3.11) | — |
-| 34 | `GET /map/{name}` | `GetMapName` | path `name` | → 200 `BPFMap` | 404 | dbg map get | — |
-| 35 | `GET /map/{name}/events` | `GetMapNameEvents` | path `name`; query `follow` bool | → 200 JSON-lines stream | 404; flowsdn absent (404, gap #468) | dbg map events | — |
+| 32 | `GET /cgroup-dump-metadata` | `GetCgroupDumpMetadata` | — | → 200 `CgroupDumpMetadata` | 500 `Error`; flowsdn absent (404, out of scope #468) | dbg cgroups list | — |
+| 33 | `GET /map` | `GetMap` | — | → 200 `BPFMapList` | flowsdn absent (404, out of scope #468) | dbg map list (userspace cache view, spec 01 §3.11) | — |
+| 34 | `GET /map/{name}` | `GetMapName` | path `name` | → 200 `BPFMap` | 404; flowsdn absent (404, out of scope #468) | dbg map get | — |
+| 35 | `GET /map/{name}/events` | `GetMapNameEvents` | path `name`; query `follow` bool | → 200 JSON-lines stream | 404; flowsdn absent (404, out of scope #468) | dbg map events | — |
 | 36 | `GET /fqdn/cache` | `GetFqdnCache` | query `matchpattern`, `cidr`, `source` | → 200 `[]DNSLookup` | 400 `Error`, 404 | dbg fqdn cache list — spec 11 | — |
 | 37 | `DELETE /fqdn/cache` | `DeleteFqdnCache` | query `matchpattern` | → 200 | 400 `Error`, 403 | dbg fqdn cache clean — spec 11 | — |
 | 38 | `GET /fqdn/cache/{id}` | `GetFqdnCacheID` | path `id` (endpoint); query as 36 | → 200 `[]DNSLookup` | 400 `Error`, 404 | dbg fqdn cache list -e — spec 11 | — |
@@ -1693,7 +1693,7 @@ API server + models + limiter ~5k, healthcheck ~2k, status ~0.8k, tests ~5k.
    recognized but unbuilt method/path pairs and answer 501. The owner's
    no-stubs rule (stormcentral#1455, "stubs are lies") replaces it: a route
    flowsdn has not built is absent and answers 404 like any unknown path, and
-   each such route is a `gap` issue (#467, #468). Invalid methods on a built
+   each such route is a `gap` issue (#467) or out of scope (#468). Invalid methods on a built
    path are handled separately. The router never registered those 501s.
    See [ADR-0012](../decisions/0012-control-plane-issue-resolutions.md).
 
@@ -1796,3 +1796,12 @@ current one (0 skips the check) is 500 `Latest revision is N not M`; an unparsab
 500 and the request's earlier writes are undone; a `DELETE` of a CIDR not in the list is 500. CIDRs are stored as
 their network (host bits cleared). `PATCH` and `DELETE` are refused by the read-only TCP listener (#297). 403 is not
 produced (no `api-server-access` control). The list is not persisted: an agent start empties the maps at revision 1.
+
+## Amendment — cgroup metadata and the map cache routes (#468, 2026-11-24)
+
+The owner dropped `GET /v1/cgroup-dump-metadata`, `GET /v1/map`, `GET /v1/map/{name}` and `GET /v1/map/{name}/events`
+from scope. They are not a gap: the agent never registers them and answers 404 `no such API route`, as for any
+unknown path. Only `cilium-dbg` (`cgroups list`, `map list|get|events`) calls them and flowsdn ships no `cilium-dbg`;
+the reference keeps map events off by default (`bpf-map-event-buffers`); flowsdn keeps no userspace map cache for
+`/map` to show; and flowsdn identifies Pods by network-namespace cookie, not cgroup. If `cilium-dbg` compatibility
+becomes a goal, that is one new issue for the whole `/map` family and the cgroup route.

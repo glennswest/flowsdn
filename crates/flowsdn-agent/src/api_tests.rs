@@ -553,6 +553,28 @@ fn documented_routes_are_the_served_routes() {
     );
 }
 
+/// #468: the owner dropped the cgroup metadata and map cache routes from
+/// scope. None of them is served (the router answers 404 `no such API
+/// route`), and spec 08 records them as permanently absent.
+#[test]
+fn dropped_cilium_dbg_routes_stay_absent() {
+    let spec = include_str!("../../../docs/spec/08-endpoint-agent-api.md");
+    for path in [
+        "/v1/cgroup-dump-metadata",
+        "/v1/map",
+        "/v1/map/{name}",
+        "/v1/map/{name}/events",
+    ] {
+        assert!(
+            !ROUTES.iter().any(|route| route.contains(path)),
+            "{path} is served"
+        );
+        let short = path.trim_start_matches("/v1");
+        assert!(spec.contains(&format!("`GET {short}`")), "{short} not in spec 08");
+    }
+    assert!(spec.contains("## Amendment — cgroup metadata and the map cache routes (#468"));
+}
+
 /// #456: `/v1/healthz` from the probes: 500 `Warning` before every probe ran
 /// once, `Ok` while fresh, `Warning` past 15 s and 500 `Failure` past 60 s
 /// for a probe that does not complete.

@@ -307,7 +307,10 @@ Scope question: only cilium-dbg calls them; `/map/{name}/events` needs the `/map
 does not have (untracked) plus `bpf-map-event-buffers` (off by default in the reference); cgroup metadata needs
 rustkube-node's cgroup layout. Nothing in flowsdn consumes them.
 - [x] Asked (A: drop from scope; B: build all incl. /map family; C: cgroup route only), recommended A; `wait-owner`.
-- [ ] On A: spec 08 §2.2/§1 say permanently absent (same line count; append amendment), changelog, close.
+- [x] Owner (master, 2026-11-24): A. /map, /map/{name}, /map/{name}/events, /cgroup-dump-metadata stay absent (404).
+- [x] Spec 08 §1/§2.2/rows 32–35/decision 6 in place (line count kept) + amendment; test
+      `dropped_cilium_dbg_routes_stay_absent`; changelog.
+- [ ] sc-build, close.
 
 ### L2 neighbor management — #469 (P3), 2026-11-20
 

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-24 (#468)
+- **docs:** The owner dropped `GET /v1/cgroup-dump-metadata`, `GET /v1/map`, `GET /v1/map/{name}` and `GET /v1/map/{name}/events` from scope. They stay absent, so the agent answers 404 `no such API route`, and that is now a decision, not a gap. Only `cilium-dbg` calls them, and flowsdn ships no `cilium-dbg`. The reference keeps map events off by default, and flowsdn keeps no userspace map cache. Spec 08 §1, §2.2, §4.4 rows 32–35 and decision 6 now say so in place (line count unchanged), and a new amendment records the decision.
+- **test:** `dropped_cilium_dbg_routes_stay_absent`: none of the four is in `api::ROUTES`, and spec 08 lists each one and carries the #468 amendment.
+
 ### 2026-11-23 (#546)
 - **chore:** secret-scan allowlist `.gitleaks.toml` (stormcentral#1679). The nightly gitleaks 8.30.1 scan at 5d3dc92 had 29 findings, all false positives: `let key = Ipv4RevnatTuple`/`Ipv6RevnatTuple` in socket-lb.rs, the `REDACTED-BY-FLOWSDN-HARVEST-NOT-A-KEY` placeholder in 06-bugtool-envoy-config's PROVENANCE, upstream Cilium's base64 test values `Hello world` (an invalid TLS pair) and `Cilium123` (a BGP password), and the public Gateway API conformance certificates and keys in 13 08-operator-gateway-api input files. Those files are byte-identical to Cilium 7d68cfb394; their git blob ids were checked against the reference. The values are allowlisted by anchored regexes, and the 13 fixture files by exact path. They stay unredacted because Cilium's reconciler parses the PEM. No secret was found and nothing needed rotating.
 - **docs:** 08-operator-gateway-api PROVENANCE "Secret scan".
