@@ -310,7 +310,8 @@ rustkube-node's cgroup layout. Nothing in flowsdn consumes them.
 - [x] Owner (master, 2026-11-24): A. /map, /map/{name}, /map/{name}/events, /cgroup-dump-metadata stay absent (404).
 - [x] Spec 08 §1/§2.2/rows 32–35/decision 6 in place (line count kept) + amendment; test
       `dropped_cilium_dbg_routes_stay_absent`; changelog.
-- [ ] sc-build, close.
+- [x] Strict sc-build at 40d59e2 (40b7ca9 failed fmt, auto-filed #547, fixed): fmt --check, `cargo xtask check`
+      (1036 tests, 0 failed), `dropped_cilium_dbg_routes_stay_absent` ok. Docs/test only: no stage. Closed.
 
 ### L2 neighbor management — #469 (P3), 2026-11-20
 
