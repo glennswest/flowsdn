@@ -570,7 +570,10 @@ fn dropped_cilium_dbg_routes_stay_absent() {
             "{path} is served"
         );
         let short = path.trim_start_matches("/v1");
-        assert!(spec.contains(&format!("`GET {short}`")), "{short} not in spec 08");
+        assert!(
+            spec.contains(&format!("`GET {short}`")),
+            "{short} not in spec 08"
+        );
     }
     assert!(spec.contains("## Amendment — cgroup metadata and the map cache routes (#468"));
 }
