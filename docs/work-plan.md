@@ -11,7 +11,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
       upstream conformance TLS fixtures (blob ids == cilium 7d68cfb394). `.gitleaks.toml`: 4 anchored regexes plus 13
       exact paths. The keys stay unredacted (Cilium parses the PEM). Re-scan with BASE+allowlist: no leaks. A planted
       fake key in another file is still found.
-- [ ] push, sc-build, close.
+- [x] 47b9843. sc-build at 47b9843 (`cargo build --locked && cargo test --locked`): exit 0, 974 passed 0 failed.
+      Allowlist and docs only, so no image or stage. Closed; the next nightly scan confirms.
 
 ### BPF corpus generator and §9.4 checks — #473 (P3), 2026-11-21
 
