@@ -134,6 +134,11 @@ pub fn held(eligible: &[Announcement], leases: &BTreeSet<ServiceKey>) -> Vec<Ann
         .collect()
 }
 
+/// A Lease's (holderIdentity, renewTime), by Lease name.
+pub type LeaseRecords = BTreeMap<String, (String, String)>;
+/// A Lease to delete: (name, resourceVersion).
+pub type StaleLease = (String, String);
+
 /// The L2 announcement Leases to delete, as (name, resourceVersion), from a
 /// LeaseList: those with no holder, and those whose holder and `renewTime`
 /// are what `previous` (this agent's last collection) saw, so no node renewed
@@ -142,8 +147,8 @@ pub fn held(eligible: &[Announcement], leases: &BTreeSet<ServiceKey>) -> Vec<Ann
 /// so a Lease taken meanwhile is kept.
 pub fn stale_leases(
     list: &Value,
-    previous: &BTreeMap<String, (String, String)>,
-) -> (Vec<(String, String)>, BTreeMap<String, (String, String)>) {
+    previous: &LeaseRecords,
+) -> (Vec<StaleLease>, LeaseRecords) {
     let mut stale = Vec::new();
     let mut seen = BTreeMap::new();
     let items = list

@@ -91,7 +91,10 @@ fn etp_local_is_answered_by_one_node_with_an_endpoint() {
     let service = edge_lb(true);
     // Both edge pods on pvetest2: only it contends.
     let both = [edge_slice(&[("pvetest2", true), ("pvetest2", true)])];
-    assert_eq!(contenders(&[all_lb()], &service, &both, &nodes), ["pvetest2"]);
+    assert_eq!(
+        contenders(&[all_lb()], &service, &both, &nodes),
+        ["pvetest2"]
+    );
     // Spread over two nodes: those two contend (the Lease picks one).
     let spread = [edge_slice(&[("pvetest1", true), ("pvetest3", true)])];
     assert_eq!(
@@ -240,10 +243,16 @@ fn only_nodes_with_a_matching_interface_contend() {
     assert!(on("a", &["eth0", "lo"]).is_empty());
     let b = on("b", &["ens18", "lo"]);
     assert_eq!(b.len(), 1);
-    assert_eq!(b.first().map(|a| a.interfaces.clone()), Some(vec!["ens18".to_owned()]));
+    assert_eq!(
+        b.first().map(|a| a.interfaces.clone()),
+        Some(vec!["ens18".to_owned()])
+    );
     let key = ("storefront".to_owned(), "edge-lb".to_owned());
     assert_eq!(services(&b), [key.clone()].into());
-    assert_eq!(lease_name(&key.0, &key.1), "flowsdn-l2announce-storefront-edge-lb");
+    assert_eq!(
+        lease_name(&key.0, &key.1),
+        "flowsdn-l2announce-storefront-edge-lb"
+    );
     // b answers once it holds the Lease, and not before.
     assert!(held(&b, &BTreeSet::new()).is_empty());
     assert_eq!(held(&b, &[key].into()), b);
@@ -267,7 +276,10 @@ fn stale_announcement_leases_are_collected() {
     let (stale, seen) = stale_leases(&list("t1"), &BTreeMap::new());
     assert_eq!(
         stale,
-        [("flowsdn-l2announce-a-x".to_owned(), "rv-flowsdn-l2announce-a-x".to_owned())]
+        [(
+            "flowsdn-l2announce-a-x".to_owned(),
+            "rv-flowsdn-l2announce-a-x".to_owned()
+        )]
     );
     assert_eq!(seen.len(), 1);
     // Renewed since: kept.

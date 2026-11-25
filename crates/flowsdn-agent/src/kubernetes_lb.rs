@@ -194,8 +194,7 @@ fn release(
     failures: &mut Vec<String>,
 ) {
     let label = format!("lease {}", elector.name);
-    let body = match runtime.block_on(client.send_json(http::Method::GET, &elector.path(), None))
-    {
+    let body = match runtime.block_on(client.send_json(http::Method::GET, &elector.path(), None)) {
         Ok((200, lease)) => elector.release(&lease),
         Ok((404, _)) => elector.release(&Value::Null),
         Ok((status, body)) => {
@@ -252,7 +251,7 @@ pub(super) fn l2_lease_loop(view: &Shared, kubeconfig: Option<&Path>, identity: 
     };
     let mut electors: BTreeMap<l2_announce::ServiceKey, Elector> = BTreeMap::new();
     let mut collected: Option<Instant> = None;
-    let mut records: BTreeMap<String, (String, String)> = BTreeMap::new();
+    let mut records = l2_announce::LeaseRecords::new();
     loop {
         std::thread::sleep(L2_RETRY);
         let Some(wanted) = lock(view).l2_eligible.clone() else {
