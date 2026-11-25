@@ -23,7 +23,9 @@ pad2 at creation; `renew6`/`renew4` (own frames) renew from the dispatch of STEP
 gateway egress, nodeport_endpoint); forward STALE -> new_flow46/64/gateway64_new; claim_port drops the XLATE4 reply
 entry of a reclaimed XLATE reservation. Kernel: nat_expiry NAT46/NAT64 rounds + two live flows.
 - [x] Code, kernel test, runtime.md, changelog.
-- [ ] Object + lock, strict sc-build + kernel-check, stage, close.
+- [x] Branch build at 32ab901 (kernel-check 24/0/2, all NAT expiry lines incl. live flows). Merged with #450; object +
+      lock 9fbae6e (socket-lb sha256 4ec054a7…). Strict sc-build at 9fbae6e: fmt --check, `cargo xtask check` 1044/0,
+      lock matches, kernel-check 24/0/2. Stage requested; closed.
 
 ### NAT46/64 to local backends — #450 (P3), 2026-11-25
 
@@ -31,8 +33,9 @@ Master (2026-11-25): option 1, the endpoint path. Built as a socket-lb classifie
 endpoint's veth TCX ingress (first, before local-delivery) instead of local-delivery reading socket-lb's maps: same
 flow state and reply translation as the uplink, no map sharing between objects. new_flow46/64 drop the out-device
 = uplink check; services.rs translates local backends (not ETP Local); loader attach_endpoint; agent attach loop.
-- [x] Code, kernel step `nat46x64_local`, docs, changelog (local commit; pushed after #447's object + lock).
-- [ ] Object + lock, strict sc-build + kernel-check, stage, close.
+- [x] Code, kernel step `nat46x64_local`, docs, changelog. Clippy fix (UplinkSettings), step moved to :30098.
+- [x] Branch build at 537d7b0 (kernel-check 24/0/2, `PASS NAT46/64 to local backends`); merged with #494, strict sc-build
+      at 9fbae6e as #494. Not seen on a node. Stage requested; closed.
 
 ### Flows since: dates and order — #552 (P3), 2026-11-25
 
