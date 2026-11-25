@@ -4,6 +4,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### scripttest policy, identity and endpoint adapters — #518 (P3), 2026-11-25
+
+Needs step A (#516) first; open. Parked --after #516.
+- [ ] After #516: policy fixture, `policy/*`, `identity/*`, `endpoint/*`, `policyrepo/*` (§3.3.10), DIVERGENCES.toml.
+
 ### scripttest privileged node-model adapters — #520 (P3), 2026-11-25
 
 Needs step A (#516) first; open. Parked --after #516.
