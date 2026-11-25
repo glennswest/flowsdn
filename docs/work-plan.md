@@ -4,6 +4,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### scripttest egress gateway adapters — #523 (P3), 2026-11-25
+
+Needs step A (#516) and FlowsdnEgressGatewayPolicy (#336) first; both open. Parked --after both.
+- [ ] After #516 and #336: `egress/policy-maps-dump` (§3.3.14), the `egressgateway` DIVERGENCES.toml.
+
 ### scripttest BGP adapters — #524 (P3), 2026-11-25
 
 Needs step A (#516) first, per the issue and spec 17 §3.9; #516 is open. Parked --after #516.
