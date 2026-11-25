@@ -692,6 +692,21 @@ const DISPATCH_IPIP: u8 = DsrDispatch::Ipip.byte();
 const DISPATCH_GENEVE: u8 = DsrDispatch::Geneve.byte();
 /// [`encap4`]'s answer when it sent nothing: not a TC verdict.
 const NOT_SENT: i32 = -1000;
+/// [`ingress4`]'s answer for a DSR packet to encapsulate: the backend is in
+/// [`ENCAP4`], and the classifier calls [`encap4`] next. Its frame cannot be
+/// nested in `ingress4`'s: the two together exceed the BPF stack.
+const ENCAP_PENDING: i32 = -1001;
+/// The backend (address, port) and mode a pending encapsulation is for.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Encap4 {
+    backend: [u8; 4],
+    port: [u8; 2],
+    mode: u8,
+    pad: u8,
+}
+#[map(name = "flowsdn_dsr_encap4")]
+static ENCAP4: PerCpuArray<Encap4> = PerCpuArray::with_max_entries(1, 0);
 #[map(name = "flowsdn_dsr_config")]
 static DSR_CONFIG: HashMap<u32, [u8; 4]> = HashMap::with_max_entries(1, BPF_F_NO_PREALLOC);
 /// This node's dispatch mode.
@@ -1305,14 +1320,18 @@ fn dsr_forward4(
     let mode = dispatch();
     let option = l4 == 34 && dsr_option_wanted(ctx, l4, proto, fib.ifindex, room4(mode))?;
     if option && mode != DISPATCH_OPT {
-        // On its own stack frame: a second FIB lookup does not fit this one.
-        let verdict = encap4(
-            ctx.skb.skb,
-            u32::from(mode),
-            u32::from_ne_bytes(flow.address),
-            u32::from(u16::from_ne_bytes(flow.port)),
-        );
-        return (verdict != NOT_SENT).then_some(verdict);
+        // Encapsulated by the classifier, on a frame of its own.
+        let slot = ENCAP4.get_ptr_mut(0)?;
+        // SAFETY: this CPU's slot, read by encap4 later in this invocation.
+        unsafe {
+            *slot = Encap4 {
+                backend: flow.address,
+                port: flow.port,
+                mode,
+                pad: 0,
+            };
+        }
+        return Some(ENCAP_PENDING);
     }
     rewrite4(
         ctx,
@@ -1335,26 +1354,27 @@ fn dsr_forward4(
 /// the frontend in the DSR option, to the FIB's next hop (the backend's
 /// node). The inner TTL is decremented, as forwarding does.
 ///
-/// Arguments are scalars (`backend` and `backend_port` in network byte
-/// order); the rest is read from the packet, a bare IPv4 header with TCP or
-/// UDP. [`NOT_SENT`] when the FIB has no route (nothing changed yet); once
-/// the packet is being changed a failure drops it.
+/// The backend and mode come from [`ENCAP4`]; the rest is read from the
+/// packet, a bare IPv4 header with TCP or UDP. [`NOT_SENT`] when the FIB has
+/// no route (nothing changed yet); once the packet is being changed a
+/// failure drops it.
 #[inline(never)]
-fn encap4(skb: *mut __sk_buff, mode: u32, backend: u32, backend_port: u32) -> i32 {
+fn encap4(skb: *mut __sk_buff) -> i32 {
     let ctx = TcContext::new(skb);
+    let Some(slot) = ENCAP4.get_ptr_mut(0) else {
+        return NOT_SENT;
+    };
+    // SAFETY: this CPU's slot, written by dsr_forward4 in this invocation.
+    let pending = unsafe { *slot };
     let Ok(proto) = ctx.load::<u8>(23) else {
         return NOT_SENT;
     };
-    let Ok(port) = u16::try_from(backend_port) else {
-        return NOT_SENT;
-    };
-    let flow = (backend.to_ne_bytes(), port.to_ne_bytes());
+    let flow = (pending.backend, pending.port);
     let (result, fib) = fib4(&ctx, proto, [0; 4], flow.0, BPF_FIB_LOOKUP_SRC);
     if !forwarded(result) {
         return NOT_SENT;
     }
-    let mode = u8::try_from(mode).unwrap_or(DISPATCH_OPT);
-    encap4_send(&ctx, mode, proto, flow, result, &fib).unwrap_or(TC_ACT_SHOT)
+    encap4_send(&ctx, pending.mode, proto, flow, result, &fib).unwrap_or(TC_ACT_SHOT)
 }
 /// [`encap4`] after the lookup.
 #[inline(always)]
@@ -4381,6 +4401,10 @@ fn ingress(ctx: &TcContext) -> i32 {
                 DSR_NONE => match ingress4(skb) {
                     NOT_NODEPORT => match icmp_in4(skb) {
                         NOT_NODEPORT => masq_icmp_in(skb),
+                        verdict => verdict,
+                    },
+                    ENCAP_PENDING => match encap4(skb) {
+                        NOT_SENT => TC_ACT_OK,
                         verdict => verdict,
                     },
                     verdict => verdict,
