@@ -11,7 +11,8 @@ L7 LB redirect, secret sync, operator runtime, KPR) and stage 2 before stage 1 (
 P1-P4 or stage 1 exists; #537 leaves the proxy choice (Envoy vs Rust, ADR-0001/#262) open. Asked on the issue
 (A: spec 16 Envoy path first, recommended; B: Rust proxy ADR; C: defer milestone 4 L7). `wait-owner` refused (#1680,
 gap label); waiting for the owner or master's answer.
-- [ ] Decision; then the prerequisite issue(s), stage 1, then this.
+- [x] Master (2026-11-25): C now, B when it comes, never A: a Rust L7 proxy in the agent, its ADR first. Filed #563
+      (P3); #543 and #474 parked --after #563; ruling posted on both; amendments to spec 16 and spec 21.
 
 ### BPF corpus: monotonic gate and re-harvest — #544 (P3), 2026-11-25
 

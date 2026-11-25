@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#543, #563)
+- **docs:** The L7 proxy will be a Rust proxy in the agent, never Envoy (master's ruling on #543: everything but the kernel and qemu is Rust). Its ADR comes first (#563, P3), and nothing is built before something on the platform needs L7. Spec 16 and spec 21 gain amendments saying their Envoy/xDS text is the reference's contract until that ADR. The Gateway API controller (#543) and `parentRef.port` (#474) are parked behind #563.
+
 ### 2026-11-25 (#544)
 - **feat:** Spec 18 §9.4's last two checks.
   - **Coverage monotonic:** `tests/bpf/COVERAGE.toml` records `ported(m)` per milestone (10, 16, 16 today). flowsdn-bpftest's build and `cargo xtask cases` refuse coverage below the record, and coverage above it until the record is raised in the same commit. An sc-build has no parent commit to compare with (#317), so the record carries it, and any decrease is a visible edit.

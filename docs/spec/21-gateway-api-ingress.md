@@ -2290,3 +2290,11 @@ host_rules YAML has neither input, so it cannot detect this defect. By the
 owner's decision (2026-10-07) flowsdn reports nothing upstream; #281 is closed
 with this local fix. This record makes no claim
 about later Cilium revisions or a running Envoy interoperability test.
+
+## Amendment — the L7 proxy is a Rust proxy in the agent, not Envoy (#563, 2026-11-25)
+
+The master ruled on #543: Envoy is not an option on this platform (everything but the kernel and qemu is Rust).
+The L7 proxy will be a Rust proxy in the agent, decided by its own ADR first (#563, per ADR-0001 and #262), and
+nothing is built before something on the platform needs L7. Until that ADR, this spec's Envoy, xDS and
+CiliumEnvoyConfig text describes the reference's contract, not flowsdn's plan; the ADR rewrites it
+(§1.3's P1–P2 and the translation target). Parked behind #563: #543 (Gateway API controller), #474 (`parentRef.port`).

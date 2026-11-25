@@ -1982,3 +1982,11 @@ A rule with `authentication` (`required` or `test-always-fail`) stays refused: t
 (fail closed, #202); the skip is reported as a `policy` problem. `cilium_auth_map`, `auth_lookup`, the auth
 manager and the `mesh-auth-*` settings are not built. If workload mTLS is wanted later, it starts as a stormcert
 workload-identity design, not here. Guarded by `host_policy_tests::authentication_and_to_groups_are_refused`.
+
+## Amendment — the L7 proxy is a Rust proxy in the agent, not Envoy (#563, 2026-11-25)
+
+The master ruled on #543: Envoy is not an option on this platform (everything but the kernel and qemu is Rust).
+The L7 proxy will be a Rust proxy in the agent, decided by its own ADR first (#563, per ADR-0001 and #262), and
+nothing is built before something on the platform needs L7. Until that ADR, this spec's Envoy, xDS and
+CiliumEnvoyConfig text describes the reference's contract, not flowsdn's plan; the ADR rewrites it
+(§3.1, §3.4 and the xDS contracts). Parked behind #563: the L7 work of #537 and #543.
