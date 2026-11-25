@@ -17,7 +17,10 @@ fn policy_maps_dump_shows_the_planned_entries() {
     let engine = flowsdn_scripttest_fixtures::areas::egress(&[]).unwrap();
     let mut state = State::with_workspace(&std::env::temp_dir(), &std::env::temp_dir()).unwrap();
     state.materialize(&archive).unwrap();
-    let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
     let options = RunOptions::with_timeout(Duration::from_secs(10)).unwrap();
     runtime
         .block_on(engine.run_async(archive.script(), &mut state, &options))
