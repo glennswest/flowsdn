@@ -65,6 +65,12 @@ pinning or subsystem libraries are absent are **not current status**.
   ready endpoint), from AF_PACKET
   sockets; `GET /v1/lb-ipam`, `GET /v1/l2-announcements`. Unit and loopback-API
   tests, and the `l2-announce-live` kernel fixture; not yet seen on a node.
+- Local redirect policy (#565, `local-redirect-policy`, default off):
+  FlowsdnLocalRedirectPolicy frontends (a Service's ClusterIPs or an
+  address) go to this node's selected Ready Pods in the socket LB, with
+  skip-LB for the backends' own sockets (`flowsdn_skip_lb{4,6}`), `status.ok`
+  and `GET /v1/lrp`. Unit tests and the `socket-lb-live` kernel step; not on
+  a cluster.
 - Kubernetes Events on Pods and the Node, aggregated and non-blocking (#298);
   the `flowsdn.io/pod-networks` annotation on local Pods (and flowsdn's entry in
   the Multus `network-status`, #371) and pod/container/

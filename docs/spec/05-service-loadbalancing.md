@@ -1308,3 +1308,22 @@ option in `opt` (a TCP SYN, a UDP packet that fits the MTU with the added bytes)
 the flow are plain DNAT, since the backend's node already has the reply entry. The Geneve UDP checksum is zero for
 IPv6 too: the receiver is the uplink program, before the stack. A node accepts all three modes whatever its own
 setting; an encapsulation that fails the frontend/backend check drops.
+
+## Amendment — local redirect policy and skip-LB in the socket LB (#565, 2026-11-25)
+
+§3.9 as flowsdn implements it (setting `kubernetes.local-redirect-policy`,
+kind FlowsdnLocalRedirectPolicy):
+
+- flowsdn translates Pods' Service traffic only in the socket LB, so there is
+  no per-packet LB to take a skipped socket on. A socket whose namespace
+  cookie is in `flowsdn_skip_lb{4,6}` for a `LOCAL_REDIRECT` frontend
+  gets that frontend's own Service, programmed as a second copy at scope 2
+  (`SCOPE_REDIRECT_SKIPPED`). An `addressMatcher` frontend has no own copy,
+  so the socket is not translated.
+- The skip maps hold 1024 entries each (no prealloc), not 100, and are
+  written by the socket-LB planner with the services, not by a separate
+  reconciler. Entries go when their redirect does.
+- `lrp-address-matcher-cidrs` is not read.
+- `GET /lrp` is `GET /v1/lrp`. The validity of a policy is its
+  `status.ok`, written by any agent where the object's differs.
+

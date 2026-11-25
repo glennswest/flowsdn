@@ -461,6 +461,7 @@ fn controller_body(phase: &AtomicUsize) {
         lb_dsr_dispatch: Default::default(),
         nat46x64: false,
         external_clusterip: false,
+        local_redirect: false,
         node_name: "local".into(),
         kubeconfig: Some(PathBuf::from(&kubeconfig)),
         auto_direct_node_routes: false,

@@ -139,8 +139,8 @@ pub const POD_POLICIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnnetworkpol
 pub const LB_IP_POOLS_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnloadbalancerippools";
 /// `flowsdn.io/v1alpha1` FlowsdnL2AnnouncementPolicy (#475).
 pub const L2_POLICIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnl2announcementpolicies";
-/// `flowsdn.io/v1alpha1` FlowsdnLocalRedirectPolicy (namespaced); a policy's
-/// status is `.../namespaces/<ns>/flowsdnlocalredirectpolicies/<name>/status` (#565).
+/// `flowsdn.io/v1alpha1` FlowsdnLocalRedirectPolicy (namespaced, #565); the kind has
+/// no status subresource, so `status.ok` is patched on the object.
 pub const REDIRECT_POLICIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnlocalredirectpolicies";
 
 pub struct JsonClient {

@@ -4,6 +4,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Local redirect policy and skip-LB — #565 (P3), 2026-11-25
+
+- [x] socket-lb skip maps and the scope-2 own-Service copy; planner, loader, watch (Pod ports/readiness, RedirectPolicies), agent planning (`local_redirect.rs`), the `flowsdn-lrp` thread (re-plan every 2 s, `status.ok`), `GET /v1/lrp`, RBAC, docs.
+- [ ] sc-build: compile and tests; then the BPF object and lock rebuild; then a strict build with kernel-check (`socket-lb-live` `local_redirect`).
+
 ### scripttest step A: table store, lifecycle, fake Kubernetes — #516 (P3), 2026-11-25
 
 Done on branch `scripttest-fixtures-516`, merged to main. The five areas run in the corpus gate: 8 PASS, 6 XFAIL (recorded), 0 FAIL. #517-#526 are unblocked.

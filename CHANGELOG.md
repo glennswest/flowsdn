@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#565)
+- **feat:** Local redirect policy and skip-LB in the socket LB (spec 05 §3.9), with `kubernetes.local-redirect-policy` (default off, needs `service-lb`).
+  - **Backends:** the agent watches FlowsdnLocalRedirectPolicy. A frontend's backends are this node's Ready Pods that the policy's `localEndpointSelector` selects, on the container ports `toPorts` names.
+  - **serviceMatcher:** each matching ClusterIP frontend goes to those Pods while there are any; with none, the Service keeps its own backends.
+  - **addressMatcher:** a new frontend; an address a Service already serves is refused.
+  - **skipRedirectFromBackend:** the backends' network-namespace cookies go into the new `flowsdn_skip_lb{4,6}` maps. A socket from such a namespace gets the Service's own backends (a copy of the frontend at the new scope 2) or, for an addressMatcher, no translation.
+  - **Status:** `status.ok` is written where it differs (the kind has no status subresource). `GET /v1/lrp` lists the policies.
+  - **Implementation:**
+    - socket-lb: `lookup4`/`lookup6` check `flowsdn_skip_lb{4,6}` when the master carries `LOCAL_REDIRECT`.
+    - Planner: `Service.local_redirect`/`skip`, `Maps.skip4`/`skip6`, `Op::Skip*`; the loader has 24 maps.
+    - Watch: Pods carry all container ports and readiness, and there is a new `Scope::RedirectPolicies`.
+    - Agent RBAC: `patch` on flowsdnlocalredirectpolicies.
+    - The socket-lb object and lock are rebuilt.
+- **test:** `local_redirect_tests` (service and address matchers, no local backend, skip-LB, a taken address, validation), a planner test (flag, skip keys, removal), a watch parse test, and `socket-lb-live` `local_redirect` (redirected connects for IPv4 and IPv6, skip-LB to the Service's own backend, no translation after skip-LB, maps emptied on removal).
+- **docs:** runtime.md (local redirect policy), agent-api.md (`GET /v1/lrp`), crds.md, spec 05 amendment, implementation-status.md.
+
 ### 2026-11-25 (#519)
 - **planning:** Master's ruling on #519: the agent's LB gets spec 05 §4.1's tables (`services`, `frontends`, `backends`). They are reconciled into the socket-LB maps through flowsdn-reconcile, with the existing planner as the apply step. Filed as #573. #519 is parked after #573 and #565.
 

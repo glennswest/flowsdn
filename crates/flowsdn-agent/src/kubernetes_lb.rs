@@ -694,9 +694,11 @@ pub(super) fn redirect_loop(
             if object.pointer("/status/ok").and_then(Value::as_bool) == Some(ok) {
                 continue;
             }
+            // The kind has no status subresource: `status` is patched on
+            // the object itself.
             let path = format!(
-                "{}/namespaces/{}/flowsdnlocalredirectpolicies/{}/status",
-                "/apis/flowsdn.io/v1alpha1", key.0, key.1
+                "/apis/flowsdn.io/v1alpha1/namespaces/{}/flowsdnlocalredirectpolicies/{}",
+                key.0, key.1
             );
             let reply = runtime.block_on(client.send_json(
                 http::Method::PATCH,

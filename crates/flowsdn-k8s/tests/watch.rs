@@ -705,7 +705,9 @@ fn pod_ports_readiness_and_local_redirect_policies() {
     assert_eq!(pod.named_ports, vec![(17, "dns".to_owned(), 53)]);
     assert!(pod.ready);
     let mut unready = object.clone();
-    unready["status"]["conditions"] = json!([{"type":"Ready","status":"False"}]);
+    if let Some(conditions) = unready.pointer_mut("/status/conditions") {
+        *conditions = json!([{"type":"Ready","status":"False"}]);
+    }
     let Resource::Pod(pod) = Scope::Pods.parse(&unready).expect("pod") else {
         panic!("pod row expected");
     };

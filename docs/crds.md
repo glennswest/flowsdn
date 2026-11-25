@@ -38,9 +38,11 @@ What ships:
 Rust types exist for FlowsdnEndpoint, FlowsdnEndpointSlice, FlowsdnIdentity,
 FlowsdnNode and FlowsdnNodeConfig (`flowsdn_k8s::kinds`, #332), and for
 FlowsdnEgressGatewayPolicy, FlowsdnLocalRedirectPolicy and FlowsdnDatapathPlugin
-(#336), all checked against their schemas by `tests/kinds.rs`. Nothing reads the
-#336 kinds yet: egress gateway is #564, local redirect policy #565, datapath
-plugins #566 (to be specified first). The agent writes FlowsdnEndpoint and
+(#336), all checked against their schemas by `tests/kinds.rs`. With
+`kubernetes.local-redirect-policy` the agent reads FlowsdnLocalRedirectPolicy
+and writes its `status.ok` (#565,
+[runtime](runtime.md#local-redirect-policy-565)). Nothing reads the other two
+yet: egress gateway is #564, datapath plugins #566 (to be specified first). The agent writes FlowsdnEndpoint and
 FlowsdnNode ([runtime](runtime.md#flowsdnendpoint-and-flowsdnnode-332)).
 The operator (`flowsdn-agent operator`, #337) registers the 22 CRDs from these
 files (spec 13 §3.2), and the agent waits for the ones its configuration uses
@@ -62,7 +64,7 @@ enforces it. Each of these is tracked per group in the issues linked from #325.
 | FlowsdnIdentity | `fsid` | Cluster | yes | a numeric security identity and its labels | agent / operator |
 | FlowsdnNode | `fsn` | Cluster | yes | per-node addresses, IPAM pools and health endpoint | agent; operator in cloud IPAM |
 | FlowsdnNodeConfig | `fsnc` | Namespaced | — | per-node agent configuration overrides by node selector: flowsdn's own settings, read by the agent at start (#480) | users; the agent reads it |
-| FlowsdnLocalRedirectPolicy | `fslrp` | Namespaced | — | redirect a frontend (address or Service) to node-local backends | users |
+| FlowsdnLocalRedirectPolicy | `fslrp` | Namespaced | — | redirect a frontend (address or Service) to node-local backends | users; agent sets `status.ok` |
 | FlowsdnEgressGatewayPolicy | `fsegp` | Cluster | — | send selected pods' egress through gateway nodes with a fixed IP | users |
 | FlowsdnEnvoyConfig | `fsec` | Namespaced | — | Envoy listeners/clusters for L7 traffic of selected Services | users, operator (Ingress/Gateway) |
 | FlowsdnClusterwideEnvoyConfig | `fscec` | Cluster | — | the same, cluster-wide | users, operator |

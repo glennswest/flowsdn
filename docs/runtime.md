@@ -55,6 +55,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.nat46x64` | `false` | Service NAT46/64: a node-local frontend with no backend of its own family reaches the other family's backends, on other nodes and on this one (#450) ([NAT46/64](#service-nat4664)). |
 | `kubernetes.lb-ipam` | `true` | LB-IPAM: give `type: LoadBalancer` Services addresses from FlowsdnLoadBalancerIPPools ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb`; nothing happens without a pool. |
 | `kubernetes.l2-announcements` | `true` | Answer ARP and NDP for the load-balancer and external addresses FlowsdnL2AnnouncementPolicies give this node ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb` and `node-port`; nothing is announced without a policy. |
+| `kubernetes.local-redirect-policy` | `false` | Local redirect policy (#565; the reference's `enable-local-redirect-policy`): FlowsdnLocalRedirectPolicy frontends, an address or a Service's ClusterIP, go to this node's Pods in the socket LB, with skip-LB for the backends' own traffic ([local redirect policy](#local-redirect-policy-565)). Needs `service-lb`. |
 | `kubernetes.endpoint-crd` | `true` | Keep a FlowsdnEndpoint for each local Pod endpoint ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). Nothing is written while the kind is not served. |
 | `kubernetes.node-crd` | `true` | Keep this node's FlowsdnNode ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). |
 | `kubernetes.bpf-masquerade` | `false` | BPF masquerade (#460, IPv6 #513; the reference's `enable-bpf-masquerade`), IPv4 and IPv6: the uplink programs source-NAT local Pods' traffic leaving the cluster ([BPF masquerade](#bpf-masquerade-460)). Needs `service-lb`; attaches the uplink programs even with `node-port` off. |
@@ -629,8 +630,8 @@ pinned: they detach when the agent exits, and the per-CPU
 pinned either. The socket LB picks backends at random: Maglev is for traffic
 entering on the uplink only, as in the reference (#453); an existing TCP connection stays on its backend when it leaves unless
 `kubernetes.lb-sock-terminate-all-protos` is on (#392, below); SCTP ports get no translation (#457); IPv6
-fragments pass untouched. A further gap: skip-LB, which comes with local redirect policy
-(#336). `socket-lb-live` (medium test suite) checks the
+fragments pass untouched. Local redirect policy and its skip-LB are
+[below](#local-redirect-policy-565). `socket-lb-live` (medium test suite) checks the
 programs on a kernel, including the NodePort local and SNAT paths through
 `BPF_PROG_TEST_RUN` and Maglev picks against the planner's tables; no
 two-node cluster run yet.
@@ -1020,6 +1021,43 @@ status patched) and the `l2-announce-live` kernel run (another namespace's
 kernel resolves the addresses to the answering interface, and an unsolicited
 NA moves its entry to another MAC); it has not served a
 Service on a node yet.
+
+### Local redirect policy (#565)
+
+With `kubernetes.local-redirect-policy` (default off; needs `service-lb`) the
+agent watches FlowsdnLocalRedirectPolicies (spec 05 §3.9) and redirects
+their frontends to this node's Pods in the socket LB:
+
+- **Backends.** This node's Ready, non-host-network Pods in the policy's
+  namespace that `redirectBackend.localEndpointSelector` selects, on the
+  container ports `redirectBackend.toPorts` names (the Pod must declare the
+  port). A frontend port pairs with a backend port when each side has one
+  (same protocol); otherwise by name, and every port must then be named.
+- **`serviceMatcher`.** Each ClusterIP frontend of the Service (all its ports,
+  or the `toPorts` given) whose port pairs goes to the local backends, marked
+  `LOCAL_REDIRECT`. With no local backend the Service keeps its own.
+- **`addressMatcher`.** A new frontend at `ip:port` for each port, only while
+  it has a local backend. An address a Service already serves is refused.
+- **`skipRedirectFromBackend`.** Each backend Pod's network namespace cookie
+  goes in `flowsdn_skip_lb{4,6}` (1024 entries each) with the frontend's
+  address and port. A socket from that namespace is not redirected. flowsdn
+  translates Pods' Service traffic only in the socket LB, so for a
+  `serviceMatcher` it gets the Service's own backends (a copy of the frontend
+  at scope 2), and for an `addressMatcher` it is not translated. A Pod's
+  cookie comes from its endpoint, so a backend gets its skip entry once its
+  endpoint exists.
+- **Validation and status.** An invalid policy (both or neither matcher, a
+  `serviceMatcher` in another namespace, a bad address, port or protocol,
+  unnamed ports where several are given) does nothing. `status.ok` says
+  whether it is valid: every agent agrees, and one writes it where it
+  differs. `GET /v1/lrp` lists the policies, why one is refused, and the
+  frontends this node redirects.
+
+The agent re-plans every 2 s (a Pod becoming Ready, an endpoint created).
+The reference's `lrp-address-matcher-cidrs` restriction is not read.
+`socket-lb-live` checks redirected connects, a Service's own backends after
+skip-LB, and no translation after skip-LB, on a kernel. There is no cluster
+run yet.
 
 ### NetworkPolicy enforcement (#292)
 
