@@ -151,7 +151,7 @@ pinning or subsystem libraries are absent are **not current status**.
   (IPv4, #460) is on.
 - Open gaps, each an issue with the `gap` label: operator identity GC (#332);
   L7 HTTP/Kafka policy rules (#537, parked behind the Rust L7 proxy ADR #563);
-  `toFQDNs` and DNS policy rules (#536);
+  `toFQDNs` and DNS policy rules (#536, parked behind #563 too);
   SCTP Services (#457); the
   Hubble observer/relay (#293). Not built by decision, refused and reported so
   they fail closed: mutual authentication (#472) and `toGroups`/`fromGroups`

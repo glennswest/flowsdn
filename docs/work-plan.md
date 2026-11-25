@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### toFQDNs and DNS rules — #536 (P3), 2026-11-25
+
+Applied the master's L7 ruling (on #543): the DNS proxy is in the agent (spec 16 §3.6) but uses the shared proxy-port
+redirect (§3.3, spec 06) that the Rust L7 proxy ADR decides, so it is parked behind #563 and the DNS proxy was added
+to #563's scope. Not built; rules stay refused and reported (fail closed). If the master reads the ruling differently,
+this is the place to override.
+- [ ] After #563.
+
 ### ICMP errors of source-NATed flows — #534 (P3), 2026-11-25
 
 Frontend's node, `nodeport_ingress`: icmp_error4_in/6_in hand FLOW_SNAT flows to snat_error4_in/6_in (to the
