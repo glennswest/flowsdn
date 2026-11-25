@@ -4,6 +4,16 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### BPF corpus: monotonic gate and re-harvest — #544 (P3), 2026-11-25
+
+No parent commit in sc-build (#317): the monotonic gate is a committed record, tests/bpf/COVERAGE.toml, equal to
+ported(m) (build.rs + xtask cases refuse below and above). `cargo xtask reharvest [--fetch]`: sparse shallow clone of
+bpf/tests at 7d68cfb394; `--check` byte for byte. Evidence build at 2a26b02: fetch at the pinned commit, old file
+refused at line 1 ("the same cases"), regenerated, corpus 4 + harvester 10 tests ok, reharvest byte match.
+CASES.toml regenerated with the old provenance header kept as the tool's HEADER.
+- [x] Code, tests, docs (spec 18 §9.4 + amendment, build-and-test.md), changelog.
+- [ ] sc-build: fmt --check, `cargo xtask check`, `cargo xtask reharvest --fetch`; merge; close.
+
 ### Performance suite vs Cilium — #321 (P1), status 2026-11-25
 
 `stormcentral test run flowsdn perf`: no test machine can take a run (13.00-flowsdn failed on pvetest1/2, 13.00 on

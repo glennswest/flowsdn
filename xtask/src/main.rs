@@ -32,6 +32,91 @@ fn print_cases() -> Result<(), Box<dyn Error>> {
     )
     .map_err(|problems| problems.join("\n"))?;
     print!("{}", corpus.summary());
+    // The monotonic gate (spec 18 §5.3, #544), as flowsdn-bpftest's build.
+    corpus
+        .check_record(&std::fs::read_to_string(
+            root.join("tests/bpf/COVERAGE.toml"),
+        )?)
+        .map_err(|problems| problems.join("\n"))?;
+    println!("  coverage equals tests/bpf/COVERAGE.toml");
+    Ok(())
+}
+
+/// The reference the BPF corpus is harvested from (spec 18 §9.4): Cilium
+/// v1.20.1. `tools/harvest-bpf-cases` refuses any other checkout.
+const REFERENCE_COMMIT: &str = "7d68cfb394f2960e10aa72e76d0d51e66c1b2ebc";
+const REFERENCE_URL: &str = "https://github.com/cilium/cilium.git";
+
+/// `cargo xtask reharvest [--fetch]` (spec 18 §9.4, #544): re-run the
+/// harvester against the pinned reference and require `tests/bpf/CASES.toml`
+/// byte for byte. The reference is `$FLOWSDN_REFERENCE`, else
+/// `target/reference/cilium-<commit>`; `--fetch` makes the latter (a shallow,
+/// sparse clone of `bpf/tests` at the pinned commit). Without a checkout the
+/// check is skipped, saying so.
+fn reharvest(fetch: bool) -> Result<(), Box<dyn Error>> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("workspace")?;
+    let reference = env::var_os("FLOWSDN_REFERENCE").map_or_else(
+        || {
+            root.join("target/reference").join(format!(
+                "cilium-{}",
+                REFERENCE_COMMIT.get(..10).unwrap_or("")
+            ))
+        },
+        std::path::PathBuf::from,
+    );
+    if fetch && !reference.join("bpf/tests").is_dir() {
+        fetch_reference(&reference)?;
+    }
+    if !reference.join("bpf/tests").is_dir() {
+        println!(
+            "re-harvest skipped: no reference checkout at {} (set FLOWSDN_REFERENCE to a Cilium checkout at {REFERENCE_COMMIT}, or run cargo xtask reharvest --fetch)",
+            reference.display()
+        );
+        return Ok(());
+    }
+    let reference = reference.to_str().ok_or("reference path is not UTF-8")?;
+    let cases = root.join("tests/bpf/CASES.toml");
+    let cases = cases.to_str().ok_or("workspace path is not UTF-8")?;
+    run(&[
+        "run",
+        "--locked",
+        "--quiet",
+        "-p",
+        "flowsdn-harvest-bpf-cases",
+        "--",
+        "--reference",
+        reference,
+        "--check",
+        cases,
+    ])
+}
+/// A shallow, sparse clone of the reference's `bpf/tests` at the pinned
+/// commit into `dir`.
+fn fetch_reference(dir: &Path) -> Result<(), Box<dyn Error>> {
+    std::fs::create_dir_all(dir)?;
+    let git = |args: &[&str]| -> Result<(), Box<dyn Error>> {
+        let status = Command::new("git").arg("-C").arg(dir).args(args).status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("git {} failed: {status}", args.join(" ")).into())
+        }
+    };
+    git(&["init", "--quiet"])?;
+    git(&["remote", "add", "origin", REFERENCE_URL])?;
+    git(&["sparse-checkout", "set", "bpf/tests"])?;
+    git(&[
+        "fetch",
+        "--quiet",
+        "--depth",
+        "1",
+        "--filter=blob:none",
+        "origin",
+        REFERENCE_COMMIT,
+    ])?;
+    git(&["checkout", "--quiet", "--detach", "FETCH_HEAD"])?;
     Ok(())
 }
 
@@ -40,7 +125,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let command = args.first().map(String::as_str).unwrap_or("help");
     if command == "help" || command == "--help" {
         println!(
-            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|ci-plan|check-changed> BASE\ncargo xtask audit-corpus [--check]\ncargo xtask cases [--summary]\ncargo xtask chart-check\ncargo xtask cloud-scan\ncargo xtask kernel-check [SUITE]\nRun build tasks on Linux; see README.md."
+            "cargo xtask <build|test|check|deny>\ncargo xtask <plan|ci-plan|check-changed> BASE\ncargo xtask audit-corpus [--check]\ncargo xtask cases [--summary]\ncargo xtask reharvest [--fetch]\ncargo xtask chart-check\ncargo xtask cloud-scan\ncargo xtask kernel-check [SUITE]\nRun build tasks on Linux; see README.md."
         );
         return Ok(());
     }
@@ -77,6 +162,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err("expected cases [--summary]".into());
         }
         return print_cases();
+    }
+    if command == "reharvest" {
+        if args.len() > 2 || args.get(1).is_some_and(|s| s != "--fetch") {
+            return Err("expected reharvest [--fetch]".into());
+        }
+        return reharvest(args.len() == 2);
     }
     if command == "audit-corpus" {
         if args.len() > 2 || args.get(1).is_some_and(|s| s != "--check") {
@@ -169,8 +260,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "warnings",
             ])?;
             run(&["test", "--workspace", "--all-features", "--locked"])?;
-            // The BPF corpus coverage (spec 18 §8.4, #473), on every check.
+            // The BPF corpus coverage (spec 18 §8.4, #473) and its monotonic
+            // gate, and the re-harvest when a reference is at hand (#544).
             print_cases()?;
+            reharvest(false)?;
             let packages = changed::musl_packages(None)?;
             for target in ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"] {
                 if packages.is_empty() {

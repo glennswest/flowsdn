@@ -243,6 +243,59 @@ impl Corpus {
             .collect()
     }
 
+    /// `ported(m)` for milestones 1..=3 (spec 18 §5.3): cases of milestone
+    /// at most `m` that are ported, retargeted or replaced.
+    pub fn coverage(&self) -> [usize; 3] {
+        let covered =
+            |status: &Option<String>| status.as_deref().is_some_and(|s| COVERED.contains(&s));
+        let at = |m: i64| {
+            self.cases
+                .iter()
+                .filter(|(c, s)| c.milestone <= m && covered(s))
+                .count()
+        };
+        [at(1), at(2), at(3)]
+    }
+
+    /// The monotonic gate (spec 18 §5.3, §9.4, #544) against the committed
+    /// record `tests/bpf/COVERAGE.toml` (`[ported] m1 m2 m3`). A build has no
+    /// parent commit (#317), so the record carries the previous coverage: a
+    /// `ported(m)` below it is refused, and one above it is refused until
+    /// the record is raised in the same commit, so the record always equals
+    /// the commit's coverage and lowering it is a visible edit.
+    pub fn check_record(&self, record: &str) -> Result<(), Vec<String>> {
+        let table: Table = record
+            .parse()
+            .map_err(|e| vec![format!("COVERAGE.toml: {e}")])?;
+        let ported = table.get("ported").and_then(toml::Value::as_table);
+        let mut problems = Vec::new();
+        for (index, now) in self.coverage().into_iter().enumerate() {
+            let m = index.saturating_add(1);
+            let Some(was) = ported
+                .and_then(|t| t.get(&format!("m{m}")))
+                .and_then(toml::Value::as_integer)
+                .and_then(|n| usize::try_from(n).ok())
+            else {
+                problems.push(format!("COVERAGE.toml: [ported] m{m} missing"));
+                continue;
+            };
+            if now < was {
+                problems.push(format!(
+                    "ported(M{m}) fell from {was} to {now}: coverage may not decrease (spec 18 §5.3)"
+                ));
+            } else if now > was {
+                problems.push(format!(
+                    "ported(M{m}) rose from {was} to {now}: set m{m} = {now} in tests/bpf/COVERAGE.toml in this commit"
+                ));
+            }
+        }
+        if problems.is_empty() {
+            Ok(())
+        } else {
+            Err(problems)
+        }
+    }
+
     /// The coverage report (spec 18 §5.3, §8.4): covered/total per
     /// milestone (cumulative), and the unported cases per milestone, file
     /// and pipeline, with their names.
