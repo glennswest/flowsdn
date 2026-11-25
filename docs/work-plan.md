@@ -17,6 +17,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - Parked behind it, picked up when something on the platform needs L7: #536, #537, #543, #474, #335 (only FlowsdnGatewayClassConfig), #525 (divergences).
 - [x] 2026-11-25 (#543): filed #577 (proxy core) and #578 (Ingress stage 1), not proposed (the ruling: not started until L7 is needed). #543 is proposed --after #577 and #578; #474 --after #543.
 - [x] 2026-11-25 (#537, #536): both proposed --after #577. #537 is HTTP only (Kafka refused, ADR-0024).
+- [x] 2026-11-25 (#578): handed out ahead of the proxy core; #577 is already queued, so #578 is proposed --after #577 (it needs the in-agent proxy to serve the model).
 
 ### Local redirect policy and skip-LB — #565 (P3), 2026-11-25
 
