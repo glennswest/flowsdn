@@ -296,6 +296,15 @@ fn ports(
         };
         for port in entries {
             let protocols: &[u8] = match port.get("protocol").and_then(Value::as_str) {
+                // The DNS proxy takes TCP and UDP only (#536): ANY is those,
+                // and SCTP would pass unproxied.
+                None | Some("ANY") if dns.is_some() => &[6, 17],
+                Some("SCTP") if dns.is_some() => {
+                    problems.insert(format!(
+                        "{policy}: DNS rules on SCTP are not enforced; the rule is skipped"
+                    ));
+                    return None;
+                }
                 None | Some("ANY") => &[6, 17, 132],
                 Some("TCP") => &[6],
                 Some("UDP") => &[17],

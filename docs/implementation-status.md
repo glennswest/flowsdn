@@ -65,6 +65,16 @@ pinning or subsystem libraries are absent are **not current status**.
   ready endpoint), from AF_PACKET
   sockets; `GET /v1/lb-ipam`, `GET /v1/l2-announcements`. Unit and loopback-API
   tests, and the `l2-announce-live` kernel fixture; not yet seen on a node.
+- DNS proxy, `toFQDNs` and DNS rules (#536, ADR-0024 step 2):
+  - Pod egress `toPorts[].rules.dns` redirect to the agent's DNS proxy (UDP
+    and TCP), which allows or refuses queries by `matchName`/`matchPattern`;
+  - `toFQDNs` selects the answered addresses, held until programmed and
+    dropped at TTL;
+  - the proxy's upstream mark makes the server's ingress judge the Pod.
+
+  With `kubernetes.flowsdn-policy` and `kubernetes.l7-proxy`. Kernel-tested
+  by `dns-live`; not on a cluster. Not built: per-endpoint caches, restore
+  across restarts, transparent upstream mode, zombies, L7 flows.
 - L7 proxy core (#577, ADR-0024 step 1): endpoint egress TCP redirect to a
   proxy port (`bpf_sk_assign`, proxy mark, local route) and the `flowsdn-l7`
   crate (transparent listeners, proxy ports, routing rule, L7 record).
@@ -165,8 +175,8 @@ pinning or subsystem libraries are absent are **not current status**.
 - Masquerade is the node's (`egress: stack`) unless `kubernetes.bpf-masquerade`
   (IPv4, #460) is on.
 - Open gaps, each an issue with the `gap` label: operator identity GC (#332);
-  L7 HTTP/Kafka policy rules (#537, parked behind the Rust L7 proxy ADR #563);
-  `toFQDNs` and DNS policy rules (#536, parked behind #563 too);
+  L7 HTTP policy rules (#537, after the ingress redirect #582; Kafka is
+  refused, ADR-0024);
   SCTP Services (#457); the
   Hubble observer/relay (#293). Not built by decision, refused and reported so
   they fail closed: mutual authentication (#472) and `toGroups`/`fromGroups`

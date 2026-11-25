@@ -73,6 +73,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.identity-allocation` | `true` | Watch Namespaces and FlowsdnIdentity objects and allocate cluster identities ([identities](#cluster-identities-291)). |
 | `kubernetes.network-policy` | `true` | Watch NetworkPolicies (and Namespaces) and enforce them in the endpoint programs ([NetworkPolicy](#networkpolicy-enforcement-292)). |
 | `kubernetes.policy-audit-mode` | `false` | Pod policy audit mode (#461; the reference's `policy-audit-mode`): Pod endpoints judge and count what their policy refuses (`audit` in `/v1/policy/verdicts`) but never drop it, and new endpoints are not quarantined. The host firewall's own audit mode is `host-firewall: audit`. |
+| `kubernetes.l7-proxy` | `true` | With `flowsdn-policy`: the agent's DNS proxy runs, so Pod egress rules' `toFQDNs` and `toPorts[].rules.dns` are enforced ([DNS proxy](#dns-proxy-tofqdns-and-dns-rules-536); the reference's `enable-l7-proxy`). Tuned by `tofqdns-proxy-port` (0: chosen at start), `tofqdns-min-ttl` (0), `tofqdns-endpoint-max-ip-per-hostname` (1000), `tofqdns-dns-reject-response-code` (`refused`, or `nameError`), `tofqdns-proxy-response-max-delay` (ms, 100) and `dnsproxy-concurrency-limit` (0: 1024 in flight), all under `kubernetes`. |
 | `kubernetes.flowsdn-policy` | `false` | Enforce the Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy ([Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292)). The CRDs must exist: the policy thread waits for both lists, NetworkPolicy enforcement included. |
 | `kubernetes.host-firewall` | `off` | `off`, `audit` or `enforce`: filter traffic to the node itself from FlowsdnClusterwideNetworkPolicy host rules ([host firewall](#host-firewall-379)); `audit` counts would-be drops and passes them. The stormcos Kubernetes-mode config sets `audit` (#402). |
 | `kubernetes.cluster-name` | `default` | The cluster label on every Pod identity (`io.flowsdn.k8s.policy.cluster`); a DNS label of at most 32 bytes. |
@@ -1084,8 +1085,73 @@ active on a node.
   - the rule and route above;
   - the L7 record that becomes an L7 flow.
 - **Not yet:** the ingress-direction redirect (traffic into an endpoint),
-  Service `l7_lb_proxy_port` redirects and the upstream leg's marks (#582). `proxy-live` (medium suite) checks the
-  egress path on a kernel.
+  Service `l7_lb_proxy_port` redirects and the upstream leg's
+  `MARK_MAGIC_PROXY_INGRESS` (#582). `proxy-live` (medium suite) checks the
+  egress path on a kernel. UDP redirects and the proxy-egress mark came with
+  the DNS proxy (#536, below).
+
+### DNS proxy, toFQDNs and DNS rules (#536)
+
+ADR-0024 step 2 (spec 16 §3.6). It runs with `kubernetes.flowsdn-policy` and
+`kubernetes.l7-proxy` (default on); stormcos does not turn `flowsdn-policy` on
+yet, so it is not active on a node.
+
+- **Start.** The policy thread installs the proxy routing (the ip rule and
+  local route above, through netlink, IPv6 too on a dual-stack node). It then
+  binds UDP and TCP listeners on one port, `tofqdns-proxy-port` or one the
+  kernel picks, for IPv4 and, on IPv6 nodes, IPv6. A failure is the
+  `dns-proxy` error and a `DnsProxyFailed` Event. DNS rules then allow nothing,
+  and their Pods' policy problems say so.
+- **Redirect.** An allow entry of a Pod egress rule with `toPorts[].rules.dns`
+  carries the proxy's port, so the datapath redirects that traffic, UDP or TCP,
+  to the proxy. A UDP flow has no established socket, so every one of its
+  packets is assigned to the listener. When a plain L4 rule allows the same
+  port, every name is allowed there.
+- **Queries.** The proxy reads the query and finds the endpoint by its address
+  and the server's identity from the pass's ipcache (world on a miss). It
+  checks the endpoint's DNS rules: a server identity (or its aggregate),
+  protocol, port, and a `matchName` or `matchPattern` regex, built as the
+  reference builds them (spec 16 §5.5). A refused query gets REFUSED (or
+  NXDOMAIN) and goes nowhere. An allowed one goes to the server it was sent
+  to over the same protocol, from a socket marked
+  `0x0b00 | identity << 16`. The datapath judges that query at the server's
+  ingress as the Pod, not the host, and the host firewall does not judge it
+  again. The answer is sent back unchanged from the address the Pod queried.
+  An upstream timeout (10 s) gets no answer, so the Pod retries; other
+  failures get SERVFAIL.
+- **toFQDNs.** An answer's names (with its CNAME chain) and A/AAAA addresses go
+  into the node's FQDN cache for `max(TTL, tofqdns-min-ttl)`, at most
+  `tofqdns-endpoint-max-ip-per-hostname` per name. Each address gets a local
+  identity (`1<<24 | 1<<23 | n`, world to the datapath), and the ipcache maps
+  the address to it. A Pod's or a node's address keeps its own identity.
+  `toFQDNs` selectors allow the identities of the addresses answered for
+  names they match, and a CIDR rule holding such an address selects it too.
+  Before the answer is released, the agent wakes the policy thread and waits,
+  for at most `tofqdns-proxy-response-max-delay`, for the pass that programs
+  it (spec 16 §3.6.5). So the Pod's first packet to the address is already
+  allowed. Each pass drops expired addresses: new connections to them are
+  refused, and an open connection keeps its flow entry (the reference's
+  zombies' purpose).
+- **Status.** `kubernetes.dns-proxy` in `GET /v1/healthz`: the port and the
+  forwarded, denied, error and timeout counts, plus answers released before
+  their pass (`hold-timeouts`). `kubernetes.policy.dns-rules` counts the
+  rules.
+- **Not built.** No per-endpoint cache: one node-wide cache, released by TTL.
+  No restore of the cache, DNS rules or port across a restart: answers are
+  learned again, and an unset `tofqdns-proxy-port` moves the port, which the
+  next pass rewrites. No transparent upstream mode: the server sees the node's
+  address, the reference's default. No zombie accounting, no per-name lock
+  striping, no L7 flows into Hubble (counts only), and no standalone DNS proxy
+  (spec 16 §3.7).
+
+`dns-live` (medium suite) checks it on a kernel. The agent's compiler programs
+a FlowsdnNetworkPolicy, and the `flowsdn-l7` proxy answers through the agent's
+`dns_proxy::Answerer`. A client Pod's allowed query is answered from the
+address it asked, through the server Pod's ingress policy as the client's
+identity. A refused query gets REFUSED and never reaches the server. Over TCP
+too. The answered address is reachable right after the answer, an address
+answered for an unselected name is dropped, and the address is dropped once its
+2 s TTL passes.
 
 ### Egress gateway (#564)
 
@@ -1286,7 +1352,11 @@ stormcos does not apply the CRDs yet (stormcos#303).
   which then enforces nothing, its host-firewall (`nodeSelector`) specs too
   (#496): L3 members that may not be combined (only Endpoints + Entities and
   CIDR + CIDRSet may), no selector, both, or a selector that does not parse.
-- **Skipped and reported** in `policy` problems: L7 rules, ICMP rules, FQDN,
+- **DNS rules and `toFQDNs`** (#536, Pod egress allow rules): see the
+  [DNS proxy](#dns-proxy-tofqdns-and-dns-rules-536). `toFQDNs` combines with
+  `toPorts` only.
+- **Skipped and reported** in `policy` problems: L7 rules other than DNS, DNS
+  rules on ingress, ICMP rules, `toFQDNs` in a deny or a host rule,
   `toServices`, `from/toRequires`, `toGroups` (not built, #530),
   `cidrGroupRef`, authentication, and `reserved:` labels in a selector.
   `from/toNodes` (#451) select Nodes by their labels: this node is the host

@@ -467,7 +467,7 @@ fn run(object: &[u8]) -> Result<()> {
     state.lock().map_err(|_| "state")?.0.dns_proxy_port = proxy.port();
     pass(&state, &slot)?;
     {
-        let guard = state.lock().map_err(|_| "state")?;
+        let mut guard = state.lock().map_err(|_| "state")?;
         let entries = guard.1.policy().policy_entries()?;
         let redirected = entries
             .iter()

@@ -1406,3 +1406,19 @@ fn a_plain_allow_of_the_same_port_allows_every_name() {
     assert!(desired.problems.iter().any(|p| p.contains("DNS rules apply to a Pod's egress only")));
     assert!(desired.problems.iter().any(|p| p.contains("L7 rules are not enforced")));
 }
+
+#[test]
+fn dns_rules_on_any_are_tcp_and_udp_and_refused_on_sctp() {
+    let view = dns_view(10053);
+    let desired = compile(&view, &[]);
+    let db = identity_of(&view, "db");
+    assert_eq!(proxy_port_of(&desired, db, 132, 53), None, "no unproxied SCTP");
+    let sctp = flowsdn_view(
+        crate::policy::tests::view(Vec::new()),
+        json!({"endpointSelector":web_selector(),"egress":[
+            {"toPorts":[{"ports":[{"port":"53","protocol":"SCTP"}],
+                         "rules":{"dns":[{"matchName":"x.example"}]}}]}]}),
+    );
+    let desired = compile(&sctp, &[]);
+    assert!(desired.problems.iter().any(|p| p.contains("DNS rules on SCTP")));
+}

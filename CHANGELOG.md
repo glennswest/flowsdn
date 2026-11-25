@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#536)
+- **feat:** The DNS proxy, `toFQDNs` and DNS rules (ADR-0024 step 2, spec 16 §3.6).
+  - **Policy:** Pod egress rules of the flowsdn policy kinds take `toPorts[].rules.dns` (`matchName`, `matchPattern`, regexes as spec 16 §5.5 builds them) and `toFQDNs` peers. An allow entry with DNS rules carries the DNS proxy's port. `toFQDNs` selects the addresses answered for its names, each with a local identity in the ipcache. Without the proxy those allows are absent and reported. Other L7 rules and DNS rules on ingress stay refused.
+  - **Proxy (`flowsdn-l7::dns`):** UDP and TCP listeners, IPv4 and IPv6, on one port. A query is checked against the endpoint's DNS rules and refused (REFUSED, or NXDOMAIN with `tofqdns-dns-reject-response-code`), or forwarded to the server asked over the same protocol with `SO_MARK 0x0b00 | identity << 16`. The answer is sent back unchanged from the address queried. An upstream timeout gets no answer, other failures SERVFAIL. Messages are parsed with bounds; refusals are built by the proxy.
+  - **Response hold:** an answer's names (with its CNAME chain) and addresses go into the node's FQDN cache for `max(TTL, tofqdns-min-ttl)`. The policy thread is woken, and the response waits, at most `tofqdns-proxy-response-max-delay`, for the pass that programs them. Each pass drops what expired.
+  - **Datapath:** UDP flows are redirected to the proxy too, with every packet assigned. A packet carrying the proxy-egress mark is judged at an endpoint's ingress as the identity in the mark, and the host endpoint's egress passes it.
+  - **Agent:** `kubernetes.l7-proxy` (default on with `flowsdn-policy`) and the `tofqdns-*` and `dnsproxy-concurrency-limit` keys. The proxy's ip rule and local route go through netlink (`Connector::ensure_mark_route`). `kubernetes.dns-proxy` in `/v1/healthz`.
+  - **Also:** the local-delivery object and lock are rebuilt.
+- **test:** `dns-live`, a new medium-suite kernel fixture. The agent's compiler programs a FlowsdnNetworkPolicy for a client Pod and a DNS server Pod.
+  - An allowed UDP query is answered from the address asked, and passes the server's ingress as the client's identity.
+  - A refused query gets REFUSED and is never forwarded.
+  - TCP queries work too.
+  - The answered address is reachable at once, another name's address is dropped, and the address is dropped after its TTL.
+  - Unit tests: messages (CNAME chains, hostile pointers, truncation), the reference's pattern strings, the cache (TTL, min-TTL, per-name limit, stable identities), the compiler (redirects, toFQDNs, expiry, fail closed without the proxy, plain-L4 overlap), the answerer's matching, the hold and the settings.
+- **docs:** runtime.md (DNS proxy section, settings), a spec 16 amendment, implementation-status.md, CLAUDE.md.
+
 ### 2026-11-25 (#577)
 - **feat:** The L7 proxy core (ADR-0024 step 1).
   - **Datapath:** an endpoint's egress TCP flow whose allowing policy entry carries a proxy port is marked `0x200 | port << 16`. Its first packet is assigned to the proxy's transparent listener (`bpf_sk_assign`), and no listener means a drop. The flow's `flowsdn_policy_ct` value keeps the port so later packets are marked, and `local_delivery` hands such packets to the stack.

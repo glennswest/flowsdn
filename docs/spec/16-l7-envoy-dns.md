@@ -2025,3 +2025,29 @@ The ingress-direction redirect (§3.3.3: a packet into an endpoint cannot be
 `sk_assign`ed on the veth's egress), the upstream leg's marks and the Service
 `l7_lb_proxy_port` redirect come with the protocols that use them.
 
+## Amendment — the DNS proxy as built (#536, 2026-11-25)
+
+ADR-0024 step 2. §3.6 as flowsdn does it, in `flowsdn-l7::dns` and the agent's
+`dns_proxy`:
+- **§3.6.1–§3.6.2 (redirect and sockets).** A DNS rule's allow entry carries the
+  proxy port. UDP is redirected as TCP is (§3.3.3), with every UDP packet
+  assigned to the listener. The four listeners, the reply from the original
+  destination and the upstream `SO_MARK` (`0x0B00 | identity << 16`, a
+  16-bit identity) are as specified. The datapath reads that mark at an
+  endpoint's ingress as the source identity and lets it past the host
+  endpoint's egress. Transparent upstream mode is not built.
+- **§3.6.3–§3.6.4 (rules and pipeline).** Matching, the reject code and the
+  SERVFAIL/no-answer cases are as specified. The regexes are the §5.5 strings.
+  Responses are forwarded byte for byte, so §3.6.6 holds without
+  re-compression.
+- **§3.6.5 (hold).** The answer goes into the cache, the policy thread is woken,
+  and the response waits up to `tofqdns-proxy-response-max-delay` for the pass
+  that programs it.
+- **§3.6.7 (cache).** There is one node-wide cache. `tofqdns-min-ttl` and
+  `tofqdns-endpoint-max-ip-per-hostname` apply, and addresses get local
+  identities from `1<<24 | 1<<23`. Not built: zombies (an open connection
+  keeps its flow entry), identity preallocation, and the name manager's
+  labels (identities are numbers held while cached).
+- **Not built:** §3.6.8 lock striping (answers are serialised) and §3.6.9
+  restore.
+

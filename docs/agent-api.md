@@ -75,7 +75,11 @@ managed-neighbor thread's last pass (#469: `{enabled, devices, forwardable,
 desired, unreachable, pruned, last, errors}`, `null` when off); a refused write is the
 `flowsdn-endpoints` / `flowsdn-node` part error. `policy` is what the policy thread last programmed (#292):
 `{endpoints: [{id, pod, ingress-enforced, egress-enforced, entries}], ipcache,
-host-firewall, flowsdn-policies, problems}`, `null` before its first pass. `host-firewall` (#379)
+host-firewall, flowsdn-policies, dns-rules, problems}`, `null` before its first pass.
+`dns-proxy` (#536) is the DNS proxy's `{port, forwarded, denied, errors,
+timeouts, hold-timeouts}` with `flowsdn-policy` and `l7-proxy` on (`null`
+otherwise, or before it starts); a proxy that cannot start is the
+`dns-proxy` part error. `host-firewall` (#379)
 is `null` with `kubernetes.host-firewall: off`, else `{mode, policies,
 ingress-enforced, audit, interfaces, learning, enforcing-on, pods, addresses,
 entries}`: the selecting FlowsdnClusterwideNetworkPolicy names, the

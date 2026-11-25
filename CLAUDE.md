@@ -32,8 +32,9 @@ firewall (`audit` in the stormcos config), socket termination (UDP; TCP opt-in, 
 IP option, IPIP or Geneve (#447), NAT46/64 (the last three off by default, kernel test runs only), CNI
 ADD timing (`/v1/cni/timing`), `cargo xtask kernel-check`. Open gaps, each an
 issue (the operator registers CRDs, #337, and runs identity/node GC, #479): Hubble observer/relay
-(#293), L7 HTTP/Kafka
-policy (#537), toFQDNs/DNS policy (#536). See
+(#293), L7 HTTP policy (#537, after #582). toFQDNs and DNS rules run in the
+agent's DNS proxy (#536; with `flowsdn-policy` and `l7-proxy`, kernel-tested by
+`dns-live`). See
 `docs/runtime.md`, `docs/agent-api.md`, `docs/implementation-status.md` and
 `deploy/stormcos/README.md` before changing runtime behavior. Fixture traffic and
 cross-architecture compilation do not establish two-node pod networking. Docs

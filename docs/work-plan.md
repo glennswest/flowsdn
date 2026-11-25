@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### DNS proxy, toFQDNs, DNS rules — #536 (P3), 2026-11-25
+
+- [x] Datapath: UDP redirect, proxy-egress mark read as the source identity; `flowsdn-l7::dns` (messages, patterns, cache, proxy); agent (rules, compiler, settings, policy thread hold, netlink routing); `dns-live`; docs.
+- [ ] sc-build: clippy and tests; local-delivery object + lock rebuild; kernel-check with `dns-live`; strict build; stage; close.
+- Not built (documented): per-endpoint caches, restore, transparent upstream mode, zombies, L7 flows into Hubble.
+
 ### L7 proxy core — #577 (P3), 2026-11-25
 
 - [x] local-delivery egress redirect (mark, sk_assign, proxy port in the flow entry), `flowsdn-l7` (listener, ports, route, record), `proxy-live`, docs.
