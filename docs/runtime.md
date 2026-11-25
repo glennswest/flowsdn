@@ -572,8 +572,11 @@ datagram's flow; only its IP header is rewritten (address and header
 checksum), since the first fragment carries the L4 header and checksum. A
 later fragment whose first was not seen, or whose datagram has no flow, passes
 untouched. IPv6 fragments pass untouched.
-So closed connections never hold the 4536 ports of a backend. NAT46/64
-reservations do not expire yet (#494). A packet the FIB cannot route,
+So closed connections never hold the 4536 ports of a backend. NAT46/64 and RFC
+6052 gateway reservations expire the same way (#494): the translation paths
+renew them in both directions (and mark them closing on a FIN or RST), a
+reclaimed NAT64 or gateway reservation takes its reply entry with it, and a
+flow whose reservation was reclaimed is translated anew on its next packet. A packet the FIB cannot route,
 with TTL 1, or for which no NAT port is free within eight tries passes
 untranslated, and so does an IPv6 packet with extension headers before its
 TCP/UDP header (fragments among them).

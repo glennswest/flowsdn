@@ -4,6 +4,15 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### NAT46/64 reservations expire — #494 (P3), 2026-11-25
+
+Built on the #450 branch (one socket-lb object rebuild). `expired` no longer exempts FLOW_XLATE; reservations get
+pad2 at creation; `renew6`/`renew4` (own frames) renew from the dispatch of STEP_XLATE_REPLY/FORWARD (uplink ingress,
+gateway egress, nodeport_endpoint); forward STALE -> new_flow46/64/gateway64_new; claim_port drops the XLATE4 reply
+entry of a reclaimed XLATE reservation. Kernel: nat_expiry NAT46/NAT64 rounds + two live flows.
+- [x] Code, kernel test, runtime.md, changelog.
+- [ ] Object + lock, strict sc-build + kernel-check, stage, close.
+
 ### NAT46/64 to local backends — #450 (P3), 2026-11-25
 
 Master (2026-11-25): option 1, the endpoint path. Built as a socket-lb classifier `nodeport_endpoint` on each local

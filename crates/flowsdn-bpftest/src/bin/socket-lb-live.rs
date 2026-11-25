@@ -1168,57 +1168,152 @@ fn tcp_flags(mut frame: Vec<u8>, flags: u8) -> Result<Vec<u8>> {
     Ok(frame)
 }
 
+/// [`tcp_flags`] for an IPv6 TCP frame.
+fn tcp_flags6(mut frame: Vec<u8>, flags: u8) -> Result<Vec<u8>> {
+    *frame.get_mut(67).ok_or("tcp")? = flags;
+    frame.splice(70..72, [0, 0]);
+    let check = !(l4_sum(
+        6,
+        frame.get(22..38).ok_or("ip")?,
+        frame.get(38..54).ok_or("ip")?,
+        frame.get(54..).ok_or("l4")?,
+    ) as u16);
+    frame.splice(70..72, check.to_be_bytes());
+    Ok(frame)
+}
+
 /// NAT port reservations expire (finding 1cb155baca89): one backend's pool
 /// is 4536 ports. 3000 closed TCP connections (SYN, then FIN) and, 12 s
 /// later (past the 10 s closing lifetime), 3000 more: the second round is
 /// source-NATed as the first was, because the closed flows' ports are
 /// reclaimed (without expiry at most 1536 of them could be). The same for
-/// UDP flows across their 60 s lifetime.
+/// UDP flows across their 60 s lifetime. The same for NAT46 and NAT64
+/// flows (#494, 192.0.2.20:30099 to [fd00:9:1::8]:8080 and
+/// [2001:db8:2::20]:30099 to 10.9.1.8:8080, each its own pool), in the same
+/// windows.
 fn nat_expiry(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     let up0 = ifindex("up0")?;
     let (front, client) = ([192, 0, 2, 20], [198, 51, 100, 9]);
+    let (front6, client6) = (ip6("2001:db8:2::20")?, ip6("2001:db8:64::9")?);
     for proto in [PROTO_TCP, PROTO_UDP] {
-        services.push(Service {
-            frontend: address("192.0.2.20:30097", proto)?,
-            backends: vec![address("10.9.1.7:8080", proto)?],
-            affinity: None,
-            scope: SCOPE_NODE_LOCAL,
-            maglev: false,
-            dsr: false,
-            nat46x64: false,
-        });
+        for (frontend, backend, nat46x64) in [
+            ("192.0.2.20:30097", "10.9.1.7:8080", false),
+            ("192.0.2.20:30099", "[fd00:9:1::8]:8080", true),
+            ("[2001:db8:2::20]:30099", "10.9.1.8:8080", true),
+        ] {
+            services.push(Service {
+                frontend: address(frontend, proto)?,
+                backends: vec![address(backend, proto)?],
+                affinity: None,
+                scope: SCOPE_NODE_LOCAL,
+                maglev: false,
+                dsr: false,
+                nat46x64,
+            });
+        }
     }
     program(lb, services)?;
     const ROUND: u16 = 3000;
-    let round = |lb: &mut SocketLb, proto: u8, first: u16| -> Result<u16> {
+    // kind 0: SNAT, 1: NAT46, 2: NAT64.
+    let round = |lb: &mut SocketLb, kind: u8, proto: u8, first: u16| -> Result<u16> {
         let mut translated = 0u16;
         for i in 0..ROUND {
             let sport = first.saturating_add(i);
-            let request = frame4(proto, client, front, sport, 30097, false);
+            let request = match kind {
+                0 => frame4(proto, client, front, sport, 30097, false),
+                1 => frame4(proto, client, front, sport, 30099, false),
+                _ => frame6(proto, client6, front6, sport, 30099, false),
+            };
             if verdict_on(lb, "nodeport_ingress", &request, up0)? == TC_ACT_REDIRECT {
                 translated = translated.saturating_add(1);
             }
             if proto == 6 {
-                let fin = tcp_flags(request, 0x11)?;
+                let fin = if kind == 2 {
+                    tcp_flags6(request, 0x11)?
+                } else {
+                    tcp_flags(request, 0x11)?
+                };
                 verdict_on(lb, "nodeport_ingress", &fin, up0)?;
             }
         }
         Ok(translated)
     };
+    // Two live UDP flows across the 62 s window (#494): a NAT46 one renewed
+    // by its client's packets, a NAT64 one by its backend's replies, half
+    // way. Both keep their NAT port while the round around them reclaims.
+    let live46 = frame4(17, client, front, 29990, 30099, false);
+    let live64 = frame6(17, client6, front6, 29991, 30099, false);
+    let port46 = |lb: &mut SocketLb| -> Result<u16> {
+        Ok(parse6(&run_on(lb, "nodeport_ingress", &live46, up0, TC_ACT_REDIRECT)?)?.2)
+    };
+    let port64 = |lb: &mut SocketLb| -> Result<([u8; 4], u16)> {
+        let (src, _, s, _, _, _) =
+            parse4(&run_on(lb, "nodeport_ingress", &live64, up0, TC_ACT_REDIRECT)?)?;
+        Ok((src, s))
+    };
     for (proto, life, name) in [(6u8, 12u64, "closed TCP"), (17, 62, "UDP")] {
-        let first = round(lb, proto, 20000)?;
-        std::thread::sleep(Duration::from_secs(life));
-        let second = round(lb, proto, 30000)?;
-        let enough = ROUND / 10 * 9;
-        if first < enough || second < enough {
-            return Err(format!(
-                "NAT expiry, {name}: {first} then {second} of {ROUND} flows source-NATed (pool 4536 ports)"
-            )
-            .into());
+        let mut first = [0u16; 3];
+        for (kind, count) in first.iter_mut().enumerate() {
+            *count = round(lb, kind as u8, proto, 20000)?;
         }
-        println!(
-            "PASS NAT expiry, {name}: {first} then, {life} s later, {second} of {ROUND} new flows source-NATed: expired reservations are reclaimed"
-        );
+        if proto == 17 {
+            let held46 = port46(lb)?;
+            let (nat4, held64) = port64(lb)?;
+            std::thread::sleep(Duration::from_secs(life / 2));
+            if port46(lb)? != held46 {
+                return Err("NAT46: a live flow changed its NAT port".into());
+            }
+            let reply = frame4(17, [10, 9, 1, 8], nat4, 8080, held64, false);
+            run_on(lb, "nodeport_ingress", &reply, up0, TC_ACT_REDIRECT)?;
+            std::thread::sleep(Duration::from_secs(life.saturating_sub(life / 2)));
+            let second46 = round(lb, 1, proto, 30000)?;
+            let second64 = round(lb, 2, proto, 30000)?;
+            let (now46, (_, now64)) = (port46(lb)?, port64(lb)?);
+            if now46 != held46 || now64 != held64 {
+                return Err(format!(
+                    "NAT expiry: live flows lost their ports (NAT46 {held46} -> {now46}, NAT64 {held64} -> {now64}) after rounds of {second46} and {second64}"
+                )
+                .into());
+            }
+            println!(
+                "PASS NAT expiry, live NAT46/64 flows: a UDP flow renewed by its client's packets and one renewed by its backend's replies keep their NAT ports past the 60 s lifetime while {second46} and {second64} new flows reclaim the expired ones"
+            );
+            let snat = round(lb, 0, proto, 30000)?;
+            let before = first.first().copied().unwrap_or(0);
+            let enough = ROUND / 10 * 9;
+            for (label, before, second) in [
+                ("SNAT", before, snat),
+                ("NAT46", first.get(1).copied().unwrap_or(0), second46),
+                ("NAT64", first.get(2).copied().unwrap_or(0), second64),
+            ] {
+                if before < enough || second < enough {
+                    return Err(format!(
+                        "NAT expiry, {label} {name}: {before} then {second} of {ROUND} flows translated (pool 4536 ports)"
+                    )
+                    .into());
+                }
+                println!(
+                    "PASS NAT expiry, {label} {name}: {before} then, {life} s later, {second} of {ROUND} new flows translated: expired reservations are reclaimed"
+                );
+            }
+            continue;
+        }
+        std::thread::sleep(Duration::from_secs(life));
+        let enough = ROUND / 10 * 9;
+        for (kind, label) in ["SNAT", "NAT46", "NAT64"].iter().enumerate() {
+            let second = round(lb, kind as u8, proto, 30000)?;
+            let before = first.get(kind).copied().unwrap_or(0);
+            if before < enough || second < enough {
+                return Err(format!(
+                    "NAT expiry, {label} {name}: {before} then {second} of {ROUND} flows translated (pool 4536 ports)"
+                )
+                .into());
+            }
+            let what = if kind == 0 { "source-NATed" } else { "translated" };
+            println!(
+                "PASS NAT expiry, {label} {name}: {before} then, {life} s later, {second} of {ROUND} new flows {what}: expired reservations are reclaimed"
+            );
+        }
     }
     Ok(())
 }
