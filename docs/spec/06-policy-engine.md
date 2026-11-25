@@ -57,7 +57,7 @@ Envoy xDS, and the SPIRE/auth map (L7 spec; the redirect *entry* and
 `auth_type` byte are specified here); endpoint state machine and proxy port
 allocation (agent core spec; the contract used is fixed in §3.7.6); CNP
 status writing and `toGroups` derivative policies (operator spec; `toGroups`
-is **deferred**, inventory 05); `--static-cnp-path` (deferred).
+is **not built**, #530: no AWS here); `--static-cnp-path` (deferred).
 
 ## 2. Compatibility contract
 
@@ -147,8 +147,8 @@ affected rule on import. They do not constrain peers.
 Ingress peers (`IngressCommonRule`): `fromEndpoints[]`, `fromRequires[]`
 (**deprecated, no effect at 1.20** — accepted, ignored; the reference has no
 remaining consumer), `fromCIDR[]`, `fromCIDRSet[]`, `fromEntities[]`,
-`fromGroups[]` (deferred), `fromNodes[]`. Egress peers add `toServices[]`,
-`toFQDNs[]` (allow only), `toGroups[]` (deferred), `toNodes[]`.
+`fromGroups[]` (not built, #530), `fromNodes[]`. Egress peers add `toServices[]`,
+`toFQDNs[]` (allow only), `toGroups[]` (not built, #530), `toNodes[]`.
 
 Peer semantics are a **union**: an entry's `L3` is the concatenation, in
 this order, of endpoint selectors, node selectors, entity selectors, CIDR
@@ -2035,3 +2035,12 @@ incremental origin/cookie handling. The raw-ABI differential gate and partial
 auth propagation now exist; the complete policy compiler must eventually be
 connected to both the frontend simulator and the kernel-entry oracle before
 its optimizations can claim the complete end-to-end agreement gate.
+
+## Amendment — `toGroups` / `fromGroups` peers are not built (#530, 2026-11-25)
+
+The master decided `toGroups` (and `fromGroups`) is not built. The reference resolves it for one provider, AWS: its
+operator reads EC2 security groups and their interfaces and writes derived CIDR rules. Nothing on this platform runs
+on AWS (stormcos nodes are bare metal and pve; flowsdn's cloud code is Azure IPAM), and an EC2 resolver could only be
+tested against recorded fixtures. A rule with a `toGroups`/`fromGroups` peer stays refused: skipped and reported as a
+`policy` problem (`<policy>: toGroups is not enforced; the rule is skipped`), so it allows nothing (fail closed).
+Reopen #530 if flowsdn ever runs on AWS. Guarded by `host_policy_tests::authentication_and_to_groups_are_refused`.

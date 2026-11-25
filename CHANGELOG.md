@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#530)
+- **docs:** `toGroups`/`fromGroups` (AWS security-group) peers are not built, as the master decided on #530. Nothing on this platform runs on AWS, and an EC2 resolver couldn't be verified live. Such a rule stays refused: it is skipped and reported (`toGroups is not enforced; the rule is skipped`), so it allows nothing. Spec 06 (scope and peer list) is edited in place with the line count unchanged and gains an amendment; runtime.md and implementation-status.md are updated. The refusal is covered by `host_policy_tests::authentication_and_to_groups_are_refused` (added for #472).
+
 ### 2026-11-25 (#472)
 - **docs:** Mutual authentication (SPIRE mTLS, `cilium_auth_map`, the auth manager) is not built, as the master decided on #472. Upstream deprecated it in v1.20, the platform runs no SPIRE, and the current refusal already fails closed. A rule with `authentication` stays permanently refused: it is skipped and reported (`authentication is not enforced; the rule is skipped`), so it allows nothing. Spec 16 (scope, §3.8, §4.7, §6.3, §12 item 10) is edited in place with the line count unchanged, a new amendment records the decision, and ADR-0013's #202 row is amended.
 - **test:** `host_policy_tests::authentication_and_to_groups_are_refused`: `authentication` (`required`, `test-always-fail`) and `toGroups` rules are skipped and reported, default deny stays on, and the plain rule beside them still applies.

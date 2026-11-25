@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### toGroups peers — #530 (P3), 2026-11-25
+
+Master (2026-11-25): A, not built (no AWS). Spec 06 in place + amendment, runtime.md, implementation-status; covered by
+`authentication_and_to_groups_are_refused` (da36d96, #472).
+- [x] Docs, changelog.
+- [ ] sc-build (fmt, `cargo xtask check`); close (docs only: no stage).
+
 ### Mutual authentication — #472 (P3), 2026-11-25
 
 Master (2026-11-25): A, not built (deprecated upstream, no SPIRE, refusal fails closed). Spec 16 in place (line count

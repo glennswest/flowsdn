@@ -1164,7 +1164,7 @@ stormcos does not apply the CRDs yet (stormcos#303).
   (#496): L3 members that may not be combined (only Endpoints + Entities and
   CIDR + CIDRSet may), no selector, both, or a selector that does not parse.
 - **Skipped and reported** in `policy` problems: L7 rules, ICMP rules, FQDN,
-  `toServices`, `from/toRequires`, `toGroups` (#530),
+  `toServices`, `from/toRequires`, `toGroups` (not built, #530),
   `cidrGroupRef`, authentication, and `reserved:` labels in a selector.
   `from/toNodes` (#451) select Nodes by their labels: this node is the host
   identity, another node each of its InternalIPs' own identity (#490). A skipped
@@ -1205,7 +1205,7 @@ not held back (before #402 it was); `kubernetes.flowsdn-policy` still waits for 
   node's own outgoing traffic. Denies win over the allows they cover.
   `fromNodes`/`toNodes` (#451) select Nodes by their labels, as for Pod
   rules. Reported in `policy` problems and not enforced: L7 rules, ICMP rules,
-  `*Requires`, `*Groups` (#530), `toServices`, `toFQDNs`, `cidrGroupRef`,
+  `*Requires`, `*Groups` (not built, #530), `toServices`, `toFQDNs`, `cidrGroupRef`,
   authentication and named ports.
   `endpointSelector` specs are [Pod rules](#pod-rules-of-the-flowsdn-policy-kinds-292);
   they are reported here too unless `kubernetes.flowsdn-policy` is on.
