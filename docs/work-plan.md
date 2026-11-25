@@ -4,6 +4,31 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### DSR by IPIP and Geneve — #447 (P3), 2026-11-25
+
+Master (2026-11-25): option 1, BPF-only on the uplinks, native routing, the reference's wire format (spec 02 §2.5).
+Design:
+- `kubernetes.lb-dsr-dispatch: opt|ipip|geneve` (reference `bpf-lb-dsr-dispatch`, default `opt`) -> socket-lb map
+  `flowsdn_dsr_config`; loader `SocketLb::set_dsr_dispatch`/`dsr_dispatch`.
+- Which packets carry the frontend is unchanged: a TCP SYN or a UDP packet that still fits the MTU with the added
+  room (opt 8/24, ipip 20/40, geneve 62/94 bytes for IPv4/IPv6); later packets are plain DNAT, too-big first
+  packets source-NAT, as for the option. (The reference L4LB encapsulates every packet; per-flow reply entries make
+  the first packet enough here, and MTU behaviour stays the option's.)
+- ipip (IPv4 in IPv4 / IPv6 in IPv6): the client's packet unchanged inside an outer header from this node's address
+  (FIB source) to the backend; the backend's node checks the inner destination is a DSR frontend and the outer
+  destination one of its backends (taking that backend's port), strips the outer header, DNATs the inner packet to
+  the backend and leaves the reply entry.
+- geneve: the inner packet DNATed (as now), wrapped in Ethernet + Geneve (VNI 2, WORLD; the DSR option, class
+  0x014b type 0x81 with the frontend) + UDP 6081 (checksum 0) + outer IP to the FIB's next hop (the backend's
+  node). The backend's node checks frontend and backend as for the option, strips everything up to the inner IP
+  header, and leaves the reply entry.
+- Receiving is not gated by this node's setting: any valid encapsulated DSR packet is accepted, so a rolling change
+  of the setting does not drop flows; invalid ones (frontend not DSR, destination not a backend) are dropped.
+- Kernel test: socket-lb-live DSR step per mode and family: forward frame layout and checksums, backend decap and
+  reply rewrite, forged frontend / non-backend dropped.
+- [ ] BPF (IPv4, IPv6), loader, agent setting, kernel test, docs, objects + lock, strict sc-build + kernel-check,
+      stage, close.
+
 ### Maglev in the socket LB — #453 (P3), 2026-11-25
 
 Master (2026-11-25): A, not a gap; the reference has no socket-LB Maglev (§3.13 LUT only for uplink frontends; guide:
