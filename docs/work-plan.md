@@ -49,6 +49,7 @@ features split: #564 egress gateway (spec 14 §3.4), #565 LRP + skip-LB (spec 05
 
 Needs step A (#516) first, per the issue and spec 17 §3.9; #516 is open. Parked --after #516.
 - [ ] After #516: operator fixture, kvstore fake (§3.3.11, §3.3.14), DIVERGENCES.toml for 2 areas.
+- [x] 2026-11-25: the scripts need the operator's unbuilt kvstore duties. Filed #572 (after #446); #522 is proposed --after #572 and #446. Keys and kinds diverge under ADR-0023/0017.
 
 ### scripttest egress gateway adapters — #523 (P3), 2026-11-25
 

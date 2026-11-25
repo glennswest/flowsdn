@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#522)
+- **planning:** The `operator-watchers` and `nodes-gc` scripttest areas test the operator's kvstore-mode duties (spec 12 §3.13), which do not exist, and flowsdn has no operator process yet (#446). Filed #572 (Service sync, EndpointSlice export sync, kvstore node GC; flowsdn names per ADR-0023), after #446. #522 is parked after #572 and #446. Its scripts' `cilium/` keys and CiliumNode inputs will be recorded divergences (ADR-0023, ADR-0017).
+
 ### 2026-11-25 (#524)
 - **planning:** The BGP scripttest areas peer a test peer with flowsdn's BGP control plane, which does not exist yet: `flowsdn-bgp-proto` has wire primitives and a session core only. Filed as gaps:
   - #570: the agent's reconcilers and the `Advertiser` interface (spec 15 §3.3–3.15, §3.17), after #334's FlowsdnBGP* types;
