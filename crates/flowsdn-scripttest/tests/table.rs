@@ -190,14 +190,19 @@ impl Keyed for Padded {
 }
 impl TableRender for Padded {
     fn headers() -> &'static [&'static str] {
-        &["Value"]
+        &["Value", "Tail"]
     }
+    // The last column is never padded (as the reference's tab writer), so the
+    // wide column comes first: every row pads to its width.
     fn cells(&self) -> Vec<String> {
-        vec![if self.id == 0 {
-            "x".repeat(131_072)
-        } else {
-            String::new()
-        }]
+        vec![
+            if self.id == 0 {
+                "x".repeat(131_072)
+            } else {
+                String::new()
+            },
+            String::new(),
+        ]
     }
 }
 #[tokio::test(flavor = "current_thread")]
@@ -386,7 +391,7 @@ async fn binding_retains_its_validated_headers_even_if_the_trait_changes() {
     engine
         .run("db/show changing --columns=Name", &mut state)
         .unwrap();
-    assert_eq!(state.stdout, "Name \nvalue\n");
+    assert_eq!(state.stdout, "Name\nvalue\n");
     let error = engine
         .run("db/show changing --columns=missing", &mut state)
         .unwrap_err();

@@ -667,9 +667,13 @@ dependencies = [
 name = "flowsdn-scripttest-fixtures"
 version = "0.14.0"
 dependencies = [
+ "flowsdn-health",
  "flowsdn-k8s",
  "flowsdn-scripttest",
+ "flowsdn-table",
+ "regex",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
