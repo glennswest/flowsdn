@@ -477,6 +477,7 @@ fn controller_body(phase: &AtomicUsize) {
         identity_allocation: true,
         network_policy: false,
         flowsdn_policy: false,
+        dns_proxy: None,
         policy_audit: false,
         cluster_name: "default".into(),
         // The uplink monitor runs here too; `single` keeps it from touching

@@ -95,7 +95,11 @@ impl Cache {
     /// Give each held address an identity, keep those still held, free the
     /// rest. An address keeps its number while any name holds it.
     fn number(&mut self) {
-        let held: BTreeSet<IpAddr> = self.names.values().flat_map(|h| h.keys().copied()).collect();
+        let held: BTreeSet<IpAddr> = self
+            .names
+            .values()
+            .flat_map(|h| h.keys().copied())
+            .collect();
         self.identities.retain(|ip, _| held.contains(ip));
         let mut used: BTreeSet<u32> = self.identities.values().copied().collect();
         let mut next = 1u32;

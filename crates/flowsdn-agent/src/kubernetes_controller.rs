@@ -158,9 +158,25 @@ impl Controller {
             self.settings.network_policy || self.settings.flowsdn_policy || host_firewall
         }) {
             let policy_view = Arc::clone(&view);
+            let wake = Arc::new(crate::dns_proxy::Wake::default());
+            // The DNS proxy (#536) with the flowsdn policy kinds.
+            let answerer = self
+                .settings
+                .dns_proxy
+                .clone()
+                .filter(|_| self.settings.flowsdn_policy)
+                .and_then(|settings| start_dns_proxy(&view, &wake, settings, ipv6));
             std::thread::Builder::new()
                 .name("flowsdn-policy".into())
-                .spawn(move || policy_loop(&policy_view, &mut maps, &gateways))?;
+                .spawn(move || {
+                    policy_loop(
+                        &policy_view,
+                        &mut maps,
+                        &gateways,
+                        &wake,
+                        answerer.as_deref(),
+                    );
+                })?;
         }
         let failed = apply_sysctls(Path::new("/proc/sys"), ipv6);
         if !failed.is_empty() {
@@ -1043,7 +1059,13 @@ fn policy_rows(state: &WatchState) -> Vec<Value> {
 /// Writes come before removals, so a change never passes through a state
 /// that allows less than both ends (new entries, then ipcache and
 /// enforcement, then stale entries).
-fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
+fn policy_loop(
+    view: &Shared,
+    maps: &mut PolicyMaps,
+    gateways: &[IpAddr],
+    wake: &crate::dns_proxy::Wake,
+    answerer: Option<&crate::dns_proxy::Answerer>,
+) {
     let mut applied: Option<(crate::policy::Desired, Instant)> = None;
     // When the host firewall first wanted each uplink (#379): it only
     // learns flows for HOST_LEARNING before enforcing there.
@@ -1051,7 +1073,8 @@ fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
     // The host firewall's last announced state (#384).
     let mut announced: Option<String> = None;
     loop {
-        std::thread::sleep(POLICY_INTERVAL);
+        // A DNS answer waiting for its addresses (#536) wakes the pass early.
+        let requests = wake.wait(POLICY_INTERVAL);
         let host_firewall = lock(view).host_firewall != HostFirewall::Off;
         let (uplinks, host_addresses) = if host_firewall {
             match host_scope() {
@@ -1091,16 +1114,30 @@ fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
             if !view.policy_lists_ready() {
                 continue;
             }
+            // Answers whose TTL ran out allow nothing more (#536).
+            view.fqdn.expire(crate::dns_proxy::now());
             crate::policy::compile(&view, gateways)
         };
         if applied
             .as_ref()
             .is_some_and(|(last, at)| *last == desired && at.elapsed() < POLICY_RESYNC)
         {
+            wake.applied(requests);
             continue;
         }
         let result = apply_policy(maps, &desired);
+        if result.is_ok() {
+            // The proxy judges by what the maps now hold, and answers held
+            // for this pass are released.
+            if let Some(answerer) = answerer {
+                answerer.publish(&desired.dns);
+            }
+            wake.applied(requests);
+        }
         let mut view = lock(view);
+        if let Some(answerer) = answerer {
+            view.dns_status = answerer.status(view.dns_proxy_port);
+        }
         view.policy_status = desired.status();
         view.applied_policies = desired.applied.clone();
         match result {
@@ -1129,6 +1166,75 @@ fn policy_loop(view: &Shared, maps: &mut PolicyMaps, gateways: &[IpAddr]) {
         }
         applied = Some((desired, Instant::now()));
     }
+}
+
+/// Start the DNS proxy (#536): its routing (the proxy mark's rule and local
+/// route, ADR-0024), its sockets on `tofqdns-proxy-port`, and the hold that
+/// puts an answer in the view's FQDN cache and waits for the policy pass.
+/// A failure is the view's `dns-proxy` error and an Event; DNS rules then
+/// allow nothing (the compiler fails closed without a port).
+fn start_dns_proxy(
+    view: &Shared,
+    wake: &Arc<crate::dns_proxy::Wake>,
+    settings: crate::dns_proxy::Settings,
+    ipv6: bool,
+) -> Option<Arc<crate::dns_proxy::Answerer>> {
+    lock(view).fqdn = flowsdn_l7::dns::cache::Cache::new(settings.limits);
+    let cache_view = Arc::clone(view);
+    let insert = move |names: &[String], ips: &[IpAddr], ttl: u32| {
+        lock(&cache_view)
+            .fqdn
+            .insert(names, ips, ttl, crate::dns_proxy::now())
+    };
+    let answerer = crate::dns_proxy::Answerer::new(crate::dns_proxy::hold(
+        insert,
+        Arc::clone(wake),
+        settings.max_delay,
+    ));
+    let started = proxy_routing(ipv6).and_then(|()| {
+        let policy: Arc<dyn flowsdn_l7::dns::Policy> = answerer.clone();
+        flowsdn_l7::dns::proxy::DnsProxy::start(settings.port, ipv6, policy, settings.config)
+            .map_err(|e| format!("DNS proxy sockets: {e}"))
+    });
+    match started {
+        Ok(proxy) => {
+            let mut view = lock(view);
+            view.dns_proxy_port = proxy.port();
+            view.dns_status = answerer.status(proxy.port());
+            view.errors.remove("dns-proxy");
+            crate::log::logln!("DNS proxy on port {}", proxy.port());
+            Some(answerer)
+        }
+        Err(error) => {
+            crate::log::logln!("DNS proxy: {error}");
+            crate::events::node(Warning, "DnsProxyFailed", error.clone());
+            lock(view).errors.insert("dns-proxy".into(), error);
+            None
+        }
+    }
+}
+
+/// The proxy's routing for each family (ADR-0024): packets marked
+/// `TO_PROXY` are delivered locally.
+fn proxy_routing(ipv6: bool) -> std::result::Result<(), String> {
+    use flowsdn_bpf_abi::policy::proxy_mark;
+    let loopback: u32 = fs::read_to_string("/sys/class/net/lo/ifindex")
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(1);
+    let connector = Connector::open().map_err(|e| format!("netlink: {e}"))?;
+    for v6 in [false].into_iter().chain(ipv6.then_some(true)) {
+        connector
+            .ensure_mark_route(
+                v6,
+                proxy_mark::RULE_PRIORITY,
+                (proxy_mark::TO_PROXY, proxy_mark::MASK),
+                proxy_mark::TABLE,
+                loopback,
+            )
+            .map_err(|e| format!("the proxy's ip rule and local route: {e}"))?;
+    }
+    Ok(())
 }
 
 fn apply_policy(

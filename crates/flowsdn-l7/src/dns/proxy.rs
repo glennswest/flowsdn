@@ -234,19 +234,15 @@ fn serve_tcp(listener: &Listener, shared: &Arc<Shared>) {
                 let _ = stream.set_read_timeout(Some(TCP_IDLE));
                 while let Some(query) = read_framed(&mut stream) {
                     let reply = match worker.slot() {
-                        Some(_slot) => answer(
-                            &worker,
-                            &query,
-                            redirected.source,
-                            redirected.original,
-                            TCP,
-                        ),
+                        Some(_slot) => {
+                            answer(&worker, &query, redirected.source, redirected.original, TCP)
+                        }
                         None => busy(&worker, &query, redirected.source, redirected.original),
                     };
-                    if let Some(reply) = reply {
-                        if write_framed(&mut stream, &reply).is_err() {
-                            return;
-                        }
+                    if let Some(reply) = reply
+                        && write_framed(&mut stream, &reply).is_err()
+                    {
+                        return;
                     }
                 }
             });
@@ -270,9 +266,22 @@ fn write_framed(stream: &mut TcpStream, data: &[u8]) -> io::Result<()> {
 }
 
 /// Over the concurrency limit (§3.6.8): SERVFAIL, nothing forwarded.
-fn busy(shared: &Shared, query: &[u8], source: SocketAddr, original: SocketAddr) -> Option<Vec<u8>> {
+fn busy(
+    shared: &Shared,
+    query: &[u8],
+    source: SocketAddr,
+    original: SocketAddr,
+) -> Option<Vec<u8>> {
     let question = message::question(query);
-    record(shared, source, 0, original, "error", question.as_ref(), json!("concurrency limit"));
+    record(
+        shared,
+        source,
+        0,
+        original,
+        "error",
+        question.as_ref(),
+        json!("concurrency limit"),
+    );
     match question {
         Some(q) => message::reply(query, &q, rcode::SERVFAIL),
         None => message::servfail_header(query),
@@ -314,12 +323,28 @@ fn answer(
 ) -> Option<Vec<u8>> {
     let (source, original) = (unmapped(source), unmapped(original));
     let Some(question) = message::question(query) else {
-        record(shared, source, 0, original, "error", None, json!("not a query"));
+        record(
+            shared,
+            source,
+            0,
+            original,
+            "error",
+            None,
+            json!("not a query"),
+        );
         return message::servfail_header(query);
     };
     let servfail = || message::reply(query, &question, rcode::SERVFAIL);
     let Some((endpoint, identity)) = shared.policy.endpoint(source.ip()) else {
-        record(shared, source, 0, original, "error", Some(&question), json!("no endpoint"));
+        record(
+            shared,
+            source,
+            0,
+            original,
+            "error",
+            Some(&question),
+            json!("no endpoint"),
+        );
         return servfail();
     };
     let server = shared.policy.identity(original.ip());
@@ -328,22 +353,60 @@ fn answer(
         .allowed(endpoint, server, protocol, original.port(), &question.name)
     {
         let reply = message::reply(query, &question, shared.config.reject);
-        record(shared, source, identity, original, "denied", Some(&question), json!({"server-identity": server}));
+        record(
+            shared,
+            source,
+            identity,
+            original,
+            "denied",
+            Some(&question),
+            json!({"server-identity": server}),
+        );
         return reply;
     }
-    let response = match forward(query, original, identity, protocol, shared.config.upstream_timeout) {
+    let response = match forward(
+        query,
+        original,
+        identity,
+        protocol,
+        shared.config.upstream_timeout,
+    ) {
         Ok(Some(response)) => response,
         Ok(None) => {
-            record(shared, source, identity, original, "timeout", Some(&question), serde_json::Value::Null);
+            record(
+                shared,
+                source,
+                identity,
+                original,
+                "timeout",
+                Some(&question),
+                serde_json::Value::Null,
+            );
             return None;
         }
         Err(error) => {
-            record(shared, source, identity, original, "error", Some(&question), json!(error.to_string()));
+            record(
+                shared,
+                source,
+                identity,
+                original,
+                "error",
+                Some(&question),
+                json!(error.to_string()),
+            );
             return servfail();
         }
     };
     let Some(answers) = message::answers(&response, &question) else {
-        record(shared, source, identity, original, "error", Some(&question), json!("upstream sent no response to it"));
+        record(
+            shared,
+            source,
+            identity,
+            original,
+            "error",
+            Some(&question),
+            json!("upstream sent no response to it"),
+        );
         return servfail();
     };
     if answers.rcode == rcode::NOERROR && !answers.ips.is_empty() {

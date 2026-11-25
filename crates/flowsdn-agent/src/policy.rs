@@ -28,6 +28,14 @@
 //!   audited) in each direction a selecting host policy has rules for
 //!   (egress since #477) once the uplink's learning time is over. Denies
 //!   win over allows they cover.
+//! - DNS rules and `toFQDNs` (#536): an allow entry of a Pod egress rule
+//!   with DNS rules carries the DNS proxy's port, so the datapath sends its
+//!   traffic there, and [`Desired::dns`] holds the rules the proxy judges
+//!   queries by. A `toFQDNs` peer selects the addresses the FQDN cache
+//!   holds for the names it matches, each by a local identity of its own
+//!   (in the ipcache; a Pod's or node's address keeps its identity), which
+//!   CIDR peers holding the address select too. Without the proxy those
+//!   allows are absent (fail closed) and it is a problem.
 //! - Pod rules of the flowsdn policy kinds (#292, `kubernetes.flowsdn-policy`,
 //!   [`host_policy::pod_policies`]) join a Pod's NetworkPolicy entries: a
 //!   direction is enforced when either selects it, default deny unless every
@@ -122,6 +130,8 @@ pub struct Desired {
     /// select it there, `Kind/name` with whether the kind is clusterwide
     /// (the drop Events' `hubble-drop-events-extended`, #470).
     pub applied: Applied,
+    /// What the DNS proxy judges queries by (#536).
+    pub dns: crate::dns_proxy::Rules,
 }
 /// See [`Desired::applied`].
 pub type Applied = BTreeMap<(u16, bool), BTreeSet<(bool, String)>>;
@@ -149,6 +159,7 @@ impl Desired {
             "quarantined": self.quarantined,
             "tracking": self.tracking,
             "audit": self.audit,
+            "dns-rules": self.dns.rules.values().map(Vec::len).sum::<usize>(),
             "problems": self.problems,
         })
     }
@@ -187,8 +198,17 @@ struct Compiler<'a> {
     /// a84713ccfa49): scope 2, which the datapath aggregates to
     /// remote-node, so a CIDR selects exactly the nodes inside it.
     remote_nodes: BTreeMap<IpAddr, u32>,
+    /// Pod addresses and their identities: an FQDN answer naming one
+    /// selects the Pod's identity (#536).
+    pod_ips: BTreeMap<IpAddr, u32>,
+    /// FQDN selector regexes, compiled once per pass.
+    regexes: BTreeMap<String, Option<regex::Regex>>,
     problems: BTreeSet<String>,
 }
+
+/// One Pod rule's keys, and those of its DNS rules with their names'
+/// regexes (#536).
+type RuleKeys = (Vec<HostKey>, Vec<(HostKey, Vec<String>)>);
 
 /// The policies' entries, each with its policy's `namespace/name`.
 fn import(view: &View, problems: &mut BTreeSet<String>) -> Vec<(String, Entry)> {
@@ -263,6 +283,18 @@ impl Compiler<'_> {
         if self.host.iter().any(held) {
             out.insert(HOST);
         }
+        // Addresses answered for a name (#536) have identities of their
+        // own, which a CIDR holding them selects too.
+        out.extend(
+            self.view
+                .fqdn
+                .identities()
+                .iter()
+                .filter(|(ip, _)| {
+                    held(ip) && !self.pod_ips.contains_key(ip) && !self.host.contains(ip)
+                })
+                .map(|(_, id)| *id),
+        );
         // Each node address inside the CIDR (and outside its exceptions) by
         // its own identity: never every node for one.
         out.extend(
@@ -293,9 +325,42 @@ impl Compiler<'_> {
                         .map(|(id, _)| *id),
                 ),
                 HostPeer::Nodes(selector) => out.extend(self.node_peers(selector)),
+                HostPeer::Fqdn(selector) => out.extend(self.fqdn_peer(selector)),
             }
         }
         out
+    }
+    /// The identity of an address the FQDN cache holds (#536): a Pod's, the
+    /// host's or a node's own, else its local FQDN identity.
+    fn fqdn_identity(&self, ip: &IpAddr) -> Option<u32> {
+        if let Some(id) = self.pod_ips.get(ip) {
+            return Some(*id);
+        }
+        if self.host.contains(ip) {
+            return Some(HOST);
+        }
+        if let Some(id) = self.remote_nodes.get(ip) {
+            return Some(*id);
+        }
+        self.view.fqdn.identity(ip)
+    }
+    /// A `toFQDNs` selector's identities: those of the addresses answered
+    /// for the names it matches.
+    fn fqdn_peer(&mut self, selector: &flowsdn_l7::dns::pattern::Selector) -> BTreeSet<u32> {
+        let regex = self
+            .regexes
+            .entry(selector.regex.clone())
+            .or_insert_with(|| selector.compiled())
+            .clone();
+        let Some(regex) = regex else {
+            return BTreeSet::new();
+        };
+        self.view
+            .fqdn
+            .ips(|name| regex.is_match(name))
+            .iter()
+            .filter_map(|ip| self.fqdn_identity(ip))
+            .collect()
     }
     /// The identities of the Nodes `selector` selects by their labels
     /// (#451): this node is the host identity, another node each of its
@@ -322,10 +387,17 @@ impl Compiler<'_> {
     }
 
     /// The keys of one Pod rule of the flowsdn policy kinds.
-    fn pod_rule(&mut self, rule: &Rule, ingress: bool, subject: &PodInfo) -> Vec<HostKey> {
+    fn pod_rule(&mut self, rule: &Rule, ingress: bool, subject: &PodInfo) -> RuleKeys {
         let peers = self.host_peers(&rule.policy, rule.peers.as_deref());
         let mut out = Vec::new();
+        let mut dns = Vec::new();
         for id in peers {
+            for (protocol, range, selectors) in &rule.dns {
+                let names: Vec<String> = selectors.iter().map(|s| s.regex.clone()).collect();
+                for key in l4_keys(id, *protocol, *range) {
+                    dns.push((key, names.clone()));
+                }
+            }
             if rule.ports.is_empty() && rule.named.is_empty() {
                 out.push((id, 0, 0, 0));
             }
@@ -347,7 +419,7 @@ impl Compiler<'_> {
                 }
             }
         }
-        out
+        (out, dns)
     }
 
     /// Named ports a peer identity's Pods expose: (protocol, name) -> ports.
@@ -608,8 +680,17 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
         .zip(1u32..)
         .map(|(ip, n)| (ip, REMOTE_NODE_SCOPE | n))
         .collect();
+    let pod_ips: BTreeMap<IpAddr, u32> = view
+        .pods
+        .iter()
+        .filter(|p| !p.host_network)
+        .filter_map(|p| Some((p, view.pod_identity(&p.namespace, &p.name)?)))
+        .flat_map(|(p, id)| p.ips.iter().map(move |ip| (*ip, id)))
+        .collect();
     let mut compiler = Compiler {
         view,
+        pod_ips: pod_ips.clone(),
+        regexes: BTreeMap::new(),
         identities: view
             .identities
             .iter()
@@ -699,6 +780,10 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             flags |= bit;
             let mut allows = BTreeSet::new();
             let mut denies = BTreeSet::new();
+            // DNS rules (#536): keys to redirect with their names, and the
+            // keys plain L4 rules allow (which allow every name there).
+            let mut redirects: BTreeMap<HostKey, BTreeSet<String>> = BTreeMap::new();
+            let mut plain = BTreeSet::new();
             for (policy, entry) in &selected {
                 if entry.verdict != Verdict::Allow {
                     compiler
@@ -712,11 +797,19 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             }
             for direction in &directions {
                 for rule in &direction.rules {
-                    let keys = compiler.pod_rule(rule, ingress, pod);
+                    let (keys, dns) = compiler.pod_rule(rule, ingress, pod);
                     if rule.deny {
                         denies.extend(keys);
-                    } else {
-                        allows.extend(keys);
+                        continue;
+                    }
+                    for key in &keys {
+                        if !dns.iter().any(|(k, _)| k == key) {
+                            plain.insert(*key);
+                        }
+                    }
+                    allows.extend(keys);
+                    for (key, names) in dns {
+                        redirects.entry(key).or_default().extend(names);
                     }
                 }
             }
@@ -724,14 +817,48 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             // rules add to a wildcard allow.
             if selected.is_empty() && !directions.iter().any(|d| d.default_deny) {
                 allows.insert((0, 0, 0, 0));
+                plain.insert((0, 0, 0, 0));
             }
-            let (allows, denies) = deny_over_allow(&allows, &denies);
+            let (mut allows, denies) = deny_over_allow(&allows, &denies);
+            let mut redirected = BTreeSet::new();
+            if !redirects.is_empty() {
+                if ingress || view.dns_proxy_port == 0 {
+                    // Fail closed: without the proxy a DNS rule would
+                    // allow every name.
+                    for key in redirects.keys() {
+                        allows.remove(key);
+                    }
+                    compiler.problems.insert(format!(
+                        "{namespace}/{name}: the DNS proxy is not running (kubernetes.l7-proxy): \
+                         its DNS rules allow nothing"
+                    ));
+                } else {
+                    let rules = desired.dns.rules.entry(*id).or_default();
+                    for (key, names) in &redirects {
+                        if !allows.contains(key) {
+                            continue;
+                        }
+                        redirected.insert(*key);
+                        let (identity, protocol, port, prefix) = *key;
+                        rules.push(crate::dns_proxy::DnsRule {
+                            identity,
+                            protocol,
+                            port,
+                            prefix,
+                            names: names.iter().cloned().collect(),
+                            any_name: plain
+                                .iter()
+                                .any(|p| (p.0 == identity || p.0 == 0) && l4_holds(*p, *key)),
+                        });
+                    }
+                }
+            }
             count = count.saturating_add(write_entries(
                 &mut desired.entries,
                 u32::from(*id),
                 !ingress,
-                &allows,
-                &denies,
+                (&allows, &denies),
+                (&redirected, view.dns_proxy_port),
                 ALLOW_PRECEDENCE,
             ));
         }
@@ -790,6 +917,13 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
             identity(ip_key(ip, bits), *id);
         }
     }
+    // Answered addresses (#536), after the CIDRs: a /32 of an ipBlock is
+    // the address's FQDN identity, which that block's rules select too.
+    for (ip, id) in view.fqdn.identities() {
+        if !pod_ips.contains_key(ip) && !host.contains(ip) && !remote_nodes.contains_key(ip) {
+            identity(ip_key(*ip, host_bits(*ip)), *id);
+        }
+    }
     for pod in view.pods.iter().filter(|p| !p.host_network) {
         if let Some(id) = view.pod_identity(&pod.namespace, &pod.name) {
             for ip in &pod.ips {
@@ -802,6 +936,32 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
     }
     for ip in &host {
         identity(ip_key(*ip, host_bits(*ip)), HOST);
+    }
+    // The DNS proxy's view of addresses (#536), as the ipcache has them.
+    let dns = &mut desired.dns;
+    dns.rules.retain(|_, rules| !rules.is_empty());
+    for endpoint in view.endpoints.iter().filter(|_| !dns.rules.is_empty()) {
+        let Some(pod) = view
+            .pods
+            .iter()
+            .find(|p| p.namespace == endpoint.namespace && p.name == endpoint.name)
+        else {
+            continue;
+        };
+        if let Some(id) = view.pod_identity(&pod.namespace, &pod.name) {
+            for ip in &pod.ips {
+                dns.endpoints.insert(*ip, (endpoint.id, id));
+            }
+        }
+    }
+    if !dns.rules.is_empty() {
+        for (ip, id) in view.fqdn.identities() {
+            dns.addresses.insert(*ip, *id);
+        }
+        dns.addresses.extend(remote_nodes.iter().map(|(ip, id)| (*ip, *id)));
+        dns.addresses.extend(pod_ips.iter().map(|(ip, id)| (*ip, *id)));
+        dns.addresses.extend(host.iter().map(|ip| (*ip, HOST)));
+        dns.prefixes = cidrs.iter().map(|(p, id)| (*p, *id)).collect();
     }
     desired.problems = compiler.problems.into_iter().collect();
     desired
@@ -905,8 +1065,8 @@ fn host_firewall(
             &mut desired.entries,
             HOST_ENDPOINT,
             egress,
-            &allows,
-            &denies,
+            (&allows, &denies),
+            (&BTreeSet::new(), 0),
             HOST_ALLOW_PRECEDENCE,
         ));
     }
@@ -1018,8 +1178,8 @@ fn write_entries(
     entries: &mut BTreeMap<[u8; 16], PolicyEntry>,
     endpoint: u32,
     egress: bool,
-    allows: &BTreeSet<HostKey>,
-    denies: &BTreeSet<HostKey>,
+    (allows, denies): (&BTreeSet<HostKey>, &BTreeSet<HostKey>),
+    (redirected, proxy_port): (&BTreeSet<HostKey>, u16),
     allow_precedence: u32,
 ) -> usize {
     let mut count = 0usize;
@@ -1041,7 +1201,13 @@ fn write_entries(
         } else {
             allow_precedence
         };
-        let Ok(value) = PolicyEntry::new(0, deny, lpm, 0, false, precedence, 0) else {
+        // An allow of a DNS rule goes to the DNS proxy (#536).
+        let proxy = if !deny && redirected.contains(&(id, protocol, port, prefix)) {
+            proxy_port
+        } else {
+            0
+        };
+        let Ok(value) = PolicyEntry::new(proxy, deny, lpm, 0, false, precedence, 0) else {
             continue;
         };
         if entries

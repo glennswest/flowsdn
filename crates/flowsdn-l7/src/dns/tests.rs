@@ -1,4 +1,8 @@
-#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 use super::{
     cache::{Cache, IDENTITY_BASE, Limits},
     message::{self, rcode},
@@ -54,8 +58,11 @@ fn a_query_and_its_answers_are_read() {
     assert_eq!(question.qtype, message::TYPE_A);
     let ip: IpAddr = "203.0.113.20".parse().unwrap();
     let ip6: IpAddr = "2001:db8::20".parse().unwrap();
-    let response =
-        message::response(&query, &[("www.example.com", 30, ip), ("www.example.com", 20, ip6)]).unwrap();
+    let response = message::response(
+        &query,
+        &[("www.example.com", 30, ip), ("www.example.com", 20, ip6)],
+    )
+    .unwrap();
     let answers = message::answers(&response, &question).unwrap();
     assert_eq!(answers.rcode, rcode::NOERROR);
     assert_eq!(answers.ips, vec![ip, ip6]);
@@ -77,17 +84,40 @@ fn a_cname_chain_gives_its_names_the_addresses() {
     response[7] = 2;
     // alias.example.com CNAME (pointer to offset 12) -> real.example.net
     let mut cname = vec![0xc0, 12, 0, 5, 0, 1, 0, 0, 0, 60];
-    let target = [4, b'r', b'e', b'a', b'l', 7, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 3, b'n', b'e', b't', 0];
+    let target = [
+        4, b'r', b'e', b'a', b'l', 7, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 3, b'n', b'e',
+        b't', 0,
+    ];
     cname.extend_from_slice(&(target.len() as u16).to_be_bytes());
     let target_at = response.len() + cname.len();
     cname.extend_from_slice(&target);
     response.extend_from_slice(&cname);
     // real.example.net A 198.51.100.1, the owner a pointer to the target.
-    response.extend_from_slice(&[0xc0, target_at as u8, 0, 1, 0, 1, 0, 0, 0, 5, 0, 4, 198, 51, 100, 1]);
+    response.extend_from_slice(&[
+        0xc0,
+        target_at as u8,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        5,
+        0,
+        4,
+        198,
+        51,
+        100,
+        1,
+    ]);
     let answers = message::answers(&response, &question).unwrap();
     assert_eq!(
         answers.names,
-        vec!["alias.example.com.".to_owned(), "real.example.net.".to_owned()]
+        vec![
+            "alias.example.com.".to_owned(),
+            "real.example.net.".to_owned()
+        ]
     );
     assert_eq!(answers.ips, vec!["198.51.100.1".parse::<IpAddr>().unwrap()]);
     assert_eq!(answers.ttl, 5);
@@ -141,7 +171,11 @@ fn the_cache_expires_names_and_numbers_addresses() {
     assert!(cache.expire(120), "one.example. expired at 120");
     assert!(cache.ips(|n| n == "one.example.").is_empty());
     assert_eq!(cache.identity(&a), None);
-    assert_eq!(cache.identity(&b), Some(IDENTITY_BASE + 2), "numbers are stable");
+    assert_eq!(
+        cache.identity(&b),
+        Some(IDENTITY_BASE + 2),
+        "numbers are stable"
+    );
     // The per-name limit keeps the latest to expire.
     cache.insert(&["two.example.".into()], &[a, c], 60, 100);
     assert_eq!(cache.ips(|n| n == "two.example."), [a, c].into());

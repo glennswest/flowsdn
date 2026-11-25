@@ -1279,3 +1279,130 @@ fn node_peers_resolve_to_node_identities() {
         Some(enforce::INGRESS)
     );
 }
+
+/// web may ask db (the DNS server here) on port 53 for *.example.com only,
+/// and reach what api.example.com resolves to on TCP 443 (#536).
+fn dns_view(port: u16) -> View {
+    let mut view = flowsdn_view(
+        view(Vec::new()),
+        json!({"endpointSelector":web_selector(),"egress":[
+            {"toEndpoints":[{"matchLabels":{"app":"db"}}],
+             "toPorts":[{"ports":[{"port":"53","protocol":"ANY"}],
+                         "rules":{"dns":[{"matchPattern":"*.example.com"}]}}]},
+            {"toFQDNs":[{"matchName":"api.example.com"}],
+             "toPorts":[{"ports":[{"port":"443","protocol":"TCP"}]}]}
+        ]}),
+    );
+    view.dns_proxy_port = port;
+    view
+}
+fn proxy_port_of(desired: &Desired, identity: u32, protocol: u8, port: u16) -> Option<u16> {
+    desired
+        .entries
+        .iter()
+        .map(|(k, v)| (EndpointPolicyKey::from_bytes(*k), *v))
+        .find(|(k, _)| {
+            k.sec_label == identity && k.egress == 1 && k.protocol == protocol && k.dport.get() == port
+        })
+        .map(|(_, v)| v.proxy_port.get())
+}
+
+#[test]
+fn dns_rules_redirect_their_port_and_are_published_for_the_proxy() {
+    let view = dns_view(10053);
+    let desired = compile(&view, &[]);
+    assert_eq!(desired.problems, Vec::<String>::new());
+    let db = identity_of(&view, "db");
+    for protocol in [6, 17] {
+        assert_eq!(proxy_port_of(&desired, db, protocol, 53), Some(10053));
+    }
+    let rules = desired.dns.rules.get(&7).expect("web's DNS rules");
+    assert!(
+        rules.iter().all(|r| r.identity == db
+            && r.port == 53
+            && r.names == vec!["^[-a-zA-Z0-9_]*[.]example[.]com[.]$".to_owned()]
+            && !r.any_name),
+        "{rules:?}"
+    );
+    assert_eq!(desired.dns.endpoints.get(&ip("10.1.0.5")), Some(&(7, identity_of(&view, "web"))));
+    assert_eq!(desired.dns.identity(ip("10.2.0.9")), db);
+    assert_eq!(desired.dns.identity(ip("203.0.113.9")), 2, "a miss is world");
+    // Nothing answered yet: toFQDNs allows nothing.
+    assert!(
+        !verdicts(&desired).iter().any(|k| k.3 == 443),
+        "{:?}",
+        verdicts(&desired)
+    );
+}
+
+#[test]
+fn tofqdns_allows_answered_addresses_until_they_expire() {
+    let mut view = dns_view(10053);
+    let api = ip("203.0.113.20");
+    let other = ip("203.0.113.21");
+    view.fqdn.insert(&["api.example.com.".into()], &[api], 30, 1000);
+    view.fqdn.insert(&["www.example.com.".into()], &[other], 30, 1000);
+    let desired = compile(&view, &[]);
+    let id = view.fqdn.identity(&api).expect("an identity");
+    assert_eq!(id >> 24, 1, "a local identity: aggregated to world");
+    assert!(verdicts(&desired).contains(&(id, true, 6, 443, 16, false)));
+    let other_id = view.fqdn.identity(&other).expect("an identity");
+    assert!(
+        !verdicts(&desired).iter().any(|k| k.0 == other_id),
+        "a name the selector does not match allows nothing"
+    );
+    let cached: Vec<u32> = desired
+        .ipcache
+        .iter()
+        .map(|(k, v)| (IpCacheKey::from_bytes(*k), v.sec_identity))
+        .filter(|(k, _)| k.prefixlen == 64)
+        .map(|(_, id)| id)
+        .collect();
+    assert!(cached.contains(&id) && cached.contains(&other_id));
+    assert_eq!(proxy_port_of(&desired, id, 6, 443), Some(0), "443 is not proxied");
+    view.fqdn.expire(1030);
+    let desired = compile(&view, &[]);
+    assert!(!verdicts(&desired).iter().any(|k| k.0 == id), "expired");
+    assert!(desired.ipcache.len() < 10);
+}
+
+#[test]
+fn dns_rules_without_the_proxy_allow_nothing_and_are_reported() {
+    let view = dns_view(0);
+    let desired = compile(&view, &[]);
+    let db = identity_of(&view, "db");
+    assert_eq!(proxy_port_of(&desired, db, 17, 53), None);
+    assert!(desired.dns.rules.is_empty());
+    assert!(
+        desired.problems.iter().any(|p| p.contains("DNS proxy is not running")),
+        "{:?}",
+        desired.problems
+    );
+}
+
+#[test]
+fn a_plain_allow_of_the_same_port_allows_every_name() {
+    let mut plain = flowsdn_view(
+        view(Vec::new()),
+        json!({"endpointSelector":web_selector(),"egress":[
+            {"toEndpoints":[{"matchLabels":{"app":"db"}}],
+             "toPorts":[{"ports":[{"port":"53","protocol":"UDP"}],
+                         "rules":{"dns":[{"matchName":"only.example.com"}]}}]},
+            {"toEndpoints":[{"matchLabels":{"app":"db"}}]}
+        ]}),
+    );
+    plain.dns_proxy_port = 10053;
+    let desired = compile(&plain, &[]);
+    let rules = desired.dns.rules.get(&7).expect("rules");
+    assert!(rules.iter().all(|r| r.any_name), "{rules:?}");
+    // L7 rules other than DNS, and DNS rules on ingress, stay refused.
+    let refused = flowsdn_view(
+        view(Vec::new()),
+        json!({"endpointSelector":web_selector(),
+            "ingress":[{"toPorts":[{"ports":[{"port":"53"}],"rules":{"dns":[{"matchName":"x"}]}}]}],
+            "egress":[{"toPorts":[{"ports":[{"port":"80"}],"rules":{"http":[{"method":"GET"}]}}]}]}),
+    );
+    let desired = compile(&refused, &[]);
+    assert!(desired.problems.iter().any(|p| p.contains("DNS rules apply to a Pod's egress only")));
+    assert!(desired.problems.iter().any(|p| p.contains("L7 rules are not enforced")));
+}

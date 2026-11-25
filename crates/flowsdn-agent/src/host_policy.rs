@@ -18,9 +18,13 @@
 //! The same rule model selects Pods (#292, [`pod_policies`]):
 //! `endpointSelector` specs of FlowsdnClusterwideNetworkPolicy and
 //! FlowsdnNetworkPolicy, in both directions, with named ports and the
-//! namespace and cluster of spec 06 §3.2.9.
+//! namespace and cluster of spec 06 §3.2.9. A Pod's egress rules also take
+//! `toFQDNs` peers and `toPorts[].rules.dns` (#536): DNS rules send the
+//! port's traffic through the agent's DNS proxy, and `toFQDNs` selects the
+//! addresses it saw answered. Other L7 rules stay refused.
 //!
 //! Pure data: `policy::compile` resolves peers to identities.
+use flowsdn_l7::dns::pattern::Selector;
 use flowsdn_policy::{
     k8s::{LabelSelector, NAMESPACE_LABELS, Operator, POD_NAMESPACE, POLICY_CLUSTER, Requirement},
     ports::PortRange,
@@ -113,6 +117,9 @@ pub enum Peer {
     /// Nodes whose labels match (`fromNodes`/`toNodes`, #451): their
     /// addresses' identities (this node: the host).
     Nodes(LabelSelector),
+    /// `toFQDNs` (#536): the addresses the DNS proxy saw answered for the
+    /// names the selector matches, by their identities.
+    Fqdn(Selector),
 }
 
 /// One ingress rule of a host policy.
@@ -128,6 +135,10 @@ pub struct Rule {
     /// (protocol, port name): the destination's container ports name them
     /// (Pod rules only).
     pub named: Vec<(u8, String)>,
+    /// `toPorts` entries with DNS rules (#536, Pod egress only): (protocol,
+    /// range, the names they allow asking for). Their ranges are in
+    /// `ports` too; their traffic goes through the DNS proxy.
+    pub dns: Vec<(u8, PortRange, Vec<Selector>)>,
 }
 
 /// The policies that select this node, merged.
@@ -225,6 +236,7 @@ fn strings(value: Option<&Value>) -> Option<Vec<String>> {
 struct Ports {
     ranges: Vec<(u8, PortRange)>,
     named: Vec<(u8, String)>,
+    dns: Vec<(u8, PortRange, Vec<Selector>)>,
 }
 
 /// (protocol number, range) pairs of `toPorts`; `ANY` is TCP, UDP and SCTP.
@@ -233,19 +245,51 @@ fn ports(
     policy: &str,
     problems: &mut BTreeSet<String>,
     allow_named: bool,
+    allow_dns: bool,
 ) -> Option<Ports> {
     let mut out = Ports::default();
     let Some(list) = rule.get("toPorts").filter(|v| !v.is_null()) else {
         return Some(out);
     };
     for item in list.as_array()? {
-        if item.get("rules").is_some_and(|v| !v.is_null())
-            || item.get("listener").is_some_and(|v| !v.is_null())
-        {
+        let l7 = item.get("rules").filter(|v| !v.is_null());
+        // DNS rules (#536) are the only L7 rules built.
+        let other_l7 = l7.is_some_and(|rules| {
+            rules
+                .as_object()
+                .is_none_or(|o| o.iter().any(|(k, v)| k != "dns" && !v.is_null()))
+        });
+        if other_l7 || item.get("listener").is_some_and(|v| !v.is_null()) {
             problems.insert(format!(
                 "{policy}: L7 rules are not enforced; the rule is skipped"
             ));
             return None;
+        }
+        let mut dns = None;
+        if let Some(rules) = l7.and_then(|r| r.get("dns")).filter(|v| !v.is_null()) {
+            if !allow_dns {
+                problems.insert(format!(
+                    "{policy}: DNS rules apply to a Pod's egress only; the rule is skipped"
+                ));
+                return None;
+            }
+            let mut selectors = Vec::new();
+            for entry in rules.as_array()? {
+                match Selector::parse(entry) {
+                    Ok(selector) => selectors.push(selector),
+                    Err(error) => {
+                        problems.insert(format!(
+                            "{policy}: DNS rule: {error}; the rule is skipped"
+                        ));
+                        return None;
+                    }
+                }
+            }
+            // An empty list is no L7 rule at all (the reference's
+            // `IsEmpty`): plain L4.
+            if !selectors.is_empty() {
+                dns = Some(selectors);
+            }
         }
         let Some(entries) = item.get("ports").and_then(Value::as_array) else {
             continue;
@@ -268,6 +312,12 @@ fn ports(
                 Some(_) => return None,
             };
             let Ok(number) = text.parse::<u16>() else {
+                if dns.is_some() {
+                    problems.insert(format!(
+                        "{policy}: a named port with DNS rules is not enforced; the rule is skipped"
+                    ));
+                    return None;
+                }
                 if allow_named {
                     out.named
                         .extend(protocols.iter().map(|p| (*p, text.to_lowercase())));
@@ -288,6 +338,10 @@ fn ports(
                 return None;
             };
             out.ranges.extend(protocols.iter().map(|p| (*p, range)));
+            if let Some(selectors) = &dns {
+                out.dns
+                    .extend(protocols.iter().map(|p| (*p, range, selectors.clone())));
+            }
         }
     }
     Some(out)
@@ -462,13 +516,15 @@ fn inject(mut selector: LabelSelector, namespace: Option<&str>, cluster: &str) -
 /// The reference's combination matrix (spec 06 §3.2.1): the first pair of a
 /// rule's L3 members that may not be combined.
 fn bad_combination(value: &Value, prefix: &str) -> Option<String> {
-    const MEMBERS: [&str; 6] = [
+    // `toFQDNs` combines with `toPorts` only (spec 06 §3.2).
+    const MEMBERS: [&str; 7] = [
         "Endpoints",
         "CIDR",
         "CIDRSet",
         "Entities",
         "Nodes",
         "Groups",
+        "FQDNs",
     ];
     let present: Vec<&str> = MEMBERS
         .iter()
@@ -509,8 +565,13 @@ fn rule(
         format!("{prefix}Groups"),
         "authentication".to_owned(),
     ];
+    // toFQDNs (#536): Pod allow rules only.
+    let fqdns = prefix == "to" && side.pods.is_some() && !deny;
     if prefix == "to" {
-        unsupported.extend(["toServices".to_owned(), "toFQDNs".to_owned()]);
+        unsupported.push("toServices".to_owned());
+        if !fqdns {
+            unsupported.push("toFQDNs".to_owned());
+        }
     }
     for field in &unsupported {
         if value.get(field).is_some_and(|v| !v.is_null()) {
@@ -609,7 +670,24 @@ fn rule(
             }
         }
     }
-    let mut ports = ports(value, policy, problems, side.pods.is_some())?;
+    if let Some(list) = value.get("toFQDNs").filter(|v| fqdns && !v.is_null()) {
+        any_l3 = true;
+        for item in list.as_array()? {
+            match Selector::parse(item) {
+                Ok(selector) => peers.push(Peer::Fqdn(selector)),
+                Err(error) => {
+                    problems.insert(format!("{policy}: toFQDNs {error}; it allows nothing"));
+                }
+            }
+        }
+    }
+    let mut ports = ports(
+        value,
+        policy,
+        problems,
+        side.pods.is_some(),
+        prefix == "to" && side.pods.is_some() && !deny,
+    )?;
     ports.ranges.extend(icmps(value, policy, problems)?);
     let no_ports = ports.ranges.is_empty() && ports.named.is_empty();
     Some(Rule {
@@ -622,6 +700,7 @@ fn rule(
         },
         ports: ports.ranges,
         named: ports.named,
+        dns: ports.dns,
     })
 }
 

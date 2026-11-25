@@ -675,3 +675,59 @@ mod tests {
         assert!(!owned(&route));
     }
 }
+
+impl Connector {
+    /// The L7 proxy's routing (#536, ADR-0024): `ip rule add pref
+    /// <priority> fwmark <mark>/<mask> lookup <table>` once, and `ip route
+    /// replace local default dev <loopback> table <table>`, for one family.
+    pub fn ensure_mark_route(
+        &self,
+        v6: bool,
+        priority: u32,
+        mark: (u32, u32),
+        table: u32,
+        loopback: u32,
+    ) -> Result<()> {
+        let (fwmark, mask) = mark;
+        self.run(async {
+            let version = if v6 { IpVersion::V6 } else { IpVersion::V4 };
+            let mut stream = self.handle.rule().get(version).execute();
+            let mut present = false;
+            while let Some(message) = stream.try_next().await? {
+                let has = |wanted: &RuleAttribute| message.attributes.contains(wanted);
+                if has(&RuleAttribute::Priority(priority)) && has(&RuleAttribute::FwMark(fwmark)) {
+                    present = true;
+                }
+            }
+            if !present {
+                let mut message = RuleMessage::default();
+                message.header.family = family(v6);
+                message.header.action = RuleAction::ToTable;
+                message.header.table = 0;
+                message.attributes.extend([
+                    RuleAttribute::Table(table),
+                    RuleAttribute::Priority(priority),
+                    RuleAttribute::FwMark(fwmark),
+                    RuleAttribute::FwMask(mask),
+                ]);
+                let mut request = self.handle.rule().add();
+                *request.message_mut() = message;
+                request.execute().await?;
+            }
+            let destination = if v6 {
+                IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED)
+            } else {
+                IpAddr::V4(Ipv4Addr::UNSPECIFIED)
+            };
+            let mut route = RouteMessageBuilder::<IpAddr>::new()
+                .destination_prefix(destination, 0)?
+                .table_id(table)
+                .output_interface(loopback)
+                .build();
+            route.header.kind = RouteType::Local;
+            route.header.scope = RouteScope::Host;
+            self.handle.route().add(route).replace().execute().await?;
+            Ok(())
+        })
+    }
+}

@@ -60,11 +60,11 @@ pub fn pattern_regex(pattern: &str) -> Result<String, String> {
     let leading = dotted.chars().take_while(|c| *c == '*').count();
     let mut rest = dotted.as_str();
     let mut out = String::from("^");
-    if leading >= 2 {
-        if let Some(after) = dotted.get(leading..).and_then(|r| r.strip_prefix("[.]")) {
-            out.push_str(SUBDOMAINS);
-            rest = after;
-        }
+    if leading >= 2
+        && let Some(after) = dotted.get(leading..).and_then(|r| r.strip_prefix("[.]"))
+    {
+        out.push_str(SUBDOMAINS);
+        rest = after;
     }
     let mut in_run = false;
     for c in rest.chars() {
@@ -103,12 +103,10 @@ impl Selector {
         };
         let match_name = text("matchName");
         let match_pattern = text("matchPattern");
-        if let Some(name) = &match_name {
-            if name.len() > MAX_FQDN_LENGTH {
-                return Err(format!(
-                    "matchName is longer than {MAX_FQDN_LENGTH} characters"
-                ));
-            }
+        if match_name.as_ref().is_some_and(|n| n.len() > MAX_FQDN_LENGTH) {
+            return Err(format!(
+                "matchName is longer than {MAX_FQDN_LENGTH} characters"
+            ));
         }
         let regex = match (&match_name, &match_pattern) {
             (Some(name), None) => name_regex(name),

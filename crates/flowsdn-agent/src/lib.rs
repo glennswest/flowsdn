@@ -2,6 +2,7 @@
 //! Unix API serving; with the `kubernetes` feature, the Kubernetes controllers.
 pub mod api;
 pub mod cni_timing;
+pub mod dns_proxy;
 pub mod egress_gateway;
 #[cfg(feature = "kubernetes")]
 pub mod endpoint_crd;

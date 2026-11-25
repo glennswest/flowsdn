@@ -271,7 +271,11 @@ pub fn response(query: &[u8], answers: &[(&str, u32, IpAddr)]) -> Option<Vec<u8>
 }
 
 fn push_name(out: &mut Vec<u8>, name: &str) {
-    for label in name.trim_end_matches('.').split('.').filter(|l| !l.is_empty()) {
+    for label in name
+        .trim_end_matches('.')
+        .split('.')
+        .filter(|l| !l.is_empty())
+    {
         let bytes = label.as_bytes();
         let length = u8::try_from(bytes.len().min(63)).unwrap_or(63);
         out.push(length);

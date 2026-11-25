@@ -121,6 +121,11 @@ pub struct Settings {
     /// Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy
     /// (#292; the CRDs must exist, the policy thread waits for their lists).
     pub flowsdn_policy: bool,
+    /// `kubernetes.l7-proxy` (#536; the reference's `enable-l7-proxy`,
+    /// default true) with `flowsdn-policy`: the agent's DNS proxy runs, so
+    /// `toFQDNs` and DNS rules are enforced; the `tofqdns-*` keys tune it.
+    /// `None` when off.
+    pub dns_proxy: Option<crate::dns_proxy::Settings>,
     /// `policy-audit-mode` (#461; the reference's `policy-audit-mode`,
     /// default false): Pod endpoints judge and count (`audit` in
     /// `/v1/policy/verdicts`) but never drop. The host firewall has its own
@@ -355,6 +360,11 @@ impl Settings {
             identity_allocation: flag("identity-allocation", true)?,
             network_policy: flag("network-policy", true)?,
             flowsdn_policy: flag("flowsdn-policy", false)?,
+            dns_proxy: if flag("flowsdn-policy", false)? && flag("l7-proxy", true)? {
+                Some(crate::dns_proxy::Settings::parse(object)?)
+            } else {
+                None
+            },
             policy_audit: flag("policy-audit-mode", false)?,
             host_firewall,
             cluster_name,
@@ -963,6 +973,12 @@ pub struct View {
     pub policy_audit: bool,
     pub pod_policies: Vec<Value>,
     pub pod_policies_synced: bool,
+    /// The DNS proxy (#536): its port (0: not running), the names it saw
+    /// answered and their addresses (`toFQDNs` selects from them), and its
+    /// counters (`GET /v1/policy`'s `dns-proxy`).
+    pub dns_proxy_port: u16,
+    pub fqdn: flowsdn_l7::dns::cache::Cache,
+    pub dns_status: Value,
     /// The host firewall (#379): its mode, the FlowsdnClusterwideNetworkPolicy
     /// objects, the uplinks (name -> ifindex) the policy thread wants it on
     /// (the API thread attaches it), and those still learning flows
@@ -1341,7 +1357,7 @@ impl View {
             "local-redirect-policy":self.local_redirect,"egress-gateway":self.egress_gateway,
             "flowsdn-endpoints":self.endpoint_crd_status,"flowsdn-node":self.node_crd_status,
             "node-config":self.node_config,
-            "policy":self.policy_status,"uplinks":self.uplinks.summary(),
+            "policy":self.policy_status,"dns-proxy":self.dns_status,"uplinks":self.uplinks.summary(),
             "neighbors":self.neighbors,"prefilter":self.prefilter})
     }
 }
