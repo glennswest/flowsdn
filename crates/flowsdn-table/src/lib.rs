@@ -149,6 +149,11 @@ impl<T: Keyed> Table<T> {
         }
     }
 
+    /// Each published revision, for waiting on the next change without polling.
+    pub fn watch(&self) -> watch::Receiver<Revision> {
+        self.notify.subscribe()
+    }
+
     /// Publishes all successful operations together. A closure returning Err
     /// still commits its successful prefix; this is not a rollback transaction.
     /// Callbacks must not block on another writer to this table.

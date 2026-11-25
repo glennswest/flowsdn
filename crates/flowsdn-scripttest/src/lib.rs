@@ -11,7 +11,7 @@ mod files;
 mod process;
 pub mod report;
 mod script;
-mod table;
+pub mod table;
 mod txtar;
 
 pub use engine::{CommandError, Control, Engine, Execution, RunError, State};

@@ -43,12 +43,12 @@ async fn show_uses_primary_key_order_and_exact_aligned_headers() {
     engine.register_table("items", table).unwrap();
     let mut state = State::default();
     engine.run("db/show items", &mut state).unwrap();
-    assert_eq!(state.stdout, "ID   Name  \n1    短     \n2    longer\n");
+    assert_eq!(state.stdout, "ID   Name\n1    短\n2    longer\n");
     assert_eq!(state.stderr, "");
     engine
         .run("db/show --columns=Name,ID items --format table", &mut state)
         .unwrap();
-    assert_eq!(state.stdout, "Name     ID\n短        1 \nlonger   2 \n");
+    assert_eq!(state.stdout, "Name     ID\n短        1\nlonger   2\n");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -85,7 +85,7 @@ async fn output_file_is_confined_and_invalid_flags_do_not_change_it() {
     engine.register_table("items", table).unwrap();
     let mut state = state();
     let root = state.work_dir().unwrap().to_owned();
-    let archive = Archive::parse("echo retained\ndb/show items -o actual --columns Name\ncmp actual expected\n-- expected --\nName\none \n").unwrap();
+    let archive = Archive::parse("echo retained\ndb/show items -o actual --columns Name\ncmp actual expected\n-- expected --\nName\none\n").unwrap();
     engine.run_archive(&archive, &mut state).unwrap();
     assert_eq!(state.stdout, "retained\n");
     for script in [
@@ -101,7 +101,7 @@ async fn output_file_is_confined_and_invalid_flags_do_not_change_it() {
         assert!(engine.run(script, &mut state).is_err(), "{script}");
         assert_eq!(
             fs::read_to_string(root.join("actual")).unwrap(),
-            "Name\none \n"
+            "Name\none\n"
         );
     }
     assert!(
@@ -417,4 +417,104 @@ fn diagnostic_dump_is_bounded_utf8_and_does_not_expose_environment() {
     let text = engine.diagnostic_dump(&state);
     assert!(text.len() <= 1_048_576);
     assert!(text.ends_with("[diagnostic truncated]\n"));
+}
+
+fn adapter() -> flowsdn_scripttest::table::Adapter<Item> {
+    use flowsdn_scripttest::table::{Adapter, Format};
+    Adapter {
+        export: Some(|item: &Item, format| {
+            Ok(match format {
+                Format::Json => format!("{{\"id\": {}}}\n", item.id),
+                _ => format!("id: {}\n", item.id),
+            })
+        }),
+        import: Some(|text: &str| {
+            text.lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| {
+                    let (id, name) = l.split_once(' ').ok_or("want: id name")?;
+                    Ok(item(id.parse().map_err(|_| "id")?, name))
+                })
+                .collect()
+        }),
+        key: Some(|index: &str, key: &str| match index {
+            "primary" | "id" => Ok(("primary", vec![key.parse::<u8>().map_err(|e| e.to_string())?])),
+            other => Err(format!("unknown index {other}")),
+        }),
+    }
+}
+
+/// spec 17 §3.3.3, §4.2 (#516): db/insert, db/cmp (offset columns, subset in
+/// any order, case-insensitive names, --grep), the queries and json/yaml.
+#[tokio::test(flavor = "current_thread")]
+async fn db_commands_insert_compare_query_and_export() {
+    let table = table();
+    let mut engine = Engine::new();
+    engine.register_table_with("items", table.clone(), adapter()).unwrap();
+    let mut state = state();
+    let archive = Archive::parse(concat!(
+        "db/insert items rows\n",
+        "db/cmp items expected.table\n",
+        "db/cmp items reordered.table\n",
+        "db/cmp --grep=^2 items grep.table\n",
+        "! db/cmp --timeout=10ms items wrong.table\n",
+        "db/get -i id -o got items 2\n",
+        "cmp got got.expected\n",
+        "db/prefix items 1 --columns=Name -o got\n",
+        "cmp got prefix.expected\n",
+        "db/show -f json -o got items\n",
+        "cmp got json.expected\n",
+        "db/show --format=yaml --out=got items\n",
+        "cmp got yaml.expected\n",
+        "db/get --delete items 1\n",
+        "db/delete items gone\n",
+        "db/empty items\n",
+        "! db/get items 1\n",
+        "-- rows --\n1 one\n2 two\n",
+        "-- expected.table --\nID   Name\n1    one\n\n2    two\n\n",
+        "-- reordered.table --\n  name   id\n  one    1\n  two    2\n",
+        "-- grep.table --\nId   Name\n2    two\n",
+        "-- wrong.table --\nID   Name\n1    uno\n",
+        "-- got.expected --\nID   Name\n2    two\n",
+        "-- prefix.expected --\nName\none\n",
+        "-- json.expected --\n{\"id\": 1}\n{\"id\": 2}\n",
+        "-- yaml.expected --\nid: 1\n---\nid: 2\n",
+        "-- gone --\n2 two\n",
+    ))
+    .unwrap();
+    let options = RunOptions::with_timeout(Duration::from_secs(10)).unwrap();
+    state.materialize(&archive).unwrap();
+    engine
+        .run_async(archive.script(), &mut state, &options)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}\n{}", engine.diagnostic_dump(&state)));
+}
+
+/// db/cmp waits for the table to change (spec 17 §5.2) rather than failing
+/// on its first look; db/initialized waits for the initializers.
+#[tokio::test(flavor = "current_thread")]
+async fn db_cmp_and_initialized_wait_for_the_table() {
+    let table = table();
+    let init = table.register_initializer("sync").unwrap();
+    table.seal_initializers();
+    let mut engine = Engine::new();
+    engine.register_table_with("items", table.clone(), adapter()).unwrap();
+    let mut state = state();
+    let archive = Archive::parse(
+        "db/initialized --timeout=5s items\ndb/cmp --timeout=5s items expected.table\n-- expected.table --\nID   Name\n7    late\n",
+    )
+    .unwrap();
+    state.materialize(&archive).unwrap();
+    let writer = table.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(init.complete());
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        writer.insert(item(7, "late")).await.unwrap();
+    });
+    let options = RunOptions::with_timeout(Duration::from_secs(10)).unwrap();
+    engine
+        .run_async(archive.script(), &mut state, &options)
+        .await
+        .unwrap();
 }

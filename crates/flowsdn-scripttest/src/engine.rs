@@ -183,6 +183,14 @@ impl Engine {
             ("wait", false, async_only),
             ("db/empty", false, async_only),
             ("db/show", false, async_only),
+            ("db/cmp", false, async_only),
+            ("db/insert", false, async_only),
+            ("db/delete", false, async_only),
+            ("db/get", false, async_only),
+            ("db/list", false, async_only),
+            ("db/prefix", false, async_only),
+            ("db/lowerbound", false, async_only),
+            ("db/initialized", false, async_only),
             ("cmp", false, crate::files::cmp),
             ("cmpenv", false, crate::files::cmpenv),
             ("empty", false, crate::files::empty),
@@ -332,6 +340,17 @@ impl Engine {
         name: &str,
         table: std::sync::Arc<flowsdn_table::Table<T>>,
     ) -> Result<(), String> {
+        self.register_table_with(name, table, crate::table::Adapter::default())
+    }
+
+    /// [`Self::register_table`] with the fixture's export, import and key
+    /// mapping for `-f json|yaml`, `db/insert`/`db/delete` and the queries.
+    pub fn register_table_with<T: flowsdn_table::Keyed + flowsdn_table::TableRender>(
+        &mut self,
+        name: &str,
+        table: std::sync::Arc<flowsdn_table::Table<T>>,
+        adapter: crate::table::Adapter<T>,
+    ) -> Result<(), String> {
         if !valid_name(name)
             || name.len() > 256
             || name.chars().any(char::is_control)
@@ -339,7 +358,7 @@ impl Engine {
         {
             return Err(format!("invalid or duplicate table name: {name}"));
         }
-        let binding = crate::table::bind(table)?;
+        let binding = crate::table::bind(table, adapter)?;
         self.tables.insert(name.into(), binding);
         Ok(())
     }
@@ -598,10 +617,8 @@ impl Engine {
                 state.publish("", "");
                 continue;
             }
-            let result = if name == "db/empty" {
-                crate::table::empty(&self.tables, &args)
-            } else if name == "db/show" {
-                crate::table::show(&self.tables, state, &args)
+            let result = if let Some(op) = name.strip_prefix("db/") {
+                crate::table::dispatch(&self.tables, state, op, &args).await
             } else if name == "wait" {
                 jobs.wait(state).await
             } else if name == "exec" {
