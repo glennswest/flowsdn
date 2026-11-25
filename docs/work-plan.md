@@ -4,6 +4,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### scripttest operator adapters — #522 (P3), 2026-11-25
+
+Needs step A (#516) first, per the issue and spec 17 §3.9; #516 is open. Parked --after #516.
+- [ ] After #516: operator fixture, kvstore fake (§3.3.11, §3.3.14), DIVERGENCES.toml for 2 areas.
+
 ### scripttest egress gateway adapters — #523 (P3), 2026-11-25
 
 Needs step A (#516) and FlowsdnEgressGatewayPolicy (#336) first; both open. Parked --after both.
