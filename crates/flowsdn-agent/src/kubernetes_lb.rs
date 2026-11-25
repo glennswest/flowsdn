@@ -59,42 +59,7 @@ pub(super) fn ipam_loop(view: &Shared, kubeconfig: Option<&Path>, identity: &str
             (view.lb_pools.clone(), view.services.clone())
         };
         let mut failures = Vec::new();
-        let now = Instant::now();
-        let read = runtime.block_on(client.send_json(http::Method::GET, &elector.path(), None));
-        let step = match read {
-            Ok((200, lease)) => {
-                Some(elector.step(now, &micro_time(SystemTime::now()), Some(&lease)))
-            }
-            Ok((404, _)) => Some(elector.step(now, &micro_time(SystemTime::now()), None)),
-            Ok((status, body)) => {
-                failures.push(format!("lease: HTTP {status} {}", message(&body)));
-                None
-            }
-            Err(error) => {
-                failures.push(format!("lease: {error}"));
-                None
-            }
-        };
-        let write = match step {
-            Some(Step::Create(body)) => Some((http::Method::POST, elector.collection(), body)),
-            Some(Step::Update(body)) => Some((http::Method::PUT, elector.path(), body)),
-            Some(Step::Wait) | None => None,
-        };
-        if let Some((method, path, body)) = write {
-            match runtime.block_on(client.send_json(method, &path, Some(&body))) {
-                Ok((200..=299, _)) => elector.wrote(now, true),
-                // Another agent wrote first: it leads.
-                Ok((409, _)) => elector.wrote(now, false),
-                Ok((status, body)) => {
-                    elector.wrote(now, false);
-                    failures.push(format!("lease: HTTP {status} {}", message(&body)));
-                }
-                Err(error) => {
-                    elector.wrote(now, false);
-                    failures.push(format!("lease: {error}"));
-                }
-            }
-        }
+        contend(&runtime, &client, &mut elector, "lease", &mut failures);
         let leading = elector.leading(Instant::now());
         let pools: Vec<Pool> = pools.iter().map(Pool::parse).collect();
         let plan = lb_ipam::plan(
@@ -174,6 +139,197 @@ pub(super) fn ipam_loop(view: &Shared, kubeconfig: Option<&Path>, identity: &str
     }
 }
 
+/// One election round for `elector`'s Lease: read it, then create, renew or
+/// take it over when the elector says so. Problems go to `failures` as
+/// `<label>: ...`.
+fn contend(
+    runtime: &tokio::runtime::Runtime,
+    client: &JsonClient,
+    elector: &mut Elector,
+    label: &str,
+    failures: &mut Vec<String>,
+) {
+    let now = Instant::now();
+    let read = runtime.block_on(client.send_json(http::Method::GET, &elector.path(), None));
+    let step = match read {
+        Ok((200, lease)) => Some(elector.step(now, &micro_time(SystemTime::now()), Some(&lease))),
+        Ok((404, _)) => Some(elector.step(now, &micro_time(SystemTime::now()), None)),
+        Ok((status, body)) => {
+            failures.push(format!("{label}: HTTP {status} {}", message(&body)));
+            None
+        }
+        Err(error) => {
+            failures.push(format!("{label}: {error}"));
+            None
+        }
+    };
+    let write = match step {
+        Some(Step::Create(body)) => Some((http::Method::POST, elector.collection(), body)),
+        Some(Step::Update(body)) => Some((http::Method::PUT, elector.path(), body)),
+        Some(Step::Wait) | None => None,
+    };
+    if let Some((method, path, body)) = write {
+        match runtime.block_on(client.send_json(method, &path, Some(&body))) {
+            Ok((200..=299, _)) => elector.wrote(now, true),
+            // Another agent wrote first: it leads.
+            Ok((409, _)) => elector.wrote(now, false),
+            Ok((status, body)) => {
+                elector.wrote(now, false);
+                failures.push(format!("{label}: HTTP {status} {}", message(&body)));
+            }
+            Err(error) => {
+                elector.wrote(now, false);
+                failures.push(format!("{label}: {error}"));
+            }
+        }
+    }
+}
+
+/// Give up `elector`'s Lease if this agent holds it, so another eligible
+/// node takes it at once instead of after the lease duration.
+fn release(
+    runtime: &tokio::runtime::Runtime,
+    client: &JsonClient,
+    elector: &mut Elector,
+    failures: &mut Vec<String>,
+) {
+    let label = format!("lease {}", elector.name);
+    let body = match runtime.block_on(client.send_json(http::Method::GET, &elector.path(), None))
+    {
+        Ok((200, lease)) => elector.release(&lease),
+        Ok((404, _)) => elector.release(&Value::Null),
+        Ok((status, body)) => {
+            elector.release(&Value::Null);
+            failures.push(format!("{label}: HTTP {status} {}", message(&body)));
+            None
+        }
+        Err(error) => {
+            elector.release(&Value::Null);
+            failures.push(format!("{label}: {error}"));
+            None
+        }
+    };
+    let Some(body) = body else {
+        return;
+    };
+    match runtime.block_on(client.send_json(http::Method::PUT, &elector.path(), Some(&body))) {
+        // 409: it changed meanwhile, so it is no longer ours to give up.
+        Ok((200..=299 | 404 | 409, _)) => {}
+        Ok((status, body)) => failures.push(format!("{label}: HTTP {status} {}", message(&body))),
+        Err(error) => failures.push(format!("{label}: {error}")),
+    }
+}
+
+/// The L2 announcement Leases (#549): renewed every `L2_RETRY`, lasting
+/// `L2_LEASE_DURATION`, and collected every `L2_COLLECT`.
+const L2_LEASE_DURATION: Duration = Duration::from_secs(15);
+const L2_RETRY: Duration = Duration::from_secs(2);
+const L2_COLLECT: Duration = Duration::from_secs(60);
+
+/// The L2 announcement election thread, with its own client (#549). It
+/// contends for the Lease of each Service the announcer found this node
+/// eligible for (`View::l2_eligible`), gives up the Leases of the others,
+/// and publishes until when it holds each (`View::l2_held`). Once a
+/// collection period it deletes the announcement Leases nobody holds or
+/// renews.
+pub(super) fn l2_lease_loop(view: &Shared, kubeconfig: Option<&Path>, identity: &str) {
+    let started = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string())
+        .and_then(|runtime| {
+            let client = runtime
+                .block_on(JsonClient::load(kubeconfig, TransportLimits::default()))
+                .map_err(|e| e.to_string())?;
+            Ok((runtime, client))
+        });
+    let (runtime, client) = match started {
+        Ok(parts) => parts,
+        Err(error) => {
+            lock(view).errors.insert("l2-leases".into(), error);
+            return;
+        }
+    };
+    let mut electors: BTreeMap<l2_announce::ServiceKey, Elector> = BTreeMap::new();
+    let mut collected: Option<Instant> = None;
+    let mut records: BTreeMap<String, (String, String)> = BTreeMap::new();
+    loop {
+        std::thread::sleep(L2_RETRY);
+        let Some(wanted) = lock(view).l2_eligible.clone() else {
+            continue;
+        };
+        let mut failures = Vec::new();
+        let gone: Vec<l2_announce::ServiceKey> = electors
+            .keys()
+            .filter(|key| !wanted.contains(*key))
+            .cloned()
+            .collect();
+        for key in gone {
+            if let Some(mut elector) = electors.remove(&key)
+                && elector.held_until().is_some()
+            {
+                release(&runtime, &client, &mut elector, &mut failures);
+            }
+        }
+        let mut held = BTreeMap::new();
+        for key in &wanted {
+            let elector = electors.entry(key.clone()).or_insert_with(|| {
+                Elector::new(
+                    LEASE_NAMESPACE,
+                    &l2_announce::lease_name(&key.0, &key.1),
+                    identity,
+                    L2_LEASE_DURATION,
+                )
+            });
+            let label = format!("lease {}", elector.name);
+            contend(&runtime, &client, elector, &label, &mut failures);
+            if let Some(until) = elector.held_until() {
+                held.insert(key.clone(), until);
+            }
+        }
+        lock(view).l2_held = held;
+        if collected.is_none_or(|at| at.elapsed() >= L2_COLLECT) {
+            collected = Some(Instant::now());
+            let path = format!("/apis/coordination.k8s.io/v1/namespaces/{LEASE_NAMESPACE}/leases");
+            match runtime.block_on(client.send_json(http::Method::GET, &path, None)) {
+                Ok((200, list)) => {
+                    let (stale, seen) = l2_announce::stale_leases(&list, &records);
+                    records = seen;
+                    for (name, version) in stale {
+                        let options = json!({"apiVersion": "v1", "kind": "DeleteOptions",
+                            "preconditions": {"resourceVersion": version}});
+                        match runtime.block_on(client.send_json(
+                            http::Method::DELETE,
+                            &format!("{path}/{name}"),
+                            Some(&options),
+                        )) {
+                            // 409: renewed or taken since the list.
+                            Ok((200..=299 | 404 | 409, _)) => {}
+                            Ok((status, body)) => failures.push(format!(
+                                "lease {name}: delete HTTP {status} {}",
+                                message(&body)
+                            )),
+                            Err(error) => {
+                                failures.push(format!("lease {name}: delete {error}"));
+                            }
+                        }
+                    }
+                }
+                Ok((status, body)) => {
+                    failures.push(format!("leases: HTTP {status} {}", message(&body)));
+                }
+                Err(error) => failures.push(format!("leases: {error}")),
+            }
+        }
+        let mut view = lock(view);
+        if failures.is_empty() {
+            view.errors.remove("l2-leases");
+        } else {
+            view.errors.insert("l2-leases".into(), failures.join("; "));
+        }
+    }
+}
+
 /// This node's interfaces: name -> (ifindex, MAC).
 fn interfaces() -> BTreeMap<String, (u32, [u8; 6])> {
     let mut out = BTreeMap::new();
@@ -232,7 +388,7 @@ pub(super) fn announce_loop(view: &Shared) {
         let wanted = if !replan {
             None
         } else {
-            let view = lock(view);
+            let mut view = lock(view);
             if !(view.l2_policies_synced
                 && view.services_synced
                 && view.slices_synced
@@ -256,7 +412,7 @@ pub(super) fn announce_loop(view: &Shared) {
                     .map(|(_, p)| p.as_slice())
                     .unwrap_or_default();
                 let interface_names: Vec<String> = names.keys().cloned().collect();
-                Some(l2_announce::plan(
+                let eligible = l2_announce::eligible(
                     policies,
                     &view.services,
                     &view.slices,
@@ -264,7 +420,16 @@ pub(super) fn announce_loop(view: &Shared) {
                     &view.local_node,
                     &view.uplinks.uplinks,
                     &interface_names,
-                ))
+                );
+                view.l2_eligible = Some(l2_announce::services(&eligible));
+                let now = Instant::now();
+                let held: BTreeSet<l2_announce::ServiceKey> = view
+                    .l2_held
+                    .iter()
+                    .filter(|(_, until)| now < **until)
+                    .map(|(key, _)| key.clone())
+                    .collect();
+                Some(l2_announce::held(&eligible, &held))
             }
         };
         if let Some(wanted) = wanted {

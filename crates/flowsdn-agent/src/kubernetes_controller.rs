@@ -258,6 +258,14 @@ impl Controller {
             std::thread::Builder::new()
                 .name("flowsdn-l2".into())
                 .spawn(move || lb::announce_loop(&l2_view))?;
+            let lease_view = Arc::clone(&view);
+            let kubeconfig = self.settings.kubeconfig.clone();
+            let identity = self.settings.node_name.clone();
+            std::thread::Builder::new()
+                .name("flowsdn-l2-lease".into())
+                .spawn(move || {
+                    lb::l2_lease_loop(&lease_view, kubeconfig.as_deref(), &identity);
+                })?;
         }
         if self.settings.endpoint_crd || self.settings.node_crd {
             let crd_view = Arc::clone(&view);

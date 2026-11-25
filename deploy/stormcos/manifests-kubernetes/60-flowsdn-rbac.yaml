@@ -41,13 +41,15 @@ rules:
     resources: [pods]
     verbs: [patch]
   # LB-IPAM (#475): ingress addresses of LoadBalancer Services, written by
-  # the agent holding the flowsdn-lb-ipam Lease.
+  # the agent holding the flowsdn-lb-ipam Lease. L2 announcements (#549):
+  # one flowsdn-l2announce-<namespace>-<name> Lease per Service, and the
+  # agents list and delete the ones nobody holds or renews.
   - apiGroups: [""]
     resources: [services/status]
     verbs: [patch]
   - apiGroups: [coordination.k8s.io]
     resources: [leases]
-    verbs: [get, create, update]
+    verbs: [get, list, create, update, delete]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

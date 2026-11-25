@@ -62,6 +62,35 @@ impl Elector {
             now.saturating_duration_since(at).saturating_add(margin) < self.duration
         })
     }
+    /// Until when this agent holds the Lease: [`Self::leading`] is true
+    /// before it. `None` while it does not hold it.
+    pub fn held_until(&self) -> Option<Instant> {
+        let margin = self.duration.checked_div(5).unwrap_or_default();
+        self.renewed
+            .and_then(|at| at.checked_add(self.duration.saturating_sub(margin)))
+    }
+    /// The Lease as read, given up (`holderIdentity` empty, so another agent
+    /// takes it at once), when this agent holds it; `None` otherwise. Either
+    /// way this agent no longer counts itself the holder.
+    pub fn release(&mut self, current: &Value) -> Option<Value> {
+        self.renewed = None;
+        self.observed = None;
+        let holder = current
+            .pointer("/spec/holderIdentity")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if holder != self.identity {
+            return None;
+        }
+        let mut next = current.clone();
+        if let Some(object) = next.as_object_mut() {
+            object.remove("status");
+        }
+        if let Some(spec) = next.get_mut("spec").and_then(Value::as_object_mut) {
+            spec.insert("holderIdentity".into(), json!(""));
+        }
+        Some(next)
+    }
     /// The next step, given the Lease as read (`None`: it does not exist).
     /// `wall` is the current time as a MicroTime (`renewTime`).
     pub fn step(&mut self, now: Instant, wall: &str, current: Option<&Value>) -> Step {
@@ -234,6 +263,36 @@ mod tests {
         );
         assert!(matches!(
             third.step(start, "t", Some(&lease("", ""))),
+            Step::Update(_)
+        ));
+    }
+
+    /// #549: an L2 announcement Lease is held until its renewal ages past
+    /// the duration less the margin, and a holder that stops contending gives
+    /// it up so another agent takes it at once.
+    #[test]
+    fn held_until_and_release() {
+        let start = Instant::now();
+        let mut me = Elector::new("kube-system", "l", "n1", Duration::from_secs(15));
+        assert_eq!(me.held_until(), None);
+        me.wrote(start, true);
+        let until = me.held_until().expect("held");
+        assert_eq!(until, after(start, 12));
+        assert!(me.leading(after(start, 11)));
+        assert!(!me.leading(until));
+        // Someone else's Lease: nothing to release.
+        assert_eq!(me.release(&lease("n2", "a")), None);
+        me.wrote(start, true);
+        let released = me.release(&lease("n1", "a")).expect("released");
+        assert_eq!(released.pointer("/spec/holderIdentity"), Some(&json!("")));
+        assert_eq!(
+            released.pointer("/metadata/resourceVersion"),
+            Some(&json!("5"))
+        );
+        assert_eq!(me.held_until(), None);
+        let mut next = Elector::new("kube-system", "l", "n2", Duration::from_secs(15));
+        assert!(matches!(
+            next.step(start, "t", Some(&released)),
             Step::Update(_)
         ));
     }

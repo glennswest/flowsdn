@@ -55,7 +55,8 @@ fn edge_slice(nodes: &[(&str, bool)]) -> SliceInfo {
 fn all_lb() -> Policy {
     Policy::parse(&json!({"metadata": {"name": "lan"}, "spec": {"loadBalancerIPs": true}}))
 }
-fn winners(
+/// The nodes that contend for the Service's Lease.
+fn contenders(
     policies: &[Policy],
     service: &ServiceInfo,
     slices: &[SliceInfo],
@@ -65,7 +66,7 @@ fn winners(
     nodes
         .iter()
         .filter(|n| {
-            !plan(
+            !eligible(
                 policies,
                 std::slice::from_ref(service),
                 slices,
@@ -88,25 +89,25 @@ fn etp_local_is_answered_by_one_node_with_an_endpoint() {
         node("pvetest3", true),
     ];
     let service = edge_lb(true);
-    // Both edge pods on pvetest2: only it answers.
+    // Both edge pods on pvetest2: only it contends.
     let both = [edge_slice(&[("pvetest2", true), ("pvetest2", true)])];
-    assert_eq!(winners(&[all_lb()], &service, &both, &nodes), ["pvetest2"]);
-    // Spread over two nodes: exactly one of them answers.
+    assert_eq!(contenders(&[all_lb()], &service, &both, &nodes), ["pvetest2"]);
+    // Spread over two nodes: those two contend (the Lease picks one).
     let spread = [edge_slice(&[("pvetest1", true), ("pvetest3", true)])];
-    let won = winners(&[all_lb()], &service, &spread, &nodes);
-    assert_eq!(won.len(), 1);
-    let first = won.first().expect("winner");
-    assert!(first == "pvetest1" || first == "pvetest3", "{won:?}");
-    // No ready endpoint: nobody answers.
+    assert_eq!(
+        contenders(&[all_lb()], &service, &spread, &nodes),
+        ["pvetest1", "pvetest3"]
+    );
+    // No ready endpoint: nobody contends.
     let none = [edge_slice(&[("pvetest1", false)])];
-    assert!(winners(&[all_lb()], &service, &none, &nodes).is_empty());
+    assert!(contenders(&[all_lb()], &service, &none, &nodes).is_empty());
     // The address goes on the uplink whose subnet holds it.
     let uplinks = [
         uplink("eth0", ("10.9.0.1", 24), true),
         uplink("eth1", ("192.168.16.10", 20), true),
         uplink("eth2", ("192.168.16.11", 20), false),
     ];
-    let out = plan(
+    let out = eligible(
         &[all_lb()],
         &[service],
         &both,
@@ -127,23 +128,22 @@ fn etp_local_is_answered_by_one_node_with_an_endpoint() {
 }
 
 #[test]
-fn etp_cluster_picks_one_ready_selected_node_and_moves_when_it_goes() {
+fn etp_cluster_ready_selected_nodes_contend() {
     let service = edge_lb(false);
     let nodes = [node("a", true), node("b", true), node("c", true)];
-    let won = winners(&[all_lb()], &service, &[], &nodes);
-    assert_eq!(won.len(), 1);
-    let first = won.first().expect("winner").clone();
-    // The winner stops being Ready: another node takes over.
+    assert_eq!(
+        contenders(&[all_lb()], &service, &[], &nodes),
+        ["a", "b", "c"]
+    );
+    // A node that is not Ready stops contending (and releases the Lease).
     let down: Vec<NodeInfo> = nodes
         .iter()
         .map(|n| NodeInfo {
-            ready: n.name != first,
+            ready: n.name != "a",
             ..n.clone()
         })
         .collect();
-    let next = winners(&[all_lb()], &service, &[], &down);
-    assert_eq!(next.len(), 1);
-    assert_ne!(next.first(), Some(&first));
+    assert_eq!(contenders(&[all_lb()], &service, &[], &down), ["b", "c"]);
     // nodeSelector limits the candidates.
     let only_b = Policy::parse(&json!({"metadata": {"name": "b"}, "spec": {
         "loadBalancerIPs": true,
@@ -159,25 +159,25 @@ fn etp_cluster_picks_one_ready_selected_node_and_moves_when_it_goes() {
             ..n.clone()
         })
         .collect();
-    assert_eq!(winners(&[only_b], &service, &[], &labelled), ["b"]);
+    assert_eq!(contenders(&[only_b], &service, &[], &labelled), ["b"]);
 }
 
 #[test]
 fn nothing_is_announced_without_a_selecting_policy_or_flag() {
     let nodes = [node("a", true)];
     let service = edge_lb(false);
-    assert!(winners(&[], &service, &[], &nodes).is_empty());
+    assert!(contenders(&[], &service, &[], &nodes).is_empty());
     let off = Policy::parse(&json!({"metadata": {"name": "off"}, "spec": {}}));
-    assert!(winners(&[off], &service, &[], &nodes).is_empty());
+    assert!(contenders(&[off], &service, &[], &nodes).is_empty());
     let other_ns = Policy::parse(&json!({"metadata": {"name": "x"}, "spec": {
         "loadBalancerIPs": true,
         "serviceSelector": {"matchLabels": {"io.kubernetes.service.namespace": "other"}}}}));
-    assert!(winners(&[other_ns], &service, &[], &nodes).is_empty());
+    assert!(contenders(&[other_ns], &service, &[], &nodes).is_empty());
     let classed = ServiceInfo {
         load_balancer_class: Some("example.com/bgp".into()),
         ..service.clone()
     };
-    assert!(winners(&[all_lb()], &classed, &[], &nodes).is_empty());
+    assert!(contenders(&[all_lb()], &classed, &[], &nodes).is_empty());
     let bad = Policy::parse(&json!({"metadata": {"name": "bad"}, "spec": {
         "loadBalancerIPs": true, "interfaces": ["("]}}));
     assert!(
@@ -185,7 +185,7 @@ fn nothing_is_announced_without_a_selecting_policy_or_flag() {
             .as_deref()
             .is_some_and(|e| e.starts_with("interfaces:"))
     );
-    assert!(winners(&[bad], &service, &[], &nodes).is_empty());
+    assert!(contenders(&[bad], &service, &[], &nodes).is_empty());
 }
 
 #[test]
@@ -198,7 +198,7 @@ fn interfaces_and_external_ips() {
     let policy = Policy::parse(&json!({"metadata": {"name": "p"}, "spec": {
         "externalIPs": true, "interfaces": ["^ens", "bond"]}}));
     let names = ["ens18".to_owned(), "lo".to_owned(), "bond0".to_owned()];
-    let out = plan(&[policy], &[service], &[], &nodes, "a", &[], &names);
+    let out = eligible(&[policy], &[service], &[], &nodes, "a", &[], &names);
     assert_eq!(out.len(), 1);
     let only = out.first().expect("announcement");
     assert_eq!(only.ip, ip("203.0.113.5"));
@@ -212,4 +212,70 @@ fn interfaces_and_external_ips() {
         status.pointer("/announcing/0/interfaces/1"),
         Some(&json!("ens18"))
     );
+}
+
+/// #549 (finding 27c1663186dc): with two Ready selected nodes whose device
+/// names differ and an `interfaces` expression matching only one, only the
+/// node with a matching interface contends, so the address always has an
+/// owner; a node without one never takes the Lease and leaves it unanswered.
+#[test]
+fn only_nodes_with_a_matching_interface_contend() {
+    let nodes = [node("a", true), node("b", true)];
+    let service = edge_lb(false);
+    let policy = Policy::parse(&json!({"metadata": {"name": "p"}, "spec": {
+        "loadBalancerIPs": true, "interfaces": ["^ens"]}}));
+    let on = |local: &str, names: &[&str]| {
+        let names: Vec<String> = names.iter().map(|n| (*n).to_owned()).collect();
+        eligible(
+            std::slice::from_ref(&policy),
+            std::slice::from_ref(&service),
+            &[],
+            &nodes,
+            local,
+            &[],
+            &names,
+        )
+    };
+    // Whichever node a hash of the names would favour, "a" has only eth0.
+    assert!(on("a", &["eth0", "lo"]).is_empty());
+    let b = on("b", &["ens18", "lo"]);
+    assert_eq!(b.len(), 1);
+    assert_eq!(b.first().map(|a| a.interfaces.clone()), Some(vec!["ens18".to_owned()]));
+    let key = ("storefront".to_owned(), "edge-lb".to_owned());
+    assert_eq!(services(&b), [key.clone()].into());
+    assert_eq!(lease_name(&key.0, &key.1), "flowsdn-l2announce-storefront-edge-lb");
+    // b answers once it holds the Lease, and not before.
+    assert!(held(&b, &BTreeSet::new()).is_empty());
+    assert_eq!(held(&b, &[key].into()), b);
+}
+
+/// #549: Lease collection deletes announcement Leases without a holder and
+/// those no node renewed over a whole period, and nothing else.
+#[test]
+fn stale_announcement_leases_are_collected() {
+    let lease = |name: &str, holder: &str, renew: &str| {
+        json!({"metadata": {"name": name, "resourceVersion": format!("rv-{name}")},
+               "spec": {"holderIdentity": holder, "renewTime": renew}})
+    };
+    let list = |renew: &str| {
+        json!({"items": [
+            lease("flowsdn-l2announce-a-x", "", ""),
+            lease("flowsdn-l2announce-a-y", "n1", renew),
+            lease("flowsdn-lb-ipam", "", ""),
+        ]})
+    };
+    let (stale, seen) = stale_leases(&list("t1"), &BTreeMap::new());
+    assert_eq!(
+        stale,
+        [("flowsdn-l2announce-a-x".to_owned(), "rv-flowsdn-l2announce-a-x".to_owned())]
+    );
+    assert_eq!(seen.len(), 1);
+    // Renewed since: kept.
+    let (stale, seen) = stale_leases(&list("t2"), &seen);
+    assert_eq!(stale.len(), 1);
+    // Not renewed for a period: collected too.
+    let (stale, seen) = stale_leases(&list("t2"), &seen);
+    let names: Vec<&str> = stale.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, ["flowsdn-l2announce-a-x", "flowsdn-l2announce-a-y"]);
+    assert!(seen.is_empty());
 }

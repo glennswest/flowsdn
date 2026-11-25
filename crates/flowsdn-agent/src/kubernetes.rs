@@ -957,6 +957,12 @@ pub struct View {
     pub l2_policies: Vec<Value>,
     pub l2_policies_synced: bool,
     pub l2_status: Value,
+    /// The Services this node may announce, for the election thread (#549);
+    /// `None` until the announcer has planned with complete lists.
+    pub l2_eligible: Option<BTreeSet<crate::l2_announce::ServiceKey>>,
+    /// The Services whose L2 announcement Lease this node holds, and until
+    /// when (#549).
+    pub l2_held: BTreeMap<crate::l2_announce::ServiceKey, std::time::Instant>,
     /// The latest failure of each controller part (`nodes`, `pods`, `routes`).
     pub errors: BTreeMap<String, String>,
 }

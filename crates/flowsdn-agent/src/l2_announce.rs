@@ -14,13 +14,18 @@
 //!   Ingress addresses are announced for `type: LoadBalancer` Services with
 //!   no `loadBalancerClass` or `io.flowsdn/l2-announcer`.
 //! - One node answers for a Service, so a client's traffic reaches one
-//!   node: the candidate with the highest rendezvous hash of (node, Service).
-//!   Candidates are Ready nodes some selecting policy selects; with
-//!   `externalTrafficPolicy: Local`, only those with a ready endpoint of the
-//!   Service (the uplink programs send Local traffic to this node's
-//!   endpoints only). Every agent computes the same winner from the same
-//!   lists; a change moves the address, and the new node announces it with
-//!   gratuitous ARP / unsolicited NA.
+//!   node: the holder of the Service's Lease
+//!   `kube-system/flowsdn-l2announce-<namespace>-<name>` (spec 05 §3.11
+//!   step 5). Only an eligible node contends for it (#549): it is Ready, a
+//!   selecting policy selects it, with `externalTrafficPolicy: Local` it has
+//!   a ready endpoint of the Service (the uplink programs send Local traffic
+//!   to this node's endpoints only), and it has an interface to answer on.
+//!   Interfaces are local facts other nodes cannot see, so eligibility is
+//!   decided by each node for itself and the Lease picks among those that
+//!   contend. A node that stops being eligible releases the Lease, and
+//!   another eligible node takes it; a node that stops renewing loses it
+//!   after the lease duration. The new holder announces with gratuitous
+//!   ARP / unsolicited NA.
 //! - The interfaces are those of this node a policy's `interfaces` regular
 //!   expressions match (any of them, unanchored); without `interfaces`,
 //!   the uplinks with carrier that are on the address's subnet, else every
@@ -100,14 +105,71 @@ pub struct Announcement {
     pub interfaces: Vec<String>,
 }
 
-/// FNV-1a 64 of `node`, a NUL and `service`: the rendezvous weight.
-fn weight(node: &str, service: &str) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in node.bytes().chain([0u8]).chain(service.bytes()) {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+/// The prefix of the per-Service L2 announcement Leases.
+pub const LEASE_PREFIX: &str = "flowsdn-l2announce-";
+
+/// The Lease that elects the node answering for a Service.
+pub fn lease_name(namespace: &str, name: &str) -> String {
+    format!("{LEASE_PREFIX}{namespace}-{name}")
+}
+
+/// A Service, by (namespace, name).
+pub type ServiceKey = (String, String);
+
+/// The Services of `eligible`: those whose Lease this node contends for.
+pub fn services(eligible: &[Announcement]) -> BTreeSet<ServiceKey> {
+    eligible
+        .iter()
+        .map(|a| (a.namespace.clone(), a.name.clone()))
+        .collect()
+}
+
+/// What this node answers for: the eligible addresses of the Services whose
+/// Lease it holds.
+pub fn held(eligible: &[Announcement], leases: &BTreeSet<ServiceKey>) -> Vec<Announcement> {
+    eligible
+        .iter()
+        .filter(|a| leases.contains(&(a.namespace.clone(), a.name.clone())))
+        .cloned()
+        .collect()
+}
+
+/// The L2 announcement Leases to delete, as (name, resourceVersion), from a
+/// LeaseList: those with no holder, and those whose holder and `renewTime`
+/// are what `previous` (this agent's last collection) saw, so no node renewed
+/// them for a whole collection period. Returns the records to compare
+/// against next time. Deletes carry the resourceVersion as a precondition,
+/// so a Lease taken meanwhile is kept.
+pub fn stale_leases(
+    list: &Value,
+    previous: &BTreeMap<String, (String, String)>,
+) -> (Vec<(String, String)>, BTreeMap<String, (String, String)>) {
+    let mut stale = Vec::new();
+    let mut seen = BTreeMap::new();
+    let items = list
+        .get("items")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    for item in items {
+        let text = |pointer: &str| {
+            item.pointer(pointer)
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned()
+        };
+        let name = text("/metadata/name");
+        if !name.starts_with(LEASE_PREFIX) {
+            continue;
+        }
+        let record = (text("/spec/holderIdentity"), text("/spec/renewTime"));
+        if record.0.is_empty() || previous.get(&name) == Some(&record) {
+            stale.push((name, text("/metadata/resourceVersion")));
+        } else {
+            seen.insert(name, record);
+        }
     }
-    hash
+    (stale, seen)
 }
 
 /// The nodes with a ready endpoint of `service`.
@@ -119,15 +181,6 @@ fn endpoint_nodes<'a>(service: &ServiceInfo, slices: &'a [SliceInfo]) -> BTreeSe
         .filter(|e| e.ready && !e.node_name.is_empty())
         .map(|e| e.node_name.as_str())
         .collect()
-}
-
-/// The node that answers for `service` among `candidates`.
-pub fn elect<'a>(service: &ServiceInfo, candidates: &[&'a str]) -> Option<&'a str> {
-    let key = format!("{}/{}", service.namespace, service.name);
-    candidates
-        .iter()
-        .copied()
-        .max_by_key(|node| (weight(node, &key), *node))
 }
 
 /// This node's interfaces for `ip`, given the policies that announce it here.
@@ -163,8 +216,11 @@ fn interfaces_for(
     out.into_iter().collect()
 }
 
-/// What this node (`local`) answers for.
-pub fn plan(
+/// What this node (`local`) may answer for: the addresses for which it is
+/// Ready, selected, holds an endpoint when the Service needs one, and has an
+/// interface. It answers for those of the Services whose Lease it holds
+/// ([`held`]).
+pub fn eligible(
     policies: &[Policy],
     services: &[ServiceInfo],
     slices: &[SliceInfo],
@@ -212,26 +268,21 @@ pub fn plan(
             continue;
         }
         let with_endpoints = endpoint_nodes(service, slices);
+        let Some(this) = nodes.iter().find(|n| n.name == local && n.ready) else {
+            continue;
+        };
+        if service.external_local && !with_endpoints.contains(local) {
+            continue;
+        }
         for (ip, by) in addresses {
-            let candidates: Vec<&str> = nodes
-                .iter()
-                .filter(|n| n.ready)
-                .filter(|n| by.iter().any(|p| p.node_selector.matches(&n.labels)))
-                .filter(|n| !service.external_local || with_endpoints.contains(n.name.as_str()))
-                .map(|n| n.name.as_str())
-                .collect();
-            if elect(service, &candidates) != Some(local) {
-                continue;
-            }
             let here: Vec<&Policy> = by
                 .iter()
                 .copied()
-                .filter(|p| {
-                    nodes
-                        .iter()
-                        .any(|n| n.name == local && p.node_selector.matches(&n.labels))
-                })
+                .filter(|p| p.node_selector.matches(&this.labels))
                 .collect();
+            if here.is_empty() {
+                continue;
+            }
             let names = interfaces_for(ip, &here, uplinks, interfaces);
             if names.is_empty() {
                 continue;
