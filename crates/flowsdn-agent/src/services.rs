@@ -308,10 +308,7 @@ pub fn frontends(
                     // LB's copy too (#542): an IPv6 socket connects across
                     // families. A Local traffic policy never translates: the
                     // backend would see this node's address, not the client's.
-                    let translated = if service.nat46x64
-                        && same.is_empty()
-                        && only.is_none()
-                    {
+                    let translated = if service.nat46x64 && same.is_empty() && only.is_none() {
                         backends(port, proto, !ip.is_ipv6(), slices, None, None)
                     } else {
                         Vec::new()

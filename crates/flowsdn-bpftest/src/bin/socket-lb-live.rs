@@ -133,7 +133,11 @@ fn socket_nat46x64(
     }
     program(lb, services)?;
     self::tcp(tcp6, sa("[::ffff:192.0.2.13]:80")?, sa("[::1]:18080")?)?;
-    self::tcp(tcp4, sa("[2001:db8::13]:80")?, sa("[::ffff:127.0.0.1]:18080")?)?;
+    self::tcp(
+        tcp4,
+        sa("[2001:db8::13]:80")?,
+        sa("[::ffff:127.0.0.1]:18080")?,
+    )?;
     for (server, frontend) in [
         (udp6, sa("[::ffff:192.0.2.13]:53")?),
         (udp4, sa("[2001:db8::13]:53")?),
