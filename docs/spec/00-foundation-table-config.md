@@ -1891,3 +1891,13 @@ picks, in config-name order; each is validated by the agent's own parse and
 refused (Warning Event on the Node) otherwise. Reference option names are not
 accepted: a key that is accepted and does nothing is not allowed. See
 `docs/runtime.md` (per-node settings).
+
+## Table rendering amendment — #516, 2026-11-25
+
+§4.3a requirement 4 is corrected by the corpus. Every column but the last is
+padded to its widest cell plus three spaces (at least five), as the
+reference's tab writer does. The last column is not padded, so no rendered
+line ends in spaces. The harvested `db/show`/`db/get`/`db/prefix -o` outputs
+are compared byte for byte by `cmp` (for example `loadbalancer/queries.txtar`)
+and have no trailing spaces. `db/cmp` strips trailing spaces from each field,
+so it is unaffected.

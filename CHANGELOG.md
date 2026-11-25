@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#516)
+- **feat:** scripttest step A (spec 17 steps 1b + k8s). The harvested scripts of five areas now run against flowsdn (`cargo test -p flowsdn-scripttest-fixtures --test corpus`): 7 PASS, 6 XFAIL with a recorded divergence, 0 FAIL.
+  - **Corpus gate** (`flowsdn-scripttest::report`): an area's `DIVERGENCES.toml` (ADR-0005: `expected-fail`, `skip`, `partial` with lines; every entry names an ADR, ids unique) and PASS / FAIL / XFAIL / XPASS / SKIP. An expected failure that passes (XPASS) fails the gate.
+  - **`db/*`** over `flowsdn-table` (§3.3.3, §4.2): `db/cmp` (character-offset or tab columns, a subset in any order, case-insensitive names, `--grep`; retries until equal or `--timeout`, default 5 s, waking on the table's new `revisions()` watch), `db/insert`, `db/delete`, `db/get` (`--delete`), `db/list`, `db/prefix`, `db/lowerbound`, `db/initialized`, and `db/show -f json|yaml`. A fixture supplies a table's export, import and key mapping with `Engine::register_table_with`. Rendered tables leave the last column unpadded, as the reference does and the corpus compares byte for byte (spec 00 amendment).
+  - **New crate `flowsdn-scripttest-fixtures`** (§11.1):
+    - `Fixture` (ADR-0004) with `hive`, `hive/start`, `hive/stop` and `hive/recreate`. Components start in order and stop in reverse; the fake Kubernetes API survives a recreate.
+    - The fake Kubernetes client with `k8s/add|update|delete|get|list|resync|summary|resources|svc/update-status`: one revision counter, `--strict` conflicts, given UIDs kept and others derived, the status subresource, redaction (`--show-redacted`) and the reference encoder's YAML quoting.
+    - The health commands `health`, `health/ok` and `health/history`.
+    - A fixture-owned metrics registry and sampler (24 samples, 5 min apart; histogram percentiles as `histogram_quantile`), with `metrics` (table, json and yaml; `-s`), `metrics/plot` and `metrics/html`.
+  - **flowsdn-health:** `Registry::with_clock`; a bounded history of degraded, stopped and closed transitions (`Registry::events`); `TableRender` for the health table. `flowsdn_k8s::crd::to_yaml_with` takes the plain-scalar rule.
+  - **Divergences recorded:**
+    - `k8sclient/fake.txtar`: the reference's Go clientset trackers (ADR-0004).
+    - `dynamicconfig/*`: no live `cilium-configs` reflection. Sources are `flowsdn-config` and FlowsdnNodeConfig, applied at start (ADR-0017, #480).
+    - `k8s-tables/*`: no StateDB reflector tables, job health rows or slim-object exports (ADR-0004).
+- **docs:** spec 17 and spec 00 amendments, implementation-status.md.
+
 ### 2026-11-25 (#336)
 - **feat:** Rust types for FlowsdnEgressGatewayPolicy, FlowsdnLocalRedirectPolicy and FlowsdnDatapathPlugin in `flowsdn_k8s::kinds` (with a shared `LabelSelector`), following #332's conventions. Enumerated fields are strings, optional schema properties are `Option`s, and FlowsdnDatapathPlugin's spec defaults to `attachmentPolicy: Always`. The agent-side features are split out: egress gateway (#564), local redirect policy and skip-LB (#565), and datapath plugins (#566, which spec 01 defers until the feature is specified).
 - **test:** T-CRD-3/4/5/7 for the three kinds in `tests/kinds.rs`. The schema-driven document generator now picks, for a string, the first of a fixed candidate list its schema admits (pattern, CEL `isIP`): a name, port, CIDR or address. For a `oneOf` over required properties, it writes one branch. The earlier kinds get the same documents as before.

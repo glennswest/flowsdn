@@ -1631,3 +1631,26 @@ The no-dependency Rust `flowsdn-harvest-controlplane` tool verifies/restores the
 The existing Node/CiliumNode corpus is unaffected. This resolves fixture recovery
 only: historical-version-aware Kubernetes/LB adapters and expected-divergence
 annotations remain required before runtime pass/fail assertions are claimed.
+
+## Step A amendment — #516, 2026-11-25
+
+Steps 1b and k8s (§3.9) are built. `flowsdn-scripttest` holds the engine's
+`db/*` commands (§3.3.3, §4.2, §5.2) and `report.rs` (§3.7). The new
+`flowsdn-scripttest-fixtures` crate (§11.1) holds the `Fixture`, the fake
+Kubernetes client, the health and metrics commands and one builder per area.
+Its `tests/corpus.rs` is the corpus gate, run by `cargo test`. As built:
+
+- `db/cmp` without a runtime compares once. With one (the gate uses
+  `run_async`), it waits on `Table::revisions()`. Update mode is not built.
+- A fixture adds an export, an import and a key mapping per table
+  (`Adapter`). A table without one refuses `-f json|yaml`, `db/insert` and
+  `db/delete` rather than guessing.
+- Area builders reconstruct the reference runner's pre-state from the expected
+  output; its Go setup is not harvested. These are the CiliumNode `test` for
+  `k8sclient`; the health scopes at a clock one second past the epoch for
+  `hive-health`; and the `test_A`/`test_B`/`test_C_seconds` series for `metrics`.
+- `hive` with no argument lists the components in start order: flowsdn has no
+  object graph to print (ADR-0004).
+- Results: 7 PASS and 6 XFAIL. The XFAILs are `k8sclient/fake`
+  (ADR-0004), `dynamicconfig/*` (ADR-0017, spec 00 #480) and `k8s-tables/*`
+  (ADR-0004); the reasons are in each area's `DIVERGENCES.toml`.
