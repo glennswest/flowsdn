@@ -10,7 +10,8 @@ Types for the three kinds + T-CRD-3/4/5/7 (generator: pattern/CEL-aware string c
 features split: #564 egress gateway (spec 14 §3.4), #565 LRP + skip-LB (spec 05 §3.9), #566 datapath plugins
 (spec 01 defers; specify first). #523 re-pointed to #564.
 - [x] Types, tests, docs, changelog (branch kinds-336).
-- [ ] sc-build (`cargo xtask check`, the kinds tests); merge; close with the split.
+- [x] Branch sc-build at 1dc1898 (8/8 kinds tests, check 0 failed); merged; sc-build at 030fa0c: fmt --check, `cargo xtask
+      check` 1049/0. No runtime change, no stage. Closed; features in #564 #565 #566.
 
 ### scripttest operator adapters — #522 (P3), 2026-11-25
 
