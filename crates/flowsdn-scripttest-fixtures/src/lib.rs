@@ -4,7 +4,9 @@
 //! (`flowsdn-scripttest`) stays free of agent dependencies; this crate is where
 //! they enter.
 pub mod areas;
+pub mod doc;
 pub mod fixture;
 pub mod health;
 pub mod k8s;
+pub mod metrics;
 pub mod time;

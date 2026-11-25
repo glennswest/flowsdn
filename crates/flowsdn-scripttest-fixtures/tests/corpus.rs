@@ -49,16 +49,33 @@ fn harvested_areas_pass_or_diverge_as_recorded() {
                 .materialize(&archive)
                 .unwrap_or_else(|e| panic!("{script}: {e}"));
             let options = RunOptions::with_timeout(Duration::from_secs(60)).expect("options");
-            let failure = runtime
+            let error = runtime
                 .block_on(engine.run_async(archive.script(), &mut state, &options))
-                .err()
+                .err();
+            let failure = error
+                .as_ref()
                 .map(|e| (e.line, format!("{}: {}", e.command, e.message)));
+            // A failed cmp: both files, for whoever reads the failure.
+            let compared: Vec<String> = error
+                .as_ref()
+                .and_then(|e| archive.script().lines().nth(e.line.saturating_sub(1)))
+                .map(|line| {
+                    line.split_whitespace()
+                        .skip_while(|w| *w != "cmp")
+                        .skip(1)
+                        .filter(|w| !w.starts_with('-'))
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default();
             let outcome = classify(&script, failure, &divergences);
             if outcome.is_failure() {
                 // What the script saw, for whoever reads the failure.
                 println!("--- {script}\n{}", engine.diagnostic_dump(&state));
-                if let Ok(actual) = state.read_text("actual.yaml") {
-                    println!("--- {script} actual.yaml\n{actual}");
+                for file in compared.iter().map(String::as_str).chain(["actual.yaml"]) {
+                    if let Ok(text) = state.read_text(file) {
+                        println!("--- {script} {file}\n{text}--- end {file}");
+                    }
                 }
             }
             results.push((script.clone(), outcome));

@@ -196,6 +196,8 @@ fn health(registry: &Registry, state: &mut State, args: &[String]) -> Result<Con
         line(&mut text, name, node, now);
         draw(&mut text, node, "", now);
     }
+    // The reference ends the tree with an empty line.
+    text.push('\n');
     match output {
         Some(file) => state.write_text(&file, &text)?,
         None => state.publish(text, ""),
