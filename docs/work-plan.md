@@ -65,6 +65,7 @@ Needs step A (#516) first, per the issue and spec 17 §3.9; #516 is open. Parked
 Needs step A (#516: Fixture, table store, lifecycle, fake Kubernetes adapters) first, per the issue and spec 17 §3.9;
 #516 is open. Parked --after #516.
 - [ ] After #516: kvstore fake, clustermesh-apiserver fixture (§3.3.11), DIVERGENCES.toml for 3 areas.
+- [ ] 2026-11-25: blocked on an owner decision (comment on #526). The question is whether the kvstore key space stays `cilium/` (spec 20 §2 interop) or becomes flowsdn's under "no Cilium, period" (#294/#330, #339 open). Independently, the scripts need the unbuilt `flowsdn-clustermesh-apiserver` sync (spec 20 §3.8), the agent's remote-cluster importer (§3.7), MCS CoreDNS config, and #519's LB tables. Nothing built.
 
 ### scripttest Envoy config adapters — #525 (P3), 2026-11-25
 
