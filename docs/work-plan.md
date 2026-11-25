@@ -29,6 +29,7 @@ Needs step A (#516) first; open. Parked --after #516.
 
 Needs step A (#516) first; open. Parked --after #516.
 - [ ] After #516: netns fixture, `link/*`, `addr/*`, `route/*`, `sysctl/*`, reconciler drivers (§3.3.7-8), in kernel-check.
+- [x] 2026-11-25: the areas compare spec 10's node-model tables, which the agent lacks. As ruled for #519, filed #576 (tables + desired-route/neighbor reconcilers); #520 is proposed --after #576. subnet: ADR-0017 divergence (live ConfigMap).
 
 ### scripttest load-balancer adapters — #519 (P3), 2026-11-25
 

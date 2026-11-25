@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#520)
+- **planning:** The node-model scripttest areas (`datapath-linux`, `device`, `route-reconciler`, `neighbor`) compare spec 10's tables (`devices`, `routes`, `neighbors`, `desired-routes`, `forwardable-ips`, `desired-neighbors`). The agent has none of them; it keeps routes and neighbors directly. Following master's ruling on #519, the tables are filed as #576. #520 is parked after #576. `subnet` reads `subnet-topology` from a live `cilium-config` ConfigMap, so it will be a recorded divergence under ADR-0017 (as dynamicconfig is).
+
 ### 2026-11-25 (#565)
 - **feat:** Local redirect policy and skip-LB in the socket LB (spec 05 §3.9), with `kubernetes.local-redirect-policy` (default off, needs `service-lb`).
   - **Backends:** the agent watches FlowsdnLocalRedirectPolicy. A frontend's backends are this node's Ready Pods that the policy's `localEndpointSelector` selects, on the container ports `toPorts` names.
