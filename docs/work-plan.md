@@ -4,6 +4,15 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Gateway API controller — #543 (P3), 2026-11-25
+
+Not started: spec 21 §1.3 forbids either controller before P1-P6 (Envoy config apply + xDS + Envoy DaemonSet,
+L7 LB redirect, secret sync, operator runtime, KPR) and stage 2 before stage 1 (Ingress) is golden-clean. None of
+P1-P4 or stage 1 exists; #537 leaves the proxy choice (Envoy vs Rust, ADR-0001/#262) open. Asked on the issue
+(A: spec 16 Envoy path first, recommended; B: Rust proxy ADR; C: defer milestone 4 L7). `wait-owner` refused (#1680,
+gap label); waiting for the owner or master's answer.
+- [ ] Decision; then the prerequisite issue(s), stage 1, then this.
+
 ### BPF corpus: monotonic gate and re-harvest — #544 (P3), 2026-11-25
 
 No parent commit in sc-build (#317): the monotonic gate is a committed record, tests/bpf/COVERAGE.toml, equal to
