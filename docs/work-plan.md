@@ -12,7 +12,9 @@ bpf/tests at 7d68cfb394; `--check` byte for byte. Evidence build at 2a26b02: fet
 refused at line 1 ("the same cases"), regenerated, corpus 4 + harvester 10 tests ok, reharvest byte match.
 CASES.toml regenerated with the old provenance header kept as the tool's HEADER.
 - [x] Code, tests, docs (spec 18 §9.4 + amendment, build-and-test.md), changelog.
-- [ ] sc-build: fmt --check, `cargo xtask check`, `cargo xtask reharvest --fetch`; merge; close.
+- [x] sc-build at 09f307f: fmt --check, `cargo xtask check` 1046/0 (both new tests ok, coverage equals the record,
+      re-harvest skipped without a reference), `cargo xtask reharvest --fetch`: byte for byte. Merged; no stage
+      (tests and tools only). Closed.
 
 ### Performance suite vs Cilium — #321 (P1), status 2026-11-25
 
