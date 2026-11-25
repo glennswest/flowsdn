@@ -1673,12 +1673,17 @@ fn dsr_encap(lb: &mut SocketLb) -> Result<()> {
                 let option = DsrIpv4::from_bytes(out.get(50..62).ok_or("option")?.try_into()?)
                     .map_err(|e| format!("{e:?}"))?;
                 udp.get(2..4) == Some(&6081u16.to_be_bytes()[..])
-                    && udp.get(4..6) == Some(&(out.len().saturating_sub(34) as u16).to_be_bytes()[..])
+                    && udp.get(4..6)
+                        == Some(&(out.len().saturating_sub(34) as u16).to_be_bytes()[..])
                     && udp.get(6..8) == Some(&[0, 0][..])
                     && header.option_words() == 3
                     && header.critical
                     && header.identity.get() == 2
-                    && option == DsrIpv4 { address: front, port: 30095 }
+                    && option
+                        == DsrIpv4 {
+                            address: front,
+                            port: 30095,
+                        }
                     && (outer_proto, dst) == (17, hop)
             } else {
                 (outer_proto, dst) == (4, remote)
@@ -1708,7 +1713,9 @@ fn dsr_encap(lb: &mut SocketLb) -> Result<()> {
             // The backend's node strips it and hands on the DNATed packet.
             let reply = frame4(proto, remote, client, 8080, sport, false);
             if run_on(lb, "nodeport_egress", &reply, up0, TCX_NEXT)? != reply {
-                return Err(format!("DSR {name} proto {proto}: a reply was rewritten early").into());
+                return Err(
+                    format!("DSR {name} proto {proto}: a reply was rewritten early").into(),
+                );
             }
             let got = run_on(lb, "nodeport_ingress", &out, up0, TCX_NEXT)?;
             let (gsrc, gdst, gs, gd, gip_ok, gl4_ok) = parse4(&got)?;
@@ -1745,11 +1752,16 @@ fn dsr_encap(lb: &mut SocketLb) -> Result<()> {
                 let option = DsrIpv6::from_bytes(out.get(70..94).ok_or("option")?.try_into()?)
                     .map_err(|e| format!("{e:?}"))?;
                 udp.get(2..4) == Some(&6081u16.to_be_bytes()[..])
-                    && udp.get(4..6) == Some(&(out.len().saturating_sub(54) as u16).to_be_bytes()[..])
+                    && udp.get(4..6)
+                        == Some(&(out.len().saturating_sub(54) as u16).to_be_bytes()[..])
                     && header.option_words() == 6
                     && header.critical
                     && header.identity.get() == 2
-                    && option == DsrIpv6 { address: front6, port: 30095 }
+                    && option
+                        == DsrIpv6 {
+                            address: front6,
+                            port: 30095,
+                        }
                     && (outer_proto, dst) == (17, hop6)
             } else {
                 (outer_proto, dst) == (41, remote6)
@@ -1821,7 +1833,14 @@ fn dsr_encap(lb: &mut SocketLb) -> Result<()> {
         for (what, frame) in forged {
             run_on(lb, "nodeport_ingress", &frame, up0, TC_ACT_SHOT)
                 .map_err(|e| format!("DSR {name} with {what}: {e}"))?;
-            let reply = frame4(6, [10, 9, 1, 6], client, 8080, base.saturating_add(5), false);
+            let reply = frame4(
+                6,
+                [10, 9, 1, 6],
+                client,
+                8080,
+                base.saturating_add(5),
+                false,
+            );
             if run_on(lb, "nodeport_egress", &reply, up0, TCX_NEXT)? != reply {
                 return Err(format!("DSR {name} with {what} left a reply rewrite").into());
             }

@@ -151,7 +151,7 @@ pinning or subsystem libraries are absent are **not current status**.
   (IPv4, #460) is on.
 - Open gaps, each an issue with the `gap` label: operator identity GC (#332);
   L7 HTTP/Kafka policy rules (#537); `toFQDNs` and DNS policy rules (#536); `toGroups` peers in policy rules
-  (#530); DSR by IPIP or Geneve (#447); ICMP errors about source-NATed NodePort flows (#534);
+  (#530); ICMP errors about source-NATed NodePort flows (#534);
   NAT46/64 to local backends or in the socket LB (#450); SCTP Services (#457); the
   Hubble observer/relay (#293).
 
@@ -619,7 +619,9 @@ literals, properties and case folding.
 The ABI adds fixed VXLAN/Geneve headers and IPv4/IPv6 Geneve DSR options, with
 24-bit identity checks and host/world rewrites. These are individual codecs;
 packet parsing, option-chain validation and mixed-cluster forwarding are not
-implemented. Issue #55's policy is resolved to the existing reference encoding,
+implemented. The socket-lb uplink programs write and read Geneve DSR (#447,
+`kubernetes.lb-dsr-dispatch: geneve`) with the same layout, kernel-checked by
+`socket-lb-live` against these codecs; that is DSR only, not a tunnel mode. Issue #55's policy is resolved to the existing reference encoding,
 without introducing a private identity option.
 
 The frozen tail-call slot enum feeds typed loader inventory checks for missing,

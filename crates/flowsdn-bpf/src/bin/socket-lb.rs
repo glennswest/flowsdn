@@ -690,6 +690,8 @@ const ENCAP_INNER_ETH: u64 = 14 << 56;
 const DISPATCH_OPT: u8 = DsrDispatch::Opt.byte();
 const DISPATCH_IPIP: u8 = DsrDispatch::Ipip.byte();
 const DISPATCH_GENEVE: u8 = DsrDispatch::Geneve.byte();
+/// [`encap4`]'s answer when it sent nothing: not a TC verdict.
+const NOT_SENT: i32 = -1000;
 #[map(name = "flowsdn_dsr_config")]
 static DSR_CONFIG: HashMap<u32, [u8; 4]> = HashMap::with_max_entries(1, BPF_F_NO_PREALLOC);
 /// This node's dispatch mode.
@@ -1303,7 +1305,14 @@ fn dsr_forward4(
     let mode = dispatch();
     let option = l4 == 34 && dsr_option_wanted(ctx, l4, proto, fib.ifindex, room4(mode))?;
     if option && mode != DISPATCH_OPT {
-        return encap4(ctx, mode, tuple, flow);
+        // On its own stack frame: a second FIB lookup does not fit this one.
+        let verdict = encap4(
+            ctx.skb.skb,
+            u32::from(mode),
+            u32::from_ne_bytes(flow.address),
+            u32::from(u16::from_ne_bytes(flow.port)),
+        );
+        return (verdict != NOT_SENT).then_some(verdict);
     }
     rewrite4(
         ctx,
@@ -1325,18 +1334,42 @@ fn dsr_forward4(
 /// address to the backend; Geneve DNATs it and sends it, in Ethernet, with
 /// the frontend in the DSR option, to the FIB's next hop (the backend's
 /// node). The inner TTL is decremented, as forwarding does.
+///
+/// Arguments are scalars (`backend` and `backend_port` in network byte
+/// order); the rest is read from the packet, a bare IPv4 header with TCP or
+/// UDP. [`NOT_SENT`] when the FIB has no route (nothing changed yet); once
+/// the packet is being changed a failure drops it.
+#[inline(never)]
+fn encap4(skb: *mut __sk_buff, mode: u32, backend: u32, backend_port: u32) -> i32 {
+    let ctx = TcContext::new(skb);
+    let Ok(proto) = ctx.load::<u8>(23) else {
+        return NOT_SENT;
+    };
+    let Ok(port) = u16::try_from(backend_port) else {
+        return NOT_SENT;
+    };
+    let flow = (backend.to_ne_bytes(), port.to_ne_bytes());
+    let (result, fib) = fib4(&ctx, proto, [0; 4], flow.0, BPF_FIB_LOOKUP_SRC);
+    if !forwarded(result) {
+        return NOT_SENT;
+    }
+    let mode = u8::try_from(mode).unwrap_or(DISPATCH_OPT);
+    encap4_send(&ctx, mode, proto, flow, result, &fib).unwrap_or(TC_ACT_SHOT)
+}
+/// [`encap4`] after the lookup.
 #[inline(always)]
-fn encap4(
+fn encap4_send(
     ctx: &TcContext,
     mode: u8,
-    tuple: (usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8; 2]),
-    flow: Nodeport4Value,
+    proto: u8,
+    flow: ([u8; 4], [u8; 2]),
+    result: i64,
+    fib: &bpf_fib_lookup,
 ) -> Option<i32> {
-    let (l4, proto, _, front, client_port, front_port) = tuple;
-    let (result, fib) = fib4(ctx, proto, [0; 4], flow.address, BPF_FIB_LOOKUP_SRC);
-    if !forwarded(result) {
-        return None;
-    }
+    let l4 = 34;
+    let front = ctx.load::<[u8; 4]>(30).ok()?;
+    let [c0, c1, f0, f1] = ctx.load::<[u8; 4]>(l4).ok()?;
+    let (client_port, front_port) = ([c0, c1], [f0, f1]);
     // SAFETY: the active members after an IPv4 lookup.
     let (source, hop) = unsafe {
         (
@@ -1351,18 +1384,10 @@ fn encap4(
         ctx.skb
             .adjust_room(IPIP4_ROOM, ADJ_ROOM_MAC, ENCAP_L3_IPV4)
             .ok()?;
-        outer4(ctx, tos, total.checked_add(20)?, 4, source, flow.address)?;
-        return send(ctx, result, &fib);
+        outer4(ctx, tos, total.checked_add(20)?, 4, source, flow.0)?;
+        return send(ctx, result, fib);
     }
-    rewrite4(
-        ctx,
-        l4,
-        proto,
-        30,
-        l4.checked_add(2)?,
-        (front, front_port),
-        (flow.address, flow.port),
-    )?;
+    rewrite4(ctx, l4, proto, 30, 36, (front, front_port), flow)?;
     let total = u16::from_be_bytes(ctx.load::<[u8; 2]>(16).ok()?);
     ctx.skb
         .adjust_room(
@@ -1384,7 +1409,7 @@ fn encap4(
     ctx.store(62, &fib.dmac, 0).ok()?;
     ctx.store(68, &fib.smac, 0).ok()?;
     ctx.store(74, &ETH_P_IPV4, 0).ok()?;
-    send(ctx, result, &fib)
+    send(ctx, result, fib)
 }
 
 /// Backend slots a DSR frontend is checked against (finding 0252b1736f32);

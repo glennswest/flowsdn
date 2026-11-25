@@ -1273,8 +1273,8 @@ explicit deviation for new allocations, covered by `ordered_pools` tests.
 ### Note on §3.12 (#292)
 
 flowsdn's forwarding mode is `kubernetes.lb-mode` and the Service annotation
-`service.flowsdn.io/forwarding-mode`, which is always honored. Only `opt` dispatch
-exists, on the uplink programs. This note is at the end of the file because the
+`service.flowsdn.io/forwarding-mode`, which is always honored. Dispatch is
+`kubernetes.lb-dsr-dispatch` (#447), on the uplink programs. This note is at the end of the file because the
 catalogue's provenance cites this spec by line number (#358).
 
 ### Note on §3.1 NatPolicy (#292)
@@ -1293,3 +1293,18 @@ subject to Maglev". flowsdn does the same. At `connect`/`sendmsg` the client's s
 so a hash could only be of (client address, frontend): per-client stickiness, which ClientIP session affinity
 already gives the Services that ask for it. Maglev's purpose, the same backend for a flow on whichever node it
 arrives, does not arise when each connection is translated once on its own node.
+
+## Amendment — DSR dispatch by IPIP and Geneve (#447, 2026-11-25)
+
+`kubernetes.lb-dsr-dispatch` is the reference's `bpf-lb-dsr-dispatch` (`opt` default, `ipip`, `geneve`; the master's
+decision on #447: BPF only, on the uplinks, native routing). The wire is spec 02 §2.5's: IPIP / IP6IP6 with the
+client's packet unchanged inside an outer header from the node's address to the backend; Geneve (UDP 6081, VNI 2,
+the DSR option class `0x014b` type `0x81` with the frontend) carrying the DNATed packet in Ethernet to the FIB's next
+hop. **DEVIATION:** no kernel tunnel device on either side (the reference's `geneve` rides `cilium_geneve`; its `ipip`
+backend decapsulates with a kernel IPIP device and holds the frontend): the backend's node's `nodeport_ingress`
+strips the encapsulation, DNATs an IPIP packet to the backend whose address is the outer destination (with that
+backend's port), and records the reply entry, as for the option. **DEVIATION:** only the packets that carry the
+option in `opt` (a TCP SYN, a UDP packet that fits the MTU with the added bytes) are encapsulated; later packets of
+the flow are plain DNAT, since the backend's node already has the reply entry. The Geneve UDP checksum is zero for
+IPv6 too: the receiver is the uplink program, before the stack. A node accepts all three modes whatever its own
+setting; an encapsulation that fails the frontend/backend check drops.

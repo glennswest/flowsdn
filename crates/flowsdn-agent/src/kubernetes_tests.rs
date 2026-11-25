@@ -77,7 +77,10 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(parsed.l2_neigh_discovery);
     assert!(parsed.maglev);
     assert!(parsed.external_clusterip);
-    assert_eq!(parsed.lb_dsr_dispatch, flowsdn_bpf_abi::lb::DsrDispatch::Geneve);
+    assert_eq!(
+        parsed.lb_dsr_dispatch,
+        flowsdn_bpf_abi::lb::DsrDispatch::Geneve
+    );
     assert!(parsed.bpf_masquerade);
     assert_eq!(
         parsed.gateway64,

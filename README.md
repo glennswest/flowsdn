@@ -45,7 +45,8 @@ preserve forwarding across agent downtime; restoration checks interface ownershi
   and FIB-redirect to other nodes' backends; IPv4 and IPv6. New flows pick a
   backend at random or by Maglev (`kubernetes.lb-algorithm`, or the
   `service.flowsdn.io/lb-algorithm` annotation). `kubernetes.lb-mode:
-  snat|dsr|hybrid` (default `snat`; DSR by IP option, per Service
+  snat|dsr|hybrid` (default `snat`; DSR by IP option, IPIP or Geneve with
+  `kubernetes.lb-dsr-dispatch`, #447; per Service
   `service.flowsdn.io/forwarding-mode`), `kubernetes.nat46x64` (default off)
   and `kubernetes.lb-external-clusterip` (default off, #465: ClusterIPs routed
   to the node from outside) are verified by kernel test runs only, not on a
@@ -90,7 +91,7 @@ two-node acceptance (#291) and live NetworkPolicy acceptance on a cluster
 The Kubernetes-mode agent also allocates cluster identities for its Pods
 (FlowsdnIdentity objects, #291). Masquerade is the node's (`egress: stack`),
 not flowsdn's. Open gaps, each an issue with the `gap` label: L7 HTTP/Kafka
-policy rules (#537), `toFQDNs` and DNS rules (#536), DSR by IPIP or Geneve (#447),
+policy rules (#537), `toFQDNs` and DNS rules (#536),
 ICMP errors about source-NATed NodePort flows (#534), NAT46/64 to local backends or in the socket LB (#450) and the
 Hubble observer/relay (#293). The operator (`flowsdn-agent operator`, #337)
 registers the flowsdn.io CRDs under leader election and collects unused
