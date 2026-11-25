@@ -150,7 +150,8 @@ pinning or subsystem libraries are absent are **not current status**.
 - Masquerade is the node's (`egress: stack`) unless `kubernetes.bpf-masquerade`
   (IPv4, #460) is on.
 - Open gaps, each an issue with the `gap` label: operator identity GC (#332);
-  L7 HTTP/Kafka policy rules (#537); `toFQDNs` and DNS policy rules (#536);
+  L7 HTTP/Kafka policy rules (#537, parked behind the Rust L7 proxy ADR #563);
+  `toFQDNs` and DNS policy rules (#536);
   ICMP errors about source-NATed NodePort flows (#534);
   SCTP Services (#457); the
   Hubble observer/relay (#293). Not built by decision, refused and reported so

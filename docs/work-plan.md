@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### L7 HTTP/Kafka policy rules — #537 (P3), 2026-11-25
+
+Covered by the master's L7 ruling (on #543): C now, B when it comes (a Rust L7 proxy in the agent, ADR #563 first),
+never Envoy. Not built; rules stay refused and reported (fail closed). Ruling posted; parked --after #563.
+- [ ] After #563.
+
 ### NAT46/64 in the socket LB — #542 (P3), 2026-11-25
 
 lookup4/6 return `Lookup::Other(id, rev)` for NAT46X64 masters; forward6 resolves it in the other family's backend map
