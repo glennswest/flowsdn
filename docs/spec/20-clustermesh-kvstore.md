@@ -2093,3 +2093,12 @@ upstream Go apiserver image. This resolves the image-owner choice, not server
 implementation, image publication or backend acceptance. #275 now has the
 shipped policy artifact and existing fastetcd#23 hardening tracker; workload
 packaging and deployed policy enforcement remain validation obligations.
+
+## Naming amendment — ADR-0023, #526, 2026-11-25
+
+ADR-0023 supersedes §2's interoperability contract. flowsdn meshes only with
+flowsdn clusters. Every key in §4.1 starts with `flowsdn/` instead of
+`cilium/` (the synced keys' inner element too). §2.5's annotations are
+`service.flowsdn.io/*` and `clustermesh.flowsdn.io/global`, with no aliases.
+Inputs are flowsdn's kinds (ADR-0017). The value encodings of §4.2–4.8 are kept
+as flowsdn's own. The etcd wire surface (§2.6, §2.7) is unchanged.

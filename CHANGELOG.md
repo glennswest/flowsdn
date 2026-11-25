@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#526)
+- **docs:** ADR-0023 (master's ruling on #526): ClusterMesh uses flowsdn names with no Cilium interop. This means `flowsdn/` kvstore keys, flowsdn kinds as inputs, and `service.flowsdn.io/*` and `clustermesh.flowsdn.io/global` annotations. Value encodings are kept, and spec 20 §2's interop contract is superseded (spec 20 amendment).
+- **planning:** The components the ClusterMesh scripttest areas need are filed as gaps: the apiserver sync (#567), the agent's remote-service import (#568, after #519's LB tables) and the MCS-API CoreDNS configuration (#569). #526 is parked after them and #519.
+
 ### 2026-11-25 (#516)
 - **feat:** scripttest step A (spec 17 steps 1b + k8s). The harvested scripts of five areas now run against flowsdn (`cargo test -p flowsdn-scripttest-fixtures --test corpus`): 8 PASS, 6 XFAIL with a recorded divergence, 0 FAIL.
   - **Corpus gate** (`flowsdn-scripttest::report`): an area's `DIVERGENCES.toml` (ADR-0005: `expected-fail`, `skip`, `partial` with lines; every entry names an ADR, ids unique) and PASS / FAIL / XFAIL / XPASS / SKIP. An expected failure that passes (XPASS) fails the gate.
