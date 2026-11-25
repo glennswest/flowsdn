@@ -4,13 +4,15 @@
 //! any lookup; the source's identity comes from the agent's ipcache, given as
 //! a resolver.
 use nix::sys::socket::{
-    AddressFamily, Backlog, SockFlag, SockType, SockaddrIn, SockaddrIn6, bind, listen,
-    setsockopt, socket,
+    AddressFamily, Backlog, SockFlag, SockType, SockaddrIn, SockaddrIn6, bind, listen, setsockopt,
+    socket,
     sockopt::{IpTransparent, ReuseAddr},
 };
 use std::{
     io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpListener, TcpStream},
+    net::{
+        IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpListener, TcpStream,
+    },
 };
 
 /// A transparent TCP listener on every address of one family, on `port`.
@@ -44,18 +46,25 @@ impl Listener {
         } else {
             AddressFamily::Inet
         };
-        let fd = socket(family, SockType::Stream, SockFlag::SOCK_CLOEXEC, None).map_err(io_error)?;
+        let fd =
+            socket(family, SockType::Stream, SockFlag::SOCK_CLOEXEC, None).map_err(io_error)?;
         setsockopt(&fd, ReuseAddr, &true).map_err(io_error)?;
         if v6 {
             ipv6_transparent(&fd)?;
             let address = SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, port, 0, 0);
-            bind(std::os::fd::AsRawFd::as_raw_fd(&fd), &SockaddrIn6::from(address))
-                .map_err(io_error)?;
+            bind(
+                std::os::fd::AsRawFd::as_raw_fd(&fd),
+                &SockaddrIn6::from(address),
+            )
+            .map_err(io_error)?;
         } else {
             setsockopt(&fd, IpTransparent, &true).map_err(io_error)?;
             let address = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port);
-            bind(std::os::fd::AsRawFd::as_raw_fd(&fd), &SockaddrIn::from(address))
-                .map_err(io_error)?;
+            bind(
+                std::os::fd::AsRawFd::as_raw_fd(&fd),
+                &SockaddrIn::from(address),
+            )
+            .map_err(io_error)?;
         }
         listen(&fd, Backlog::new(1024).map_err(io_error)?).map_err(io_error)?;
         let socket = TcpListener::from(fd);

@@ -81,11 +81,16 @@ impl Ports {
             return Ok(existing.port);
         }
         let fresh = |ports: &Self, port: u16| {
-            port != 0 && !ports.taken(port) && !open.contains(&port) && !ports.released.contains_key(&port)
+            port != 0
+                && !ports.taken(port)
+                && !open.contains(&port)
+                && !ports.released.contains_key(&port)
         };
         let port = match requested.filter(|p| fresh(self, *p)) {
             Some(port) => port,
-            None => self.pick(open, now, seed).ok_or("no free proxy port in the range")?,
+            None => self
+                .pick(open, now, seed)
+                .ok_or("no free proxy port in the range")?,
         };
         self.released.remove(&port);
         self.ports.insert(
@@ -122,7 +127,9 @@ impl Ports {
                 }
                 match (second, self.released.get(&port)) {
                     (false, None) => return Some(port),
-                    (true, Some(at)) if now.saturating_sub(*at) >= REUSE_DELAY => return Some(port),
+                    (true, Some(at)) if now.saturating_sub(*at) >= REUSE_DELAY => {
+                        return Some(port);
+                    }
                     _ => {}
                 }
             }
@@ -178,10 +185,20 @@ impl Ports {
             self.ports.insert(
                 name.to_owned(),
                 ProxyPort {
-                    kind: entry.get("kind").and_then(Value::as_str).unwrap_or("").to_owned(),
-                    ingress: entry.get("ingress").and_then(Value::as_bool).unwrap_or(false),
+                    kind: entry
+                        .get("kind")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_owned(),
+                    ingress: entry
+                        .get("ingress")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
                     port,
-                    is_static: entry.get("static").and_then(Value::as_bool).unwrap_or(false),
+                    is_static: entry
+                        .get("static")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
                     references: 0,
                 },
             );

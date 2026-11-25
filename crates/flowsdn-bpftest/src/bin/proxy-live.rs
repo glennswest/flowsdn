@@ -47,14 +47,21 @@ fn ip(args: &[&str]) -> Result<String> {
     let output = Command::new("ip").args(args).output()?;
     ensure(
         output.status.success(),
-        &format!("ip {}: {}", args.join(" "), String::from_utf8_lossy(&output.stderr)),
+        &format!(
+            "ip {}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        ),
     )?;
     Ok(String::from_utf8(output.stdout)?)
 }
 fn isolate() -> Result<()> {
     let before = std::fs::read_link("/proc/self/ns/net")?;
     unshare(CloneFlags::CLONE_NEWNET)?;
-    ensure(std::fs::read_link("/proc/self/ns/net")? != before, "namespace isolation failed")
+    ensure(
+        std::fs::read_link("/proc/self/ns/net")? != before,
+        "namespace isolation failed",
+    )
 }
 
 /// The Pod: its own namespace; once told `GO`, configure `eth0`; then for
@@ -66,7 +73,10 @@ fn pod() -> Result<()> {
     writeln!(out, "READY")?;
     out.flush()?;
     let mut lines = BufReader::new(std::io::stdin()).lines();
-    ensure(lines.next().transpose()?.as_deref() == Some("GO"), "pod: expected GO")?;
+    ensure(
+        lines.next().transpose()?.as_deref() == Some("GO"),
+        "pod: expected GO",
+    )?;
     ip(&["link", "set", "lo", "up"])?;
     ip(&["addr", "add", "10.0.0.7/24", "dev", "eth0"])?;
     ip(&["link", "set", "eth0", "up"])?;
@@ -105,7 +115,10 @@ fn run(object: &[u8]) -> Result<()> {
         .spawn()?;
     let mut input = child.stdin.take().ok_or("pod stdin")?;
     let mut lines = BufReader::new(child.stdout.take().ok_or("pod stdout")?).lines();
-    ensure(lines.next().transpose()?.as_deref() == Some("READY"), "pod did not isolate")?;
+    ensure(
+        lines.next().transpose()?.as_deref() == Some("READY"),
+        "pod did not isolate",
+    )?;
     ip(&["link", "set", "lo", "up"])?;
     ip(&["link", "add", "ep0", "type", "veth", "peer", "name", "eth0"])?;
     ip(&["link", "set", "eth0", "netns", &child.id().to_string()])?;
@@ -180,25 +193,42 @@ fn run(object: &[u8]) -> Result<()> {
     );
 
     writeln!(input, "GO")?;
-    ensure(lines.next().transpose()?.as_deref() == Some("UP"), "pod did not come up")?;
+    ensure(
+        lines.next().transpose()?.as_deref() == Some("UP"),
+        "pod did not come up",
+    )?;
     let mut connect = |target: &str| -> Result<String> {
         writeln!(input, "CONNECT {target}")?;
         input.flush()?;
         Ok(lines.next().transpose()?.ok_or("pod ended")?)
     };
     let got = connect("203.0.113.10:80")?;
-    ensure(got == "OK world", &format!("pod to 203.0.113.10:80 through the proxy: {got}"))?;
+    ensure(
+        got == "OK world",
+        &format!("pod to 203.0.113.10:80 through the proxy: {got}"),
+    )?;
     let (original, source, identity) = server.join().map_err(|_| "proxy thread panicked")??;
     ensure(
         original == SocketAddr::from(([203, 0, 113, 10], 80)),
         &format!("original destination {original}"),
     )?;
-    ensure(source.ip() == IpAddr::from(POD), &format!("source {source}"))?;
-    ensure(identity == POD_IDENTITY, &format!("source identity {identity}"))?;
-    let remembered = delivery.policy().policy_flows()?.iter().any(|(k, v)| {
-        k.dport.get() == 80 && k.egress == 1 && v.pad == u32::from(PROXY_PORT)
-    });
-    ensure(remembered, "the redirected flow does not carry its proxy port")?;
+    ensure(
+        source.ip() == IpAddr::from(POD),
+        &format!("source {source}"),
+    )?;
+    ensure(
+        identity == POD_IDENTITY,
+        &format!("source identity {identity}"),
+    )?;
+    let remembered = delivery
+        .policy()
+        .policy_flows()?
+        .iter()
+        .any(|(k, v)| k.dport.get() == 80 && k.egress == 1 && v.pad == u32::from(PROXY_PORT));
+    ensure(
+        remembered,
+        "the redirected flow does not carry its proxy port",
+    )?;
     println!(
         "PASS the Pod's connection to 203.0.113.10:80 reaches the transparent listener: original destination {original}, source {source}, identity {identity}; request and reply pass; the flow remembers proxy port {PROXY_PORT}"
     );
@@ -217,7 +247,9 @@ fn run(object: &[u8]) -> Result<()> {
 
 fn main() -> Result<()> {
     let mut args = std::env::args_os().skip(1);
-    let first = args.next().ok_or("usage: proxy-live LOCAL_DELIVERY_OBJECT")?;
+    let first = args
+        .next()
+        .ok_or("usage: proxy-live LOCAL_DELIVERY_OBJECT")?;
     if first == "pod" {
         return pod();
     }

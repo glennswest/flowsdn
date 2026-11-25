@@ -428,6 +428,7 @@ dependencies = [
  "flowsdn-cni",
  "flowsdn-connector",
  "flowsdn-ipam",
+ "flowsdn-l7",
  "flowsdn-lb",
  "httparse",
  "nix",
@@ -591,6 +592,15 @@ dependencies = [
  "sha2",
  "tokio",
  "yaml-rust2",
+]
+
+[[package]]
+name = "flowsdn-l7"
+version = "0.14.0"
+dependencies = [
+ "flowsdn-bpf-abi",
+ "nix",
+ "serde_json",
 ]
 
 [[package]]
