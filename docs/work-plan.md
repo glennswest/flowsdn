@@ -18,7 +18,9 @@ lookup4/6 return `Lookup::Other(id, rev)` for NAT46X64 masters; forward6 resolve
 Seen once (58fe0c5, 30+ min, then passed). Client requests time out at 90 s, but `wait_for_pools` retries forever
 and the test's 30 s deadline starts after it. Test body now under a 240 s watchdog naming its phase.
 - [x] Watchdog, changelog.
-- [ ] sc-build: `cargo xtask check` + the test 30 times (reproduction attempt); close with what it shows.
+- [x] sc-build at 52e3ac3: fmt, `cargo xtask check` 1046/0 (the test ok once; the 30-run loop lacked
+      `--features kubernetes` and ran nothing). Rerun at 6abc803 with the feature: 30/30 passed, 10.2-10.4 s each,
+      no hang reproduced. Closed: a recurrence now fails naming its phase (and sc-build files it).
 
 ### Gateway API controller — #543 (P3), 2026-11-25
 
