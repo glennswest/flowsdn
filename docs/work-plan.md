@@ -4,6 +4,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### scripttest privileged node-model adapters — #520 (P3), 2026-11-25
+
+Needs step A (#516) first; open. Parked --after #516.
+- [ ] After #516: netns fixture, `link/*`, `addr/*`, `route/*`, `sysctl/*`, reconciler drivers (§3.3.7-8), in kernel-check.
+
 ### scripttest load-balancer adapters — #519 (P3), 2026-11-25
 
 Needs step A (#516) first; open. Parked --after #516. `redirectpolicy` also needs #565 (LRP agent side; #336 did
