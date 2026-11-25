@@ -368,6 +368,7 @@ dependencies = [
  "flowsdn-bpf-loader",
  "flowsdn-cni",
  "flowsdn-connector",
+ "flowsdn-encryption",
  "flowsdn-health",
  "flowsdn-hubble",
  "flowsdn-identity",

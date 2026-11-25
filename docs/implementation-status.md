@@ -65,6 +65,11 @@ pinning or subsystem libraries are absent are **not current status**.
   ready endpoint), from AF_PACKET
   sockets; `GET /v1/lb-ipam`, `GET /v1/l2-announcements`. Unit and loopback-API
   tests, and the `l2-announce-live` kernel fixture; not yet seen on a node.
+- Egress gateway (#564, `egress-gateway`, default off, IPv4): selected Pods'
+  traffic to a FlowsdnEgressGatewayPolicy's destinations is sent unchanged to
+  the gateway node and SNATed there to the egress address (native routing, no
+  tunnel); `GET /v1/egress-gateway`. Unit tests and the `socket-lb-live`
+  kernel step; not on a two-node cluster.
 - Local redirect policy (#565, `local-redirect-policy`, default off):
   FlowsdnLocalRedirectPolicy frontends (a Service's ClusterIPs or an
   address) go to this node's selected Ready Pods in the socket LB, with

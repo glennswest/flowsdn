@@ -41,8 +41,10 @@ FlowsdnEgressGatewayPolicy, FlowsdnLocalRedirectPolicy and FlowsdnDatapathPlugin
 (#336), all checked against their schemas by `tests/kinds.rs`. With
 `kubernetes.local-redirect-policy` the agent reads FlowsdnLocalRedirectPolicy
 and writes its `status.ok` (#565,
-[runtime](runtime.md#local-redirect-policy-565)). Nothing reads the other two
-yet: egress gateway is #564, datapath plugins #566 (to be specified first). The agent writes FlowsdnEndpoint and
+[runtime](runtime.md#local-redirect-policy-565)). With
+`kubernetes.egress-gateway` the agent reads FlowsdnEgressGatewayPolicy (#564,
+[runtime](runtime.md#egress-gateway-564)). Nothing reads FlowsdnDatapathPlugin yet (#566, to be specified
+first). The agent writes FlowsdnEndpoint and
 FlowsdnNode ([runtime](runtime.md#flowsdnendpoint-and-flowsdnnode-332)).
 The operator (`flowsdn-agent operator`, #337) registers the 22 CRDs from these
 files (spec 13 §3.2), and the agent waits for the ones its configuration uses

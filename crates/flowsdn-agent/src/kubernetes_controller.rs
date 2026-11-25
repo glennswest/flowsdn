@@ -1413,7 +1413,10 @@ fn program_egress(
             && let Some(interface) = interfaces.iter().find(|i| i.index == *index && *index != 0)
         {
             let path = format!("/proc/sys/net/ipv4/conf/{}/rp_filter", interface.name);
-            if std::fs::read_to_string(&path).map(|v| v.trim() != "2").unwrap_or(false) {
+            if std::fs::read_to_string(&path)
+                .map(|v| v.trim() != "2")
+                .unwrap_or(false)
+            {
                 let _ = std::fs::write(&path, "2");
             }
         }
@@ -1489,7 +1492,9 @@ fn service_loop(
         if egress_gateway {
             program_egress(lb, view, &mut egress_written);
         }
-        let due = fresh || serviced.elapsed() >= RECONCILE_INTERVAL || batch.wait(Instant::now()).is_some();
+        let due = fresh
+            || serviced.elapsed() >= RECONCILE_INTERVAL
+            || batch.wait(Instant::now()).is_some();
         if !due {
             continue;
         }

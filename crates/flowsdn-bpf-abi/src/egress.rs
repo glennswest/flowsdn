@@ -67,7 +67,11 @@ impl MapBytes<28> for EgressGw4Value {
         put(&mut bytes, 0, self.egress_ip);
         put(&mut bytes, 4, self.gateway_ip);
         for (index, word) in self.reserved.iter().enumerate() {
-            put(&mut bytes, 8usize.saturating_add(index.saturating_mul(4)), word.to_le_bytes());
+            put(
+                &mut bytes,
+                8usize.saturating_add(index.saturating_mul(4)),
+                word.to_le_bytes(),
+            );
         }
         put(&mut bytes, 20, self.egress_ifindex.to_le_bytes());
         put(&mut bytes, 24, self.reserved2.to_le_bytes());

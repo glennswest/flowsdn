@@ -19,6 +19,9 @@ use aya::{
     },
 };
 pub use flowsdn_bpf_abi::lb::DsrDispatch;
+/// `flowsdn_egress_gw_policy_v4`'s contents (#564): (LPM prefix length, source
+/// ++ destination) -> `EgressGw4Value` bytes.
+pub type EgressGateway4 = std::collections::BTreeMap<(u32, [u8; 8]), [u8; 28]>;
 use flowsdn_bpf_abi::maglev::TABLE_LEN;
 use flowsdn_lb::socket::{Maps, Op};
 use std::{
@@ -562,7 +565,7 @@ impl SocketLb {
     }
     /// The egress gateway policy map's entries: ((prefix length, source and
     /// destination), value bytes), as `flowsdn_egress_gw_policy_v4` holds them.
-    pub fn egress_gateway4(&self) -> KernelResult<std::collections::BTreeMap<(u32, [u8; 8]), [u8; 28]>> {
+    pub fn egress_gateway4(&self) -> KernelResult<EgressGateway4> {
         let mut out = std::collections::BTreeMap::new();
         for item in self.egress_gw4.iter() {
             let (key, value) = item?;
@@ -575,7 +578,7 @@ impl SocketLb {
     /// stops before anything is removed (spec 14 §3.4.6).
     pub fn set_egress_gateway4(
         &mut self,
-        desired: &std::collections::BTreeMap<(u32, [u8; 8]), [u8; 28]>,
+        desired: &EgressGateway4,
     ) -> KernelResult<()> {
         let current = self.egress_gateway4()?;
         for ((prefix, data), value) in desired {

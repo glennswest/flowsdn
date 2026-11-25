@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Egress gateway — #564 (P3), 2026-11-25
+
+- [x] ABI (`egress.rs`), socket-lb (redirect to the gateway, gateway SNAT on the masquerade path), loader map, agent planning (`egress_gateway.rs`) in the services thread every 1 s, watch, settings, `GET /v1/egress-gateway`, docs.
+- [ ] sc-build compile and tests; object + lock rebuild; strict build with kernel-check (`socket-lb-live` `egress_gateway`); stage.
+- IPv6 (`flowsdn_egress_gw_policy_v6`) not built; follow-up if wanted.
+
 ### ADR: Rust L7 proxy in the agent — #563 (P3), 2026-11-25
 
 - [x] ADR-0024 (in-agent module `flowsdn-l7`, BPF TPROXY only, no xDS or CEC, order DNS → HTTP → Ingress → Gateway API, Kafka refused, OpenSSL TLS with agent-read Secrets, conformance via the upstream suites). Spec 16/21 amendments, ADR-0015/ADR-0001 notes, docs index.

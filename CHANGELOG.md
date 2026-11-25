@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#564)
+- **feat:** Egress gateway, IPv4 (spec 14 §3.4, with a native-routing amendment), with `kubernetes.egress-gateway` (default off). It needs `bpf-masquerade` and `service-lb`; the agent refuses to start otherwise.
+  - **Planning:** the agent watches FlowsdnEgressGatewayPolicy and selects the source Pods (namespace, Pod and flattened node selectors) and the gateway (first matching node by name; with `egressGateways`, FNV-1a of the Pod UID). It derives the egress address (interface, `egressIP`, or the primary uplink's IPv4) and plans `flowsdn_egress_gw_policy_v4` every second.
+  - **Source node:** the uplink egress program sends a selected Pod's packet unchanged to the gateway node (`bpf_redirect_neigh`). No gateway resolved: dropped. An excluded CIDR: passed on.
+  - **Gateway node:** the packet is SNATed to the egress address on BPF masquerade's NAT path, and the reply is reverse translated and routed back to the Pod's node.
+  - **Also:** `GET /v1/egress-gateway`. The socket-lb object and lock are rebuilt.
+- **test:** `egress_gateway_tests` (single and multiple gateways, egress address sources, the no-gateway sentinel, selection, validation), and `socket-lb-live` `egress_gateway` (both nodes' halves, TCP and UDP SNAT and replies, drops).
+- **docs:** runtime.md, agent-api.md, crds.md, a spec 14 amendment, implementation-status.md.
+
 ### 2026-11-25 (#525)
 - **feat:** The scripttest `envoyconfig` area (12 scripts) runs in the corpus gate on the fake API and agent lifecycle, recorded as an expected divergence under ADR-0024. flowsdn has no Envoy, xDS or CiliumEnvoyConfig, so the fake Envoy and `envoy/cmp` are not built. Gate: 8 PASS, 27 XFAIL, 0 FAIL.
 

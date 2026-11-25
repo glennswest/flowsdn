@@ -2258,3 +2258,31 @@ selection. It does not provide WireGuard/XFRM operations, keys, map writers,
 cloud IPAM, node watchers, liveness, leak prevention or safe live migration.
 Unit tests establish the local decisions only. Spec 02 additionally owns tested
 BPF host-routing/build-plan decisions; actual object instrumentation remains open.
+
+## Amendment — egress gateway as flowsdn builds it (#564, 2026-11-25)
+
+§3.4 with flowsdn's kinds and routing mode:
+
+- Input: FlowsdnEgressGatewayPolicy (`flowsdn.io/v1alpha1`, ADR-0017), with
+  `kubernetes.egress-gateway` (default off). It requires `bpf-masquerade` and
+  `service-lb`; the agent refuses to start without them (§3.4.7: never
+  silently disabled). Identity allocation mode and CiliumEndpointSlice
+  requirements do not apply: sources are Pods, selected by their own and
+  their Namespace's labels, and the multi-gateway hash uses the Pod's UID.
+- **Native routing, no tunnel (deviation from §3.4.7–§3.4.8).** flowsdn has
+  no tunnel device for Pod traffic. The source node's uplink egress program
+  sends the packet unchanged to the gateway node as its next hop
+  (`bpf_redirect_neigh`), so nodes must share a segment, as direct node routes
+  already require. The gateway forwards it, and its uplink egress program
+  SNATs it on BPF masquerade's NAT path to the egress address. Replies are
+  reverse translated there and routed natively to the Pod's node, with no
+  re-encapsulation. The source identity is not carried, and is not needed: the
+  gateway matches on the source address.
+- Map: `flowsdn_egress_gw_policy_v4` has the `_v4_v2` layout (§3.4.5). There
+  is no legacy map and no IPv6 map yet. Drops are plain `TC_ACT_SHOT`, without
+  the reference's drop codes.
+- §3.4.4: "the device with the default route" is the uplink holding the
+  node's address. Addresses are read on every pass (every second), not only on
+  policy events.
+- §3.4.10 (status, health check) is not built.
+

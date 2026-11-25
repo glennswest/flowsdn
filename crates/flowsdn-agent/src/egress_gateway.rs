@@ -110,7 +110,11 @@ fn gateway(value: &Value) -> Result<Gateway, String> {
         .and_then(Value::as_str)
         .filter(|i| !i.is_empty())
         .map(str::to_owned);
-    let egress_ip = match value.get("egressIP").and_then(Value::as_str).filter(|i| !i.is_empty()) {
+    let egress_ip = match value
+        .get("egressIP")
+        .and_then(Value::as_str)
+        .filter(|i| !i.is_empty())
+    {
         None => None,
         Some(text) => Some(
             text.parse()
@@ -351,7 +355,10 @@ pub fn plan(
         }
         report.gateways.insert(
             policy.name.clone(),
-            resolved.iter().map(|(ip, node, _)| (*ip, node.clone())).collect(),
+            resolved
+                .iter()
+                .map(|(ip, node, _)| (*ip, node.clone()))
+                .collect(),
         );
         let addresses: Vec<Ipv4Addr> = resolved.iter().map(|(ip, _, _)| *ip).collect();
         let mut own = Entries::new();

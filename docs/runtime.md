@@ -56,6 +56,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.lb-ipam` | `true` | LB-IPAM: give `type: LoadBalancer` Services addresses from FlowsdnLoadBalancerIPPools ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb`; nothing happens without a pool. |
 | `kubernetes.l2-announcements` | `true` | Answer ARP and NDP for the load-balancer and external addresses FlowsdnL2AnnouncementPolicies give this node ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb` and `node-port`; nothing is announced without a policy. |
 | `kubernetes.local-redirect-policy` | `false` | Local redirect policy (#565; the reference's `enable-local-redirect-policy`): FlowsdnLocalRedirectPolicy frontends, an address or a Service's ClusterIP, go to this node's Pods in the socket LB, with skip-LB for the backends' own traffic ([local redirect policy](#local-redirect-policy-565)). Needs `service-lb`. |
+| `kubernetes.egress-gateway` | `false` | Egress gateway (#564; the reference's `enable-egress-gateway`): selected Pods' IPv4 traffic to a FlowsdnEgressGatewayPolicy's destinations leaves the cluster through a gateway node, from its egress address ([egress gateway](#egress-gateway-564)). Needs `bpf-masquerade` and `service-lb`; the agent refuses to start otherwise. |
 | `kubernetes.endpoint-crd` | `true` | Keep a FlowsdnEndpoint for each local Pod endpoint ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). Nothing is written while the kind is not served. |
 | `kubernetes.node-crd` | `true` | Keep this node's FlowsdnNode ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). |
 | `kubernetes.bpf-masquerade` | `false` | BPF masquerade (#460, IPv6 #513; the reference's `enable-bpf-masquerade`), IPv4 and IPv6: the uplink programs source-NAT local Pods' traffic leaving the cluster ([BPF masquerade](#bpf-masquerade-460)). Needs `service-lb`; attaches the uplink programs even with `node-port` off. |
@@ -1058,6 +1059,41 @@ The reference's `lrp-address-matcher-cidrs` restriction is not read.
 `socket-lb-live` checks redirected connects, a Service's own backends after
 skip-LB, and no translation after skip-LB, on a kernel. There is no cluster
 run yet.
+
+### Egress gateway (#564)
+
+With `kubernetes.egress-gateway` (default off; needs `bpf-masquerade` and
+`service-lb`) the agent watches FlowsdnEgressGatewayPolicies (spec 14 §3.4)
+and keeps `flowsdn_egress_gw_policy_v4` planned, re-planning every second:
+
+- **Sources.** Pods with an IPv4 address that a `selectors[]` entry's
+  namespace selector (on the Namespace's labels) and Pod selector both
+  select. Every entry's `nodeSelector` forms one list the Pod's node must
+  match, as in the reference.
+- **Gateway.** The first node in name order that the gateway's `nodeSelector`
+  selects, by its IPv4 InternalIP. With `egressGateways`, each Pod gets one of
+  the resolved gateways by FNV-1a of its UID (a node joining or leaving
+  reshuffles them, as upstream). With none resolved, the Pod's matching
+  traffic is dropped, never sent from its own node.
+- **Egress address,** on the gateway node: the `interface`'s first IPv4,
+  else `egressIP` (it must be on one of the node's interfaces; the FIB picks
+  the device), else the first IPv4 of the uplink holding the node's address.
+  Its interface gets loose `rp_filter`. If none can be found, the gateway
+  drops the traffic. Addresses are read again on every pass.
+- **Datapath (native routing).** On the Pod's node the uplink's egress
+  program sends the packet unchanged to the gateway node, its next hop
+  (`bpf_redirect_neigh`). There is no tunnel, so the nodes must share a
+  segment, as direct node routes already require. On the gateway the packet is
+  forwarded to its uplink, whose egress program source-NATs it to the egress
+  address with a NAT port from BPF masquerade's range. The reply is reverse
+  translated there and routed back to the Pod's node. `excludedCIDRs` are
+  passed on as if no policy matched.
+
+IPv4 only. IPv6 sources and destinations are counted in
+`GET /v1/egress-gateway` (`ipv6-skipped`) but not programmed. There is no
+policy status and no gateway health check (spec 14 §3.4.10). Kernel checks
+cover both nodes' halves (`socket-lb-live` `egress_gateway`). There is no
+two-node cluster run yet.
 
 ### NetworkPolicy enforcement (#292)
 

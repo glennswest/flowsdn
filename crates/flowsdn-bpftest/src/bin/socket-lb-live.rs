@@ -1227,13 +1227,25 @@ fn egress_gateway(lb: &mut SocketLb) -> Result<()> {
     let desired: std::collections::BTreeMap<_, _> = [
         // A local Pod; the gateway is another node on up0's subnet.
         entry([10, 9, 0, 8], [203, 0, 113, 0], 24, [0; 4], [192, 0, 2, 30]),
-        entry([10, 9, 0, 8], [203, 0, 113, 128], 25, [0; 4], GATEWAY_EXCLUDED),
+        entry(
+            [10, 9, 0, 8],
+            [203, 0, 113, 128],
+            25,
+            [0; 4],
+            GATEWAY_EXCLUDED,
+        ),
         // No gateway resolved.
         entry([10, 9, 0, 9], [203, 0, 113, 0], 24, [0; 4], GATEWAY_NONE),
         // This node is the gateway for another node's Pod.
         entry([10, 9, 1, 5], [203, 0, 113, 0], 24, egress, [192, 0, 2, 20]),
         // This node is the gateway but has no egress address.
-        entry([10, 9, 0, 10], [203, 0, 113, 0], 24, [0; 4], [192, 0, 2, 20]),
+        entry(
+            [10, 9, 0, 10],
+            [203, 0, 113, 0],
+            24,
+            [0; 4],
+            [192, 0, 2, 20],
+        ),
     ]
     .into_iter()
     .collect();
@@ -1268,7 +1280,11 @@ fn egress_gateway(lb: &mut SocketLb) -> Result<()> {
         let request = frame4(proto, [10, 9, 1, 5], server, sport, 443, false);
         let (src, dst, s, d, ip_ok, l4_ok) =
             parse4(&run_on(lb, "nodeport_egress", &request, up0, TCX_NEXT)?)?;
-        if (src, dst, d) != (egress, server, 443) || !(61000..=65535).contains(&s) || !ip_ok || !l4_ok {
+        if (src, dst, d) != (egress, server, 443)
+            || !(61000..=65535).contains(&s)
+            || !ip_ok
+            || !l4_ok
+        {
             return Err(format!(
                 "egress gateway SNAT proto {proto}: {src:?}:{s} -> {dst:?}:{d}, checksums ip {ip_ok} l4 {l4_ok}"
             )
