@@ -9,7 +9,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 Owner (master, 2026-11-25): A, drop both. Spec 02 §6.2 rows + net line, §8 debug events, §12 item 11 in place (line
 count kept) + amendment; guard test `flowsdn-bpftest/tests/build_dimensions.rs` (no `[features]` in flowsdn-bpf).
 - [x] Docs, test, changelog.
-- [ ] sc-build (fmt, `cargo xtask check`); close (docs + test only: no stage).
+- [x] sc-build at 58fe0c5: 1st run hung in agent tests/kubernetes.rs (30+ min, cancelled, filed #555); 2nd run fmt
+      --check, `cargo xtask check` 1042 passed 0 failed, `flowsdn_bpf_has_no_build_dimensions` ok. No stage; closed.
 
 ### FlowsdnEndpoint DELETE retry — #551 (P1), 2026-11-24
 
