@@ -58,7 +58,7 @@ impl Events {
             .copied()
             .collect();
         // Stable: equal times keep the later-kept first.
-        newest.sort_by(|a, b| b.0.cmp(&a.0));
+        newest.sort_by_key(|(time, _)| std::cmp::Reverse(*time));
         newest.truncate(limit);
         (inner.1, inner.0.len(), newest)
     }
