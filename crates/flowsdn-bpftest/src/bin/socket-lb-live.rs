@@ -1339,13 +1339,19 @@ fn nat_expiry(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         Ok((src, s))
     };
     for (proto, life, name) in [(6u8, 12u64, "closed TCP"), (17, 62, "UDP")] {
+        // The live flows first, while the pool is empty: a new flow gets
+        // eight tries at a free port, which a pool 3000 of 4536 full can
+        // refuse (#534's run, 1 in ~27).
+        let live = if proto == 17 {
+            Some((port46(lb)?, port64(lb)?))
+        } else {
+            None
+        };
         let mut first = [0u16; 3];
         for (kind, count) in first.iter_mut().enumerate() {
             *count = round(lb, kind as u8, proto, 20000)?;
         }
-        if proto == 17 {
-            let held46 = port46(lb)?;
-            let (nat4, held64) = port64(lb)?;
+        if let Some((held46, (nat4, held64))) = live {
             std::thread::sleep(Duration::from_secs(life / 2));
             if port46(lb)? != held46 {
                 return Err("NAT46: a live flow changed its NAT port".into());
