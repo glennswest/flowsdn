@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#537, #536)
+- **planning:** Under ADR-0024, HTTP L7 policy (#537, step 3) and the DNS proxy / toFQDNs (#536, step 2) are parked after the L7 proxy core (#577). Kafka rules stay refused (removed by the reference at v1.20), so #537's done line is HTTP only. Behaviour is unchanged: L7 and DNS rules are refused, reported and skipped (fail closed).
+
 ### 2026-11-25 (#543)
 - **planning:** With ADR-0024 in place, the Gateway API controller follows the master's sequencing: the L7 proxy core (#577), then Ingress stage 1 (#578), then this. #543 is parked after both, and #474 after #543. The two new issues are filed but not proposed: per the ruling, nothing L7 starts until something on the platform needs it.
 
