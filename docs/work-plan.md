@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### scripttest load-balancer adapters — #519 (P3), 2026-11-25
+
+Needs step A (#516) first; open. Parked --after #516. `redirectpolicy` also needs #565 (LRP agent side; #336 did
+only the types) or a recorded divergence.
+- [ ] After #516: `lb/*`, `skiplbmap`, `svc/set-proxy-redirect`, `test/*`, `http/get` (§3.3.5-6), DIVERGENCES.toml x3.
+
 ### scripttest Hubble exporter adapters — #521 (P3), 2026-11-25
 
 Needs step A (#516) and the Hubble observer (#293) first; both open. Parked --after both.
