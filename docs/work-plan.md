@@ -4,6 +4,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### scripttest Hubble exporter adapters — #521 (P3), 2026-11-25
+
+Needs step A (#516) and the Hubble observer (#293) first; both open. Parked --after both.
+- [ ] After #516 and #293: `config/*`, `event/send`, `file/*`, `exporters/count` (§3.3.13), DIVERGENCES.toml.
+
 ### Egress, redirect and plugin kinds — #336 (P2), 2026-11-25
 
 Types for the three kinds + T-CRD-3/4/5/7 (generator: pattern/CEL-aware string candidates, oneOf branches). Agent
