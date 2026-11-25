@@ -694,8 +694,8 @@ fn masquerade6(lb: &mut SocketLb) -> Result<()> {
     Ok(())
 }
 
-/// Service NAT46/64 to a backend on this node (#450): 192.0.2.20:30097 to
-/// [fd00:9::5]:8080 and [2001:db8:2::20]:30097 to 10.9.0.5:8080, both on the
+/// Service NAT46/64 to a backend on this node (#450): 192.0.2.20:30098 to
+/// [fd00:9::5]:8080 and [2001:db8:2::20]:30098 to 10.9.0.5:8080, both on the
 /// local pod device `pod0`. The uplink translates the client's packet and
 /// redirects it toward the pod, source-NATed to the node's address of the
 /// backend's family and a NAT port; the pod's reply to that address is
@@ -712,8 +712,8 @@ fn nat46x64_local(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> 
     );
     for proto in [PROTO_TCP, PROTO_UDP] {
         for (frontend, backend) in [
-            ("192.0.2.20:30097", "[fd00:9::5]:8080"),
-            ("[2001:db8:2::20]:30097", "10.9.0.5:8080"),
+            ("192.0.2.20:30098", "[fd00:9::5]:8080"),
+            ("[2001:db8:2::20]:30098", "10.9.0.5:8080"),
         ] {
             services.push(Service {
                 frontend: address(frontend, proto)?,
@@ -729,7 +729,7 @@ fn nat46x64_local(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> 
     program(lb, services)?;
     for (proto, sport) in [(6u8, 42200u16), (17, 42201)] {
         // NAT46 to the local IPv6 backend.
-        let request = frame4(proto, client, front, sport, 30097, false);
+        let request = frame4(proto, client, front, sport, 30098, false);
         let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
         let (src, dst, s, d, hops, l4_ok) = parse6(&out)?;
         if out.get(12..14) != Some(&[0x86, 0xdd][..])
@@ -747,7 +747,7 @@ fn nat46x64_local(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> 
         let out = run_on(lb, "nodeport_endpoint", &reply, pod0, TC_ACT_REDIRECT)?;
         let (rsrc, rdst, rs, rd, ip_ok, l4_ok) = parse4(&out)?;
         if out.get(12..14) != Some(&[0x08, 0x00][..])
-            || (rsrc, rdst, rs, rd) != (front, client, 30097, sport)
+            || (rsrc, rdst, rs, rd) != (front, client, 30098, sport)
             || !ip_ok
             || !l4_ok
             || out.get(22) != Some(&63)
@@ -758,7 +758,7 @@ fn nat46x64_local(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> 
             .into());
         }
         // NAT64 to the local IPv4 backend.
-        let request = frame6(proto, client6, front6, sport, 30097, false);
+        let request = frame6(proto, client6, front6, sport, 30098, false);
         let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
         let (src, dst, s, d, ip_ok, l4_ok) = parse4(&out)?;
         if out.get(12..14) != Some(&[0x08, 0x00][..])
@@ -777,7 +777,7 @@ fn nat46x64_local(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> 
         let out = run_on(lb, "nodeport_endpoint", &reply, pod0, TC_ACT_REDIRECT)?;
         let (rsrc, rdst, rs, rd, hops, l4_ok) = parse6(&out)?;
         if out.get(12..14) != Some(&[0x86, 0xdd][..])
-            || (rsrc, rdst, rs, rd) != (front6, client6, 30097, sport)
+            || (rsrc, rdst, rs, rd) != (front6, client6, 30098, sport)
             || hops != 63
             || !l4_ok
         {

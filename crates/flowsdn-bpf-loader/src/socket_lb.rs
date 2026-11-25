@@ -412,8 +412,7 @@ impl SocketLb {
             TcAttachOptions::TcxOrder(LinkOrder::first()),
         )?;
         let link = program.take_link(id)?;
-        self.endpoints
-            .insert(interface.to_owned(), (ifindex, link));
+        self.endpoints.insert(interface.to_owned(), (ifindex, link));
         Ok(())
     }
     /// Detach `nodeport_endpoint` from `interface`.
