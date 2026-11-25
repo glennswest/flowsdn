@@ -55,6 +55,13 @@ dc492b2815; #303 closed); `perf` and the two-node runs still wait for machines
 (#321, #291). Unit tests, cross-compilation and namespace fixtures alone do not
 establish multi-node Kubernetes acceptance.
 
+`cargo xtask reharvest --fetch` checks that `tests/bpf/CASES.toml` is byte for byte
+what `tools/harvest-bpf-cases` makes from the pinned reference (spec 18 §9.4, #544),
+fetching a shallow, sparse clone of the reference's `bpf/tests` into `target/reference`.
+`cargo xtask check` runs the same check without fetching, so it skips with a message
+unless `FLOWSDN_REFERENCE` names a checkout. The BPF corpus's coverage must equal
+`tests/bpf/COVERAGE.toml`: porting a case raises that record in the same commit.
+
 `cargo xtask cloud-scan` scans the recorded cloud fixtures under
 `tests/cloud/**` for unscrubbed credentials and identifiers (ADR-0007 §2) and
 loads each scenario. It scans each file as it is and every escaped JSON string

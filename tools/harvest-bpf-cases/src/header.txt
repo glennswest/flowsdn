@@ -1,0 +1,58 @@
+# flowsdn — harvest of the reference BPF unit-test case inventory
+#
+# GENERATED FILE. Produced by tools/harvest-bpf-cases (Rust) from a read-only
+# checkout of the reference. Do not edit by hand: re-run the tool.
+# Hand-maintained state lives in [[port]] entries in tests/bpf/PORTED.toml,
+# which is keyed on (file, name) from this file.
+#
+# PROVENANCE
+# ----------
+# Case names, packet shapes, feature flags and the three-stage structure
+# recorded here are derived from the reference implementation
+#   cilium/cilium, tag v1.20.1, commit 7d68cfb394, directory bpf/tests/.
+# That directory is licensed "GPL-2.0-only OR BSD-2-Clause"; flowsdn takes it
+# under BSD-2-Clause, as decided in docs/decisions/0005-test-strategy.md
+# (ADR-0005 §2) and permitted by docs/licensing.md. A matching entry exists in
+# NOTICE.
+#
+# NO C CODE WAS COPIED. This file contains only identifiers (test names,
+# preprocessor symbol names, ASSIGN_CONFIG variable names, include-graph
+# facts) and counts, mechanically extracted. No test body, assertion,
+# packet-builder call sequence or expected byte value from the reference has
+# been transcribed into flowsdn. flowsdn test bodies are written from
+# docs/spec/02-datapath-programs.md and docs/spec/18-bpf-test-harness.md,
+# per the clean-room protocol in docs/licensing.md.
+#
+# HOW IT WAS DERIVED
+# ------------------
+# tools/harvest-bpf-cases (Rust) walks each bpf/tests/*.c with a small
+# #ifdef/#elif/#else-aware preprocessor, so the feature set, ASSIGN_CONFIG
+# set, included datapath object and PKTGEN/SETUP/CHECK section list recorded
+# below are the ones the compiler actually sees for that translation unit.
+# Cases contributed by a shared test header (e.g. encrypt_host.h) are
+# attributed to every .c that includes it, with `defined_in` naming the
+# header. `entrypoint` is resolved by following the SETUP stage to the
+# entry helper it tail-calls, through up to three levels of local helper or
+# macro indirection, supplemented by guarded audits in spec 18 §4.3.1.
+# "direct" means SETUP or CHECK invokes the library function under test
+# without entering an attached datapath program; "unresolved" means the harvester
+# could not follow the indirection and a human must classify it.
+#
+# SUMMARY (reference v1.20.1 / 7d68cfb394)
+# ----------------------------------------
+#   translation units compiled upstream  141
+#   translation units present but dead   1
+#   CHECK sections written in .c files  397
+#   effective cases after header expansion 625
+#   by milestone   M1 279   M2 138   M3 208
+#   by file        M1 63    M2 42    M3 37
+#   by entrypoint  from_netdev 186  to_netdev 164  direct 112  from_container 63  xdp_entry 26  lxc_policy_egress 4  from_wireguard 4  to_wireguard 4  from_host 22  from_overlay 21  to_container 13  lxc_policy 3  to_overlay 3
+#   by object      host 72  (library unit test) 23  lxc 20  xdp 13  overlay 8  sock 3  wireguard 2  sock_term 1
+#
+# FINDING: bpf/tests/encrypt_host_wireguard_tunnel is a C source file that is
+# missing its .c extension upstream, so the build never compiles it and its
+# 10 cases (from encrypt_host.h, TUNNEL_MODE + ENABLE_WIREGUARD) never run.
+# flowsdn ports the WireGuard-over-tunnel encrypt-host case set anyway; it is
+# listed here as file "encrypt_host_wireguard_tunnel.c" for symmetry with the
+# _strict variant and marked upstream_dead = true.
+

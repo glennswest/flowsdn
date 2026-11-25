@@ -59,8 +59,10 @@ fn reharvest(fetch: bool) -> Result<(), Box<dyn Error>> {
         .ok_or("workspace")?;
     let reference = env::var_os("FLOWSDN_REFERENCE").map_or_else(
         || {
-            root.join("target/reference")
-                .join(format!("cilium-{}", REFERENCE_COMMIT.get(..10).unwrap_or("")))
+            root.join("target/reference").join(format!(
+                "cilium-{}",
+                REFERENCE_COMMIT.get(..10).unwrap_or("")
+            ))
         },
         std::path::PathBuf::from,
     );

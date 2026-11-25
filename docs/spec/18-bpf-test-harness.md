@@ -1177,10 +1177,10 @@ tests, at the tiers of §10.3.
 - [x] Every `status = "ported"` entry names a Rust test path that exists (the
       §11.3 compile-time check is the oracle).
 - [x] Every `retargeted` / `replaced` / `dropped` entry has a `disposition`.
-- [ ] Coverage is monotonic against the previous commit (§5.3). Gap #544.
-- [ ] Re-running `tools/harvest-bpf-cases (Rust)` against the pinned reference
-      commit reproduces `CASES.toml` byte-for-byte (guards silent hand edits).
-      Skipped with a clear message when the reference clone is absent. Gap #544.
+- [x] Coverage is monotonic (§5.3), against `tests/bpf/COVERAGE.toml` (#544).
+- [x] Re-running `tools/harvest-bpf-cases (Rust)` against the pinned reference
+      commit reproduces `CASES.toml` byte-for-byte (`cargo xtask reharvest`).
+      Skipped with a clear message when the reference clone is absent (#544).
 
 ### 9.5 The corpus itself
 
@@ -1497,3 +1497,19 @@ Aya trait implementation is not itself evidence of kernel unavailability.
 does not list CGROUP_SOCK_ADDR (accessed 2026-09-22). Its actual status on the
 validation kernel is determined by this probe. The ABI layout was checked against
 pinned `bpf/include/linux/bpf.h`; no upstream executable implementation was copied.
+
+## Amendment — the §9.4 monotonic gate and re-harvest (#544, 2026-11-25)
+
+**Monotonic.** An sc-build checkout is a depth-1 clone with no parent (#317), so no build can read the previous
+commit's `PORTED.toml`. The previous coverage is carried by `tests/bpf/COVERAGE.toml` (`[ported] m1 m2 m3`):
+flowsdn-bpftest's build script (and `cargo xtask cases`) refuse a commit whose `ported(m)` is below the record
+("fell from … to …") or above it ("rose …: set mN = … in this commit"). The record therefore always equals the
+commit's coverage, and lowering coverage needs a visible edit of the record in the same diff.
+
+**Re-harvest.** `cargo xtask reharvest [--fetch]` runs `tools/harvest-bpf-cases --check` against
+`$FLOWSDN_REFERENCE`, else `target/reference/cilium-<commit>`; `--fetch` makes that a shallow, sparse clone of
+`bpf/tests` at the pinned commit. `--check` now compares the rendered file byte for byte and names the first
+differing line (saying when the cases are the same and only the text differs). Without a checkout it prints
+`re-harvest skipped: no reference checkout at …` and passes; `cargo xtask check` runs it that way. `CASES.toml`
+was regenerated once by the tool (same cases, the tool's TOML layout); its provenance header is the tool's
+`HEADER`, kept verbatim.

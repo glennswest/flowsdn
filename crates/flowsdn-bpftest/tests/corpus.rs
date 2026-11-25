@@ -186,7 +186,8 @@ tier = "progrun"
 rust = "tc_demo::first_case"
 "#;
     let with_include = |s: &str| (s == "tc_demo").then(|| include_line("tc_demo"));
-    let one = Corpus::parse(&cases("", 1), ported, with_include).unwrap_or_else(|p| panic!("{p:?}"));
+    let one =
+        Corpus::parse(&cases("", 1), ported, with_include).unwrap_or_else(|p| panic!("{p:?}"));
     assert_eq!(one.coverage(), [1, 1, 1]);
     let record = |m1: u8| format!("[ported]\nm1 = {m1}\nm2 = 1\nm3 = 1\n");
     assert_eq!(one.check_record(&record(1)), Ok(()));
@@ -196,6 +197,9 @@ rust = "tc_demo::first_case"
         ("[ported]\nm1 = 1\nm2 = 1\n".to_owned(), "m3 missing"),
     ] {
         let problems = one.check_record(&text).err().unwrap_or_default();
-        assert!(problems.iter().any(|p| p.contains(want)), "{want}: {problems:?}");
+        assert!(
+            problems.iter().any(|p| p.contains(want)),
+            "{want}: {problems:?}"
+        );
     }
 }
