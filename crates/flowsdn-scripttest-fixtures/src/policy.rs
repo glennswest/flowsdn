@@ -77,12 +77,9 @@ impl Policies {
         let desired = BTreeMap::from([(key.clone(), labels.clone())]);
         // Creates are answered at once here, so two passes settle.
         for _ in 0..2 {
-            let actions = self.allocator.reconcile(
-                &desired,
-                &self.identities,
-                "default",
-                identity::MIN_ID,
-            );
+            let actions =
+                self.allocator
+                    .reconcile(&desired, &self.identities, "default", identity::MIN_ID);
             for action in actions {
                 if let Action::Create { id, labels } = action {
                     let security: BTreeMap<String, String> = labels
@@ -109,49 +106,61 @@ fn publish(state: &mut State, text: String) -> Result<Control, CommandError> {
 /// Register the policy area's commands on `engine`.
 pub fn register(engine: &mut Engine, policies: &Arc<Mutex<Policies>>) -> Result<(), String> {
     let p = Arc::clone(policies);
-    engine.register_command("identity/allocate", false, move |state: &mut State, args: &[String]| {
-        let [labels] = args else {
-            return Err(fail("identity/allocate takes one label set"));
-        };
-        let labels = label_set(labels).map_err(fail)?;
-        let id = lock(&p).allocate(&labels).map_err(fail)?;
-        publish(state, format!("{id}\n"))
-    })?;
+    engine.register_command(
+        "identity/allocate",
+        false,
+        move |state: &mut State, args: &[String]| {
+            let [labels] = args else {
+                return Err(fail("identity/allocate takes one label set"));
+            };
+            let labels = label_set(labels).map_err(fail)?;
+            let id = lock(&p).allocate(&labels).map_err(fail)?;
+            publish(state, format!("{id}\n"))
+        },
+    )?;
     let p = Arc::clone(policies);
-    engine.register_command("endpoint/create", false, move |state: &mut State, args: &[String]| {
-        let [identity, labels] = args else {
-            return Err(fail("endpoint/create takes an identity and a label set"));
-        };
-        let identity: u32 = identity
-            .parse()
-            .map_err(|_| fail(format!("identity {identity:?} is not a number")))?;
-        label_set(labels).map_err(fail)?;
-        let mut policies = lock(&p);
-        let id = policies
-            .endpoints
-            .keys()
-            .next_back()
-            .map_or(Some(1), |last| last.checked_add(1))
-            .ok_or_else(|| fail("endpoint IDs exhausted"))?;
-        policies.endpoints.insert(id, (identity, labels.clone()));
-        drop(policies);
-        publish(state, format!("{id}\n"))
-    })?;
+    engine.register_command(
+        "endpoint/create",
+        false,
+        move |state: &mut State, args: &[String]| {
+            let [identity, labels] = args else {
+                return Err(fail("endpoint/create takes an identity and a label set"));
+            };
+            let identity: u32 = identity
+                .parse()
+                .map_err(|_| fail(format!("identity {identity:?} is not a number")))?;
+            label_set(labels).map_err(fail)?;
+            let mut policies = lock(&p);
+            let id = policies
+                .endpoints
+                .keys()
+                .next_back()
+                .map_or(Some(1), |last| last.checked_add(1))
+                .ok_or_else(|| fail("endpoint IDs exhausted"))?;
+            policies.endpoints.insert(id, (identity, labels.clone()));
+            drop(policies);
+            publish(state, format!("{id}\n"))
+        },
+    )?;
     let p = Arc::clone(policies);
-    engine.register_command("policy/import", false, move |state: &mut State, args: &[String]| {
-        let [file] = args else {
-            return Err(fail("policy/import takes a file"));
-        };
-        let text = state.read_text(file)?;
-        let documents = flowsdn_k8s::crd::yaml_documents(&text)
-            .map_err(|e| fail(format!("{file}: {e}")))?;
-        for document in documents.into_iter().filter(|d| !d.is_null()) {
-            Scope::PodPolicies
-                .parse(&document)
-                .map_err(|e| fail(format!("{file}: {e} (flowsdn reads FlowsdnNetworkPolicy)")))?;
-            lock(&p).imported.push(document);
-        }
-        Ok(Control::Continue)
-    })?;
+    engine.register_command(
+        "policy/import",
+        false,
+        move |state: &mut State, args: &[String]| {
+            let [file] = args else {
+                return Err(fail("policy/import takes a file"));
+            };
+            let text = state.read_text(file)?;
+            let documents = flowsdn_k8s::crd::yaml_documents(&text)
+                .map_err(|e| fail(format!("{file}: {e}")))?;
+            for document in documents.into_iter().filter(|d| !d.is_null()) {
+                Scope::PodPolicies.parse(&document).map_err(|e| {
+                    fail(format!("{file}: {e} (flowsdn reads FlowsdnNetworkPolicy)"))
+                })?;
+                lock(&p).imported.push(document);
+            }
+            Ok(Control::Continue)
+        },
+    )?;
     Ok(())
 }

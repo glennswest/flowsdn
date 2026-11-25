@@ -160,6 +160,9 @@ fn policy(flags: &[String]) -> Result<Engine, String> {
     fixture::register_hive(&mut engine, &shared)?;
     k8s::register(&mut engine, &k8s)?;
     crate::health::register(&mut engine, &flowsdn_health::Registry::new())?;
-    crate::policy::register(&mut engine, &Arc::new(Mutex::new(crate::policy::Policies::default())))?;
+    crate::policy::register(
+        &mut engine,
+        &Arc::new(Mutex::new(crate::policy::Policies::default())),
+    )?;
     Ok(engine)
 }

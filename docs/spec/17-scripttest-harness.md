@@ -1654,3 +1654,14 @@ Its `tests/corpus.rs` is the corpus gate, run by `cargo test`. As built:
 - Results: 8 PASS and 6 XFAIL. The XFAILs are `k8sclient/fake`
   (ADR-0004), `dynamicconfig/*` (ADR-0017, spec 00 #480) and `k8s-tables/*`
   (ADR-0004); the reasons are in each area's `DIVERGENCES.toml`.
+
+## Policy area amendment — #518, 2026-11-25
+
+The `policy` fixture registers `identity/allocate`, `endpoint/create` and
+`policy/import` over flowsdn's code: the agent's identity allocator and its
+FlowsdnNetworkPolicy watch parser. Every harvested script imports
+`cilium.io/v2` CiliumNetworkPolicies, which flowsdn refuses by kind
+(ADR-0020). So each is a `partial` divergence on its first import line, and
+the commands after it (`endpoint/regen-all`, `policy/lookup-flow`,
+`policyrepo/*`) are not reached and not built.
+

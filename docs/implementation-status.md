@@ -206,9 +206,9 @@ pinning or subsystem libraries are absent are **not current status**.
   `socket-lb-live` with the IPv4 NodePort/SNAT steps; the node-service checks
   failed against the node's older flowsdn. The IPv6 NodePort steps, the long
   suite, `perf` and two-node acceptance (pvetest1 + pvetest2) have not run.
-- scripttest (#516): the harvested scripts of `hive-health`, `metrics`,
-  `k8sclient`, `k8s-tables` and `dynamicconfig` run in the corpus gate
-  (`flowsdn-scripttest-fixtures` `tests/corpus.rs`): 8 pass, 6 fail as their
+- scripttest (#516, #518): the harvested scripts of `hive-health`, `metrics`,
+  `k8sclient`, `k8s-tables`, `dynamicconfig` and `policy` run in the corpus gate
+  (`flowsdn-scripttest-fixtures` `tests/corpus.rs`): 8 pass, 11 fail as their
   `DIVERGENCES.toml` records. The other areas still only parse (#517-#526).
 - Configuration keys/defaults, listeners and boundaries are in
   [the runtime guide](runtime.md); the served routes in [the API contract](agent-api.md).

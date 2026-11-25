@@ -23,7 +23,8 @@ Needs step A (#516) first; open. Parked --after #516. With this, every scripttes
 ### scripttest policy, identity and endpoint adapters — #518 (P3), 2026-11-25
 
 Needs step A (#516) first; open. Parked --after #516.
-- [ ] After #516: policy fixture, `policy/*`, `identity/*`, `endpoint/*`, `policyrepo/*` (§3.3.10), DIVERGENCES.toml.
+- [x] After #516: policy fixture, `policy/*`, `identity/*`, `endpoint/*`, `policyrepo/*` (§3.3.10), DIVERGENCES.toml.
+- [x] 2026-11-25: done. The policy fixture (identity/allocate via the agent's allocator, endpoint/create, policy/import via the FlowsdnNetworkPolicy parser). Five partial divergences on the CiliumNetworkPolicy import lines (ADR-0020). Gate 8 PASS, 11 XFAIL, 0 FAIL.
 
 ### scripttest privileged node-model adapters — #520 (P3), 2026-11-25
 

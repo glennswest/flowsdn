@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#518)
+- **feat:** The scripttest `policy` area runs in the corpus gate, with three commands over flowsdn's own code:
+  - `identity/allocate`: reserved names map to their numbers; other label sets go through the agent's CRD-mode allocator against an in-memory identity list;
+  - `endpoint/create`;
+  - `policy/import`: each document through the agent's FlowsdnNetworkPolicy watch parser.
+
+  The five harvested scripts import `cilium.io/v2` CiliumNetworkPolicies, which flowsdn refuses by kind. Each is recorded as a `partial` divergence on its first import line (ADR-0020), so a failure on any other line still fails the gate. Gate: 8 PASS, 11 XFAIL, 0 FAIL.
+
 ### 2026-11-25 (#520)
 - **planning:** The node-model scripttest areas (`datapath-linux`, `device`, `route-reconciler`, `neighbor`) compare spec 10's tables (`devices`, `routes`, `neighbors`, `desired-routes`, `forwardable-ips`, `desired-neighbors`). The agent has none of them; it keeps routes and neighbors directly. Following master's ruling on #519, the tables are filed as #576. #520 is parked after #576. `subnet` reads `subnet-topology` from a live `cilium-config` ConfigMap, so it will be a recorded divergence under ADR-0017 (as dynamicconfig is).
 
