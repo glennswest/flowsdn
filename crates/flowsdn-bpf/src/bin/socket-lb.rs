@@ -842,13 +842,10 @@ fn now16() -> u16 {
     (ns.checked_div(1_000_000_000).unwrap_or(0) & 0xffff) as u16
 }
 /// Whether a reservation with `flags`, last seen at `seen`, has outlived its
-/// flow. NAT46/64 reservations (their traffic does not refresh them) never
-/// expire.
+/// flow. NAT46/64 and gateway reservations expire too (#494): their
+/// translation paths renew them ([`renew4`], [`renew6`]).
 #[inline(always)]
 fn expired(flags: u8, seen: [u8; 2], proto: u8, now: u16) -> bool {
-    if flags & FLOW_XLATE != 0 {
-        return false;
-    }
     let life = if flags & FLOW_CLOSING != 0 {
         LIFE_CLOSING
     } else if proto == 6 {
@@ -1122,6 +1119,11 @@ fn claim_port(
         };
         if !expired(held.flags, held.pad2, proto, now16()) {
             continue;
+        }
+        // A NAT64 or gateway flow's reply entry has the same key (#494): a
+        // reply to this port must not be translated to the old client.
+        if held.flags & FLOW_XLATE != 0 {
+            let _ = XLATE4.remove(&keys.k4);
         }
         keys.s4.a = held.other;
         keys.s4.b = held.address;
@@ -3811,21 +3813,29 @@ fn new_flow46_in(ctx: &TcContext, state: &mut Xlate4) -> Option<()> {
     // SAFETY: see lookup6.
     let chosen = unsafe { LB6_BACKENDS.get(&id).copied() }?;
     let (result, source) = fib6(ctx, proto, [0; 16], chosen.address, BPF_FIB_LOOKUP_SRC)?;
-    // SAFETY: the per-CPU slot just filled; plain field reads, the source
+    // A backend on this node too (#450): its reply to the NAT address is
+    // caught on its veth by `nodeport_endpoint`.
+    // SAFETY: the per-CPU slot just filled; a plain field read, the source
     // being the active member after an IPv6 lookup.
-    let (device, nat) = unsafe { ((*source).ifindex, (*source).__bindgen_anon_3.ipv6_src) };
-    if !forwarded(result) || device != uplink(ctx) {
+    let nat = unsafe { (*source).__bindgen_anon_3.ipv6_src };
+    if !forwarded(result) {
         return None;
     }
     let nat = ip6_bytes(nat);
+    // The reservation, with its last-seen second (#494).
     let reply = Nodeport6Value {
         address: mapped6(front),
         port: front_port,
-        flags: FLOW_XLATE,
+        flags: FLOW_XLATE
+            | if closes(ctx, IP4_L4, proto) {
+                FLOW_CLOSING
+            } else {
+                0
+            },
         pad: 0,
         other: mapped6(client),
         other_port: client_port,
-        pad2: [0; 2],
+        pad2: now16().to_ne_bytes(),
     };
     // The reply entry first: a reply must never find a flow it cannot undo.
     let nat_port = claim_port6((chosen.address, chosen.port.0), nat, proto, &reply)?;
@@ -3891,19 +3901,26 @@ fn new_flow64_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> 
     let chosen = unsafe { LB4_BACKENDS.get(&id).copied() }?;
     let backend = (chosen.address.0, chosen.port.0);
     let (result, fib) = fib4(ctx, proto, [0; 4], backend.0, BPF_FIB_LOOKUP_SRC);
-    if !forwarded(result) || fib.ifindex != uplink(ctx) {
+    // A backend on this node too (#450): see new_flow46_in.
+    if !forwarded(result) {
         return None;
     }
     // SAFETY: the active member after an IPv4 lookup.
     let nat = unsafe { fib.__bindgen_anon_3.ipv4_src }.to_ne_bytes();
+    // The reservation, with its last-seen second (#494).
     let reservation = Nodeport4Value {
         address: [0; 4],
         port: [0; 2],
-        flags: FLOW_XLATE,
+        flags: FLOW_XLATE
+            | if closes(ctx, IP6_SPORT, proto) {
+                FLOW_CLOSING
+            } else {
+                0
+            },
         pad: 0,
         other: [0; 4],
         other_port: [0; 2],
-        pad2: [0; 2],
+        pad2: now16().to_ne_bytes(),
     };
     let nat_port = claim_port(backend, nat, proto, &reservation)?;
     let reply_key = Nodeport4Key {
@@ -4288,14 +4305,20 @@ fn gateway64_new_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) 
     }
     // SAFETY: the active member after an IPv4 lookup.
     let nat = unsafe { fib.__bindgen_anon_3.ipv4_src }.to_ne_bytes();
+    // The reservation, with its last-seen second (#494).
     let reservation = Nodeport4Value {
         address: [0; 4],
         port: [0; 2],
-        flags: FLOW_XLATE,
+        flags: FLOW_XLATE
+            | if closes(ctx, IP6_SPORT, proto) {
+                FLOW_CLOSING
+            } else {
+                0
+            },
         pad: 0,
         other: [0; 4],
         other_port: [0; 2],
-        pad2: [0; 2],
+        pad2: now16().to_ne_bytes(),
     };
     let nat_port = claim_port(server, nat, proto, &reservation)?;
     let reply_key = Nodeport4Key {
@@ -4379,8 +4402,15 @@ fn ingress(ctx: &TcContext) -> i32 {
                 },
                 verdict => verdict,
             },
-            STEP_XLATE_REPLY => to_v4(skb, true),
-            STEP_XLATE_FORWARD => to_v4(skb, false),
+            STEP_XLATE_REPLY => {
+                renew6(skb, true);
+                to_v4(skb, true)
+            }
+            // A flow whose reservation was reclaimed is made anew (#494).
+            STEP_XLATE_FORWARD if renew6(skb, false) == LIVE || new_flow64(skb) != 0 => {
+                to_v4(skb, false)
+            }
+            STEP_XLATE_FORWARD => TC_ACT_OK,
             STEP_DSR => match dsr6(skb) {
                 DSR_REJECT => TC_ACT_SHOT,
                 _ => TC_ACT_OK,
@@ -4393,10 +4423,17 @@ fn ingress(ctx: &TcContext) -> i32 {
             _ => TC_ACT_OK,
         },
         _ => match xlate4(skb) {
-            STEP_XLATE_REPLY => to_v6(skb, true),
+            STEP_XLATE_REPLY => {
+                renew4(skb, true);
+                to_v6(skb, true)
+            }
             STEP_NEW if new_flow46(skb) != 0 => to_v6(skb, false),
             STEP_NEW => TC_ACT_OK,
-            STEP_FORWARD => to_v6(skb, false),
+            // A flow whose reservation was reclaimed is made anew (#494).
+            STEP_FORWARD if renew4(skb, false) == LIVE || new_flow46(skb) != 0 => {
+                to_v6(skb, false)
+            }
+            STEP_FORWARD => TC_ACT_OK,
             _ => match dsr4(skb) {
                 DSR_NONE => match ingress4(skb) {
                     NOT_NODEPORT => match icmp_in4(skb) {
@@ -4415,13 +4452,184 @@ fn ingress(ctx: &TcContext) -> i32 {
         },
     }
 }
+/// [`renew6`]/[`renew4`]'s answers for a forward packet: the reservation is
+/// this flow's (renewed), or it is gone or another flow's (make the flow
+/// anew).
+const LIVE: i32 = 1;
+const STALE: i32 = 0;
+
+/// The NAT port reservation of the translated flow in [`INGRESS6`] (#494),
+/// renewed and marked closing on a TCP FIN or RST. `reply` (NAT46: the
+/// backend's IPv6 reply to the NAT address): the reservation is the reply
+/// entry itself. Forward (NAT64 or the gateway: the client's IPv6 packet):
+/// the reservation in `flowsdn_nodeport4_nat` and its reply entry in
+/// `flowsdn_nodeport4_xlate`, which must still name this client.
+#[inline(never)]
+fn renew6(skb: *mut __sk_buff, reply: bool) -> i32 {
+    renew6_in(&TcContext::new(skb), reply).unwrap_or(STALE)
+}
+#[inline(always)]
+fn renew6_in(ctx: &TcContext, reply: bool) -> Option<i32> {
+    let state = INGRESS6.get_ptr_mut(0)?;
+    let keys = NAT_KEYS.get_ptr_mut(0)?;
+    // SAFETY: the slots of this CPU, filled earlier in this invocation (the
+    // state) or used by nothing else meanwhile (the keys); read in place.
+    let (state, keys) = unsafe { (&*state, &mut *keys) };
+    let (proto, src, dst, sport, dport) = state.tuple;
+    let fin = closes(ctx, IP6_SPORT, proto);
+    if reply {
+        keys.k6.a = src;
+        keys.k6.b = dst;
+        keys.k6.ap = sport;
+        keys.k6.bp = dport;
+        keys.k6.proto = proto;
+        keys.k6.direction = SNAT_REPLY;
+        keys.k6.pad = [0; 2];
+        let value = NODEPORT6.get_ptr_mut(&keys.k6)?;
+        // SAFETY: an LRU value read and written in place; a racing writer
+        // only costs one renewal.
+        unsafe {
+            if (*value).flags & FLOW_XLATE != 0 {
+                (*value).pad2 = now16().to_ne_bytes();
+                if fin {
+                    (*value).flags |= FLOW_CLOSING;
+                }
+            }
+        }
+        return Some(LIVE);
+    }
+    let flow = &state.flow;
+    keys.k4.a = unmapped(flow.address);
+    keys.k4.b = unmapped(flow.other);
+    keys.k4.ap = flow.port;
+    keys.k4.bp = flow.other_port;
+    keys.k4.proto = proto;
+    keys.k4.direction = SNAT_REPLY;
+    keys.k4.pad = [0; 2];
+    // SAFETY: an LRU value copied at once.
+    let owner = unsafe { XLATE4.get(&keys.k4).copied() }?;
+    if owner.other != src || owner.other_port != sport {
+        return Some(STALE);
+    }
+    let Some(held) = NODEPORT4.get_ptr_mut(&keys.k4) else {
+        return Some(STALE);
+    };
+    // SAFETY: as above.
+    unsafe {
+        if (*held).flags & FLOW_XLATE == 0 {
+            return Some(STALE);
+        }
+        (*held).pad2 = now16().to_ne_bytes();
+        if fin {
+            (*held).flags |= FLOW_CLOSING;
+        }
+    }
+    Some(LIVE)
+}
+/// [`renew6`] for the translated flow in [`XLATE4_SLOT`]: `reply` (NAT64 or
+/// the gateway: the IPv4 server's reply to the NAT address) renews the
+/// reservation in `flowsdn_nodeport4_nat`; forward (NAT46: the client's IPv4
+/// packet) the reservation in `flowsdn_nodeport6_nat`, which must still name
+/// this client.
+#[inline(never)]
+fn renew4(skb: *mut __sk_buff, reply: bool) -> i32 {
+    renew4_in(&TcContext::new(skb), reply).unwrap_or(STALE)
+}
+#[inline(always)]
+fn renew4_in(ctx: &TcContext, reply: bool) -> Option<i32> {
+    let state = XLATE4_SLOT.get_ptr_mut(0)?;
+    let keys = NAT_KEYS.get_ptr_mut(0)?;
+    // SAFETY: see renew6_in.
+    let (state, keys) = unsafe { (&*state, &mut *keys) };
+    let proto = state.proto;
+    let fin = closes(ctx, IP4_L4, proto);
+    if reply {
+        keys.k4.a = state.src;
+        keys.k4.b = state.dst;
+        keys.k4.ap = state.sport;
+        keys.k4.bp = state.dport;
+        keys.k4.proto = proto;
+        keys.k4.direction = SNAT_REPLY;
+        keys.k4.pad = [0; 2];
+        let held = NODEPORT4.get_ptr_mut(&keys.k4)?;
+        // SAFETY: see renew6_in.
+        unsafe {
+            if (*held).flags & FLOW_XLATE != 0 {
+                (*held).pad2 = now16().to_ne_bytes();
+                if fin {
+                    (*held).flags |= FLOW_CLOSING;
+                }
+            }
+        }
+        return Some(LIVE);
+    }
+    let flow = &state.flow;
+    keys.k6.a = flow.address;
+    keys.k6.b = flow.other;
+    keys.k6.ap = flow.port;
+    keys.k6.bp = flow.other_port;
+    keys.k6.proto = proto;
+    keys.k6.direction = SNAT_REPLY;
+    keys.k6.pad = [0; 2];
+    let Some(value) = NODEPORT6.get_ptr_mut(&keys.k6) else {
+        return Some(STALE);
+    };
+    // SAFETY: see renew6_in.
+    unsafe {
+        if (*value).flags & FLOW_XLATE == 0
+            || (*value).other != mapped6(state.src)
+            || (*value).other_port != state.sport
+        {
+            return Some(STALE);
+        }
+        (*value).pad2 = now16().to_ne_bytes();
+        if fin {
+            (*value).flags |= FLOW_CLOSING;
+        }
+    }
+    Some(LIVE)
+}
+
+/// Service NAT46/64 to a backend on this node (#450), on a local Pod's
+/// host-side veth ingress, ahead of local-delivery: the Pod's reply to a
+/// translated flow (to this node's address and NAT port) is translated back
+/// to the client's family and sent out of the uplink by the FIB, as the
+/// uplink does for a remote backend's reply. Everything else goes on to the
+/// next program (`TCX_NEXT`) untouched.
+#[classifier]
+pub fn nodeport_endpoint(ctx: TcContext) -> i32 {
+    let skb = ctx.skb.skb;
+    next(match ctx.load::<[u8; 2]>(12) {
+        Ok(ETH_P_IPV6) => match ingress6(skb) {
+            STEP_XLATE_REPLY => {
+                renew6(skb, true);
+                to_v4(skb, true)
+            }
+            _ => TC_ACT_OK,
+        },
+        Ok(ETH_P_IPV4) => match xlate4(skb) {
+            STEP_XLATE_REPLY => {
+                renew4(skb, true);
+                to_v6(skb, true)
+            }
+            _ => TC_ACT_OK,
+        },
+        _ => TC_ACT_OK,
+    })
+}
 #[classifier]
 pub fn nodeport_egress(ctx: TcContext) -> i32 {
     next(match ctx.load::<[u8; 2]>(12) {
         Ok(ETH_P_IPV6) => match egress6(ctx.skb.skb) {
             NOT_NODEPORT => match icmp_out6(ctx.skb.skb) {
                 NOT_NODEPORT => match gateway64(ctx.skb.skb) {
-                    STEP_XLATE_FORWARD => to_v4(ctx.skb.skb, false),
+                    STEP_XLATE_FORWARD
+                        if renew6(ctx.skb.skb, false) == LIVE
+                            || gateway64_new(ctx.skb.skb) != 0 =>
+                    {
+                        to_v4(ctx.skb.skb, false)
+                    }
+                    STEP_XLATE_FORWARD => TC_ACT_OK,
                     STEP_NEW if gateway64_new(ctx.skb.skb) != 0 => to_v4(ctx.skb.skb, false),
                     STEP_NEW => TC_ACT_OK,
                     _ => match masq6(ctx.skb.skb) {

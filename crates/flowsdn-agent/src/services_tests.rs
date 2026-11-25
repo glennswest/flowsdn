@@ -151,12 +151,13 @@ fn nat46x64_translates_a_node_local_frontend_with_no_backend_of_its_family() {
             .clone()
     };
     let out = frontends(std::slice::from_ref(&service), &slices, "n1", &nodes);
-    // IPv4 on the uplink: only the other node's IPv6 backend, never DSR.
+    // IPv4 on the uplink: the IPv6 backends, this node's too (#450), never
+    // DSR.
     let v4 = find(&out, "192.0.2.1", SCOPE_NODE_LOCAL);
     assert!(v4.nat46x64 && !v4.dsr);
     assert_eq!(
         v4.backends.iter().map(|b| b.ip).collect::<Vec<_>>(),
-        [ip("fd00:2::5")]
+        [ip("fd00:1::5"), ip("fd00:2::5")]
     );
     // Its own family has backends, or it is not the uplink's: not translated.
     let v6 = find(&out, "2001:db8::1", SCOPE_NODE_LOCAL);
@@ -173,13 +174,19 @@ fn nat46x64_translates_a_node_local_frontend_with_no_backend_of_its_family() {
         .collect();
     assert_eq!(policies, ["Nat46"]);
 
-    // Only local backends, the setting off, or a Local policy: not translated.
+    // Only local backends: translated too (#450). The setting off, or a
+    // Local policy: not translated.
     let local_only = [SliceInfo {
         endpoints: vec![endpoint("fd00:1::5", "n1")],
         ..slices[0].clone()
     }];
     let out = frontends(std::slice::from_ref(&service), &local_only, "n1", &nodes);
-    assert!(!find(&out, "192.0.2.1", SCOPE_NODE_LOCAL).nat46x64);
+    let local = find(&out, "192.0.2.1", SCOPE_NODE_LOCAL);
+    assert!(local.nat46x64);
+    assert_eq!(
+        local.backends.iter().map(|b| b.ip).collect::<Vec<_>>(),
+        [ip("fd00:1::5")]
+    );
     let off = ServiceInfo {
         nat46x64: false,
         ..service.clone()

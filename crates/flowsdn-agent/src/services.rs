@@ -160,7 +160,7 @@ fn by_topology<'a>(
 }
 
 /// The backends of `service`'s `port` in `family` (true: IPv6), limited to
-/// endpoints on node `only` when given and not on node `not_on` when given.
+/// endpoints on node `only` when given.
 /// With `topology` (traffic policy Cluster), ready endpoints are chosen by
 /// their hints ([`Topology`]).
 fn backends(
@@ -169,7 +169,6 @@ fn backends(
     v6: bool,
     slices: &[&SliceInfo],
     only: Option<&str>,
-    not_on: Option<&str>,
     topology: Option<Topology<'_>>,
 ) -> Vec<Address> {
     let family = if v6 { "IPv6" } else { "IPv4" };
@@ -185,9 +184,7 @@ fn backends(
             continue;
         };
         for endpoint in &slice.endpoints {
-            if only.is_some_and(|node| endpoint.node_name != node)
-                || not_on.is_some_and(|node| endpoint.node_name == node)
-            {
+            if only.is_some_and(|node| endpoint.node_name != node) {
                 continue;
             }
             if endpoint.ready {
@@ -304,18 +301,18 @@ pub fn frontends(
                         ip.is_ipv6(),
                         slices,
                         only,
-                        None,
                         only.is_none().then_some(topology),
                     );
-                    // Translated backends must be on other nodes: a local pod's
-                    // reply to this node's address never reaches the uplink. So
-                    // `externalTrafficPolicy: Local` never translates.
+                    // Translated backends on this node too (#450): a local
+                    // pod's reply is translated back on its veth. A Local
+                    // `externalTrafficPolicy` never translates: the backend
+                    // would see this node's address, not the client's.
                     let translated = if service.nat46x64
                         && scope == SCOPE_NODE_LOCAL
                         && same.is_empty()
                         && only.is_none()
                     {
-                        backends(port, proto, !ip.is_ipv6(), slices, None, Some(local), None)
+                        backends(port, proto, !ip.is_ipv6(), slices, None, None)
                     } else {
                         Vec::new()
                     };

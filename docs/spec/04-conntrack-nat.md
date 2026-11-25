@@ -1145,3 +1145,14 @@ packet with an IPv4-mapped source (`ip6_rcv_core`):
   addresses for the IPv4 side), `flowsdn_nodeport4_xlate` for IPv4-keyed ones.
 - **Refused before any change, passing untouched:** see docs/runtime.md. A helper failing
   after the header began to change drops the packet.
+
+### Amendment — NAT46/64 to backends on this node (#450, 2026-11-25)
+
+The master chose the endpoint path. Selection takes this node's backends of the other family too (still not with
+`externalTrafficPolicy: Local`), and a new flow needs only a FIB route (no longer out of the uplink it arrived on).
+A local backend gets the translated packet redirected to its veth, source-NATed as any other. Its reply, to this
+node's address and NAT port, would be local input, so the socket-lb object's `nodeport_endpoint` classifier, attached
+first on the TCX ingress of every local endpoint's host-side veth while `kubernetes.nat46x64` is on, finds the flow
+in the same maps (`STEP_XLATE_REPLY` of the uplink classifiers) and runs the same reply translation, redirecting by
+the FIB out of the uplink. Everything else it passes on (`TCX_NEXT`) to local-delivery. One flow state for local and
+remote backends; no new setting; no routing requirement. The socket LB half is #542.

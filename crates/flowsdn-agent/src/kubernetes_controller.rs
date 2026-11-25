@@ -207,26 +207,21 @@ impl Controller {
                 Ok(lb) => {
                     let (sender, receiver) = mpsc::channel();
                     let lb_view = Arc::clone(&view);
-                    let node_port = self.settings.node_port;
-                    let terminate_tcp = self.settings.terminate_tcp;
-                    let masquerade = self
-                        .settings
-                        .bpf_masquerade
-                        .then(|| self.settings.non_masquerade.clone());
-                    let gateway64 = self.settings.gateway64;
+                    let uplink = UplinkSettings {
+                        node_port: self.settings.node_port,
+                        terminate_tcp: self.settings.terminate_tcp,
+                        masquerade: self
+                            .settings
+                            .bpf_masquerade
+                            .then(|| self.settings.non_masquerade.clone()),
+                        gateway64: self.settings.gateway64,
+                        nat46x64: self.settings.nat46x64,
+                    };
                     std::thread::Builder::new()
                         .name("flowsdn-services".into())
                         .spawn(move || {
                             let mut lb = lb;
-                            service_loop(
-                                &receiver,
-                                &lb_view,
-                                &mut lb,
-                                node_port,
-                                terminate_tcp,
-                                masquerade.as_deref(),
-                                gateway64,
-                            );
+                            service_loop(&receiver, &lb_view, &mut lb, &uplink);
                         })?;
                     Some(sender)
                 }
@@ -1275,15 +1270,32 @@ fn load_socket_lb(
 /// ended, in passes at most every 50 ms. The first successful programming
 /// also ends sockets to UDP backends `_reverse_sk` remembers from before
 /// (the agent was down when they left).
+/// What the services thread does besides programming the services.
+struct UplinkSettings {
+    node_port: bool,
+    terminate_tcp: bool,
+    /// BPF masquerade's never-masqueraded CIDRs, when it is on.
+    masquerade: Option<Vec<crate::kubernetes::Cidr>>,
+    gateway64: Option<[u8; 12]>,
+    /// NAT46/64 to local backends (#450): `nodeport_endpoint` on endpoints.
+    nat46x64: bool,
+}
 fn service_loop(
     receiver: &mpsc::Receiver<Vec<socket::Service>>,
     view: &Shared,
     lb: &mut SocketLb,
-    node_port: bool,
-    terminate_tcp: bool,
-    masquerade: Option<&[crate::kubernetes::Cidr]>,
-    gateway64: Option<[u8; 12]>,
+    settings: &UplinkSettings,
 ) {
+    let UplinkSettings {
+        node_port,
+        terminate_tcp,
+        masquerade,
+        gateway64,
+        nat46x64,
+    } = settings;
+    let (node_port, terminate_tcp, gateway64, nat46x64) =
+        (*node_port, *terminate_tcp, *gateway64, *nat46x64);
+    let masquerade = masquerade.as_deref();
     let mut desired: Option<Vec<socket::Service>> = None;
     // The terminable backends last programmed; None until the first success.
     let mut programmed: Option<BTreeSet<flowsdn_connector::sock_diag::Backend>> = None;
@@ -1422,6 +1434,55 @@ fn service_loop(
                 }
             }
         }
+        // NAT46/64 to local backends (#450): every local endpoint's veth
+        // translates its replies back.
+        if nat46x64 {
+            let endpoints = endpoint_interfaces(&lock(view).endpoints);
+            let result = attach_endpoints(lb, &endpoints);
+            let mut view = lock(view);
+            match result {
+                Ok(()) => view.errors.remove("nat46x64-endpoints"),
+                Err(error) => view.errors.insert("nat46x64-endpoints".into(), error),
+            };
+        }
+    }
+}
+
+/// Local endpoints' host-side interfaces and indexes (#450).
+fn endpoint_interfaces(endpoints: &[crate::kubernetes::LocalEndpoint]) -> BTreeMap<String, u32> {
+    endpoints
+        .iter()
+        .filter(|e| !e.interface.is_empty() && e.ifindex != 0)
+        .map(|e| (e.interface.clone(), e.ifindex))
+        .collect()
+}
+/// Bring `nodeport_endpoint` to exactly `want` (name -> index): detach the
+/// gone and the re-created, attach the rest. Every endpoint is tried; the
+/// failures are reported together.
+fn attach_endpoints(
+    lb: &mut SocketLb,
+    want: &BTreeMap<String, u32>,
+) -> std::result::Result<(), String> {
+    let stale: Vec<String> = lb
+        .endpoints()
+        .filter(|(name, index)| want.get(*name) != Some(index))
+        .map(|(name, _)| name.to_owned())
+        .collect();
+    for name in stale {
+        lb.detach_endpoint(&name);
+    }
+    let mut failures = Vec::new();
+    for (name, index) in want {
+        if let Err(error) = lb.attach_endpoint(name, *index) {
+            failures.push(format!(
+                "attach the NAT46/64 reply program to {name}: {error}"
+            ));
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("; "))
     }
 }
 

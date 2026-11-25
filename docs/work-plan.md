@@ -16,6 +16,23 @@ Datapath in source and kernel-checked (strict sc-build e983c71: 1044/0, kernel-c
 Remaining is hardware: perf (cross-node) + medium on pvetest1+pvetest2 with a release carrying d90ff71b54b7 or later,
 and harvested scripts through real adapters. Status comment posted; `wait-hardware` (pvetest1 pair).
 - [ ] Hardware run result from the master; then close or file what it finds.
+### NAT46/64 reservations expire — #494 (P3), 2026-11-25
+
+Built on the #450 branch (one socket-lb object rebuild). `expired` no longer exempts FLOW_XLATE; reservations get
+pad2 at creation; `renew6`/`renew4` (own frames) renew from the dispatch of STEP_XLATE_REPLY/FORWARD (uplink ingress,
+gateway egress, nodeport_endpoint); forward STALE -> new_flow46/64/gateway64_new; claim_port drops the XLATE4 reply
+entry of a reclaimed XLATE reservation. Kernel: nat_expiry NAT46/NAT64 rounds + two live flows.
+- [x] Code, kernel test, runtime.md, changelog.
+- [ ] Object + lock, strict sc-build + kernel-check, stage, close.
+
+### NAT46/64 to local backends — #450 (P3), 2026-11-25
+
+Master (2026-11-25): option 1, the endpoint path. Built as a socket-lb classifier `nodeport_endpoint` on each local
+endpoint's veth TCX ingress (first, before local-delivery) instead of local-delivery reading socket-lb's maps: same
+flow state and reply translation as the uplink, no map sharing between objects. new_flow46/64 drop the out-device
+= uplink check; services.rs translates local backends (not ETP Local); loader attach_endpoint; agent attach loop.
+- [x] Code, kernel step `nat46x64_local`, docs, changelog (local commit; pushed after #447's object + lock).
+- [ ] Object + lock, strict sc-build + kernel-check, stage, close.
 
 ### Flows since: dates and order — #552 (P3), 2026-11-25
 
