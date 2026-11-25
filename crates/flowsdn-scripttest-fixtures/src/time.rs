@@ -4,7 +4,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 /// Days since 1970-01-01 of a proleptic Gregorian date (H. Hinnant's
 /// `days_from_civil`).
 fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
-    let y = if month <= 2 { year.saturating_sub(1) } else { year };
+    let y = if month <= 2 {
+        year.saturating_sub(1)
+    } else {
+        year
+    };
     let era = y.div_euclid(400);
     let yoe = y.rem_euclid(400);
     let mp = month.saturating_add(9).rem_euclid(12);
@@ -72,7 +76,11 @@ pub fn parse(text: &str) -> Result<Option<SystemTime>, String> {
             .find(|c: char| !c.is_ascii_digit())
             .unwrap_or(fraction.len());
         let (value, tail) = fraction.split_at(digits);
-        let padded: String = value.chars().chain(std::iter::repeat('0')).take(9).collect();
+        let padded: String = value
+            .chars()
+            .chain(std::iter::repeat('0'))
+            .take(9)
+            .collect();
         nanos = padded.parse().map_err(|_| bad())?;
         rest = tail;
     }
@@ -84,8 +92,14 @@ pub fn parse(text: &str) -> Result<Option<SystemTime>, String> {
                 Some("-") => -1,
                 _ => return Err(bad()),
             };
-            let hours: i64 = rest.get(1..3).and_then(|h| h.parse().ok()).ok_or_else(bad)?;
-            let minutes: i64 = rest.get(4..6).and_then(|m| m.parse().ok()).ok_or_else(bad)?;
+            let hours: i64 = rest
+                .get(1..3)
+                .and_then(|h| h.parse().ok())
+                .ok_or_else(bad)?;
+            let minutes: i64 = rest
+                .get(4..6)
+                .and_then(|m| m.parse().ok())
+                .ok_or_else(bad)?;
             hours
                 .saturating_mul(3600)
                 .saturating_add(minutes.saturating_mul(60))

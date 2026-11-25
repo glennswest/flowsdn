@@ -122,7 +122,11 @@ fn line(out: &mut String, name: &str, node: &Node<'_>, now: SystemTime) {
 }
 
 /// `health [--output=f] [--match=re] [--levels=a,b] [module-prefix]`.
-fn health(registry: &Registry, state: &mut State, args: &[String]) -> Result<Control, CommandError> {
+fn health(
+    registry: &Registry,
+    state: &mut State,
+    args: &[String],
+) -> Result<Control, CommandError> {
     let mut output = None;
     let mut matching = None;
     let mut levels: Option<Vec<String>> = None;
@@ -171,9 +175,9 @@ fn health(registry: &Registry, state: &mut State, args: &[String]) -> Result<Con
         })
         .filter(|row| matching.as_ref().is_none_or(|re| re.is_match(&row.id)))
         .filter(|row| {
-            levels.as_ref().is_none_or(|levels| {
-                levels.contains(&shown(row).name().to_ascii_lowercase())
-            })
+            levels
+                .as_ref()
+                .is_none_or(|levels| levels.contains(&shown(row).name().to_ascii_lowercase()))
         })
         .collect();
     let count = |level: Level| rows.iter().filter(|r| shown(r) == level).count();
@@ -216,9 +220,11 @@ pub fn register(engine: &mut Engine, registry: &Registry) -> Result<(), String> 
         },
     )?;
     let r = registry.clone();
-    engine.register_command("health", false, move |state: &mut State, args: &[String]| {
-        health(&r, state, args)
-    })?;
+    engine.register_command(
+        "health",
+        false,
+        move |state: &mut State, args: &[String]| health(&r, state, args),
+    )?;
     let r = registry.clone();
     engine.register_command("health/ok", false, move |_: &mut State, _: &[String]| {
         let snapshot = r.snapshot();

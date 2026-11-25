@@ -200,7 +200,8 @@ impl Metrics {
     /// Observe `value` in the histogram series `name` with `labels`.
     pub fn observe(&mut self, name: &str, labels: &BTreeMap<String, String>, value: f64) {
         for series in &mut self.series {
-            if series.name == name && series.labels == *labels
+            if series.name == name
+                && series.labels == *labels
                 && let Value::Histogram {
                     bounds,
                     counts,
@@ -288,7 +289,12 @@ fn sample_text(seconds: bool, sample: Option<&Sample>) -> String {
     }
 }
 
-fn render(metrics: &Metrics, re: Option<&regex::Regex>, sampled: bool, format: &str) -> Result<String, String> {
+fn render(
+    metrics: &Metrics,
+    re: Option<&regex::Regex>,
+    sampled: bool,
+    format: &str,
+) -> Result<String, String> {
     if !sampled {
         let rows = metrics.listed(re);
         let value = |s: &Series| match &s.value {
@@ -314,7 +320,8 @@ fn render(metrics: &Metrics, re: Option<&regex::Regex>, sampled: bool, format: &
                 let items = rows
                     .iter()
                     .map(|s| {
-                        let labels = Doc::map(s.labels.iter().map(|(k, v)| (k.clone(), Doc::str(v))));
+                        let labels =
+                            Doc::map(s.labels.iter().map(|(k, v)| (k.clone(), Doc::str(v))));
                         let mut fields = Vec::new();
                         if format == "yaml" || !s.labels.is_empty() {
                             fields.push(("labels".to_owned(), labels));
@@ -325,7 +332,11 @@ fn render(metrics: &Metrics, re: Option<&regex::Regex>, sampled: bool, format: &
                     })
                     .collect();
                 let list = Doc::Seq(items);
-                Ok(if format == "json" { doc::json(&list) } else { doc::yaml(&list) })
+                Ok(if format == "json" {
+                    doc::json(&list)
+                } else {
+                    doc::yaml(&list)
+                })
             }
             other => Err(format!("unknown format {other}; use table, json or yaml")),
         };
@@ -365,18 +376,27 @@ fn render(metrics: &Metrics, re: Option<&regex::Regex>, sampled: bool, format: &
                             fields.push((
                                 "histogram".into(),
                                 Doc::map([
-                                    ("p50", column(|s| match s {
-                                        Sample::Percentiles(a, _, _) => *a,
-                                        Sample::Scalar(v) => *v,
-                                    })),
-                                    ("p90", column(|s| match s {
-                                        Sample::Percentiles(_, b, _) => *b,
-                                        Sample::Scalar(v) => *v,
-                                    })),
-                                    ("p99", column(|s| match s {
-                                        Sample::Percentiles(_, _, c) => *c,
-                                        Sample::Scalar(v) => *v,
-                                    })),
+                                    (
+                                        "p50",
+                                        column(|s| match s {
+                                            Sample::Percentiles(a, _, _) => *a,
+                                            Sample::Scalar(v) => *v,
+                                        }),
+                                    ),
+                                    (
+                                        "p90",
+                                        column(|s| match s {
+                                            Sample::Percentiles(_, b, _) => *b,
+                                            Sample::Scalar(v) => *v,
+                                        }),
+                                    ),
+                                    (
+                                        "p99",
+                                        column(|s| match s {
+                                            Sample::Percentiles(_, _, c) => *c,
+                                            Sample::Scalar(v) => *v,
+                                        }),
+                                    ),
                                 ]),
                             ));
                         }
@@ -394,7 +414,10 @@ fn render(metrics: &Metrics, re: Option<&regex::Regex>, sampled: bool, format: &
                             ));
                         }
                     }
-                    fields.push(("latest".into(), Doc::str(sample_text(*seconds, samples.first()))));
+                    fields.push((
+                        "latest".into(),
+                        Doc::str(sample_text(*seconds, samples.first())),
+                    ));
                     Doc::Map(fields)
                 })
                 .collect();
@@ -404,7 +427,11 @@ fn render(metrics: &Metrics, re: Option<&regex::Regex>, sampled: bool, format: &
                 ("interval_seconds", Doc::Num(INTERVAL.as_secs_f64())),
                 ("samples", Doc::Seq(items)),
             ]);
-            Ok(if format == "json" { doc::json(&top) } else { doc::yaml(&top) })
+            Ok(if format == "json" {
+                doc::json(&top)
+            } else {
+                doc::yaml(&top)
+            })
         }
         other => Err(format!("unknown format {other}; use table, json or yaml")),
     }
@@ -442,11 +469,7 @@ fn plot(title: &str, labels: &str, seconds: bool, samples: &[f64], taken: usize)
     if !labels.is_empty() {
         centered(&mut out, &format!("[ {labels} ]"));
     }
-    let max = samples
-        .iter()
-        .take(taken)
-        .copied()
-        .fold(0.0f64, f64::max);
+    let max = samples.iter().take(taken).copied().fold(0.0f64, f64::max);
     let mut cells = vec![[0u8; WIDTH]; HEIGHT];
     let (px_w, px_h) = (WIDTH.saturating_mul(2), HEIGHT.saturating_mul(4));
     for (age, value) in samples.iter().take(taken).enumerate() {
@@ -498,12 +521,14 @@ fn plot(title: &str, labels: &str, seconds: bool, samples: &[f64], taken: usize)
     // Ticks at 120 and 60 minutes ago and now.
     let ticks = [(3usize, "-120min"), (35, "-60min"), (66, "now")];
     let mut axis: Vec<char> = "─".repeat(WIDTH).chars().collect();
-    let mut names = vec![' '; WIDTH.saturating_add(11)];
+    let mut names = vec![' '; WIDTH.saturating_add(12)];
     for (at, name) in ticks {
         if let Some(c) = axis.get_mut(at) {
             *c = '┬';
         }
-        let start = at.saturating_add(11).saturating_sub(name.chars().count() / 2);
+        let start = at
+            .saturating_add(11)
+            .saturating_sub(name.chars().count() / 2);
         for (offset, ch) in name.chars().enumerate() {
             if let Some(slot) = names.get_mut(start.saturating_add(offset)) {
                 *slot = ch;
@@ -570,8 +595,7 @@ fn flags(args: &[String]) -> Result<Flags, CommandError> {
                 return Err(fail(format!("unknown flag {flag}")));
             }
             _ => {
-                parsed.pattern =
-                    Some(regex::Regex::new(arg).map_err(|e| fail(e.to_string()))?);
+                parsed.pattern = Some(regex::Regex::new(arg).map_err(|e| fail(e.to_string()))?);
             }
         }
     }
@@ -588,69 +612,84 @@ fn emit(state: &mut State, out: Option<&String>, text: String) -> Result<Control
 /// Register `metrics`, `metrics/plot` and `metrics/html` for `metrics`.
 pub fn register(engine: &mut Engine, metrics: &Shared) -> Result<(), String> {
     let m = Arc::clone(metrics);
-    engine.register_command("metrics", true, move |state: &mut State, args: &[String]| {
-        let flags = flags(args)?;
-        let text = render(&lock(&m), flags.pattern.as_ref(), flags.sampled, &flags.format)
+    engine.register_command(
+        "metrics",
+        true,
+        move |state: &mut State, args: &[String]| {
+            let flags = flags(args)?;
+            let text = render(
+                &lock(&m),
+                flags.pattern.as_ref(),
+                flags.sampled,
+                &flags.format,
+            )
             .map_err(fail)?;
-        emit(state, flags.out.as_ref(), text)
-    })?;
+            emit(state, flags.out.as_ref(), text)
+        },
+    )?;
     let m = Arc::clone(metrics);
-    engine.register_command("metrics/plot", true, move |state: &mut State, args: &[String]| {
-        let flags = flags(args)?;
-        let metrics = lock(&m);
-        let mut graphs = Vec::new();
-        for ((name, labels), (seconds, samples)) in metrics.sampled(flags.pattern.as_ref()) {
-            let mut series: Vec<(String, Vec<f64>)> = Vec::new();
-            match samples.first() {
-                Some(Sample::Percentiles(..)) => {
-                    for (label, pick) in [
-                        ("p50", 0usize),
-                        ("p90", 1),
-                        ("p99", 2),
-                    ] {
-                        let values = samples
+    engine.register_command(
+        "metrics/plot",
+        true,
+        move |state: &mut State, args: &[String]| {
+            let flags = flags(args)?;
+            let metrics = lock(&m);
+            let mut graphs = Vec::new();
+            for ((name, labels), (seconds, samples)) in metrics.sampled(flags.pattern.as_ref()) {
+                let mut series: Vec<(String, Vec<f64>)> = Vec::new();
+                match samples.first() {
+                    Some(Sample::Percentiles(..)) => {
+                        for (label, pick) in [("p50", 0usize), ("p90", 1), ("p99", 2)] {
+                            let values = samples
+                                .iter()
+                                .map(|s| match (s, pick) {
+                                    (Sample::Percentiles(a, _, _), 0) => *a,
+                                    (Sample::Percentiles(_, b, _), 1) => *b,
+                                    (Sample::Percentiles(_, _, c), _) => *c,
+                                    (Sample::Scalar(v), _) => *v,
+                                })
+                                .collect();
+                            series.push((format!("{name} ({label})"), values));
+                        }
+                    }
+                    _ => {
+                        let mut values: Vec<f64> = samples
                             .iter()
-                            .map(|s| match (s, pick) {
-                                (Sample::Percentiles(a, _, _), 0) => *a,
-                                (Sample::Percentiles(_, b, _), 1) => *b,
-                                (Sample::Percentiles(_, _, c), _) => *c,
-                                (Sample::Scalar(v), _) => *v,
+                            .map(|s| match s {
+                                Sample::Scalar(v) | Sample::Percentiles(v, _, _) => *v,
                             })
                             .collect();
-                        series.push((format!("{name} ({label})"), values));
+                        if flags.rate {
+                            // Per second between consecutive samples, newest first.
+                            let rates: Vec<f64> = values
+                                .windows(2)
+                                .map(|w| match w {
+                                    [new, old] => (new - old) / INTERVAL.as_secs_f64(),
+                                    _ => 0.0,
+                                })
+                                .collect();
+                            values = rates;
+                        }
+                        series.push((name.clone(), values));
                     }
                 }
-                _ => {
-                    let mut values: Vec<f64> = samples
-                        .iter()
-                        .map(|s| match s {
-                            Sample::Scalar(v) | Sample::Percentiles(v, _, _) => *v,
-                        })
-                        .collect();
-                    if flags.rate {
-                        // Per second between consecutive samples, newest first.
-                        let rates: Vec<f64> = values
-                            .windows(2)
-                            .map(|w| match w {
-                                [new, old] => (new - old) / INTERVAL.as_secs_f64(),
-                                _ => 0.0,
-                            })
-                            .collect();
-                        values = rates;
-                    }
-                    series.push((name.clone(), values));
+                for (title, values) in series {
+                    graphs.push(plot(
+                        &title,
+                        labels,
+                        *seconds,
+                        &values,
+                        metrics.sampled.taken,
+                    ));
                 }
             }
-            for (title, values) in series {
-                graphs.push(plot(&title, labels, *seconds, &values, metrics.sampled.taken));
+            drop(metrics);
+            if graphs.is_empty() {
+                return Err(fail("no sampled series match"));
             }
-        }
-        drop(metrics);
-        if graphs.is_empty() {
-            return Err(fail("no sampled series match"));
-        }
-        emit(state, flags.out.as_ref(), graphs.join("\n"))
-    })?;
+            emit(state, flags.out.as_ref(), graphs.join("\n"))
+        },
+    )?;
     let m = Arc::clone(metrics);
     engine.register_command("metrics/html", false, move |state: &mut State, args: &[String]| {
         let flags = flags(args)?;
