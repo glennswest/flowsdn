@@ -13,8 +13,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = manifest.join("../..");
     let cases_path = root.join("tests/bpf/CASES.toml");
     let ported_path = root.join("tests/bpf/PORTED.toml");
+    let record_path = root.join("tests/bpf/COVERAGE.toml");
     println!("cargo:rerun-if-changed={}", cases_path.display());
     println!("cargo:rerun-if-changed={}", ported_path.display());
+    println!("cargo:rerun-if-changed={}", record_path.display());
     println!("cargo:rerun-if-changed=src/corpus.rs");
     println!("cargo:rerun-if-changed=tests");
     let tests = manifest.join("tests");
@@ -29,6 +31,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             problems.join("\n")
         )
     })?;
+    corpus
+        .check_record(&fs::read_to_string(&record_path)?)
+        .map_err(|problems| {
+            format!(
+                "tests/bpf coverage is not monotonic (spec 18 §5.3, #544):\n{}",
+                problems.join("\n")
+            )
+        })?;
     let out = PathBuf::from(env::var("OUT_DIR")?);
     let ported = out.join("ported");
     fs::create_dir_all(&ported)?;

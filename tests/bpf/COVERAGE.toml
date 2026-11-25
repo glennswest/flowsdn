@@ -1,0 +1,11 @@
+# flowsdn — the BPF test corpus's coverage, ported(m) per milestone (spec 18 §5.3).
+#
+# The monotonic gate (#544): flowsdn-bpftest's build refuses a commit whose
+# coverage differs from these numbers. A build has no parent commit to compare
+# with (#317), so this record carries the previous coverage. Porting a case
+# raises it here in the same commit; lowering it is a visible edit of this file.
+
+[ported]
+m1 = 10
+m2 = 16
+m3 = 16
