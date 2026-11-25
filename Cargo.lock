@@ -374,6 +374,7 @@ dependencies = [
  "flowsdn-identity",
  "flowsdn-ipam",
  "flowsdn-k8s",
+ "flowsdn-l7",
  "flowsdn-lb",
  "flowsdn-policy",
  "futures",
@@ -427,6 +428,7 @@ dependencies = [
  "flowsdn-bpf-loader",
  "flowsdn-cni",
  "flowsdn-connector",
+ "flowsdn-identity",
  "flowsdn-ipam",
  "flowsdn-l7",
  "flowsdn-lb",
@@ -600,6 +602,7 @@ version = "0.14.0"
 dependencies = [
  "flowsdn-bpf-abi",
  "nix",
+ "regex",
  "serde_json",
 ]
 
