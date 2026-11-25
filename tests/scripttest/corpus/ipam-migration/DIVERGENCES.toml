@@ -1,0 +1,15 @@
+# flowsdn's expected divergences for this area (spec 17 §3.7, ADR-0005).
+# Not harvested; excluded from a re-harvest.
+
+[[divergence]]
+id = "ipam-migration-ciliumnode-pools"
+script = "ipam-migration/from-cluster-pool-migration.txtar"
+adr = "ADR-0020"
+kind = "partial"
+lines = [13]
+reason = """
+The node is given only as a `cilium.io/v2` CiliumNode whose `spec.ipam.pools` the reference's
+multi-pool IPAM reads. flowsdn's agent IPAM takes its pools from its Node's pod CIDRs (spec 07
+§3.4) and reads no CiliumNode (ADR-0017, ADR-0020), so `ipam/start` finds no Node here. Multi-pool
+IPAM (spec 07 §3.6) is not built either.
+"""

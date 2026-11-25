@@ -9,12 +9,15 @@ use serde_json::json;
 use std::sync::{Arc, Mutex};
 
 /// The areas with a builder: the harvested scripts the runner executes.
-pub const AREAS: [&str; 6] = [
+pub const AREAS: [&str; 9] = [
     "dynamicconfig",
     "hive-health",
+    "ipam-migration",
+    "ipam-multipool",
     "k8s-tables",
     "k8sclient",
     "metrics",
+    "podippool",
     "policy",
 ];
 
@@ -24,6 +27,7 @@ pub fn build(area: &str, flags: &[String]) -> Result<Engine, String> {
         // The fake API and the agent lifecycle only: flowsdn has none of the
         // reference tables these areas compare (their DIVERGENCES.toml).
         "dynamicconfig" | "k8s-tables" => kubernetes_only(FakeClient::default(), flags),
+        "ipam-migration" | "ipam-multipool" | "podippool" => ipam(flags),
         "hive-health" => hive_health(),
         "k8sclient" => k8sclient(flags),
         "metrics" => metrics(flags),
@@ -164,5 +168,17 @@ fn policy(flags: &[String]) -> Result<Engine, String> {
         &mut engine,
         &Arc::new(Mutex::new(crate::policy::Policies::default())),
     )?;
+    Ok(engine)
+}
+
+/// The IPAM areas (#517): the fake API, `hive/*`, `k8s/*` and `ipam/start`.
+fn ipam(flags: &[String]) -> Result<Engine, String> {
+    let fixture = Fixture::new(FakeClient::default(), flags, Box::new(|_| Ok(Vec::new())))?;
+    let shared = Arc::new(Mutex::new(fixture));
+    let k8s = Arc::clone(&lock(&shared).k8s);
+    let mut engine = Engine::new();
+    fixture::register_hive(&mut engine, &shared)?;
+    k8s::register(&mut engine, &k8s)?;
+    crate::ipam::register(&mut engine, &k8s)?;
     Ok(engine)
 }

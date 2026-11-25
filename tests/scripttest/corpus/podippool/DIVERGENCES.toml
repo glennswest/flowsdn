@@ -1,0 +1,15 @@
+# flowsdn's expected divergences for this area (spec 17 §3.7, ADR-0005).
+# Not harvested; excluded from a re-harvest.
+
+[[divergence]]
+id = "podippool-statedb-reflector-table"
+script = "podippool/podippool.txtar"
+adr = "ADR-0004"
+kind = "partial"
+lines = [8]
+reason = """
+Asserts the reference's StateDB reflector table `podippools` (its columns, reflector health row and
+JSON/YAML export) fed from CiliumPodIPPools. flowsdn has no StateDB reflector tables (ADR-0004, as
+for k8s-tables) and reads FlowsdnPodIPPool rather than the reference kind (ADR-0020), so the table
+does not exist.
+"""

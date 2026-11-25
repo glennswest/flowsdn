@@ -48,7 +48,7 @@ fn harvested_areas_pass_or_diverge_as_recorded() {
             state
                 .materialize(&archive)
                 .unwrap_or_else(|e| panic!("{script}: {e}"));
-            let options = RunOptions::with_timeout(Duration::from_secs(60)).expect("options");
+            let options = RunOptions::with_timeout(Duration::from_secs(20)).expect("options");
             let error = runtime
                 .block_on(engine.run_async(archive.script(), &mut state, &options))
                 .err();

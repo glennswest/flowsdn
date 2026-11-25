@@ -7,6 +7,7 @@ pub mod areas;
 pub mod doc;
 pub mod fixture;
 pub mod health;
+pub mod ipam;
 pub mod k8s;
 pub mod metrics;
 pub mod policy;

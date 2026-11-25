@@ -1,0 +1,28 @@
+# flowsdn's expected divergences for this area (spec 17 §3.7, ADR-0005).
+# Not harvested; excluded from a re-harvest.
+
+[[divergence]]
+id = "ipam-multipool-migration-ciliumnodes"
+script = "ipam-multipool/from-cluster-pool-migration.txtar"
+adr = "ADR-0020"
+kind = "partial"
+lines = [17]
+reason = """
+Asserts the reference operator's multi-pool allocator migrating `cilium.io/v2` CiliumNodes from
+CiliumPodIPPools. flowsdn reads and writes its own kinds (FlowsdnNode, FlowsdnPodIPPool; ADR-0017,
+ADR-0020), so nothing writes these CiliumNodes and the first comparison never matches. The
+operator multi-pool allocator (spec 07) is not built either.
+"""
+
+[[divergence]]
+id = "ipam-multipool-pools-ciliumnodes"
+script = "ipam-multipool/multiple-pools.txtar"
+adr = "ADR-0020"
+kind = "partial"
+lines = [11]
+reason = """
+Asserts the reference operator's multi-pool allocator writing `cilium.io/v2` CiliumNodes from
+CiliumPodIPPools. flowsdn reads and writes its own kinds (FlowsdnNode, FlowsdnPodIPPool; ADR-0017,
+ADR-0020), so nothing writes these CiliumNodes and the first comparison never matches. The
+operator multi-pool allocator (spec 07) is not built either.
+"""
