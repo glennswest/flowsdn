@@ -82,10 +82,35 @@ fn harvested_areas_pass_or_diverge_as_recorded() {
 #[test]
 fn go_yaml_quoting() {
     use flowsdn_scripttest_fixtures::k8s::go_plain;
-    for plain in ["10.96.1.1", "3e5a3605-a4ff-4fc2-b244-d5baee6180a5", "echo", "-x", "a:b", "v1", "fd00::1"] {
+    for plain in [
+        "10.96.1.1",
+        "3e5a3605-a4ff-4fc2-b244-d5baee6180a5",
+        "echo",
+        "-x",
+        "a:b",
+        "v1",
+        "fd00::1",
+    ] {
         assert!(go_plain(plain), "{plain}");
     }
-    for quoted in ["", "2", "1.5", "3e5", "0x1f", "true", "No", "~", "null", "-", "a: b", "x #y", "*a", " a", "2026-11-25", "+.inf"] {
+    for quoted in [
+        "",
+        "2",
+        "1.5",
+        "3e5",
+        "0x1f",
+        "true",
+        "No",
+        "~",
+        "null",
+        "-",
+        "a: b",
+        "x #y",
+        "*a",
+        " a",
+        "2026-11-25",
+        "+.inf",
+    ] {
         assert!(!go_plain(quoted), "{quoted}");
     }
 }

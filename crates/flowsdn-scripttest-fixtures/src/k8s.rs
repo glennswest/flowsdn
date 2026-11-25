@@ -192,7 +192,7 @@ impl FakeClient {
     /// `Service`, else the closest known one (noted in `log`).
     pub fn resolve(&self, name: &str, log: &mut Vec<String>) -> Result<String, String> {
         let lower = name.to_ascii_lowercase();
-        if self.resources.iter().any(|r| *r == lower) {
+        if self.resources.contains(&lower) {
             return Ok(lower);
         }
         let plural_name = plural(&lower);
@@ -470,10 +470,9 @@ pub fn register(engine: &mut Engine, client: &Arc<Mutex<FakeClient>>) -> Result<
 /// edge whitespace. Everything else is double-quoted, as there.
 pub fn go_plain(s: &str) -> bool {
     const RESOLVED: [&str; 37] = [
-        "y", "Y", "yes", "Yes", "YES", "n", "N", "no", "No", "NO", "true", "True", "TRUE",
-        "false", "False", "FALSE", "on", "On", "ON", "off", "Off", "OFF", "null", "Null",
-        "NULL", "~", ".inf", ".Inf", ".INF", "+.inf", "-.inf", "+.Inf", "-.Inf", ".nan",
-        ".NaN", ".NAN", "<<",
+        "y", "Y", "yes", "Yes", "YES", "n", "N", "no", "No", "NO", "true", "True", "TRUE", "false",
+        "False", "FALSE", "on", "On", "ON", "off", "Off", "OFF", "null", "Null", "NULL", "~",
+        ".inf", ".Inf", ".INF", "+.inf", "-.inf", "+.Inf", "-.Inf", ".nan", ".NaN", ".NAN", "<<",
     ];
     let Some(first) = s.chars().next() else {
         return false;
@@ -488,13 +487,14 @@ pub fn go_plain(s: &str) -> bool {
                 .find_map(|p| u.strip_prefix(p))
                 .is_some_and(|d| !d.is_empty() && d.chars().all(|c| c.is_digit(radix)))
         };
-        radix(["0x", "0X"], 16) || radix(["0o", "0O"], 8) || radix(["0b", "0B"], 2) || u.parse::<f64>().is_ok()
+        radix(["0x", "0X"], 16)
+            || radix(["0o", "0O"], 8)
+            || radix(["0b", "0B"], 2)
+            || u.parse::<f64>().is_ok()
     };
     let date = || {
         let b = s.as_bytes();
-        b.len() >= 8
-            && b.iter().take(4).all(u8::is_ascii_digit)
-            && b.get(4) == Some(&b'-')
+        b.len() >= 8 && b.iter().take(4).all(u8::is_ascii_digit) && b.get(4) == Some(&b'-')
     };
     !(RESOLVED.contains(&s)
         || s.starts_with(char::is_whitespace)
