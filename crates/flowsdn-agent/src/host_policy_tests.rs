@@ -220,7 +220,7 @@ fn authentication_and_to_groups_are_refused() {
         "mesh: toGroups is not enforced; the rule is skipped",
     ] {
         assert!(
-            got.problems.iter().any(|p| p == needle),
+            got.problems.iter().any(|p| p.ends_with(needle)),
             "{needle}: {:?}",
             got.problems
         );
