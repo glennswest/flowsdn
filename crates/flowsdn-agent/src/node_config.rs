@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 /// The settings a FlowsdnNodeConfig may set: node-scoped ones the agent
 /// reads. Paths that depend on the manifest's mounts, the node's identity,
 /// the API credentials and the cluster-wide name are not among them.
-pub const ALLOWED: [&str; 29] = [
+pub const ALLOWED: [&str; 30] = [
     "egress",
     "device-mtu",
     "route-mtu",
@@ -39,6 +39,7 @@ pub const ALLOWED: [&str; 29] = [
     "kubernetes.node-port",
     "kubernetes.lb-algorithm",
     "kubernetes.lb-mode",
+    "kubernetes.lb-dsr-dispatch",
     "kubernetes.nat46x64",
     "kubernetes.lb-external-clusterip",
     "kubernetes.policy-audit-mode",

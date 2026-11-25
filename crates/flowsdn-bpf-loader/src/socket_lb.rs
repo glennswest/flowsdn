@@ -18,6 +18,7 @@ use aya::{
         tc::{SchedClassifierLink, TcAttachOptions},
     },
 };
+pub use flowsdn_bpf_abi::lb::DsrDispatch;
 use flowsdn_bpf_abi::maglev::TABLE_LEN;
 use flowsdn_lb::socket::{Maps, Op};
 use std::{
@@ -59,6 +60,7 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 21] = [
     ("flowsdn_masq6_sources", MapType::LpmTrie, 20, 1, 256, 1),
     ("flowsdn_masq6_exclude", MapType::LpmTrie, 20, 1, 1024, 1),
     ("flowsdn_gw64_config", MapType::Hash, 4, 16, 1, 1),
+    ("flowsdn_dsr_config", MapType::Hash, 4, 4, 1, 1),
     ("flowsdn_gw64_sources", MapType::LpmTrie, 20, 1, 256, 1),
     (
         "flowsdn_nodeport4_xlate",
@@ -92,6 +94,8 @@ pub struct SocketLb {
     /// The RFC 6052 gateway (#454): its prefix and IPv6 sources.
     gw64_config: HashMap<MapData, u32, [u8; 16]>,
     gw64_sources: LpmTrie<MapData, [u8; 16], u8>,
+    /// How DSR packets carry their frontend (#447).
+    dsr_config: HashMap<MapData, u32, [u8; 4]>,
     pin_root: Option<PathBuf>,
     /// Owned links; unpinned ones detach when this owner drops.
     links: Vec<FdLink>,
@@ -255,6 +259,7 @@ impl SocketLb {
         let masq6_sources = take_lpm(&mut bpf, "flowsdn_masq6_sources")?;
         let masq6_exclude = take_lpm(&mut bpf, "flowsdn_masq6_exclude")?;
         let gw64_config = take(&mut bpf, "flowsdn_gw64_config")?;
+        let dsr_config = take(&mut bpf, "flowsdn_dsr_config")?;
         let gw64_sources = {
             let map = bpf
                 .take_map("flowsdn_gw64_sources")
@@ -286,6 +291,7 @@ impl SocketLb {
             masq6_exclude,
             gw64_config,
             gw64_sources,
+            dsr_config,
             pin_root: pin_root.map(Path::to_owned),
             links: Vec::new(),
             uplinks: std::collections::BTreeMap::new(),
@@ -482,6 +488,25 @@ impl SocketLb {
         }
         self.gw64_config.insert(0, value, 0)?;
         Ok(())
+    }
+    /// How DSR packets this node sends carry their frontend (#447). The
+    /// backend's side accepts every mode whatever this says.
+    pub fn set_dsr_dispatch(&mut self, mode: DsrDispatch) -> KernelResult<()> {
+        self.dsr_config.insert(0, [mode.byte(), 0, 0, 0], 0)?;
+        Ok(())
+    }
+    /// What [`Self::set_dsr_dispatch`] last wrote ([`DsrDispatch::Opt`] when
+    /// nothing was).
+    pub fn dsr_dispatch(&self) -> KernelResult<DsrDispatch> {
+        match self.dsr_config.get(&0, 0) {
+            Ok(value) => Ok(value
+                .first()
+                .copied()
+                .and_then(DsrDispatch::from_byte)
+                .unwrap_or_default()),
+            Err(MapError::KeyNotFound) => Ok(DsrDispatch::Opt),
+            Err(error) => Err(error.into()),
+        }
     }
     /// What [`Self::set_gateway64`] last wrote: (prefix when on, sources).
     pub fn gateway64(&self) -> KernelResult<(Option<[u8; 12]>, Vec<Prefix6>)> {

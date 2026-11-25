@@ -50,6 +50,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.uplinks` | `{}` (`mode: active-active`, `table: 2080`, `rule-priority: 9100`, no weights) | Several uplinks (#408): an object, every key optional. `mode` is `active-active`, `active-backup` or `single` (as before #408); `weights` is `{"<interface>": 1-255}`; `table` and `rule-priority` place flowsdn's per-address source rules. Uplinks are discovered, never listed ([several uplinks](#several-uplinks-408)). |
 | `kubernetes.lb-algorithm` | `random` | `random` or `maglev`: how the uplink programs pick a backend for a new flow from outside the cluster ([Maglev](#clusterip-socket-lb-292)). A Service's `service.flowsdn.io/lb-algorithm` annotation (`random` or `maglev`) overrides it. |
 | `kubernetes.lb-mode` | `snat` | `snat`, `dsr` or `hybrid` (DSR for TCP, SNAT otherwise): how traffic from outside the cluster reaches a backend on another node ([DSR](#direct-server-return)). A Service's `service.flowsdn.io/forwarding-mode: dsr\|snat` annotation overrides it. |
+| `kubernetes.lb-dsr-dispatch` | `opt` | How a DSR packet carries its frontend to the backend's node (#447; the reference's `bpf-lb-dsr-dispatch`): `opt` (an IPv4 option or IPv6 Destination Options header), `ipip` (IPIP / IP6IP6) or `geneve` (UDP 6081 with the DSR option) ([DSR](#direct-server-return)). A node accepts all three whatever its own setting. |
 | `kubernetes.lb-external-clusterip` | `false` | External access to ClusterIP Services (#465; the reference's `bpf-lb-external-clusterip`): each cluster IP also gets a node-local copy, so traffic from outside the cluster that is routed to a ClusterIP on this node (a static route or BGP advertisement) reaches its backends through the uplink programs, with `internalTrafficPolicy` and with Maglev as for NodePort. |
 | `kubernetes.nat46x64` | `false` | Service NAT46/64: a node-local frontend with no backend of its own family reaches the other family's backends on other nodes ([NAT46/64](#service-nat4664)). |
 | `kubernetes.lb-ipam` | `true` | LB-IPAM: give `type: LoadBalancer` Services addresses from FlowsdnLoadBalancerIPPools ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb`; nothing happens without a pool. |
@@ -742,13 +743,37 @@ reply's source (#488). The client's source cannot vouch for the node that
 added the option. `GET /v1/service` shows `forwarding-mode: dsr`.
 
 Every node on the path must run these programs and the network must carry a
-reply whose source is the frontend. Only option dispatch exists (no IPIP or
-Geneve). A new flow whose first packet cannot carry the option (UDP the
-option would push over the device's MTU, an IPv4 header with options
-already, a TCP segment that is not a SYN) is source-NATed like an SNAT flow
-instead (#488), so its reply still comes back through this node. A later UDP
-packet of a DSR flow that the option would push over the MTU is sent
-without it; the backend's node already has the frontend. Verified by kernel test runs only (`socket-lb-live`); it has not
+reply whose source is the frontend. `kubernetes.lb-dsr-dispatch` (#447) picks how
+the frontend travels, on the same packets (a TCP SYN, a UDP packet that fits):
+
+- `opt` (default): the option above.
+- `ipip`: the client's packet as it came, to the frontend, inside an outer IPv4
+  (protocol 4) or IPv6 (next header 41) header from this node's address to the
+  backend. The backend's node accepts it when the inner destination is a DSR
+  frontend and the outer destination one of its backends, strips the outer
+  header, DNATs the packet to that backend (with the backend's port) and
+  records the frontend.
+- `geneve`: the DNATed packet, in Ethernet, in Geneve (VNI 2, the DSR option:
+  class `0x014b`, type `0x81`, the frontend) over UDP 6081 to the FIB's next hop,
+  the backend's node. Its UDP checksum is zero, IPv6 included: the receiving
+  program takes the packet before the stack. The backend's node checks the
+  frontend and destination as for the option, then strips everything before the
+  inner IP header.
+
+Nothing on either node is a kernel tunnel device, and routing is unchanged. A
+node accepts all three modes whatever its own setting, so changing it node by
+node does not break flows; an encapsulated packet that fails the check drops,
+one that is not DSR (an inner destination that is no DSR frontend, Geneve
+without the DSR option) goes on untouched. The room each mode adds (option 8 /
+24 bytes, IPIP 20 / 40, Geneve 62 / 94 for IPv4 / IPv6) decides which UDP packets
+still fit the MTU.
+
+A new flow whose first packet cannot carry the frontend (UDP that the added
+bytes would push over the device's MTU, an IPv4 header with options already, a
+TCP segment that is not a SYN) is source-NATed like an SNAT flow instead (#488),
+so its reply still comes back through this node. A later UDP packet of a DSR
+flow that would go over the MTU is sent DNATed without it; the backend's node
+already has the frontend. Verified by kernel test runs only (`socket-lb-live`); it has not
 carried traffic between two nodes.
 
 ICMP and ICMPv6 errors about DSR flows, and about flows to a node-local backend, are
@@ -879,7 +904,7 @@ parses (`"true"`, `"1400"`, `'{"mode":"single"}'`) and as text otherwise.
 - **Which keys.** `egress`, `device-mtu`, `route-mtu`, `ipv4-pool`,
   `ipv6-pool`, `ipv4-gateway`, `ipv6-gateway`, and the `kubernetes` settings
   `auto-direct-node-routes`, `direct-routing-skip-unreachable`,
-  `service-lb`, `node-port`, `lb-algorithm`, `lb-mode`, `nat46x64`,
+  `service-lb`, `node-port`, `lb-algorithm`, `lb-mode`, `lb-dsr-dispatch`, `nat46x64`,
   `lb-external-clusterip`, `policy-audit-mode`,
   `lb-ipam`, `l2-announcements`, `identity-allocation`, `network-policy`,
   `flowsdn-policy`, `host-firewall`, `uplinks`, `endpoint-crd`, `node-crd`,

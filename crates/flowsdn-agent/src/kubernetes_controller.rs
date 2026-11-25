@@ -198,7 +198,12 @@ impl Controller {
             None
         };
         let lb = match socket_lb.filter(|_| self.settings.service_lb) {
-            Some(object) => match load_socket_lb(object, pin_root, &self.settings.cgroup_root) {
+            Some(object) => match load_socket_lb(
+                object,
+                pin_root,
+                &self.settings.cgroup_root,
+                self.settings.lb_dsr_dispatch,
+            ) {
                 Ok(lb) => {
                     let (sender, receiver) = mpsc::channel();
                     let lb_view = Arc::clone(&view);
@@ -1243,15 +1248,19 @@ fn slice_rows(state: &WatchState) -> Vec<SliceInfo> {
         .collect()
 }
 
-/// Load the socket-lb object and attach it to the cgroup root.
+/// Load the socket-lb object, set how its DSR packets carry their frontend
+/// (#447), and attach it to the cgroup root.
 fn load_socket_lb(
     object: &[u8],
     pin_root: Option<&Path>,
     cgroup_root: &Path,
+    dispatch: flowsdn_bpf_abi::lb::DsrDispatch,
 ) -> std::result::Result<SocketLb, String> {
     let pins = pin_root.map(|root| root.join("socket-lb"));
     let mut lb = SocketLb::load(Object::Bytes(object), pins.as_deref())
         .map_err(|e| format!("load socket-lb: {e}"))?;
+    lb.set_dsr_dispatch(dispatch)
+        .map_err(|e| format!("socket-lb DSR dispatch {}: {e}", dispatch.name()))?;
     lb.attach(cgroup_root)
         .map_err(|e| format!("attach socket-lb to {}: {e}", cgroup_root.display()))?;
     Ok(lb)

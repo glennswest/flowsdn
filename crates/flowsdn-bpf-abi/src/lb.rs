@@ -604,6 +604,50 @@ pub mod service_flags {
     pub const SOURCE_RANGE_DENY: u16 = 0x4000;
     pub const FWD_MODE_DSR: u16 = 0x8000;
 }
+/// How a DSR packet carries its frontend to the backend's node (#447, the
+/// reference's `bpf-lb-dsr-dispatch`, spec 02 §2.5): the byte the agent
+/// writes to socket-lb's `flowsdn_dsr_config` (absent: [`Self::Opt`]).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum DsrDispatch {
+    /// The IPv4 option / IPv6 Destination Options header.
+    #[default]
+    Opt = 0,
+    /// IPIP / IP6IP6: the client's packet unchanged in an outer header to
+    /// the backend.
+    Ipip = 1,
+    /// Geneve to the backend's node with the DSR option, the packet DNATed.
+    Geneve = 2,
+}
+impl DsrDispatch {
+    pub const fn byte(self) -> u8 {
+        self as u8
+    }
+    /// The setting's value: `opt`, `ipip` or `geneve`.
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "opt" => Some(Self::Opt),
+            "ipip" => Some(Self::Ipip),
+            "geneve" => Some(Self::Geneve),
+            _ => None,
+        }
+    }
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Opt => "opt",
+            Self::Ipip => "ipip",
+            Self::Geneve => "geneve",
+        }
+    }
+    pub const fn from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            0 => Some(Self::Opt),
+            1 => Some(Self::Ipip),
+            2 => Some(Self::Geneve),
+            _ => None,
+        }
+    }
+}
+
 /// Backend states are enum-like byte values, not independent bit masks.
 pub mod backend_state {
     pub const ACTIVE: u8 = 0;

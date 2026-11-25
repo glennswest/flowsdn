@@ -92,6 +92,11 @@ pub struct Settings {
     /// `service.flowsdn.io/forwarding-mode` annotation overrides: how traffic
     /// from outside reaches a backend on another node.
     pub lb_mode: LbMode,
+    /// `lb-dsr-dispatch` (#447; the reference's `bpf-lb-dsr-dispatch`,
+    /// default `opt`): how a DSR packet carries its frontend to the backend's
+    /// node: `opt` (IP option / Destination Options header), `ipip` (IPIP /
+    /// IP6IP6) or `geneve`.
+    pub lb_dsr_dispatch: flowsdn_bpf_abi::lb::DsrDispatch,
     /// `nat46x64` (default off; spec 04 §3.15): traffic from outside reaches a
     /// frontend with no backend of its family through the other family's
     /// backends on other nodes.
@@ -268,6 +273,11 @@ impl Settings {
             "hybrid" => LbMode::Hybrid,
             _ => return Err("kubernetes.lb-mode must be snat, dsr or hybrid".into()),
         };
+        let lb_dsr_dispatch = match text("lb-dsr-dispatch")?.as_str() {
+            "" => flowsdn_bpf_abi::lb::DsrDispatch::Opt,
+            other => flowsdn_bpf_abi::lb::DsrDispatch::parse(other)
+                .ok_or("kubernetes.lb-dsr-dispatch must be opt, ipip or geneve")?,
+        };
         let host_firewall = match text("host-firewall")?.as_str() {
             "" | "off" => HostFirewall::Off,
             "audit" => HostFirewall::Audit,
@@ -309,6 +319,7 @@ impl Settings {
             xdp_prefilter: flag("xdp-prefilter", false)?,
             maglev,
             lb_mode,
+            lb_dsr_dispatch,
             nat46x64: flag("nat46x64", false)?,
             external_clusterip: flag("lb-external-clusterip", false)?,
             identity_allocation: flag("identity-allocation", true)?,

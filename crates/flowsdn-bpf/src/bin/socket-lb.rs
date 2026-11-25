@@ -38,7 +38,7 @@ use flowsdn_bpf_abi::{
     affinity::{Lb4AffinityKey, Lb6AffinityKey, LbAffinityMatch, LbAffinityVal, NETNS_COOKIE},
     lb::{
         Ipv4RevnatEntry, Ipv4RevnatTuple, Ipv6RevnatEntry, Ipv6RevnatTuple, Lb4Backend, Lb4Key,
-        Lb6Backend, Lb6Key, LbService, service_flags,
+        DsrDispatch, Lb6Backend, Lb6Key, LbService, service_flags,
     },
     maglev::{self, ALGORITHM_MAGLEV, TABLE_LEN},
 };
@@ -621,7 +621,10 @@ pub fn sock6_getpeername(ctx: SockAddrContext) -> i32 {
 // that fits the device's MTU. The backend's node reads the option at its
 // uplink's ingress into a reply entry, and its uplink's egress rewrites the
 // reply's source to the frontend, so replies skip this node. A too-big UDP
-// packet of a known flow goes without the option. ICMP errors about the
+// packet of a known flow goes without the option. With `flowsdn_dsr_config`
+// set to IPIP or Geneve (#447) the same packets carry the frontend by
+// encapsulation instead (see `encap4`/`encap6`); the backend's node strips
+// it at its uplink's ingress, whichever mode it is set to itself. ICMP errors about the
 // flow are translated both ways (#449, "ICMP errors of Service flows").
 //
 // A frontend whose master carries `NAT46X64` (spec 04 §3.15, spec 05 §3.1) has
@@ -668,6 +671,77 @@ const DSR_OPT6: [u8; 2] = [0x1b, 20];
 const IPPROTO_DSTOPTS: u8 = 60;
 /// `BPF_ADJ_ROOM_NET`: room after the fixed network header.
 const ADJ_ROOM_NET: u32 = 0;
+/// `BPF_ADJ_ROOM_MAC`: room right after the Ethernet header.
+const ADJ_ROOM_MAC: u32 = 1;
+/// `bpf_skb_adjust_room` flags for an added tunnel header: its outer L3
+/// family, a UDP header, an inner Ethernet header of `ENCAP_L2(14)`.
+const ENCAP_L3_IPV4: u64 = 1 << 1;
+const ENCAP_L3_IPV6: u64 = 1 << 2;
+const ENCAP_L4_UDP: u64 = 1 << 4;
+const ENCAP_L2_ETH: u64 = 1 << 6;
+const ENCAP_INNER_ETH: u64 = 14 << 56;
+
+// How a DSR packet carries its frontend (#447, the reference's
+// `bpf-lb-dsr-dispatch`, spec 02 §2.5): an IP option / IPv6 Destination
+// Options header, IPIP / IP6IP6 (the client's packet unchanged inside an
+// outer header to the backend), or Geneve (the DNATed packet in Ethernet,
+// with the DSR option, to the backend's node). Set by the agent in
+// `flowsdn_dsr_config`; absent is `opt`. Receiving accepts all three.
+const DISPATCH_OPT: u8 = DsrDispatch::Opt.byte();
+const DISPATCH_IPIP: u8 = DsrDispatch::Ipip.byte();
+const DISPATCH_GENEVE: u8 = DsrDispatch::Geneve.byte();
+#[map(name = "flowsdn_dsr_config")]
+static DSR_CONFIG: HashMap<u32, [u8; 4]> = HashMap::with_max_entries(1, BPF_F_NO_PREALLOC);
+/// This node's dispatch mode.
+#[inline(always)]
+fn dispatch() -> u8 {
+    // SAFETY: a fixed-size array value copied at once.
+    unsafe { DSR_CONFIG.get(&0).copied() }.map_or(DISPATCH_OPT, |v| v[0])
+}
+/// Geneve's UDP port.
+const GENEVE_PORT: [u8; 2] = 6081u16.to_be_bytes();
+/// The Geneve DSR option's header: class 0x014b, type 0x81 (critical), its
+/// length in 4-byte words (2: an IPv4 address and port, 5: IPv6).
+const GENEVE_OPT4: [u8; 4] = [0x01, 0x4b, 0x81, 2];
+const GENEVE_OPT6: [u8; 4] = [0x01, 0x4b, 0x81, 5];
+/// The Geneve base header: version 0, the option words (3 or 6), the
+/// critical-options flag, Ethernet (0x6558), VNI 2 (WORLD: the client is
+/// outside the cluster), a reserved byte.
+const GENEVE4_BASE: [u8; 8] = [3, 0x40, 0x65, 0x58, 0, 0, 2, 0];
+const GENEVE6_BASE: [u8; 8] = [6, 0x40, 0x65, 0x58, 0, 0, 2, 0];
+/// Bytes a mode adds in front of an IPv4 / IPv6 packet: the option; an outer
+/// header; outer IP + UDP 8 + Geneve 8 + option 12 or 24 + Ethernet 14.
+const IPIP4_ROOM: i32 = 20;
+const GENEVE4_ROOM: i32 = 62;
+const IPIP6_ROOM: i32 = 40;
+const GENEVE6_ROOM: i32 = 94;
+/// The same, removed on the backend's node.
+const IPIP4_STRIP: i32 = -20;
+const GENEVE4_STRIP: i32 = -62;
+const IPIP6_STRIP: i32 = -40;
+const GENEVE6_STRIP: i32 = -94;
+#[inline(always)]
+fn room4(mode: u8) -> i32 {
+    match mode {
+        DISPATCH_IPIP => IPIP4_ROOM,
+        DISPATCH_GENEVE => GENEVE4_ROOM,
+        _ => 8,
+    }
+}
+#[inline(always)]
+fn room6(mode: u8) -> i32 {
+    match mode {
+        DISPATCH_IPIP => IPIP6_ROOM,
+        DISPATCH_GENEVE => GENEVE6_ROOM,
+        _ => DSR_OPT6_LEN,
+    }
+}
+/// A tunnel source port from the flow's ports, so a flow keeps one path.
+#[inline(always)]
+fn tunnel_port(client_port: [u8; 2], front_port: [u8; 2]) -> [u8; 2] {
+    let mixed = u16::from_be_bytes(client_port) ^ u16::from_be_bytes(front_port).rotate_left(7);
+    (0xc000 | (mixed & 0x3fff)).to_be_bytes()
+}
 const TCP_FLAGS_SYN_ACK: u8 = 0x12;
 const TCP_FLAG_SYN: u8 = 0x02;
 
@@ -930,16 +1004,13 @@ fn forwarded(result: i64) -> bool {
 /// subsystem. TTL is decremented, as forwarding would.
 #[inline(always)]
 fn redirect(ctx: &TcContext, result: i64, fib: &bpf_fib_lookup) -> Option<i32> {
-    let [ttl, proto] = ctx.load::<[u8; 2]>(22).ok()?;
-    let lower = [ttl.checked_sub(1)?, proto];
-    ctx.l3_csum_replace(
-        24,
-        u64::from(u16::from_ne_bytes([ttl, proto])),
-        u64::from(u16::from_ne_bytes(lower)),
-        2,
-    )
-    .ok()?;
-    ctx.store(22, &lower, 0).ok()?;
+    lower_ttl(ctx)?;
+    send(ctx, result, fib)
+}
+/// [`redirect`] without the TTL: an encapsulated packet's outer header is
+/// new.
+#[inline(always)]
+fn send(ctx: &TcContext, result: i64, fib: &bpf_fib_lookup) -> Option<i32> {
     if result == FIB_SUCCESS {
         ctx.store(0, &fib.dmac, 0).ok()?;
         ctx.store(6, &fib.smac, 0).ok()?;
@@ -950,6 +1021,44 @@ fn redirect(ctx: &TcContext, result: i64, fib: &bpf_fib_lookup) -> Option<i32> {
         // the translated destination itself.
         Some(unsafe { bpf_redirect_neigh(fib.ifindex, core::ptr::null_mut(), 0, 0) } as i32)
     }
+}
+
+/// A fresh outer IPv4 header at offset 14: DF, TTL 64, no options.
+#[inline(always)]
+fn outer4(ctx: &TcContext, tos: u8, total: u16, proto: u8, src: [u8; 4], dst: [u8; 4]) -> Option<()> {
+    let (src_word, dst_word) = (u32::from_be_bytes(src), u32::from_be_bytes(dst));
+    let sum = 0x4500u32
+        .wrapping_add(u32::from(tos))
+        .wrapping_add(u32::from(total))
+        .wrapping_add(0x4000)
+        .wrapping_add((64u32 << 8) | u32::from(proto))
+        .wrapping_add(src_word >> 16)
+        .wrapping_add(src_word & 0xffff)
+        .wrapping_add(dst_word >> 16)
+        .wrapping_add(dst_word & 0xffff);
+    let sum = (sum & 0xffff).wrapping_add(sum >> 16);
+    let sum = (sum & 0xffff).wrapping_add(sum >> 16);
+    let [c0, c1] = (!(sum as u16)).to_be_bytes();
+    let [t0, t1] = total.to_be_bytes();
+    let head = [0x45, tos, t0, t1, 0, 0, 0x40, 0, 64, proto, c0, c1];
+    ctx.store(14, &head, 0).ok()?;
+    ctx.store(26, &src, 0).ok()?;
+    ctx.store(30, &dst, 0).ok()
+}
+
+/// Decrement the TTL of the IPv4 header at offset 14, as forwarding does.
+#[inline(always)]
+fn lower_ttl(ctx: &TcContext) -> Option<()> {
+    let [ttl, proto] = ctx.load::<[u8; 2]>(22).ok()?;
+    let lower = [ttl.checked_sub(1)?, proto];
+    ctx.l3_csum_replace(
+        24,
+        u64::from(u16::from_ne_bytes([ttl, proto])),
+        u64::from(u16::from_ne_bytes(lower)),
+        2,
+    )
+    .ok()?;
+    ctx.store(22, &lower, 0).ok()
 }
 
 /// TTL that forwarding may still decrement.
@@ -1191,7 +1300,11 @@ fn dsr_forward4(
         return None;
     }
     // A packet that already has options passes without ours.
-    let option = l4 == 34 && dsr_option_wanted(ctx, l4, proto, fib.ifindex, 8)?;
+    let mode = dispatch();
+    let option = l4 == 34 && dsr_option_wanted(ctx, l4, proto, fib.ifindex, room4(mode))?;
+    if option && mode != DISPATCH_OPT {
+        return encap4(ctx, mode, tuple, flow);
+    }
     rewrite4(
         ctx,
         l4,
@@ -1205,6 +1318,73 @@ fn dsr_forward4(
         push_option4(ctx, front, front_port)?;
     }
     redirect(ctx, result, &fib)
+}
+
+/// [`dsr_forward4`] by encapsulation (#447): IPIP keeps the client's packet
+/// as it came (to the frontend) inside an outer header from this node's
+/// address to the backend; Geneve DNATs it and sends it, in Ethernet, with
+/// the frontend in the DSR option, to the FIB's next hop (the backend's
+/// node). The inner TTL is decremented, as forwarding does.
+#[inline(always)]
+fn encap4(
+    ctx: &TcContext,
+    mode: u8,
+    tuple: (usize, u8, [u8; 4], [u8; 4], [u8; 2], [u8; 2]),
+    flow: Nodeport4Value,
+) -> Option<i32> {
+    let (l4, proto, _, front, client_port, front_port) = tuple;
+    let (result, fib) = fib4(ctx, proto, [0; 4], flow.address, BPF_FIB_LOOKUP_SRC);
+    if !forwarded(result) {
+        return None;
+    }
+    // SAFETY: the active members after an IPv4 lookup.
+    let (source, hop) = unsafe {
+        (
+            fib.__bindgen_anon_3.ipv4_src.to_ne_bytes(),
+            fib.__bindgen_anon_4.ipv4_dst.to_ne_bytes(),
+        )
+    };
+    lower_ttl(ctx)?;
+    let tos = ctx.load::<u8>(15).ok()?;
+    if mode == DISPATCH_IPIP {
+        let total = u16::from_be_bytes(ctx.load::<[u8; 2]>(16).ok()?);
+        ctx.skb
+            .adjust_room(IPIP4_ROOM, ADJ_ROOM_MAC, ENCAP_L3_IPV4)
+            .ok()?;
+        outer4(ctx, tos, total.checked_add(20)?, 4, source, flow.address)?;
+        return send(ctx, result, &fib);
+    }
+    rewrite4(
+        ctx,
+        l4,
+        proto,
+        30,
+        l4.checked_add(2)?,
+        (front, front_port),
+        (flow.address, flow.port),
+    )?;
+    let total = u16::from_be_bytes(ctx.load::<[u8; 2]>(16).ok()?);
+    ctx.skb
+        .adjust_room(
+            GENEVE4_ROOM,
+            ADJ_ROOM_MAC,
+            ENCAP_L3_IPV4 | ENCAP_L4_UDP | ENCAP_L2_ETH | ENCAP_INNER_ETH,
+        )
+        .ok()?;
+    let udp = total.checked_add(42)?;
+    outer4(ctx, tos, udp.checked_add(20)?, 17, source, hop)?;
+    let [s0, s1] = tunnel_port(client_port, front_port);
+    let [l0, l1] = udp.to_be_bytes();
+    ctx.store(34, &[s0, s1, GENEVE_PORT[0], GENEVE_PORT[1], l0, l1, 0, 0], 0)
+        .ok()?;
+    ctx.store(42, &GENEVE4_BASE, 0).ok()?;
+    ctx.store(50, &GENEVE_OPT4, 0).ok()?;
+    ctx.store(54, &front, 0).ok()?;
+    ctx.store(58, &[front_port[0], front_port[1], 0, 0], 0).ok()?;
+    ctx.store(62, &fib.dmac, 0).ok()?;
+    ctx.store(68, &fib.smac, 0).ok()?;
+    ctx.store(74, &ETH_P_IPV4, 0).ok()?;
+    send(ctx, result, &fib)
 }
 
 /// Backend slots a DSR frontend is checked against (finding 0252b1736f32);
@@ -1221,6 +1401,18 @@ const DSR_REJECT: i32 = 2;
 /// then make a reply leave from an address the service does not have.
 #[inline(always)]
 fn dsr_valid4(front: ([u8; 4], [u8; 2]), proto: u8, backend: ([u8; 4], [u8; 2])) -> bool {
+    matches!(dsr_match4(front, proto, backend.0, Some(backend.1)), Some(Some(_)))
+}
+/// [`dsr_valid4`] with the backend's port unknown (IPIP carries none): None
+/// when `front` is not a DSR frontend, `Some(None)` when `address` is not
+/// one of its backends (with `port`, when given), else the backend's port.
+#[inline(always)]
+fn dsr_match4(
+    front: ([u8; 4], [u8; 2]),
+    proto: u8,
+    address: [u8; 4],
+    port: Option<[u8; 2]>,
+) -> Option<Option<[u8; 2]>> {
     let mut key = Lb4Key {
         address: Be32(front.0),
         dport: Be16(front.1),
@@ -1230,11 +1422,9 @@ fn dsr_valid4(front: ([u8; 4], [u8; 2]), proto: u8, backend: ([u8; 4], [u8; 2]))
         pad: [0; 2],
     };
     // SAFETY: see lookup4.
-    let Some(service) = (unsafe { LB4_SERVICES.get(&key).copied() }) else {
-        return false;
-    };
+    let service = unsafe { LB4_SERVICES.get(&key).copied() }?;
     if service.service_flags() & service_flags::FWD_MODE_DSR == 0 {
-        return false;
+        return None;
     }
     for slot in 1..=DSR_CHECK_SLOTS {
         if slot > service.count {
@@ -1249,11 +1439,11 @@ fn dsr_valid4(front: ([u8; 4], [u8; 2]), proto: u8, backend: ([u8; 4], [u8; 2]))
         let Some(chosen) = (unsafe { LB4_BACKENDS.get(&entry.backend_id()).copied() }) else {
             continue;
         };
-        if chosen.address.0 == backend.0 && chosen.port.0 == backend.1 {
-            return true;
+        if chosen.address.0 == address && port.is_none_or(|p| p == chosen.port.0) {
+            return Some(Some(chosen.port.0));
         }
     }
-    false
+    Some(None)
 }
 
 /// On the backend's node: a packet carrying the DSR option, from the
@@ -1267,6 +1457,14 @@ fn dsr4(skb: *mut __sk_buff) -> i32 {
 /// DSR mode, or a destination that is not one of its backends, is refused.
 #[inline(always)]
 fn dsr_backend4(ctx: &TcContext) -> Option<i32> {
+    // An encapsulated DSR packet (#447), outer header without options.
+    if ctx.load::<[u8; 2]>(12).ok()? == ETH_P_IPV4 && ctx.load::<u8>(14).ok()? == 0x45 {
+        match ctx.load::<u8>(23).ok()? {
+            4 => return decap_ipip4(ctx),
+            17 if ctx.load::<[u8; 2]>(36).ok() == Some(GENEVE_PORT) => return decap_geneve4(ctx),
+            _ => {}
+        }
+    }
     let (l4, proto, client, backend, client_port, backend_port) = tuple4(ctx)?;
     if l4 != 42 || ctx.load::<[u8; 2]>(34).ok()? != DSR_OPT4 {
         return Some(DSR_NONE);
@@ -1295,6 +1493,92 @@ fn dsr_backend4(ctx: &TcContext) -> Option<i32> {
     };
     // A full table only costs this reply its rewrite; the packet is valid.
     let _ = NODEPORT4.insert(&reverse, &front, 0);
+    Some(DSR_ACCEPT)
+}
+/// The reply entry of a DSR flow on the backend's node: the backend's reply
+/// to the client leaves from the frontend.
+#[inline(always)]
+fn dsr_reply4(
+    backend: ([u8; 4], [u8; 2]),
+    client: ([u8; 4], [u8; 2]),
+    front: ([u8; 4], [u8; 2]),
+    proto: u8,
+) {
+    let reverse = Nodeport4Key {
+        a: backend.0,
+        b: client.0,
+        ap: backend.1,
+        bp: client.1,
+        proto,
+        direction: REPLY,
+        pad: [0; 2],
+    };
+    let value = Nodeport4Value {
+        address: front.0,
+        port: front.1,
+        flags: 0,
+        pad: 0,
+        other: [0; 4],
+        other_port: [0; 2],
+        pad2: [0; 2],
+    };
+    // A full table only costs this reply its rewrite; the packet is valid.
+    let _ = NODEPORT4.insert(&reverse, &value, 0);
+}
+/// IPIP (#447): the inner packet goes to a DSR frontend and the outer
+/// destination is one of its backends. Strip the outer header, DNAT the
+/// packet to that backend (its port from the service), leave the reply
+/// entry. An inner destination that is not a DSR frontend is not ours; a
+/// DSR frontend whose backends do not include the outer destination drops.
+#[inline(always)]
+fn decap_ipip4(ctx: &TcContext) -> Option<i32> {
+    if ctx.load::<u8>(34).ok()? != 0x45 {
+        return Some(DSR_NONE);
+    }
+    let proto = ctx.load::<u8>(43).ok()?;
+    if proto != 6 && proto != 17 {
+        return Some(DSR_NONE);
+    }
+    let backend = ctx.load::<[u8; 4]>(30).ok()?;
+    let client = ctx.load::<[u8; 4]>(46).ok()?;
+    let front = ctx.load::<[u8; 4]>(50).ok()?;
+    let [c0, c1, f0, f1] = ctx.load::<[u8; 4]>(54).ok()?;
+    let (client_port, front_port) = ([c0, c1], [f0, f1]);
+    let port = match dsr_match4((front, front_port), proto, backend, None) {
+        None => return Some(DSR_NONE),
+        Some(None) => return Some(DSR_REJECT),
+        Some(Some(port)) => port,
+    };
+    ctx.skb.adjust_room(IPIP4_STRIP, ADJ_ROOM_MAC, 0).ok()?;
+    rewrite4(ctx, 34, proto, 30, 36, (front, front_port), (backend, port))?;
+    dsr_reply4((backend, port), (client, client_port), (front, front_port), proto);
+    Some(DSR_ACCEPT)
+}
+/// Geneve (#447): a UDP 6081 packet with the DSR option, carrying the
+/// already DNATed packet in Ethernet. The frontend must be a DSR frontend
+/// and the inner destination one of its backends; strip everything before
+/// the inner IPv4 header and leave the reply entry. Geneve without the DSR
+/// option is not ours.
+#[inline(always)]
+fn decap_geneve4(ctx: &TcContext) -> Option<i32> {
+    if ctx.load::<[u8; 4]>(42).ok()? != [3, 0x40, 0x65, 0x58]
+        || ctx.load::<[u8; 4]>(50).ok()? != GENEVE_OPT4
+    {
+        return Some(DSR_NONE);
+    }
+    if ctx.load::<[u8; 2]>(74).ok()? != ETH_P_IPV4 || ctx.load::<u8>(76).ok()? != 0x45 {
+        return Some(DSR_REJECT);
+    }
+    let front = (ctx.load::<[u8; 4]>(54).ok()?, ctx.load::<[u8; 2]>(58).ok()?);
+    let proto = ctx.load::<u8>(85).ok()?;
+    let client = ctx.load::<[u8; 4]>(88).ok()?;
+    let backend = ctx.load::<[u8; 4]>(92).ok()?;
+    let [c0, c1, b0, b1] = ctx.load::<[u8; 4]>(96).ok()?;
+    if !dsr_valid4(front, proto, (backend, [b0, b1])) {
+        return Some(DSR_REJECT);
+    }
+    ctx.skb.adjust_room(GENEVE4_STRIP, ADJ_ROOM_MAC, 0).ok()?;
+    dsr_reply4((backend, [b0, b1]), (client, [c0, c1]), front, proto);
     Some(DSR_ACCEPT)
 }
 
@@ -1384,7 +1668,8 @@ fn nodeport4_in(ctx: &TcContext) -> Option<i32> {
             let dsr = remote
                 && service.service_flags() & service_flags::FWD_MODE_DSR != 0
                 && l4 == 34
-                && dsr_option_wanted(ctx, l4, proto, fib.ifindex, 8).unwrap_or(false);
+                && dsr_option_wanted(ctx, l4, proto, fib.ifindex, room4(dispatch()))
+                    .unwrap_or(false);
             if dsr {
                 flow.flags = FLOW_DSR;
                 route = Some((result, fib));
@@ -2059,6 +2344,12 @@ fn fib6(
 fn redirect6(ctx: &TcContext, result: i64, fib: *const bpf_fib_lookup) -> Option<i32> {
     let hops = ctx.load::<u8>(IP6_HOPS).ok()?.checked_sub(1)?;
     ctx.store(IP6_HOPS, &hops, 0).ok()?;
+    send6(ctx, result, fib)
+}
+/// [`redirect6`] without the hop limit: an encapsulated packet's outer header
+/// is new.
+#[inline(always)]
+fn send6(ctx: &TcContext, result: i64, fib: *const bpf_fib_lookup) -> Option<i32> {
     // SAFETY: the per-CPU slot fib6 just filled; plain field reads.
     let (ifindex, dmac, smac) = unsafe { ((*fib).ifindex, (*fib).dmac, (*fib).smac) };
     if result == FIB_SUCCESS {
@@ -2188,6 +2479,16 @@ const STEP_MASQ_REPLY: i32 = 7;
 /// [`dsr_valid4`] for IPv6.
 #[inline(always)]
 fn dsr_valid6(front: ([u8; 16], [u8; 2]), proto: u8, backend: ([u8; 16], [u8; 2])) -> bool {
+    matches!(dsr_match6(front, proto, backend.0, Some(backend.1)), Some(Some(_)))
+}
+/// [`dsr_match4`] for IPv6.
+#[inline(always)]
+fn dsr_match6(
+    front: ([u8; 16], [u8; 2]),
+    proto: u8,
+    address: [u8; 16],
+    port: Option<[u8; 2]>,
+) -> Option<Option<[u8; 2]>> {
     let mut key = Lb6Key {
         address: front.0,
         dport: Be16(front.1),
@@ -2197,11 +2498,9 @@ fn dsr_valid6(front: ([u8; 16], [u8; 2]), proto: u8, backend: ([u8; 16], [u8; 2]
         pad: [0; 2],
     };
     // SAFETY: see lookup6.
-    let Some(service) = (unsafe { LB6_SERVICES.get(&key).copied() }) else {
-        return false;
-    };
+    let service = unsafe { LB6_SERVICES.get(&key).copied() }?;
     if service.service_flags() & service_flags::FWD_MODE_DSR == 0 {
-        return false;
+        return None;
     }
     for slot in 1..=DSR_CHECK_SLOTS {
         if slot > service.count {
@@ -2216,11 +2515,11 @@ fn dsr_valid6(front: ([u8; 16], [u8; 2]), proto: u8, backend: ([u8; 16], [u8; 2]
         let Some(chosen) = (unsafe { LB6_BACKENDS.get(&entry.backend_id()).copied() }) else {
             continue;
         };
-        if chosen.address == backend.0 && chosen.port.0 == backend.1 {
-            return true;
+        if chosen.address == address && port.is_none_or(|p| p == chosen.port.0) {
+            return Some(Some(chosen.port.0));
         }
     }
-    false
+    Some(None)
 }
 /// [`dsr4`] for IPv6, from the classifier on its own stack frame.
 #[inline(never)]
@@ -2231,6 +2530,11 @@ fn dsr6(skb: *mut __sk_buff) -> i32 {
 /// after the fixed one, its next header the L4 protocol.
 #[inline(always)]
 fn dsr_backend6(ctx: &TcContext) -> Option<i32> {
+    match ctx.load::<u8>(IP6_NEXT).ok()? {
+        41 => return decap_ipip6(ctx),
+        17 => return decap_geneve6(ctx),
+        _ => {}
+    }
     if ctx.load::<[u8; 2]>(IP6_OPT.checked_add(2)?).ok()? != DSR_OPT6 {
         return Some(DSR_NONE);
     }
@@ -2261,6 +2565,89 @@ fn dsr_backend6(ctx: &TcContext) -> Option<i32> {
     let _ = NODEPORT6.insert(&reverse, &front, 0);
     Some(DSR_ACCEPT)
 }
+/// [`dsr_reply4`] for IPv6.
+#[inline(always)]
+fn dsr_reply6(
+    backend: ([u8; 16], [u8; 2]),
+    client: ([u8; 16], [u8; 2]),
+    front: ([u8; 16], [u8; 2]),
+    proto: u8,
+) {
+    let reverse = Nodeport6Key {
+        a: backend.0,
+        b: client.0,
+        ap: backend.1,
+        bp: client.1,
+        proto,
+        direction: REPLY,
+        pad: [0; 2],
+    };
+    let value = Nodeport6Value {
+        address: front.0,
+        port: front.1,
+        flags: 0,
+        pad: 0,
+        other: [0; 16],
+        other_port: [0; 2],
+        pad2: [0; 2],
+    };
+    let _ = NODEPORT6.insert(&reverse, &value, 0);
+}
+/// [`decap_ipip4`] for IP6IP6: the inner header (no extension headers) at 54.
+#[inline(always)]
+fn decap_ipip6(ctx: &TcContext) -> Option<i32> {
+    if ctx.load::<u8>(54).ok()? >> 4 != 6 {
+        return Some(DSR_NONE);
+    }
+    let proto = ctx.load::<u8>(60).ok()?;
+    if proto != 6 && proto != 17 {
+        return Some(DSR_NONE);
+    }
+    let backend = ctx.load::<[u8; 16]>(IP6_DST).ok()?;
+    let client = ctx.load::<[u8; 16]>(62).ok()?;
+    let front = ctx.load::<[u8; 16]>(78).ok()?;
+    let [c0, c1, f0, f1] = ctx.load::<[u8; 4]>(94).ok()?;
+    let (client_port, front_port) = ([c0, c1], [f0, f1]);
+    let port = match dsr_match6((front, front_port), proto, backend, None) {
+        None => return Some(DSR_NONE),
+        Some(None) => return Some(DSR_REJECT),
+        Some(Some(port)) => port,
+    };
+    ctx.skb.adjust_room(IPIP6_STRIP, ADJ_ROOM_MAC, 0).ok()?;
+    rewrite6(
+        ctx,
+        proto,
+        IP6_DST,
+        IP6_DPORT,
+        (front, front_port),
+        (backend, port),
+    )?;
+    dsr_reply6((backend, port), (client, client_port), (front, front_port), proto);
+    Some(DSR_ACCEPT)
+}
+/// [`decap_geneve4`] for IPv6: the option at 70, the inner IPv6 header at 108.
+#[inline(always)]
+fn decap_geneve6(ctx: &TcContext) -> Option<i32> {
+    if ctx.load::<[u8; 4]>(62).ok()? != [6, 0x40, 0x65, 0x58]
+        || ctx.load::<[u8; 4]>(70).ok()? != GENEVE_OPT6
+    {
+        return Some(DSR_NONE);
+    }
+    if ctx.load::<[u8; 2]>(106).ok()? != ETH_P_IPV6 || ctx.load::<u8>(108).ok()? >> 4 != 6 {
+        return Some(DSR_REJECT);
+    }
+    let front = (ctx.load::<[u8; 16]>(74).ok()?, ctx.load::<[u8; 2]>(90).ok()?);
+    let proto = ctx.load::<u8>(114).ok()?;
+    let client = ctx.load::<[u8; 16]>(116).ok()?;
+    let backend = ctx.load::<[u8; 16]>(132).ok()?;
+    let [c0, c1, b0, b1] = ctx.load::<[u8; 4]>(148).ok()?;
+    if !dsr_valid6(front, proto, (backend, [b0, b1])) {
+        return Some(DSR_REJECT);
+    }
+    ctx.skb.adjust_room(GENEVE6_STRIP, ADJ_ROOM_MAC, 0).ok()?;
+    dsr_reply6((backend, [b0, b1]), (client, [c0, c1]), front, proto);
+    Some(DSR_ACCEPT)
+}
 
 /// [`nodeport4_in`] for IPv6, up to the flow lookup: fill [`INGRESS6`] and
 /// return the step.
@@ -2271,7 +2658,14 @@ fn ingress6(skb: *mut __sk_buff) -> i32 {
 #[inline(always)]
 fn classify6(ctx: &TcContext) -> Option<i32> {
     let state = INGRESS6.get_ptr_mut(0)?;
-    if ctx.load::<u8>(IP6_NEXT).ok()? == IPPROTO_DSTOPTS {
+    // The DSR option, IP6IP6, or Geneve with the DSR option (#447).
+    let next = ctx.load::<u8>(IP6_NEXT).ok()?;
+    if next == IPPROTO_DSTOPTS
+        || next == 41
+        || (next == 17
+            && ctx.load::<[u8; 2]>(IP6_DPORT).ok() == Some(GENEVE_PORT)
+            && ctx.load::<[u8; 4]>(70).ok() == Some(GENEVE_OPT6))
+    {
         return Some(STEP_DSR);
     }
     let tuple = tuple6(ctx)?;
@@ -2470,7 +2864,11 @@ fn dsr_forward6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Op
     }
     // SAFETY: the per-CPU slot fib6 just filled; a plain field read.
     let device = unsafe { (*fib).ifindex };
-    let option = dsr_option_wanted(ctx, IP6_SPORT, proto, device, DSR_OPT6_LEN)?;
+    let mode = dispatch();
+    let option = dsr_option_wanted(ctx, IP6_SPORT, proto, device, room6(mode))?;
+    if option && mode != DISPATCH_OPT {
+        return encap6(ctx, mode, tuple, flow);
+    }
     rewrite6(
         ctx,
         proto,
@@ -2492,6 +2890,87 @@ fn dsr_forward6_in(ctx: &TcContext, tuple: &Tuple6, flow: &Nodeport6Value) -> Op
         ctx.store(IP6_NEXT, &IPPROTO_DSTOPTS, 0).ok()?;
     }
     redirect6(ctx, result, fib)
+}
+/// A fresh outer IPv6 header at offset 14: `first` (version, traffic class,
+/// flow label) from the inner one, hop limit 64.
+#[inline(always)]
+fn outer6(
+    ctx: &TcContext,
+    first: [u8; 4],
+    payload: u16,
+    next: u8,
+    src: [u8; 16],
+    dst: [u8; 16],
+) -> Option<()> {
+    let [p0, p1] = payload.to_be_bytes();
+    ctx.store(14, &first, 0).ok()?;
+    ctx.store(IP6_PAYLOAD, &[p0, p1, next, 64], 0).ok()?;
+    ctx.store(IP6_SRC, &src, 0).ok()?;
+    ctx.store(IP6_DST, &dst, 0).ok()
+}
+/// [`encap4`] for IPv6: IP6IP6 to the backend, or Geneve to the FIB's next
+/// hop with the IPv6 DSR option. The inner hop limit is decremented.
+#[inline(always)]
+fn encap6(ctx: &TcContext, mode: u8, tuple: &Tuple6, flow: &Nodeport6Value) -> Option<i32> {
+    let (proto, _, front, client_port, front_port) = *tuple;
+    let (result, fib) = fib6(ctx, proto, [0; 16], flow.address, BPF_FIB_LOOKUP_SRC)?;
+    if !forwarded(result) {
+        return None;
+    }
+    // SAFETY: the per-CPU slot fib6 just filled; the active members after an
+    // IPv6 lookup.
+    let (source, hop, dmac, smac) = unsafe {
+        (
+            ip6_bytes((*fib).__bindgen_anon_3.ipv6_src),
+            ip6_bytes((*fib).__bindgen_anon_4.ipv6_dst),
+            (*fib).dmac,
+            (*fib).smac,
+        )
+    };
+    let hops = ctx.load::<u8>(IP6_HOPS).ok()?.checked_sub(1)?;
+    ctx.store(IP6_HOPS, &hops, 0).ok()?;
+    let first = ctx.load::<[u8; 4]>(14).ok()?;
+    if mode == DISPATCH_IPIP {
+        let payload = u16::from_be_bytes(ctx.load::<[u8; 2]>(IP6_PAYLOAD).ok()?);
+        ctx.skb
+            .adjust_room(IPIP6_ROOM, ADJ_ROOM_MAC, ENCAP_L3_IPV6)
+            .ok()?;
+        outer6(ctx, first, payload.checked_add(40)?, 41, source, flow.address)?;
+        return send6(ctx, result, fib);
+    }
+    rewrite6(
+        ctx,
+        proto,
+        IP6_DST,
+        IP6_DPORT,
+        (front, front_port),
+        (flow.address, flow.port),
+    )?;
+    let payload = u16::from_be_bytes(ctx.load::<[u8; 2]>(IP6_PAYLOAD).ok()?);
+    ctx.skb
+        .adjust_room(
+            GENEVE6_ROOM,
+            ADJ_ROOM_MAC,
+            ENCAP_L3_IPV6 | ENCAP_L4_UDP | ENCAP_L2_ETH | ENCAP_INNER_ETH,
+        )
+        .ok()?;
+    // UDP 8 + Geneve 8 + option 24 + Ethernet 14 + the inner IPv6 packet.
+    let udp = payload.checked_add(94)?;
+    outer6(ctx, first, udp, 17, source, hop)?;
+    let [s0, s1] = tunnel_port(client_port, front_port);
+    let [l0, l1] = udp.to_be_bytes();
+    // A zero UDP checksum: the backend's node's program takes the packet
+    // before the stack, and the inner packet's own checksum stays valid.
+    ctx.store(54, &[s0, s1, GENEVE_PORT[0], GENEVE_PORT[1], l0, l1, 0, 0], 0)
+        .ok()?;
+    ctx.store(62, &GENEVE6_BASE, 0).ok()?;
+    ctx.store(70, &GENEVE_OPT6, 0).ok()?;
+    ctx.store(74, &front, 0).ok()?;
+    ctx.store(90, &[front_port[0], front_port[1], 0, 0], 0).ok()?;
+    ctx.store(94, &dmac, 0).ok()?;
+    ctx.store(100, &smac, 0).ok()?;
+    ctx.store(106, &ETH_P_IPV6, 0).ok()?;
+    send6(ctx, result, fib)
 }
 /// A node-local backend: rewrite the destination, let the stack deliver it.
 #[inline(always)]
@@ -2582,7 +3061,8 @@ fn new_flow6_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> O
     // As for IPv4: DSR only when this first packet can carry the option.
     let dsr = remote
         && service.service_flags() & service_flags::FWD_MODE_DSR != 0
-        && dsr_option_wanted(ctx, IP6_SPORT, proto, out_device, DSR_OPT6_LEN).unwrap_or(false);
+        && dsr_option_wanted(ctx, IP6_SPORT, proto, out_device, room6(dispatch()))
+            .unwrap_or(false);
     if dsr {
         flow.flags = FLOW_DSR;
     } else if remote {

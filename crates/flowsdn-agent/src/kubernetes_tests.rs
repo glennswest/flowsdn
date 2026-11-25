@@ -47,6 +47,11 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(!parsed.bpf_masquerade && parsed.non_masquerade.is_empty());
     assert_eq!(parsed.gateway64, None);
     assert_eq!(parsed.lb_mode, LbMode::Snat);
+    assert_eq!(
+        parsed.lb_dsr_dispatch,
+        flowsdn_bpf_abi::lb::DsrDispatch::Opt,
+        "the IP option by default (#447)"
+    );
     assert_eq!(parsed.host_firewall, HostFirewall::Off);
     assert!(!parsed.flowsdn_policy);
     assert_eq!(parsed.cgroup_root, PathBuf::from(DEFAULT_CGROUP_ROOT));
@@ -55,6 +60,7 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
             &json!({"node-name":"n1","kubeconfig":"/k","auto-direct-node-routes":false,
             "direct-routing-skip-unreachable":true,"service-lb":false,"node-port":false,
             "cgroup-root":"/run/flowsdn/cgroupv2","lb-algorithm":"maglev","lb-mode":"hybrid",
+            "lb-dsr-dispatch":"geneve",
             "host-firewall":"audit","l2-neigh-discovery":true,"lb-external-clusterip":true,
             "bpf-masquerade":true,"non-masquerade-cidrs":["192.0.2.0/24","10.200.1.7/16","2001:db8:5::/48"],
             "nat46x64-gateway":true}),
@@ -71,11 +77,20 @@ fn settings_default_and_take_the_node_name_from_the_environment() {
     assert!(parsed.l2_neigh_discovery);
     assert!(parsed.maglev);
     assert!(parsed.external_clusterip);
+    assert_eq!(parsed.lb_dsr_dispatch, flowsdn_bpf_abi::lb::DsrDispatch::Geneve);
     assert!(parsed.bpf_masquerade);
     assert_eq!(
         parsed.gateway64,
         Some([0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0]),
         "the RFC 6052 well-known prefix by default"
+    );
+    assert!(
+        Settings::parse(
+            Some(&json!({"node-name":"n1","lb-dsr-dispatch":"vxlan"})),
+            &env(&[])
+        )
+        .is_err(),
+        "lb-dsr-dispatch is opt, ipip or geneve"
     );
     for bad in ["64:ff9b::/64", "192.0.2.0/24", "nonsense"] {
         assert!(

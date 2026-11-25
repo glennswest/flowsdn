@@ -416,6 +416,7 @@ fn controller_lists_watches_and_derives_the_pool() {
     .expect("kubeconfig");
     let settings = Settings {
         lb_mode: Default::default(),
+        lb_dsr_dispatch: Default::default(),
         nat46x64: false,
         external_clusterip: false,
         node_name: "local".into(),

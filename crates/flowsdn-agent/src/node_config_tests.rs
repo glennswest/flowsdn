@@ -166,6 +166,7 @@ fn every_allowed_key_is_one_the_agent_reads() {
         ("kubernetes.node-port", "false"),
         ("kubernetes.lb-algorithm", "maglev"),
         ("kubernetes.lb-mode", "hybrid"),
+        ("kubernetes.lb-dsr-dispatch", "ipip"),
         ("kubernetes.nat46x64", "true"),
         ("kubernetes.lb-external-clusterip", "true"),
         ("kubernetes.policy-audit-mode", "true"),

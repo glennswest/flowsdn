@@ -454,6 +454,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     masquerade6(lb)?;
     maglev(lb, services)?;
     dsr(lb, services)?;
+    dsr_encap(lb)?;
     icmp_errors(lb)?;
     nat46x64(lb, services)?;
     gateway64(lb)?;
@@ -1579,6 +1580,268 @@ fn quote6(f: &[u8]) -> Result<(Quote6, bool)> {
         ),
         l4_sum(58, &src, &dst, icmp) == 0xffff,
     ))
+}
+
+/// An outer IPv4 header's checks: (protocol, source, destination, header
+/// checksum ok, total length matches the frame, TTL).
+fn outer4(f: &[u8]) -> Result<(u8, [u8; 4], [u8; 4], bool, bool, u8)> {
+    let ip = f.get(14..34).ok_or("short frame")?;
+    let total = u16::from_be_bytes(ip.get(2..4).ok_or("ip")?.try_into()?);
+    Ok((
+        *ip.get(9).ok_or("ip")?,
+        ip.get(12..16).ok_or("ip")?.try_into()?,
+        ip.get(16..20).ok_or("ip")?.try_into()?,
+        sum(ip, 0) == 0xffff,
+        usize::from(total) == f.len().saturating_sub(14),
+        *ip.get(8).ok_or("ip")?,
+    ))
+}
+/// [`outer4`] for IPv6: (next header, source, destination, -, payload length
+/// matches, hop limit).
+fn outer6(f: &[u8]) -> Result<(u8, [u8; 16], [u8; 16], bool, bool, u8)> {
+    let ip = f.get(14..54).ok_or("short frame")?;
+    let payload = u16::from_be_bytes(ip.get(4..6).ok_or("ip")?.try_into()?);
+    Ok((
+        *ip.get(6).ok_or("ip")?,
+        ip.get(8..24).ok_or("ip")?.try_into()?,
+        ip.get(24..40).ok_or("ip")?.try_into()?,
+        true,
+        usize::from(payload) == f.len().saturating_sub(54),
+        *ip.get(7).ok_or("ip")?,
+    ))
+}
+/// The frame inside an encapsulation of `room` bytes after the Ethernet
+/// header (IPIP: the outer IP header; Geneve: up to the inner Ethernet one,
+/// whose type replaces the outer's).
+fn inner(f: &[u8], room: usize, geneve: bool) -> Result<Vec<u8>> {
+    let mut out = f.get(..14).ok_or("short frame")?.to_vec();
+    if geneve {
+        let eth = room.saturating_add(12)..room.saturating_add(14);
+        out.splice(12..14, f.get(eth).ok_or("inner ethernet")?.iter().copied());
+    }
+    out.extend_from_slice(f.get(room.saturating_add(14)..).ok_or("short frame")?);
+    Ok(out)
+}
+
+/// DSR by encapsulation (#447, `lb-dsr-dispatch`) on [`dsr`]'s frontends
+/// (192.0.2.20:30095, [2001:db8:2::20]:30095 to 10.9.1.5:8080 /
+/// [fd00:9:1::5]:8080, routed via 192.0.2.30 / 2001:db8:2::30). `ipip`: the
+/// client's packet, its TTL lowered, leaves inside an outer header from this
+/// node's address to the backend. `geneve`: the DNATed packet leaves in
+/// Ethernet + Geneve (VNI 2, the DSR option naming the frontend; decoded by
+/// `flowsdn_bpf_abi::tunnel`) over UDP 6081 (checksum 0) to the next hop. The
+/// backend's node (this program on the same uplink) strips either, hands on
+/// the DNATed packet with valid checksums and rewrites the reply's source to
+/// the frontend; an encapsulation naming a destination that is not a
+/// backend, or (Geneve) a frontend that is not DSR, drops. A later TCP
+/// segment is plain DNAT. Back to `opt` at the end.
+fn dsr_encap(lb: &mut SocketLb) -> Result<()> {
+    use flowsdn_bpf_abi::{
+        lb::DsrDispatch,
+        tunnel::{DsrIpv4, DsrIpv6, GeneveHeader},
+    };
+    let up0 = ifindex("up0")?;
+    let (front, client, remote, hop) = (
+        [192, 0, 2, 20],
+        [198, 51, 100, 9],
+        [10, 9, 1, 5],
+        [192, 0, 2, 30],
+    );
+    let (front6, client6, remote6, hop6) = (
+        ip6("2001:db8:2::20")?,
+        ip6("2001:db8:64::9")?,
+        ip6("fd00:9:1::5")?,
+        ip6("2001:db8:2::30")?,
+    );
+    for (mode, base) in [(DsrDispatch::Ipip, 42000u16), (DsrDispatch::Geneve, 42100)] {
+        lb.set_dsr_dispatch(mode)?;
+        if lb.dsr_dispatch()? != mode {
+            return Err(format!("DSR dispatch {} does not read back", mode.name()).into());
+        }
+        let geneve = mode == DsrDispatch::Geneve;
+        let name = mode.name();
+        for (proto, sport) in [(6u8, base), (17, base.saturating_add(1))] {
+            // IPv4.
+            let request = frame4(proto, client, front, sport, 30095, false);
+            let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+            let room = if geneve { 62 } else { 20 };
+            let (outer_proto, src, dst, ip_ok, length_ok, ttl) = outer4(&out)?;
+            let wire_ok = if geneve {
+                let udp = out.get(34..42).ok_or("udp")?;
+                let header = GeneveHeader::from_bytes(out.get(42..50).ok_or("geneve")?.try_into()?)
+                    .map_err(|e| format!("{e:?}"))?;
+                let option = DsrIpv4::from_bytes(out.get(50..62).ok_or("option")?.try_into()?)
+                    .map_err(|e| format!("{e:?}"))?;
+                udp.get(2..4) == Some(&6081u16.to_be_bytes()[..])
+                    && udp.get(4..6) == Some(&(out.len().saturating_sub(34) as u16).to_be_bytes()[..])
+                    && udp.get(6..8) == Some(&[0, 0][..])
+                    && header.option_words() == 3
+                    && header.critical
+                    && header.identity.get() == 2
+                    && option == DsrIpv4 { address: front, port: 30095 }
+                    && (outer_proto, dst) == (17, hop)
+            } else {
+                (outer_proto, dst) == (4, remote)
+            };
+            let carried = inner(&out, room, geneve)?;
+            let (isrc, idst, is, id, iip_ok, il4_ok) = parse4(&carried)?;
+            let want_inner = if geneve {
+                (client, remote, sport, 8080)
+            } else {
+                (client, front, sport, 30095)
+            };
+            if !wire_ok
+                || src != front
+                || !ip_ok
+                || !length_ok
+                || ttl != 64
+                || (isrc, idst, is, id) != want_inner
+                || !iip_ok
+                || !il4_ok
+                || carried.get(22) != Some(&63)
+            {
+                return Err(format!(
+                    "DSR {name} forward proto {proto}: outer {outer_proto} {src:?} -> {dst:?} ip {ip_ok} length {length_ok} ttl {ttl} wire {wire_ok}; inner {isrc:?}:{is} -> {idst:?}:{id} ip {iip_ok} l4 {il4_ok}"
+                )
+                .into());
+            }
+            // The backend's node strips it and hands on the DNATed packet.
+            let reply = frame4(proto, remote, client, 8080, sport, false);
+            if run_on(lb, "nodeport_egress", &reply, up0, TCX_NEXT)? != reply {
+                return Err(format!("DSR {name} proto {proto}: a reply was rewritten early").into());
+            }
+            let got = run_on(lb, "nodeport_ingress", &out, up0, TCX_NEXT)?;
+            let (gsrc, gdst, gs, gd, gip_ok, gl4_ok) = parse4(&got)?;
+            if (gsrc, gdst, gs, gd) != (client, remote, sport, 8080)
+                || !gip_ok
+                || !gl4_ok
+                || got.len() != out.len().saturating_sub(room)
+                || got.get(12..14) != Some(&[0x08, 0x00][..])
+            {
+                return Err(format!(
+                    "DSR {name} decap proto {proto}: {gsrc:?}:{gs} -> {gdst:?}:{gd} ip {gip_ok} l4 {gl4_ok}, {} bytes",
+                    got.len()
+                )
+                .into());
+            }
+            let (rsrc, rdst, rs, rd, rip_ok, rl4_ok) =
+                parse4(&run_on(lb, "nodeport_egress", &reply, up0, TCX_NEXT)?)?;
+            if (rsrc, rdst, rs, rd) != (front, client, 30095, sport) || !rip_ok || !rl4_ok {
+                return Err(format!(
+                    "DSR {name} reply proto {proto}: {rsrc:?}:{rs} -> {rdst:?}:{rd}"
+                )
+                .into());
+            }
+
+            // IPv6.
+            let request = frame6(proto, client6, front6, sport, 30095, false);
+            let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+            let room = if geneve { 94 } else { 40 };
+            let (outer_proto, src, dst, _, length_ok, hops) = outer6(&out)?;
+            let wire_ok = if geneve {
+                let udp = out.get(54..62).ok_or("udp")?;
+                let header = GeneveHeader::from_bytes(out.get(62..70).ok_or("geneve")?.try_into()?)
+                    .map_err(|e| format!("{e:?}"))?;
+                let option = DsrIpv6::from_bytes(out.get(70..94).ok_or("option")?.try_into()?)
+                    .map_err(|e| format!("{e:?}"))?;
+                udp.get(2..4) == Some(&6081u16.to_be_bytes()[..])
+                    && udp.get(4..6) == Some(&(out.len().saturating_sub(54) as u16).to_be_bytes()[..])
+                    && header.option_words() == 6
+                    && header.critical
+                    && header.identity.get() == 2
+                    && option == DsrIpv6 { address: front6, port: 30095 }
+                    && (outer_proto, dst) == (17, hop6)
+            } else {
+                (outer_proto, dst) == (41, remote6)
+            };
+            let carried = inner(&out, room, geneve)?;
+            let (isrc, idst, is, id, ihops, il4_ok) = parse6(&carried)?;
+            let want_inner = if geneve {
+                (client6, remote6, sport, 8080)
+            } else {
+                (client6, front6, sport, 30095)
+            };
+            if !wire_ok
+                || src != front6
+                || !length_ok
+                || hops != 64
+                || (isrc, idst, is, id) != want_inner
+                || ihops != 63
+                || !il4_ok
+            {
+                return Err(format!(
+                    "DSR {name} IPv6 forward proto {proto}: outer {outer_proto} {src:?} -> {dst:?} length {length_ok} hops {hops} wire {wire_ok}; inner {isrc:?}:{is} -> {idst:?}:{id} hops {ihops} l4 {il4_ok}"
+                )
+                .into());
+            }
+            let reply = frame6(proto, remote6, client6, 8080, sport, false);
+            let got = run_on(lb, "nodeport_ingress", &out, up0, TCX_NEXT)?;
+            let (gsrc, gdst, gs, gd, _, gl4_ok) = parse6(&got)?;
+            if (gsrc, gdst, gs, gd) != (client6, remote6, sport, 8080)
+                || !gl4_ok
+                || got.len() != out.len().saturating_sub(room)
+            {
+                return Err(format!(
+                    "DSR {name} IPv6 decap proto {proto}: {gsrc:?}:{gs} -> {gdst:?}:{gd} l4 {gl4_ok}"
+                )
+                .into());
+            }
+            let (rsrc, rdst, rs, rd, _, rl4_ok) =
+                parse6(&run_on(lb, "nodeport_egress", &reply, up0, TCX_NEXT)?)?;
+            if (rsrc, rdst, rs, rd) != (front6, client6, 30095, sport) || !rl4_ok {
+                return Err(format!(
+                    "DSR {name} IPv6 reply proto {proto}: {rsrc:?}:{rs} -> {rdst:?}:{rd}"
+                )
+                .into());
+            }
+        }
+        // A later TCP segment finds the backend's reply entry: plain DNAT.
+        let later = ack(frame4(6, client, front, base, 30095, false), 34)?;
+        let out = run_on(lb, "nodeport_ingress", &later, up0, TC_ACT_REDIRECT)?;
+        let (src, dst, _, d, ip_ok, l4_ok) = parse4(&out)?;
+        if out.get(23) != Some(&6) || (src, dst, d) != (client, remote, 8080) || !ip_ok || !l4_ok {
+            return Err(format!("DSR {name} later segment: {src:?} -> {dst:?}:{d}").into());
+        }
+        // Forged encapsulations drop on the backend's node.
+        let request = frame4(6, client, front, base.saturating_add(5), 30095, false);
+        let valid = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+        let mut forged: Vec<(&str, Vec<u8>)> = Vec::new();
+        if geneve {
+            let mut wrong_front = valid.clone();
+            wrong_front.splice(54..58, [192, 0, 2, 99]);
+            let mut not_backend = valid.clone();
+            not_backend.splice(92..96, [10, 9, 1, 6]);
+            forged.push(("a frontend that is not DSR", wrong_front));
+            forged.push(("a destination that is not a backend", not_backend));
+        } else {
+            let mut not_backend = valid.clone();
+            not_backend.splice(30..34, [10, 9, 1, 6]);
+            forged.push(("an outer destination that is not a backend", not_backend));
+        }
+        for (what, frame) in forged {
+            run_on(lb, "nodeport_ingress", &frame, up0, TC_ACT_SHOT)
+                .map_err(|e| format!("DSR {name} with {what}: {e}"))?;
+            let reply = frame4(6, [10, 9, 1, 6], client, 8080, base.saturating_add(5), false);
+            if run_on(lb, "nodeport_egress", &reply, up0, TCX_NEXT)? != reply {
+                return Err(format!("DSR {name} with {what} left a reply rewrite").into());
+            }
+        }
+        // IPv6: a destination that is not a backend drops too.
+        let request = frame6(6, client6, front6, base.saturating_add(6), 30095, false);
+        let valid = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+        let mut not_backend = valid.clone();
+        let last = if geneve { 147 } else { 53 };
+        if let Some(byte) = not_backend.get_mut(last) {
+            *byte = 0x06;
+        }
+        run_on(lb, "nodeport_ingress", &not_backend, up0, TC_ACT_SHOT)
+            .map_err(|e| format!("DSR {name} IPv6 to a destination that is not a backend: {e}"))?;
+    }
+    lb.set_dsr_dispatch(DsrDispatch::Opt)?;
+    println!(
+        "PASS DSR by encapsulation: with lb-dsr-dispatch ipip the client's packet (TTL / hop limit lowered) leaves inside an outer IPv4 or IPv6 header from the node's address to the backend, with geneve the DNATed packet leaves in Ethernet + Geneve (VNI 2, the DSR option naming the frontend) over UDP 6081 to the next hop, TCP and UDP, IPv4 and IPv6; the backend's node strips either, hands on the packet DNATed with valid checksums and rewrites the reply's source to the frontend; a later TCP segment is plain DNAT; an encapsulation naming a destination that is not a backend, or a frontend that is not DSR, drops"
+    );
+    Ok(())
 }
 
 /// ICMP errors of Service flows (#449), for a DSR frontend (192.0.2.20:30095,
