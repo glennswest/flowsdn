@@ -8,6 +8,8 @@ replacement and enrollment boundaries; it does not announce working proxies.
 
 ## Envoy replacement (#262)
 
+> Superseded by [ADR-0024](0024-rust-l7-proxy-in-the-agent.md) (#563): the L7 proxy is a Rust proxy in the agent and Envoy is not used. The gates below became that proxy's acceptance criteria.
+
 Retain the external, digest-pinned `cilium/proxy` Envoy DaemonSet as the supported
 L7 execution target. Do not silently substitute a new Rust proxy. A Rust L7
 proxy is a separate project with its own ownership, versioning and security

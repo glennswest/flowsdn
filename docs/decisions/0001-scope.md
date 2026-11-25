@@ -45,7 +45,7 @@ Internals are free. Notably:
 
 ## Consequences
 
-- Envoy remains the L7 proxy initially, consumed as the cilium/proxy image
+- (Superseded by [ADR-0024](0024-rust-l7-proxy-in-the-agent.md), #563: the L7 proxy is a Rust proxy in the agent.) Envoy remains the L7 proxy initially, consumed as the cilium/proxy image
   running as its own DaemonSet. Replacing it with a Rust proxy is a separate
   decision (ADR to come) and a separate project.
 - x86-64 and arm64 are both first-class from the first commit. One BPF

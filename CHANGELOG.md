@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#563)
+- **docs:** ADR-0024, following the master's ruling on #543: flowsdn's L7 proxy is a Rust module of the agent, with no Envoy and no xDS.
+  - **Traffic path:** traffic reaches it through the existing policy and Service redirects, by BPF TPROXY (`bpf_sk_assign`) only.
+  - **Rules:** it reads policy, identities and Secrets in process.
+  - **Order:** the DNS proxy becomes its DNS listener (#536), then HTTP policy (#537; Kafka stays refused, as in the reference at v1.20), then Ingress and Gateway API.
+  - **Gateway and Ingress:** each agent translates them to spec 21's model and serves it; the operator keeps status.
+  - **Retired kinds:** FlowsdnEnvoyConfig and FlowsdnClusterwideEnvoyConfig.
+  - **Conformance:** the upstream Gateway API and Ingress suites run against the proxy. The Envoy goldens become divergences.
+  - **Superseded:** ADR-0015's Envoy section; spec 16 and 21 amendments record the rest.
+
 ### 2026-11-25 (#517)
 - **feat:** The scripttest IPAM areas (`ipam-migration`, `ipam-multipool`, `podippool`) run in the corpus gate.
   - **`ipam/start`** uses the agent's IPAM source: the local Node's pod CIDRs, read with flowsdn's Node parser.

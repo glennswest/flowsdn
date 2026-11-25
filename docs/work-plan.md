@@ -4,6 +4,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### ADR: Rust L7 proxy in the agent — #563 (P3), 2026-11-25
+
+- [x] ADR-0024 (in-agent module `flowsdn-l7`, BPF TPROXY only, no xDS or CEC, order DNS → HTTP → Ingress → Gateway API, Kafka refused, OpenSSL TLS with agent-read Secrets, conformance via the upstream suites). Spec 16/21 amendments, ADR-0015/ADR-0001 notes, docs index.
+- Parked behind it, picked up when something on the platform needs L7: #536, #537, #543, #474, #335 (only FlowsdnGatewayClassConfig), #525 (divergences).
+
 ### Local redirect policy and skip-LB — #565 (P3), 2026-11-25
 
 - [x] socket-lb skip maps and the scope-2 own-Service copy; planner, loader, watch (Pod ports/readiness, RedirectPolicies), agent planning (`local_redirect.rs`), the `flowsdn-lrp` thread (re-plan every 2 s, `status.ok`), `GET /v1/lrp`, RBAC, docs.

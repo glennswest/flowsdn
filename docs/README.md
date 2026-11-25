@@ -22,6 +22,8 @@ points, rather than treating specifications as a list of implemented features.
 | Test container (`/test short\|medium\|long\|perf\|perf-scale`) | [test/README.md](../test/README.md) |
 | Why no reference-project names ship, and the name check | [ADR-0020](decisions/0020-no-reference-names-shipped.md) |
 | How endpoint policy is enforced (shared programs and maps) | [ADR-0021](decisions/0021-endpoint-policy-datapath.md) |
+| How ClusterMesh is named (flowsdn keys and kinds, no Cilium interop) | [ADR-0023](decisions/0023-clustermesh-flowsdn-names.md) |
+| Where L7 is done (a Rust proxy in the agent; no Envoy, no xDS) | [ADR-0024](decisions/0024-rust-l7-proxy-in-the-agent.md) |
 
 ## Specifications and historical evidence
 

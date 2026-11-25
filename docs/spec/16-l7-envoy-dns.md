@@ -1990,3 +1990,21 @@ The L7 proxy will be a Rust proxy in the agent, decided by its own ADR first (#5
 nothing is built before something on the platform needs L7. Until that ADR, this spec's Envoy, xDS and
 CiliumEnvoyConfig text describes the reference's contract, not flowsdn's plan; the ADR rewrites it
 (§3.1, §3.4 and the xDS contracts). Parked behind #563: the L7 work of #537 and #543.
+
+## Amendment — ADR-0024: the Rust L7 proxy in the agent (#563, 2026-11-25)
+
+[ADR-0024](../decisions/0024-rust-l7-proxy-in-the-agent.md) decides flowsdn's L7 proxy, replacing the placeholder
+amendment above. The proxy is a module of the agent process (`flowsdn-l7`). Consequences for this spec:
+
+- §3.1 and §3.2 (the Envoy DaemonSet, the xDS server, bootstrap, admin and access-log sockets, the `cilium.*`
+  NPDS/NPHDS protobufs) are not built. The proxy reads endpoint policy, identities and the ipcache in process. The
+  ACK barrier of §3.1.5 becomes "a listener is bound before its port is published in a policy map entry".
+- §3.3 (proxy ports, redirect lifecycle, persistence) is kept. The datapath redirect uses only the BPF TPROXY path
+  (`bpf_sk_assign`); the nftables `tproxy` rules of §3.3.3 are not built.
+- §3.4 (CiliumEnvoyConfig) is not built; `FlowsdnEnvoyConfig` and `FlowsdnClusterwideEnvoyConfig` are retired.
+- §3.5: HTTP rules (§3.5.1) and TLS interception (§3.5.3) are implemented by the proxy. Kafka stays refused.
+  Secrets are read by the agent (§3.5.4), with no SDS.
+- §3.6: the DNS proxy is the proxy's DNS listener, with the same redirect lifecycle. §3.7 (the standalone DNS
+  proxy) is not built.
+- Order: proxy core, DNS (#536), HTTP (#537), then Ingress and Gateway API (spec 21).
+

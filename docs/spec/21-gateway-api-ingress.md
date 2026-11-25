@@ -2298,3 +2298,20 @@ The L7 proxy will be a Rust proxy in the agent, decided by its own ADR first (#5
 nothing is built before something on the platform needs L7. Until that ADR, this spec's Envoy, xDS and
 CiliumEnvoyConfig text describes the reference's contract, not flowsdn's plan; the ADR rewrites it
 (§1.3's P1–P2 and the translation target). Parked behind #563: #543 (Gateway API controller), #474 (`parentRef.port`).
+
+## Amendment — ADR-0024: no Envoy, no CiliumEnvoyConfig (#563, 2026-11-25)
+
+[ADR-0024](../decisions/0024-rust-l7-proxy-in-the-agent.md) puts the L7 proxy in the agent and drops Envoy. For
+this spec:
+
+- §1.3: P1 and P2 become "the agent's proxy serves the `Model`". P3 (the `l7_lb_proxy_port` redirect) and P5–P6
+  stand. P4 (secret sync) is dropped: the agent reads the referenced Secrets.
+- §3.1: each agent translates Ingress and Gateway API objects to the §4 `Model` and its proxy serves it. There is no
+  model-to-CEC translation and no CEC. The operator keeps status (§3.11), generated Services and EndpointSlices
+  (§2.3) and GatewayClass acceptance.
+- §9: the ingestion goldens (objects to `Model`) remain binding. The CEC/Envoy output goldens become recorded
+  divergences under ADR-0024. The upstream Gateway API and ingress-controller conformance suites run against
+  the Rust proxy.
+- Staging is unchanged: Ingress (stage 1), then Gateway API. Nothing starts before something on the platform
+  needs L7.
+
