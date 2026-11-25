@@ -1,0 +1,14 @@
+# flowsdn's expected divergences for this area (spec 17 §3.7, ADR-0005).
+# Not harvested; excluded from a re-harvest.
+
+[[divergence]]
+id = "envoyconfig-no-envoy"
+script = "envoyconfig/*.txtar"
+adr = "ADR-0024"
+kind = "expected-fail"
+reason = """
+These scripts assert the reference's CiliumEnvoyConfig / CiliumClusterwideEnvoyConfig handling:
+Envoy listeners, clusters and routes pushed over xDS (`envoy/cmp`) and the L7 redirects of the
+Services they name. flowsdn has no Envoy and no xDS: its L7 proxy is a Rust module of the agent
+configured from policy and spec 21's model, and the Envoy config kinds are retired (ADR-0024).
+"""

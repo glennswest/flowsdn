@@ -9,8 +9,9 @@ use serde_json::json;
 use std::sync::{Arc, Mutex};
 
 /// The areas with a builder: the harvested scripts the runner executes.
-pub const AREAS: [&str; 9] = [
+pub const AREAS: [&str; 10] = [
     "dynamicconfig",
+    "envoyconfig",
     "hive-health",
     "ipam-migration",
     "ipam-multipool",
@@ -26,7 +27,9 @@ pub fn build(area: &str, flags: &[String]) -> Result<Engine, String> {
     match area {
         // The fake API and the agent lifecycle only: flowsdn has none of the
         // reference tables these areas compare (their DIVERGENCES.toml).
-        "dynamicconfig" | "k8s-tables" => kubernetes_only(FakeClient::default(), flags),
+        "dynamicconfig" | "envoyconfig" | "k8s-tables" => {
+            kubernetes_only(FakeClient::default(), flags)
+        }
         "ipam-migration" | "ipam-multipool" | "podippool" => ipam(flags),
         "hive-health" => hive_health(),
         "k8sclient" => k8sclient(flags),

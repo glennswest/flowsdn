@@ -91,7 +91,8 @@ Needs step A (#516: Fixture, table store, lifecycle, fake Kubernetes adapters) f
 
 Envoy-specific (fake Envoy, `envoy/cmp`, CEC → xDS): under the master's ruling (never Envoy) #563 decides what replaces
 that contract and already lists #525 in its scope. Parked --after #563; the `envoyconfig` area stays unasserted.
-- [ ] After #563: port to the Rust proxy's config, or record ADR-0005 divergences.
+- [x] After #563: port to the Rust proxy's config, or record ADR-0005 divergences.
+- [x] 2026-11-25: done under ADR-0024. envoyconfig runs and is recorded as expected-fail (no Envoy/xDS/CEC); the fake Envoy and `envoy/cmp` are not built.
 
 ### toFQDNs and DNS rules — #536 (P3), 2026-11-25
 

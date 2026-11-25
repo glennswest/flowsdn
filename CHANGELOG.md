@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#525)
+- **feat:** The scripttest `envoyconfig` area (12 scripts) runs in the corpus gate on the fake API and agent lifecycle, recorded as an expected divergence under ADR-0024. flowsdn has no Envoy, xDS or CiliumEnvoyConfig, so the fake Envoy and `envoy/cmp` are not built. Gate: 8 PASS, 27 XFAIL, 0 FAIL.
+
 ### 2026-11-25 (#537, #536)
 - **planning:** Under ADR-0024, HTTP L7 policy (#537, step 3) and the DNS proxy / toFQDNs (#536, step 2) are parked after the L7 proxy core (#577). Kafka rules stay refused (removed by the reference at v1.20), so #537's done line is HTTP only. Behaviour is unchanged: L7 and DNS rules are refused, reported and skipped (fail closed).
 
