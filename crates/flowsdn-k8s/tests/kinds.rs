@@ -15,7 +15,8 @@
 //!   `Kind::named` object.
 use flowsdn_k8s::crd::{owned_crds, yaml_to_json};
 use flowsdn_k8s::kinds::{
-    API_VERSION, FlowsdnEndpoint, FlowsdnEndpointSlice, FlowsdnIdentity, FlowsdnNode,
+    API_VERSION, FlowsdnDatapathPlugin, FlowsdnEgressGatewayPolicy, FlowsdnEndpoint,
+    FlowsdnEndpointSlice, FlowsdnIdentity, FlowsdnLocalRedirectPolicy, FlowsdnNode,
     FlowsdnNodeConfig, Kind,
 };
 use flowsdn_k8s::schema::{apply_defaults, validate};
@@ -116,7 +117,23 @@ impl Generator<'_> {
                     Some("ipv4") => json!(format!("10.0.0.{octet}")),
                     Some("ipv6") => json!(format!("fd00::{octet:x}")),
                     Some("date-time") => json!("2026-11-20T08:00:00Z"),
-                    _ => json!(format!("v{n}")),
+                    // The first candidate the string's own schema admits
+                    // (its pattern, CEL rules): a name first, so kinds
+                    // without such rules get what they always did; then a
+                    // port, IPv4 CIDR and address, IPv6 address and prefix
+                    // (#336: ports, CIDRs and egress IPs).
+                    _ => [
+                        format!("v{n}"),
+                        format!("{}", n.checked_rem(65_534).unwrap_or(0).saturating_add(1)),
+                        format!("10.{octet}.0.0/16"),
+                        format!("10.0.0.{octet}"),
+                        format!("fd00::{octet:x}"),
+                        format!("fd00:{octet:x}::/64"),
+                    ]
+                    .into_iter()
+                    .map(|candidate| json!(candidate))
+                    .find(|candidate| validate(schema, candidate).is_empty())
+                    .unwrap_or_else(|| json!(format!("v{n}"))),
                 }
             }
             Some("integer") => {
@@ -151,14 +168,32 @@ impl Generator<'_> {
 
     fn object(&mut self, schema: &Value, depth: usize) -> Value {
         let mut out = Map::new();
-        let required: Vec<&str> = schema
-            .get("required")
-            .and_then(Value::as_array)
-            .map(|r| r.iter().filter_map(Value::as_str).collect())
-            .unwrap_or_default();
+        let names = |s: &Value| -> Vec<String> {
+            s.get("required")
+                .and_then(Value::as_array)
+                .map(|r| r.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+                .unwrap_or_default()
+        };
+        let mut required = names(schema);
+        // `oneOf` over required properties (#336: an address or a Service):
+        // one branch's are written, the others' left out.
+        let mut excluded: Vec<String> = Vec::new();
+        if let Some(branches) = schema.get("oneOf").and_then(Value::as_array)
+            && !branches.is_empty()
+        {
+            let pick = self.pick(branches.len());
+            let keep = branches.get(pick).map(names).unwrap_or_default();
+            for (index, branch) in branches.iter().enumerate() {
+                if index != pick {
+                    excluded.extend(names(branch).into_iter().filter(|n| !keep.contains(n)));
+                }
+            }
+            required.extend(keep);
+        }
+        let required: Vec<&str> = required.iter().map(String::as_str).collect();
         if let Some(properties) = schema.get("properties").and_then(Value::as_object) {
             for (name, child) in properties {
-                if name == "apiVersion" || name == "kind" {
+                if name == "apiVersion" || name == "kind" || excluded.contains(name) {
                     continue;
                 }
                 if name == "metadata" && depth == 0 {
@@ -362,6 +397,18 @@ fn flowsdn_node() {
 #[test]
 fn flowsdn_node_config() {
     all::<FlowsdnNodeConfig>(0x332_0005);
+}
+#[test]
+fn flowsdn_egress_gateway_policy() {
+    all::<FlowsdnEgressGatewayPolicy>(0x336_0001);
+}
+#[test]
+fn flowsdn_local_redirect_policy() {
+    all::<FlowsdnLocalRedirectPolicy>(0x336_0002);
+}
+#[test]
+fn flowsdn_datapath_plugin() {
+    all::<FlowsdnDatapathPlugin>(0x336_0003);
 }
 
 #[test]

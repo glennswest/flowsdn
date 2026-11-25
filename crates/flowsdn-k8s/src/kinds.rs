@@ -72,6 +72,9 @@ kind!(FlowsdnEndpointSlice, "flowsdnendpointslices", false);
 kind!(FlowsdnIdentity, "flowsdnidentities", false);
 kind!(FlowsdnNode, "flowsdnnodes", false);
 kind!(FlowsdnNodeConfig, "flowsdnnodeconfigs", true);
+kind!(FlowsdnEgressGatewayPolicy, "flowsdnegressgatewaypolicies", false);
+kind!(FlowsdnLocalRedirectPolicy, "flowsdnlocalredirectpolicies", true);
+kind!(FlowsdnDatapathPlugin, "flowsdndatapathplugins", false);
 
 /// FlowsdnEndpoint is the status of a flowsdn policy rule.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
@@ -1375,4 +1378,260 @@ pub struct CloudSubnet {
     /// ID is the resource ID of the subnet
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+}
+
+// The egress, redirect and plugin kinds (#336). Enumerated fields are strings,
+// so a value this build does not know still deserializes (T-CRD-5).
+
+/// A Kubernetes label selector (`matchLabels` and `matchExpressions`, ANDed).
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct LabelSelector {
+    /// matchExpressions is a list of label selector requirements. The requirements are ANDed.
+    #[serde(
+        rename = "matchExpressions",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub match_expressions: Option<Vec<LabelSelectorRequirement>>,
+    /// matchLabels is a map of {key,value} pairs, each equivalent to an `In` requirement with
+    /// that one value.
+    #[serde(
+        rename = "matchLabels",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub match_labels: Option<BTreeMap<String, String>>,
+}
+
+/// One label selector requirement: a key, an operator (In, NotIn, Exists, DoesNotExist) and
+/// values.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct LabelSelectorRequirement {
+    pub key: String,
+    pub operator: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub values: Option<Vec<String>>,
+}
+
+/// FlowsdnEgressGatewayPolicy: traffic from the selected Pods to the destination CIDRs leaves
+/// the cluster through a gateway node, from its egress IP (spec 14).
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnEgressGatewayPolicy {
+    /// `apiVersion`: flowsdn.io/v1alpha1 (empty: not written).
+    #[serde(
+        rename = "apiVersion",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub api_version: String,
+    /// `kind`: the kind name (empty: not written).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
+    /// Standard object metadata.
+    #[serde(default)]
+    pub metadata: ObjectMeta,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec: Option<FlowsdnEgressGatewayPolicySpec>,
+}
+
+/// The egress gateway policy's spec.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnEgressGatewayPolicySpec {
+    /// Destination CIDRs the policy applies to.
+    #[serde(rename = "destinationCIDRs")]
+    pub destination_cidrs: Vec<String>,
+    /// The gateway node (by node selector) and its egress IP or interface.
+    #[serde(rename = "egressGateway")]
+    pub egress_gateway: EgressGateway,
+    /// Further gateways.
+    #[serde(
+        rename = "egressGateways",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub egress_gateways: Option<Vec<EgressGateway>>,
+    /// Destination CIDRs excluded from the policy.
+    #[serde(
+        rename = "excludedCIDRs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub excluded_cidrs: Option<Vec<String>>,
+    /// The source Pods: by namespace, node and Pod selectors.
+    pub selectors: Vec<EgressRule>,
+}
+
+/// One egress gateway: a node selector and, optionally, its egress IP or interface.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct EgressGateway {
+    #[serde(rename = "egressIP", default, skip_serializing_if = "Option::is_none")]
+    pub egress_ip: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interface: Option<String>,
+    #[serde(rename = "nodeSelector")]
+    pub node_selector: LabelSelector,
+}
+
+/// One source selection of an egress gateway policy.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct EgressRule {
+    #[serde(
+        rename = "namespaceSelector",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub namespace_selector: Option<LabelSelector>,
+    #[serde(
+        rename = "nodeSelector",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub node_selector: Option<LabelSelector>,
+    #[serde(
+        rename = "podSelector",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pod_selector: Option<LabelSelector>,
+}
+
+/// FlowsdnLocalRedirectPolicy: traffic to a frontend (an address or a Service) is redirected
+/// to local backend Pods on the same node (spec 05).
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnLocalRedirectPolicy {
+    /// `apiVersion`: flowsdn.io/v1alpha1 (empty: not written).
+    #[serde(
+        rename = "apiVersion",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub api_version: String,
+    /// `kind`: the kind name (empty: not written).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
+    /// Standard object metadata.
+    #[serde(default)]
+    pub metadata: ObjectMeta,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec: Option<FlowsdnLocalRedirectPolicySpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<FlowsdnLocalRedirectPolicyStatus>,
+}
+
+/// The local redirect policy's spec.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnLocalRedirectPolicySpec {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// The local Pods traffic is redirected to, and their ports.
+    #[serde(rename = "redirectBackend")]
+    pub redirect_backend: RedirectBackend,
+    /// What is redirected: an address and ports, or a Service.
+    #[serde(rename = "redirectFrontend")]
+    pub redirect_frontend: RedirectFrontend,
+    /// Whether a backend's own traffic to the frontend is not redirected (skip-LB).
+    #[serde(
+        rename = "skipRedirectFromBackend",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub skip_redirect_from_backend: Option<bool>,
+}
+
+/// The local backends of a redirect.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct RedirectBackend {
+    #[serde(rename = "localEndpointSelector")]
+    pub local_endpoint_selector: LabelSelector,
+    #[serde(rename = "toPorts")]
+    pub to_ports: Vec<RedirectPort>,
+}
+
+/// The frontend of a redirect: one of an address or a Service.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct RedirectFrontend {
+    #[serde(
+        rename = "addressMatcher",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub address_matcher: Option<RedirectAddress>,
+    #[serde(
+        rename = "serviceMatcher",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub service_matcher: Option<RedirectService>,
+}
+
+/// A frontend address and its ports.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct RedirectAddress {
+    pub ip: String,
+    #[serde(rename = "toPorts")]
+    pub to_ports: Vec<RedirectPort>,
+}
+
+/// A frontend Service and, optionally, which of its ports.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct RedirectService {
+    pub namespace: String,
+    #[serde(rename = "serviceName")]
+    pub service_name: String,
+    #[serde(rename = "toPorts", default, skip_serializing_if = "Option::is_none")]
+    pub to_ports: Option<Vec<RedirectPort>>,
+}
+
+/// A port of a redirect: number (as a string), protocol (TCP or UDP) and an optional name.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct RedirectPort {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub port: String,
+    pub protocol: String,
+}
+
+/// The local redirect policy's status.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnLocalRedirectPolicyStatus {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ok: Option<bool>,
+}
+
+/// FlowsdnDatapathPlugin registers a datapath plugin and how flowsdn treats it.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnDatapathPlugin {
+    /// `apiVersion`: flowsdn.io/v1alpha1 (empty: not written).
+    #[serde(
+        rename = "apiVersion",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub api_version: String,
+    /// `kind`: the kind name (empty: not written).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
+    /// Standard object metadata.
+    #[serde(default)]
+    pub metadata: ObjectMeta,
+    pub spec: FlowsdnDatapathPluginSpec,
+}
+
+/// The datapath plugin's spec.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnDatapathPluginSpec {
+    /// What flowsdn does when it cannot talk to the plugin: Always or BestEffort.
+    #[serde(rename = "attachmentPolicy")]
+    pub attachment_policy: String,
+    /// An opaque version; a change triggers a datapath reinitialization.
+    pub version: String,
+}
+impl Default for FlowsdnDatapathPluginSpec {
+    /// A valid empty spec: `attachmentPolicy` is an enum, so not empty.
+    fn default() -> Self {
+        Self {
+            attachment_policy: "Always".into(),
+            version: String::new(),
+        }
+    }
 }
