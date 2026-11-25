@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### scripttest Envoy config adapters — #525 (P3), 2026-11-25
+
+Envoy-specific (fake Envoy, `envoy/cmp`, CEC → xDS): under the master's ruling (never Envoy) #563 decides what replaces
+that contract and already lists #525 in its scope. Parked --after #563; the `envoyconfig` area stays unasserted.
+- [ ] After #563: port to the Rust proxy's config, or record ADR-0005 divergences.
+
 ### toFQDNs and DNS rules — #536 (P3), 2026-11-25
 
 Applied the master's L7 ruling (on #543): the DNS proxy is in the agent (spec 16 §3.6) but uses the shared proxy-port
