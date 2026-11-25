@@ -30,6 +30,7 @@ Needs step A (#516) first; open. Parked --after #516.
 Needs step A (#516) first; open. Parked --after #516. `redirectpolicy` also needs #565 (LRP agent side; #336 did
 only the types) or a recorded divergence.
 - [ ] After #516: `lb/*`, `skiplbmap`, `svc/set-proxy-redirect`, `test/*`, `http/get` (§3.3.5-6), DIVERGENCES.toml x3.
+- [ ] 2026-11-25: blocked on a decision (comment on #519). The agent's LB is a stateless translation to socket-LB map writes, with none of spec 05 §4.1's services/frontends/backends tables, which the corpus's 285 `db/cmp` assertions read. Options: build the tables (reconciled into the maps through flowsdn-reconcile; recommended, as its own gap), or an ADR superseding spec 05 §4.1 / ADR-0004's LB clause. Nothing built.
 
 ### scripttest Hubble exporter adapters — #521 (P3), 2026-11-25
 
