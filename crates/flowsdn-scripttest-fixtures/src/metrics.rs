@@ -177,6 +177,9 @@ fn percentiles(seconds: bool, (p50, p90, p99): (f64, f64, f64)) -> String {
     )
 }
 
+/// A sampled series: (name, labels) and (in seconds, samples newest first).
+type SampledRow<'a> = (&'a (String, String), &'a (bool, Vec<Sample>));
+
 #[derive(Debug, Default)]
 struct Sampled {
     /// (name, labels) -> its samples, newest first.
@@ -239,7 +242,7 @@ impl Metrics {
         rows.sort_by(|a, b| (&a.name, a.labels_text()).cmp(&(&b.name, b.labels_text())));
         rows
     }
-    fn sampled(&self, re: Option<&regex::Regex>) -> Vec<(&(String, String), &(bool, Vec<Sample>))> {
+    fn sampled(&self, re: Option<&regex::Regex>) -> Vec<SampledRow<'_>> {
         self.sampled
             .series
             .iter()

@@ -1,0 +1,15 @@
+# flowsdn's expected divergences for this area (spec 17 §3.7, ADR-0005).
+# Not harvested; excluded from a re-harvest.
+
+[[divergence]]
+id = "k8s-tables-statedb-reflector-tables"
+script = "k8s-tables/*.txtar"
+adr = "ADR-0004"
+kind = "expected-fail"
+reason = """
+These scripts assert the reference's StateDB Kubernetes tables (`k8s-pods`, `k8s-namespaces`):
+their columns, a reflector job's health row (`job-k8s-reflector-...: 1 upserted, 0 deleted`), and
+JSON/YAML exports of its slim Go object types. flowsdn has no StateDB (ADR-0004); its reflector
+(`flowsdn-k8s` `watch::WatchState`, spec 13 §5.2) keeps one table of the fields its consumers read
+per watched scope, reports no per-job health rows, and has no object export to compare.
+"""

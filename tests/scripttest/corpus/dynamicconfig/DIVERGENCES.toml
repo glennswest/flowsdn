@@ -1,0 +1,16 @@
+# flowsdn's expected divergences for this area (spec 17 §3.7, ADR-0005).
+# Not harvested; excluded from a re-harvest.
+
+[[divergence]]
+id = "dynamicconfig-no-live-reflection"
+script = "dynamicconfig/*.txtar"
+adr = "ADR-0017"
+kind = "expected-fail"
+reason = """
+These scripts assert the reference's dynamic-config reflector: a live `cilium-configs` table of
+reference option names from the `cilium-config` ConfigMap, CiliumNodeConfig objects and
+`config.cilium.io/` Node annotations. flowsdn's configuration sources are its own: the ConfigMap
+default is `kube-system/flowsdn-config` (ADR-0017), and a FlowsdnNodeConfig's `spec.defaults` are
+flowsdn agent settings applied once at agent start, reference option names refused (spec 00,
+FlowsdnNodeConfig amendment, #480). There is no live configuration table to compare.
+"""

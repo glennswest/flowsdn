@@ -9,11 +9,20 @@ use serde_json::json;
 use std::sync::{Arc, Mutex};
 
 /// The areas with a builder: the harvested scripts the runner executes.
-pub const AREAS: [&str; 3] = ["hive-health", "k8sclient", "metrics"];
+pub const AREAS: [&str; 5] = [
+    "dynamicconfig",
+    "hive-health",
+    "k8s-tables",
+    "k8sclient",
+    "metrics",
+];
 
 /// The engine for one script of `area`, with the script's `#!` flags.
 pub fn build(area: &str, flags: &[String]) -> Result<Engine, String> {
     match area {
+        // The fake API and the agent lifecycle only: flowsdn has none of the
+        // reference tables these areas compare (their DIVERGENCES.toml).
+        "dynamicconfig" | "k8s-tables" => kubernetes_only(FakeClient::default(), flags),
         "hive-health" => hive_health(),
         "k8sclient" => k8sclient(flags),
         "metrics" => metrics(flags),
@@ -27,6 +36,11 @@ fn k8sclient(flags: &[String]) -> Result<Engine, String> {
     let mut client = FakeClient::default();
     client.add(json!({"apiVersion": "cilium.io/v2", "kind": "CiliumNode",
         "metadata": {"name": "test"}}))?;
+    kubernetes_only(client, flags)
+}
+
+/// The fake client, `hive/*` and `k8s/*`, with no components.
+fn kubernetes_only(client: FakeClient, flags: &[String]) -> Result<Engine, String> {
     let fixture = Fixture::new(client, flags, Box::new(|_| Ok(Vec::new())))?;
     let shared = Arc::new(Mutex::new(fixture));
     let k8s = Arc::clone(&lock(&shared).k8s);
