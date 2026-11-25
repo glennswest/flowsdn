@@ -7,7 +7,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 ### L7 proxy core — #577 (P3), 2026-11-25
 
 - [x] local-delivery egress redirect (mark, sk_assign, proxy port in the flow entry), `flowsdn-l7` (listener, ports, route, record), `proxy-live`, docs.
-- [ ] sc-build; local-delivery object + lock rebuild; strict build with kernel-check (`proxy-live`); stage.
+- [x] local-delivery object + lock rebuilt; kernel-check on 7.3.4-200.fc44: 25 pass, 0 fail, 2 skip, `proxy-live` PASS (original destination, source, identity, data both ways, fail closed).
+- [ ] Strict build at the commit carrying the object; stage.
 - Not in this step: ingress-direction and Service (`l7_lb_proxy_port`) redirects; follow-up issue.
 
 ### Egress gateway — #564 (P3), 2026-11-25

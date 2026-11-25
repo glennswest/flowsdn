@@ -8,7 +8,16 @@ fn allocation_prefers_the_request_and_skips_open_ports() {
     let mut ports = Ports::new((10000, 10009));
     let open = BTreeSet::from([10004u16]);
     let first = ports
-        .acquire("http-egress", "http", false, Some(10004), false, &open, 0, 0)
+        .acquire(
+            "http-egress",
+            "http",
+            false,
+            Some(10004),
+            false,
+            &open,
+            0,
+            0,
+        )
         .unwrap();
     assert_ne!(first, 10004, "an open port is never chosen");
     assert!((10000..=10009).contains(&first) && first != 10004);

@@ -141,14 +141,16 @@ fn run(object: &[u8]) -> Result<()> {
         .attach("ep0")
         .map_err(|e| format!("attach to ep0: {e}"))?;
     let key = IpCacheKey::v4(POD, 32, 0).map_err(|_| "ipcache prefix")?;
-    delivery.policy().upsert_ipcache(
-        key,
-        RemoteEndpointInfo {
-            sec_identity: POD_IDENTITY,
-            ..Default::default()
-        },
-    )
-    .map_err(|e| format!("ipcache: {e}"))?;
+    delivery
+        .policy()
+        .upsert_ipcache(
+            key,
+            RemoteEndpointInfo {
+                sec_identity: POD_IDENTITY,
+                ..Default::default()
+            },
+        )
+        .map_err(|e| format!("ipcache: {e}"))?;
     let rule = PolicyKey::new(0, true, TCP, 80, 16).map_err(|_| "policy key")?;
     let entry = PolicyEntry::new(PROXY_PORT, false, 24, 0, false, 0xFFFF_FF01, 0)
         .map_err(|_| "policy entry")?;
@@ -156,14 +158,16 @@ fn run(object: &[u8]) -> Result<()> {
         .policy()
         .upsert_policy(EndpointPolicyKey::for_endpoint(ENDPOINT, rule), entry)
         .map_err(|e| format!("policy entry: {e}"))?;
-    delivery.policy().set_policy_endpoint(
-        ep0,
-        PolicyEndpoint {
-            endpoint: ENDPOINT,
-            flags: enforce::EGRESS,
-        },
-    )
-    .map_err(|e| format!("policy endpoint: {e}"))?;
+    delivery
+        .policy()
+        .set_policy_endpoint(
+            ep0,
+            PolicyEndpoint {
+                endpoint: ENDPOINT,
+                flags: enforce::EGRESS,
+            },
+        )
+        .map_err(|e| format!("policy endpoint: {e}"))?;
     let identities: Vec<(IpCacheKey, RemoteEndpointInfo)> = delivery
         .policy()
         .ipcache_entries()
