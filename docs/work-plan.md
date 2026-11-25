@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### scripttest ClusterMesh adapters — #526 (P3), 2026-11-25
+
+Needs step A (#516: Fixture, table store, lifecycle, fake Kubernetes adapters) first, per the issue and spec 17 §3.9;
+#516 is open. Parked --after #516.
+- [ ] After #516: kvstore fake, clustermesh-apiserver fixture (§3.3.11), DIVERGENCES.toml for 3 areas.
+
 ### scripttest Envoy config adapters — #525 (P3), 2026-11-25
 
 Envoy-specific (fake Envoy, `envoy/cmp`, CEC → xDS): under the master's ruling (never Envoy) #563 decides what replaces
