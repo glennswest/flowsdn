@@ -4,6 +4,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### scripttest IPAM adapters — #517 (P3), 2026-11-25
+
+Needs step A (#516) first; open. Parked --after #516. With this, every scripttest adapter gap (#517-#526) waits on #516.
+- [ ] After #516: IPAM fixture, `ipam/*`, `allocator/*` (§3.3.12), DIVERGENCES.toml x3.
+
 ### scripttest policy, identity and endpoint adapters — #518 (P3), 2026-11-25
 
 Needs step A (#516) first; open. Parked --after #516.
