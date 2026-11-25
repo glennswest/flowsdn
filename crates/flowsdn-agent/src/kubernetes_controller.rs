@@ -147,6 +147,7 @@ impl Controller {
             cluster_name: self.settings.cluster_name.clone(),
             lb_ipam: self.settings.lb_ipam_on(),
             l2_announcements: self.settings.l2_on(),
+            local_redirect: self.settings.local_redirect_on(),
             derive: self.derive,
             node_config: self.settings.node_config.clone(),
             ..View::default()
@@ -267,6 +268,14 @@ impl Controller {
                     lb::l2_lease_loop(&lease_view, kubeconfig.as_deref(), &identity);
                 })?;
         }
+        if let (true, Some(sender)) = (self.settings.local_redirect_on(), &lb) {
+            let redirect_view = Arc::clone(&view);
+            let kubeconfig = self.settings.kubeconfig.clone();
+            let sender = sender.clone();
+            std::thread::Builder::new()
+                .name("flowsdn-lrp".into())
+                .spawn(move || lb::redirect_loop(&redirect_view, &sender, kubeconfig.as_deref()))?;
+        }
         if self.settings.endpoint_crd || self.settings.node_crd {
             let crd_view = Arc::clone(&view);
             let kubeconfig = self.settings.kubeconfig.clone();
@@ -292,6 +301,7 @@ impl Controller {
                     ..
                 } = self;
                 let (lb_ipam_on, l2_on) = (settings.lb_ipam_on(), settings.l2_on());
+                let redirect_on = settings.local_redirect_on();
                 // flowsdn.io watchers start once their CRDs exist (#337).
                 let required: BTreeSet<String> = settings
                     .required_crds()
@@ -548,6 +558,24 @@ impl Controller {
                                 let mut view = lock(&l2_view);
                                 view.l2_policies = rows;
                                 view.l2_policies_synced = true;
+                            },
+                        ),
+                    ));
+                }
+                if redirect_on {
+                    let redirect_view = Arc::clone(&watch_view);
+                    parts.push(gated(
+                        gate.clone(),
+                        watch_forever(
+                            &client,
+                            Scope::RedirectPolicies,
+                            "local-redirect-policies",
+                            &watch_view,
+                            move |state| {
+                                let rows = object_rows(state);
+                                let mut view = lock(&redirect_view);
+                                view.redirect_policies = rows;
+                                view.redirect_policies_synced = true;
                             },
                         ),
                     ));
@@ -925,6 +953,8 @@ fn pod_rows(state: &WatchState) -> Vec<PodInfo> {
                     .any(|key| key == crate::tagging::NETWORK_STATUS),
                 resource_version: pod.metadata.resource_version.clone(),
                 named_ports: pod.named_ports.clone(),
+                ports: pod.ports.clone(),
+                ready: pod.ready,
             }),
             _ => None,
         })
@@ -966,7 +996,9 @@ fn object_rows(state: &WatchState) -> Vec<Value> {
         .snapshot()
         .all()
         .filter_map(|(row, _)| match &*row {
-            Resource::LbIpPool(p) | Resource::L2Policy(p) => Some(p.object.clone()),
+            Resource::LbIpPool(p) | Resource::L2Policy(p) | Resource::RedirectPolicy(p) => {
+                Some(p.object.clone())
+            }
             _ => None,
         })
         .collect()

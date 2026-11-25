@@ -15,8 +15,8 @@
 //! algorithm picks a new flow's backend from its lookup table in
 //! `flowsdn_lb{4,6}_maglev` by the flow hash, so every node sends a flow to
 //! the same backend (spec 05 §3.13, §5.1); without a table it picks at
-//! random. DSR and skip-LB are not done here; the agent terminates
-//! sockets.
+//! random. A local redirect honours the skip-LB maps (#565). DSR is not done
+//! here; the agent terminates sockets.
 #![no_std]
 #![no_main]
 
@@ -35,7 +35,10 @@ use aya_ebpf::{
 };
 use flowsdn_bpf_abi::{
     Be16, Be32,
-    affinity::{Lb4AffinityKey, Lb6AffinityKey, LbAffinityMatch, LbAffinityVal, NETNS_COOKIE},
+    affinity::{
+        Lb4AffinityKey, Lb6AffinityKey, LbAffinityMatch, LbAffinityVal, NETNS_COOKIE, SkipLb4Key,
+        SkipLb6Key,
+    },
     lb::{
         Ipv4RevnatEntry, Ipv4RevnatTuple, Ipv6RevnatEntry, Ipv6RevnatTuple, Lb4Backend, Lb4Key,
         DsrDispatch, Lb6Backend, Lb6Key, LbService, service_flags,
@@ -85,6 +88,41 @@ static LB6_AFFINITY: LruHashMap<Lb6AffinityKey, LbAffinityVal> =
 #[map(name = "flowsdn_lb_affinity_match")]
 static LB_AFFINITY_MATCH: HashMap<LbAffinityMatch, u8> =
     HashMap::with_max_entries(65536, BPF_F_NO_PREALLOC);
+
+/// Local redirect skip-LB (#565, spec 05 §3.9): sockets of these network
+/// namespaces are not redirected to a `LOCAL_REDIRECT` frontend's local
+/// backends; they get the frontend's own Service (scope
+/// [`SCOPE_REDIRECT_SKIPPED`]), or no translation when it has none.
+#[map(name = "flowsdn_skip_lb4")]
+static SKIP_LB4: HashMap<SkipLb4Key, u8> = HashMap::with_max_entries(1024, BPF_F_NO_PREALLOC);
+#[map(name = "flowsdn_skip_lb6")]
+static SKIP_LB6: HashMap<SkipLb6Key, u8> = HashMap::with_max_entries(1024, BPF_F_NO_PREALLOC);
+/// `flowsdn_lb::socket::SCOPE_REDIRECT_SKIPPED`.
+const SCOPE_REDIRECT_SKIPPED: u8 = 2;
+
+#[inline(always)]
+fn skipped4(cookie: u64, address: [u8; 4], port: [u8; 2]) -> bool {
+    let key = SkipLb4Key {
+        netns_cookie: cookie,
+        address: u32::from_ne_bytes(address),
+        port: u16::from_ne_bytes(port),
+        pad: 0,
+    };
+    // SAFETY: presence only; the value is not read.
+    unsafe { SKIP_LB4.get(&key) }.is_some()
+}
+#[inline(always)]
+fn skipped6(cookie: u64, address: [u8; 16], port: [u8; 2]) -> bool {
+    let key = SkipLb6Key {
+        netns_cookie: cookie,
+        address,
+        pad: 0,
+        port: u16::from_ne_bytes(port),
+        pad2: 0,
+    };
+    // SAFETY: as in skipped4.
+    unsafe { SKIP_LB6.get(&key) }.is_some()
+}
 
 /// Outcome of a frontend lookup.
 enum Lookup<B> {
@@ -224,9 +262,19 @@ fn lookup4(
     };
     // SAFETY: values are copied at once and never written through; entries
     // are RCU protected for this invocation.
-    let Some(service) = (unsafe { LB4_SERVICES.get(&key).copied() }) else {
+    let Some(mut service) = (unsafe { LB4_SERVICES.get(&key).copied() }) else {
         return Lookup::None;
     };
+    if service.service_flags() & service_flags::LOCAL_REDIRECT != 0
+        && skipped4(netns(ctx), address, port)
+    {
+        key.scope = SCOPE_REDIRECT_SKIPPED;
+        // SAFETY: as above.
+        let Some(own) = (unsafe { LB4_SERVICES.get(&key).copied() }) else {
+            return Lookup::None;
+        };
+        service = own;
+    }
     let rev = service.rev_nat_index;
     let sticky = service.service_flags() & service_flags::SESSION_AFFINITY != 0;
     let affinity = Lb4AffinityKey {
@@ -303,9 +351,19 @@ fn lookup6(
         pad: [0; 2],
     };
     // SAFETY: see lookup4.
-    let Some(service) = (unsafe { LB6_SERVICES.get(&key).copied() }) else {
+    let Some(mut service) = (unsafe { LB6_SERVICES.get(&key).copied() }) else {
         return Lookup::None;
     };
+    if service.service_flags() & service_flags::LOCAL_REDIRECT != 0
+        && skipped6(netns(ctx), address, port)
+    {
+        key.scope = SCOPE_REDIRECT_SKIPPED;
+        // SAFETY: see lookup4.
+        let Some(own) = (unsafe { LB6_SERVICES.get(&key).copied() }) else {
+            return Lookup::None;
+        };
+        service = own;
+    }
     let rev = service.rev_nat_index;
     let sticky = service.service_flags() & service_flags::SESSION_AFFINITY != 0;
     let [c0, c1, c2, c3, c4, c5, c6, c7] = netns(ctx).to_ne_bytes();

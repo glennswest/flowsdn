@@ -11,7 +11,7 @@
 use crate::maglev;
 use flowsdn_bpf_abi::{
     Be16, Be32, MapBytes,
-    affinity::LbAffinityMatch,
+    affinity::{LbAffinityMatch, SkipLb4Key, SkipLb6Key},
     lb::{Algorithm, Lb4Backend, Lb4Key, Lb6Backend, Lb6Key, LbService, service_flags},
     maglev::{ALGORITHM_MAGLEV, SEED_MURMUR, TABLE_LEN},
 };
@@ -27,6 +27,10 @@ pub const SCOPE_CLUSTER: u8 = 0;
 /// only this node's backends, for packets arriving from outside the cluster
 /// on the uplink (no SNAT, so a remote backend's reply would bypass us).
 pub const SCOPE_NODE_LOCAL: u8 = 1;
+/// A local-redirect frontend's own Service (#565, spec 05 §3.9): what a
+/// socket that skips the redirect (`skipRedirectFromBackend`, in
+/// `flowsdn_skip_lb{4,6}`) is translated to. Only the socket LB reads it.
+pub const SCOPE_REDIRECT_SKIPPED: u8 = 2;
 pub const PROTO_TCP: u8 = 6;
 pub const PROTO_UDP: u8 = 17;
 
@@ -76,6 +80,13 @@ pub struct Service {
     /// IPv6 socket at the other family's backend and refuses an IPv4 one
     /// (#542).
     pub nat46x64: bool,
+    /// A local redirect (#565, spec 05 §3.9): the master carries
+    /// `LOCAL_REDIRECT`, so the socket LB consults the skip-LB map first.
+    pub local_redirect: bool,
+    /// With `local_redirect`: the network namespace cookies whose sockets
+    /// skip this frontend (its backends' own, `skipRedirectFromBackend`),
+    /// written to `flowsdn_skip_lb{4,6}` as (cookie, address, port).
+    pub skip: Vec<u64>,
 }
 
 /// The four maps' contents as raw map bytes, keyed as the kernel keys them.
@@ -92,6 +103,10 @@ pub struct Maps {
     /// ([`TABLE_LEN`] backend IDs) by service ID.
     pub maglev4: BTreeMap<u16, Vec<u32>>,
     pub maglev6: BTreeMap<u16, Vec<u32>>,
+    /// `flowsdn_skip_lb{4,6}` keys (#565): (netns cookie, frontend address,
+    /// port) whose sockets are not redirected.
+    pub skip4: BTreeSet<[u8; 16]>,
+    pub skip6: BTreeSet<[u8; 32]>,
 }
 
 /// One map write. [`plan`] orders them so a concurrent lookup never reads a
@@ -113,6 +128,10 @@ pub enum Op {
     Maglev6(u16, Vec<u32>),
     DeleteMaglev4(u16),
     DeleteMaglev6(u16),
+    Skip4([u8; 16]),
+    Skip6([u8; 32]),
+    DeleteSkip4([u8; 16]),
+    DeleteSkip6([u8; 32]),
 }
 
 /// What [`desired`] chose: the map contents, and the service ID of each frontend.
@@ -121,6 +140,29 @@ pub struct Desired {
     pub maps: Maps,
     /// The service ID of each (frontend, scope).
     pub ids: BTreeMap<(Address, u8), u16>,
+}
+
+/// A `flowsdn_skip_lb4` key: the cookie in host order, address and port
+/// in network order, as the socket program builds it.
+pub fn skip_key4(cookie: u64, ip: Ipv4Addr, port: u16) -> [u8; 16] {
+    SkipLb4Key {
+        netns_cookie: cookie,
+        address: u32::from_le_bytes(ip.octets()),
+        port: u16::from_le_bytes(port.to_be_bytes()),
+        pad: 0,
+    }
+    .to_bytes()
+}
+/// A `flowsdn_skip_lb6` key (see [`skip_key4`]).
+pub fn skip_key6(cookie: u64, ip: Ipv6Addr, port: u16) -> [u8; 32] {
+    SkipLb6Key {
+        netns_cookie: cookie,
+        address: ip.octets(),
+        pad: 0,
+        port: u16::from_le_bytes(port.to_be_bytes()),
+        pad2: 0,
+    }
+    .to_bytes()
 }
 
 fn key4(frontend: Address, scope: u8, slot: u16) -> Option<[u8; 12]> {
@@ -322,6 +364,19 @@ pub fn desired(current: &Maps, services: &[Service]) -> Result<Desired, String> 
         if service.nat46x64 {
             routable |= service_flags::NAT46X64;
         }
+        if service.local_redirect {
+            routable |= service_flags::LOCAL_REDIRECT;
+            for cookie in &service.skip {
+                match frontend.ip {
+                    IpAddr::V4(ip) => {
+                        out.maps.skip4.insert(skip_key4(*cookie, ip, frontend.port));
+                    }
+                    IpAddr::V6(ip) => {
+                        out.maps.skip6.insert(skip_key6(*cookie, ip, frontend.port));
+                    }
+                }
+            }
+        }
         match service.affinity {
             Some(seconds) => {
                 master.set_service_flags(routable | service_flags::SESSION_AFFINITY);
@@ -467,6 +522,18 @@ pub fn plan(current: &Maps, desired: &Maps) -> Vec<Op> {
             }
         }
     }
+    for key in desired.skip4.difference(&current.skip4) {
+        ops.push(Op::Skip4(*key));
+    }
+    for key in desired.skip6.difference(&current.skip6) {
+        ops.push(Op::Skip6(*key));
+    }
+    for key in current.skip4.difference(&desired.skip4) {
+        ops.push(Op::DeleteSkip4(*key));
+    }
+    for key in current.skip6.difference(&desired.skip6) {
+        ops.push(Op::DeleteSkip6(*key));
+    }
     for master in [true, false] {
         for key in current.services4.keys() {
             let (_, _, slot) = frontend4(*key);
@@ -553,6 +620,18 @@ pub fn apply(maps: &mut Maps, ops: &[Op]) {
             }
             Op::DeleteMaglev6(id) => {
                 maps.maglev6.remove(&id);
+            }
+            Op::Skip4(key) => {
+                maps.skip4.insert(key);
+            }
+            Op::Skip6(key) => {
+                maps.skip6.insert(key);
+            }
+            Op::DeleteSkip4(key) => {
+                maps.skip4.remove(&key);
+            }
+            Op::DeleteSkip6(key) => {
+                maps.skip6.remove(&key);
             }
         }
     }

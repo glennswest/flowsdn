@@ -138,6 +138,11 @@ pub struct Settings {
     /// `node-port`: watch FlowsdnL2AnnouncementPolicies and answer ARP/NDP
     /// for the addresses they give this node. Nothing without a policy.
     pub l2_announcements: bool,
+    /// `kubernetes.local-redirect-policy` (#565; the reference's
+    /// `enable-local-redirect-policy`, default off, needs `service-lb`):
+    /// watch FlowsdnLocalRedirectPolicies and redirect their frontends to
+    /// this node's Pods in the socket LB ([`crate::local_redirect`]).
+    pub local_redirect: bool,
     /// `kubernetes.endpoint-crd` (#332), default on: keep a FlowsdnEndpoint
     /// for each local Pod endpoint ([`crate::endpoint_crd`]).
     pub endpoint_crd: bool,
@@ -192,6 +197,9 @@ impl Settings {
         if self.l2_on() {
             out.insert("flowsdnl2announcementpolicies.flowsdn.io");
         }
+        if self.local_redirect_on() {
+            out.insert("flowsdnlocalredirectpolicies.flowsdn.io");
+        }
         if self.flowsdn_policy {
             out.insert("flowsdnnetworkpolicies.flowsdn.io");
         }
@@ -209,6 +217,10 @@ impl Settings {
     /// LB-IPAM runs: `lb-ipam`, with `service-lb` (it reads the Services).
     pub fn lb_ipam_on(&self) -> bool {
         self.lb_ipam && self.service_lb
+    }
+    /// Local redirect policy runs: `local-redirect-policy`, with `service-lb`.
+    pub fn local_redirect_on(&self) -> bool {
+        self.local_redirect && self.service_lb
     }
     /// The L2 announcer runs: `l2-announcements`, with `service-lb` and
     /// `node-port` (the uplink programs serve what it announces).
@@ -332,6 +344,7 @@ impl Settings {
             uplinks: crate::uplinks::Settings::parse(object.get("uplinks"))?,
             lb_ipam: flag("lb-ipam", true)?,
             l2_announcements: flag("l2-announcements", true)?,
+            local_redirect: flag("local-redirect-policy", false)?,
             endpoint_crd: flag("endpoint-crd", true)?,
             node_crd: flag("node-crd", true)?,
             terminate_tcp: flag("lb-sock-terminate-all-protos", false)?,
@@ -494,6 +507,10 @@ pub struct PodInfo {
     pub resource_version: String,
     /// Named container ports: (protocol number, name, port).
     pub named_ports: Vec<(u8, String, u16)>,
+    /// Every container port: (protocol number, name or empty, port).
+    pub ports: Vec<(u8, String, u16)>,
+    /// The Pod's `Ready` condition is `True`.
+    pub ready: bool,
 }
 /// A container of a Pod: name and runtime ID (`<runtime>://<id>`, empty
 /// until created); `init` for init containers.
@@ -968,6 +985,12 @@ pub struct View {
     pub l2_policies: Vec<Value>,
     pub l2_policies_synced: bool,
     pub l2_status: Value,
+    /// Local redirect policy (#565): on, the FlowsdnLocalRedirectPolicy
+    /// objects, and what the last [`Self::refresh_frontends`] did with them.
+    pub local_redirect: bool,
+    pub redirect_policies: Vec<Value>,
+    pub redirect_policies_synced: bool,
+    pub redirect_report: crate::local_redirect::Report,
     /// The Services this node may announce, for the election thread (#549);
     /// `None` until the announcer has planned with complete lists.
     pub l2_eligible: Option<BTreeSet<crate::l2_announce::ServiceKey>>,
@@ -1188,6 +1211,15 @@ impl View {
             .collect();
         self.frontends =
             crate::services::frontends(&self.services, &self.slices, &self.local_node, &nodes);
+        if self.local_redirect {
+            self.redirect_report = crate::local_redirect::apply(
+                &mut self.frontends,
+                &self.redirect_policies,
+                &self.pods,
+                &self.local_node,
+                &self.endpoints,
+            );
+        }
         Some(self.frontends.iter().map(|f| f.service.clone()).collect())
     }
     /// `GET /v1/lb-ipam`.
@@ -1215,6 +1247,10 @@ impl View {
             }
             status
         }
+    }
+    /// `GET /v1/lrp`.
+    pub fn lrp_json(&self) -> Value {
+        self.redirect_report.json(self.local_redirect)
     }
     /// `GET /v1/service`.
     pub fn service_list(&self) -> Value {
@@ -1265,6 +1301,7 @@ impl View {
             "auto-direct-node-routes":self.direct_routes,"service-lb":self.service_lb,
             "identity-allocation":self.identity,"network-policy":self.network_policy,"flowsdn-policy":self.flowsdn_policy,
             "lb-ipam":self.lb_ipam,"l2-announcements":self.l2_announcements,
+            "local-redirect-policy":self.local_redirect,
             "flowsdn-endpoints":self.endpoint_crd_status,"flowsdn-node":self.node_crd_status,
             "node-config":self.node_config,
             "policy":self.policy_status,"uplinks":self.uplinks.summary(),

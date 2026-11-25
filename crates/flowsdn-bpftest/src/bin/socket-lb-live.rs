@@ -16,6 +16,8 @@
 //! and BPF masquerade (#460) on the uplink: TCP, UDP and ICMP echo of a local
 //! Pod leaving the cluster, their replies, and an ICMP error about a flow;
 //! and the RFC 6052 NAT46/64 gateway (#454) for a Pod's IPv6 TCP and UDP.
+//! Local redirect policy (#565): redirected connects, a Service matcher and
+//! skip-LB from a backend's network namespace.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_lb::socket::{self, Address, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
@@ -60,6 +62,8 @@ fn service(frontend: &str, proto: u8, backends: &[&str]) -> Result<Service> {
         maglev: false,
         dsr: false,
         nat46x64: false,
+        local_redirect: false,
+        skip: Vec::new(),
     })
 }
 /// Plan from the kernel's maps and apply, as the agent's services thread does.
@@ -128,6 +132,8 @@ fn socket_nat46x64(
     ] {
         services.push(Service {
             nat46x64: true,
+            local_redirect: false,
+            skip: Vec::new(),
             ..service(frontend, proto, &[backend])?
         });
     }
@@ -176,6 +182,90 @@ fn socket_nat46x64(
         }
         other => Err(format!("IPv4 socket to a NAT46 frontend: {other:?}").into()),
     }
+}
+
+/// Local redirect policy (#565, spec 05 §3.9) in the socket LB. A
+/// serviceMatcher frontend `192.0.2.20:80`, whose Service's own backend is
+/// `127.0.0.2`, is redirected to the "local Pod" `127.0.0.1` (the master
+/// carries `LOCAL_REDIRECT`). With this network namespace's cookie in
+/// `flowsdn_skip_lb4` (`skipRedirectFromBackend`), its sockets reach the
+/// Service's own backend (scope 2) instead. An addressMatcher frontend
+/// `192.0.2.21:80` (no Service of its own) is redirected, and with the skip
+/// entry left untranslated. IPv6: `[2001:db8::20]:80` redirected to `[::1]`,
+/// and skipped to no translation.
+fn local_redirect(
+    lb: &mut SocketLb,
+    services: &mut Vec<Service>,
+    tcp4: (&TcpListener, &TcpListener),
+    tcp6: &TcpListener,
+) -> Result<()> {
+    let (local, own) = tcp4;
+    let cookie = flowsdn_connector::namespace_cookie()?;
+    if cookie == 0 {
+        return Err("SO_NETNS_COOKIE unsupported".into());
+    }
+    let redirect = |frontend: &str, backend: &str, skip: &[u64]| -> Result<Service> {
+        Ok(Service {
+            local_redirect: true,
+            skip: skip.to_vec(),
+            ..service(frontend, PROTO_TCP, &[backend])?
+        })
+    };
+    let own_service = Service {
+        scope: socket::SCOPE_REDIRECT_SKIPPED,
+        ..service("192.0.2.20:80", PROTO_TCP, &["127.0.0.2:18080"])?
+    };
+    let base = services.len();
+    services.push(redirect("192.0.2.20:80", "127.0.0.1:18080", &[])?);
+    services.push(own_service);
+    services.push(redirect("192.0.2.21:80", "127.0.0.1:18080", &[])?);
+    services.push(redirect("[2001:db8::20]:80", "[::1]:18080", &[])?);
+    program(lb, services)?;
+    tcp(local, sa("192.0.2.20:80")?, sa("127.0.0.1:18080")?)?;
+    tcp(local, sa("192.0.2.21:80")?, sa("127.0.0.1:18080")?)?;
+    tcp(tcp6, sa("[2001:db8::20]:80")?, sa("[::1]:18080")?)?;
+    println!("PASS local redirect: service and address frontends go to the local backend");
+    for index in [base, base.saturating_add(2), base.saturating_add(3)] {
+        if let Some(entry) = services.get_mut(index) {
+            entry.skip = vec![cookie];
+        }
+    }
+    program(lb, services)?;
+    let dump = lb.dump()?;
+    if dump.skip4.len() != 2 || dump.skip6.len() != 1 {
+        return Err(format!(
+            "skip-LB maps hold {} IPv4 and {} IPv6 entries, not 2 and 1",
+            dump.skip4.len(),
+            dump.skip6.len()
+        )
+        .into());
+    }
+    tcp(own, sa("192.0.2.20:80")?, sa("127.0.0.2:18080")?)?;
+    println!("PASS skip-LB: this netns reaches the redirected Service's own backend");
+    for frontend in ["192.0.2.21:80", "[2001:db8::20]:80"] {
+        match TcpStream::connect_timeout(&sa(frontend)?, TIMEOUT) {
+            Ok(stream) => {
+                return Err(format!(
+                    "skip-LB {frontend}: translated to {:?}",
+                    stream.peer_addr()
+                )
+                .into());
+            }
+            // Untranslated: no route to the documentation address here.
+            Err(error) if error.kind() != ErrorKind::PermissionDenied => {
+                println!("PASS skip-LB {frontend}: not translated ({error})");
+            }
+            Err(error) => return Err(format!("skip-LB {frontend}: {error}").into()),
+        }
+    }
+    services.truncate(base);
+    program(lb, services)?;
+    let dump = lb.dump()?;
+    if !dump.skip4.is_empty() || !dump.skip6.is_empty() {
+        return Err("skip-LB entries left after the redirects were removed".into());
+    }
+    println!("PASS local redirect removed: skip-LB maps empty");
+    Ok(())
 }
 
 /// Unconnected then connected UDP to `frontend`: the backend server sees the
@@ -476,6 +566,8 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             maglev: false,
             dsr: false,
             nat46x64: false,
+            local_redirect: false,
+            skip: Vec::new(),
         });
     }
     program(lb, services)?;
@@ -798,6 +890,8 @@ fn nat46x64_local(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> 
                 maglev: false,
                 dsr: false,
                 nat46x64: true,
+                local_redirect: false,
+                skip: Vec::new(),
             });
         }
     }
@@ -1284,6 +1378,8 @@ fn nat_expiry(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
                 maglev: false,
                 dsr: false,
                 nat46x64,
+                local_redirect: false,
+                skip: Vec::new(),
             });
         }
     }
@@ -1436,6 +1532,8 @@ fn nat46x64(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
                 maglev: false,
                 dsr: false,
                 nat46x64: true,
+                local_redirect: false,
+                skip: Vec::new(),
             });
         }
     }
@@ -1611,6 +1709,8 @@ fn dsr(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
                 maglev: false,
                 dsr: true,
                 nat46x64: false,
+                local_redirect: false,
+                skip: Vec::new(),
             });
         }
     }
@@ -2447,6 +2547,8 @@ fn maglev(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         maglev: true,
         dsr: false,
         nat46x64: false,
+        local_redirect: false,
+        skip: Vec::new(),
     });
     services.push(Service {
         frontend: address("[2001:db8:2::20]:30070", PROTO_UDP)?,
@@ -2459,6 +2561,8 @@ fn maglev(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
         maglev: true,
         dsr: false,
         nat46x64: false,
+        local_redirect: false,
+        skip: Vec::new(),
     });
     program(lb, services)?;
     let maps = lb.dump()?;
@@ -2537,6 +2641,8 @@ fn nodeport6(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             maglev: false,
             dsr: false,
             nat46x64: false,
+            local_redirect: false,
+            skip: Vec::new(),
         });
     }
     program(lb, services)?;
@@ -2602,6 +2708,8 @@ fn snat(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
             maglev: false,
             dsr: false,
             nat46x64: false,
+            local_redirect: false,
+            skip: Vec::new(),
         });
     }
     program(lb, services)?;
@@ -2731,6 +2839,8 @@ fn snat6(
             maglev: false,
             dsr: false,
             nat46x64: false,
+            local_redirect: false,
+            skip: Vec::new(),
         });
     }
     program(lb, services)?;
@@ -3047,6 +3157,7 @@ fn main() -> Result<()> {
         first.affinity = None;
     }
     terminate(&mut lb, &mut services, &udp4)?;
+    local_redirect(&mut lb, &mut services, (&tcp4, &tcp4b), &tcp6)?;
 
     // Removal: the frontend is no longer translated (no route in this netns).
     services.retain(|s| s.frontend.port != 80 || s.frontend.ip.is_ipv6());

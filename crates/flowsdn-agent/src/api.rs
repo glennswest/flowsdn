@@ -358,7 +358,7 @@ struct Lease {
 /// Every route the agent serves, as the first column of docs/agent-api.md's
 /// "Supported methods" table; a test keeps the two equal (#298: the API is a
 /// supported boundary for `sc net` and the console plugin).
-pub const ROUTES: [&str; 30] = [
+pub const ROUTES: [&str; 31] = [
     "`GET /v1/config`",
     "`GET /v1/healthz`",
     "`GET /v1/health/modules`",
@@ -380,6 +380,7 @@ pub const ROUTES: [&str; 30] = [
     "`GET /v1/uplinks`",
     "`GET /v1/lb-ipam`",
     "`GET /v1/l2-announcements`",
+    "`GET /v1/lrp`",
     "`GET /v1/policy/events`",
     "`GET /v1/flows`",
     "`GET /v1/policy/verdicts`",
@@ -569,7 +570,8 @@ impl Api {
                 | "/v1/service"
                 | "/v1/uplinks"
                 | "/v1/lb-ipam"
-                | "/v1/l2-announcements",
+                | "/v1/l2-announcements"
+                | "/v1/lrp",
             ) => {
                 let Some(view) = &self.kubernetes else {
                     return fail(404, "kubernetes node discovery is not enabled");
@@ -584,6 +586,7 @@ impl Api {
                         "/v1/uplinks" => view.uplinks.json(),
                         "/v1/lb-ipam" => view.lb_ipam_json(),
                         "/v1/l2-announcements" => view.l2_json(),
+                        "/v1/lrp" => view.lrp_json(),
                         _ => view.route_list(),
                     },
                 ));

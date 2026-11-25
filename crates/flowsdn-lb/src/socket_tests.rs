@@ -19,6 +19,8 @@ fn dns(backends: &[&str]) -> Vec<Service> {
             maglev: false,
             dsr: false,
             nat46x64: false,
+            local_redirect: false,
+            skip: Vec::new(),
         })
         .collect()
 }
@@ -160,6 +162,8 @@ fn dual_stack_and_mixed_backends() {
             maglev: false,
             dsr: false,
             nat46x64: false,
+            local_redirect: false,
+            skip: Vec::new(),
         },
         Service {
             frontend: addr("fd00:10:96::1", 443, PROTO_TCP),
@@ -169,6 +173,8 @@ fn dual_stack_and_mixed_backends() {
             maglev: false,
             dsr: false,
             nat46x64: false,
+            local_redirect: false,
+            skip: Vec::new(),
         },
     ];
     sync(&mut maps, &services);
@@ -284,6 +290,8 @@ fn node_local_scope_is_a_separate_service_with_its_own_id() {
         maglev: false,
         dsr: false,
         nat46x64: false,
+        local_redirect: false,
+        skip: Vec::new(),
     };
     let local = Service {
         backends: vec![addr("10.1.0.5", 8080, PROTO_TCP)],
@@ -291,6 +299,8 @@ fn node_local_scope_is_a_separate_service_with_its_own_id() {
         maglev: false,
         dsr: false,
         nat46x64: false,
+        local_redirect: false,
+        skip: Vec::new(),
         ..cluster.clone()
     };
     let want = sync(&mut maps, &[cluster.clone(), local.clone()]);
@@ -330,6 +340,8 @@ fn maglev_tables_follow_their_backends() {
                 maglev: true,
                 dsr: false,
                 nat46x64: false,
+                local_redirect: false,
+                skip: Vec::new(),
             },
             Service {
                 frontend: front6,
@@ -339,6 +351,8 @@ fn maglev_tables_follow_their_backends() {
                 maglev: true,
                 dsr: false,
                 nat46x64: false,
+                local_redirect: false,
+                skip: Vec::new(),
             },
         ]
     };
@@ -430,6 +444,8 @@ fn nat46x64_frontend_takes_the_other_familys_backends_only() {
             maglev: true,
             dsr: false,
             nat46x64: true,
+            local_redirect: false,
+            skip: Vec::new(),
         },
         Service {
             frontend: addr("2001:db8::20", 30096, PROTO_UDP),
@@ -442,6 +458,8 @@ fn nat46x64_frontend_takes_the_other_familys_backends_only() {
             maglev: false,
             dsr: false,
             nat46x64: true,
+            local_redirect: false,
+            skip: Vec::new(),
         },
     ];
     let want = desired(&Maps::default(), &services).expect("desired");
@@ -486,4 +504,58 @@ fn nat46x64_frontend_takes_the_other_familys_backends_only() {
         master.expect("master").service_flags() & service_flags::NAT46X64,
         0
     );
+}
+
+/// Local redirect (#565, spec 05 §3.9): the master carries `LOCAL_REDIRECT`
+/// and each skip cookie becomes a `flowsdn_skip_lb{4,6}` key (cookie in host
+/// order, address and port in network order); the Service's own copy at
+/// scope 2 is a separate frontend; removing the redirect deletes the keys.
+#[test]
+fn local_redirect_flags_the_master_and_writes_skip_keys() {
+    let mut current = Maps::default();
+    let mut services = dns(&["10.1.9.9"]);
+    for service in &mut services {
+        service.local_redirect = true;
+        service.skip = vec![7, 7, 9];
+    }
+    let mut own = dns(&["10.1.1.5", "10.1.2.5"]);
+    for service in &mut own {
+        service.scope = SCOPE_REDIRECT_SKIPPED;
+    }
+    services.extend(own);
+    services.push(Service {
+        frontend: addr("fd00::a", 53, PROTO_UDP),
+        backends: vec![addr("fd00::9", 53, PROTO_UDP)],
+        local_redirect: true,
+        skip: vec![7],
+        ..dns(&[]).remove(0)
+    });
+    let want = sync(&mut current, &services);
+    assert_eq!(want.ids.len(), 5, "two frontends at two scopes and an IPv6 one");
+    let master = |scope| {
+        let key = key4(addr("10.96.0.10", 53, PROTO_UDP), scope, 0).expect("key");
+        LbService::from_bytes(*current.services4.get(&key).expect("master"))
+    };
+    assert_ne!(master(SCOPE_CLUSTER).service_flags() & service_flags::LOCAL_REDIRECT, 0);
+    assert_eq!(master(SCOPE_REDIRECT_SKIPPED).service_flags() & service_flags::LOCAL_REDIRECT, 0);
+    assert_eq!(master(SCOPE_REDIRECT_SKIPPED).count, 2);
+    // Cookies 7 and 9 for 10.96.0.10:53 (UDP and TCP share the key).
+    assert_eq!(current.skip4.len(), 2);
+    let key = skip_key4(7, "10.96.0.10".parse().expect("ip"), 53);
+    assert!(current.skip4.contains(&key));
+    assert_eq!(key.get(..8), Some(7u64.to_le_bytes().as_slice()));
+    assert_eq!(key.get(8..12), Some([10u8, 96, 0, 10].as_slice()));
+    assert_eq!(key.get(12..14), Some(53u16.to_be_bytes().as_slice()));
+    assert_eq!(current.skip6.len(), 1);
+    for service in &mut services {
+        service.local_redirect = false;
+        service.skip.clear();
+    }
+    let ops = plan(&current, &desired(&current, &services).expect("desired").maps);
+    assert_eq!(
+        ops.iter().filter(|op| matches!(op, Op::DeleteSkip4(_) | Op::DeleteSkip6(_))).count(),
+        3
+    );
+    sync(&mut current, &services);
+    assert!(current.skip4.is_empty() && current.skip6.is_empty());
 }

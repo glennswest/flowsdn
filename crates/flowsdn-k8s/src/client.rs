@@ -82,6 +82,7 @@ pub fn request_uri(scope: &Scope, query: &Query<'_>) -> Result<String, Error> {
         Scope::PodPolicies => POD_POLICIES_PATH,
         Scope::LbIpPools => LB_IP_POOLS_PATH,
         Scope::L2Policies => L2_POLICIES_PATH,
+        Scope::RedirectPolicies => REDIRECT_POLICIES_PATH,
     };
     let mut params = Vec::new();
     if let Some(selector) = scope.field_selector() {
@@ -138,6 +139,9 @@ pub const POD_POLICIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnnetworkpol
 pub const LB_IP_POOLS_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnloadbalancerippools";
 /// `flowsdn.io/v1alpha1` FlowsdnL2AnnouncementPolicy (#475).
 pub const L2_POLICIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnl2announcementpolicies";
+/// `flowsdn.io/v1alpha1` FlowsdnLocalRedirectPolicy (namespaced); a policy's
+/// status is `.../namespaces/<ns>/flowsdnlocalredirectpolicies/<name>/status` (#565).
+pub const REDIRECT_POLICIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnlocalredirectpolicies";
 
 pub struct JsonClient {
     client: Client,

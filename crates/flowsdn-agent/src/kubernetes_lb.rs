@@ -609,3 +609,117 @@ pub(super) fn announce_loop(view: &Shared) {
         }
     }
 }
+
+/// Local redirect (#565): how often policies, local Pods and their netns
+/// cookies are planned again (a Pod becoming Ready or its endpoint being
+/// created changes the backends and the skip-LB entries).
+const REDIRECT_INTERVAL: Duration = Duration::from_secs(2);
+
+/// The local redirect thread: re-plan the socket LB's frontends with the
+/// FlowsdnLocalRedirectPolicies and send them when they change, and write
+/// each policy's `status.ok`. Validity does not depend on the node, so every
+/// agent agrees; a status is written only where the object's differs.
+pub(super) fn redirect_loop(
+    view: &Shared,
+    sender: &mpsc::Sender<Vec<flowsdn_lb::socket::Service>>,
+    kubeconfig: Option<&Path>,
+) {
+    let started = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string())
+        .and_then(|runtime| {
+            let client = runtime
+                .block_on(JsonClient::load(kubeconfig, TransportLimits::default()))
+                .map_err(|e| e.to_string())?;
+            Ok((runtime, client))
+        });
+    let (runtime, client) = match started {
+        Ok(parts) => parts,
+        Err(error) => {
+            lock(view).errors.insert("local-redirect-policy".into(), error);
+            return;
+        }
+    };
+    let mut sent: Option<Vec<flowsdn_lb::socket::Service>> = None;
+    let mut logged: BTreeMap<(String, String), Option<String>> = BTreeMap::new();
+    loop {
+        std::thread::sleep(REDIRECT_INTERVAL);
+        let (desired, objects, report) = {
+            let mut view = lock(view);
+            if !view.redirect_policies_synced {
+                continue;
+            }
+            let desired = view.refresh_frontends();
+            (
+                desired,
+                view.redirect_policies.clone(),
+                view.redirect_report.clone(),
+            )
+        };
+        if let Some(desired) = desired
+            && sent.as_ref() != Some(&desired)
+        {
+            if sender.send(desired.clone()).is_err() {
+                return;
+            }
+            sent = Some(desired);
+        }
+        for (key, problem) in &report.problems {
+            if logged.get(key) != Some(problem) {
+                match problem {
+                    Some(problem) => crate::log::logln!(
+                        "local redirect policy {}/{}: {problem}",
+                        key.0,
+                        key.1
+                    ),
+                    None => crate::log::logln!("local redirect policy {}/{}: ok", key.0, key.1),
+                }
+            }
+        }
+        logged = report.problems.clone();
+        let mut failures = Vec::new();
+        for object in &objects {
+            let text = |pointer: &str| {
+                object
+                    .pointer(pointer)
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_owned()
+            };
+            let key = (text("/metadata/namespace"), text("/metadata/name"));
+            let Some(ok) = report.problems.get(&key).map(Option::is_none) else {
+                continue;
+            };
+            if object.pointer("/status/ok").and_then(Value::as_bool) == Some(ok) {
+                continue;
+            }
+            let path = format!(
+                "{}/namespaces/{}/flowsdnlocalredirectpolicies/{}/status",
+                "/apis/flowsdn.io/v1alpha1", key.0, key.1
+            );
+            let reply = runtime.block_on(client.send_json(
+                http::Method::PATCH,
+                &path,
+                Some(&json!({"status": {"ok": ok}})),
+            ));
+            match reply {
+                Ok((200..=299 | 404 | 409, _)) => {}
+                Ok((status, body)) => failures.push(format!(
+                    "{}/{}: HTTP {status} {}",
+                    key.0,
+                    key.1,
+                    message(&body)
+                )),
+                Err(error) => failures.push(format!("{}/{}: {error}", key.0, key.1)),
+            }
+        }
+        let mut view = lock(view);
+        if failures.is_empty() {
+            view.errors.remove("local-redirect-policy");
+        } else {
+            view.errors
+                .insert("local-redirect-policy".into(), failures.join("; "));
+        }
+    }
+}

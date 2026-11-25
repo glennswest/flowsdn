@@ -577,6 +577,8 @@ fn terminable_and_stale_backends() {
         maglev: false,
         dsr: false,
         nat46x64: false,
+        local_redirect: false,
+        skip: Vec::new(),
     };
     let udp_only = terminable_backends(std::slice::from_ref(&service), false);
     assert_eq!(udp_only, [(PROTO_UDP, ip("10.2.0.9"), 53)].into());

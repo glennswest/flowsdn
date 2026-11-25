@@ -684,3 +684,39 @@ fn load_balancer_fields_node_readiness_and_the_pool_and_policy_kinds() {
     };
     assert_eq!(parsed.metadata.name, "lan");
 }
+
+/// #565: every container port (named or not) and the Pod's `Ready`
+/// condition; FlowsdnLocalRedirectPolicy rows are kept whole and namespaced.
+#[test]
+fn pod_ports_readiness_and_local_redirect_policies() {
+    let object = json!({"metadata":{"name":"dns","namespace":"kube-system","uid":"u","resourceVersion":"1"},
+        "spec":{"nodeName":"n1","containers":[{"name":"c","ports":[
+            {"containerPort":53,"protocol":"UDP","name":"dns"},
+            {"containerPort":53,"protocol":"TCP"},
+            {"containerPort":9253}]}]},
+        "status":{"podIP":"10.1.9.9","conditions":[{"type":"Ready","status":"True"}]}});
+    let Resource::Pod(pod) = Scope::Pods.parse(&object).expect("pod") else {
+        panic!("pod row expected");
+    };
+    assert_eq!(
+        pod.ports,
+        vec![(17, "dns".to_owned(), 53), (6, String::new(), 53), (6, String::new(), 9253)]
+    );
+    assert_eq!(pod.named_ports, vec![(17, "dns".to_owned(), 53)]);
+    assert!(pod.ready);
+    let mut unready = object.clone();
+    unready["status"]["conditions"] = json!([{"type":"Ready","status":"False"}]);
+    let Resource::Pod(pod) = Scope::Pods.parse(&unready).expect("pod") else {
+        panic!("pod row expected");
+    };
+    assert!(!pod.ready);
+    let policy = json!({"apiVersion":"flowsdn.io/v1alpha1","kind":"FlowsdnLocalRedirectPolicy",
+        "metadata":{"name":"nodelocaldns","namespace":"kube-system","uid":"l","resourceVersion":"2"},
+        "spec":{"redirectFrontend":{"serviceMatcher":{"serviceName":"kube-dns","namespace":"kube-system"}}}});
+    let Resource::RedirectPolicy(parsed) = Scope::RedirectPolicies.parse(&policy).expect("lrp") else {
+        panic!("redirect policy row expected");
+    };
+    assert_eq!(parsed.object, policy);
+    assert!(Scope::RedirectPolicies.namespaced());
+    assert!(Scope::RedirectPolicies.parse(&object).is_err(), "kind is checked");
+}

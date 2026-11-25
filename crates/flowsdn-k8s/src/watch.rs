@@ -44,6 +44,11 @@ pub struct Pod {
     /// Named container ports (`spec.containers[].ports[]` with a name): the
     /// (protocol number, name, port) NetworkPolicy named ports resolve to.
     pub named_ports: Vec<(u8, String, u16)>,
+    /// Every container port (`spec.containers[].ports[]`): (protocol number,
+    /// name or empty, port); local redirect backends (#565).
+    pub ports: Vec<(u8, String, u16)>,
+    /// The `Ready` condition is `True` (local redirect backends, #565).
+    pub ready: bool,
     /// Only the annotations the agent writes (`flowsdn.io/` and
     /// [`NETWORK_STATUS`]), each at most [`ANNOTATION_MAX`] bytes; other
     /// annotations are not kept.
@@ -200,6 +205,8 @@ pub enum Resource {
     LbIpPool(NetworkPolicy),
     /// A `flowsdn.io/v1alpha1` FlowsdnL2AnnouncementPolicy, kept whole (#475).
     L2Policy(NetworkPolicy),
+    /// A `flowsdn.io/v1alpha1` FlowsdnLocalRedirectPolicy, kept whole (#565).
+    RedirectPolicy(NetworkPolicy),
 }
 impl Resource {
     pub fn metadata(&self) -> &Metadata {
@@ -214,7 +221,8 @@ impl Resource {
             | Self::ClusterwidePolicy(p)
             | Self::PodPolicy(p)
             | Self::LbIpPool(p)
-            | Self::L2Policy(p) => &p.metadata,
+            | Self::L2Policy(p)
+            | Self::RedirectPolicy(p) => &p.metadata,
         }
     }
 }
@@ -251,6 +259,8 @@ pub enum Scope {
     LbIpPools,
     /// Every `flowsdn.io/v1alpha1` FlowsdnL2AnnouncementPolicy (#475).
     L2Policies,
+    /// Every `flowsdn.io/v1alpha1` FlowsdnLocalRedirectPolicy (#565).
+    RedirectPolicies,
 }
 impl Scope {
     pub fn field_selector(&self) -> Option<String> {
@@ -285,6 +295,7 @@ impl Scope {
                 Self::PodPolicies => "FlowsdnNetworkPolicy",
                 Self::LbIpPools => "FlowsdnLoadBalancerIPPool",
                 Self::L2Policies => "FlowsdnL2AnnouncementPolicy",
+                Self::RedirectPolicies => "FlowsdnLocalRedirectPolicy",
             };
             if text(kind)? != expected {
                 return Err(error("unexpected resource kind"));
@@ -364,6 +375,11 @@ impl Scope {
                     owners: owner_references(value),
                     containers: container_statuses(value),
                     named_ports: named_ports(value),
+                    ports: container_ports(value),
+                    ready: array(value.pointer("/status/conditions"))?.iter().any(|c| {
+                        c.get("type").and_then(Value::as_str) == Some("Ready")
+                            && c.get("status").and_then(Value::as_str) == Some("True")
+                    }),
                     annotations: flowsdn_annotations(value),
                     oversized: oversized_annotations(value),
                 }))
@@ -392,6 +408,10 @@ impl Scope {
                 object: value.clone(),
             })),
             Self::L2Policies => Ok(Resource::L2Policy(NetworkPolicy {
+                metadata,
+                object: value.clone(),
+            })),
+            Self::RedirectPolicies => Ok(Resource::RedirectPolicy(NetworkPolicy {
                 metadata,
                 object: value.clone(),
             })),
@@ -463,6 +483,12 @@ fn owner_references(value: &Value) -> Vec<OwnerReference> {
         .collect()
 }
 fn named_ports(value: &Value) -> Vec<(u8, String, u16)> {
+    container_ports(value)
+        .into_iter()
+        .filter(|(_, name, _)| !name.is_empty())
+        .collect()
+}
+fn container_ports(value: &Value) -> Vec<(u8, String, u16)> {
     let mut ports = Vec::new();
     let containers = value
         .pointer("/spec/containers")
@@ -473,9 +499,7 @@ fn named_ports(value: &Value) -> Vec<(u8, String, u16)> {
         .filter_map(|c| c.get("ports").and_then(Value::as_array))
         .flatten()
     {
-        let Some(name) = port.get("name").and_then(Value::as_str) else {
-            continue;
-        };
+        let name = port.get("name").and_then(Value::as_str).unwrap_or("");
         let Some(number) = port
             .get("containerPort")
             .and_then(Value::as_u64)

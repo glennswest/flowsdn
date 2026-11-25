@@ -12,6 +12,7 @@ pub mod kubernetes;
 pub mod l2_announce;
 pub mod lb_ipam;
 pub mod lease;
+pub mod local_redirect;
 pub mod log;
 pub mod neighbors;
 #[cfg(feature = "kubernetes")]

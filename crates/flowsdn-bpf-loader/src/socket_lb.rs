@@ -42,7 +42,7 @@ pub const PROGRAMS: [&str; 8] = [
 /// names and §4.3 layouts; flowsdn sizes the reverse and affinity maps at
 /// 64Ki. The affinity maps are the programs' own; the agent writes the
 /// match map.
-const MAPS: [(&str, MapType, u32, u32, u32, u32); 22] = [
+const MAPS: [(&str, MapType, u32, u32, u32, u32); 24] = [
     ("flowsdn_lb4_services", MapType::Hash, 12, 12, 65536, 1),
     ("flowsdn_lb4_backends", MapType::Hash, 4, 12, 65536, 1),
     ("flowsdn_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
@@ -61,6 +61,8 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 22] = [
     ("flowsdn_masq6_exclude", MapType::LpmTrie, 20, 1, 1024, 1),
     ("flowsdn_gw64_config", MapType::Hash, 4, 16, 1, 1),
     ("flowsdn_dsr_config", MapType::Hash, 4, 4, 1, 1),
+    ("flowsdn_skip_lb4", MapType::Hash, 16, 1, 1024, 1),
+    ("flowsdn_skip_lb6", MapType::Hash, 32, 1, 1024, 1),
     ("flowsdn_gw64_sources", MapType::LpmTrie, 20, 1, 256, 1),
     (
         "flowsdn_nodeport4_xlate",
@@ -96,6 +98,9 @@ pub struct SocketLb {
     gw64_sources: LpmTrie<MapData, [u8; 16], u8>,
     /// How DSR packets carry their frontend (#447).
     dsr_config: HashMap<MapData, u32, [u8; 4]>,
+    /// Local redirect skip-LB (#565): (netns cookie, frontend, port).
+    skip4: HashMap<MapData, [u8; 16], u8>,
+    skip6: HashMap<MapData, [u8; 32], u8>,
     pin_root: Option<PathBuf>,
     /// Owned links; unpinned ones detach when this owner drops.
     links: Vec<FdLink>,
@@ -263,6 +268,8 @@ impl SocketLb {
         let masq6_exclude = take_lpm(&mut bpf, "flowsdn_masq6_exclude")?;
         let gw64_config = take(&mut bpf, "flowsdn_gw64_config")?;
         let dsr_config = take(&mut bpf, "flowsdn_dsr_config")?;
+        let skip4 = take(&mut bpf, "flowsdn_skip_lb4")?;
+        let skip6 = take(&mut bpf, "flowsdn_skip_lb6")?;
         let gw64_sources = {
             let map = bpf
                 .take_map("flowsdn_gw64_sources")
@@ -295,6 +302,8 @@ impl SocketLb {
             gw64_config,
             gw64_sources,
             dsr_config,
+            skip4,
+            skip6,
             pin_root: pin_root.map(Path::to_owned),
             links: Vec::new(),
             uplinks: std::collections::BTreeMap::new(),
@@ -600,6 +609,12 @@ impl SocketLb {
         for key in self.affinity_match.keys() {
             maps.affinity_match.insert(key?);
         }
+        for key in self.skip4.keys() {
+            maps.skip4.insert(key?);
+        }
+        for key in self.skip6.keys() {
+            maps.skip6.insert(key?);
+        }
         maps.maglev4 = dump_maglev(&self.maglev4)?;
         maps.maglev6 = dump_maglev(&self.maglev6)?;
         Ok(maps)
@@ -624,6 +639,10 @@ impl SocketLb {
                 Op::DeleteBackend6(id) => absent(self.backends6.remove(&id))?,
                 Op::AffinityMatch(key) => self.affinity_match.insert(key, 0, 0)?,
                 Op::DeleteAffinityMatch(key) => absent(self.affinity_match.remove(&key))?,
+                Op::Skip4(key) => self.skip4.insert(key, 1, 0)?,
+                Op::Skip6(key) => self.skip6.insert(key, 1, 0)?,
+                Op::DeleteSkip4(key) => absent(self.skip4.remove(&key))?,
+                Op::DeleteSkip6(key) => absent(self.skip6.remove(&key))?,
             }
         }
         Ok(())

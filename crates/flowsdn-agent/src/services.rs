@@ -335,6 +335,8 @@ pub fn frontends(
                                     service.dsr_other
                                 },
                             nat46x64,
+                            local_redirect: false,
+                            skip: Vec::new(),
                         },
                     });
                 }
