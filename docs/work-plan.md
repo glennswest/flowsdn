@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Controller test hang — #555 (P2), 2026-11-25
+
+Seen once (58fe0c5, 30+ min, then passed). Client requests time out at 90 s, but `wait_for_pools` retries forever
+and the test's 30 s deadline starts after it. Test body now under a 240 s watchdog naming its phase.
+- [x] Watchdog, changelog.
+- [ ] sc-build: `cargo xtask check` + the test 30 times (reproduction attempt); close with what it shows.
+
 ### Gateway API controller — #543 (P3), 2026-11-25
 
 Not started: spec 21 §1.3 forbids either controller before P1-P6 (Envoy config apply + xDS + Envoy DaemonSet,

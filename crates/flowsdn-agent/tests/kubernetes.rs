@@ -382,8 +382,49 @@ fn server(
     port
 }
 
+/// What [`controller_body`] is doing, for the watchdog's message (#555).
+const PHASES: [&str; 6] = [
+    "starting the mock API server",
+    "reading the FlowsdnNodeConfig source",
+    "connecting (the CRD gate)",
+    "waiting for the Node's pool (wait_for_pools)",
+    "converging after spawn",
+    "done",
+];
+
+/// #555: the body once ran for 30+ minutes in sc-build without failing, and
+/// passed on the next run. It now runs on its own thread under a watchdog: a
+/// recurrence fails within [`WATCHDOG`], naming the phase it was in, instead
+/// of holding the build.
+const WATCHDOG: Duration = Duration::from_secs(240);
+
 #[test]
 fn controller_lists_watches_and_derives_the_pool() {
+    let phase = Arc::new(AtomicUsize::new(0));
+    let (done, finished) = std::sync::mpsc::channel();
+    let body_phase = Arc::clone(&phase);
+    let body = thread::spawn(move || {
+        controller_body(&body_phase);
+        let _ = done.send(());
+    });
+    match finished.recv_timeout(WATCHDOG) {
+        Ok(()) => {}
+        // The body panicked: its own message, from the join below.
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {}
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            let at = PHASES
+                .get(phase.load(Ordering::SeqCst))
+                .copied()
+                .unwrap_or("unknown");
+            panic!("the controller test hung for {WATCHDOG:?} while {at} (#555)");
+        }
+    }
+    if let Err(panic) = body.join() {
+        std::panic::resume_unwind(panic);
+    }
+}
+
+fn controller_body(phase: &AtomicUsize) {
     let dir = std::env::temp_dir().join(format!("flowsdn-k8s-agent-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("dir");
     let (key, cert) = certificate();
@@ -405,6 +446,7 @@ fn controller_lists_watches_and_derives_the_pool() {
         Arc::clone(&writes),
         crd_served_at,
     );
+    phase.store(1, Ordering::SeqCst);
     let kubeconfig = dir.join("kubeconfig");
     std::fs::write(
         &kubeconfig,
@@ -466,7 +508,9 @@ fn controller_lists_watches_and_derives_the_pool() {
         });
     assert_eq!(report.selected, ["edge"]);
     assert_eq!(merged.pointer("/kubernetes/lb-mode"), Some(&json!("dsr")));
+    phase.store(2, Ordering::SeqCst);
     let controller = Controller::connect(settings, &dir).expect("connect");
+    phase.store(3, Ordering::SeqCst);
     let (pool4, pool6) = controller.wait_for_pools(true, true).expect("pools");
     assert_eq!(pool4, Some(("10.172.0.0".parse().expect("IP"), 16)));
     // No node IPv6, so IPv6 derives from the IPv4 alloc CIDR.
@@ -474,6 +518,7 @@ fn controller_lists_watches_and_derives_the_pool() {
     // No socket-lb object: Services and EndpointSlices are watched, nothing
     // is attached (that needs CAP_BPF and a cgroup).
     let view = controller.spawn(false, None, None, None).expect("spawn");
+    phase.store(4, Ordering::SeqCst);
     let deadline = Instant::now()
         .checked_add(Duration::from_secs(30))
         .expect("deadline");
@@ -614,5 +659,6 @@ fn controller_lists_watches_and_derives_the_pool() {
         assert!(Instant::now() < deadline, "controller did not converge");
         thread::sleep(Duration::from_millis(50));
     }
+    phase.store(5, Ordering::SeqCst);
     let _ = std::fs::remove_dir_all(&dir);
 }

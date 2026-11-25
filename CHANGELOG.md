@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#555)
+- **test:** `tests/kubernetes.rs` `controller_lists_watches_and_derives_the_pool` runs its body on its own thread under a 240 s watchdog, recording its phase: the mock server, the node config, the CRD gate, `wait_for_pools`, and converging after spawn. It once ran 30+ minutes in an sc-build without failing and passed on the next run. A recurrence now fails naming the phase instead of holding the build. A panic in the body still fails with its own message.
+
 ### 2026-11-25 (#543, #563)
 - **docs:** The L7 proxy will be a Rust proxy in the agent, never Envoy (master's ruling on #543: everything but the kernel and qemu is Rust). Its ADR comes first (#563, P3), and nothing is built before something on the platform needs L7. Spec 16 and spec 21 gain amendments saying their Envoy/xDS text is the reference's contract until that ADR. The Gateway API controller (#543) and `parentRef.port` (#474) are parked behind #563.
 
