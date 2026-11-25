@@ -936,12 +936,17 @@ Kubernetes-mode agent (the operator registers CRDs and collects garbage, #337, #
   two naming labels) and nodes (`nodeSelector`), and announces their ingress
   addresses with `loadBalancerIPs: true` and their `spec.externalIPs` with
   `externalIPs: true` (both default false). One node answers for a Service:
-  the highest rendezvous hash of (node, Service) among the Ready nodes a
-  selecting policy selects, and with `externalTrafficPolicy: Local` only those
-  with a ready endpoint of the Service. Every agent computes the same winner
-  from the same lists; when it changes (a node not Ready, the last local
-  endpoint gone), the new node takes over with three gratuitous ARPs or
-  unsolicited Neighbor Advertisements, one a second. The address is never
+  the holder of its Lease `kube-system/flowsdn-l2announce-<namespace>-<name>`
+  (15 s, renewed every 2 s), for which only eligible nodes contend (#549):
+  Ready, selected by a selecting policy, with an interface to answer on (see
+  below), and with `externalTrafficPolicy: Local` a ready endpoint of the
+  Service. A node that stops being eligible (not Ready, its last endpoint
+  gone, no matching interface) gives the Lease up and another eligible node
+  takes it within about 2 s; a node whose agent stops renewing loses it after
+  15 s. The new holder takes over with three gratuitous ARPs or unsolicited
+  Neighbor Advertisements, one a second. Once a minute the agents delete
+  announcement Leases with no holder or not renewed for that minute.
+  Lease problems are the `l2-leases` entry of the controller errors. The address is never
   added to the host: an AF_PACKET socket per interface answers ARP requests,
   and one with a classic BPF filter answers Neighbor Solicitations (it joins
   each address's solicited-node group; duplicate address detection is not

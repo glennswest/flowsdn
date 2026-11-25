@@ -59,8 +59,10 @@ pinning or subsystem libraries are absent are **not current status**.
   Lease `kube-system/flowsdn-lb-ipam` writes `status.loadBalancer.ingress`
   from FlowsdnLoadBalancerIPPools and the pools' conditions; L2 announcements
   (`l2-announcements`, default on) answer ARP/NDP for the addresses a
-  FlowsdnL2AnnouncementPolicy gives this node (one node per Service; with
-  `externalTrafficPolicy: Local`, one with a ready endpoint), from AF_PACKET
+  FlowsdnL2AnnouncementPolicy gives this node (one node per Service, the
+  holder of its `flowsdn-l2announce-*` Lease, contended only by nodes with a
+  matching interface, #549; with `externalTrafficPolicy: Local`, one with a
+  ready endpoint), from AF_PACKET
   sockets; `GET /v1/lb-ipam`, `GET /v1/l2-announcements`. Unit and loopback-API
   tests, and the `l2-announce-live` kernel fixture; not yet seen on a node.
 - Kubernetes Events on Pods and the Node, aggregated and non-blocking (#298);

@@ -4,6 +4,18 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### L2 announcer election ignores interface eligibility — #549 (P1), 2026-11-24
+
+Finding 27c1663186dc: the rendezvous hash elected among every Ready selected node, and `interfaces_for` ran only on
+the winner, so a winner without a matching device left the address unowned. Interfaces are node-local, so the hash
+cannot see them. Fix as spec 05 §3.11 step 5 (the reference): a per-Service Lease
+`kube-system/flowsdn-l2announce-<ns>-<name>`, contended only by eligible nodes (Ready, selected, an interface, ETP
+Local endpoint). New thread `flowsdn-l2-lease`: contend/renew 2 s, 15 s duration, release when ineligible, collect
+unheld/unrenewed Leases every 60 s (RBAC leases list/delete).
+- [x] Code + tests 567e877 (`only_nodes_with_a_matching_interface_contend`, `stale_announcement_leases_are_collected`,
+      `held_until_and_release`); runtime.md, implementation-status, agent-api, RBAC, changelog.
+- [ ] sc-build (fmt, `cargo xtask check`); kernel-check `l2-announce-live` (responder unchanged); stage; close.
+
 ### Secret scan false positives — #546 (P1), 2026-11-23
 
 - [x] gitleaks 8.30.1 (pinned sha256, scratch) reproduced the 29 findings at 5d3dc92. All are false positives: 5 Rust
