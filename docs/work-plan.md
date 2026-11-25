@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Performance suite vs Cilium — #321 (P1), status 2026-11-25
+
+`stormcentral test run flowsdn perf`: no test machine can take a run (13.00-flowsdn failed on pvetest1/2, 13.00 on
+pvetest3; others no known release; server8 in the power-off window). Suite unchanged; status posted; `wait-hardware`.
+- [ ] Clean installs of both flavors on a pair; perf on each; side-by-side table; perf-scale at night.
+
 ### Milestone 2 acceptance — #292 (P1), status 2026-11-25
 
 Datapath in source and kernel-checked (strict sc-build e983c71: 1044/0, kernel-check 24/0/2; stage d90ff71b54b7).
