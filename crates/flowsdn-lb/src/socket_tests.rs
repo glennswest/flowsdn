@@ -531,13 +531,23 @@ fn local_redirect_flags_the_master_and_writes_skip_keys() {
         ..dns(&[]).remove(0)
     });
     let want = sync(&mut current, &services);
-    assert_eq!(want.ids.len(), 5, "two frontends at two scopes and an IPv6 one");
+    assert_eq!(
+        want.ids.len(),
+        5,
+        "two frontends at two scopes and an IPv6 one"
+    );
     let master = |scope| {
         let key = key4(addr("10.96.0.10", 53, PROTO_UDP), scope, 0).expect("key");
         LbService::from_bytes(*current.services4.get(&key).expect("master"))
     };
-    assert_ne!(master(SCOPE_CLUSTER).service_flags() & service_flags::LOCAL_REDIRECT, 0);
-    assert_eq!(master(SCOPE_REDIRECT_SKIPPED).service_flags() & service_flags::LOCAL_REDIRECT, 0);
+    assert_ne!(
+        master(SCOPE_CLUSTER).service_flags() & service_flags::LOCAL_REDIRECT,
+        0
+    );
+    assert_eq!(
+        master(SCOPE_REDIRECT_SKIPPED).service_flags() & service_flags::LOCAL_REDIRECT,
+        0
+    );
     assert_eq!(master(SCOPE_REDIRECT_SKIPPED).count, 2);
     // Cookies 7 and 9 for 10.96.0.10:53 (UDP and TCP share the key).
     assert_eq!(current.skip4.len(), 2);
@@ -551,9 +561,14 @@ fn local_redirect_flags_the_master_and_writes_skip_keys() {
         service.local_redirect = false;
         service.skip.clear();
     }
-    let ops = plan(&current, &desired(&current, &services).expect("desired").maps);
+    let ops = plan(
+        &current,
+        &desired(&current, &services).expect("desired").maps,
+    );
     assert_eq!(
-        ops.iter().filter(|op| matches!(op, Op::DeleteSkip4(_) | Op::DeleteSkip6(_))).count(),
+        ops.iter()
+            .filter(|op| matches!(op, Op::DeleteSkip4(_) | Op::DeleteSkip6(_)))
+            .count(),
         3
     );
     sync(&mut current, &services);

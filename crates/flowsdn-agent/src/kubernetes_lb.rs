@@ -637,7 +637,9 @@ pub(super) fn redirect_loop(
     let (runtime, client) = match started {
         Ok(parts) => parts,
         Err(error) => {
-            lock(view).errors.insert("local-redirect-policy".into(), error);
+            lock(view)
+                .errors
+                .insert("local-redirect-policy".into(), error);
             return;
         }
     };
@@ -668,11 +670,9 @@ pub(super) fn redirect_loop(
         for (key, problem) in &report.problems {
             if logged.get(key) != Some(problem) {
                 match problem {
-                    Some(problem) => crate::log::logln!(
-                        "local redirect policy {}/{}: {problem}",
-                        key.0,
-                        key.1
-                    ),
+                    Some(problem) => {
+                        crate::log::logln!("local redirect policy {}/{}: {problem}", key.0, key.1)
+                    }
                     None => crate::log::logln!("local redirect policy {}/{}: ok", key.0, key.1),
                 }
             }

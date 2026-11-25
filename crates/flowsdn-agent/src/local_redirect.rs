@@ -44,10 +44,16 @@ pub struct Port {
 /// What a policy redirects.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Matcher {
-    Address { ip: IpAddr, ports: Vec<Port> },
+    Address {
+        ip: IpAddr,
+        ports: Vec<Port>,
+    },
     /// The Service's name (in the policy's namespace) and the ports given,
     /// None for all of the Service's ports.
-    Service { name: String, ports: Option<Vec<Port>> },
+    Service {
+        name: String,
+        ports: Option<Vec<Port>>,
+    },
 }
 
 /// A parsed, valid policy.
@@ -91,7 +97,9 @@ fn ports(value: Option<&Value>) -> Result<Vec<Port>, String> {
 }
 fn named(ports: &[Port], side: &str) -> Result<(), String> {
     if ports.len() > 1 && ports.iter().any(|p| p.name.is_empty()) {
-        return Err(format!("{side} has several ports, so every one needs a name"));
+        return Err(format!(
+            "{side} has several ports, so every one needs a name"
+        ));
     }
     Ok(())
 }
@@ -126,7 +134,10 @@ pub fn parse(object: &Value) -> Result<Policy, String> {
             Matcher::Address { ip, ports }
         }
         (None, Some(service)) => {
-            let target_namespace = service.get("namespace").and_then(Value::as_str).unwrap_or("");
+            let target_namespace = service
+                .get("namespace")
+                .and_then(Value::as_str)
+                .unwrap_or("");
             if target_namespace != namespace {
                 return Err(format!(
                     "serviceMatcher namespace {target_namespace:?} is not the policy's namespace"
@@ -154,8 +165,9 @@ pub fn parse(object: &Value) -> Result<Policy, String> {
         }
         _ => return Err("exactly one of addressMatcher and serviceMatcher is required".into()),
     };
-    let selector = LabelSelector::parse(object.pointer("/spec/redirectBackend/localEndpointSelector"))
-        .map_err(|e| format!("localEndpointSelector: {e}"))?;
+    let selector =
+        LabelSelector::parse(object.pointer("/spec/redirectBackend/localEndpointSelector"))
+            .map_err(|e| format!("localEndpointSelector: {e}"))?;
     let backend_ports = ports(object.pointer("/spec/redirectBackend/toPorts"))?;
     if backend_ports.is_empty() {
         return Err("redirectBackend has no toPorts".into());
@@ -304,10 +316,22 @@ pub fn apply(
                     .filter(|c| *c != 0),
             })
             .collect();
-        let skip = if policy.skip { cookies(&backends) } else { Vec::new() };
+        let skip = if policy.skip {
+            cookies(&backends)
+        } else {
+            Vec::new()
+        };
         let problem = match &policy.matcher {
             Matcher::Service { name, ports } => {
-                redirect_service(frontends, policy, name, ports.as_deref(), &backends, &skip, &mut report);
+                redirect_service(
+                    frontends,
+                    policy,
+                    name,
+                    ports.as_deref(),
+                    &backends,
+                    &skip,
+                    &mut report,
+                );
                 None
             }
             Matcher::Address { ip, ports } => {
@@ -358,7 +382,8 @@ fn redirect_service(
         let (port, count) = match ports {
             None => (own, service_ports.len()),
             Some(list) => match list.iter().find(|p| {
-                p.proto == own.proto && (p.port == own.port || (!p.name.is_empty() && p.name == own.name))
+                p.proto == own.proto
+                    && (p.port == own.port || (!p.name.is_empty() && p.name == own.name))
             }) {
                 Some(p) => (p.clone(), list.len()),
                 None => continue,
@@ -421,7 +446,9 @@ fn redirect_address(
         if local.is_empty() {
             continue;
         }
-        report.redirected.push((key.clone(), address, local.clone()));
+        report
+            .redirected
+            .push((key.clone(), address, local.clone()));
         added.push(Frontend {
             namespace: policy.namespace.clone(),
             name: policy.name.clone(),

@@ -700,7 +700,11 @@ fn pod_ports_readiness_and_local_redirect_policies() {
     };
     assert_eq!(
         pod.ports,
-        vec![(17, "dns".to_owned(), 53), (6, String::new(), 53), (6, String::new(), 9253)]
+        vec![
+            (17, "dns".to_owned(), 53),
+            (6, String::new(), 53),
+            (6, String::new(), 9253)
+        ]
     );
     assert_eq!(pod.named_ports, vec![(17, "dns".to_owned(), 53)]);
     assert!(pod.ready);
@@ -715,10 +719,14 @@ fn pod_ports_readiness_and_local_redirect_policies() {
     let policy = json!({"apiVersion":"flowsdn.io/v1alpha1","kind":"FlowsdnLocalRedirectPolicy",
         "metadata":{"name":"nodelocaldns","namespace":"kube-system","uid":"l","resourceVersion":"2"},
         "spec":{"redirectFrontend":{"serviceMatcher":{"serviceName":"kube-dns","namespace":"kube-system"}}}});
-    let Resource::RedirectPolicy(parsed) = Scope::RedirectPolicies.parse(&policy).expect("lrp") else {
+    let Resource::RedirectPolicy(parsed) = Scope::RedirectPolicies.parse(&policy).expect("lrp")
+    else {
         panic!("redirect policy row expected");
     };
     assert_eq!(parsed.object, policy);
     assert!(Scope::RedirectPolicies.namespaced());
-    assert!(Scope::RedirectPolicies.parse(&object).is_err(), "kind is checked");
+    assert!(
+        Scope::RedirectPolicies.parse(&object).is_err(),
+        "kind is checked"
+    );
 }

@@ -200,7 +200,7 @@ fn local_redirect(
     tcp6: &TcpListener,
 ) -> Result<()> {
     let (local, own) = tcp4;
-    let cookie = flowsdn_connector::namespace_cookie()?;
+    let cookie = flowsdn_connector::namespace_cookie().map_err(|e| e.to_string())?;
     if cookie == 0 {
         return Err("SO_NETNS_COOKIE unsupported".into());
     }
@@ -245,11 +245,9 @@ fn local_redirect(
     for frontend in ["192.0.2.21:80", "[2001:db8::20]:80"] {
         match TcpStream::connect_timeout(&sa(frontend)?, TIMEOUT) {
             Ok(stream) => {
-                return Err(format!(
-                    "skip-LB {frontend}: translated to {:?}",
-                    stream.peer_addr()
-                )
-                .into());
+                return Err(
+                    format!("skip-LB {frontend}: translated to {:?}", stream.peer_addr()).into(),
+                );
             }
             // Untranslated: no route to the documentation address here.
             Err(error) if error.kind() != ErrorKind::PermissionDenied => {
