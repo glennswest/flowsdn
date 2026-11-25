@@ -17,7 +17,7 @@
 //! Usage: `proxy-live LOCAL_DELIVERY_OBJECT`. It needs iproute2 and root, as
 //! kernel-check gives it.
 use flowsdn_bpf_abi::{
-    IpCacheKey, RemoteEndpointInfo,
+    IpCacheKey, MapBytes, RemoteEndpointInfo,
     policy::{EndpointPolicyKey, PolicyEndpoint, PolicyEntry, PolicyKey, enforce},
 };
 use flowsdn_bpf_loader::kernel::{Egress, LocalDelivery, Object};
@@ -35,7 +35,7 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 const POD: [u8; 4] = [10, 0, 0, 7];
 const POD_IDENTITY: u32 = 1234;
-const ENDPOINT: u16 = 7;
+const ENDPOINT: u32 = 7;
 const PROXY_PORT: u16 = 15001;
 const TCP: u8 = 6;
 const TIMEOUT: Duration = Duration::from_secs(3);
@@ -150,19 +150,31 @@ fn run(object: &[u8]) -> Result<()> {
         let IpAddr::V4(v4) = address else { return 0 };
         IpCacheKey::v4(v4.octets(), 32, 0)
             .ok()
-            .and_then(|key| identities.iter().find(|(k, _)| *k == key))
+            .and_then(|key| {
+                identities
+                    .iter()
+                    .find(|(k, _)| k.to_bytes() == key.to_bytes())
+            })
             .map_or(2, |(_, info)| info.sec_identity)
     };
     let listener = Listener::bind(PROXY_PORT, false)?;
-    let server = std::thread::spawn(move || -> Result<(SocketAddr, SocketAddr, u32)> {
-        let mut redirected = listener.accept(&resolve)?;
-        redirected.stream.set_read_timeout(Some(TIMEOUT))?;
-        let mut request = [0u8; 5];
-        redirected.stream.read_exact(&mut request)?;
-        ensure(&request == b"hello", "the proxy got another request")?;
-        redirected.stream.write_all(b"world")?;
-        Ok((redirected.original, redirected.source, redirected.identity))
-    });
+    let server = std::thread::spawn(
+        move || -> std::result::Result<(SocketAddr, SocketAddr, u32), String> {
+            let text = |e: std::io::Error| e.to_string();
+            let mut redirected = listener.accept(&resolve).map_err(text)?;
+            redirected
+                .stream
+                .set_read_timeout(Some(TIMEOUT))
+                .map_err(text)?;
+            let mut request = [0u8; 5];
+            redirected.stream.read_exact(&mut request).map_err(text)?;
+            if &request != b"hello" {
+                return Err("the proxy got another request".into());
+            }
+            redirected.stream.write_all(b"world").map_err(text)?;
+            Ok((redirected.original, redirected.source, redirected.identity))
+        },
+    );
     println!(
         "PASS endpoint ep0: egress enforced, TCP 80 to any identity through proxy port {PROXY_PORT}; ip rule fwmark 0x200/0xf00 -> table 2004 (local); transparent listener on {PROXY_PORT}"
     );
