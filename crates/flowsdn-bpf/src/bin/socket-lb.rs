@@ -2189,7 +2189,12 @@ fn masq_icmp4_in(ctx: &TcContext) -> Option<i32> {
 // DSR or node-local flow goes to the backend: the error's destination and
 // the quote's source become the backend. A DSR flow's is redirected toward
 // the backend's node as the flow's packets are; a local one goes to the
-// stack. Errors about source-NATed flows pass untouched.
+// stack. A source-NATed flow's (#534) goes to the backend's node as an error
+// about the packet the backend sent (`backend -> nat:natport`), from this
+// node's NAT address and redirected by the FIB; and an error the backend's
+// side sends about a forwarded packet (quoting `nat:natport -> backend`)
+// arrives at the NAT address and goes to the client quoting
+// `client -> frontend`, from the frontend when the backend sent it.
 
 /// Whether ICMP `kind` is an error that quotes the packet it is about:
 /// destination unreachable (fragmentation needed among them), time exceeded
@@ -2257,6 +2262,15 @@ fn icmp_error4_in(ctx: &TcContext) -> Option<i32> {
     };
     // SAFETY: LRU value copied at once, never written through.
     let flow = unsafe { NODEPORT4.get(&key).copied() }?;
+    if flow.flags & FLOW_SNAT != 0 && flow.flags & !(FLOW_SNAT | FLOW_CLOSING) == 0 {
+        return snat_error4_in(
+            ctx,
+            (l4, inner, inner_l4, proto, src),
+            (front, front_port),
+            (client, client_port),
+            flow,
+        );
+    }
     if flow.flags & !(FLOW_DSR | FLOW_CLOSING) != 0 {
         return None;
     }
@@ -2277,6 +2291,98 @@ fn icmp_error4_in(ctx: &TcContext) -> Option<i32> {
         Some((result, fib)) => redirect(ctx, result, &fib),
         None => Some(TC_ACT_OK),
     }
+}
+
+/// A client's error about a reply of source-NATed flow `flow` (#534): to the
+/// backend, as an error about the packet it sent (`backend -> nat:natport`),
+/// from this node's NAT address, while the flow's reservation still names
+/// this client.
+#[inline(always)]
+fn snat_error4_in(
+    ctx: &TcContext,
+    at: (usize, usize, usize, u8, [u8; 4]),
+    front: ([u8; 4], [u8; 2]),
+    client: ([u8; 4], [u8; 2]),
+    flow: Nodeport4Value,
+) -> Option<i32> {
+    let (l4, inner, inner_l4, proto, src) = at;
+    let (backend, nat) = ((flow.address, flow.port), (flow.other, flow.other_port));
+    let key = Nodeport4Key {
+        a: backend.0,
+        b: nat.0,
+        ap: backend.1,
+        bp: nat.1,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let held = unsafe { NODEPORT4.get(&key).copied() }?;
+    if held.other != client.0 || held.other_port != client.1 {
+        return None;
+    }
+    ttl_ok(ctx)?;
+    let (result, fib) = fib4(ctx, ICMP4, nat.0, backend.0, 0);
+    if !forwarded(result) {
+        return None;
+    }
+    set_address4(ctx, 26, src, nat.0)?;
+    set_address4(ctx, 30, front.0, backend.0)?;
+    set_inner4(ctx, l4, inner, 12, inner_l4, front, backend)?;
+    set_inner4(ctx, l4, inner, 16, inner_l4.checked_add(2)?, client, nat)?;
+    redirect(ctx, result, &fib)
+}
+
+/// On the frontend's node (#534): an ICMP error the backend's side sends
+/// about a source-NATed packet (quoting `nat:natport -> backend`), to the
+/// client quoting `client -> frontend`; its source becomes the frontend when
+/// the backend sent it.
+#[inline(always)]
+fn snat_error4_back(ctx: &TcContext) -> Option<i32> {
+    let (l4, src, dst, kind, _) = icmp4(ctx)?;
+    if !icmp4_error(kind) {
+        return None;
+    }
+    let (inner, inner_l4, proto, nat, backend, nat_port, backend_port) = icmp4_inner(ctx, l4)?;
+    if nat != dst {
+        return None;
+    }
+    let key = Nodeport4Key {
+        a: backend,
+        b: nat,
+        ap: backend_port,
+        bp: nat_port,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let flow = unsafe { NODEPORT4.get(&key).copied() }?;
+    // A NodePort SNAT flow's only: masquerade and NAT46/64 have their own.
+    if flow.flags & !FLOW_CLOSING != 0 {
+        return None;
+    }
+    let (front, client) = ((flow.address, flow.port), (flow.other, flow.other_port));
+    ttl_ok(ctx)?;
+    let (result, fib) = fib4(ctx, ICMP4, front.0, client.0, 0);
+    if !forwarded(result) {
+        return None;
+    }
+    if src == backend {
+        set_address4(ctx, 26, backend, front.0)?;
+    }
+    set_address4(ctx, 30, nat, client.0)?;
+    set_inner4(ctx, l4, inner, 12, inner_l4, (nat, nat_port), client)?;
+    set_inner4(
+        ctx,
+        l4,
+        inner,
+        16,
+        inner_l4.checked_add(2)?,
+        (backend, backend_port),
+        front,
+    )?;
+    redirect(ctx, result, &fib)
 }
 
 // IPv6: the same flows, keyed and translated the same way. There is no
@@ -3369,6 +3475,15 @@ fn icmp_error6_in(ctx: &TcContext) -> Option<i32> {
     };
     // SAFETY: LRU value copied at once, never written through.
     let flow = unsafe { NODEPORT6.get(&key).copied() }?;
+    if flow.flags & FLOW_SNAT != 0 && flow.flags & !(FLOW_SNAT | FLOW_CLOSING) == 0 {
+        return snat_error6_in(
+            ctx,
+            (proto, inner_l4),
+            (front, front_port),
+            (client, client_port),
+            &flow,
+        );
+    }
     if flow.flags & !(FLOW_DSR | FLOW_CLOSING) != 0 {
         return None;
     }
@@ -3396,6 +3511,88 @@ fn icmp_error6_in(ctx: &TcContext) -> Option<i32> {
         Some((result, fib)) => redirect6(ctx, result, fib),
         None => Some(TC_ACT_OK),
     }
+}
+
+/// [`snat_error4_in`] for IPv6.
+#[inline(always)]
+fn snat_error6_in(
+    ctx: &TcContext,
+    at: (u8, usize),
+    front: ([u8; 16], [u8; 2]),
+    client: ([u8; 16], [u8; 2]),
+    flow: &Nodeport6Value,
+) -> Option<i32> {
+    let (proto, inner_l4) = at;
+    let (backend, nat) = ((flow.address, flow.port), (flow.other, flow.other_port));
+    let key = Nodeport6Key {
+        a: backend.0,
+        b: nat.0,
+        ap: backend.1,
+        bp: nat.1,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let held = unsafe { NODEPORT6.get(&key).copied() }?;
+    if held.other != client.0 || held.other_port != client.1 {
+        return None;
+    }
+    hops_ok(ctx)?;
+    let (result, fib) = fib6(ctx, ICMP6, nat.0, backend.0, 0)?;
+    if !forwarded(result) {
+        return None;
+    }
+    let src = ctx.load::<[u8; 16]>(IP6_SRC).ok()?;
+    set_icmp6(ctx, IP6_SRC, 0, true, (src, [0; 2]), (nat.0, [0; 2]))?;
+    set_icmp6(ctx, IP6_DST, 0, true, (front.0, [0; 2]), (backend.0, [0; 2]))?;
+    set_icmp6(ctx, INNER6_SRC, inner_l4, false, front, backend)?;
+    set_icmp6(ctx, INNER6_DST, inner_l4.checked_add(2)?, false, client, nat)?;
+    redirect6(ctx, result, fib)
+}
+
+/// [`snat_error4_back`] for IPv6.
+#[inline(always)]
+fn snat_error6_back(ctx: &TcContext) -> Option<i32> {
+    let (proto, nat, backend, inner_l4, nat_port, backend_port) = icmp6_error(ctx)?;
+    if ctx.load::<[u8; 16]>(IP6_DST).ok()? != nat {
+        return None;
+    }
+    let key = Nodeport6Key {
+        a: backend,
+        b: nat,
+        ap: backend_port,
+        bp: nat_port,
+        proto,
+        direction: SNAT_REPLY,
+        pad: [0; 2],
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    let flow = unsafe { NODEPORT6.get(&key).copied() }?;
+    // A NodePort SNAT flow's only: masquerade and NAT46/64 have their own.
+    if flow.flags & !FLOW_CLOSING != 0 {
+        return None;
+    }
+    let (front, client) = ((flow.address, flow.port), (flow.other, flow.other_port));
+    hops_ok(ctx)?;
+    let (result, fib) = fib6(ctx, ICMP6, front.0, client.0, 0)?;
+    if !forwarded(result) {
+        return None;
+    }
+    if ctx.load::<[u8; 16]>(IP6_SRC).ok()? == backend {
+        set_icmp6(ctx, IP6_SRC, 0, true, (backend, [0; 2]), (front.0, [0; 2]))?;
+    }
+    set_icmp6(ctx, IP6_DST, 0, true, (nat, [0; 2]), (client.0, [0; 2]))?;
+    set_icmp6(ctx, INNER6_SRC, inner_l4, false, (nat, nat_port), client)?;
+    set_icmp6(
+        ctx,
+        INNER6_DST,
+        inner_l4.checked_add(2)?,
+        false,
+        (backend, backend_port),
+        front,
+    )?;
+    redirect6(ctx, result, fib)
 }
 
 // BPF masquerade (#513), IPv6: the counterpart of the IPv4 one (#460). At
@@ -4220,6 +4417,11 @@ fn icmp_out4(skb: *mut __sk_buff) -> i32 {
 fn icmp_in4(skb: *mut __sk_buff) -> i32 {
     icmp_error4_in(&TcContext::new(skb)).unwrap_or(NOT_NODEPORT)
 }
+/// [`snat_error4_back`] on its own frame; [`NOT_NODEPORT`] when not ours.
+#[inline(never)]
+fn snat_icmp_in4(skb: *mut __sk_buff) -> i32 {
+    snat_error4_back(&TcContext::new(skb)).unwrap_or(NOT_NODEPORT)
+}
 #[inline(never)]
 fn masq_icmp_in(skb: *mut __sk_buff) -> i32 {
     masq_icmp4_in(&TcContext::new(skb)).unwrap_or(TC_ACT_OK)
@@ -4236,6 +4438,11 @@ fn icmp_out6(skb: *mut __sk_buff) -> i32 {
 #[inline(never)]
 fn icmp_in6(skb: *mut __sk_buff) -> i32 {
     icmp_error6_in(&TcContext::new(skb)).unwrap_or(NOT_NODEPORT)
+}
+/// [`snat_error6_back`] on its own frame; [`NOT_NODEPORT`] when not ours.
+#[inline(never)]
+fn snat_icmp_in6(skb: *mut __sk_buff) -> i32 {
+    snat_error6_back(&TcContext::new(skb)).unwrap_or(NOT_NODEPORT)
 }
 /// [`masq_classify6`] on its own frame.
 #[inline(never)]
@@ -4481,7 +4688,10 @@ fn ingress(ctx: &TcContext) -> i32 {
                 _ => TC_ACT_OK,
             },
             STEP_PASS => match icmp_in6(skb) {
-                NOT_NODEPORT => masq_icmp_in6(skb),
+                NOT_NODEPORT => match snat_icmp_in6(skb) {
+                    NOT_NODEPORT => masq_icmp_in6(skb),
+                    verdict => verdict,
+                },
                 verdict => verdict,
             },
             STEP_MASQ_REPLY => masq_reply6(skb),
@@ -4502,7 +4712,10 @@ fn ingress(ctx: &TcContext) -> i32 {
             _ => match dsr4(skb) {
                 DSR_NONE => match ingress4(skb) {
                     NOT_NODEPORT => match icmp_in4(skb) {
-                        NOT_NODEPORT => masq_icmp_in(skb),
+                        NOT_NODEPORT => match snat_icmp_in4(skb) {
+                            NOT_NODEPORT => masq_icmp_in(skb),
+                            verdict => verdict,
+                        },
                         verdict => verdict,
                     },
                     ENCAP_PENDING => match encap4(skb) {

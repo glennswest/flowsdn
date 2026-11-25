@@ -4,6 +4,16 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### ICMP errors of source-NATed flows — #534 (P3), 2026-11-25
+
+Frontend's node, `nodeport_ingress`: icmp_error4_in/6_in hand FLOW_SNAT flows to snat_error4_in/6_in (to the
+backend quoting `backend -> nat:natport`, from nat; reservation must name the client); new snat_icmp_in4/6 (own frames,
+before masquerade) take the backend side's errors via the SNAT_REPLY entry (to the client quoting `client -> frontend`,
+from the frontend when the backend sent it). Quote per the packet each host sent (the issue text said `nat -> backend`
+for the backend's quote; a host matches by the packet it sent). Kernel step icmp_errors_snat.
+- [x] Code, kernel step, docs, changelog (branch snat-icmp-534).
+- [ ] Object + lock, strict sc-build + kernel-check, merge, stage, close.
+
 ### L7 HTTP/Kafka policy rules — #537 (P3), 2026-11-25
 
 Covered by the master's L7 ruling (on #543): C now, B when it comes (a Rust L7 proxy in the agent, ADR #563 first),

@@ -530,6 +530,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     dsr(lb, services)?;
     dsr_encap(lb)?;
     icmp_errors(lb)?;
+    icmp_errors_snat(lb)?;
     nat46x64(lb, services)?;
     nat46x64_local(lb, services)?;
     gateway64(lb)?;
@@ -2311,6 +2312,115 @@ fn icmp_errors(lb: &mut SocketLb) -> Result<()> {
     }
     println!(
         "PASS ICMP errors of Service flows: for a DSR and a node-local frontend, TCP and UDP, IPv4 and IPv6, an error about the client's packet (the DSR one quoted with its option) leaves the backend's node quoting the frontend, from the frontend when the backend sent it; a client's error about a reply goes to the backend, a DSR flow's redirected toward its node; checksums valid; errors about other flows untouched"
+    );
+    Ok(())
+}
+
+/// ICMP errors of source-NATed flows (#534), on [`snat`]'s and [`snat6`]'s
+/// frontends (:30090, backends 10.9.1.5 / fd00:9:1::5 on another node): an
+/// error the backend sends about a forwarded packet (quoting
+/// `nat:natport -> backend`) reaches the client from the frontend, quoting
+/// `client -> frontend`; a client's error about a reply goes to the backend
+/// from the NAT address, quoting `backend -> nat:natport`. TCP and UDP, IPv4
+/// and IPv6; TTL / hop limit 63, checksums valid.
+fn icmp_errors_snat(lb: &mut SocketLb) -> Result<()> {
+    let up0 = ifindex("up0")?;
+    let (front, client, backend) = ([192, 0, 2, 20], [198, 51, 100, 9], [10, 9, 1, 5]);
+    for proto in [6u8, 17] {
+        let sport = 41700u16.saturating_add(u16::from(proto));
+        let request = frame4(proto, client, front, sport, 30090, false);
+        let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+        let (nat, _, nat_port, _, _, _) = parse4(&out)?;
+        let error = icmp_frame4(backend, nat, &error_message(3, 3, &out)?);
+        let back = run_on(lb, "nodeport_ingress", &error, up0, TC_ACT_REDIRECT)?;
+        let (quote, sums) = quote4(&back)?;
+        if back.get(26..30) != Some(&front[..])
+            || back.get(30..34) != Some(&client[..])
+            || quote != (client, front, sport, 30090, true)
+            || back.get(22) != Some(&63)
+            || !sums
+        {
+            return Err(format!(
+                "SNAT ICMP error proto {proto} from the backend: {:?} -> {:?}, quote {quote:?}, ttl {:?}, checksums {sums}",
+                back.get(26..30),
+                back.get(30..34),
+                back.get(22)
+            )
+            .into());
+        }
+        let reply = frame4(proto, front, client, 30090, sport, false);
+        let error = icmp_frame4(client, front, &error_message(3, 3, &reply)?);
+        let to = run_on(lb, "nodeport_ingress", &error, up0, TC_ACT_REDIRECT)?;
+        let (quote, sums) = quote4(&to)?;
+        if to.get(26..30) != Some(&nat[..])
+            || to.get(30..34) != Some(&backend[..])
+            || quote != (backend, nat, 8080, nat_port, true)
+            || to.get(22) != Some(&63)
+            || !sums
+        {
+            return Err(format!(
+                "SNAT ICMP error proto {proto} from the client: {:?} -> {:?}, quote {quote:?}, ttl {:?}, checksums {sums}",
+                to.get(26..30),
+                to.get(30..34),
+                to.get(22)
+            )
+            .into());
+        }
+    }
+    let (front6, client6, backend6) = (
+        ip6("2001:db8:2::20")?,
+        ip6("2001:db8:64::9")?,
+        ip6("fd00:9:1::5")?,
+    );
+    for proto in [6u8, 17] {
+        let sport = 41800u16.saturating_add(u16::from(proto));
+        let request = frame6(proto, client6, front6, sport, 30090, false);
+        let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+        let (nat, _, nat_port, _, _, _) = parse6(&out)?;
+        let error = icmp_frame6(backend6, nat, &error_message(1, 4, &out)?);
+        let back = run_on(lb, "nodeport_ingress", &error, up0, TC_ACT_REDIRECT)?;
+        let (quote, sum_ok) = quote6(&back)?;
+        if back.get(22..38) != Some(&front6[..])
+            || back.get(38..54) != Some(&client6[..])
+            || quote != (client6, front6, sport, 30090)
+            || back.get(21) != Some(&63)
+            || !sum_ok
+        {
+            return Err(format!(
+                "SNAT ICMPv6 error proto {proto} from the backend: {:?} -> {:?}, quote {quote:?}, hops {:?}, checksum {sum_ok}",
+                back.get(22..38),
+                back.get(38..54),
+                back.get(21)
+            )
+            .into());
+        }
+        let reply = frame6(proto, front6, client6, 30090, sport, false);
+        let error = icmp_frame6(client6, front6, &error_message(1, 4, &reply)?);
+        let to = run_on(lb, "nodeport_ingress", &error, up0, TC_ACT_REDIRECT)?;
+        let (quote, sum_ok) = quote6(&to)?;
+        if to.get(22..38) != Some(&nat[..])
+            || to.get(38..54) != Some(&backend6[..])
+            || quote != (backend6, nat, 8080, nat_port)
+            || to.get(21) != Some(&63)
+            || !sum_ok
+        {
+            return Err(format!(
+                "SNAT ICMPv6 error proto {proto} from the client: {:?} -> {:?}, quote {quote:?}, hops {:?}, checksum {sum_ok}",
+                to.get(22..38),
+                to.get(38..54),
+                to.get(21)
+            )
+            .into());
+        }
+    }
+    // An error quoting a NAT port no flow holds passes untouched.
+    let stray = frame4(17, front, backend, 64999, 8080, false);
+    let error = icmp_frame4(backend, front, &error_message(3, 3, &stray)?);
+    if run_on(lb, "nodeport_ingress", &error, up0, TCX_NEXT)? != error {
+        return Err("an ICMP error about an unknown NAT port was rewritten".into());
+    }
+    println!(
+        "PASS ICMP errors of source-NATed flows: TCP and UDP, IPv4 and IPv6, the backend's error about a forwarded packet reaches the client from the frontend quoting client -> frontend, and a client's error about a reply reaches the backend from the NAT address quoting backend -> nat:natport; TTL and hop limit 63, checksums valid; an error about an unknown NAT port untouched"
     );
     Ok(())
 }

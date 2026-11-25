@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#534)
+- **feat:** ICMP and ICMPv6 errors about NodePort/LB flows source-NATed to another node's backend are translated on the frontend's node, as #449 did for DSR and node-local flows. These are destination unreachable (including fragmentation needed / packet too big), time exceeded and parameter problem, quoting TCP or UDP.
+  - **The backend's side:** an error about a forwarded packet (to the NAT address, quoting `nat:natport -> backend`) reaches the client quoting `client -> frontend`, from the frontend when the backend sent it.
+  - **A client:** an error about a reply reaches the backend as an error about the packet it sent (`backend -> nat:natport`), from the node's NAT address, while the flow's reservation still names that client.
+  - **Implementation:** both are redirected by the FIB with TTL / hop limit lowered, and the quoted header and ICMP checksums are kept right. In socket-lb: `snat_error4_in`/`snat_error6_in` from the existing client-error path, and the new `snat_icmp_in4`/`snat_icmp_in6` steps (own frames) before masquerade. The socket-lb object and lock are rebuilt.
+- **test:** `socket-lb-live` `icmp_errors_snat`: both directions, TCP and UDP, IPv4 and IPv6, on the SNAT frontends, with addresses, quotes, TTL / hop limit and checksums checked, and an error about an unknown NAT port untouched.
+
 ### 2026-11-25 (#542)
 - **feat:** Service NAT46/64 in the socket LB, for IPv6 sockets, as in the reference. A pod's or the host's IPv6 socket to `::ffff:<IPv4 frontend>` whose backends are IPv6 connects to the IPv6 backend. One to an IPv6 frontend with IPv4 backends connects to `::ffff:<backend>`. getpeername and UDP replies show the frontend.
   - **Limits:** TCP and connected UDP only, because the kernel sends an unconnected `sendto` to `::ffff:` down its IPv4 path and refuses a sendmsg6 rewrite to `::ffff:`. An IPv4 socket to such a frontend fails with EPERM, as before.

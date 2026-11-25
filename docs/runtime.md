@@ -805,10 +805,16 @@ router's source.
 from the frontend goes to the backend, with its destination and the quote's
 source rewritten. A DSR flow's error is redirected toward the backend's node like the flow's
 packets; a local one goes to the stack.
+- **Source-NATed flows (#534), frontend's node, `nodeport_ingress`:** an error the backend's side sends
+about a forwarded packet (to this node's NAT address, quoting `nat:natport -> backend`) goes to the
+client quoting `client -> frontend`, from the frontend when the backend sent it. A client's error about
+a reply goes to the backend as an error about the packet it sent (`backend -> nat:natport`), from this
+node's NAT address, while the flow's NAT reservation still names that client. Both are redirected by the
+FIB, TTL or hop limit lowered.
 
 The quote's IP header checksum and the ICMP
 checksum are kept right. The quoted TCP/UDP checksum is left alone: a quote may be cut short, and receivers do
-not check it. Errors about source-NATed flows still pass untouched (#534).
+not check it.
 
 ### CRDs and the operator (#337)
 
