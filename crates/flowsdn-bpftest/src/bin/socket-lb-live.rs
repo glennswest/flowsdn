@@ -1584,7 +1584,8 @@ fn quote6(f: &[u8]) -> Result<(Quote6, bool)> {
 
 /// An outer IPv4 header's checks: (protocol, source, destination, header
 /// checksum ok, total length matches the frame, TTL).
-fn outer4(f: &[u8]) -> Result<(u8, [u8; 4], [u8; 4], bool, bool, u8)> {
+type Outer<const N: usize> = (u8, [u8; N], [u8; N], bool, bool, u8);
+fn outer4(f: &[u8]) -> Result<Outer<4>> {
     let ip = f.get(14..34).ok_or("short frame")?;
     let total = u16::from_be_bytes(ip.get(2..4).ok_or("ip")?.try_into()?);
     Ok((
@@ -1598,7 +1599,7 @@ fn outer4(f: &[u8]) -> Result<(u8, [u8; 4], [u8; 4], bool, bool, u8)> {
 }
 /// [`outer4`] for IPv6: (next header, source, destination, -, payload length
 /// matches, hop limit).
-fn outer6(f: &[u8]) -> Result<(u8, [u8; 16], [u8; 16], bool, bool, u8)> {
+fn outer6(f: &[u8]) -> Result<Outer<16>> {
     let ip = f.get(14..54).ok_or("short frame")?;
     let payload = u16::from_be_bytes(ip.get(4..6).ok_or("ip")?.try_into()?);
     Ok((

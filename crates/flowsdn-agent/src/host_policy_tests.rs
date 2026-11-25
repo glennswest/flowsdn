@@ -209,7 +209,10 @@ fn authentication_and_to_groups_are_refused() {
         ]}),
     )];
     let got = select(&objects, &node, false);
-    assert!(got.enforce_ingress && got.enforce_egress, "default deny stays on");
+    assert!(
+        got.enforce_ingress && got.enforce_egress,
+        "default deny stays on"
+    );
     assert_eq!(got.rules.len(), 1, "only the plain rule: {:?}", got.rules);
     assert!(got.egress_rules.is_empty(), "nothing allowed by toGroups");
     for needle in [
