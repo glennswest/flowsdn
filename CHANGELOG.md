@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#543)
+- **planning:** With ADR-0024 in place, the Gateway API controller follows the master's sequencing: the L7 proxy core (#577), then Ingress stage 1 (#578), then this. #543 is parked after both, and #474 after #543. The two new issues are filed but not proposed: per the ruling, nothing L7 starts until something on the platform needs it.
+
 ### 2026-11-25 (#563)
 - **docs:** ADR-0024, following the master's ruling on #543: flowsdn's L7 proxy is a Rust module of the agent, with no Envoy and no xDS.
   - **Traffic path:** traffic reaches it through the existing policy and Service redirects, by BPF TPROXY (`bpf_sk_assign`) only.

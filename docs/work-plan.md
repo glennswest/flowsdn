@@ -8,6 +8,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] ADR-0024 (in-agent module `flowsdn-l7`, BPF TPROXY only, no xDS or CEC, order DNS → HTTP → Ingress → Gateway API, Kafka refused, OpenSSL TLS with agent-read Secrets, conformance via the upstream suites). Spec 16/21 amendments, ADR-0015/ADR-0001 notes, docs index.
 - Parked behind it, picked up when something on the platform needs L7: #536, #537, #543, #474, #335 (only FlowsdnGatewayClassConfig), #525 (divergences).
+- [x] 2026-11-25 (#543): filed #577 (proxy core) and #578 (Ingress stage 1), not proposed (the ruling: not started until L7 is needed). #543 is proposed --after #577 and #578; #474 --after #543.
 
 ### Local redirect policy and skip-LB — #565 (P3), 2026-11-25
 
