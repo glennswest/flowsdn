@@ -244,6 +244,12 @@ fn egress(gateway: &Gateway, local: &Local<'_>) -> Result<(Ipv4Addr, u32), Strin
 /// value bytes, as the loader writes them.
 pub type Entries = BTreeMap<(u32, [u8; 8]), [u8; 28]>;
 
+/// An egress address and interface index, or why there is none.
+pub type Derived = Result<(Ipv4Addr, u32), String>;
+/// A resolved gateway: its address, its node, and this node's egress when it
+/// is that node.
+type Resolved = (Ipv4Addr, String, Option<(Ipv4Addr, u32)>);
+
 /// What [`plan`] decided, for `GET /v1/egress-gateway`.
 #[derive(Clone, Debug, Default)]
 pub struct Report {
@@ -255,7 +261,7 @@ pub struct Report {
     pub sources: BTreeMap<String, usize>,
     /// This node as a gateway: (policy, egress address, interface index, or
     /// the derivation error).
-    pub local: Vec<(String, Result<(Ipv4Addr, u32), String>)>,
+    pub local: Vec<(String, Derived)>,
     /// IPv6 addresses and destinations seen but not programmed.
     pub ipv6_skipped: usize,
 }
@@ -332,7 +338,7 @@ pub fn plan(
     let mut entries = Entries::new();
     for policy in &policies {
         // Gateways: (address, node, this node's egress when it is the node).
-        let mut resolved: Vec<(Ipv4Addr, String, Option<(Ipv4Addr, u32)>)> = Vec::new();
+        let mut resolved: Vec<Resolved> = Vec::new();
         for gateway in &policy.gateways {
             let found = sorted.iter().find_map(|node| {
                 if !gateway.node.matches(&node.labels) {

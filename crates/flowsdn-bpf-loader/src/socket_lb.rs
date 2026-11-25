@@ -66,7 +66,14 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 25] = [
     ("flowsdn_dsr_config", MapType::Hash, 4, 4, 1, 1),
     ("flowsdn_skip_lb4", MapType::Hash, 16, 1, 1024, 1),
     ("flowsdn_skip_lb6", MapType::Hash, 32, 1, 1024, 1),
-    ("flowsdn_egress_gw_policy_v4", MapType::LpmTrie, 12, 28, 16384, 1),
+    (
+        "flowsdn_egress_gw_policy_v4",
+        MapType::LpmTrie,
+        12,
+        28,
+        16384,
+        1,
+    ),
     ("flowsdn_gw64_sources", MapType::LpmTrie, 20, 1, 256, 1),
     (
         "flowsdn_nodeport4_xlate",
@@ -283,7 +290,11 @@ impl SocketLb {
                 .ok_or("socket-lb object has no map flowsdn_egress_gw_policy_v4")?;
             match map {
                 Map::LpmTrie(_) => LpmTrie::try_from(map)?,
-                _ => return Err("socket-lb map flowsdn_egress_gw_policy_v4 is not an LPM trie".into()),
+                _ => {
+                    return Err(
+                        "socket-lb map flowsdn_egress_gw_policy_v4 is not an LPM trie".into(),
+                    );
+                }
             }
         };
         let gw64_sources = {
@@ -576,14 +587,12 @@ impl SocketLb {
     /// Make `flowsdn_egress_gw_policy_v4` hold exactly `desired` (#564):
     /// changed and new entries first, then stale ones removed. A failed read
     /// stops before anything is removed (spec 14 §3.4.6).
-    pub fn set_egress_gateway4(
-        &mut self,
-        desired: &EgressGateway4,
-    ) -> KernelResult<()> {
+    pub fn set_egress_gateway4(&mut self, desired: &EgressGateway4) -> KernelResult<()> {
         let current = self.egress_gateway4()?;
         for ((prefix, data), value) in desired {
             if current.get(&(*prefix, *data)) != Some(value) {
-                self.egress_gw4.insert(&Key::new(*prefix, *data), value, 0)?;
+                self.egress_gw4
+                    .insert(&Key::new(*prefix, *data), value, 0)?;
             }
         }
         for (prefix, data) in current.keys() {
