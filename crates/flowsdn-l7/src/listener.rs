@@ -6,7 +6,7 @@
 use nix::sys::socket::{
     AddressFamily, Backlog, SockFlag, SockType, SockaddrIn, SockaddrIn6, bind, listen,
     setsockopt, socket,
-    sockopt::{IpTransparent, Ipv6Transparent, ReuseAddr},
+    sockopt::{IpTransparent, ReuseAddr},
 };
 use std::{
     io,
@@ -47,7 +47,21 @@ impl Listener {
         let fd = socket(family, SockType::Stream, SockFlag::SOCK_CLOEXEC, None).map_err(io_error)?;
         setsockopt(&fd, ReuseAddr, &true).map_err(io_error)?;
         if v6 {
-            setsockopt(&fd, Ipv6Transparent, &true).map_err(io_error)?;
+            let on: nix::libc::c_int = 1;
+            // SAFETY: `fd` is a live socket; the value pointer and length
+            // describe the local `on` exactly; the kernel keeps no pointer.
+            let result = unsafe {
+                nix::libc::setsockopt(
+                    std::os::fd::AsRawFd::as_raw_fd(&fd),
+                    nix::libc::SOL_IPV6,
+                    nix::libc::IPV6_TRANSPARENT,
+                    std::ptr::from_ref(&on).cast(),
+                    std::mem::size_of::<nix::libc::c_int>() as nix::libc::socklen_t,
+                )
+            };
+            if result != 0 {
+                return Err(io::Error::last_os_error());
+            }
             let address = SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, port, 0, 0);
             bind(std::os::fd::AsRawFd::as_raw_fd(&fd), &SockaddrIn6::from(address))
                 .map_err(io_error)?;

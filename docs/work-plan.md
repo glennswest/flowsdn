@@ -4,6 +4,12 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### L7 proxy core — #577 (P3), 2026-11-25
+
+- [x] local-delivery egress redirect (mark, sk_assign, proxy port in the flow entry), `flowsdn-l7` (listener, ports, route, record), `proxy-live`, docs.
+- [ ] sc-build; local-delivery object + lock rebuild; strict build with kernel-check (`proxy-live`); stage.
+- Not in this step: ingress-direction and Service (`l7_lb_proxy_port`) redirects; follow-up issue.
+
 ### Egress gateway — #564 (P3), 2026-11-25
 
 - [x] ABI (`egress.rs`), socket-lb (redirect to the gateway, gateway SNAT on the masquerade path), loader map, agent planning (`egress_gateway.rs`) in the services thread every 1 s, watch, settings, `GET /v1/egress-gateway`, docs.

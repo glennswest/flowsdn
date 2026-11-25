@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#577)
+- **feat:** The L7 proxy core (ADR-0024 step 1).
+  - **Datapath:** an endpoint's egress TCP flow whose allowing policy entry carries a proxy port is marked `0x200 | port << 16`. Its first packet is assigned to the proxy's transparent listener (`bpf_sk_assign`), and no listener means a drop. The flow's `flowsdn_policy_ct` value keeps the port so later packets are marked, and `local_delivery` hands such packets to the stack.
+  - **New crate `flowsdn-l7`:** transparent listeners (original destination, source and identity); proxy ports per spec 16 §3.3.1 (range, reuse delay, persistence); the ip rule and local route (pref 9, fwmark 0x200/0xf00, table 2004); and the L7 record.
+  - **Also:** the local-delivery object and lock are rebuilt.
+- **test:** `proxy-live`, a new medium-suite kernel fixture. A Pod in its own namespace connects to 203.0.113.10:80, and the transparent listener accepts it with that original destination, the Pod as source and its ipcache identity; request and reply pass, the flow keeps its proxy port, and with no listener the connection fails. `flowsdn-l7` port allocation tests.
+- **docs:** runtime.md, a spec 16 amendment, implementation-status.md.
+
 ### 2026-11-25 (#523)
 - **feat:** scripttest `egress/policy-maps-dump`, which runs flowsdn's egress gateway planner (#564) over the fake API's FlowsdnEgressGatewayPolicies, Pods, Nodes and Namespaces and prints the reference's line format. `tests/egress.rs` checks it with flowsdn's kinds. The `egressgateway` area (2 scripts) runs in the corpus gate as an expected divergence: its inputs are CiliumEgressGatewayPolicy, CiliumEndpoint and CiliumNode (ADR-0020), and it seeds spec 10's tables (#576). Gate: 8 PASS, 29 XFAIL, 0 FAIL.
 

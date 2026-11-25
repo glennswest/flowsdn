@@ -65,6 +65,10 @@ pinning or subsystem libraries are absent are **not current status**.
   ready endpoint), from AF_PACKET
   sockets; `GET /v1/lb-ipam`, `GET /v1/l2-announcements`. Unit and loopback-API
   tests, and the `l2-announce-live` kernel fixture; not yet seen on a node.
+- L7 proxy core (#577, ADR-0024 step 1): endpoint egress TCP redirect to a
+  proxy port (`bpf_sk_assign`, proxy mark, local route) and the `flowsdn-l7`
+  crate (transparent listeners, proxy ports, routing rule, L7 record).
+  Kernel-tested by `proxy-live`; nothing in the agent uses it yet.
 - Egress gateway (#564, `egress-gateway`, default off, IPv4): selected Pods'
   traffic to a FlowsdnEgressGatewayPolicy's destinations is sent unchanged to
   the gateway node and SNATed there to the egress address (native routing, no

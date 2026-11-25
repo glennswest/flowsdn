@@ -2008,3 +2008,20 @@ amendment above. The proxy is a module of the agent process (`flowsdn-l7`). Cons
   proxy) is not built.
 - Order: proxy core, DNS (#536), HTTP (#537), then Ingress and Gateway API (spec 21).
 
+## Amendment — the proxy core as built (#577, 2026-11-25)
+
+ADR-0024 step 1. §3.3.3 as flowsdn does it:
+- An allowed endpoint egress TCP flow whose entry carries a proxy port is
+  marked `MARK_MAGIC_TO_PROXY | port << 16`, and its first packet is
+  `bpf_sk_assign`ed to the listener found by `bpf_skc_lookup_tcp` on loopback.
+  No listener drops the packet.
+- The flow's `flowsdn_policy_ct` value carries the port (its `pad`), so later
+  packets are marked and delivered by the ip rule (pref 9, `fwmark
+  0x200/0xf00`, table 2004 `local default dev lo`).
+- §3.3.1's proxy-port allocation, reuse delay and persistence are in
+  `flowsdn-l7::ports`.
+
+The ingress-direction redirect (§3.3.3: a packet into an endpoint cannot be
+`sk_assign`ed on the veth's egress), the upstream leg's marks and the Service
+`l7_lb_proxy_port` redirect come with the protocols that use them.
+

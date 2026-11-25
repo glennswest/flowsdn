@@ -1060,6 +1060,33 @@ The reference's `lrp-address-matcher-cidrs` restriction is not read.
 skip-LB, and no translation after skip-LB, on a kernel. There is no cluster
 run yet.
 
+### L7 proxy core (#577)
+
+ADR-0024 step 1, the base the L7 features build on (DNS #536, HTTP #537,
+Ingress #578). Nothing in the agent opens a proxy port yet, so this is not
+active on a node.
+
+- **Datapath.** An endpoint's egress TCP flow that its policy allows through
+  an entry with a proxy port goes to the proxy. `local_delivery` marks the
+  packet `0x200 | port << 16` and assigns its first packet to the proxy's
+  transparent listener (`bpf_sk_assign`, the listener looked up on loopback).
+  The flow's entry in `flowsdn_policy_ct` remembers the port, so every later
+  packet is marked too. The packet goes to the stack, and the ip rule
+  `pref 9 fwmark 0x200/0xf00 lookup 2004` with `local default dev lo` in table
+  2004 delivers it locally. With no listener on the port the packet is
+  dropped (fail closed). BPF only: there are no nftables `tproxy` rules.
+- **`flowsdn-l7`.** It provides:
+  - transparent listeners, where an accepted connection's local address is the
+    original destination and its source identity comes from the ipcache;
+  - proxy ports (10000–20000), with the requested port when free, reference
+    counts, a 5-minute reuse delay and `proxy-ports.json` persistence (a file
+    older than 15 minutes is ignored);
+  - the rule and route above;
+  - the L7 record that becomes an L7 flow.
+- **Not yet:** the ingress-direction redirect (traffic into an endpoint) and
+  Service `l7_lb_proxy_port` redirects. `proxy-live` (medium suite) checks the
+  egress path on a kernel.
+
 ### Egress gateway (#564)
 
 With `kubernetes.egress-gateway` (default off; needs `bpf-masquerade` and
