@@ -8,7 +8,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] Datapath: UDP redirect, proxy-egress mark read as the source identity; `flowsdn-l7::dns` (messages, patterns, cache, proxy); agent (rules, compiler, settings, policy thread hold, netlink routing); `dns-live`; docs.
 - [x] local-delivery object + lock rebuilt; kernel-check on 7.3.4-200.fc44: 26 pass, 0 fail, 2 skip; `dns-live` 6/6 PASS, `proxy-live` PASS.
-- [ ] Strict build at the object commit; stage; close.
+- [x] Strict sc-build at c1c8105: fmt --check, `cargo xtask check`, test/build.sh, kernel-check 26 pass 0 fail 2 skip (`dns-live` 6/6). Staged; closed.
 - Not built (documented): per-endpoint caches, restore, transparent upstream mode, zombies, L7 flows into Hubble.
 
 ### L7 proxy core — #577 (P3), 2026-11-25
