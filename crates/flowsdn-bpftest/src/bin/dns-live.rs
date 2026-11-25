@@ -156,10 +156,7 @@ fn pod(role: &str) -> Result<()> {
         let line = line?;
         let words: Vec<&str> = line.split_whitespace().collect();
         let reply = match words.as_slice() {
-            ["SEEN"] => format!(
-                "SEEN {}",
-                seen.lock().map_err(|_| "seen lock")?.join(",")
-            ),
+            ["SEEN"] => format!("SEEN {}", seen.lock().map_err(|_| "seen lock")?.join(",")),
             ["UDP", server, name] => client_query(server, name, false),
             ["TCPDNS", server, name] => client_query(server, name, true),
             ["CONNECT", target] => connect(target),
@@ -220,7 +217,10 @@ fn serve_dns(seen: &Arc<Mutex<Vec<String>>>) -> Result<()> {
                 seen.push(format!("tcp:{}", q.name));
             }
             if let Some(reply) = answer(&query) {
-                let mut out = u16::try_from(reply.len()).unwrap_or(0).to_be_bytes().to_vec();
+                let mut out = u16::try_from(reply.len())
+                    .unwrap_or(0)
+                    .to_be_bytes()
+                    .to_vec();
                 out.extend_from_slice(&reply);
                 let _ = stream.write_all(&out);
             }
@@ -266,7 +266,11 @@ fn client_query(server: &str, name: &str, tcp: bool) -> String {
         };
         let answers = message::answers(&reply, &question).ok_or("not an answer")?;
         let ips: Vec<String> = answers.ips.iter().map(ToString::to_string).collect();
-        Ok(format!("OK {} {} FROM {from}", answers.rcode, ips.join(",")))
+        Ok(format!(
+            "OK {} {} FROM {from}",
+            answers.rcode,
+            ips.join(",")
+        ))
     })();
     result.unwrap_or_else(|e| format!("FAIL {e}"))
 }
@@ -303,19 +307,19 @@ fn pod_info(name: &str, address: &str, app: &str) -> Result<PodInfo> {
 /// policy, and the proxy's port.
 fn view(client_ifindex: u32, dns_ifindex: u32, proxy_port: u16) -> Result<View> {
     let policy = json!({"apiVersion":"flowsdn.io/v1alpha1","kind":"FlowsdnNetworkPolicy",
-        "metadata":{"name":"dns-live","namespace":"shop"},
-        "specs":[
-            {"endpointSelector":{"matchLabels":{"app":"client"}},"egress":[
-                {"toEndpoints":[{"matchLabels":{"app":"dns"}}],
-                 "toPorts":[{"ports":[{"port":"53","protocol":"ANY"}],
-                             "rules":{"dns":[{"matchPattern":"*.example.com"}]}}]},
-                {"toFQDNs":[{"matchName":"api.example.com"}],
-                 "toPorts":[{"ports":[{"port":"80","protocol":"TCP"}]}]}]},
-            {"endpointSelector":{"matchLabels":{"app":"dns"}},"ingress":[
-                {"fromEndpoints":[{"matchLabels":{"app":"client"}}],
-                 "toPorts":[{"ports":[{"port":"53","protocol":"ANY"},
-                                      {"port":"80","protocol":"TCP"}]}]}]}
-        ]});
+    "metadata":{"name":"dns-live","namespace":"shop"},
+    "specs":[
+        {"endpointSelector":{"matchLabels":{"app":"client"}},"egress":[
+            {"toEndpoints":[{"matchLabels":{"app":"dns"}}],
+             "toPorts":[{"ports":[{"port":"53","protocol":"ANY"}],
+                         "rules":{"dns":[{"matchPattern":"*.example.com"}]}}]},
+            {"toFQDNs":[{"matchName":"api.example.com"}],
+             "toPorts":[{"ports":[{"port":"80","protocol":"TCP"}]}]}]},
+        {"endpointSelector":{"matchLabels":{"app":"dns"}},"ingress":[
+            {"fromEndpoints":[{"matchLabels":{"app":"client"}}],
+             "toPorts":[{"ports":[{"port":"53","protocol":"ANY"},
+                                  {"port":"80","protocol":"TCP"}]}]}]}
+    ]});
     let endpoint = |id: u16, name: &str, interface: &str, ifindex: u32| LocalEndpoint {
         id,
         namespace: "shop".into(),
@@ -462,8 +466,7 @@ fn run(object: &[u8]) -> Result<()> {
         ..Config::default()
     };
     let policy: Arc<dyn l7dns::Policy> = answerer.clone();
-    let proxy = DnsProxy::start(0, false, policy, config)
-        .map_err(|e| format!("DNS proxy: {e}"))?;
+    let proxy = DnsProxy::start(0, false, policy, config).map_err(|e| format!("DNS proxy: {e}"))?;
     state.lock().map_err(|_| "state")?.0.dns_proxy_port = proxy.port();
     pass(&state, &slot)?;
     {
@@ -471,9 +474,14 @@ fn run(object: &[u8]) -> Result<()> {
         let entries = guard.1.policy().policy_entries()?;
         let redirected = entries
             .iter()
-            .filter(|(k, v)| k.egress == 1 && k.dport.get() == 53 && v.proxy_port.get() == proxy.port())
+            .filter(|(k, v)| {
+                k.egress == 1 && k.dport.get() == 53 && v.proxy_port.get() == proxy.port()
+            })
             .count();
-        ensure(redirected == 2, &format!("port 53 TCP and UDP to the proxy: {redirected}"))?;
+        ensure(
+            redirected == 2,
+            &format!("port 53 TCP and UDP to the proxy: {redirected}"),
+        )?;
     }
     println!(
         "PASS policy compiled by the agent: client egress to dns:53 with DNS rule *.example.com \
@@ -505,8 +513,13 @@ fn run(object: &[u8]) -> Result<()> {
          queried); the upstream query passed the server's ingress policy as the client's identity"
     );
     let got = client.ask("CONNECT 10.0.1.80:80")?;
-    ensure(got == "OK world", &format!("toFQDNs allowed address: {got}"))?;
-    println!("PASS toFQDNs allows: the client reaches 10.0.1.80:80 right after the answer (the hold)");
+    ensure(
+        got == "OK world",
+        &format!("toFQDNs allowed address: {got}"),
+    )?;
+    println!(
+        "PASS toFQDNs allows: the client reaches 10.0.1.80:80 right after the answer (the hold)"
+    );
 
     let got = client.ask("UDP 10.0.1.53:53 evil.example.org")?;
     ensure(
@@ -518,7 +531,9 @@ fn run(object: &[u8]) -> Result<()> {
         !seen.contains("evil"),
         &format!("a refused query reached the server: {seen}"),
     )?;
-    println!("PASS DNS rule refuses: evil.example.org answered REFUSED by the proxy, never forwarded");
+    println!(
+        "PASS DNS rule refuses: evil.example.org answered REFUSED by the proxy, never forwarded"
+    );
 
     let got = client.ask("TCPDNS 10.0.1.53:53 www.example.com")?;
     ensure(
@@ -542,7 +557,9 @@ fn run(object: &[u8]) -> Result<()> {
         got.starts_with("FAIL"),
         &format!("after the TTL the address must be dropped: {got}"),
     )?;
-    println!("PASS toFQDNs expiry: after the {API_TTL} s TTL a new connection to 10.0.1.80:80 is dropped");
+    println!(
+        "PASS toFQDNs expiry: after the {API_TTL} s TTL a new connection to 10.0.1.80:80 is dropped"
+    );
 
     drop(client.input);
     drop(dns.input);
