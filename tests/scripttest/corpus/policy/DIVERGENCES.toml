@@ -1,0 +1,67 @@
+# flowsdn's expected divergences for this area (spec 17 §3.7, ADR-0005).
+# Not harvested; excluded from a re-harvest.
+
+[[divergence]]
+id = "policy-cilium-network-policy-kube-apiserver-allow"
+script = "policy/kube-apiserver-allow.txtar"
+adr = "ADR-0020"
+kind = "partial"
+lines = [12]
+reason = """
+The script imports `cilium.io/v2` CiliumNetworkPolicies. flowsdn reads its own kind,
+`flowsdn.io/v1alpha1` FlowsdnNetworkPolicy (ADR-0017, ADR-0020: no reference names), and its
+watch parser refuses the reference kind, so the script stops at this line. The lines before it
+(identities from flowsdn's allocator, endpoints) run and must pass.
+"""
+
+[[divergence]]
+id = "policy-cilium-network-policy-kube-apiserver-deny"
+script = "policy/kube-apiserver-deny.txtar"
+adr = "ADR-0020"
+kind = "partial"
+lines = [14]
+reason = """
+The script imports `cilium.io/v2` CiliumNetworkPolicies. flowsdn reads its own kind,
+`flowsdn.io/v1alpha1` FlowsdnNetworkPolicy (ADR-0017, ADR-0020: no reference names), and its
+watch parser refuses the reference kind, so the script stops at this line. The lines before it
+(identities from flowsdn's allocator, endpoints) run and must pass.
+"""
+
+[[divergence]]
+id = "policy-cilium-network-policy-kube-apiserver-duplicate-delete"
+script = "policy/kube-apiserver-duplicate-delete.txtar"
+adr = "ADR-0020"
+kind = "partial"
+lines = [11]
+reason = """
+The script imports `cilium.io/v2` CiliumNetworkPolicies. flowsdn reads its own kind,
+`flowsdn.io/v1alpha1` FlowsdnNetworkPolicy (ADR-0017, ADR-0020: no reference names), and its
+watch parser refuses the reference kind, so the script stops at this line. The lines before it
+(identities from flowsdn's allocator, endpoints) run and must pass.
+"""
+
+[[divergence]]
+id = "policy-cilium-network-policy-shared-identity-teardown"
+script = "policy/shared-identity-teardown.txtar"
+adr = "ADR-0020"
+kind = "partial"
+lines = [13]
+reason = """
+The script imports `cilium.io/v2` CiliumNetworkPolicies. flowsdn reads its own kind,
+`flowsdn.io/v1alpha1` FlowsdnNetworkPolicy (ADR-0017, ADR-0020: no reference names), and its
+watch parser refuses the reference kind, so the script stops at this line. The lines before it
+(identities from flowsdn's allocator, endpoints) run and must pass.
+"""
+
+[[divergence]]
+id = "policy-cilium-network-policy-test"
+script = "policy/test.txtar"
+adr = "ADR-0020"
+kind = "partial"
+lines = [13]
+reason = """
+The script imports `cilium.io/v2` CiliumNetworkPolicies. flowsdn reads its own kind,
+`flowsdn.io/v1alpha1` FlowsdnNetworkPolicy (ADR-0017, ADR-0020: no reference names), and its
+watch parser refuses the reference kind, so the script stops at this line. The lines before it
+(identities from flowsdn's allocator, endpoints) run and must pass.
+"""

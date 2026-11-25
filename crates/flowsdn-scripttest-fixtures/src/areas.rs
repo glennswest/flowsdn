@@ -9,12 +9,13 @@ use serde_json::json;
 use std::sync::{Arc, Mutex};
 
 /// The areas with a builder: the harvested scripts the runner executes.
-pub const AREAS: [&str; 5] = [
+pub const AREAS: [&str; 6] = [
     "dynamicconfig",
     "hive-health",
     "k8s-tables",
     "k8sclient",
     "metrics",
+    "policy",
 ];
 
 /// The engine for one script of `area`, with the script's `#!` flags.
@@ -26,6 +27,7 @@ pub fn build(area: &str, flags: &[String]) -> Result<Engine, String> {
         "hive-health" => hive_health(),
         "k8sclient" => k8sclient(flags),
         "metrics" => metrics(flags),
+        "policy" => policy(flags),
         other => Err(format!("no fixture for area {other}")),
     }
 }
@@ -145,5 +147,19 @@ fn metrics(flags: &[String]) -> Result<Engine, String> {
     let mut engine = Engine::new();
     fixture::register_hive(&mut engine, &fixture)?;
     crate::metrics::register(&mut engine, &shared)?;
+    Ok(engine)
+}
+
+/// `policy` (#518): the fake API, the health table, and the identity,
+/// endpoint and policy commands over flowsdn's allocator and watch parser.
+fn policy(flags: &[String]) -> Result<Engine, String> {
+    let fixture = Fixture::new(FakeClient::default(), flags, Box::new(|_| Ok(Vec::new())))?;
+    let shared = Arc::new(Mutex::new(fixture));
+    let k8s = Arc::clone(&lock(&shared).k8s);
+    let mut engine = Engine::new();
+    fixture::register_hive(&mut engine, &shared)?;
+    k8s::register(&mut engine, &k8s)?;
+    crate::health::register(&mut engine, &flowsdn_health::Registry::new())?;
+    crate::policy::register(&mut engine, &Arc::new(Mutex::new(crate::policy::Policies::default())))?;
     Ok(engine)
 }

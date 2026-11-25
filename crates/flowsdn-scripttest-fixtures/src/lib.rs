@@ -9,4 +9,5 @@ pub mod fixture;
 pub mod health;
 pub mod k8s;
 pub mod metrics;
+pub mod policy;
 pub mod time;
