@@ -462,6 +462,7 @@ fn controller_body(phase: &AtomicUsize) {
         nat46x64: false,
         external_clusterip: false,
         local_redirect: false,
+        egress_gateway: false,
         node_name: "local".into(),
         kubeconfig: Some(PathBuf::from(&kubeconfig)),
         auto_direct_node_routes: false,
