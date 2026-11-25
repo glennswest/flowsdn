@@ -47,7 +47,15 @@ fn harvested_areas_pass_or_diverge_as_recorded() {
                 .run(archive.script(), &mut state)
                 .err()
                 .map(|e| (e.line, format!("{}: {}", e.command, e.message)));
-            results.push((script.clone(), classify(&script, failure, &divergences)));
+            let outcome = classify(&script, failure, &divergences);
+            if outcome.is_failure() {
+                // What the script saw, for whoever reads the failure.
+                println!("--- {script}\n{}", engine.diagnostic_dump(&state));
+                if let Ok(actual) = state.read_text("actual.yaml") {
+                    println!("--- {script} actual.yaml\n{actual}");
+                }
+            }
+            results.push((script.clone(), outcome));
         }
     }
     let mut failures = Vec::new();

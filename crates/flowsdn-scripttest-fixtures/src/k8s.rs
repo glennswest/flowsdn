@@ -197,7 +197,9 @@ impl FakeClient {
         }
         let plural_name = plural(&lower);
         let found = self.resources.iter().find(|r| {
-            r.rsplit('.').next().is_some_and(|p| p == lower || p == plural_name)
+            r.rsplit('.')
+                .next()
+                .is_some_and(|p| p == lower || p == plural_name)
         });
         match found {
             Some(resource) => {
@@ -276,8 +278,15 @@ fn parse(args: &[String]) -> Result<Args, CommandError> {
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         if arg == "-o" || arg == "--out" {
-            parsed.out = Some(iter.next().ok_or_else(|| fail(format!("{arg} needs a file")))?.clone());
-        } else if let Some(file) = arg.strip_prefix("--out=").or_else(|| arg.strip_prefix("-o=")) {
+            parsed.out = Some(
+                iter.next()
+                    .ok_or_else(|| fail(format!("{arg} needs a file")))?
+                    .clone(),
+            );
+        } else if let Some(file) = arg
+            .strip_prefix("--out=")
+            .or_else(|| arg.strip_prefix("-o="))
+        {
             parsed.out = Some(file.to_owned());
         } else if let Some(fields) = arg.strip_prefix("--show-redacted=") {
             parsed.shown = fields.split(',').map(str::to_owned).collect();
@@ -329,57 +338,66 @@ pub fn register(engine: &mut Engine, client: &Arc<Mutex<FakeClient>>) -> Result<
             }
             for file in &args.words {
                 for object in documents(state, file)? {
-                    op(&mut lock(&c), object, args.strict).map_err(|e| fail(format!("{file}: {e}")))?;
+                    op(&mut lock(&c), object, args.strict)
+                        .map_err(|e| fail(format!("{file}: {e}")))?;
                 }
             }
             Ok(Control::Continue)
         })?;
     }
     let c = Arc::clone(client);
-    engine.register_command("k8s/get", false, move |state: &mut State, args: &[String]| {
-        let args = parse(args)?;
-        let [resource, target] = args.words.as_slice() else {
-            return Err(fail("k8s/get needs a resource and namespace/name"));
-        };
-        let (namespace, name) = ns_name(target);
-        let client = lock(&c);
-        let resource = client.resolve(resource, &mut state.log).map_err(fail)?;
-        let object = client
-            .get(&resource, &namespace, &name)
-            .ok_or_else(|| fail(format!("{resource} {target} not found")))?;
-        let value = render(object, &args.shown);
-        drop(client);
-        emit(state, args.out.as_ref(), &value)
-    })?;
+    engine.register_command(
+        "k8s/get",
+        false,
+        move |state: &mut State, args: &[String]| {
+            let args = parse(args)?;
+            let [resource, target] = args.words.as_slice() else {
+                return Err(fail("k8s/get needs a resource and namespace/name"));
+            };
+            let (namespace, name) = ns_name(target);
+            let client = lock(&c);
+            let resource = client.resolve(resource, &mut state.log).map_err(fail)?;
+            let object = client
+                .get(&resource, &namespace, &name)
+                .ok_or_else(|| fail(format!("{resource} {target} not found")))?;
+            let value = render(object, &args.shown);
+            drop(client);
+            emit(state, args.out.as_ref(), &value)
+        },
+    )?;
     let c = Arc::clone(client);
-    engine.register_command("k8s/list", false, move |state: &mut State, args: &[String]| {
-        let args = parse(args)?;
-        let (resource, namespace) = match args.words.as_slice() {
-            [resource] => (resource.clone(), String::new()),
-            [resource, namespace] => (resource.clone(), namespace.clone()),
-            _ => return Err(fail("k8s/list needs a resource and an optional namespace")),
-        };
-        let client = lock(&c);
-        let resource = client.resolve(&resource, &mut state.log).map_err(fail)?;
-        let items: Vec<Value> = client
-            .list(&resource, &namespace)
-            .into_iter()
-            .map(|o| render(o, &args.shown))
-            .collect();
-        let mut metadata = Map::new();
-        if args.shown.iter().any(|s| s == "resource-version") {
-            metadata.insert(
-                "resourceVersion".into(),
-                json!(client.list_version().to_string()),
-            );
-        }
-        drop(client);
-        emit(
-            state,
-            args.out.as_ref(),
-            &json!({"items": items, "metadata": metadata}),
-        )
-    })?;
+    engine.register_command(
+        "k8s/list",
+        false,
+        move |state: &mut State, args: &[String]| {
+            let args = parse(args)?;
+            let (resource, namespace) = match args.words.as_slice() {
+                [resource] => (resource.clone(), String::new()),
+                [resource, namespace] => (resource.clone(), namespace.clone()),
+                _ => return Err(fail("k8s/list needs a resource and an optional namespace")),
+            };
+            let client = lock(&c);
+            let resource = client.resolve(&resource, &mut state.log).map_err(fail)?;
+            let items: Vec<Value> = client
+                .list(&resource, &namespace)
+                .into_iter()
+                .map(|o| render(o, &args.shown))
+                .collect();
+            let mut metadata = Map::new();
+            if args.shown.iter().any(|s| s == "resource-version") {
+                metadata.insert(
+                    "resourceVersion".into(),
+                    json!(client.list_version().to_string()),
+                );
+            }
+            drop(client);
+            emit(
+                state,
+                args.out.as_ref(),
+                &json!({"items": items, "metadata": metadata}),
+            )
+        },
+    )?;
     let c = Arc::clone(client);
     engine.register_command(
         "k8s/svc/update-status",
@@ -397,35 +415,51 @@ pub fn register(engine: &mut Engine, client: &Arc<Mutex<FakeClient>>) -> Result<
         },
     )?;
     let c = Arc::clone(client);
-    engine.register_command("k8s/resync", false, move |state: &mut State, args: &[String]| {
-        let args = parse(args)?;
-        let (resource, files) = args
-            .words
-            .split_first()
-            .ok_or_else(|| fail("k8s/resync needs a resource"))?;
-        let mut objects = Vec::new();
-        for file in files {
-            objects.extend(documents(state, file)?);
-        }
-        let mut client = lock(&c);
-        let resource = client.resolve(resource, &mut state.log).map_err(fail)?;
-        client.resync(&resource, objects).map_err(fail)?;
-        Ok(Control::Continue)
-    })?;
+    engine.register_command(
+        "k8s/resync",
+        false,
+        move |state: &mut State, args: &[String]| {
+            let args = parse(args)?;
+            let (resource, files) = args
+                .words
+                .split_first()
+                .ok_or_else(|| fail("k8s/resync needs a resource"))?;
+            let mut objects = Vec::new();
+            for file in files {
+                objects.extend(documents(state, file)?);
+            }
+            let mut client = lock(&c);
+            let resource = client.resolve(resource, &mut state.log).map_err(fail)?;
+            client.resync(&resource, objects).map_err(fail)?;
+            Ok(Control::Continue)
+        },
+    )?;
     let c = Arc::clone(client);
-    engine.register_command("k8s/summary", false, move |state: &mut State, args: &[String]| {
-        let text = lock(&c).summary();
-        match args.first() {
-            Some(file) => state.write_text(file, &text)?,
-            None => state.publish(text, ""),
-        }
-        Ok(Control::Continue)
-    })?;
+    engine.register_command(
+        "k8s/summary",
+        false,
+        move |state: &mut State, args: &[String]| {
+            let text = lock(&c).summary();
+            match args.first() {
+                Some(file) => state.write_text(file, &text)?,
+                None => state.publish(text, ""),
+            }
+            Ok(Control::Continue)
+        },
+    )?;
     let c = Arc::clone(client);
-    engine.register_command("k8s/resources", false, move |state: &mut State, _: &[String]| {
-        let text: String = lock(&c).resources.iter().map(|r| format!("{r}\n")).collect();
-        state.publish(text, "");
-        Ok(Control::Continue)
-    })?;
+    engine.register_command(
+        "k8s/resources",
+        false,
+        move |state: &mut State, _: &[String]| {
+            let text: String = lock(&c)
+                .resources
+                .iter()
+                .map(|r| format!("{r}\n"))
+                .collect();
+            state.publish(text, "");
+            Ok(Control::Continue)
+        },
+    )?;
     Ok(())
 }

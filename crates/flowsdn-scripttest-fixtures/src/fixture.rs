@@ -120,8 +120,15 @@ pub fn register_hive(engine: &mut Engine, fixture: &Shared) -> Result<(), String
         lock(&f).stop().map(|()| Control::Continue).map_err(fail)
     })?;
     let f = Arc::clone(fixture);
-    engine.register_command("hive/recreate", false, move |_: &mut State, args: &[String]| {
-        lock(&f).recreate(args).map(|()| Control::Continue).map_err(fail)
-    })?;
+    engine.register_command(
+        "hive/recreate",
+        false,
+        move |_: &mut State, args: &[String]| {
+            lock(&f)
+                .recreate(args)
+                .map(|()| Control::Continue)
+                .map_err(fail)
+        },
+    )?;
     Ok(())
 }

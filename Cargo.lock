@@ -660,6 +660,16 @@ dependencies = [
  "regex",
  "rustix",
  "tokio",
+ "toml",
+]
+
+[[package]]
+name = "flowsdn-scripttest-fixtures"
+version = "0.14.0"
+dependencies = [
+ "flowsdn-k8s",
+ "flowsdn-scripttest",
+ "serde_json",
 ]
 
 [[package]]

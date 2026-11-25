@@ -248,23 +248,53 @@ reason = "would hang"
     let mut seen = BTreeSet::new();
     let entries = load(text, "k8sclient", &mut seen).expect("load");
     assert_eq!(entries.len(), 3);
-    assert_eq!(entries.get(1).map(|d| d.kind.clone()), Some(Kind::Partial(vec![7])));
+    assert_eq!(
+        entries.get(1).map(|d| d.kind.clone()),
+        Some(Kind::Partial(vec![7]))
+    );
     let f = "k8sclient/fake.txtar";
-    assert_eq!(classify(f, Some((3, "x".into())), &entries), Outcome::Xfail("go-trackers".into()));
-    assert_eq!(classify(f, None, &entries), Outcome::Xpass("go-trackers".into()));
+    assert_eq!(
+        classify(f, Some((3, "x".into())), &entries),
+        Outcome::Xfail("go-trackers".into())
+    );
+    assert_eq!(
+        classify(f, None, &entries),
+        Outcome::Xpass("go-trackers".into())
+    );
     assert!(classify(f, None, &entries).is_failure());
     let other = "k8sclient/uid.txtar";
     assert_eq!(classify(other, None, &entries), Outcome::Pass);
-    assert_eq!(classify(other, Some((7, "x".into())), &entries), Outcome::Xfail("half".into()));
-    assert!(matches!(classify(other, Some((8, "x".into())), &entries), Outcome::Fail(_)));
-    assert_eq!(skipped("k8sclient/hang.txtar", &entries), Some("hangs".into()));
+    assert_eq!(
+        classify(other, Some((7, "x".into())), &entries),
+        Outcome::Xfail("half".into())
+    );
+    assert!(matches!(
+        classify(other, Some((8, "x".into())), &entries),
+        Outcome::Fail(_)
+    ));
+    assert_eq!(
+        skipped("k8sclient/hang.txtar", &entries),
+        Some("hangs".into())
+    );
     assert_eq!(skipped(other, &entries), None);
     // Refused: no ADR, another area's script, an unknown kind, a duplicate id.
     for (bad, want) in [
-        ("[[divergence]]\nid='a'\nscript='k8sclient/x.txtar'\nkind='skip'\nreason='r'\n", "no adr"),
-        ("[[divergence]]\nid='b'\nscript='other/x.txtar'\nadr='ADR-0004'\nkind='skip'\nreason='r'\n", "is not an"),
-        ("[[divergence]]\nid='c'\nscript='k8sclient/x.txtar'\nadr='ADR-0004'\nkind='maybe'\nreason='r'\n", "unknown kind"),
-        ("[[divergence]]\nid='go-trackers'\nscript='k8sclient/x.txtar'\nadr='ADR-0004'\nkind='skip'\nreason='r'\n", "duplicate id"),
+        (
+            "[[divergence]]\nid='a'\nscript='k8sclient/x.txtar'\nkind='skip'\nreason='r'\n",
+            "no adr",
+        ),
+        (
+            "[[divergence]]\nid='b'\nscript='other/x.txtar'\nadr='ADR-0004'\nkind='skip'\nreason='r'\n",
+            "is not an",
+        ),
+        (
+            "[[divergence]]\nid='c'\nscript='k8sclient/x.txtar'\nadr='ADR-0004'\nkind='maybe'\nreason='r'\n",
+            "unknown kind",
+        ),
+        (
+            "[[divergence]]\nid='go-trackers'\nscript='k8sclient/x.txtar'\nadr='ADR-0004'\nkind='skip'\nreason='r'\n",
+            "duplicate id",
+        ),
     ] {
         let error = load(bad, "k8sclient", &mut seen).expect_err(want);
         assert!(error.contains(want), "{want}: {error}");

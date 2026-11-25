@@ -44,7 +44,11 @@ impl Divergence {
 /// Parse an area's `DIVERGENCES.toml`. Refused: an entry without an ADR, an
 /// unknown kind, a `partial` without lines, a script outside `area`, a
 /// duplicate id (within the file; `seen` carries ids across areas).
-pub fn load(text: &str, area: &str, seen: &mut BTreeSet<String>) -> Result<Vec<Divergence>, String> {
+pub fn load(
+    text: &str,
+    area: &str,
+    seen: &mut BTreeSet<String>,
+) -> Result<Vec<Divergence>, String> {
     let table: toml::Table = text.parse().map_err(|e| format!("DIVERGENCES.toml: {e}"))?;
     let entries = match table.get("divergence") {
         None => return Ok(Vec::new()),
@@ -66,10 +70,14 @@ pub fn load(text: &str, area: &str, seen: &mut BTreeSet<String>) -> Result<Vec<D
         let adr = field("adr")?;
         let reason = field("reason")?;
         if !adr.starts_with("ADR-") {
-            return Err(format!("divergence {id}: adr must name an ADR (ADR-NNNN), not {adr}"));
+            return Err(format!(
+                "divergence {id}: adr must name an ADR (ADR-NNNN), not {adr}"
+            ));
         }
         if !script.starts_with(&format!("{area}/")) || !script.ends_with(".txtar") {
-            return Err(format!("divergence {id}: script {script} is not an {area}/*.txtar"));
+            return Err(format!(
+                "divergence {id}: script {script} is not an {area}/*.txtar"
+            ));
         }
         let kind = match field("kind")?.as_str() {
             "expected-fail" => Kind::ExpectedFail,
@@ -135,7 +143,11 @@ pub fn skipped(script: &str, divergences: &[Divergence]) -> Option<String> {
 
 /// Classify a finished run of `script`: `failure` is the failing line and
 /// message, None when it passed.
-pub fn classify(script: &str, failure: Option<(usize, String)>, divergences: &[Divergence]) -> Outcome {
+pub fn classify(
+    script: &str,
+    failure: Option<(usize, String)>,
+    divergences: &[Divergence],
+) -> Outcome {
     let covering: Vec<&Divergence> = divergences.iter().filter(|d| d.covers(script)).collect();
     match failure {
         None => covering
