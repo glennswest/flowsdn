@@ -73,6 +73,11 @@ fn fixtures(env: &Env) -> Vec<(&'static str, PathBuf, Vec<PathBuf>)> {
             vec![delivery.clone()],
         ),
         (
+            "fixture-proxy-live",
+            env.fixture("proxy-live"),
+            vec![delivery.clone()],
+        ),
+        (
             "fixture-host-chain-live",
             env.fixture("host-chain-live"),
             vec![delivery, env.bpf("socket-lb")],

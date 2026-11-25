@@ -41,8 +41,11 @@ static __config_stack_egress: u32 = 0;
 
 #[classifier]
 pub fn local_delivery(ctx: TcContext) -> i32 {
-    if policy::enforce(&ctx, 1, policy::SCOPE_ENDPOINT) != TC_ACT_OK {
-        return TC_ACT_SHOT;
+    match policy::enforce(&ctx, 1, policy::SCOPE_ENDPOINT) {
+        TC_ACT_OK => {}
+        // Assigned to the L7 proxy (#577): the stack delivers it locally.
+        policy::TO_PROXY => return TC_ACT_OK,
+        _ => return TC_ACT_SHOT,
     }
     // A packet to the node itself: the host firewall's ingress (#384).
     if policy::enforce(&ctx, 0, policy::SCOPE_HOST_PODS) != TC_ACT_OK {

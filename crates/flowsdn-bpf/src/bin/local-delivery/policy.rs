@@ -14,17 +14,22 @@
 //! what its policy would drop. Each decision is counted in
 //! `flowsdn_policy_verdicts` and emitted into `flowsdn_policy_events`
 //! (#452; remembered flows are neither). An ICMP or ICMPv6 packet's policy
-//! port is its type (#448), so rules can allow types. It does not do
-//! authentication (an entry that requires it drops), proxy redirects, and
-//! fragments other than the first (dropped where enforced). An ICMP or ICMPv6 error (destination unreachable, time
+//! port is its type (#448), so rules can allow types. An allowed egress TCP
+//! flow whose entry carries a proxy port goes to the L7 proxy (#577,
+//! ADR-0024): its first packet is assigned to the proxy's transparent
+//! listener (`bpf_sk_assign`), and every packet of it carries the proxy mark
+//! so the stack delivers it locally. It does not do authentication (an entry
+//! that requires it drops), ingress proxy redirects, and fragments other
+//! than the first (dropped where enforced). An ICMP or ICMPv6 error (destination unreachable, time
 //! exceeded, parameter problem) about a remembered flow is related traffic
 //! and passes without a policy lookup (#463); one about no remembered flow
 //! is judged as new ICMP traffic.
 use aya_ebpf::{
-    bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, TC_ACT_SHOT},
-    helpers::bpf_ktime_get_ns,
+    EbpfContext,
+    bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, TC_ACT_SHOT, bpf_sock_tuple},
+    helpers::{bpf_ktime_get_ns, bpf_sk_assign, bpf_sk_release, bpf_skc_lookup_tcp},
     macros::map,
-    maps::{HashMap, LpmTrie, LruHashMap, LruPerCpuHashMap, RingBuf, lpm_trie::Key},
+    maps::{HashMap, LpmTrie, LruHashMap, LruPerCpuHashMap, PerCpuArray, RingBuf, lpm_trie::Key},
     programs::TcContext,
 };
 use flowsdn_bpf_abi::{
@@ -32,7 +37,7 @@ use flowsdn_bpf_abi::{
     policy::{
         ENDPOINT_POLICY_FULL_PREFIX, HOST_PODS, POLICY_CT_CLOSING, PolicyCtKey, PolicyCtValue,
         PolicyEndpoint, PolicyEntry, PolicyEvent, PolicyStatsValue, PolicyVerdictKey, enforce,
-        drop_reason, verdict,
+        drop_reason, proxy_mark, verdict,
     },
 };
 
@@ -72,6 +77,75 @@ static POLICY_CT: LruHashMap<PolicyCtKey, PolicyCtValue> = LruHashMap::with_max_
 /// loses events; the counts stay.
 #[map(name = "flowsdn_policy_events")]
 static EVENTS: RingBuf = RingBuf::with_byte_size(256 * 1024, 0);
+
+/// [`enforce`]'s verdict for a packet assigned to the L7 proxy (#577): the
+/// caller hands it to the stack, never redirects it.
+pub const TO_PROXY: i32 = -3;
+/// The socket lookup tuple of a proxy redirect, off the stack: an IPv4 tuple
+/// is its first 12 bytes, an IPv6 one all 36 (`struct bpf_sock_tuple`).
+#[map(name = "flowsdn_proxy_tuple")]
+static PROXY_TUPLE: PerCpuArray<[u8; 36]> = PerCpuArray::with_max_entries(1, 0);
+
+/// Send the packet to the L7 proxy listening on `port`: mark it, and assign
+/// it to the transparent listener (looked up on loopback, the listener being
+/// bound to every address). No listener: dropped (fail closed).
+#[inline(always)]
+fn to_proxy(ctx: &TcContext, flow: &Flow, port: u16) -> i32 {
+    // SAFETY: the program's own skb; `mark` is a plain integer field.
+    unsafe {
+        (*ctx.skb.skb).mark = proxy_mark::TO_PROXY | (u32::from(port) << 16);
+    }
+    let Some(tuple) = PROXY_TUPLE.get_ptr_mut(0) else {
+        return TC_ACT_SHOT;
+    };
+    let dport = port.to_be_bytes();
+    let v4 = flow.key.family == FAMILY_V4;
+    // SAFETY: a per-CPU map value of this program run, written only here.
+    let tuple = unsafe { &mut *tuple };
+    let size = if v4 {
+        let [a, b, c, d, ..] = flow.key.saddr;
+        let [s0, s1] = flow.key.sport.0;
+        *tuple = [0; 36];
+        let head = [a, b, c, d, 127, 0, 0, 1, s0, s1, dport[0], dport[1]];
+        for (slot, byte) in tuple.iter_mut().zip(head) {
+            *slot = byte;
+        }
+        12
+    } else {
+        *tuple = [0; 36];
+        for (slot, byte) in tuple.iter_mut().zip(flow.key.saddr) {
+            *slot = byte;
+        }
+        if let Some(last) = tuple.get_mut(31) {
+            *last = 1;
+        }
+        let [s0, s1] = flow.key.sport.0;
+        for (slot, byte) in tuple.iter_mut().skip(32).zip([s0, s1, dport[0], dport[1]]) {
+            *slot = byte;
+        }
+        36
+    };
+    // SAFETY: the tuple is a live map value of at least `size` bytes; the
+    // helper keeps no pointer. BPF_F_CURRENT_NETNS (-1) and no flags.
+    let sk = unsafe {
+        bpf_skc_lookup_tcp(
+            ctx.as_ptr(),
+            core::ptr::from_mut(tuple).cast::<bpf_sock_tuple>(),
+            size,
+            u64::MAX,
+            0,
+        )
+    };
+    if sk.is_null() {
+        return TC_ACT_SHOT;
+    }
+    // SAFETY: `sk` is the reference the lookup returned, released below on
+    // every path.
+    let assigned = unsafe { bpf_sk_assign(ctx.as_ptr(), sk.cast(), 0) };
+    // SAFETY: as above.
+    unsafe { bpf_sk_release(sk.cast()) };
+    if assigned == 0 { TO_PROXY } else { TC_ACT_SHOT }
+}
 
 /// Policy decisions per endpoint, direction, verdict, protocol and port.
 #[map(name = "flowsdn_policy_verdicts")]
@@ -430,15 +504,16 @@ fn entry(endpoint: u32, identity: u32, egress: u8, flow: &Flow) -> Hit {
 
 /// spec 02 §3.10: the specific entry, the aggregate's, then the wildcard
 /// identity; the winner by precedence, then L4 prefix length. 0 when it
-/// allows the flow, else why not ([`drop_reason`], #470).
+/// allows the flow, else why not ([`drop_reason`], #470); an allowing
+/// entry's proxy port is in the upper 16 bits (#577).
 #[inline(always)]
-fn refused(endpoint: u32, remote: u32, egress: u8, flow: &Flow) -> u8 {
+fn refused(endpoint: u32, remote: u32, egress: u8, flow: &Flow) -> u32 {
     let specific = entry(endpoint, remote, egress, flow);
     if specific.found && specific.entry.precedence == MAX_PRECEDENCE {
         return if specific.entry.denies() {
-            drop_reason::POLICY_DENY
+            u32::from(drop_reason::POLICY_DENY)
         } else {
-            0
+            u32::from(specific.entry.proxy_port.get()) << 16
         };
     }
     let group = aggregate(remote);
@@ -453,7 +528,7 @@ fn refused(endpoint: u32, remote: u32, egress: u8, flow: &Flow) -> u8 {
         broader = entry(endpoint, 0, egress, flow);
     }
     if !specific.found && !broader.found {
-        return drop_reason::POLICY_DENIED;
+        return u32::from(drop_reason::POLICY_DENIED);
     }
     let (chosen, other) = if !specific.found
         || (broader.found
@@ -466,7 +541,7 @@ fn refused(endpoint: u32, remote: u32, egress: u8, flow: &Flow) -> u8 {
         (specific.entry, broader)
     };
     if chosen.denies() {
-        return drop_reason::POLICY_DENY;
+        return u32::from(drop_reason::POLICY_DENY);
     }
     let mut auth = chosen.auth_type();
     if other.found
@@ -478,9 +553,9 @@ fn refused(endpoint: u32, remote: u32, egress: u8, flow: &Flow) -> u8 {
     }
     // No authentication map: an entry that requires it is not satisfied.
     if auth == 0 {
-        0
+        u32::from(chosen.proxy_port.get()) << 16
     } else {
-        drop_reason::AUTH_REQUIRED
+        u32::from(drop_reason::AUTH_REQUIRED)
     }
 }
 
@@ -495,18 +570,18 @@ fn lifetime(flow: &Flow) -> u64 {
     }
 }
 
-/// A live entry for `key`: refresh it and say so.
+/// A live entry for `key`: refresh it and return its proxy port (0: none).
 #[inline(always)]
-fn tracked(key: &PolicyCtKey, flow: &Flow, now: u64) -> bool {
+fn tracked(key: &PolicyCtKey, flow: &Flow, now: u64) -> Option<u16> {
     let Some(value) = POLICY_CT.get_ptr_mut(key) else {
-        return false;
+        return None;
     };
     // SAFETY: an LRU value pointer is valid for this program run; the fields
     // are plain integers, and concurrent writers only move the expiry.
     unsafe {
         let expires = (*value).expires;
         if expires < now {
-            return false;
+            return None;
         }
         let closing = flow.tcp_flags & (TCP_FIN | TCP_RST) != 0;
         if closing {
@@ -521,8 +596,8 @@ fn tracked(key: &PolicyCtKey, flow: &Flow, now: u64) -> bool {
         if closing || next > expires.saturating_add(REFRESH_SLACK) {
             (*value).expires = next;
         }
+        Some(u16::try_from((*value).pad).unwrap_or(0))
     }
-    true
 }
 
 /// A live entry for `key`, read only: an ICMP error does not refresh the
@@ -682,7 +757,16 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
         return TC_ACT_OK;
     }
     flow.key.egress = egress;
-    if tracked(&flow.key, &flow, now) {
+    if let Some(proxy) = tracked(&flow.key, &flow, now) {
+        if proxy != 0 {
+            // A later packet of a redirected flow: the proxy's established
+            // transparent socket takes it once the stack routes it locally.
+            // SAFETY: the program's own skb; `mark` is a plain integer.
+            unsafe {
+                (*ctx.skb.skb).mark = proxy_mark::TO_PROXY | (u32::from(proxy) << 16);
+            }
+            return TO_PROXY;
+        }
         return TC_ACT_OK;
     }
     let mut reply = flow.key;
@@ -691,9 +775,10 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
     reply.sport = flow.key.dport;
     reply.dport = flow.key.sport;
     reply.egress = egress ^ 1;
-    if tracked(&reply, &flow, now) {
+    if tracked(&reply, &flow, now).is_some() {
         return TC_ACT_OK;
     }
+    let mut proxy: u16 = 0;
     if enforced {
         let remote = if egress != 0 {
             identity(flow.key.family, flow.key.daddr)
@@ -703,7 +788,8 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
         flow.remote = remote;
         // The node itself (kubelet probes) always reaches its pods.
         if !(egress == 0 && remote == HOST) {
-            let reason = refused(endpoint.endpoint, remote, egress, &flow);
+            let decision = refused(endpoint.endpoint, remote, egress, &flow);
+            let reason = (decision & 0xff) as u8;
             if reason != 0 {
                 let verdict = refuse(ctx, &endpoint, egress, &flow, reason);
                 if verdict != TC_ACT_OK {
@@ -711,15 +797,23 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
                 }
             } else {
                 count(ctx, endpoint.endpoint, egress, &flow, verdict::ALLOWED, 0);
+                proxy = (decision >> 16) as u16;
             }
         }
+    }
+    // Only an endpoint's egress TCP is redirected here (#577).
+    if !(scope == SCOPE_ENDPOINT && egress != 0 && flow.key.protocol == TCP) {
+        proxy = 0;
     }
     let value = PolicyCtValue {
         expires: now.saturating_add(lifetime(&flow)),
         flags: 0,
-        pad: 0,
+        pad: u32::from(proxy),
     };
     // A full table or a racing insert only costs a policy lookup later.
     let _ = POLICY_CT.insert(&flow.key, &value, 0);
+    if proxy != 0 {
+        return to_proxy(ctx, &flow, proxy);
+    }
     TC_ACT_OK
 }

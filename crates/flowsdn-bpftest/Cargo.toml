@@ -20,6 +20,7 @@ flowsdn-bpf-loader = { path = "../flowsdn-bpf-loader", version = "=0.14.0", feat
 flowsdn-cni = { path = "../flowsdn-cni", version = "=0.14.0" }
 flowsdn-ipam = { path = "../flowsdn-ipam", version = "=0.14.0" }
 flowsdn-lb = { path = "../flowsdn-lb", version = "=0.14.0" }
+flowsdn-l7 = { path = "../flowsdn-l7", version = "=0.14.0" }
 flowsdn-connector = { path = "../flowsdn-connector", version = "=0.14.0" }
 flowsdn-agent = { path = "../flowsdn-agent", version = "=0.14.0" }
 flowsdn-api-client = { path = "../flowsdn-api-client", version = "=0.14.0" }

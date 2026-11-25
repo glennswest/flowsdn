@@ -454,12 +454,26 @@ impl MapBytes<64> for PolicyEvent {
 /// `flowsdn_policy_ct` value flag: a FIN or RST was seen.
 pub const POLICY_CT_CLOSING: u32 = 1;
 /// `flowsdn_policy_ct` value: monotonic second after which the entry is dead.
+/// `pad` holds the flow's L7 proxy port (host order, 0: none; #577): every
+/// later packet of a flow the policy redirected is marked for the proxy too.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PolicyCtValue {
     pub expires: u64,
     pub flags: u32,
     pub pad: u32,
+}
+
+/// The skb mark of a packet redirected to the L7 proxy (#577, ADR-0024,
+/// spec 16 §3.3.3): `TO_PROXY | port << 16`. An ip rule sends `TO_PROXY`
+/// under `MASK` to a table whose only route is local, so the stack delivers
+/// it to the proxy's transparent socket.
+pub mod proxy_mark {
+    pub const TO_PROXY: u32 = 0x0200;
+    pub const MASK: u32 = 0x0f00;
+    /// The routing table and rule priority of that local route.
+    pub const TABLE: u32 = 2004;
+    pub const RULE_PRIORITY: u32 = 9;
 }
 impl MapBytes<16> for PolicyCtValue {
     fn to_bytes(self) -> [u8; 16] {
