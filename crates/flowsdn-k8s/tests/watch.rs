@@ -689,7 +689,7 @@ fn load_balancer_fields_node_readiness_and_the_pool_and_policy_kinds() {
 /// condition; FlowsdnLocalRedirectPolicy rows are kept whole and namespaced.
 #[test]
 fn pod_ports_readiness_and_local_redirect_policies() {
-    let object = json!({"metadata":{"name":"dns","namespace":"kube-system","uid":"u","resourceVersion":"1"},
+    let object = json!({"kind":"Pod","metadata":{"name":"dns","namespace":"kube-system","uid":"u","resourceVersion":"1"},
         "spec":{"nodeName":"n1","containers":[{"name":"c","ports":[
             {"containerPort":53,"protocol":"UDP","name":"dns"},
             {"containerPort":53,"protocol":"TCP"},
