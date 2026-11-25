@@ -457,6 +457,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     dsr_encap(lb)?;
     icmp_errors(lb)?;
     nat46x64(lb, services)?;
+    nat46x64_local(lb, services)?;
     gateway64(lb)?;
     nat_expiry(lb, services)?;
     external_clusterip(lb, services)?;
@@ -693,6 +694,114 @@ fn masquerade6(lb: &mut SocketLb) -> Result<()> {
     Ok(())
 }
 
+/// Service NAT46/64 to a backend on this node (#450): 192.0.2.20:30097 to
+/// [fd00:9::5]:8080 and [2001:db8:2::20]:30097 to 10.9.0.5:8080, both on the
+/// local pod device `pod0`. The uplink translates the client's packet and
+/// redirects it toward the pod, source-NATed to the node's address of the
+/// backend's family and a NAT port; the pod's reply to that address is
+/// translated back by `nodeport_endpoint` on `pod0` and redirected toward
+/// the client from the frontend. A pod packet that is no reply passes.
+fn nat46x64_local(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
+    let (up0, pod0) = (ifindex("up0")?, ifindex("pod0")?);
+    ip(&["-6", "route", "replace", "fd00:9::/64", "dev", "pod0"])?;
+    let (front, client, local) = ([192, 0, 2, 20], [198, 51, 100, 9], [10, 9, 0, 5]);
+    let (front6, client6, local6) = (
+        ip6("2001:db8:2::20")?,
+        ip6("2001:db8:64::9")?,
+        ip6("fd00:9::5")?,
+    );
+    for proto in [PROTO_TCP, PROTO_UDP] {
+        for (frontend, backend) in [
+            ("192.0.2.20:30097", "[fd00:9::5]:8080"),
+            ("[2001:db8:2::20]:30097", "10.9.0.5:8080"),
+        ] {
+            services.push(Service {
+                frontend: address(frontend, proto)?,
+                backends: vec![address(backend, proto)?],
+                affinity: None,
+                scope: SCOPE_NODE_LOCAL,
+                maglev: false,
+                dsr: false,
+                nat46x64: true,
+            });
+        }
+    }
+    program(lb, services)?;
+    for (proto, sport) in [(6u8, 42200u16), (17, 42201)] {
+        // NAT46 to the local IPv6 backend.
+        let request = frame4(proto, client, front, sport, 30097, false);
+        let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+        let (src, dst, s, d, hops, l4_ok) = parse6(&out)?;
+        if out.get(12..14) != Some(&[0x86, 0xdd][..])
+            || (src, dst, d) != (front6, local6, 8080)
+            || !(61000..=65535).contains(&s)
+            || hops != 63
+            || !l4_ok
+        {
+            return Err(format!(
+                "NAT46 local forward proto {proto}: {src:?}:{s} -> {dst:?}:{d}, hops {hops}, checksum {l4_ok}"
+            )
+            .into());
+        }
+        let reply = frame6(proto, local6, src, 8080, s, false);
+        let out = run_on(lb, "nodeport_endpoint", &reply, pod0, TC_ACT_REDIRECT)?;
+        let (rsrc, rdst, rs, rd, ip_ok, l4_ok) = parse4(&out)?;
+        if out.get(12..14) != Some(&[0x08, 0x00][..])
+            || (rsrc, rdst, rs, rd) != (front, client, 30097, sport)
+            || !ip_ok
+            || !l4_ok
+            || out.get(22) != Some(&63)
+        {
+            return Err(format!(
+                "NAT46 local reply proto {proto}: {rsrc:?}:{rs} -> {rdst:?}:{rd}, ip {ip_ok} l4 {l4_ok}"
+            )
+            .into());
+        }
+        // NAT64 to the local IPv4 backend.
+        let request = frame6(proto, client6, front6, sport, 30097, false);
+        let out = run_on(lb, "nodeport_ingress", &request, up0, TC_ACT_REDIRECT)?;
+        let (src, dst, s, d, ip_ok, l4_ok) = parse4(&out)?;
+        if out.get(12..14) != Some(&[0x08, 0x00][..])
+            || (src, dst, d) != (front, local, 8080)
+            || !(61000..=65535).contains(&s)
+            || out.get(22) != Some(&63)
+            || !ip_ok
+            || !l4_ok
+        {
+            return Err(format!(
+                "NAT64 local forward proto {proto}: {src:?}:{s} -> {dst:?}:{d}, ip {ip_ok} l4 {l4_ok}"
+            )
+            .into());
+        }
+        let reply = frame4(proto, local, src, 8080, s, false);
+        let out = run_on(lb, "nodeport_endpoint", &reply, pod0, TC_ACT_REDIRECT)?;
+        let (rsrc, rdst, rs, rd, hops, l4_ok) = parse6(&out)?;
+        if out.get(12..14) != Some(&[0x86, 0xdd][..])
+            || (rsrc, rdst, rs, rd) != (front6, client6, 30097, sport)
+            || hops != 63
+            || !l4_ok
+        {
+            return Err(format!(
+                "NAT64 local reply proto {proto}: {rsrc:?}:{rs} -> {rdst:?}:{rd}, hops {hops}, checksum {l4_ok}"
+            )
+            .into());
+        }
+    }
+    // The pod's other traffic goes on to local-delivery untouched.
+    for frame in [
+        frame4(6, local, client, 8080, 40000, false),
+        frame6(17, local6, client6, 8080, 40001, false),
+    ] {
+        if run_on(lb, "nodeport_endpoint", &frame, pod0, TCX_NEXT)? != frame {
+            return Err("nodeport_endpoint changed a frame that is no NAT46/64 reply".into());
+        }
+    }
+    println!(
+        "PASS NAT46/64 to local backends: TCP and UDP from an IPv4 client to an IPv6 backend and from an IPv6 client to an IPv4 backend on this node's pod device, source-NATed to the node's address and a NAT port, hop limit and TTL 63, checksums valid; the pod's reply translated back by nodeport_endpoint on its device and sent from the frontend; other pod traffic passed on"
+    );
+    Ok(())
+}
+
 /// The RFC 6052 gateway (#454) on uplink `up0`: a local Pod (fd00:9::7)
 /// reaching 64:ff9b::198.51.100.9 leaves as IPv4 from 192.0.2.20 and a NAT
 /// port, the same for the flow's next packet; the IPv4 reply comes back to
@@ -700,7 +809,7 @@ fn masquerade6(lb: &mut SocketLb) -> Result<()> {
 /// sources are untouched, and with the gateway off nothing is translated.
 fn gateway64(lb: &mut SocketLb) -> Result<()> {
     let up0 = ifindex("up0")?;
-    ip(&["-6", "route", "add", "fd00:9::/64", "dev", "pod0"])?;
+    ip(&["-6", "route", "replace", "fd00:9::/64", "dev", "pod0"])?;
     let (pod6, front6) = (ip6("fd00:9::7")?, ip6("64:ff9b::c633:6409")?);
     let (server, node) = ([198, 51, 100, 9], [192, 0, 2, 20]);
     let prefix = [0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0];

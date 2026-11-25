@@ -3811,10 +3811,12 @@ fn new_flow46_in(ctx: &TcContext, state: &mut Xlate4) -> Option<()> {
     // SAFETY: see lookup6.
     let chosen = unsafe { LB6_BACKENDS.get(&id).copied() }?;
     let (result, source) = fib6(ctx, proto, [0; 16], chosen.address, BPF_FIB_LOOKUP_SRC)?;
-    // SAFETY: the per-CPU slot just filled; plain field reads, the source
+    // A backend on this node too (#450): its reply to the NAT address is
+    // caught on its veth by `nodeport_endpoint`.
+    // SAFETY: the per-CPU slot just filled; a plain field read, the source
     // being the active member after an IPv6 lookup.
-    let (device, nat) = unsafe { ((*source).ifindex, (*source).__bindgen_anon_3.ipv6_src) };
-    if !forwarded(result) || device != uplink(ctx) {
+    let nat = unsafe { (*source).__bindgen_anon_3.ipv6_src };
+    if !forwarded(result) {
         return None;
     }
     let nat = ip6_bytes(nat);
@@ -3891,7 +3893,8 @@ fn new_flow64_in(ctx: &TcContext, tuple: &Tuple6, flow: &mut Nodeport6Value) -> 
     let chosen = unsafe { LB4_BACKENDS.get(&id).copied() }?;
     let backend = (chosen.address.0, chosen.port.0);
     let (result, fib) = fib4(ctx, proto, [0; 4], backend.0, BPF_FIB_LOOKUP_SRC);
-    if !forwarded(result) || fib.ifindex != uplink(ctx) {
+    // A backend on this node too (#450): see new_flow46_in.
+    if !forwarded(result) {
         return None;
     }
     // SAFETY: the active member after an IPv4 lookup.
@@ -4414,6 +4417,27 @@ fn ingress(ctx: &TcContext) -> i32 {
             },
         },
     }
+}
+/// Service NAT46/64 to a backend on this node (#450), on a local Pod's
+/// host-side veth ingress, ahead of local-delivery: the Pod's reply to a
+/// translated flow (to this node's address and NAT port) is translated back
+/// to the client's family and sent out of the uplink by the FIB, as the
+/// uplink does for a remote backend's reply. Everything else goes on to the
+/// next program (`TCX_NEXT`) untouched.
+#[classifier]
+pub fn nodeport_endpoint(ctx: TcContext) -> i32 {
+    let skb = ctx.skb.skb;
+    next(match ctx.load::<[u8; 2]>(12) {
+        Ok(ETH_P_IPV6) => match ingress6(skb) {
+            STEP_XLATE_REPLY => to_v4(skb, true),
+            _ => TC_ACT_OK,
+        },
+        Ok(ETH_P_IPV4) => match xlate4(skb) {
+            STEP_XLATE_REPLY => to_v6(skb, true),
+            _ => TC_ACT_OK,
+        },
+        _ => TC_ACT_OK,
+    })
 }
 #[classifier]
 pub fn nodeport_egress(ctx: TcContext) -> i32 {

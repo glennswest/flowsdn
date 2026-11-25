@@ -101,6 +101,9 @@ pub struct SocketLb {
     links: Vec<FdLink>,
     /// The NodePort programs' TCX links on uplinks (#292), by interface.
     uplinks: std::collections::BTreeMap<String, Vec<SchedClassifierLink>>,
+    /// `nodeport_endpoint` on local endpoints' veths (#450), by interface:
+    /// its index when attached, and the link.
+    endpoints: std::collections::BTreeMap<String, (u32, SchedClassifierLink)>,
 }
 
 /// A prefix set of the masquerade (#460, #513), by address size.
@@ -295,6 +298,7 @@ impl SocketLb {
             pin_root: pin_root.map(Path::to_owned),
             links: Vec::new(),
             uplinks: std::collections::BTreeMap::new(),
+            endpoints: std::collections::BTreeMap::new(),
         })
     }
 
@@ -383,6 +387,45 @@ impl SocketLb {
         }
         self.uplinks.insert(interface.to_owned(), links);
         Ok(())
+    }
+    /// Service NAT46/64 to local backends (#450): `nodeport_endpoint` first on
+    /// the TCX ingress of local endpoint `interface` (index `ifindex`), ahead
+    /// of local-delivery, which it passes everything it does not translate.
+    /// Already attached to that index is fine; a device re-created under the
+    /// same name is attached anew.
+    pub fn attach_endpoint(&mut self, interface: &str, ifindex: u32) -> KernelResult<()> {
+        if interface.is_empty() || interface.len() >= 16 || interface.contains(['\0', '/']) {
+            return Err("invalid network interface name".into());
+        }
+        if self
+            .endpoints
+            .get(interface)
+            .is_some_and(|(index, _)| *index == ifindex)
+        {
+            return Ok(());
+        }
+        self.endpoints.remove(interface);
+        let program = self.classifier("nodeport_endpoint")?;
+        let id = program.attach_with_options(
+            interface,
+            TcAttachType::Ingress,
+            TcAttachOptions::TcxOrder(LinkOrder::first()),
+        )?;
+        let link = program.take_link(id)?;
+        self.endpoints
+            .insert(interface.to_owned(), (ifindex, link));
+        Ok(())
+    }
+    /// Detach `nodeport_endpoint` from `interface`.
+    pub fn detach_endpoint(&mut self, interface: &str) {
+        self.endpoints.remove(interface);
+    }
+    /// The endpoint interfaces `nodeport_endpoint` is attached to, with the
+    /// index it was attached at.
+    pub fn endpoints(&self) -> impl Iterator<Item = (&str, u32)> {
+        self.endpoints
+            .iter()
+            .map(|(name, (index, _))| (name.as_str(), *index))
     }
     /// A tc program of the object (`nodeport_ingress`, `nodeport_egress`),
     /// loaded, for BPF_PROG_TEST_RUN by the kernel fixtures.

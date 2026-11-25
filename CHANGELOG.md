@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#450)
+- **feat:** Service NAT46/64 reaches backends on this node (master's decision on #450: the endpoint path). A `kubernetes.nat46x64` frontend now gets this node's backends of the other family too, though still not with `externalTrafficPolicy: Local`. The uplink translates the client's packet and redirects it to the Pod's veth, source-NATed to this node's address of the backend's family on a NAT port. The Pod's reply to that address would be local input, so a new socket-lb classifier, `nodeport_endpoint`, is attached first on the TCX ingress of every local endpoint's host-side veth while the setting is on. It finds the flow in the same maps, translates the reply back, and sends it out of the uplink from the frontend. Everything else goes on to local-delivery untouched. New flows no longer need the FIB to route the backend out of the uplink they arrived on. Loader: `SocketLb::attach_endpoint`/`detach_endpoint`/`endpoints`. Agent: endpoints are synced in the services thread, and failures are the `nat46x64-endpoints` controller error. The socket-lb object and lock are rebuilt. NAT46/64 in the socket LB is #542.
+- **test:** new `socket-lb-live` step `nat46x64_local`: NAT46 and NAT64, TCP and UDP, to a backend on the pod device; the reply translated back by `nodeport_endpoint` with valid checksums; other pod traffic passed on. `services_tests` now expects local backends to be translated.
+- **docs:** runtime.md (Service NAT46/64, settings, gaps), a spec 04 amendment, README, implementation-status.md.
+
 ### 2026-11-25 (#447)
 - **feat:** DSR by IPIP or Geneve encapsulation (master's decision on #447: BPF only, on the uplinks, native routing, the reference's wire format). The new `kubernetes.lb-dsr-dispatch: opt|ipip|geneve` (the reference's `bpf-lb-dsr-dispatch`, default `opt`) picks how a DSR packet carries its frontend. FlowsdnNodeConfig may set it too.
   - `ipip`: the client's packet unchanged (TTL lowered) inside an outer IPv4 (protocol 4) or IPv6 (next header 41) header, from this node's address to the backend.

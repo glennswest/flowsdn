@@ -4,6 +4,15 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### NAT46/64 to local backends — #450 (P3), 2026-11-25
+
+Master (2026-11-25): option 1, the endpoint path. Built as a socket-lb classifier `nodeport_endpoint` on each local
+endpoint's veth TCX ingress (first, before local-delivery) instead of local-delivery reading socket-lb's maps: same
+flow state and reply translation as the uplink, no map sharing between objects. new_flow46/64 drop the out-device
+= uplink check; services.rs translates local backends (not ETP Local); loader attach_endpoint; agent attach loop.
+- [x] Code, kernel step `nat46x64_local`, docs, changelog (local commit; pushed after #447's object + lock).
+- [ ] Object + lock, strict sc-build + kernel-check, stage, close.
+
 ### Flows since: dates and order — #552 (P3), 2026-11-25
 
 Findings 3c7298844c45 (day vs month/leap year in `flows::parse_time`) and 8fb1b606e6dc (`Events::newest` filters

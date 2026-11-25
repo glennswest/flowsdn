@@ -214,6 +214,7 @@ impl Controller {
                         .bpf_masquerade
                         .then(|| self.settings.non_masquerade.clone());
                     let gateway64 = self.settings.gateway64;
+                    let nat46x64 = self.settings.nat46x64;
                     std::thread::Builder::new()
                         .name("flowsdn-services".into())
                         .spawn(move || {
@@ -226,6 +227,7 @@ impl Controller {
                                 terminate_tcp,
                                 masquerade.as_deref(),
                                 gateway64,
+                                nat46x64,
                             );
                         })?;
                     Some(sender)
@@ -1283,6 +1285,7 @@ fn service_loop(
     terminate_tcp: bool,
     masquerade: Option<&[crate::kubernetes::Cidr]>,
     gateway64: Option<[u8; 12]>,
+    nat46x64: bool,
 ) {
     let mut desired: Option<Vec<socket::Service>> = None;
     // The terminable backends last programmed; None until the first success.
@@ -1422,6 +1425,55 @@ fn service_loop(
                 }
             }
         }
+        // NAT46/64 to local backends (#450): every local endpoint's veth
+        // translates its replies back.
+        if nat46x64 {
+            let endpoints = endpoint_interfaces(&lock(view).endpoints);
+            let result = attach_endpoints(lb, &endpoints);
+            let mut view = lock(view);
+            match result {
+                Ok(()) => view.errors.remove("nat46x64-endpoints"),
+                Err(error) => view.errors.insert("nat46x64-endpoints".into(), error),
+            };
+        }
+    }
+}
+
+/// Local endpoints' host-side interfaces and indexes (#450).
+fn endpoint_interfaces(
+    endpoints: &[crate::kubernetes::LocalEndpoint],
+) -> BTreeMap<String, u32> {
+    endpoints
+        .iter()
+        .filter(|e| !e.interface.is_empty() && e.ifindex != 0)
+        .map(|e| (e.interface.clone(), e.ifindex))
+        .collect()
+}
+/// Bring `nodeport_endpoint` to exactly `want` (name -> index): detach the
+/// gone and the re-created, attach the rest. Every endpoint is tried; the
+/// failures are reported together.
+fn attach_endpoints(
+    lb: &mut SocketLb,
+    want: &BTreeMap<String, u32>,
+) -> std::result::Result<(), String> {
+    let stale: Vec<String> = lb
+        .endpoints()
+        .filter(|(name, index)| want.get(*name) != Some(index))
+        .map(|(name, _)| name.to_owned())
+        .collect();
+    for name in stale {
+        lb.detach_endpoint(&name);
+    }
+    let mut failures = Vec::new();
+    for (name, index) in want {
+        if let Err(error) = lb.attach_endpoint(name, *index) {
+            failures.push(format!("attach the NAT46/64 reply program to {name}: {error}"));
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("; "))
     }
 }
 

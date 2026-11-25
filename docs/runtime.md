@@ -52,7 +52,7 @@ limited to 1 MiB. The authoritative reader is
 | `kubernetes.lb-mode` | `snat` | `snat`, `dsr` or `hybrid` (DSR for TCP, SNAT otherwise): how traffic from outside the cluster reaches a backend on another node ([DSR](#direct-server-return)). A Service's `service.flowsdn.io/forwarding-mode: dsr\|snat` annotation overrides it. |
 | `kubernetes.lb-dsr-dispatch` | `opt` | How a DSR packet carries its frontend to the backend's node (#447; the reference's `bpf-lb-dsr-dispatch`): `opt` (an IPv4 option or IPv6 Destination Options header), `ipip` (IPIP / IP6IP6) or `geneve` (UDP 6081 with the DSR option) ([DSR](#direct-server-return)). A node accepts all three whatever its own setting. |
 | `kubernetes.lb-external-clusterip` | `false` | External access to ClusterIP Services (#465; the reference's `bpf-lb-external-clusterip`): each cluster IP also gets a node-local copy, so traffic from outside the cluster that is routed to a ClusterIP on this node (a static route or BGP advertisement) reaches its backends through the uplink programs, with `internalTrafficPolicy` and with Maglev as for NodePort. |
-| `kubernetes.nat46x64` | `false` | Service NAT46/64: a node-local frontend with no backend of its own family reaches the other family's backends on other nodes ([NAT46/64](#service-nat4664)). |
+| `kubernetes.nat46x64` | `false` | Service NAT46/64: a node-local frontend with no backend of its own family reaches the other family's backends, on other nodes and on this one (#450) ([NAT46/64](#service-nat4664)). |
 | `kubernetes.lb-ipam` | `true` | LB-IPAM: give `type: LoadBalancer` Services addresses from FlowsdnLoadBalancerIPPools ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb`; nothing happens without a pool. |
 | `kubernetes.l2-announcements` | `true` | Answer ARP and NDP for the load-balancer and external addresses FlowsdnL2AnnouncementPolicies give this node ([LoadBalancer Services](#loadbalancer-services-475)). Takes effect only with `service-lb` and `node-port`; nothing is announced without a policy. |
 | `kubernetes.endpoint-crd` | `true` | Keep a FlowsdnEndpoint for each local Pod endpoint ([endpoint and node objects](#flowsdnendpoint-and-flowsdnnode-332)). Nothing is written while the kind is not served. |
@@ -626,8 +626,8 @@ pinned: they detach when the agent exits, and the per-CPU
 pinned either. The socket LB picks backends at random: Maglev is for traffic
 entering on the uplink only, as in the reference (#453); an existing TCP connection stays on its backend when it leaves unless
 `kubernetes.lb-sock-terminate-all-protos` is on (#392, below); SCTP ports get no translation (#457); IPv6
-fragments pass untouched. Further gaps, each an issue: DSR by IPIP/Geneve (#447), NAT46/64 in
-the socket LB (#450), and skip-LB, which comes with local redirect policy
+fragments pass untouched. Further gaps, each an issue: NAT46/64 in
+the socket LB (#542), and skip-LB, which comes with local redirect policy
 (#336). `socket-lb-live` (medium test suite) checks the
 programs on a kernel, including the NodePort local and SNAT paths through
 `BPF_PROG_TEST_RUN` and Maglev picks against the planner's tables; no
@@ -696,23 +696,30 @@ goal, not a claim that all Cilium APIs, CRDs, CLIs or networking features work t
 
 With `kubernetes.nat46x64: true` (default off; spec 04 §3.15), a frontend on the
 uplink that has no backend of its own family and has backends of the other family
-on other nodes is translated: an IPv4 client reaches IPv6 backends (NAT46) and an
+is translated: an IPv4 client reaches IPv6 backends (NAT46) and an
 IPv6 client reaches IPv4 backends (NAT64). The usual case is a NodePort, externalIP
 or LoadBalancer address of one family on a Service whose endpoints are the other's.
 `nodeport_ingress` rewrites the header (`bpf_skb_change_proto`), always source-NATs
 to this node's address of the backend's family on a port in 61000-65535, and
-redirects by the FIB. The reply is translated back at uplink ingress and redirected
-to the client from the frontend. `GET /v1/service` shows `nat-policy: Nat46` or
+redirects by the FIB. A remote backend's reply is translated back at uplink ingress
+and redirected to the client from the frontend. A backend on this node (#450) gets
+the translated packet on its veth; its reply to this node's address would be local
+input, so `nodeport_endpoint`, attached first on every local endpoint's veth ingress
+while the setting is on (ahead of local-delivery, which it passes everything else),
+translates it back the same way and sends it out of the uplink. Problems attaching
+it are the `nat46x64-endpoints` controller error. `GET /v1/service` shows `nat-policy: Nat46` or
 `Nat64`. IPv4-keyed flows are in `flowsdn_nodeport4_xlate` (64Ki entries), IPv6-keyed
 ones in `flowsdn_nodeport6_nat`.
 
 Limits:
 
-- **Other nodes' backends only.** A local pod's reply to this node's address is
-  local input and never reaches the uplink, so this node's backends are left out. A
-  frontend whose backends are all on this node is not translated, and neither is one
-  with `externalTrafficPolicy: Local`: send that traffic to another node.
-- **Client's address hidden, no DSR.** The backend sees this node's address.
+- **Not with `externalTrafficPolicy: Local`.** Such a frontend is not translated:
+  the backend would see this node's address, not the client's.
+- **Client's address hidden, no DSR.** The backend sees this node's address. A local
+  backend's NetworkPolicy judges the packet as from this node.
+- **A local backend's reply skips local-delivery.** `nodeport_endpoint` redirects it
+  before local-delivery's egress policy; it is the reply of a connection the pod's
+  ingress policy admitted.
 - **Uplink only.** The socket LB does not translate, so a pod or host client of the
   frontend gets no backend. Pod traffic to IPv4 by an RFC 6052 address is the
   gateway below (#454).
