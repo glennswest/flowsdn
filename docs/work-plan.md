@@ -9,7 +9,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 Master (2026-11-25): A, not a gap; the reference has no socket-LB Maglev (§3.13 LUT only for uplink frontends; guide:
 E-W "not subject to Maglev"). Spec 05 §3.13 in place + amendment, runtime.md, implementation-status.md, changelog.
 - [x] Docs.
-- [ ] sc-build (fmt, `cargo xtask check`); remove `gap` label; close (docs only: no stage).
+- [x] sc-build at 8171e1d: fmt --check, `cargo xtask check` 1042 passed 0 failed. `gap` label removed; closed.
 
 ### debug-events / test-hooks build dimensions — #464 (P3), 2026-11-25
 
