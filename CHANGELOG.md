@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#464)
+- **docs:** The owner dropped the `debug-events` and `test-hooks` BPF build dimensions, so they are no longer a gap. Every flowsdn BPF object is a release object, and flowsdn-bpf defines no Cargo features. Test hooks are not used because the kernel tests run the shipped objects. Debug events, if ever wanted, come with the Hubble observer (#293), their only reader. Spec 02 §6.2 (the build-dimensions table), §8 events and §12 item 11 now say so in place (line count unchanged), and a new amendment records the decision.
+- **test:** `flowsdn-bpftest` `tests/build_dimensions.rs`: flowsdn-bpf has no `[features]` section, and spec 02 carries the #464 amendment.
+
 ### 2026-11-24 (#551)
 - **fix:** A FlowsdnEndpoint whose DELETE fails is deleted on a later pass (finding 86abd1e1de01). The writer forgot an endpoint's object before sending its DELETE. After a transient API error or a failed request it never tried again, and a CNI-removed endpoint's object stayed as long as its Pod did. The writer now keeps the object until the DELETE succeeds or finds it gone (404) or replaced (409, the UID precondition), and retries every 2 s pass, with each failure reported as before. While an older same-named Pod's object waits to be deleted, the new Pod's object is not written over it; it is created once the old one is gone.
 - **test:** `a_failed_delete_is_retried_until_it_succeeds`: an HTTP 503, then a failed request, then a successful retry with the same UID precondition; and a same-named new Pod while the old object's DELETE fails.

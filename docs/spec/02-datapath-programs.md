@@ -1285,15 +1285,15 @@ is recorded in §12.1.
 | `PROG_TYPE` tc vs xdp, `ETH_HLEN` | (b) object / (a) `eth_header_length` | 1 / 1 | |
 | `USE_LOOPBACK_LB` | (c) on in lxc | 1 | |
 | `POLICY_AUDIT_MODE`, `POLICY_VERDICT_NOTIFY`, `DROP_NOTIFY`, `TRACE_NOTIFY`, `MONITOR_AGGREGATION`, `LOCAL_DELIVERY_METRICS`, `POLICY_ACCOUNTING` | (a) per-endpoint u8/bool globals | 1 | per-endpoint objects are patched individually (spec 01) |
-| `DEBUG`, `SKIP_DEBUG`, `TRACE_SOCK_NOTIFY` | **(b) Cargo feature `debug-events`** | 1 | debug events add a `perf_event_output` at every step of every path; not shipped in release objects |
+| `DEBUG`, `SKIP_DEBUG`, `TRACE_SOCK_NOTIFY` | none: dropped (owner, #464) | 1 | debug events, if wanted, come with the Hubble observer (#293); every object is a release object |
 | `DISABLE_EXTERNAL_IP_MITIGATION`, `SERVICE_NO_BACKEND_RESPONSE` | (a) | 1 | |
 | `PREALLOCATE_MAPS`, `NO_COMMON_MEM_MAPS`, `*_MAP_SIZE` | loader (spec 01) | 1 | map flags/sizes, not code |
 | `VLAN_FILTER` | map (`cilium_vlan_filter`) | 1 | **DEVIATION** §6.1 |
-| `BPF_TEST` | (b) Cargo feature `test-hooks` | 1 | test fixtures |
+| `BPF_TEST` | none: dropped (owner, #464) | 1 | kernel tests run the shipped objects |
 | `CONDITIONAL_PREALLOC`, `LRU_MEM_FLAVOR`, `BPF_F_RDONLY_PROG_COND` | loader | 1 | |
 
-Net: two build dimensions (`debug-events`, `test-hooks`) plus the object
-kind; ~45 runtime toggles. A third (`dsr_mode`) is expected after
+Net: no build dimension but the object kind (#464 dropped `debug-events`
+and `test-hooks`); ~45 runtime toggles. A third (`dsr_mode`) is expected after
 measurement.
 
 ### 6.3 Agent flags accepted but without datapath effect
@@ -1338,8 +1338,8 @@ iptables meaning, `--bpf-lb-mode=snat|dsr` (kept, drives `dsr_mode`),
 - `cilium_snat_v4_alloc_retries` histogram; `cilium_ratelimit_metrics`
   dropped counters.
 - Signals: NAT/CT fill-up, auth required.
-- Debug events (`debug-events` build): `DBG_*` codes of the reference,
-  `debug_msg{arg1,arg2,arg3}` and `debug_capture_msg`.
+- Debug events (`DBG_*`, `debug_msg`, `debug_capture_msg`): not built
+  (owner, #464); if wanted, they come with the Hubble observer (#293).
 - Verifier statistics (instruction count, stack depth per program) MUST
   be logged by the loader at attach time and exported as a gauge so budget
   regressions are visible in production, not only in CI.
@@ -1743,14 +1743,14 @@ claim that the full packet path has been validated.
     shares that delivery helper. The endpoint kernel fixture tests both 0 and
     1 for IPv4 and IPv6 (`bpftest/src/bin/endpoint/packets.rs`); it does not
     establish ICMP generation or full production-path coverage.
-11. **Resolved #63: debug events are an explicit build dimension.**
-    Select `debug-events` only for diagnostic BPF objects; ordinary release
-    objects exclude it and `test-hooks`. `cilium-dbg monitor --type debug`
-    requires a debug build. flowsdn-bpf has neither feature today: no debug
-    emit sites and no diagnostic objects, so every object built is a release
-    object. Building them is gap #464 (wire the feature to actual emit sites,
-    verify event presence/absence, object size and verifier acceptance on
-    both architectures). Trace/drop compatibility is separate.
+11. **#63, superseded by the owner (#464, 2026-11-25): no debug-events or
+    test-hooks build dimensions.** Every flowsdn BPF object is a release
+    object; flowsdn-bpf has no Cargo features. Test hooks are not used: the
+    kernel tests run the shipped objects through `BPF_PROG_TEST_RUN`. Debug
+    events, if ever wanted, come with the Hubble observer (#293), their only
+    reader; `cilium-dbg monitor --type debug` is not a goal (#294). Not a
+    gap. Guarded by `flowsdn-bpftest`'s `tests/build_dimensions.rs`.
+    Trace/drop compatibility is separate.
 
 ### Pinned helper audit (#254, 2026-09-22)
 
@@ -1801,3 +1801,11 @@ availability does not establish kernel helper support or verifier acceptance;
 no prealloc); every other frame (ARP, VLAN-tagged, short, non-IP) passes. With `kubernetes.xdp-prefilter` the agent
 attaches it to the uplinks with a hardware address, native mode where the driver has it, else generic. NodePort
 acceleration at XDP is not part of it. Kernel-checked by `prefilter-live`.
+
+## Amendment — no debug-events or test-hooks build dimensions (#464, 2026-11-25)
+
+The owner dropped both build dimensions of §6.2 and §12 item 11. flowsdn-bpf defines no Cargo features, so there is
+one build of each object and it is the release object. Kernel tests (`cargo xtask kernel-check`) load the objects
+that ship, so test-only fixtures would test something else. Debug events have no reader in flowsdn; if they are
+wanted, the Hubble observer (#293) brings the event channel and its reader together. `tests/build_dimensions.rs` in
+flowsdn-bpftest fails if flowsdn-bpf gains a `[features]` section or this amendment goes.

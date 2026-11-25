@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### debug-events / test-hooks build dimensions — #464 (P3), 2026-11-25
+
+Owner (master, 2026-11-25): A, drop both. Spec 02 §6.2 rows + net line, §8 debug events, §12 item 11 in place (line
+count kept) + amendment; guard test `flowsdn-bpftest/tests/build_dimensions.rs` (no `[features]` in flowsdn-bpf).
+- [x] Docs, test, changelog.
+- [ ] sc-build (fmt, `cargo xtask check`); close (docs + test only: no stage).
+
 ### FlowsdnEndpoint DELETE retry — #551 (P1), 2026-11-24
 
 Finding 86abd1e1de01: `Writer::sync` removed the written entry before DELETE, so a failed DELETE was never retried.
