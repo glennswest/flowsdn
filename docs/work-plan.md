@@ -9,21 +9,21 @@ Kept here whole, newest notes as they were. Write new intentions here.
 Findings 3c7298844c45 (day vs month/leap year in `flows::parse_time`) and 8fb1b606e6dc (`Events::newest` filters
 all, sorts by time, then limits). Tests in flows_tests.rs; agent-api.md; changelog.
 - [x] Code, tests, docs.
-- [ ] sc-build (fmt, `cargo xtask check`); stage with #447; close.
+- [x] Verified in the e983c71 strict sc-build (clippy fix #560); stage with #447. Closed.
 
 ### toGroups peers — #530 (P3), 2026-11-25
 
 Master (2026-11-25): A, not built (no AWS). Spec 06 in place + amendment, runtime.md, implementation-status; covered by
 `authentication_and_to_groups_are_refused` (da36d96, #472).
 - [x] Docs, changelog.
-- [ ] sc-build (fmt, `cargo xtask check`); close (docs only: no stage).
+- [x] Verified in the e983c71 strict sc-build. Closed.
 
 ### Mutual authentication — #472 (P3), 2026-11-25
 
 Master (2026-11-25): A, not built (deprecated upstream, no SPIRE, refusal fails closed). Spec 16 in place (line count
 kept) + amendment, ADR-0013 #202 row; test `authentication_and_to_groups_are_refused` (shared with #530).
 - [x] Docs, test, changelog.
-- [ ] sc-build (fmt, `cargo xtask check`); close (docs + test: no stage).
+- [x] Verified in the e983c71 strict sc-build (test ok after #559 fix). Closed.
 
 ### DSR by IPIP and Geneve — #447 (P3), 2026-11-25
 
@@ -47,8 +47,11 @@ Design:
   of the setting does not drop flows; invalid ones (frontend not DSR, destination not a backend) are dropped.
 - Kernel test: socket-lb-live DSR step per mode and family: forward frame layout and checksums, backend decap and
   reply rewrite, forged frontend / non-backend dropped.
-- [ ] BPF (IPv4, IPv6), loader, agent setting, kernel test, docs, objects + lock, strict sc-build + kernel-check,
-      stage, close.
+- [x] BPF (IPv4, IPv6), loader, agent setting, kernel step `dsr_encap`, docs. Build fixes on the way: encap4 stack
+      (#556: own frame; #561: beside ingress4 via the `flowsdn_dsr_encap4` slot, combined 752 > 512), loader MAPS
+      count (#557), clippy (#558). Object + lock from 0de9ad6 (socket-lb sha256 97a51810…), committed at e983c71.
+- [x] Strict sc-build at e983c71: fmt --check, `cargo xtask check` 1044 passed 0 failed, test/build.sh (lock matches),
+      kernel-check 7.3.4 24/0/2, `PASS DSR by encapsulation`. Not seen between two nodes. Stage requested; closed.
 
 ### Maglev in the socket LB — #453 (P3), 2026-11-25
 
