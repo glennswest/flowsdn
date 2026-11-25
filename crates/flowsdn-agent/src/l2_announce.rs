@@ -145,10 +145,7 @@ pub type StaleLease = (String, String);
 /// them for a whole collection period. Returns the records to compare
 /// against next time. Deletes carry the resourceVersion as a precondition,
 /// so a Lease taken meanwhile is kept.
-pub fn stale_leases(
-    list: &Value,
-    previous: &LeaseRecords,
-) -> (Vec<StaleLease>, LeaseRecords) {
+pub fn stale_leases(list: &Value, previous: &LeaseRecords) -> (Vec<StaleLease>, LeaseRecords) {
     let mut stale = Vec::new();
     let mut seen = BTreeMap::new();
     let items = list
