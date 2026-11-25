@@ -1215,7 +1215,7 @@ fn egress_gateway(lb: &mut SocketLb) -> Result<()> {
         let [a, b, c, d] = src;
         let [e, f, g, h] = dst;
         (
-            (32 + len, [a, b, c, d, e, f, g, h]),
+            (32u32.saturating_add(len), [a, b, c, d, e, f, g, h]),
             EgressGw4Value {
                 egress_ip,
                 gateway_ip,
