@@ -226,7 +226,12 @@ impl<T: Keyed + TableRender> Typed<T> {
         let mut bytes = 0usize;
         let header: Vec<_> = selected
             .iter()
-            .map(|index| self.headers.get(*index).expect("selected header").to_string())
+            .map(|index| {
+                self.headers
+                    .get(*index)
+                    .expect("selected header")
+                    .to_string()
+            })
             .collect();
         account(&mut bytes, &header)?;
         let mut widths: Vec<_> = header.iter().map(|cell| cell.chars().count()).collect();
@@ -295,10 +300,13 @@ impl<T: Keyed + TableRender> Binding for Typed<T> {
         if snapshot.len() > MAX_ROWS {
             return Err(limit());
         }
-        snapshot.all().map(|(row, _)| self.row_cells(&row)).collect()
+        snapshot
+            .all()
+            .map(|(row, _)| self.row_cells(&row))
+            .collect()
     }
     fn watch(&self) -> watch::Receiver<u64> {
-        self.table.watch()
+        self.table.revisions()
     }
     fn query<'a>(&'a self, query: Query<'a>) -> BoxFuture<'a, Result<String>> {
         Box::pin(async move {
@@ -329,10 +337,7 @@ impl<T: Keyed + TableRender> Binding for Typed<T> {
             let text = self.rows(&rows, query.columns, query.format)?;
             if query.delete {
                 for (row, _) in &rows {
-                    self.table
-                        .delete(&row.primary_key())
-                        .await
-                        .map_err(error)?;
+                    self.table.delete(&row.primary_key()).await.map_err(error)?;
                 }
             }
             Ok(text)
@@ -344,10 +349,7 @@ impl<T: Keyed + TableRender> Binding for Typed<T> {
             let error = |e: flowsdn_table::TableError| failure(e.to_string());
             for row in rows {
                 if delete {
-                    self.table
-                        .delete(&row.primary_key())
-                        .await
-                        .map_err(error)?;
+                    self.table.delete(&row.primary_key()).await.map_err(error)?;
                 } else {
                     self.table.insert(row).await.map_err(error)?;
                 }
@@ -431,12 +433,7 @@ fn flags<'a>(
             .iter()
             .find(|names| names.contains(&flag))
             .and_then(|names| names.last())
-            .ok_or_else(|| {
-                failure(format!(
-                    "unknown {command} flag: {}",
-                    diagnostic_name(flag)
-                ))
-            })?;
+            .ok_or_else(|| failure(format!("unknown {command} flag: {}", diagnostic_name(flag))))?;
         let value = inline
             .or_else(|| iter.next().map(String::as_str))
             .ok_or_else(|| failure(format!("missing value for {flag}")))?;
@@ -660,7 +657,10 @@ pub(crate) fn show(tables: &Tables, state: &mut State, args: &[String]) -> Resul
         }));
     };
     let binding = lookup(tables, name)?;
-    let output = binding.show(values.get("--columns").copied(), format_of(values.get("--format"))?)?;
+    let output = binding.show(
+        values.get("--columns").copied(),
+        format_of(values.get("--format"))?,
+    )?;
     emit(state, values.get("--out"), output)
 }
 
@@ -688,7 +688,13 @@ fn expected_table(text: &str) -> Result<Expected> {
             match (c.is_whitespace(), start) {
                 (false, None) => start = Some(index),
                 (true, Some(from)) => {
-                    names.push(header.chars().skip(from).take(index.saturating_sub(from)).collect());
+                    names.push(
+                        header
+                            .chars()
+                            .skip(from)
+                            .take(index.saturating_sub(from))
+                            .collect(),
+                    );
                     offsets.push(from);
                     start = None;
                 }

@@ -150,7 +150,7 @@ impl<T: Keyed> Table<T> {
     }
 
     /// Each published revision, for waiting on the next change without polling.
-    pub fn watch(&self) -> watch::Receiver<Revision> {
+    pub fn revisions(&self) -> watch::Receiver<Revision> {
         self.notify.subscribe()
     }
 

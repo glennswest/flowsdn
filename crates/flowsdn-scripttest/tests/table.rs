@@ -438,7 +438,10 @@ fn adapter() -> flowsdn_scripttest::table::Adapter<Item> {
                 .collect()
         }),
         key: Some(|index: &str, key: &str| match index {
-            "primary" | "id" => Ok(("primary", vec![key.parse::<u8>().map_err(|e| e.to_string())?])),
+            "primary" | "id" => Ok((
+                "primary",
+                vec![key.parse::<u8>().map_err(|e| e.to_string())?],
+            )),
             other => Err(format!("unknown index {other}")),
         }),
     }
@@ -450,7 +453,9 @@ fn adapter() -> flowsdn_scripttest::table::Adapter<Item> {
 async fn db_commands_insert_compare_query_and_export() {
     let table = table();
     let mut engine = Engine::new();
-    engine.register_table_with("items", table.clone(), adapter()).unwrap();
+    engine
+        .register_table_with("items", table.clone(), adapter())
+        .unwrap();
     let mut state = state();
     let archive = Archive::parse(concat!(
         "db/insert items rows\n",
@@ -498,7 +503,9 @@ async fn db_cmp_and_initialized_wait_for_the_table() {
     let init = table.register_initializer("sync").unwrap();
     table.seal_initializers();
     let mut engine = Engine::new();
-    engine.register_table_with("items", table.clone(), adapter()).unwrap();
+    engine
+        .register_table_with("items", table.clone(), adapter())
+        .unwrap();
     let mut state = state();
     let archive = Archive::parse(
         "db/initialized --timeout=5s items\ndb/cmp --timeout=5s items expected.table\n-- expected.table --\nID   Name\n7    late\n",

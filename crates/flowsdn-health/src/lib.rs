@@ -5,8 +5,13 @@
 
 pub mod collector;
 pub mod history;
-use flowsdn_table::{Key, Keyed, Snapshot, Table, TableError};
-use std::{collections::BTreeMap, fmt, sync::Arc, time::SystemTime};
+use flowsdn_table::{Key, Keyed, Snapshot, Table, TableError, TableRender};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    fmt,
+    sync::{Arc, Mutex, PoisonError},
+    time::SystemTime,
+};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Level {
@@ -33,6 +38,84 @@ impl Keyed for HealthStatus {
         self.id.as_bytes().to_vec()
     }
 }
+impl Level {
+    /// `OK`, `Degraded`, `Stopped`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Ok => "OK",
+            Self::Degraded => "Degraded",
+            Self::Stopped => "Stopped",
+        }
+    }
+}
+impl HealthStatus {
+    /// The module path and the component: the id split at its last dot.
+    pub fn module_component(&self) -> (&str, &str) {
+        self.id.rsplit_once('.').unwrap_or(("", &self.id))
+    }
+}
+/// The `health` table's columns (spec 17 §3.3.3): no times, so the rendering
+/// is a function of the row alone.
+impl TableRender for HealthStatus {
+    fn headers() -> &'static [&'static str] {
+        &["Module", "Component", "Level", "Message", "Error", "Count"]
+    }
+    fn cells(&self) -> Vec<String> {
+        let (module, component) = self.module_component();
+        let level = if self.stopped.is_some() {
+            Level::Stopped
+        } else {
+            self.level
+        };
+        vec![
+            module.to_owned(),
+            component.to_owned(),
+            level.name().to_owned(),
+            self.message.clone(),
+            self.error.clone(),
+            self.count.to_string(),
+        ]
+    }
+}
+
+/// A health transition kept in the registry's history (spec 00 §3.4.3): a
+/// degraded or stopped report, or a closed scope. OK reports are not kept.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Event {
+    pub time: SystemTime,
+    pub kind: EventKind,
+    pub id: String,
+    pub message: String,
+    pub error: String,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EventKind {
+    Degraded,
+    Stopped,
+    /// A scope closed at this level.
+    Closed(Level),
+}
+impl fmt::Display for EventKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Degraded => f.pad("Degraded"),
+            Self::Stopped => f.pad("Stopped"),
+            Self::Closed(level) => f.pad(&format!("Closed({})", level.name())),
+        }
+    }
+}
+/// The history keeps this many events, dropping the oldest.
+pub const EVENTS_KEPT: usize = 1024;
+/// Where reporters take the time from.
+pub type Clock = fn() -> SystemTime;
+type Events = Arc<Mutex<VecDeque<Event>>>;
+fn push(events: &Events, event: Event) {
+    let mut events = events.lock().unwrap_or_else(PoisonError::into_inner);
+    if events.len() >= EVENTS_KEPT {
+        events.pop_front();
+    }
+    events.push_back(event);
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InvalidScope(pub String);
@@ -56,6 +139,8 @@ fn component(name: &str) -> Result<(), InvalidScope> {
 #[derive(Clone)]
 pub struct Registry {
     table: Arc<Table<HealthStatus>>,
+    clock: Clock,
+    events: Events,
 }
 impl Default for Registry {
     fn default() -> Self {
@@ -65,11 +150,25 @@ impl Default for Registry {
 impl Registry {
     pub const NAME: &'static str = "health";
     pub fn new() -> Self {
+        Self::with_clock(SystemTime::now)
+    }
+    /// A registry whose reporters read `clock` (a test's fixed time).
+    pub fn with_clock(clock: Clock) -> Self {
         let table = Table::new(vec![]).expect("health table has no secondary indexes");
         table.seal_initializers();
         Self {
             table: Arc::new(table),
+            clock,
+            events: Arc::default(),
         }
+    }
+    /// The kept transitions, oldest first.
+    pub fn events(&self) -> Vec<Event> {
+        let events = self.events.lock().unwrap_or_else(PoisonError::into_inner);
+        events.iter().cloned().collect()
+    }
+    pub fn table_handle(&self) -> Arc<Table<HealthStatus>> {
+        self.table.clone()
     }
     /// Construction does not insert a status: unknown remains absent until reported.
     pub fn reporter(&self, module: &str) -> Result<Reporter, InvalidScope> {
@@ -77,6 +176,8 @@ impl Registry {
         Ok(Reporter {
             table: self.table.clone(),
             id: module.to_owned(),
+            clock: self.clock,
+            events: self.events.clone(),
         })
     }
     pub fn snapshot(&self) -> Snapshot<HealthStatus> {
@@ -91,6 +192,8 @@ impl Registry {
 pub struct Reporter {
     table: Arc<Table<HealthStatus>>,
     id: String,
+    clock: Clock,
+    events: Events,
 }
 enum Update {
     Ok(String),
@@ -106,6 +209,8 @@ impl Reporter {
         Ok(Self {
             table: self.table.clone(),
             id: format!("{}.{name}", self.id),
+            clock: self.clock,
+            events: self.events.clone(),
         })
     }
     pub async fn ok(&self, message: impl Into<String>) -> Result<(), TableError> {
@@ -127,12 +232,32 @@ impl Reporter {
     /// Remove this scope only. Existing handles may report it again; dropping a
     /// handle has no effect because reporters may be cloned and outlive tasks.
     pub async fn close(&self) -> Result<(), TableError> {
-        self.table.delete(self.id.as_bytes()).await.map(|_| ())
+        let result = self.table.delete(self.id.as_bytes()).await?;
+        if let Some(row) = result.previous {
+            push(
+                &self.events,
+                Event {
+                    time: (self.clock)(),
+                    kind: EventKind::Closed(row.level),
+                    id: self.id.clone(),
+                    message: row.message.clone(),
+                    error: row.error.clone(),
+                },
+            );
+        }
+        Ok(())
     }
     async fn report(&self, update: Update) -> Result<(), TableError> {
+        let now = (self.clock)();
+        let event = match &update {
+            Update::Ok(_) => None,
+            Update::Degraded(message, error) => {
+                Some((EventKind::Degraded, message.clone(), error.clone()))
+            }
+            Update::Stopped(reason) => Some((EventKind::Stopped, reason.clone(), String::new())),
+        };
         self.table
             .modify(self.id.as_bytes(), |old| {
-                let now = SystemTime::now();
                 let mut row = old.cloned().unwrap_or_else(|| HealthStatus {
                     id: self.id.clone(),
                     level: Level::Stopped,
@@ -169,8 +294,20 @@ impl Reporter {
                 }
                 Some(row)
             })
-            .await
-            .map(|_| ())
+            .await?;
+        if let Some((kind, message, error)) = event {
+            push(
+                &self.events,
+                Event {
+                    time: now,
+                    kind,
+                    id: self.id.clone(),
+                    message,
+                    error,
+                },
+            );
+        }
+        Ok(())
     }
 }
 

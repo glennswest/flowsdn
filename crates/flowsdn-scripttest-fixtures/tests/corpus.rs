@@ -4,17 +4,22 @@
 //! anywhere else, or an expected failure that passes (XPASS: a stale entry),
 //! fails the gate.
 use flowsdn_scripttest::{
-    Archive, State,
+    Archive, RunOptions, State,
     report::{Outcome, classify, load, skipped},
 };
 use flowsdn_scripttest_fixtures::areas::{AREAS, build};
-use std::{collections::BTreeSet, fs, path::Path};
+use std::{collections::BTreeSet, fs, path::Path, time::Duration};
 
 #[test]
 fn harvested_areas_pass_or_diverge_as_recorded() {
     let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/scripttest/corpus");
     let mut seen = BTreeSet::new();
     let mut results = Vec::new();
+    // `*` retries and db/cmp's waits need a runtime (spec 17 §5.2).
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .expect("runtime");
     for area in AREAS {
         let dir = corpus.join(area);
         let divergences = match fs::read_to_string(dir.join("DIVERGENCES.toml")) {
@@ -43,8 +48,9 @@ fn harvested_areas_pass_or_diverge_as_recorded() {
             state
                 .materialize(&archive)
                 .unwrap_or_else(|e| panic!("{script}: {e}"));
-            let failure = engine
-                .run(archive.script(), &mut state)
+            let options = RunOptions::with_timeout(Duration::from_secs(60)).expect("options");
+            let failure = runtime
+                .block_on(engine.run_async(archive.script(), &mut state, &options))
                 .err()
                 .map(|e| (e.line, format!("{}: {}", e.command, e.message)));
             let outcome = classify(&script, failure, &divergences);

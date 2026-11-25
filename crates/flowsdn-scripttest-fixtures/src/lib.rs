@@ -5,4 +5,6 @@
 //! they enter.
 pub mod areas;
 pub mod fixture;
+pub mod health;
 pub mod k8s;
+pub mod time;

@@ -10,7 +10,13 @@ publish.workspace = true
 [dependencies]
 flowsdn-scripttest = { path = "../flowsdn-scripttest", version = "=0.14.0" }
 flowsdn-k8s = { path = "../flowsdn-k8s", version = "=0.14.0" }
+flowsdn-health = { path = "../flowsdn-health", version = "=0.14.0" }
+flowsdn-table = { path = "../flowsdn-table", version = "=0.14.0" }
+regex.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "time"] }
 
 [lints]
 workspace = true
