@@ -282,3 +282,67 @@ fn a_failed_uid_test_starts_over_and_a_refusal_is_reported() {
         )]
     );
 }
+
+/// #551 (finding 86abd1e1de01): a DELETE that fails (a transient error or a
+/// failed request) keeps the object in the writer's memory and is retried on
+/// the next pass until it succeeds; a same-named new Pod's object is created
+/// only once the old one is gone.
+#[test]
+fn a_failed_delete_is_retried_until_it_succeeds() {
+    let mut view = view();
+    let mut writer = Writer::default();
+    let mut api = Api::default();
+    pass(&mut writer, &desired(&view), &mut api);
+    assert_eq!(writer.held(), 1);
+    let endpoints = view.endpoints.clone();
+    view.endpoints.clear();
+    api.answer("DELETE", 503, json!({"message": "unavailable"}));
+    let outcome = pass(&mut writer, &desired(&view), &mut api);
+    assert_eq!(
+        outcome.failures,
+        vec![(
+            ("shop".to_owned(), "web".to_owned()),
+            "HTTP 503 unavailable".to_owned()
+        )]
+    );
+    assert_eq!(writer.held(), 1, "kept for the retry");
+    // A request that fails outright is kept too.
+    let outcome = {
+        let mut send = |m: http::Method, p: &str, b: Option<&Value>| {
+            api.send(m, p, b);
+            Err::<(u16, Value), String>("connection reset".into())
+        };
+        writer.sync(&desired(&view), &mut send)
+    };
+    assert_eq!(outcome.failures.len(), 1);
+    assert_eq!(writer.held(), 1);
+    // The next pass deletes it, with the same precondition.
+    let outcome = pass(&mut writer, &desired(&view), &mut api);
+    assert_eq!(outcome, Outcome::default());
+    assert_eq!(api.methods(), ["POST", "DELETE", "DELETE", "DELETE"]);
+    assert_eq!(
+        api.calls.last().and_then(|c| c.2.clone()),
+        Some(json!({"preconditions": {"uid": "ep-1"}}))
+    );
+    assert_eq!(writer.held(), 0);
+    pass(&mut writer, &desired(&view), &mut api);
+    assert_eq!(api.calls.len(), 4, "nothing left to delete");
+
+    // A new Pod of the same name while the old object's DELETE fails: the
+    // old object is not patched for it; it is created after the delete.
+    view.endpoints = endpoints;
+    let mut writer = Writer::default();
+    let mut api = Api::default();
+    pass(&mut writer, &desired(&view), &mut api);
+    let mut renamed = desired(&view);
+    for want in renamed.values_mut() {
+        want.pod_uid = "pod-2".into();
+    }
+    api.answer("DELETE", 500, json!({"message": "boom"}));
+    let outcome = pass(&mut writer, &renamed, &mut api);
+    assert_eq!(outcome.failures.len(), 1);
+    assert_eq!(api.methods(), ["POST", "DELETE"]);
+    pass(&mut writer, &renamed, &mut api);
+    assert_eq!(api.methods(), ["POST", "DELETE", "DELETE", "POST"]);
+    assert_eq!(writer.held(), 1);
+}

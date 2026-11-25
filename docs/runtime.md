@@ -843,7 +843,9 @@ The Kubernetes-mode agent publishes its endpoints and its node as
   Pod's `flowsdn.io/pod-networks`. Created with `POST`; a status change is a
   JSON patch whose first op tests the object's UID (spec 13 §3.9), so a
   replaced object is never overwritten; deleted (UID precondition) when the
-  endpoint goes. An existing object of the same name is adopted when the
+  endpoint goes, retried every pass until the server deletes it or finds it
+  gone or replaced (#551); a new Pod of the same name gets its object after
+  that. An existing object of the same name is adopted when the
   same Pod owns it (an agent restart) and replaced otherwise. A write the
   server refuses is a `flowsdn-endpoints` part error and a
   `FlowsdnEndpointFailed` Warning Event on the Pod.

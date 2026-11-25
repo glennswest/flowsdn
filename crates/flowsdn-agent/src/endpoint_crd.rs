@@ -286,18 +286,24 @@ impl Writer {
             .filter(|(k, w)| desired.get(*k).is_none_or(|d| d.pod_uid != w.pod_uid))
             .map(|(k, _)| k.clone())
             .collect();
+        // An entry stays until its DELETE succeeds, finds the object gone
+        // (404) or replaced (409, the UID precondition), so a failed DELETE
+        // is retried on the next pass (#551).
         for key in gone {
-            if let Some(written) = self.written.remove(&key) {
-                let body = json!({"preconditions": {"uid": written.uid}});
-                match send(
-                    http::Method::DELETE,
-                    &FlowsdnEndpoint::path(&key.0, &key.1),
-                    Some(&body),
-                ) {
-                    Ok((200..=299 | 404 | 409, _)) => {}
-                    Ok((status, body)) => outcome.failures.push((key, message(status, &body))),
-                    Err(error) => outcome.failures.push((key, error)),
+            let Some(written) = self.written.get(&key) else {
+                continue;
+            };
+            let body = json!({"preconditions": {"uid": written.uid}});
+            match send(
+                http::Method::DELETE,
+                &FlowsdnEndpoint::path(&key.0, &key.1),
+                Some(&body),
+            ) {
+                Ok((200..=299 | 404 | 409, _)) => {
+                    self.written.remove(&key);
                 }
+                Ok((status, body)) => outcome.failures.push((key, message(status, &body))),
+                Err(error) => outcome.failures.push((key, error)),
             }
         }
         if self
@@ -311,6 +317,9 @@ impl Writer {
         for (key, want) in desired {
             let status = serde_json::to_value(&want.object.status).unwrap_or(Value::Null);
             let result = match self.written.get(key) {
+                // A same-named older Pod's object whose DELETE failed: it is
+                // retried next pass, and the new Pod's object created after.
+                Some(written) if written.pod_uid != want.pod_uid => continue,
                 Some(written) if written.status == status => continue,
                 Some(written) => {
                     self.update(key, written.uid.clone(), &want.pod_uid, &status, send)

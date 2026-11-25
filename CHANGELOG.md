@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-24 (#551)
+- **fix:** A FlowsdnEndpoint whose DELETE fails is deleted on a later pass (finding 86abd1e1de01). The writer forgot an endpoint's object before sending its DELETE. After a transient API error or a failed request it never tried again, and a CNI-removed endpoint's object stayed as long as its Pod did. The writer now keeps the object until the DELETE succeeds or finds it gone (404) or replaced (409, the UID precondition), and retries every 2 s pass, with each failure reported as before. While an older same-named Pod's object waits to be deleted, the new Pod's object is not written over it; it is created once the old one is gone.
+- **test:** `a_failed_delete_is_retried_until_it_succeeds`: an HTTP 503, then a failed request, then a successful retry with the same UID precondition; and a same-named new Pod while the old object's DELETE fails.
+
 ### 2026-11-24 (#550)
 - **fix:** CRD registration reconciles a CRD that another actor created first (finding 6d1718ddfed1). When the operator's `GET` found no CRD and its `POST` then got `409 AlreadyExists`, it counted the CRD as created and only waited for `Established`. An older or unlabelled schema created by the other actor was then accepted, and the operator started against it. On 409 the operator now reads the CRD again and applies the same update check and `PUT` as for an existing copy (spec 13 §3.2 steps 2–4, row F14). If the raced copy has this build's schema, registration reports `Current`.
 - **test:** `a_raced_create_of_an_older_schema_is_updated` (an older label and no label are both updated, and a copy that vanished before the read is an error); `a_raced_create_of_this_schema_is_left_alone` replaces `a_raced_create_is_success`.

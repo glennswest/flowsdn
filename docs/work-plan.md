@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### FlowsdnEndpoint DELETE retry — #551 (P1), 2026-11-24
+
+Finding 86abd1e1de01: `Writer::sync` removed the written entry before DELETE, so a failed DELETE was never retried.
+Now the entry stays until 2xx/404/409; a same-named new Pod (different pod_uid) is skipped until the old is deleted.
+- [x] Code, test `a_failed_delete_is_retried_until_it_succeeds`, runtime.md, changelog.
+- [ ] sc-build (fmt, `cargo xtask check`); stage; close.
+
 ### CRD registration after a raced create — #550 (P1), 2026-11-24
 
 Finding 6d1718ddfed1: `register` took POST 409 as Created and skipped `needs_update`. Now 409 -> GET -> same update
