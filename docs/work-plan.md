@@ -9,7 +9,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 Finding 6d1718ddfed1: `register` took POST 409 as Created and skipped `needs_update`. Now 409 -> GET -> same update
 path as an existing CRD (`Current` if it is this schema). Spec 13 §3.2 step 2 and F14 amended in place (line count kept).
 - [x] Code, tests (`a_raced_create_of_an_older_schema_is_updated`, `..._this_schema_is_left_alone`), spec 13, changelog.
-- [ ] sc-build (fmt, `cargo xtask check`); stage with #549; close.
+- [x] sc-build at 94e407e (detached, result on #550): fmt --check, `cargo xtask check` 1040 passed 0 failed, both new
+      tests ok. Lock unchanged since e8c0062 (kernel-check 24/0/2). Stage requested with #549; closed.
 
 ### L2 announcer election ignores interface eligibility — #549 (P1), 2026-11-24
 
@@ -21,7 +22,10 @@ Local endpoint). New thread `flowsdn-l2-lease`: contend/renew 2 s, 15 s duration
 unheld/unrenewed Leases every 60 s (RBAC leases list/delete).
 - [x] Code + tests 567e877 (`only_nodes_with_a_matching_interface_contend`, `stale_announcement_leases_are_collected`,
       `held_until_and_release`); runtime.md, implementation-status, agent-api, RBAC, changelog.
-- [ ] sc-build (fmt, `cargo xtask check`); kernel-check `l2-announce-live` (responder unchanged); stage; close.
+- [x] 567e877 failed clippy type_complexity + fmt (#553), c236282 fmt (#554); fixed in e8c0062. Strict sc-build at
+      e8c0062: fmt --check, `cargo xtask check` (all new l2/lease tests ok, 0 failed), test/build.sh, kernel-check
+      24/0/2. `l2-announce-live` exercises only the responder, not the election; no two-node live check (no pair).
+      Stage requested; closed.
 
 ### Secret scan false positives — #546 (P1), 2026-11-23
 
