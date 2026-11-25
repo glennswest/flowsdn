@@ -12,7 +12,10 @@ before masquerade) take the backend side's errors via the SNAT_REPLY entry (to t
 from the frontend when the backend sent it). Quote per the packet each host sent (the issue text said `nat -> backend`
 for the backend's quote; a host matches by the packet it sent). Kernel step icmp_errors_snat.
 - [x] Code, kernel step, docs, changelog (branch snat-icmp-534).
-- [ ] Object + lock, strict sc-build + kernel-check, merge, stage, close.
+- [x] Branch build at 79b11a4: first run failed on a 1-in-27 flake in #494's live-flow step (flows made after the round
+      filled the pool); retry passed 24/0/2. Fixed the test (live flows first). Merged; object + lock 35fa763 (socket-lb
+      sha256 fd3456c7…). Strict sc-build at 35fa763: fmt, `cargo xtask check` 1046/0, lock matches, kernel-check 24/0/2
+      first run. Not seen on a node. Stage requested; closed.
 
 ### L7 HTTP/Kafka policy rules — #537 (P3), 2026-11-25
 
