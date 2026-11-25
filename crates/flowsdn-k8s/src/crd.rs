@@ -339,12 +339,21 @@ fn yaml_value(value: &yaml_rust2::Yaml) -> Result<Value, Error> {
 /// or 1.2 reader could take them for another type, multi-line strings as
 /// literal blocks when that is exact, every other string double-quoted.
 pub fn to_yaml(value: &Value) -> String {
+    to_yaml_with(value, conservative_plain)
+}
+
+/// Whether a string may be written as a plain (unquoted) scalar.
+pub type Plain = fn(&str) -> bool;
+
+/// [`to_yaml`] with another rule for which strings stay plain; the rest are
+/// double-quoted.
+pub fn to_yaml_with(value: &Value, plain: Plain) -> String {
     let mut out = String::new();
     match value {
-        Value::Object(map) if !map.is_empty() => emit_map(&mut out, value, 0),
-        Value::Array(items) if !items.is_empty() => emit_seq(&mut out, items, 0),
+        Value::Object(map) if !map.is_empty() => emit_map(&mut out, value, 0, plain),
+        Value::Array(items) if !items.is_empty() => emit_seq(&mut out, items, 0, plain),
         _ => {
-            emit_inline(&mut out, value, 0);
+            emit_inline(&mut out, value, 0, plain);
             out.push('\n');
         }
     }
@@ -355,40 +364,40 @@ fn pad(out: &mut String, indent: usize) {
     out.extend(std::iter::repeat_n(' ', indent));
 }
 
-fn emit_map(out: &mut String, value: &Value, indent: usize) {
+fn emit_map(out: &mut String, value: &Value, indent: usize, plain: Plain) {
     let Value::Object(map) = value else { return };
     let mut keys: Vec<&String> = map.keys().collect();
     keys.sort();
     for key in keys {
         let Some(child) = map.get(key) else { continue };
         pad(out, indent);
-        out.push_str(&scalar_string(key));
+        out.push_str(&scalar_string(key, plain));
         out.push(':');
-        emit_child(out, child, indent);
+        emit_child(out, child, indent, plain);
     }
 }
 
 /// After `key:` or `-`: a nested block on the next lines, else ` scalar`.
-fn emit_child(out: &mut String, child: &Value, indent: usize) {
+fn emit_child(out: &mut String, child: &Value, indent: usize, plain: Plain) {
     let deeper = indent.saturating_add(2);
     match child {
         Value::Object(map) if !map.is_empty() => {
             out.push('\n');
-            emit_map(out, child, deeper);
+            emit_map(out, child, deeper, plain);
         }
         Value::Array(items) if !items.is_empty() => {
             out.push('\n');
-            emit_seq(out, items, indent);
+            emit_seq(out, items, indent, plain);
         }
         _ => {
             out.push(' ');
-            emit_inline(out, child, deeper);
+            emit_inline(out, child, deeper, plain);
             out.push('\n');
         }
     }
 }
 
-fn emit_seq(out: &mut String, items: &[Value], indent: usize) {
+fn emit_seq(out: &mut String, items: &[Value], indent: usize, plain: Plain) {
     let deeper = indent.saturating_add(2);
     for item in items {
         pad(out, indent);
@@ -397,17 +406,17 @@ fn emit_seq(out: &mut String, items: &[Value], indent: usize) {
             Value::Object(map) if !map.is_empty() => {
                 // The first key shares the `- ` line; the rest align under it.
                 let mut block = String::new();
-                emit_map(&mut block, item, deeper);
+                emit_map(&mut block, item, deeper, plain);
                 out.push(' ');
                 out.push_str(block.get(deeper..).unwrap_or_default());
             }
             Value::Array(inner) if !inner.is_empty() => {
                 out.push('\n');
-                emit_seq(out, inner, deeper);
+                emit_seq(out, inner, deeper, plain);
             }
             _ => {
                 out.push(' ');
-                emit_inline(out, item, deeper);
+                emit_inline(out, item, deeper, plain);
                 out.push('\n');
             }
         }
@@ -415,7 +424,7 @@ fn emit_seq(out: &mut String, items: &[Value], indent: usize) {
 }
 
 /// A scalar or empty collection; `indent` is the block-scalar content indent.
-fn emit_inline(out: &mut String, value: &Value, indent: usize) {
+fn emit_inline(out: &mut String, value: &Value, indent: usize, plain: Plain) {
     match value {
         Value::Null => out.push_str("null"),
         Value::Bool(v) => out.push_str(if *v { "true" } else { "false" }),
@@ -431,7 +440,7 @@ fn emit_inline(out: &mut String, value: &Value, indent: usize) {
                     }
                 }
             } else {
-                out.push_str(&scalar_string(s));
+                out.push_str(&scalar_string(s, plain));
             }
         }
         Value::Array(_) => out.push_str("[]"),
@@ -455,17 +464,20 @@ fn literal_header(s: &str) -> Option<&'static str> {
 
 /// A plain scalar when it can only be read as this string, else JSON quoting
 /// (a valid YAML double-quoted scalar).
-fn scalar_string(s: &str) -> String {
+fn conservative_plain(s: &str) -> bool {
     let mut chars = s.chars();
-    let plain = chars
+    chars
         .next()
         .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
         && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '/' | '-'))
         && !matches!(
             s.to_ascii_lowercase().as_str(),
             "y" | "n" | "yes" | "no" | "on" | "off" | "true" | "false" | "null"
-        );
-    if plain {
+        )
+}
+
+fn scalar_string(s: &str, plain: Plain) -> String {
+    if plain(s) {
         s.to_owned()
     } else {
         Value::String(s.to_owned()).to_string()

@@ -307,7 +307,7 @@ fn documents(state: &State, file: &str) -> Result<Vec<Value>, CommandError> {
         .map_err(|e| fail(format!("{file}: {e}")))
 }
 fn emit(state: &mut State, out: Option<&String>, value: &Value) -> Result<Control, CommandError> {
-    let text = flowsdn_k8s::crd::to_yaml(value);
+    let text = flowsdn_k8s::crd::to_yaml_with(value, go_plain);
     match out {
         Some(file) => state.write_text(file, &text)?,
         None => state.publish(text, ""),
@@ -462,4 +462,48 @@ pub fn register(engine: &mut Engine, client: &Arc<Mutex<FakeClient>>) -> Result<
         },
     )?;
     Ok(())
+}
+
+/// Whether the reference's encoder (go-yaml v2 behind sigs.k8s.io/yaml) writes
+/// `s` plain: unless it is empty, would read back as a bool, null, number or
+/// date (YAML 1.1), or holds an indicator, `: `, ` #`, a control character or
+/// edge whitespace. Everything else is double-quoted, as there.
+pub fn go_plain(s: &str) -> bool {
+    const RESOLVED: [&str; 37] = [
+        "y", "Y", "yes", "Yes", "YES", "n", "N", "no", "No", "NO", "true", "True", "TRUE",
+        "false", "False", "FALSE", "on", "On", "ON", "off", "Off", "OFF", "null", "Null",
+        "NULL", "~", ".inf", ".Inf", ".INF", "+.inf", "-.inf", "+.Inf", "-.Inf", ".nan",
+        ".NaN", ".NAN", "<<",
+    ];
+    let Some(first) = s.chars().next() else {
+        return false;
+    };
+    let second = s.chars().nth(1);
+    let number = || {
+        let t: String = s.chars().filter(|c| *c != '_').collect();
+        let u = t.strip_prefix(['+', '-']).unwrap_or(&t);
+        let radix = |prefix: [&str; 2], radix: u32| {
+            prefix
+                .iter()
+                .find_map(|p| u.strip_prefix(p))
+                .is_some_and(|d| !d.is_empty() && d.chars().all(|c| c.is_digit(radix)))
+        };
+        radix(["0x", "0X"], 16) || radix(["0o", "0O"], 8) || radix(["0b", "0B"], 2) || u.parse::<f64>().is_ok()
+    };
+    let date = || {
+        let b = s.as_bytes();
+        b.len() >= 8
+            && b.iter().take(4).all(u8::is_ascii_digit)
+            && b.get(4) == Some(&b'-')
+    };
+    !(RESOLVED.contains(&s)
+        || s.starts_with(char::is_whitespace)
+        || s.ends_with(char::is_whitespace)
+        || s.ends_with(':')
+        || s.contains(": ")
+        || s.contains(" #")
+        || s.chars().any(char::is_control)
+        || "[]{},#&*!|>'\"%@`".contains(first)
+        || ("-?:".contains(first) && second.is_none_or(char::is_whitespace))
+        || (first.is_ascii_digit() || "+-.".contains(first)) && (number() || date()))
 }
