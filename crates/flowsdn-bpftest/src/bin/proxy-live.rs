@@ -135,8 +135,11 @@ fn run(object: &[u8]) -> Result<()> {
         ip(&args)?;
     }
 
-    let mut delivery = LocalDelivery::load_object(Object::Bytes(object), Egress::Stack)?;
-    delivery.attach("ep0")?;
+    let mut delivery = LocalDelivery::load_object(Object::Bytes(object), Egress::Stack)
+        .map_err(|e| format!("load local-delivery: {e}"))?;
+    delivery
+        .attach("ep0")
+        .map_err(|e| format!("attach to ep0: {e}"))?;
     let key = IpCacheKey::v4(POD, 32, 0).map_err(|_| "ipcache prefix")?;
     delivery.policy().upsert_ipcache(
         key,
@@ -144,21 +147,27 @@ fn run(object: &[u8]) -> Result<()> {
             sec_identity: POD_IDENTITY,
             ..Default::default()
         },
-    )?;
+    )
+    .map_err(|e| format!("ipcache: {e}"))?;
     let rule = PolicyKey::new(0, true, TCP, 80, 16).map_err(|_| "policy key")?;
     let entry = PolicyEntry::new(PROXY_PORT, false, 24, 0, false, 0xFFFF_FF01, 0)
         .map_err(|_| "policy entry")?;
     delivery
         .policy()
-        .upsert_policy(EndpointPolicyKey::for_endpoint(ENDPOINT, rule), entry)?;
+        .upsert_policy(EndpointPolicyKey::for_endpoint(ENDPOINT, rule), entry)
+        .map_err(|e| format!("policy entry: {e}"))?;
     delivery.policy().set_policy_endpoint(
         ep0,
         PolicyEndpoint {
             endpoint: ENDPOINT,
             flags: enforce::EGRESS,
         },
-    )?;
-    let identities: Vec<(IpCacheKey, RemoteEndpointInfo)> = delivery.policy().ipcache_entries()?;
+    )
+    .map_err(|e| format!("policy endpoint: {e}"))?;
+    let identities: Vec<(IpCacheKey, RemoteEndpointInfo)> = delivery
+        .policy()
+        .ipcache_entries()
+        .map_err(|e| format!("read the ipcache: {e}"))?;
     let resolve = move |address: IpAddr| -> u32 {
         let IpAddr::V4(v4) = address else { return 0 };
         IpCacheKey::v4(v4.octets(), 32, 0)
@@ -170,7 +179,8 @@ fn run(object: &[u8]) -> Result<()> {
             })
             .map_or(2, |(_, info)| info.sec_identity)
     };
-    let listener = Listener::bind(PROXY_PORT, false)?;
+    let listener =
+        Listener::bind(PROXY_PORT, false).map_err(|e| format!("transparent listener: {e}"))?;
     let server = std::thread::spawn(
         move || -> std::result::Result<(SocketAddr, SocketAddr, u32), String> {
             let text = |e: std::io::Error| e.to_string();
