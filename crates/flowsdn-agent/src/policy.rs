@@ -615,7 +615,7 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
                 HostPeer::Endpoints(_) => {
                     selector_policies.insert(rule.policy.clone());
                 }
-                HostPeer::Identities(_) | HostPeer::Nodes(_) => {}
+                HostPeer::Identities(_) | HostPeer::Nodes(_) | HostPeer::Fqdn(_) => {}
             }
         }
     }

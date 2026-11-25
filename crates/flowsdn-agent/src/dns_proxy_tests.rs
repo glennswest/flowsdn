@@ -1,5 +1,4 @@
 use super::*;
-use flowsdn_l7::dns::Policy as _;
 
 fn answerer(rules: Rules) -> Arc<Answerer> {
     let a = Answerer::new(Box::new(|_, _, _| true));
