@@ -171,7 +171,12 @@ impl Generator<'_> {
         let names = |s: &Value| -> Vec<String> {
             s.get("required")
                 .and_then(Value::as_array)
-                .map(|r| r.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+                .map(|r| {
+                    r.iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
                 .unwrap_or_default()
         };
         let mut required = names(schema);

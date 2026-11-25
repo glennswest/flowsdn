@@ -72,8 +72,16 @@ kind!(FlowsdnEndpointSlice, "flowsdnendpointslices", false);
 kind!(FlowsdnIdentity, "flowsdnidentities", false);
 kind!(FlowsdnNode, "flowsdnnodes", false);
 kind!(FlowsdnNodeConfig, "flowsdnnodeconfigs", true);
-kind!(FlowsdnEgressGatewayPolicy, "flowsdnegressgatewaypolicies", false);
-kind!(FlowsdnLocalRedirectPolicy, "flowsdnlocalredirectpolicies", true);
+kind!(
+    FlowsdnEgressGatewayPolicy,
+    "flowsdnegressgatewaypolicies",
+    false
+);
+kind!(
+    FlowsdnLocalRedirectPolicy,
+    "flowsdnlocalredirectpolicies",
+    true
+);
 kind!(FlowsdnDatapathPlugin, "flowsdndatapathplugins", false);
 
 /// FlowsdnEndpoint is the status of a flowsdn policy rule.
