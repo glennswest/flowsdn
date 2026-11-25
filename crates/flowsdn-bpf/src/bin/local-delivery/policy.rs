@@ -15,10 +15,14 @@
 //! `flowsdn_policy_verdicts` and emitted into `flowsdn_policy_events`
 //! (#452; remembered flows are neither). An ICMP or ICMPv6 packet's policy
 //! port is its type (#448), so rules can allow types. An allowed egress TCP
-//! flow whose entry carries a proxy port goes to the L7 proxy (#577,
-//! ADR-0024): its first packet is assigned to the proxy's transparent
-//! listener (`bpf_sk_assign`), and every packet of it carries the proxy mark
-//! so the stack delivers it locally. It does not do authentication (an entry
+//! or UDP flow whose entry carries a proxy port goes to the L7 proxy (#577,
+//! #536, ADR-0024): its first packet (every UDP packet, which has no
+//! established socket) is assigned to the proxy's transparent listener
+//! (`bpf_sk_assign`), and every packet of it carries the proxy mark so the
+//! stack delivers it locally. The proxy's upstream packets carry
+//! `proxy_mark::PROXY_EGRESS` with the endpoint's identity (#536): an
+//! endpoint's ingress judges that identity, not the host's, and the host
+//! endpoint's egress passes them. It does not do authentication (an entry
 //! that requires it drops), ingress proxy redirects, and fragments other
 //! than the first (dropped where enforced). An ICMP or ICMPv6 error (destination unreachable, time
 //! exceeded, parameter problem) about a remembered flow is related traffic
@@ -27,7 +31,9 @@
 use aya_ebpf::{
     EbpfContext,
     bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, TC_ACT_SHOT, bpf_sock_tuple},
-    helpers::{bpf_ktime_get_ns, bpf_sk_assign, bpf_sk_release, bpf_skc_lookup_tcp},
+    helpers::{
+        bpf_ktime_get_ns, bpf_sk_assign, bpf_sk_lookup_udp, bpf_sk_release, bpf_skc_lookup_tcp,
+    },
     macros::map,
     maps::{HashMap, LpmTrie, LruHashMap, LruPerCpuHashMap, PerCpuArray, RingBuf, lpm_trie::Key},
     programs::TcContext,
@@ -125,16 +131,15 @@ fn to_proxy(ctx: &TcContext, flow: &Flow, port: u16) -> i32 {
         }
         36
     };
+    let tuple = core::ptr::from_mut(tuple).cast::<bpf_sock_tuple>();
     // SAFETY: the tuple is a live map value of at least `size` bytes; the
-    // helper keeps no pointer. BPF_F_CURRENT_NETNS (-1) and no flags.
-    let sk = unsafe {
-        bpf_skc_lookup_tcp(
-            ctx.as_ptr(),
-            core::ptr::from_mut(tuple).cast::<bpf_sock_tuple>(),
-            size,
-            u64::MAX,
-            0,
-        )
+    // helpers keep no pointer. BPF_F_CURRENT_NETNS (-1) and no flags.
+    let sk: *mut core::ffi::c_void = unsafe {
+        if flow.key.protocol == UDP {
+            bpf_sk_lookup_udp(ctx.as_ptr(), tuple, size, u64::MAX, 0).cast()
+        } else {
+            bpf_skc_lookup_tcp(ctx.as_ptr(), tuple, size, u64::MAX, 0).cast()
+        }
     };
     if sk.is_null() {
         return TC_ACT_SHOT;
@@ -745,6 +750,14 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
             return TC_ACT_OK;
         }
     }
+    // The proxy's upstream packet for an endpoint (#536): the endpoint's
+    // own egress was judged when it was redirected, so the host endpoint
+    // does not judge it again.
+    // SAFETY: the program's own skb; `mark` is a plain integer.
+    let marked = proxy_mark::identity(unsafe { (*ctx.skb.skb).mark });
+    if scope != SCOPE_ENDPOINT && egress != 0 && marked.is_some() {
+        return TC_ACT_OK;
+    }
     if flow.fragment {
         return if enforced {
             refuse(ctx, &endpoint, egress, &flow, 0)
@@ -758,6 +771,11 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
     }
     flow.key.egress = egress;
     if let Some(proxy) = tracked(&flow.key, &flow, now) {
+        if proxy != 0 && flow.key.protocol == UDP {
+            // A UDP flow has no established socket: every packet is
+            // assigned to the listener (#536).
+            return to_proxy(ctx, &flow, proxy);
+        }
         if proxy != 0 {
             // A later packet of a redirected flow: the proxy's established
             // transparent socket takes it once the stack routes it locally.
@@ -782,6 +800,11 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
     if enforced {
         let remote = if egress != 0 {
             identity(flow.key.family, flow.key.daddr)
+        } else if let Some(source) = marked.filter(|_| scope == SCOPE_ENDPOINT) {
+            // The proxy's upstream packet: judged as the endpoint it
+            // speaks for (spec 16 §3.6.2), so the host exemption below
+            // does not apply.
+            source
         } else {
             identity(flow.key.family, flow.key.saddr)
         };
@@ -801,8 +824,11 @@ pub fn enforce(ctx: &TcContext, egress: u8, scope: u8) -> i32 {
             }
         }
     }
-    // Only an endpoint's egress TCP is redirected here (#577).
-    if !(scope == SCOPE_ENDPOINT && egress != 0 && flow.key.protocol == TCP) {
+    // Only an endpoint's egress TCP (#577) and UDP (#536) is redirected here.
+    if !(scope == SCOPE_ENDPOINT
+        && egress != 0
+        && (flow.key.protocol == TCP || flow.key.protocol == UDP))
+    {
         proxy = 0;
     }
     let value = PolicyCtValue {

@@ -6,7 +6,7 @@
 use nix::sys::socket::{
     AddressFamily, Backlog, SockFlag, SockType, SockaddrIn, SockaddrIn6, bind, listen, setsockopt,
     socket,
-    sockopt::{IpTransparent, ReuseAddr},
+    sockopt::{IpTransparent, Ipv6V6Only, ReuseAddr},
 };
 use std::{
     io,
@@ -34,7 +34,7 @@ pub struct Redirected {
     pub identity: u32,
 }
 
-fn io_error(error: nix::Error) -> io::Error {
+pub(crate) fn io_error(error: nix::Error) -> io::Error {
     io::Error::from_raw_os_error(error as i32)
 }
 
@@ -50,6 +50,8 @@ impl Listener {
             socket(family, SockType::Stream, SockFlag::SOCK_CLOEXEC, None).map_err(io_error)?;
         setsockopt(&fd, ReuseAddr, &true).map_err(io_error)?;
         if v6 {
+            // Its own family only: an IPv4 listener may hold the same port.
+            setsockopt(&fd, Ipv6V6Only, &true).map_err(io_error)?;
             ipv6_transparent(&fd)?;
             let address = SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, port, 0, 0);
             bind(
@@ -92,7 +94,7 @@ impl Listener {
 
 /// `IPV6_TRANSPARENT` (nix has no option for it).
 #[allow(unsafe_code)]
-fn ipv6_transparent(fd: &std::os::fd::OwnedFd) -> io::Result<()> {
+pub(crate) fn ipv6_transparent(fd: &std::os::fd::OwnedFd) -> io::Result<()> {
     let on: nix::libc::c_int = 1;
     // SAFETY: `fd` is a live socket; the value pointer and length describe
     // the local `on` exactly; the kernel keeps no pointer.
@@ -113,7 +115,7 @@ fn ipv6_transparent(fd: &std::os::fd::OwnedFd) -> io::Result<()> {
 }
 
 /// `::ffff:a.b.c.d` as `a.b.c.d`.
-fn unmapped(address: SocketAddr) -> SocketAddr {
+pub(crate) fn unmapped(address: SocketAddr) -> SocketAddr {
     match address {
         SocketAddr::V6(v6) => match v6.ip().to_ipv4_mapped() {
             Some(v4) => SocketAddr::new(IpAddr::V4(v4), v6.port()),

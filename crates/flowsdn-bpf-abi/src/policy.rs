@@ -471,6 +471,29 @@ pub struct PolicyCtValue {
 pub mod proxy_mark {
     pub const TO_PROXY: u32 = 0x0200;
     pub const MASK: u32 = 0x0f00;
+    /// The proxy's own upstream packet on behalf of an endpoint's egress
+    /// (`MARK_MAGIC_PROXY_EGRESS`, spec 16 §3.6.2, #536): the upper 16 bits
+    /// are the endpoint's identity, which the destination's ingress policy
+    /// judges instead of the host's.
+    pub const PROXY_EGRESS: u32 = 0x0b00;
+    /// The `SO_MARK` of an upstream socket for `identity` (spec 16 §3.6.2).
+    /// The mark has room for 16 bits: a cluster identity of this cluster
+    /// (no cluster ID). `None` for one that does not fit.
+    pub const fn egress(identity: u32) -> Option<u32> {
+        if identity > 0xffff || identity == 0 {
+            None
+        } else {
+            Some(PROXY_EGRESS | identity.wrapping_shl(16))
+        }
+    }
+    /// The identity a proxy egress mark carries.
+    pub const fn identity(mark: u32) -> Option<u32> {
+        if mark & MASK == PROXY_EGRESS {
+            Some(mark.wrapping_shr(16))
+        } else {
+            None
+        }
+    }
     /// The routing table and rule priority of that local route.
     pub const TABLE: u32 = 2004;
     pub const RULE_PRIORITY: u32 = 9;

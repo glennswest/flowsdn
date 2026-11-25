@@ -15,8 +15,12 @@
 //! - [`record`]: the L7 record a listener emits into the agent's flow
 //!   pipeline (spec 16 §4.3).
 //!
-//! What the proxy does with a connection (DNS, #536; HTTP policy, #537;
-//! Ingress and Gateway API) builds on this and is not here.
+//! - [`dns`]: the DNS proxy (spec 16 §3.6, ADR-0024 step 2, #536), its
+//!   rules' names and patterns and the cache `toFQDNs` selects from.
+//!
+//! HTTP policy (#537), Ingress and Gateway API build on this and are not
+//! here.
+pub mod dns;
 pub mod listener;
 pub mod ports;
 pub mod record;
