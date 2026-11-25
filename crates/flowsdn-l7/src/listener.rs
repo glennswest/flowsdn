@@ -66,7 +66,7 @@ impl Listener {
             )
             .map_err(io_error)?;
         }
-        listen(&fd, Backlog::new(1024).map_err(io_error)?).map_err(io_error)?;
+        listen(&fd, Backlog::MAXCONN).map_err(io_error)?;
         let socket = TcpListener::from(fd);
         let port = socket.local_addr()?.port();
         Ok(Self { socket, port })
