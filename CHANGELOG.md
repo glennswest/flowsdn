@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#517)
+- **feat:** The scripttest IPAM areas (`ipam-migration`, `ipam-multipool`, `podippool`) run in the corpus gate.
+  - **`ipam/start`** uses the agent's IPAM source: the local Node's pod CIDRs, read with flowsdn's Node parser.
+  - **Inputs:** the scripts give the node and pools only as `cilium.io/v2` CiliumNode and CiliumPodIPPool. flowsdn reads its own kinds (ADR-0017, ADR-0020).
+  - **Divergences:** each script is a `partial` divergence on its first line that depends on that. These are `ipam/start` finding no Node, the first comparison of operator-written CiliumNodes, and the reference's StateDB `podippools` table (ADR-0004).
+  - **Not built:** multi-pool IPAM and its operator allocator (spec 07 §3.6).
+  - **Gate:** each harvested script now has 20 s, not 60 s, so a script that can never converge does not hold it. Result: 8 PASS, 15 XFAIL, 0 FAIL.
+
 ### 2026-11-25 (#518)
 - **feat:** The scripttest `policy` area runs in the corpus gate, with three commands over flowsdn's own code:
   - `identity/allocate`: reserved names map to their numbers; other label sets go through the agent's CRD-mode allocator against an in-memory identity list;

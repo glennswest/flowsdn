@@ -18,7 +18,8 @@ Done on branch `scripttest-fixtures-516`, merged to main. The five areas run in 
 ### scripttest IPAM adapters — #517 (P3), 2026-11-25
 
 Needs step A (#516) first; open. Parked --after #516. With this, every scripttest adapter gap (#517-#526) waits on #516.
-- [ ] After #516: IPAM fixture, `ipam/*`, `allocator/*` (§3.3.12), DIVERGENCES.toml x3.
+- [x] After #516: IPAM fixture, `ipam/*`, `allocator/*` (§3.3.12), DIVERGENCES.toml x3.
+- [x] 2026-11-25: done. `ipam/start` over the agent's Node pod-CIDR source. Four partial divergences (CiliumNode/CiliumPodIPPool inputs, ADR-0020; the `podippools` StateDB table, ADR-0004). Gate 8 PASS, 15 XFAIL, 0 FAIL.
 
 ### scripttest policy, identity and endpoint adapters — #518 (P3), 2026-11-25
 

@@ -19,9 +19,12 @@ fn fail(message: impl Into<String>) -> CommandError {
 /// Register `ipam/start` against `client`'s Nodes.
 pub fn register(engine: &mut Engine, client: &Arc<Mutex<FakeClient>>) -> Result<(), String> {
     let c = Arc::clone(client);
-    engine.register_command("ipam/start", false, move |state: &mut State, _: &[String]| {
-        let client = lock(&c);
-        let node = client
+    engine.register_command(
+        "ipam/start",
+        false,
+        move |state: &mut State, _: &[String]| {
+            let client = lock(&c);
+            let node = client
             .list("v1.nodes", "")
             .into_iter()
             .filter_map(|object| Scope::Nodes.parse(object).ok())
@@ -35,14 +38,15 @@ pub fn register(engine: &mut Engine, client: &Arc<Mutex<FakeClient>>) -> Result<
                      Node's pod CIDRs and reads no CiliumNode"
                 ))
             })?;
-        let cidrs: Vec<String> = node
-            .pod_cidrs
-            .iter()
-            .map(|(ip, len)| format!("{ip}/{len}"))
-            .collect();
-        drop(client);
-        state.publish(format!("pools: {}\n", cidrs.join(", ")), "");
-        Ok(Control::Continue)
-    })?;
+            let cidrs: Vec<String> = node
+                .pod_cidrs
+                .iter()
+                .map(|(ip, len)| format!("{ip}/{len}"))
+                .collect();
+            drop(client);
+            state.publish(format!("pools: {}\n", cidrs.join(", ")), "");
+            Ok(Control::Continue)
+        },
+    )?;
     Ok(())
 }

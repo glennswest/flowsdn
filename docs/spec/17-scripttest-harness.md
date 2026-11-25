@@ -1665,3 +1665,13 @@ FlowsdnNetworkPolicy watch parser. Every harvested script imports
 the commands after it (`endpoint/regen-all`, `policy/lookup-flow`,
 `policyrepo/*`) are not reached and not built.
 
+## IPAM areas amendment — #517, 2026-11-25
+
+`ipam/start` reads the agent's IPAM source, its Node's pod CIDRs, with
+flowsdn's Node parser. The harvested IPAM scripts give the node and pools
+only as `cilium.io/v2` CiliumNode and CiliumPodIPPool (ADR-0020), so each is a
+`partial` divergence on the first line that depends on them. `podippool`
+asserts a StateDB reflector table (ADR-0004). The other `ipam/*` commands and
+`allocator/allocated-pools` are not reached and not built. The corpus gate
+gives each script 20 s.
+
