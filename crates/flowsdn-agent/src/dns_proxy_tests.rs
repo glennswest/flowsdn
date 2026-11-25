@@ -9,7 +9,9 @@ fn answerer(rules: Rules) -> Arc<Answerer> {
 #[test]
 fn rules_match_identity_aggregate_port_and_name() {
     let mut rules = Rules::default();
-    rules.endpoints.insert("10.1.0.5".parse().expect("ip"), (7, 300));
+    rules
+        .endpoints
+        .insert("10.1.0.5".parse().expect("ip"), (7, 300));
     rules.rules.insert(
         7,
         vec![
@@ -36,10 +38,16 @@ fn rules_match_identity_aggregate_port_and_name() {
     assert!(a.allowed(7, 301, 17, 53, "api.example.com."));
     assert!(!a.allowed(7, 301, 17, 53, "www.example.com."));
     assert!(!a.allowed(7, 301, 6, 53, "api.example.com."), "UDP only");
-    assert!(!a.allowed(7, 302, 17, 53, "api.example.com."), "another server");
+    assert!(
+        !a.allowed(7, 302, 17, 53, "api.example.com."),
+        "another server"
+    );
     // A local (CIDR/FQDN) identity aggregates to world (13): any name.
     assert!(a.allowed(7, (1 << 24) | 5, 6, 53, "anything."));
-    assert!(!a.allowed(8, 301, 17, 53, "api.example.com."), "another endpoint");
+    assert!(
+        !a.allowed(8, 301, 17, 53, "api.example.com."),
+        "another endpoint"
+    );
 }
 
 #[test]

@@ -1302,7 +1302,10 @@ fn proxy_port_of(desired: &Desired, identity: u32, protocol: u8, port: u16) -> O
         .iter()
         .map(|(k, v)| (EndpointPolicyKey::from_bytes(*k), *v))
         .find(|(k, _)| {
-            k.sec_label == identity && k.egress == 1 && k.protocol == protocol && k.dport.get() == port
+            k.sec_label == identity
+                && k.egress == 1
+                && k.protocol == protocol
+                && k.dport.get() == port
         })
         .map(|(_, v)| v.proxy_port.get())
 }
@@ -1324,9 +1327,16 @@ fn dns_rules_redirect_their_port_and_are_published_for_the_proxy() {
             && !r.any_name),
         "{rules:?}"
     );
-    assert_eq!(desired.dns.endpoints.get(&ip("10.1.0.5")), Some(&(7, identity_of(&view, "web"))));
+    assert_eq!(
+        desired.dns.endpoints.get(&ip("10.1.0.5")),
+        Some(&(7, identity_of(&view, "web")))
+    );
     assert_eq!(desired.dns.identity(ip("10.2.0.9")), db);
-    assert_eq!(desired.dns.identity(ip("203.0.113.9")), 2, "a miss is world");
+    assert_eq!(
+        desired.dns.identity(ip("203.0.113.9")),
+        2,
+        "a miss is world"
+    );
     // Nothing answered yet: toFQDNs allows nothing.
     assert!(
         !verdicts(&desired).iter().any(|k| k.3 == 443),
@@ -1340,8 +1350,10 @@ fn tofqdns_allows_answered_addresses_until_they_expire() {
     let mut view = dns_view(10053);
     let api = ip("203.0.113.20");
     let other = ip("203.0.113.21");
-    view.fqdn.insert(&["api.example.com.".into()], &[api], 30, 1000);
-    view.fqdn.insert(&["www.example.com.".into()], &[other], 30, 1000);
+    view.fqdn
+        .insert(&["api.example.com.".into()], &[api], 30, 1000);
+    view.fqdn
+        .insert(&["www.example.com.".into()], &[other], 30, 1000);
     let desired = compile(&view, &[]);
     let id = view.fqdn.identity(&api).expect("an identity");
     assert_eq!(id >> 24, 1, "a local identity: aggregated to world");
@@ -1359,7 +1371,11 @@ fn tofqdns_allows_answered_addresses_until_they_expire() {
         .map(|(_, id)| id)
         .collect();
     assert!(cached.contains(&id) && cached.contains(&other_id));
-    assert_eq!(proxy_port_of(&desired, id, 6, 443), Some(0), "443 is not proxied");
+    assert_eq!(
+        proxy_port_of(&desired, id, 6, 443),
+        Some(0),
+        "443 is not proxied"
+    );
     view.fqdn.expire(1030);
     let desired = compile(&view, &[]);
     assert!(!verdicts(&desired).iter().any(|k| k.0 == id), "expired");
@@ -1374,7 +1390,10 @@ fn dns_rules_without_the_proxy_allow_nothing_and_are_reported() {
     assert_eq!(proxy_port_of(&desired, db, 17, 53), None);
     assert!(desired.dns.rules.is_empty());
     assert!(
-        desired.problems.iter().any(|p| p.contains("DNS proxy is not running")),
+        desired
+            .problems
+            .iter()
+            .any(|p| p.contains("DNS proxy is not running")),
         "{:?}",
         desired.problems
     );
@@ -1403,8 +1422,18 @@ fn a_plain_allow_of_the_same_port_allows_every_name() {
             "egress":[{"toPorts":[{"ports":[{"port":"80"}],"rules":{"http":[{"method":"GET"}]}}]}]}),
     );
     let desired = compile(&refused, &[]);
-    assert!(desired.problems.iter().any(|p| p.contains("DNS rules apply to a Pod's egress only")));
-    assert!(desired.problems.iter().any(|p| p.contains("L7 rules are not enforced")));
+    assert!(
+        desired
+            .problems
+            .iter()
+            .any(|p| p.contains("DNS rules apply to a Pod's egress only"))
+    );
+    assert!(
+        desired
+            .problems
+            .iter()
+            .any(|p| p.contains("L7 rules are not enforced"))
+    );
 }
 
 #[test]
@@ -1412,7 +1441,11 @@ fn dns_rules_on_any_are_tcp_and_udp_and_refused_on_sctp() {
     let view = dns_view(10053);
     let desired = compile(&view, &[]);
     let db = identity_of(&view, "db");
-    assert_eq!(proxy_port_of(&desired, db, 132, 53), None, "no unproxied SCTP");
+    assert_eq!(
+        proxy_port_of(&desired, db, 132, 53),
+        None,
+        "no unproxied SCTP"
+    );
     let sctp = flowsdn_view(
         crate::policy::tests::view(Vec::new()),
         json!({"endpointSelector":web_selector(),"egress":[
@@ -1420,5 +1453,10 @@ fn dns_rules_on_any_are_tcp_and_udp_and_refused_on_sctp() {
                          "rules":{"dns":[{"matchName":"x.example"}]}}]}]}),
     );
     let desired = compile(&sctp, &[]);
-    assert!(desired.problems.iter().any(|p| p.contains("DNS rules on SCTP")));
+    assert!(
+        desired
+            .problems
+            .iter()
+            .any(|p| p.contains("DNS rules on SCTP"))
+    );
 }

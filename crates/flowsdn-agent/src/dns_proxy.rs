@@ -9,11 +9,7 @@
 //! addresses (the response hold of §3.6.5), so the endpoint's first packet
 //! to them is allowed.
 use flowsdn_identity::cidr::CidrPrefix;
-use flowsdn_l7::dns::{
-    Config, Policy,
-    cache::Limits,
-    message::rcode,
-};
+use flowsdn_l7::dns::{Config, Policy, cache::Limits, message::rcode};
 use flowsdn_policy::ports::PortBlock;
 use regex::Regex;
 use serde_json::{Map, Value, json};
@@ -290,20 +286,25 @@ impl Policy for Answerer {
         let guard = self.read();
         let (rules, compiled) = &*guard;
         let group = aggregate(server, rules.cluster_id);
-        rules.rules.get(&endpoint).into_iter().flatten().any(|rule| {
-            (rule.identity == 0 || rule.identity == server || rule.identity == group)
-                && (rule.protocol == 0 || rule.protocol == protocol)
-                && PortBlock {
-                    port: rule.port,
-                    prefix: rule.prefix,
-                }
-                .matches(port)
-                && (rule.any_name
-                    || rule
-                        .names
-                        .iter()
-                        .any(|n| compiled.get(n).is_some_and(|re| re.is_match(name))))
-        })
+        rules
+            .rules
+            .get(&endpoint)
+            .into_iter()
+            .flatten()
+            .any(|rule| {
+                (rule.identity == 0 || rule.identity == server || rule.identity == group)
+                    && (rule.protocol == 0 || rule.protocol == protocol)
+                    && PortBlock {
+                        port: rule.port,
+                        prefix: rule.prefix,
+                    }
+                    .matches(port)
+                    && (rule.any_name
+                        || rule
+                            .names
+                            .iter()
+                            .any(|n| compiled.get(n).is_some_and(|re| re.is_match(name))))
+            })
     }
     fn learned(&self, _endpoint: u16, names: &[String], ips: &[IpAddr], ttl: u32) {
         if !(self.learn)(names, ips, ttl) {

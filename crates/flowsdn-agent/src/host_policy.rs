@@ -278,9 +278,8 @@ fn ports(
                 match Selector::parse(entry) {
                     Ok(selector) => selectors.push(selector),
                     Err(error) => {
-                        problems.insert(format!(
-                            "{policy}: DNS rule: {error}; the rule is skipped"
-                        ));
+                        problems
+                            .insert(format!("{policy}: DNS rule: {error}; the rule is skipped"));
                         return None;
                     }
                 }

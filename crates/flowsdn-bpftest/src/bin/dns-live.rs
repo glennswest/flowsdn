@@ -191,10 +191,10 @@ fn serve_dns(seen: &Arc<Mutex<Vec<String>>>) -> Result<()> {
             let Some(query) = buffer.get(..length) else {
                 continue;
             };
-            if let Some(q) = message::question(query) {
-                if let Ok(mut seen) = udp_seen.lock() {
-                    seen.push(format!("udp:{}", q.name));
-                }
+            if let Some(q) = message::question(query)
+                && let Ok(mut seen) = udp_seen.lock()
+            {
+                seen.push(format!("udp:{}", q.name));
             }
             if let Some(reply) = answer(query) {
                 let _ = udp.send_to(&reply, from);
@@ -214,10 +214,10 @@ fn serve_dns(seen: &Arc<Mutex<Vec<String>>>) -> Result<()> {
             if stream.read_exact(&mut query).is_err() {
                 continue;
             }
-            if let Some(q) = message::question(&query) {
-                if let Ok(mut seen) = tcp_seen.lock() {
-                    seen.push(format!("tcp:{}", q.name));
-                }
+            if let Some(q) = message::question(&query)
+                && let Ok(mut seen) = tcp_seen.lock()
+            {
+                seen.push(format!("tcp:{}", q.name));
             }
             if let Some(reply) = answer(&query) {
                 let mut out = u16::try_from(reply.len()).unwrap_or(0).to_be_bytes().to_vec();

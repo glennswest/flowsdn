@@ -103,7 +103,10 @@ impl Selector {
         };
         let match_name = text("matchName");
         let match_pattern = text("matchPattern");
-        if match_name.as_ref().is_some_and(|n| n.len() > MAX_FQDN_LENGTH) {
+        if match_name
+            .as_ref()
+            .is_some_and(|n| n.len() > MAX_FQDN_LENGTH)
+        {
             return Err(format!(
                 "matchName is longer than {MAX_FQDN_LENGTH} characters"
             ));

@@ -958,8 +958,10 @@ pub fn compile(view: &View, gateways: &[IpAddr]) -> Desired {
         for (ip, id) in view.fqdn.identities() {
             dns.addresses.insert(*ip, *id);
         }
-        dns.addresses.extend(remote_nodes.iter().map(|(ip, id)| (*ip, *id)));
-        dns.addresses.extend(pod_ips.iter().map(|(ip, id)| (*ip, *id)));
+        dns.addresses
+            .extend(remote_nodes.iter().map(|(ip, id)| (*ip, *id)));
+        dns.addresses
+            .extend(pod_ips.iter().map(|(ip, id)| (*ip, *id)));
         dns.addresses.extend(host.iter().map(|ip| (*ip, HOST)));
         dns.prefixes = cidrs.iter().map(|(p, id)| (*p, *id)).collect();
     }
