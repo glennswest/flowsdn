@@ -4,6 +4,15 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### NAT46/64 in the socket LB — #542 (P3), 2026-11-25
+
+lookup4/6 return `Lookup::Other(id, rev)` for NAT46X64 masters; forward6 resolves it in the other family's backend map
+(NAT46: native IPv6; NAT64: `::ffff:` + IPv4) and remembers UDP in LB6_REVERSE_SK; reverse6 tries LB6 first for
+`::ffff:` peers; forward4 refuses Other. services.rs translates the scope-0 copy too. Kernel: TCP + connected UDP
+(unconnected UDP across families is refused by the kernel itself), EPERM for AF_INET.
+- [x] Code, kernel step, docs, changelog (branch socket-nat46-542).
+- [ ] Object + lock, strict sc-build + kernel-check, merge, stage, close.
+
 ### Controller test hang — #555 (P2), 2026-11-25
 
 Seen once (58fe0c5, 30+ min, then passed). Client requests time out at 90 s, but `wait_for_pools` retries forever

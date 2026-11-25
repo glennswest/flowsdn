@@ -1156,3 +1156,13 @@ first on the TCX ingress of every local endpoint's host-side veth while `kuberne
 in the same maps (`STEP_XLATE_REPLY` of the uplink classifiers) and runs the same reply translation, redirecting by
 the FIB out of the uplink. Everything else it passes on (`TCX_NEXT`) to local-delivery. One flow state for local and
 remote backends; no new setting; no routing requirement. The socket LB half is #542.
+
+### Amendment — NAT46/64 in the socket LB (#542, 2026-11-25)
+
+The socket LB's copy of a NAT46/64 frontend (scope 0) carries the other family's backends and `NAT46X64` too. For
+IPv6 sockets, as in the reference: `connect6`/`sendmsg6` to `::ffff:<IPv4 frontend>` take the backend from the IPv6
+backend map, and to an IPv6 frontend from the IPv4 map, written `::ffff:<backend>`; UDP translations are remembered
+in `_lb6_reverse_sk` (keyed by the backend as the socket sees it, `::ffff:` included) so `recvmsg6`/`getpeername6`
+show the frontend. `connect4`/`sendmsg4` to such a frontend fail (EPERM). The kernel limits it to TCP and connected
+UDP: an unconnected `sendto` to `::ffff:` goes down the IPv4 path, and a sendmsg6 rewrite to `::ffff:` is
+unsupported (ENOTSUPP).

@@ -104,6 +104,76 @@ fn tcp(listener: &TcpListener, frontend: SocketAddr, backend: SocketAddr) -> Res
     Ok(())
 }
 
+/// Service NAT46/64 in the socket LB (#542), IPv6 sockets only, as in the
+/// reference: `[::ffff:192.0.2.13]` (an IPv4 frontend whose backends are
+/// IPv6) reaches `[::1]`, and `[2001:db8::13]` (IPv6, IPv4 backends) reaches
+/// `[::ffff:127.0.0.1]`, TCP and connected UDP; getpeername and the reply show
+/// the frontend. An IPv4 socket to the IPv4 frontend fails with EPERM (it
+/// cannot be pointed at an IPv6 backend). Unconnected UDP across families is
+/// the kernel's to refuse: a `sendto` to `::ffff:` takes the IPv4 path, and a
+/// sendmsg6 rewrite to `::ffff:` is unsupported.
+fn socket_nat46x64(
+    lb: &mut SocketLb,
+    services: &mut Vec<Service>,
+    tcp: (&TcpListener, &TcpListener),
+    udp: (&UdpSocket, &UdpSocket),
+) -> Result<()> {
+    let (tcp4, tcp6) = tcp;
+    let (udp4, udp6) = udp;
+    for (frontend, backend, proto) in [
+        ("192.0.2.13:80", "[::1]:18080", PROTO_TCP),
+        ("192.0.2.13:53", "[::1]:15353", PROTO_UDP),
+        ("[2001:db8::13]:80", "127.0.0.1:18080", PROTO_TCP),
+        ("[2001:db8::13]:53", "127.0.0.1:15353", PROTO_UDP),
+    ] {
+        services.push(Service {
+            nat46x64: true,
+            ..service(frontend, proto, &[backend])?
+        });
+    }
+    program(lb, services)?;
+    self::tcp(tcp6, sa("[::ffff:192.0.2.13]:80")?, sa("[::1]:18080")?)?;
+    self::tcp(tcp4, sa("[2001:db8::13]:80")?, sa("[::ffff:127.0.0.1]:18080")?)?;
+    for (server, frontend) in [
+        (udp6, sa("[::ffff:192.0.2.13]:53")?),
+        (udp4, sa("[2001:db8::13]:53")?),
+    ] {
+        server.set_read_timeout(Some(TIMEOUT))?;
+        let client = UdpSocket::bind("[::]:0")?;
+        client.set_read_timeout(Some(TIMEOUT))?;
+        client.connect(frontend)?;
+        if client.peer_addr()? != frontend {
+            return Err(format!(
+                "socket NAT46/64 UDP {frontend}: getpeername {} instead of the frontend",
+                client.peer_addr()?
+            )
+            .into());
+        }
+        client.send(b"query")?;
+        let mut buffer = [0; 16];
+        let (n, from) = server.recv_from(&mut buffer)?;
+        if buffer.get(..n) != Some(b"query".as_slice()) {
+            return Err(format!("socket NAT46/64 UDP {frontend}: query lost").into());
+        }
+        server.send_to(b"answer", from)?;
+        let n = client.recv(&mut buffer)?;
+        if buffer.get(..n) != Some(b"answer".as_slice()) {
+            return Err(format!("socket NAT46/64 UDP {frontend}: reply lost").into());
+        }
+        println!(
+            "PASS socket NAT46/64 connected UDP {frontend} -> {}: getpeername shows the frontend, reply delivered",
+            server.local_addr()?
+        );
+    }
+    match TcpStream::connect_timeout(&sa("192.0.2.13:80")?, TIMEOUT) {
+        Err(error) if error.kind() == ErrorKind::PermissionDenied => {
+            println!("PASS socket NAT46/64: an IPv4 socket to the NAT46 frontend fails with EPERM");
+            Ok(())
+        }
+        other => Err(format!("IPv4 socket to a NAT46 frontend: {other:?}").into()),
+    }
+}
+
 /// Unconnected then connected UDP to `frontend`: the backend server sees the
 /// query, and the client sees the reply (and its peer) as `frontend`.
 fn udp(server: &UdpSocket, frontend: SocketAddr, local: &str) -> Result<()> {
@@ -2770,6 +2840,7 @@ fn main() -> Result<()> {
     )?;
     udp(&udp4, sa("192.0.2.10:53")?, "127.0.0.1:0")?;
     udp(&udp6, sa("[2001:db8::10]:53")?, "[::1]:0")?;
+    socket_nat46x64(&mut lb, &mut services, (&tcp4, &tcp6), (&udp4, &udp6))?;
 
     match TcpStream::connect_timeout(&sa("192.0.2.11:80")?, TIMEOUT) {
         Err(error) if error.kind() == ErrorKind::PermissionDenied => {

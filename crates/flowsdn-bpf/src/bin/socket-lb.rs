@@ -93,6 +93,9 @@ enum Lookup<B> {
     /// A frontend without a usable backend: fail the syscall.
     Reject,
     Backend(B, u16),
+    /// A `NAT46X64` frontend (#542): the backend's ID in the other family's
+    /// backend map, and the service's reverse-NAT index.
+    Other(u32, u16),
 }
 
 /// Pick slot `1..=count` uniformly. The master entry is the single publish
@@ -259,9 +262,15 @@ fn lookup4(
             entry.backend_id()
         }
     };
-    // SAFETY: as above.
-    let Some(backend) = (unsafe { LB4_BACKENDS.get(&id).copied() }) else {
-        return Lookup::Reject;
+    let nat46x64 = service.service_flags() & service_flags::NAT46X64 != 0;
+    let backend = if nat46x64 {
+        None
+    } else {
+        // SAFETY: as above.
+        let Some(backend) = (unsafe { LB4_BACKENDS.get(&id).copied() }) else {
+            return Lookup::Reject;
+        };
+        Some(backend)
     };
     if sticky {
         let value = LbAffinityVal {
@@ -272,7 +281,10 @@ fn lookup4(
         // A full LRU evicts an old client; failing only forgets this one.
         let _ = LB4_AFFINITY.insert(&affinity, &value, 0);
     }
-    Lookup::Backend(backend, rev)
+    match backend {
+        Some(backend) => Lookup::Backend(backend, rev),
+        None => Lookup::Other(id, rev),
+    }
 }
 
 #[inline(always)]
@@ -330,9 +342,15 @@ fn lookup6(
             entry.backend_id()
         }
     };
-    // SAFETY: see lookup4.
-    let Some(backend) = (unsafe { LB6_BACKENDS.get(&id).copied() }) else {
-        return Lookup::Reject;
+    let nat46x64 = service.service_flags() & service_flags::NAT46X64 != 0;
+    let backend = if nat46x64 {
+        None
+    } else {
+        // SAFETY: see lookup4.
+        let Some(backend) = (unsafe { LB6_BACKENDS.get(&id).copied() }) else {
+            return Lookup::Reject;
+        };
+        Some(backend)
     };
     if sticky {
         let value = LbAffinityVal {
@@ -343,7 +361,10 @@ fn lookup6(
         // See lookup4.
         let _ = LB6_AFFINITY.insert(&affinity, &value, 0);
     }
-    Lookup::Backend(backend, rev)
+    match backend {
+        Some(backend) => Lookup::Backend(backend, rev),
+        None => Lookup::Other(id, rev),
+    }
 }
 
 /// TCP and UDP only; the kernel resolves protocol 0 to the socket's real one.
@@ -424,10 +445,21 @@ fn remember4(ctx: &SockAddrContext, backend: &Lb4Backend, front: ([u8; 4], [u8; 
 }
 #[inline(always)]
 fn remember6(ctx: &SockAddrContext, backend: &Lb6Backend, front: ([u8; 16], [u8; 2]), rev: u16) {
+    remember6_at(ctx, (backend.address, backend.port.0), front, rev);
+}
+/// [`remember6`] for a backend as the socket sees it: an IPv6 address, or
+/// `::ffff:` and an IPv4 backend of a NAT64 frontend (#542).
+#[inline(always)]
+fn remember6_at(
+    ctx: &SockAddrContext,
+    backend: ([u8; 16], [u8; 2]),
+    front: ([u8; 16], [u8; 2]),
+    rev: u16,
+) {
     let key = Ipv6RevnatTuple {
         cookie: cookie(ctx),
-        address: backend.address,
-        port: backend.port,
+        address: backend.0,
+        port: Be16(backend.1),
         pad: 0,
         pad2: 0,
     };
@@ -451,7 +483,8 @@ fn forward4(ctx: &SockAddrContext) -> i32 {
     let port = port_bytes(raw);
     match lookup4(ctx, address, port, proto) {
         Lookup::None => ALLOW,
-        Lookup::Reject => REJECT,
+        // An IPv4 socket cannot be pointed at an IPv6 backend (#542).
+        Lookup::Reject | Lookup::Other(..) => REJECT,
         Lookup::Backend(backend, rev) => {
             if raw.protocol == IPPROTO_UDP {
                 remember4(ctx, &backend, (address, port), rev);
@@ -477,6 +510,20 @@ fn forward6(ctx: &SockAddrContext) -> i32 {
         return match lookup4(ctx, address, port, proto) {
             Lookup::None => ALLOW,
             Lookup::Reject => REJECT,
+            // NAT46 (#542): `::ffff:` and an IPv4 frontend whose backends are
+            // IPv6; the socket connects to the IPv6 backend.
+            Lookup::Other(id, rev) => {
+                // SAFETY: see lookup4.
+                let Some(backend) = (unsafe { LB6_BACKENDS.get(&id).copied() }) else {
+                    return REJECT;
+                };
+                if raw.protocol == IPPROTO_UDP {
+                    remember6(ctx, &backend, (ip6_bytes(words), port), rev);
+                }
+                set_user_ip6(raw, ip6_words(backend.address));
+                raw.user_port = port_value(backend.port.0);
+                ALLOW
+            }
             Lookup::Backend(backend, rev) => {
                 if raw.protocol == IPPROTO_UDP {
                     remember4(ctx, &backend, (address, port), rev);
@@ -491,6 +538,21 @@ fn forward6(ctx: &SockAddrContext) -> i32 {
     match lookup6(ctx, address, port, proto) {
         Lookup::None => ALLOW,
         Lookup::Reject => REJECT,
+        // NAT64 (#542): an IPv6 frontend whose backends are IPv4; the socket
+        // connects to `::ffff:` and the IPv4 backend.
+        Lookup::Other(id, rev) => {
+            // SAFETY: see lookup4.
+            let Some(backend) = (unsafe { LB4_BACKENDS.get(&id).copied() }) else {
+                return REJECT;
+            };
+            let target = [0, 0, MAPPED, u32::from_ne_bytes(backend.address.0)];
+            if raw.protocol == IPPROTO_UDP {
+                remember6_at(ctx, (ip6_bytes(target), backend.port.0), (address, port), rev);
+            }
+            set_user_ip6(raw, target);
+            raw.user_port = port_value(backend.port.0);
+            ALLOW
+        }
         Lookup::Backend(backend, rev) => {
             if raw.protocol == IPPROTO_UDP {
                 remember6(ctx, &backend, (address, port), rev);
@@ -534,6 +596,21 @@ fn reverse6(ctx: &SockAddrContext) -> i32 {
     }
     let words = raw.user_ip6;
     let port = port_bytes(raw);
+    // A `::ffff:` peer may be a NAT64 frontend's IPv4 backend, remembered
+    // with the IPv6 frontend (#542); else an IPv4 frontend's.
+    let key6 = Ipv6RevnatTuple {
+        cookie: cookie(ctx),
+        address: ip6_bytes(words),
+        port: Be16(port),
+        pad: 0,
+        pad2: 0,
+    };
+    // SAFETY: LRU value copied at once, never written through.
+    if let Some(front) = unsafe { LB6_REVERSE_SK.get(&key6).copied() } {
+        set_user_ip6(raw, ip6_words(front.address));
+        raw.user_port = port_value(front.port.0);
+        return ALLOW;
+    }
     if let Some(address) = mapped(words) {
         let key = Ipv4RevnatTuple {
             cookie: cookie(ctx),
@@ -547,18 +624,6 @@ fn reverse6(ctx: &SockAddrContext) -> i32 {
             raw.user_port = port_value(front.port.0);
         }
         return ALLOW;
-    }
-    let key = Ipv6RevnatTuple {
-        cookie: cookie(ctx),
-        address: ip6_bytes(words),
-        port: Be16(port),
-        pad: 0,
-        pad2: 0,
-    };
-    // SAFETY: LRU value copied at once, never written through.
-    if let Some(front) = unsafe { LB6_REVERSE_SK.get(&key).copied() } {
-        set_user_ip6(raw, ip6_words(front.address));
-        raw.user_port = port_value(front.port.0);
     }
     ALLOW
 }

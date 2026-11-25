@@ -92,7 +92,7 @@ The Kubernetes-mode agent also allocates cluster identities for its Pods
 (FlowsdnIdentity objects, #291). Masquerade is the node's (`egress: stack`),
 not flowsdn's. Open gaps, each an issue with the `gap` label: L7 HTTP/Kafka
 policy rules (#537), `toFQDNs` and DNS rules (#536),
-ICMP errors about source-NATed NodePort flows (#534), NAT46/64 in the socket LB (#542) and the
+ICMP errors about source-NATed NodePort flows (#534) and the
 Hubble observer/relay (#293). The operator (`flowsdn-agent operator`, #337)
 registers the flowsdn.io CRDs under leader election and collects unused
 FlowsdnIdentities and ownerless FlowsdnNodes (#479), and the agent's flowsdn.io

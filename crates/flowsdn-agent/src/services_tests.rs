@@ -163,8 +163,10 @@ fn nat46x64_translates_a_node_local_frontend_with_no_backend_of_its_family() {
     let v6 = find(&out, "2001:db8::1", SCOPE_NODE_LOCAL);
     assert!(!v6.nat46x64 && v6.dsr);
     assert_eq!(v6.backends.len(), 2);
+    // The socket LB's copy is translated too (#542).
     let socket = find(&out, "192.0.2.1", SCOPE_CLUSTER);
-    assert!(!socket.nat46x64 && socket.backends.is_empty());
+    assert!(socket.nat46x64);
+    assert_eq!(socket.backends.len(), 2);
     // The API says so.
     let list = service_list(&out, &BTreeMap::new());
     let rows = list.as_array().expect("rows");
@@ -172,7 +174,11 @@ fn nat46x64_translates_a_node_local_frontend_with_no_backend_of_its_family() {
         .iter()
         .filter_map(|r| r.pointer("/spec/flags/nat-policy")?.as_str())
         .collect();
-    assert_eq!(policies, ["Nat46"]);
+    // The uplink's frontend and the socket LB's (#542).
+    assert!(
+        !policies.is_empty() && policies.iter().all(|p| *p == "Nat46"),
+        "{policies:?}"
+    );
 
     // Only local backends: translated too (#450). The setting off, or a
     // Local policy: not translated.

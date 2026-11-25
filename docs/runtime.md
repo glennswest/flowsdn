@@ -629,8 +629,7 @@ pinned: they detach when the agent exits, and the per-CPU
 pinned either. The socket LB picks backends at random: Maglev is for traffic
 entering on the uplink only, as in the reference (#453); an existing TCP connection stays on its backend when it leaves unless
 `kubernetes.lb-sock-terminate-all-protos` is on (#392, below); SCTP ports get no translation (#457); IPv6
-fragments pass untouched. Further gaps, each an issue: NAT46/64 in
-the socket LB (#542), and skip-LB, which comes with local redirect policy
+fragments pass untouched. A further gap: skip-LB, which comes with local redirect policy
 (#336). `socket-lb-live` (medium test suite) checks the
 programs on a kernel, including the NodePort local and SNAT paths through
 `BPF_PROG_TEST_RUN` and Maglev picks against the planner's tables; no
@@ -723,9 +722,16 @@ Limits:
 - **A local backend's reply skips local-delivery.** `nodeport_endpoint` redirects it
   before local-delivery's egress policy; it is the reply of a connection the pod's
   ingress policy admitted.
-- **Uplink only.** The socket LB does not translate, so a pod or host client of the
-  frontend gets no backend. Pod traffic to IPv4 by an RFC 6052 address is the
-  gateway below (#454).
+- **The socket LB translates IPv6 sockets only** (#542, as the reference does): a
+  pod's or the host's IPv6 socket to `::ffff:<IPv4 frontend>` connects to its IPv6
+  backend, and one to an IPv6 frontend with IPv4 backends connects to
+  `::ffff:<backend>`; getpeername and UDP replies show the frontend. TCP and
+  connected UDP only: the kernel sends an unconnected `sendto` to `::ffff:` down its
+  IPv4 path, and refuses a sendmsg rewrite to `::ffff:`. An IPv4 socket to such a
+  frontend fails with EPERM, since it cannot be pointed at an IPv6 backend. Sockets
+  to a NAT64 frontend's IPv4 backend are not ended when that backend leaves
+  (termination matches IPv6 entries by IPv6 address). Pod traffic to IPv4 by an
+  RFC 6052 address is the gateway below (#454).
 - **Passes untouched, with no ICMP error:** IPv4 options, a fragment, UDP without a
   checksum (IPv6 requires one), TTL 1, a packet too big for the device once translated
   (an IPv4 packet grows by 20 bytes). TCP is not affected by that last one in practice:

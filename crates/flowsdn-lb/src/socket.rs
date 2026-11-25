@@ -71,8 +71,10 @@ pub struct Service {
     /// Only the uplink NodePort programs (scope 1) read it.
     pub dsr: bool,
     /// Service NAT46/64 (spec 04 §3.15): the backends are the other family's
-    /// and the master carries `NAT46X64`. Only the uplink NodePort programs
-    /// (scope 1) read it.
+    /// and the master carries `NAT46X64`. The uplink NodePort programs
+    /// (scope 1) translate the packet; the socket LB (scope 0) points an
+    /// IPv6 socket at the other family's backend and refuses an IPv4 one
+    /// (#542).
     pub nat46x64: bool,
 }
 

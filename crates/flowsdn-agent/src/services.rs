@@ -304,11 +304,11 @@ pub fn frontends(
                         only.is_none().then_some(topology),
                     );
                     // Translated backends on this node too (#450): a local
-                    // pod's reply is translated back on its veth. A Local
-                    // `externalTrafficPolicy` never translates: the backend
-                    // would see this node's address, not the client's.
+                    // pod's reply is translated back on its veth. The socket
+                    // LB's copy too (#542): an IPv6 socket connects across
+                    // families. A Local traffic policy never translates: the
+                    // backend would see this node's address, not the client's.
                     let translated = if service.nat46x64
-                        && scope == SCOPE_NODE_LOCAL
                         && same.is_empty()
                         && only.is_none()
                     {

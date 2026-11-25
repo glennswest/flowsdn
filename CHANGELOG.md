@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#542)
+- **feat:** Service NAT46/64 in the socket LB, for IPv6 sockets, as in the reference. A pod's or the host's IPv6 socket to `::ffff:<IPv4 frontend>` whose backends are IPv6 connects to the IPv6 backend. One to an IPv6 frontend with IPv4 backends connects to `::ffff:<backend>`. getpeername and UDP replies show the frontend.
+  - **Limits:** TCP and connected UDP only, because the kernel sends an unconnected `sendto` to `::ffff:` down its IPv4 path and refuses a sendmsg6 rewrite to `::ffff:`. An IPv4 socket to such a frontend fails with EPERM, as before.
+  - **Implementation:** the agent gives the socket LB's (scope 0) copy of a `kubernetes.nat46x64` frontend the translated backends. socket-lb's `lookup4`/`lookup6` return the backend ID of a `NAT46X64` master for the IPv6 path to resolve in the other family's map. The reverse lookup for a `::ffff:` peer tries `_lb6_reverse_sk` first. The socket-lb object and lock are rebuilt.
+- **test:** `socket-lb-live` `socket_nat46x64`: TCP and connected UDP in both directions through real sockets in the test cgroup, and EPERM for an IPv4 socket. `services_tests`: the socket LB's copy is translated.
+- **docs:** runtime.md (Service NAT46/64), a spec 04 amendment, README, implementation-status.md.
+
 ### 2026-11-25 (#555)
 - **test:** `tests/kubernetes.rs` `controller_lists_watches_and_derives_the_pool` runs its body on its own thread under a 240 s watchdog, recording its phase: the mock server, the node config, the CRD gate, `wait_for_pools`, and converging after spawn. It once ran 30+ minutes in an sc-build without failing and passed on the next run. A recurrence now fails naming the phase instead of holding the build. A panic in the body still fails with its own message.
 
