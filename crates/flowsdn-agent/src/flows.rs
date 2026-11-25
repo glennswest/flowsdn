@@ -197,8 +197,18 @@ pub(super) fn parse_time(text: &str) -> Option<SystemTime> {
     }
     let (year, month, day) = (number(0..4)?, number(5..7)?, number(8..10)?);
     let (hour, minute, second) = (number(11..13)?, number(14..16)?, number(17..19)?);
+    // The month's length, with the Gregorian leap years (finding
+    // 3c7298844c45): 2026-02-30 is refused, not read as March 2.
+    let divides = |n: i64| year.checked_rem(n) == Some(0);
+    let leap = divides(4) && (!divides(100) || divides(400));
+    let days = match month {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
     if !(1..=12).contains(&month)
-        || !(1..=31).contains(&day)
+        || !(1..=days).contains(&day)
         || hour > 23
         || minute > 59
         || second > 60

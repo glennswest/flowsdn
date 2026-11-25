@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Flows since: dates and order — #552 (P3), 2026-11-25
+
+Findings 3c7298844c45 (day vs month/leap year in `flows::parse_time`) and 8fb1b606e6dc (`Events::newest` filters
+all, sorts by time, then limits). Tests in flows_tests.rs; agent-api.md; changelog.
+- [x] Code, tests, docs.
+- [ ] sc-build (fmt, `cargo xtask check`); stage with #447; close.
+
 ### toGroups peers — #530 (P3), 2026-11-25
 
 Master (2026-11-25): A, not built (no AWS). Spec 06 in place + amendment, runtime.md, implementation-status; covered by

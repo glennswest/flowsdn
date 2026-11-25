@@ -40,21 +40,26 @@ impl Events {
         }
     }
     /// The newest `limit` at or after `since`, newest first, with how many
-    /// were seen and are kept (for `GET /v1/flows`, #485).
+    /// were seen and are kept (for `GET /v1/flows`, #485). Events are kept in
+    /// ring-buffer order, and CPUs can stamp them out of that order, so every
+    /// kept event is filtered and the matches are sorted by time (finding
+    /// 8fb1b606e6dc); among equal times the later-kept comes first.
     pub(super) fn newest(
         &self,
         limit: usize,
         since: Option<SystemTime>,
     ) -> (u64, usize, Vec<(SystemTime, PolicyEvent)>) {
         let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
-        let newest = inner
+        let mut newest: Vec<(SystemTime, PolicyEvent)> = inner
             .0
             .iter()
             .rev()
-            .take_while(|(time, _)| since.is_none_or(|since| *time >= since))
-            .take(limit)
+            .filter(|(time, _)| since.is_none_or(|since| *time >= since))
             .copied()
             .collect();
+        // Stable: equal times keep the later-kept first.
+        newest.sort_by(|a, b| b.0.cmp(&a.0));
+        newest.truncate(limit);
         (inner.1, inner.0.len(), newest)
     }
     /// `GET /v1/policy/events`: the newest `limit`, newest first, and how

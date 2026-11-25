@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#552)
+- **fix:** `GET /v1/flows?since=` refuses an impossible date with 400 (finding 3c7298844c45). The parser allowed day 31 in every month, so `2026-02-30T00:00:00Z` was read as March 2. It now checks the day against the month's length, with Gregorian leap years.
+- **fix:** `GET /v1/flows` with `since` returns every kept flow at or after it, newest first by time (finding 8fb1b606e6dc). Events are kept in ring-buffer order, and CPUs can stamp them in a different order, so cutting the list at the first older event dropped newer ones behind it. All kept events are now filtered, sorted by time and then limited.
+- **test:** `rfc3339_times_parse` covers impossible days (Feb 29 in 2026 and 1900, Feb 30, Apr 31, Nov 31, day 0) and valid edges (2000-02-29, Dec 31); the new `flows_since_does_not_stop_at_an_out_of_order_event`.
+
 ### 2026-11-25 (#530)
 - **docs:** `toGroups`/`fromGroups` (AWS security-group) peers are not built, as the master decided on #530. Nothing on this platform runs on AWS, and an EC2 resolver couldn't be verified live. Such a rule stays refused: it is skipped and reported (`toGroups is not enforced; the rule is skipped`), so it allows nothing. Spec 06 (scope and peer list) is edited in place with the line count unchanged and gains an amendment; runtime.md and implementation-status.md are updated. The refusal is covered by `host_policy_tests::authentication_and_to_groups_are_refused` (added for #472).
 

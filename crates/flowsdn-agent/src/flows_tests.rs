@@ -207,6 +207,53 @@ fn flows_are_newest_first_bounded_and_since() {
     );
 }
 
+/// #552 (finding 8fb1b606e6dc): events kept out of time order (CPUs stamp
+/// after reserving their ring entries) are all filtered by `since` and
+/// returned newest first by time, not cut at the first older one.
+#[test]
+fn flows_since_does_not_stop_at_an_out_of_order_event() {
+    let events = Events::default();
+    let now = UNIX_EPOCH
+        .checked_add(Duration::from_secs(1_795_000_100))
+        .unwrap_or(UNIX_EPOCH);
+    // Kept in this order, stamped 10, 100 (old) and 40 s before `now`.
+    let stamps = [90u64, 0, 60];
+    let batch = stamps
+        .iter()
+        .map(|s| {
+            let mut e = event(false, [198, 51, 100, 9], [10, 1, 0, 5], 6, verdict::ALLOWED);
+            e.time_ns = s.saturating_mul(1_000_000_000);
+            e.sport = Be16::new(u16::try_from(*s).unwrap_or(0));
+            e
+        })
+        .collect();
+    events.push(batch, now, 100_000_000_000);
+    let ports = |value: &Value| -> Vec<Value> {
+        value
+            .get("flows")
+            .and_then(Value::as_array)
+            .map(|flows| {
+                flows
+                    .iter()
+                    .filter_map(|f| f.pointer("/source/port").cloned())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    // Since now - 60 s: both recent ones, past the old one between them.
+    let since = parse_time("2026-11-18T11:07:20Z");
+    assert_eq!(
+        ports(&json(&events, None, 10, since)),
+        vec![json!(90), json!(60)]
+    );
+    // All, newest first by time; the limit takes the newest.
+    assert_eq!(
+        ports(&json(&events, None, 10, None)),
+        vec![json!(90), json!(60), json!(0)]
+    );
+    assert_eq!(ports(&json(&events, None, 1, None)), vec![json!(90)]);
+}
+
 #[test]
 fn rfc3339_times_parse() {
     let at = |s: u64, n: u32| UNIX_EPOCH.checked_add(Duration::new(s, n));
@@ -221,6 +268,8 @@ fn rfc3339_times_parse() {
         at(1_795_000_000, 0)
     );
     assert_eq!(parse_time("2024-02-29T00:00:00Z"), at(1_709_164_800, 0));
+    assert_eq!(parse_time("2000-02-29T00:00:00Z"), at(951_782_400, 0));
+    assert_eq!(parse_time("2026-12-31T00:00:00Z"), at(1_798_675_200, 0));
     for bad in [
         "",
         "2026-11-18",
@@ -231,6 +280,13 @@ fn rfc3339_times_parse() {
         "2026-11-18T07:06:40+0100",
         "1969-12-31T23:59:59Z",
         "2026-11-18T07:06:4xZ",
+        // #552 (finding 3c7298844c45): days the month does not have.
+        "2026-02-29T00:00:00Z",
+        "2026-02-30T00:00:00Z",
+        "2026-04-31T00:00:00Z",
+        "1900-02-29T00:00:00Z",
+        "2026-11-31T00:00:00Z",
+        "2026-11-00T00:00:00Z",
     ] {
         assert_eq!(parse_time(bad), None, "{bad}");
     }
