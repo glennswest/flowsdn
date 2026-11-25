@@ -1244,11 +1244,23 @@ fn nat_expiry(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     let live46 = frame4(17, client, front, 29990, 30099, false);
     let live64 = frame6(17, client6, front6, 29991, 30099, false);
     let port46 = |lb: &mut SocketLb| -> Result<u16> {
-        Ok(parse6(&run_on(lb, "nodeport_ingress", &live46, up0, TC_ACT_REDIRECT)?)?.2)
+        Ok(parse6(&run_on(
+            lb,
+            "nodeport_ingress",
+            &live46,
+            up0,
+            TC_ACT_REDIRECT,
+        )?)?
+        .2)
     };
     let port64 = |lb: &mut SocketLb| -> Result<([u8; 4], u16)> {
-        let (src, _, s, _, _, _) =
-            parse4(&run_on(lb, "nodeport_ingress", &live64, up0, TC_ACT_REDIRECT)?)?;
+        let (src, _, s, _, _, _) = parse4(&run_on(
+            lb,
+            "nodeport_ingress",
+            &live64,
+            up0,
+            TC_ACT_REDIRECT,
+        )?)?;
         Ok((src, s))
     };
     for (proto, life, name) in [(6u8, 12u64, "closed TCP"), (17, 62, "UDP")] {
@@ -1309,7 +1321,11 @@ fn nat_expiry(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
                 )
                 .into());
             }
-            let what = if kind == 0 { "source-NATed" } else { "translated" };
+            let what = if kind == 0 {
+                "source-NATed"
+            } else {
+                "translated"
+            };
             println!(
                 "PASS NAT expiry, {label} {name}: {before} then, {life} s later, {second} of {ROUND} new flows {what}: expired reservations are reclaimed"
             );
