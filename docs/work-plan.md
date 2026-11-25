@@ -9,7 +9,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 Finding 86abd1e1de01: `Writer::sync` removed the written entry before DELETE, so a failed DELETE was never retried.
 Now the entry stays until 2xx/404/409; a same-named new Pod (different pod_uid) is skipped until the old is deleted.
 - [x] Code, test `a_failed_delete_is_retried_until_it_succeeds`, runtime.md, changelog.
-- [ ] sc-build (fmt, `cargo xtask check`); stage; close.
+- [x] sc-build at 611d9b6: fmt --check, `cargo xtask check` 1041 passed 0 failed. Lock unchanged since e8c0062
+      (kernel-check 24/0/2). Stage requested; closed.
 
 ### CRD registration after a raced create — #550 (P1), 2026-11-24
 
