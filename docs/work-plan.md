@@ -7,8 +7,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 ### Local redirect policy and skip-LB — #565 (P3), 2026-11-25
 
 - [x] socket-lb skip maps and the scope-2 own-Service copy; planner, loader, watch (Pod ports/readiness, RedirectPolicies), agent planning (`local_redirect.rs`), the `flowsdn-lrp` thread (re-plan every 2 s, `status.ok`), `GET /v1/lrp`, RBAC, docs.
-- [x] BPF object + lock rebuilt at 4c5b8fe-era source (socket-lb sha256 96d50a27…); kernel-check on 7.3.4-200.fc44: 24 pass, 0 fail, 2 skip, `socket-lb-live` local redirect + skip-LB PASS.
-- [ ] Strict build at the commit carrying the object.
+- [x] BPF object + lock rebuilt from 92bf7ca (socket-lb sha256 96d50a27…), committed at 1ae2a67. Strict sc-build at 1ae2a67: fmt --check, `cargo xtask check`, test/build.sh, kernel-check on 7.3.4-200.fc44 (24 pass, 0 fail, 2 skip; `socket-lb-live` local redirect and skip-LB steps PASS). Staged.
 
 ### scripttest step A: table store, lifecycle, fake Kubernetes — #516 (P3), 2026-11-25
 
