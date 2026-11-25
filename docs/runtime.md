@@ -622,8 +622,8 @@ root the links detach when the agent exits. The NodePort uplink links are never
 pinned: they detach when the agent exits, and the per-CPU
 `flowsdn_nodeport6_fib`, `flowsdn_nodeport6_scratch` and
 `flowsdn_nodeport4_xlate_scratch` scratch maps are not
-pinned either. The socket LB picks backends at random (Maglev there is gap
-#453); an existing TCP connection stays on its backend when it leaves unless
+pinned either. The socket LB picks backends at random: Maglev is for traffic
+entering on the uplink only, as in the reference (#453); an existing TCP connection stays on its backend when it leaves unless
 `kubernetes.lb-sock-terminate-all-protos` is on (#392, below); SCTP ports get no translation (#457); IPv6
 fragments pass untouched. Further gaps, each an issue: DSR by IPIP/Geneve (#447), NAT46/64 in
 the socket LB (#450), and skip-LB, which comes with local redirect policy

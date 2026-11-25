@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#453)
+- **docs:** Maglev in the socket LB is no longer a gap (master's decision, #453): the reference doesn't do it either. Its socket LB picks backends at random, and it builds Maglev tables only for frontends served on the uplink (spec 05 §3.13). Its kube-proxy-free guide says in-cluster connections "are not subject to Maglev". flowsdn already does the same: Maglev on the uplink path, and a random pick plus ClientIP affinity at the socket. A connect-time hash couldn't be per-flow, because the source port isn't chosen yet. Spec 05 §3.13 (in place, same line count), runtime.md and implementation-status.md are updated, and a spec 05 amendment records the decision.
+
 ### 2026-11-25 (#464)
 - **docs:** The owner dropped the `debug-events` and `test-hooks` BPF build dimensions, so they are no longer a gap. Every flowsdn BPF object is a release object, and flowsdn-bpf defines no Cargo features. Test hooks are not used because the kernel tests run the shipped objects. Debug events, if ever wanted, come with the Hubble observer (#293), their only reader. Spec 02 §6.2 (the build-dimensions table), §8 events and §12 item 11 now say so in place (line count unchanged), and a new amendment records the decision.
 - **test:** `flowsdn-bpftest` `tests/build_dimensions.rs`: flowsdn-bpf has no `[features]` section, and spec 02 carries the #464 amendment.

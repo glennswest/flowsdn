@@ -651,7 +651,7 @@ IPv4 `jhash_3words(client, dport << 16 | sport, proto, seed4)`, IPv6 the
 two-round mix of `hash_from_tuple_v6`; sport 0 with session affinity.
 Tables are written after backends and before masters, deleted after stale
 masters; a table is never written in place (a new inner map is swapped in).
-Socket LB Maglev is gap #453. flowsdn amendment (2026-11-20, #465): the
+The socket LB has no Maglev, as in the reference (#453). Amendment (2026-11-20, #465): the
 agent's `kubernetes.lb-external-clusterip` (default false) is
 `bpf-lb-external-clusterip`. With it each ClusterIP frontend also gets a
 node-local copy for the uplink path, with backends limited by
@@ -1282,3 +1282,14 @@ catalogue's provenance cites this spec by line number (#358).
 `NatPolicy` is not read from a Service field: `kubernetes.nat46x64` derives it per
 node-local frontend (spec 04's note on §3.15), and `GET /v1/service` reports it as
 `nat-policy`.
+
+## Amendment — Maglev is not applied in the socket LB (#453, 2026-11-25)
+
+Not a gap. The reference applies Maglev only to traffic arriving from outside the node (§3.13: the LUT exists for
+NodePort, LoadBalancer, HostPort and ExternalIPs frontends, and ClusterIP only with `bpf-lb-external-clusterip`, all
+served on the uplink path). Its socket LB picks a random slot; its kube-proxy-free guide says in-cluster connections
+"are assigned to service backends directly, e.g. at TCP connect time, without any intermediate hop and thus are not
+subject to Maglev". flowsdn does the same. At `connect`/`sendmsg` the client's source port is usually not chosen,
+so a hash could only be of (client address, frontend): per-client stickiness, which ClientIP session affinity
+already gives the Services that ask for it. Maglev's purpose, the same backend for a flow on whichever node it
+arrives, does not arise when each connection is translated once on its own node.

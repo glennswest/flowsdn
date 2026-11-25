@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Maglev in the socket LB — #453 (P3), 2026-11-25
+
+Master (2026-11-25): A, not a gap; the reference has no socket-LB Maglev (§3.13 LUT only for uplink frontends; guide:
+E-W "not subject to Maglev"). Spec 05 §3.13 in place + amendment, runtime.md, implementation-status.md, changelog.
+- [x] Docs.
+- [ ] sc-build (fmt, `cargo xtask check`); remove `gap` label; close (docs only: no stage).
+
 ### debug-events / test-hooks build dimensions — #464 (P3), 2026-11-25
 
 Owner (master, 2026-11-25): A, drop both. Spec 02 §6.2 rows + net line, §8 debug events, §12 item 11 in place (line
