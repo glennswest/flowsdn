@@ -262,11 +262,21 @@ pub fn register(
     wait: &mut dyn FnMut(Duration),
 ) -> Result<Registered, Error> {
     let path = format!("{CRDS_PATH}/{name}");
-    let (status, existing) = send(http::Method::GET, &path, None)?;
+    let (status, mut existing) = send(http::Method::GET, &path, None)?;
     let mut done = match status {
         200 => Registered::Current,
         404 => match send(http::Method::POST, CRDS_PATH, Some(payload))? {
-            (200..=299 | 409, _) => Registered::Created,
+            (200..=299, _) => Registered::Created,
+            // Another actor created it meanwhile (#550): read what it made
+            // and reconcile it like any existing copy, so an older or
+            // unlabelled schema is replaced before the wait for Established.
+            (409, _) => match send(http::Method::GET, &path, None)? {
+                (200, raced) => {
+                    existing = raced;
+                    Registered::Current
+                }
+                (status, body) => return Err(refused(&format!("read {name}"), status, &body)),
+            },
             (status, body) => return Err(refused(&format!("create {name}"), status, &body)),
         },
         status => return Err(refused(&format!("read {name}"), status, &existing)),

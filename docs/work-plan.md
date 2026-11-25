@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### CRD registration after a raced create — #550 (P1), 2026-11-24
+
+Finding 6d1718ddfed1: `register` took POST 409 as Created and skipped `needs_update`. Now 409 -> GET -> same update
+path as an existing CRD (`Current` if it is this schema). Spec 13 §3.2 step 2 and F14 amended in place (line count kept).
+- [x] Code, tests (`a_raced_create_of_an_older_schema_is_updated`, `..._this_schema_is_left_alone`), spec 13, changelog.
+- [ ] sc-build (fmt, `cargo xtask check`); stage with #549; close.
+
 ### L2 announcer election ignores interface eligibility — #549 (P1), 2026-11-24
 
 Finding 27c1663186dc: the rendezvous hash elected among every Ready selected node, and `interfaces_for` ran only on

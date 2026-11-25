@@ -149,17 +149,54 @@ fn absent_is_created_then_established() {
 }
 
 #[test]
-fn a_raced_create_is_success() {
+fn a_raced_create_of_this_schema_is_left_alone() {
     let (result, script, _) = run(
         vec![
             (404, Value::Null),
             (409, Value::Null),
             (200, crd(Some(SCHEMA_VERSION), true)),
+            (200, crd(Some(SCHEMA_VERSION), true)),
         ],
         &json!({}),
     );
-    assert_eq!(result, Ok(Registered::Created));
-    assert_eq!(methods(&script), ["GET", "POST", "GET"]);
+    assert_eq!(result, Ok(Registered::Current));
+    assert_eq!(methods(&script), ["GET", "POST", "GET", "GET"]);
+}
+
+/// #550 (finding 6d1718ddfed1): another actor creates the CRD between this
+/// operator's GET and POST, with an older or unlabelled schema. The 409 is
+/// followed by a read and the same update as for an existing copy, before
+/// the wait for Established, so the operator does not start on it.
+#[test]
+fn a_raced_create_of_an_older_schema_is_updated() {
+    let payload = json!({"metadata": {"labels": {SCHEMA_VERSION_LABEL: SCHEMA_VERSION}},
+        "spec": {"group": "flowsdn.io"}});
+    for raced in [crd(Some("1.0.0"), true), crd(None, true)] {
+        let (result, script, _) = run(
+            vec![
+                (404, Value::Null),
+                (409, Value::Null),
+                (200, raced),
+                (200, Value::Null),
+                (200, crd(Some(SCHEMA_VERSION), true)),
+            ],
+            &payload,
+        );
+        assert_eq!(result, Ok(Registered::Updated));
+        assert_eq!(methods(&script), ["GET", "POST", "GET", "PUT", "GET"]);
+        let put = script.calls.get(3).and_then(|c| c.2.clone()).expect("PUT");
+        assert_eq!(
+            put.pointer("/metadata/labels"),
+            payload.pointer("/metadata/labels")
+        );
+        assert_eq!(put.pointer("/metadata/resourceVersion"), Some(&json!("7")));
+    }
+    // The raced copy vanished again before the read: an error, not success.
+    let (result, _, _) = run(
+        vec![(404, Value::Null), (409, Value::Null), (404, Value::Null)],
+        &json!({}),
+    );
+    assert!(result.is_err());
 }
 
 #[test]

@@ -314,8 +314,8 @@ Registration for each CRD:
    projection described in the ownership amendment. Do not copy metadata annotations or claim
    upstream ownership. All following lookups and updates target this owned
    identity only; an existing upstream CRD is never an update candidate.
-2. `GET` the CRD. On `404`, `POST` it; a `409 AlreadyExists` is success (two
-   operators raced).
+2. `GET` the CRD. On `404`, `POST` it; on `409 AlreadyExists` (a race) `GET` it
+   again and go on with step 3 on that copy, as for an existing CRD (#550).
 3. Decide whether an update is needed:
    - if the existing CRD's `spec.versions[0].schema` is absent → update;
    - if the existing CRD has no `io.flowsdn.k8s.crd.schema.version` label →
@@ -1148,7 +1148,7 @@ Environment variables follow spec 00 §2: `CILIUM_` + key upper-cased with `-` �
 | F11 | `410 Gone` on a watch | Relist from scratch; replace the table; reconcilers prune on the replace. Counted in `flowsdn_k8s_watch_relist_total` |
 | F12 | `409 Conflict` on a status write | Not an error. Retry on the next controller tick with fresh state; log at debug |
 | F13 | JSON-patch `test` op fails (CEP UID changed, taint list changed) | The patch is rejected atomically. Re-read and retry; for CEP, mark the local record as needing re-initialization |
-| F14 | Two operators race to create a CRD | `409 AlreadyExists` on create is success; `409 Conflict` on update retries the poll |
+| F14 | Two operators race to create a CRD | `409 AlreadyExists` on create: re-read, then the step 3 update check on the racer's copy (#550); `409 Conflict` on update retries the poll |
 | F15 | Server does not implement CEL (C3) | CRs that should be rejected are accepted. flowsdn MUST NOT compensate by re-validating client-side in the first cut; instead the conformance suite (§9.5) fails and the gap is documented for that server. Open decision §12.4 |
 | F16 | Server does not implement schema defaulting (C4) | Fields flowsdn expects to be defaulted arrive absent. flowsdn's Rust types carry `#[serde(default)]` with the **same** default value as the schema, so this degrades correctly. The defaults are asserted equal to the schema's by test T-CRD-8 (§9.1) |
 | F17 | Server does not implement the status subresource (C12) | A status write would clobber spec. flowsdn probes at startup by writing an empty status patch to its own CiliumNode and verifying `metadata.generation` did not change; on failure it refuses to start |
