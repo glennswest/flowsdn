@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Mutual authentication — #472 (P3), 2026-11-25
+
+Master (2026-11-25): A, not built (deprecated upstream, no SPIRE, refusal fails closed). Spec 16 in place (line count
+kept) + amendment, ADR-0013 #202 row; test `authentication_and_to_groups_are_refused` (shared with #530).
+- [x] Docs, test, changelog.
+- [ ] sc-build (fmt, `cargo xtask check`); close (docs + test: no stage).
+
 ### DSR by IPIP and Geneve — #447 (P3), 2026-11-25
 
 Master (2026-11-25): option 1, BPF-only on the uplinks, native routing, the reference's wire format (spec 02 §2.5).

@@ -189,6 +189,41 @@ fn unsupported_rules_are_skipped_and_reported() {
     }
 }
 
+/// #472 and #530: rules with `authentication` (mutual authentication) or a
+/// `toGroups`/`fromGroups` peer (cloud security groups) are not built and stay
+/// refused: skipped and reported, so with default deny on they allow nothing
+/// (fail closed), and the rules beside them still apply.
+#[test]
+fn authentication_and_to_groups_are_refused() {
+    let node = labels(&[]);
+    let objects = [policy(
+        "mesh",
+        json!({"nodeSelector":{},
+        "ingress":[
+            {"fromEntities":["world"],"authentication":{"mode":"required"}},
+            {"fromEntities":["world"],"authentication":{"mode":"test-always-fail"}},
+            {"fromEntities":["cluster"],"toPorts":[{"ports":[{"port":"22","protocol":"TCP"}]}]}
+        ],
+        "egress":[
+            {"toGroups":[{"aws":{"securityGroupsIds":["sg-1"]}}]}
+        ]}),
+    )];
+    let got = select(&objects, &node, false);
+    assert!(got.enforce_ingress && got.enforce_egress, "default deny stays on");
+    assert_eq!(got.rules.len(), 1, "only the plain rule: {:?}", got.rules);
+    assert!(got.egress_rules.is_empty(), "nothing allowed by toGroups");
+    for needle in [
+        "mesh: authentication is not enforced; the rule is skipped",
+        "mesh: toGroups is not enforced; the rule is skipped",
+    ] {
+        assert!(
+            got.problems.iter().any(|p| p == needle),
+            "{needle}: {:?}",
+            got.problems
+        );
+    }
+}
+
 #[test]
 fn scope_is_every_interface_holding_a_global_address() {
     use std::net::IpAddr;

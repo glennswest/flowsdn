@@ -41,8 +41,8 @@ In scope:
   `matchPattern`, the response-hold ordering contract, cache, zombies, TTL, GC,
   restore, concurrency limits, configuration.
 - The standalone DNS proxy (SDP) and its gRPC protocol.
-- Mutual authentication and ztunnel: **deferred**, with the datapath contract
-  documented so nothing has to be redesigned later.
+- Mutual authentication: **not built** (#472, §3.8); ztunnel: **deferred**,
+  with the datapath contract documented so nothing has to be redesigned later.
 
 Out of scope (owned by sibling specs; referenced, never duplicated):
 
@@ -1158,11 +1158,11 @@ The SDP's runtime directory is `/var/run/standalone-dns-proxy`. It MUST NOT
 require BPF map access: everything it needs (endpoint IP → id, IP → identity)
 arrives in `PolicyState`.
 
-### 3.8 Mutual authentication — deferred
+### 3.8 Mutual authentication — not built (#472)
 
-Mutual authentication (SPIFFE/SPIRE) is **deferred**. It is deprecated upstream at
-v1.20 and ztunnel is the successor for mTLS. flowsdn MUST NOT implement the
-handshake, the SPIRE delegated-identity client or the auth manager at this time.
+Mutual authentication (SPIFFE/SPIRE) is **not built** (master, 2026-11-25, #472). It is deprecated
+upstream at v1.20, ztunnel is the successor for mTLS, and nothing on the platform runs SPIRE. flowsdn
+does not implement the handshake, the SPIRE delegated-identity client or the auth manager.
 
 What flowsdn MUST do now, so the datapath does not have to be redesigned later:
 
@@ -1172,10 +1172,10 @@ What flowsdn MUST do now, so the datapath does not have to be redesigned later:
   agent skips it and reports `<policy>: authentication is not enforced; the
   rule is skipped` as a `policy` problem (`host_policy.rs`), so a skipped allow
   fails closed. Silently allowing would turn an authentication requirement
-  into a plain allow, a security regression. Mutual authentication is gap #472.
-- The agent has no `mesh-auth-*` settings (§6); they come with gap #472.
+  into a plain allow, a security regression. This refusal is permanent (#472).
+- The agent has no `mesh-auth-*` settings (§6), and will not (#472).
 
-The contract a future implementation must satisfy: the datapath's `auth_lookup`
+The reference's contract, kept should #472 ever be reopened: the datapath's `auth_lookup`
 consults `cilium_auth_map` with `(local_sec_label, remote_sec_label,
 remote_node_id, auth_type)`; a miss or an expired entry drops the packet with
 `DROP_POLICY_AUTH_REQUIRED` and raises a `SIGNAL_AUTH_REQUIRED` perf event
@@ -1325,7 +1325,7 @@ semaphore_acquire_time_ns (4), policy_check_time_ns (5)}`;
 `DNSResponseData{is_response (1), cnames (2), qtypes (3), answer_types (4)}`;
 `UpdateMappingResponse{response (1)}`.
 
-### 4.7 `cilium_auth_map` (reserved; absent until gap #472)
+### 4.7 `cilium_auth_map` (reserved; not built, #472)
 
 | | Layout |
 |---|---|
@@ -1334,7 +1334,7 @@ semaphore_acquire_time_ns (4), policy_check_time_ns (5)}`;
 | Value | `auth_info{ expiration u64 }` — 8 bytes, units of 512 ns since boot-time epoch |
 | Max entries | `bpf-auth-map-max` |
 | Pin | `<bpf_root>/tc/globals/cilium_auth_map` |
-| Owner | agent (deferred) |
+| Owner | none (not built, #472) |
 
 `auth_type` 1 = SPIRE mutual TLS. Spec 01 owns the map catalogue; this entry is
 reserved there so the numbering does not move when the feature lands.
@@ -1557,7 +1557,7 @@ Accepted and **ignored**: `tofqdns-pre-cache` (removed upstream at v1.21),
 
 ### 6.3 Features flowsdn does not have
 
-Absent from the agent's configuration (mutual authentication, gap #472):
+Absent from the agent's configuration (mutual authentication, not built, #472):
 `mesh-auth-enabled`, `mesh-auth-queue-size`, `mesh-auth-gc-interval`,
 `mesh-auth-signal-backoff-duration`, `mesh-auth-mutual-listener-port`,
 `mesh-auth-mutual-connect-timeout`, `mesh-auth-spire-admin-socket`,
@@ -1951,8 +1951,8 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
 
 10. **Resolved — #202.** Until mutual authentication is implemented, reject required and
    test-always-fail authentication modes at policy validation. Never convert an
-   authentication requirement into allow. This rejection does not remove mutual
-   authentication from the full feature scope.
+   authentication requirement into allow. Superseded in part by #472 (2026-11-25):
+   mutual authentication is out of scope, so the rejection is permanent.
 
 11. **Resolved #203:** [ADR-0015](../decisions/0015-proxy-and-ztunnel-contracts.md)
     selects Rust nftables transactions in the enrolled pod namespace, without
@@ -1972,3 +1972,13 @@ Resolved entries are normative decisions from [ADR-0013](../decisions/0013-integ
     mandatory. State-machine tests cover stale replies, NACK, reconnect,
     cancellation and timeout including timeout after readiness; actual endpoint
     and xDS integration remain required.
+
+## Amendment — mutual authentication is not built (#472, 2026-11-25)
+
+The master took mutual authentication out of scope: it is deprecated upstream in v1.20 (ztunnel succeeds it for
+mTLS), the platform runs no SPIRE server or agent, and per-workload identities exist in stormcert only as a design.
+A rule with `authentication` (`required` or `test-always-fail`) stays refused: the agent skips it and reports
+`<policy>: authentication is not enforced; the rule is skipped`, so the allow it would have granted is not granted
+(fail closed, #202); the skip is reported as a `policy` problem. `cilium_auth_map`, `auth_lookup`, the auth
+manager and the `mesh-auth-*` settings are not built. If workload mTLS is wanted later, it starts as a stormcert
+workload-identity design, not here. Guarded by `host_policy_tests::authentication_and_to_groups_are_refused`.
