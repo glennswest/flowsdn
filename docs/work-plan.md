@@ -4,6 +4,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### scripttest BGP adapters — #524 (P3), 2026-11-25
+
+Needs step A (#516) first, per the issue and spec 17 §3.9; #516 is open. Parked --after #516.
+- [ ] After #516: BGP test peer (§3.6.6), `bgp/*`, `gobgp/*` (§3.3.9), DIVERGENCES.toml for 2 areas.
+
 ### scripttest ClusterMesh adapters — #526 (P3), 2026-11-25
 
 Needs step A (#516: Fixture, table store, lifecycle, fake Kubernetes adapters) first, per the issue and spec 17 §3.9;
