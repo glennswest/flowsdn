@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#447)
+- **feat:** DSR by IPIP or Geneve encapsulation (master's decision on #447: BPF only, on the uplinks, native routing, the reference's wire format). The new `kubernetes.lb-dsr-dispatch: opt|ipip|geneve` (the reference's `bpf-lb-dsr-dispatch`, default `opt`) picks how a DSR packet carries its frontend. FlowsdnNodeConfig may set it too.
+  - `ipip`: the client's packet unchanged (TTL lowered) inside an outer IPv4 (protocol 4) or IPv6 (next header 41) header, from this node's address to the backend.
+  - `geneve`: the DNATed packet in Ethernet, in Geneve (VNI 2, the DSR option class `0x014b` type `0x81` with the frontend, critical flag), over UDP 6081 with checksum 0, to the FIB's next hop.
+  - The same packets as the option carry it: a TCP SYN, and UDP packets that fit the MTU with the added 20/40 or 62/94 bytes. Later packets are plain DNAT.
+  - The backend node's `nodeport_ingress` strips either encapsulation, whatever its own setting. It accepts the packet only when the frontend is a DSR frontend and the destination one of its backends. For IPIP it DNATs to the backend at the outer destination, with that backend's port. It records the reply entry as for the option. A failed check drops; Geneve without the DSR option, or an inner destination that is no DSR frontend, goes on untouched.
+  - No kernel tunnel device, and routing is unchanged.
+  - Implementation: socket-lb map `flowsdn_dsr_config`; loader `SocketLb::set_dsr_dispatch`/`dsr_dispatch`; `flowsdn_bpf_abi::lb::DsrDispatch`. IPv4 encapsulation runs in its own frame (`encap4`) beside `ingress4`, through the per-CPU slot `flowsdn_dsr_encap4`, so the two stay under the 512-byte BPF stack. The socket-lb object and lock are rebuilt.
+- **test:** `socket-lb-live` step `dsr_encap`, kernel-checked: for `ipip` and `geneve`, TCP and UDP, IPv4 and IPv6, the forward frame's layout and checksums (the Geneve header and DSR option decoded by `flowsdn_bpf_abi::tunnel`), decapsulation on the backend's node with a valid DNATed packet, the reply's source rewritten, a later TCP segment as plain DNAT, and forged encapsulations dropped. The settings tests cover the default, `geneve` and a refused value; the node-config tests cover `ipip`.
+- **docs:** runtime.md (Direct server return, settings, node-config keys), a spec 05 amendment and its §3.12 note, README, implementation-status.md, CLAUDE.md.
+
 ### 2026-11-25 (#552)
 - **fix:** `GET /v1/flows?since=` refuses an impossible date with 400 (finding 3c7298844c45). The parser allowed day 31 in every month, so `2026-02-30T00:00:00Z` was read as March 2. It now checks the day against the month's length, with Gregorian leap years.
 - **fix:** `GET /v1/flows` with `since` returns every kept flow at or after it, newest first by time (finding 8fb1b606e6dc). Events are kept in ring-buffer order, and CPUs can stamp them in a different order, so cutting the list at the first older event dropped newer ones behind it. All kept events are now filtered, sorted by time and then limited.
