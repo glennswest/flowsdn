@@ -59,6 +59,7 @@ Needs step A (#516) and FlowsdnEgressGatewayPolicy (#336) first; both open. Park
 
 Needs step A (#516) first, per the issue and spec 17 §3.9; #516 is open. Parked --after #516.
 - [ ] After #516: BGP test peer (§3.6.6), `bgp/*`, `gobgp/*` (§3.3.9), DIVERGENCES.toml for 2 areas.
+- [x] 2026-11-25: the scripts need the unbuilt BGP control plane and speaker. Filed #570 (reconcilers + Advertiser, after #334) and #571 (in-tree speaker). #524 is proposed --after #570, #571 and #334. The input kinds diverge under ADR-0017/0020 (FlowsdnBGP*, not CiliumBGP*).
 
 ### scripttest ClusterMesh adapters — #526 (P3), 2026-11-25
 

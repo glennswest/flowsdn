@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#524)
+- **planning:** The BGP scripttest areas peer a test peer with flowsdn's BGP control plane, which does not exist yet: `flowsdn-bgp-proto` has wire primitives and a session core only. Filed as gaps:
+  - #570: the agent's reconcilers and the `Advertiser` interface (spec 15 §3.3–3.15, §3.17), after #334's FlowsdnBGP* types;
+  - #571: the in-tree speaker (§3.16).
+
+  #524 is parked after #570, #571 and #334. Its scripts' Cilium kinds (CiliumBGP*, CiliumNode) will be recorded divergences under ADR-0017/0020 once they run.
+
 ### 2026-11-25 (#526)
 - **docs:** ADR-0023 (master's ruling on #526): ClusterMesh uses flowsdn names with no Cilium interop. This means `flowsdn/` kvstore keys, flowsdn kinds as inputs, and `service.flowsdn.io/*` and `clustermesh.flowsdn.io/global` annotations. Value encodings are kept, and spec 20 §2's interop contract is superseded (spec 20 amendment).
 - **planning:** The components the ClusterMesh scripttest areas need are filed as gaps: the apiserver sync (#567), the agent's remote-service import (#568, after #519's LB tables) and the MCS-API CoreDNS configuration (#569). #526 is parked after them and #519.
