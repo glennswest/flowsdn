@@ -4,6 +4,7 @@ pub mod api;
 pub mod cni_timing;
 #[cfg(feature = "kubernetes")]
 pub mod endpoint_crd;
+pub mod egress_gateway;
 pub mod endpoints;
 pub mod events;
 pub mod host_policy;

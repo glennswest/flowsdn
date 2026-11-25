@@ -17,7 +17,8 @@
 //! Pod leaving the cluster, their replies, and an ICMP error about a flow;
 //! and the RFC 6052 NAT46/64 gateway (#454) for a Pod's IPv6 TCP and UDP.
 //! Local redirect policy (#565): redirected connects, a Service matcher and
-//! skip-LB from a backend's network namespace.
+//! skip-LB from a backend's network namespace. Egress gateway (#564): both
+//! nodes' halves on the uplink programs.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
 use flowsdn_lb::socket::{self, Address, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
@@ -616,6 +617,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     snat(lb, services)?;
     masquerade(lb)?;
     masquerade6(lb)?;
+    egress_gateway(lb)?;
     maglev(lb, services)?;
     dsr(lb, services)?;
     dsr_encap(lb)?;
@@ -1191,6 +1193,103 @@ fn masquerade(lb: &mut SocketLb) -> Result<()> {
     }
     println!(
         "PASS BPF masquerade: Pod TCP, UDP and echo to 198.51.100.9 leave from 192.0.2.20 and a NAT port, replies and an ICMP error come back to the Pod, checksums valid; cluster and node traffic untouched; off when cleared"
+    );
+    Ok(())
+}
+
+/// Egress gateway (#564, spec 14 §3.4, native routing), on the uplink's
+/// egress program. A source node sends a selected Pod's packet unchanged to
+/// the gateway node (redirected, next hop the gateway); an excluded
+/// destination goes on as if no policy matched; no gateway drops. On the
+/// gateway node a Pod's packet (from another node) leaves from the egress
+/// address and a NAT port, and the reply comes back to that Pod. This node
+/// as gateway without an egress address drops.
+fn egress_gateway(lb: &mut SocketLb) -> Result<()> {
+    use flowsdn_bpf_abi::{
+        MapBytes,
+        egress::{EgressGw4Value, GATEWAY_EXCLUDED, GATEWAY_NONE},
+    };
+    let up0 = ifindex("up0")?;
+    let (server, egress) = ([203, 0, 113, 5], [198, 51, 100, 77]);
+    let entry = |src: [u8; 4], dst: [u8; 4], len: u32, egress_ip: [u8; 4], gateway_ip: [u8; 4]| {
+        let [a, b, c, d] = src;
+        let [e, f, g, h] = dst;
+        (
+            (32 + len, [a, b, c, d, e, f, g, h]),
+            EgressGw4Value {
+                egress_ip,
+                gateway_ip,
+                ..EgressGw4Value::default()
+            }
+            .to_bytes(),
+        )
+    };
+    let desired: std::collections::BTreeMap<_, _> = [
+        // A local Pod; the gateway is another node on up0's subnet.
+        entry([10, 9, 0, 8], [203, 0, 113, 0], 24, [0; 4], [192, 0, 2, 30]),
+        entry([10, 9, 0, 8], [203, 0, 113, 128], 25, [0; 4], GATEWAY_EXCLUDED),
+        // No gateway resolved.
+        entry([10, 9, 0, 9], [203, 0, 113, 0], 24, [0; 4], GATEWAY_NONE),
+        // This node is the gateway for another node's Pod.
+        entry([10, 9, 1, 5], [203, 0, 113, 0], 24, egress, [192, 0, 2, 20]),
+        // This node is the gateway but has no egress address.
+        entry([10, 9, 0, 10], [203, 0, 113, 0], 24, [0; 4], [192, 0, 2, 20]),
+    ]
+    .into_iter()
+    .collect();
+    lb.set_egress_gateway4(&desired)?;
+    if lb.egress_gateway4()? != desired {
+        return Err("egress gateway map does not read back as written".into());
+    }
+    let sent = frame4(6, [10, 9, 0, 8], server, 40000, 443, false);
+    let out = run_on(lb, "nodeport_egress", &sent, up0, TC_ACT_REDIRECT)?;
+    if out.get(14..) != sent.get(14..) {
+        return Err("egress gateway: the redirected packet was changed".into());
+    }
+    let excluded = frame4(6, [10, 9, 0, 8], [203, 0, 113, 200], 40001, 443, false);
+    if run_on(lb, "nodeport_egress", &excluded, up0, TCX_NEXT)? != excluded {
+        return Err("egress gateway: an excluded destination was changed".into());
+    }
+    run_on(
+        lb,
+        "nodeport_egress",
+        &frame4(6, [10, 9, 0, 9], server, 40002, 443, false),
+        up0,
+        TC_ACT_SHOT,
+    )?;
+    run_on(
+        lb,
+        "nodeport_egress",
+        &frame4(6, [10, 9, 0, 10], server, 40003, 443, false),
+        up0,
+        TC_ACT_SHOT,
+    )?;
+    for (proto, sport) in [(6u8, 40004u16), (17, 40005)] {
+        let request = frame4(proto, [10, 9, 1, 5], server, sport, 443, false);
+        let (src, dst, s, d, ip_ok, l4_ok) =
+            parse4(&run_on(lb, "nodeport_egress", &request, up0, TCX_NEXT)?)?;
+        if (src, dst, d) != (egress, server, 443) || !(61000..=65535).contains(&s) || !ip_ok || !l4_ok {
+            return Err(format!(
+                "egress gateway SNAT proto {proto}: {src:?}:{s} -> {dst:?}:{d}, checksums ip {ip_ok} l4 {l4_ok}"
+            )
+            .into());
+        }
+        let reply = frame4(proto, server, egress, 443, s, false);
+        let (src, dst, s2, d2, ip_ok, l4_ok) =
+            parse4(&run_on(lb, "nodeport_ingress", &reply, up0, TCX_NEXT)?)?;
+        if (src, dst, s2, d2) != (server, [10, 9, 1, 5], 443, sport) || !ip_ok || !l4_ok {
+            return Err(format!(
+                "egress gateway reply proto {proto}: {src:?}:{s2} -> {dst:?}:{d2}, checksums ip {ip_ok} l4 {l4_ok}"
+            )
+            .into());
+        }
+    }
+    lb.set_egress_gateway4(&std::collections::BTreeMap::new())?;
+    if run_on(lb, "nodeport_egress", &sent, up0, TCX_NEXT)? != sent {
+        return Err("egress gateway cleared, yet a packet was redirected".into());
+    }
+    println!(
+        "PASS egress gateway: a selected Pod's packet is redirected unchanged to the gateway, an excluded destination passes, no gateway drops; on the gateway TCP and UDP leave from 198.51.100.77 and a NAT port and the replies come back to the other node's Pod, checksums valid; a gateway without an egress address drops; cleared map: untouched"
     );
     Ok(())
 }

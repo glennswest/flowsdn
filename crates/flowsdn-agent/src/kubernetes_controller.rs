@@ -148,6 +148,7 @@ impl Controller {
             lb_ipam: self.settings.lb_ipam_on(),
             l2_announcements: self.settings.l2_on(),
             local_redirect: self.settings.local_redirect_on(),
+            egress_gateway: self.settings.egress_gateway,
             derive: self.derive,
             node_config: self.settings.node_config.clone(),
             ..View::default()
@@ -217,6 +218,7 @@ impl Controller {
                             .then(|| self.settings.non_masquerade.clone()),
                         gateway64: self.settings.gateway64,
                         nat46x64: self.settings.nat46x64,
+                        egress_gateway: self.settings.egress_gateway,
                     };
                     std::thread::Builder::new()
                         .name("flowsdn-services".into())
@@ -302,6 +304,7 @@ impl Controller {
                 } = self;
                 let (lb_ipam_on, l2_on) = (settings.lb_ipam_on(), settings.l2_on());
                 let redirect_on = settings.local_redirect_on();
+                let egress_on = settings.egress_gateway;
                 // flowsdn.io watchers start once their CRDs exist (#337).
                 let required: BTreeSet<String> = settings
                     .required_crds()
@@ -378,6 +381,7 @@ impl Controller {
                     || settings.network_policy
                     || settings.flowsdn_policy
                     || host_firewall
+                    || settings.egress_gateway
                 {
                     let ns_view = Arc::clone(&watch_view);
                     parts.push(
@@ -558,6 +562,24 @@ impl Controller {
                                 let mut view = lock(&l2_view);
                                 view.l2_policies = rows;
                                 view.l2_policies_synced = true;
+                            },
+                        ),
+                    ));
+                }
+                if egress_on {
+                    let egress_view = Arc::clone(&watch_view);
+                    parts.push(gated(
+                        gate.clone(),
+                        watch_forever(
+                            &client,
+                            Scope::EgressPolicies,
+                            "egress-gateway-policies",
+                            &watch_view,
+                            move |state| {
+                                let rows = object_rows(state);
+                                let mut view = lock(&egress_view);
+                                view.egress_policies = rows;
+                                view.egress_policies_synced = true;
                             },
                         ),
                     ));
@@ -996,9 +1018,10 @@ fn object_rows(state: &WatchState) -> Vec<Value> {
         .snapshot()
         .all()
         .filter_map(|(row, _)| match &*row {
-            Resource::LbIpPool(p) | Resource::L2Policy(p) | Resource::RedirectPolicy(p) => {
-                Some(p.object.clone())
-            }
+            Resource::LbIpPool(p)
+            | Resource::L2Policy(p)
+            | Resource::RedirectPolicy(p)
+            | Resource::EgressPolicy(p) => Some(p.object.clone()),
             _ => None,
         })
         .collect()
@@ -1311,7 +1334,110 @@ struct UplinkSettings {
     gateway64: Option<[u8; 12]>,
     /// NAT46/64 to local backends (#450): `nodeport_endpoint` on endpoints.
     nat46x64: bool,
+    /// Egress gateway (#564): keep `flowsdn_egress_gw_policy_v4` planned.
+    egress_gateway: bool,
 }
+/// How often the egress gateway map is planned again (spec 14 §6.4's
+/// `egress-gateway-reconciliation-trigger-interval`).
+const EGRESS_INTERVAL: Duration = Duration::from_secs(1);
+
+/// This node's interfaces with their IPv4 addresses, from sysfs and netlink.
+fn egress_interfaces() -> Vec<crate::egress_gateway::Interface> {
+    let Ok(connector) = Connector::open() else {
+        return Vec::new();
+    };
+    let Ok(entries) = std::fs::read_dir("/sys/class/net") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some(index) = std::fs::read_to_string(entry.path().join("ifindex"))
+            .ok()
+            .and_then(|i| i.trim().parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let addresses = connector
+            .addresses(index)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|ip| match ip {
+                IpAddr::V4(v4) => Some(v4),
+                IpAddr::V6(_) => None,
+            })
+            .collect();
+        out.push(crate::egress_gateway::Interface {
+            name,
+            index,
+            addresses,
+        });
+    }
+    out
+}
+
+/// Plan the egress gateway map from the view and write it when it changed
+/// (#564). Interfaces this node is the gateway on get loose `rp_filter`.
+fn program_egress(
+    lb: &mut SocketLb,
+    view: &Shared,
+    written: &mut Option<crate::egress_gateway::Entries>,
+) {
+    let interfaces = egress_interfaces();
+    let (entries, report) = {
+        let view = lock(view);
+        if !(view.egress_policies_synced && view.pods_synced && view.nodes_synced) {
+            return;
+        }
+        let primary = view
+            .uplinks
+            .uplinks
+            .iter()
+            .find(|u| u.primary)
+            .map(|u| u.name.clone());
+        let local = crate::egress_gateway::Local {
+            node: &view.local_node,
+            interfaces: &interfaces,
+            primary: primary.as_deref(),
+        };
+        crate::egress_gateway::plan(
+            &view.egress_policies,
+            &view.pods,
+            &view.namespaces,
+            &view.nodes,
+            &local,
+        )
+    };
+    for (_, egress) in &report.local {
+        if let Ok((_, index)) = egress
+            && let Some(interface) = interfaces.iter().find(|i| i.index == *index && *index != 0)
+        {
+            let path = format!("/proc/sys/net/ipv4/conf/{}/rp_filter", interface.name);
+            if std::fs::read_to_string(&path).map(|v| v.trim() != "2").unwrap_or(false) {
+                let _ = std::fs::write(&path, "2");
+            }
+        }
+    }
+    let result = if written.as_ref() == Some(&entries) {
+        Ok(())
+    } else {
+        lb.set_egress_gateway4(&entries).map_err(|e| e.to_string())
+    };
+    let mut view = lock(view);
+    view.egress_status = report.json(true, entries.len());
+    match result {
+        Ok(()) => {
+            *written = Some(entries);
+            view.errors.remove("egress-gateway");
+        }
+        Err(error) => {
+            crate::log::logln!("egress gateway: {error}");
+            *written = None;
+            view.errors.insert("egress-gateway".into(), error);
+        }
+    }
+}
+
 fn service_loop(
     receiver: &mpsc::Receiver<Vec<socket::Service>>,
     view: &Shared,
@@ -1324,7 +1450,9 @@ fn service_loop(
         masquerade,
         gateway64,
         nat46x64,
+        egress_gateway,
     } = settings;
+    let egress_gateway = *egress_gateway;
     let (node_port, terminate_tcp, gateway64, nat46x64) =
         (*node_port, *terminate_tcp, *gateway64, *nat46x64);
     let masquerade = masquerade.as_deref();
@@ -1332,11 +1460,20 @@ fn service_loop(
     // The terminable backends last programmed; None until the first success.
     let mut programmed: Option<BTreeSet<flowsdn_connector::sock_diag::Backend>> = None;
     let mut batch = services::TerminationBatch::default();
+    // Egress gateway (#564): what was last written, and when the Services
+    // were last programmed (they keep their 30 s cadence while egress
+    // gateway wakes this thread every second).
+    let mut egress_written: Option<crate::egress_gateway::Entries> = None;
+    let mut serviced = Instant::now();
+    let mut fresh = false;
     loop {
-        let timeout = batch
+        let mut timeout = batch
             .wait(Instant::now())
             .unwrap_or(RECONCILE_INTERVAL)
             .min(RECONCILE_INTERVAL);
+        if egress_gateway {
+            timeout = timeout.min(EGRESS_INTERVAL);
+        }
         match receiver.recv_timeout(timeout) {
             Ok(next) => {
                 let mut next = next;
@@ -1344,10 +1481,20 @@ fn service_loop(
                     next = newer;
                 }
                 desired = Some(next);
+                fresh = true;
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => return,
         }
+        if egress_gateway {
+            program_egress(lb, view, &mut egress_written);
+        }
+        let due = fresh || serviced.elapsed() >= RECONCILE_INTERVAL || batch.wait(Instant::now()).is_some();
+        if !due {
+            continue;
+        }
+        fresh = false;
+        serviced = Instant::now();
         if let Some(services) = &desired {
             let result = program(lb, services);
             if result.is_ok() {

@@ -143,6 +143,11 @@ pub struct Settings {
     /// watch FlowsdnLocalRedirectPolicies and redirect their frontends to
     /// this node's Pods in the socket LB ([`crate::local_redirect`]).
     pub local_redirect: bool,
+    /// `kubernetes.egress-gateway` (#564; the reference's
+    /// `enable-egress-gateway`, default off, needs `bpf-masquerade`): watch
+    /// FlowsdnEgressGatewayPolicies and keep `flowsdn_egress_gw_policy_v4`
+    /// ([`crate::egress_gateway`]).
+    pub egress_gateway: bool,
     /// `kubernetes.endpoint-crd` (#332), default on: keep a FlowsdnEndpoint
     /// for each local Pod endpoint ([`crate::endpoint_crd`]).
     pub endpoint_crd: bool,
@@ -199,6 +204,9 @@ impl Settings {
         }
         if self.local_redirect_on() {
             out.insert("flowsdnlocalredirectpolicies.flowsdn.io");
+        }
+        if self.egress_gateway {
+            out.insert("flowsdnegressgatewaypolicies.flowsdn.io");
         }
         if self.flowsdn_policy {
             out.insert("flowsdnnetworkpolicies.flowsdn.io");
@@ -290,6 +298,16 @@ impl Settings {
             other => flowsdn_bpf_abi::lb::DsrDispatch::parse(other)
                 .ok_or("kubernetes.lb-dsr-dispatch must be opt, ipip or geneve")?,
         };
+        // Egress gateway (#564) SNATs on the uplink programs' masquerade
+        // path: without them it would do nothing, so it is refused (spec 14
+        // §3.4.7: never silently disabled).
+        if flag("egress-gateway", false)?
+            && !(flag("bpf-masquerade", false)? && flag("service-lb", true)?)
+        {
+            return Err(
+                "kubernetes.egress-gateway needs kubernetes.bpf-masquerade and kubernetes.service-lb".into(),
+            );
+        }
         let host_firewall = match text("host-firewall")?.as_str() {
             "" | "off" => HostFirewall::Off,
             "audit" => HostFirewall::Audit,
@@ -345,6 +363,7 @@ impl Settings {
             lb_ipam: flag("lb-ipam", true)?,
             l2_announcements: flag("l2-announcements", true)?,
             local_redirect: flag("local-redirect-policy", false)?,
+            egress_gateway: flag("egress-gateway", false)?,
             endpoint_crd: flag("endpoint-crd", true)?,
             node_crd: flag("node-crd", true)?,
             terminate_tcp: flag("lb-sock-terminate-all-protos", false)?,
@@ -991,6 +1010,12 @@ pub struct View {
     pub redirect_policies: Vec<Value>,
     pub redirect_policies_synced: bool,
     pub redirect_report: crate::local_redirect::Report,
+    /// Egress gateway (#564): on, the FlowsdnEgressGatewayPolicy objects,
+    /// and what the services thread last planned (`GET /v1/egress-gateway`).
+    pub egress_gateway: bool,
+    pub egress_policies: Vec<Value>,
+    pub egress_policies_synced: bool,
+    pub egress_status: Value,
     /// The Services this node may announce, for the election thread (#549);
     /// `None` until the announcer has planned with complete lists.
     pub l2_eligible: Option<BTreeSet<crate::l2_announce::ServiceKey>>,
@@ -1248,6 +1273,18 @@ impl View {
             status
         }
     }
+    /// `GET /v1/egress-gateway`.
+    pub fn egress_json(&self) -> Value {
+        if self.egress_status.is_null() {
+            json!({"enabled": self.egress_gateway, "entries": 0, "policies": []})
+        } else {
+            let mut status = self.egress_status.clone();
+            if let Some(object) = status.as_object_mut() {
+                object.insert("enabled".into(), json!(self.egress_gateway));
+            }
+            status
+        }
+    }
     /// `GET /v1/lrp`.
     pub fn lrp_json(&self) -> Value {
         self.redirect_report.json(self.local_redirect)
@@ -1301,7 +1338,7 @@ impl View {
             "auto-direct-node-routes":self.direct_routes,"service-lb":self.service_lb,
             "identity-allocation":self.identity,"network-policy":self.network_policy,"flowsdn-policy":self.flowsdn_policy,
             "lb-ipam":self.lb_ipam,"l2-announcements":self.l2_announcements,
-            "local-redirect-policy":self.local_redirect,
+            "local-redirect-policy":self.local_redirect,"egress-gateway":self.egress_gateway,
             "flowsdn-endpoints":self.endpoint_crd_status,"flowsdn-node":self.node_crd_status,
             "node-config":self.node_config,
             "policy":self.policy_status,"uplinks":self.uplinks.summary(),

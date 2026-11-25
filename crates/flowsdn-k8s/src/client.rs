@@ -83,6 +83,7 @@ pub fn request_uri(scope: &Scope, query: &Query<'_>) -> Result<String, Error> {
         Scope::LbIpPools => LB_IP_POOLS_PATH,
         Scope::L2Policies => L2_POLICIES_PATH,
         Scope::RedirectPolicies => REDIRECT_POLICIES_PATH,
+        Scope::EgressPolicies => EGRESS_POLICIES_PATH,
     };
     let mut params = Vec::new();
     if let Some(selector) = scope.field_selector() {
@@ -142,6 +143,8 @@ pub const L2_POLICIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnl2announcem
 /// `flowsdn.io/v1alpha1` FlowsdnLocalRedirectPolicy (namespaced, #565); the kind has
 /// no status subresource, so `status.ok` is patched on the object.
 pub const REDIRECT_POLICIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnlocalredirectpolicies";
+/// `flowsdn.io/v1alpha1` FlowsdnEgressGatewayPolicy (cluster-scoped, #564).
+pub const EGRESS_POLICIES_PATH: &str = "/apis/flowsdn.io/v1alpha1/flowsdnegressgatewaypolicies";
 
 pub struct JsonClient {
     client: Client,

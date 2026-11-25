@@ -42,7 +42,7 @@ pub const PROGRAMS: [&str; 8] = [
 /// names and §4.3 layouts; flowsdn sizes the reverse and affinity maps at
 /// 64Ki. The affinity maps are the programs' own; the agent writes the
 /// match map.
-const MAPS: [(&str, MapType, u32, u32, u32, u32); 24] = [
+const MAPS: [(&str, MapType, u32, u32, u32, u32); 25] = [
     ("flowsdn_lb4_services", MapType::Hash, 12, 12, 65536, 1),
     ("flowsdn_lb4_backends", MapType::Hash, 4, 12, 65536, 1),
     ("flowsdn_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
@@ -63,6 +63,7 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 24] = [
     ("flowsdn_dsr_config", MapType::Hash, 4, 4, 1, 1),
     ("flowsdn_skip_lb4", MapType::Hash, 16, 1, 1024, 1),
     ("flowsdn_skip_lb6", MapType::Hash, 32, 1, 1024, 1),
+    ("flowsdn_egress_gw_policy_v4", MapType::LpmTrie, 12, 28, 16384, 1),
     ("flowsdn_gw64_sources", MapType::LpmTrie, 20, 1, 256, 1),
     (
         "flowsdn_nodeport4_xlate",
@@ -101,6 +102,9 @@ pub struct SocketLb {
     /// Local redirect skip-LB (#565): (netns cookie, frontend, port).
     skip4: HashMap<MapData, [u8; 16], u8>,
     skip6: HashMap<MapData, [u8; 32], u8>,
+    /// Egress gateway policies (#564): (source, destination prefix) ->
+    /// `EgressGw4Value` bytes.
+    egress_gw4: LpmTrie<MapData, [u8; 8], [u8; 28]>,
     pin_root: Option<PathBuf>,
     /// Owned links; unpinned ones detach when this owner drops.
     links: Vec<FdLink>,
@@ -270,6 +274,15 @@ impl SocketLb {
         let dsr_config = take(&mut bpf, "flowsdn_dsr_config")?;
         let skip4 = take(&mut bpf, "flowsdn_skip_lb4")?;
         let skip6 = take(&mut bpf, "flowsdn_skip_lb6")?;
+        let egress_gw4 = {
+            let map = bpf
+                .take_map("flowsdn_egress_gw_policy_v4")
+                .ok_or("socket-lb object has no map flowsdn_egress_gw_policy_v4")?;
+            match map {
+                Map::LpmTrie(_) => LpmTrie::try_from(map)?,
+                _ => return Err("socket-lb map flowsdn_egress_gw_policy_v4 is not an LPM trie".into()),
+            }
+        };
         let gw64_sources = {
             let map = bpf
                 .take_map("flowsdn_gw64_sources")
@@ -304,6 +317,7 @@ impl SocketLb {
             dsr_config,
             skip4,
             skip6,
+            egress_gw4,
             pin_root: pin_root.map(Path::to_owned),
             links: Vec::new(),
             uplinks: std::collections::BTreeMap::new(),
@@ -544,6 +558,36 @@ impl SocketLb {
     /// backend's side accepts every mode whatever this says.
     pub fn set_dsr_dispatch(&mut self, mode: DsrDispatch) -> KernelResult<()> {
         self.dsr_config.insert(0, [mode.byte(), 0, 0, 0], 0)?;
+        Ok(())
+    }
+    /// The egress gateway policy map's entries: ((prefix length, source and
+    /// destination), value bytes), as `flowsdn_egress_gw_policy_v4` holds them.
+    pub fn egress_gateway4(&self) -> KernelResult<std::collections::BTreeMap<(u32, [u8; 8]), [u8; 28]>> {
+        let mut out = std::collections::BTreeMap::new();
+        for item in self.egress_gw4.iter() {
+            let (key, value) = item?;
+            out.insert((key.prefix_len(), key.data()), value);
+        }
+        Ok(out)
+    }
+    /// Make `flowsdn_egress_gw_policy_v4` hold exactly `desired` (#564):
+    /// changed and new entries first, then stale ones removed. A failed read
+    /// stops before anything is removed (spec 14 §3.4.6).
+    pub fn set_egress_gateway4(
+        &mut self,
+        desired: &std::collections::BTreeMap<(u32, [u8; 8]), [u8; 28]>,
+    ) -> KernelResult<()> {
+        let current = self.egress_gateway4()?;
+        for ((prefix, data), value) in desired {
+            if current.get(&(*prefix, *data)) != Some(value) {
+                self.egress_gw4.insert(&Key::new(*prefix, *data), value, 0)?;
+            }
+        }
+        for (prefix, data) in current.keys() {
+            if !desired.contains_key(&(*prefix, *data)) {
+                absent(self.egress_gw4.remove(&Key::new(*prefix, *data)))?;
+            }
+        }
         Ok(())
     }
     /// What [`Self::set_dsr_dispatch`] last wrote ([`DsrDispatch::Opt`] when

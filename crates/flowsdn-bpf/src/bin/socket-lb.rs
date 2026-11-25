@@ -22,7 +22,10 @@
 
 use aya_ebpf::{
     EbpfContext,
-    bindings::{BPF_F_NO_PREALLOC, TC_ACT_OK, TC_ACT_SHOT, __sk_buff, bpf_fib_lookup, bpf_sock_addr},
+    bindings::{
+        BPF_F_NO_PREALLOC, TC_ACT_OK, TC_ACT_SHOT, __sk_buff, bpf_fib_lookup, bpf_redir_neigh,
+        bpf_sock_addr,
+    },
     helpers::{
         bpf_check_mtu, bpf_csum_diff, bpf_fib_lookup as fib_lookup, bpf_get_netns_cookie,
         bpf_get_prandom_u32, bpf_get_socket_cookie, bpf_ktime_get_ns, bpf_redirect,
@@ -43,6 +46,7 @@ use flowsdn_bpf_abi::{
         Ipv4RevnatEntry, Ipv4RevnatTuple, Ipv6RevnatEntry, Ipv6RevnatTuple, Lb4Backend, Lb4Key,
         DsrDispatch, Lb6Backend, Lb6Key, LbService, service_flags,
     },
+    egress::{EgressGw4Value, GATEWAY_EXCLUDED, GATEWAY_NONE},
     maglev::{self, ALGORITHM_MAGLEV, TABLE_LEN},
 };
 
@@ -1962,6 +1966,7 @@ fn masq_flow4(
     from: ([u8; 4], [u8; 2]),
     to: ([u8; 4], [u8; 2]),
     fin: bool,
+    egress: Option<[u8; 4]>,
 ) -> Option<([u8; 4], [u8; 2])> {
     let key = Nodeport4Key {
         a: from.0,
@@ -1981,13 +1986,19 @@ fn masq_flow4(
     if l4 == NO_L4 {
         return None;
     }
-    let (result, fib) = fib4(ctx, proto, [0; 4], to.0, BPF_FIB_LOOKUP_SRC);
-    // Only out of the uplink it leaves by, from that uplink's address.
-    if !forwarded(result) || fib.ifindex != uplink(ctx) {
-        return None;
-    }
-    // SAFETY: the active member after an IPv4 lookup.
-    let nat = unsafe { fib.__bindgen_anon_3.ipv4_src }.to_ne_bytes();
+    let nat = match egress {
+        // An egress gateway's flow (#564): from its egress address.
+        Some(address) => address,
+        None => {
+            let (result, fib) = fib4(ctx, proto, [0; 4], to.0, BPF_FIB_LOOKUP_SRC);
+            // Only out of the uplink it leaves by, from that uplink's address.
+            if !forwarded(result) || fib.ifindex != uplink(ctx) {
+                return None;
+            }
+            // SAFETY: the active member after an IPv4 lookup.
+            unsafe { fib.__bindgen_anon_3.ipv4_src }.to_ne_bytes()
+        }
+    };
     let reply = Nodeport4Value {
         address: to.0,
         port: to.1,
@@ -2146,7 +2157,7 @@ fn masquerade4(ctx: &TcContext) -> Option<()> {
         if kind != 8 || !masqueraded4(src, dst) {
             return None;
         }
-        let (nat, nat_id) = masq_flow4(ctx, l4, ICMP4, (src, id), (dst, [0; 2]), false)?;
+        let (nat, nat_id) = masq_flow4(ctx, l4, ICMP4, (src, id), (dst, [0; 2]), false, None)?;
         set_address4(ctx, 26, src, nat)?;
         return set_echo_id(ctx, l4, id, nat_id);
     };
@@ -2154,8 +2165,88 @@ fn masquerade4(ctx: &TcContext) -> Option<()> {
         return None;
     }
     let fin = closes(ctx, l4, proto);
-    let nat = masq_flow4(ctx, l4, proto, (src, sport), (dst, dport), fin)?;
+    let nat = masq_flow4(ctx, l4, proto, (src, sport), (dst, dport), fin, None)?;
     rewrite4(ctx, l4, proto, 26, l4, (src, sport), nat)
+}
+
+// ---------------------------------------------------------------------------
+// Egress gateway (#564, spec 14 §3.4, flowsdn's native-routing amendment). At
+// the uplink's egress, a selected Pod's TCP/UDP packet to a policy's
+// destination ([`EGRESS_GW4`], exact source, longest-prefix destination):
+// - on the gateway node (the entry carries the egress address) leaves from
+//   that address, a NAT port claimed as BPF masquerade's (#460), whose reply
+//   path reverse translates it to the Pod and hands it to the stack, which
+//   routes it to the Pod's node;
+// - on any other node is sent unchanged to the gateway node, its next hop
+//   (`bpf_redirect_neigh`), which forwards it out of its own uplink.
+// No gateway resolved: dropped (never out of this node's address). An
+// excluded destination: as if no policy matched.
+
+#[map(name = "flowsdn_egress_gw_policy_v4")]
+static EGRESS_GW4: LpmTrie<[u8; 8], EgressGw4Value> =
+    LpmTrie::with_max_entries(16384, BPF_F_NO_PREALLOC);
+/// `BPF_FIB_LKUP_RET_NOT_FWDED`: the address is this node's own.
+const FIB_LOCAL: i64 = 4;
+/// `bpf_redir_neigh.nh_family`.
+const AF_INET: u32 = 2;
+
+#[inline(always)]
+fn egress_policy4(src: [u8; 4], dst: [u8; 4]) -> Option<EgressGw4Value> {
+    let [a, b, c, d] = src;
+    let [e, f, g, h] = dst;
+    EGRESS_GW4
+        .get(Key::new(64, [a, b, c, d, e, f, g, h]))
+        .copied()
+}
+
+/// None: no egress gateway policy for this packet (the masquerade is next).
+#[inline(always)]
+fn egress_gateway4(ctx: &TcContext) -> Option<i32> {
+    let (l4, proto, src, dst, sport, dport) = tuple4(ctx)?;
+    let policy = egress_policy4(src, dst)?;
+    if policy.gateway_ip == GATEWAY_EXCLUDED {
+        return None;
+    }
+    if policy.gateway_ip == GATEWAY_NONE {
+        return Some(TC_ACT_SHOT);
+    }
+    if policy.egress_ip != [0; 4] {
+        let fin = closes(ctx, l4, proto);
+        let Some(nat) = masq_flow4(
+            ctx,
+            l4,
+            proto,
+            (src, sport),
+            (dst, dport),
+            fin,
+            Some(policy.egress_ip),
+        ) else {
+            return Some(TC_ACT_SHOT);
+        };
+        rewrite4(ctx, l4, proto, 26, l4, (src, sport), nat)?;
+        return Some(TC_ACT_OK);
+    }
+    let (result, fib) = fib4(ctx, proto, [0; 4], policy.gateway_ip, 0);
+    // The gateway is this node but it has no egress address: dropped, as
+    // with no gateway; and a gateway the FIB cannot reach.
+    if result == FIB_LOCAL || !forwarded(result) {
+        return Some(TC_ACT_SHOT);
+    }
+    // SAFETY: the generated C struct holds only integers and a union of
+    // integers; all-zero is valid and the used member is written below.
+    let mut next: bpf_redir_neigh = unsafe { core::mem::zeroed() };
+    next.nh_family = AF_INET;
+    next.__bindgen_anon_1.ipv4_nh = u32::from_ne_bytes(policy.gateway_ip);
+    // SAFETY: `next` is a live stack value of the helper's ABI type and its
+    // real size; the helper does not keep the pointer.
+    Some(unsafe {
+        bpf_redirect_neigh(
+            fib.ifindex,
+            core::ptr::from_mut(&mut next),
+            core::mem::size_of::<bpf_redir_neigh>() as i32,
+            0,
+        )
+    } as i32)
 }
 
 /// The reply of a masqueraded TCP/UDP flow: to the Pod, through the stack.
@@ -4457,6 +4548,11 @@ fn egress4(skb: *mut __sk_buff) -> i32 {
         None => NOT_NODEPORT,
     }
 }
+/// [`egress_gateway4`] on its own frame; [`NOT_NODEPORT`] when not ours.
+#[inline(never)]
+fn egress_gw_out4(skb: *mut __sk_buff) -> i32 {
+    egress_gateway4(&TcContext::new(skb)).unwrap_or(NOT_NODEPORT)
+}
 #[inline(never)]
 fn masq_out(skb: *mut __sk_buff) -> i32 {
     let _ = masquerade4(&TcContext::new(skb));
@@ -4980,7 +5076,10 @@ pub fn nodeport_egress(ctx: TcContext) -> i32 {
         },
         _ => match egress4(ctx.skb.skb) {
             NOT_NODEPORT => match icmp_out4(ctx.skb.skb) {
-                NOT_NODEPORT => masq_out(ctx.skb.skb),
+                NOT_NODEPORT => match egress_gw_out4(ctx.skb.skb) {
+                    NOT_NODEPORT => masq_out(ctx.skb.skb),
+                    verdict => verdict,
+                },
                 verdict => verdict,
             },
             verdict => verdict,

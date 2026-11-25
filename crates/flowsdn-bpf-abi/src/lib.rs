@@ -50,6 +50,7 @@ pub mod notify {
 
 pub mod affinity;
 pub mod ct;
+pub mod egress;
 pub mod endpoint;
 pub mod lb;
 pub mod maglev;

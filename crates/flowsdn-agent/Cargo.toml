@@ -34,6 +34,7 @@ flowsdn-bpf-abi = { path = "../flowsdn-bpf-abi", version = "=0.14.0" }
 flowsdn-ipam = { path = "../flowsdn-ipam", version = "=0.14.0" }
 flowsdn-lb = { path = "../flowsdn-lb", version = "=0.14.0" }
 flowsdn-policy = { path = "../flowsdn-policy", version = "=0.14.0" }
+flowsdn-encryption = { path = "../flowsdn-encryption", version = "=0.14.0" }
 flowsdn-connector = { path = "../flowsdn-connector", version = "=0.14.0" }
 regex.workspace = true
 

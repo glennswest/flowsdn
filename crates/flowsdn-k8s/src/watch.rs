@@ -207,6 +207,8 @@ pub enum Resource {
     L2Policy(NetworkPolicy),
     /// A `flowsdn.io/v1alpha1` FlowsdnLocalRedirectPolicy, kept whole (#565).
     RedirectPolicy(NetworkPolicy),
+    /// A `flowsdn.io/v1alpha1` FlowsdnEgressGatewayPolicy, kept whole (#564).
+    EgressPolicy(NetworkPolicy),
 }
 impl Resource {
     pub fn metadata(&self) -> &Metadata {
@@ -222,7 +224,8 @@ impl Resource {
             | Self::PodPolicy(p)
             | Self::LbIpPool(p)
             | Self::L2Policy(p)
-            | Self::RedirectPolicy(p) => &p.metadata,
+            | Self::RedirectPolicy(p)
+            | Self::EgressPolicy(p) => &p.metadata,
         }
     }
 }
@@ -261,6 +264,8 @@ pub enum Scope {
     L2Policies,
     /// Every `flowsdn.io/v1alpha1` FlowsdnLocalRedirectPolicy (#565).
     RedirectPolicies,
+    /// Every `flowsdn.io/v1alpha1` FlowsdnEgressGatewayPolicy (#564).
+    EgressPolicies,
 }
 impl Scope {
     pub fn field_selector(&self) -> Option<String> {
@@ -278,6 +283,7 @@ impl Scope {
                 | Self::ClusterwidePolicies
                 | Self::LbIpPools
                 | Self::L2Policies
+                | Self::EgressPolicies
         )
     }
     pub fn parse(&self, value: &Value) -> Result<Resource, Error> {
@@ -296,6 +302,7 @@ impl Scope {
                 Self::LbIpPools => "FlowsdnLoadBalancerIPPool",
                 Self::L2Policies => "FlowsdnL2AnnouncementPolicy",
                 Self::RedirectPolicies => "FlowsdnLocalRedirectPolicy",
+                Self::EgressPolicies => "FlowsdnEgressGatewayPolicy",
             };
             if text(kind)? != expected {
                 return Err(error("unexpected resource kind"));
@@ -412,6 +419,10 @@ impl Scope {
                 object: value.clone(),
             })),
             Self::RedirectPolicies => Ok(Resource::RedirectPolicy(NetworkPolicy {
+                metadata,
+                object: value.clone(),
+            })),
+            Self::EgressPolicies => Ok(Resource::EgressPolicy(NetworkPolicy {
                 metadata,
                 object: value.clone(),
             })),
