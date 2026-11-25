@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#519)
+- **planning:** Master's ruling on #519: the agent's LB gets spec 05 §4.1's tables (`services`, `frontends`, `backends`). They are reconciled into the socket-LB maps through flowsdn-reconcile, with the existing planner as the apply step. Filed as #573. #519 is parked after #573 and #565.
+
 ### 2026-11-25 (#522)
 - **planning:** The `operator-watchers` and `nodes-gc` scripttest areas test the operator's kvstore-mode duties (spec 12 §3.13), which do not exist, and flowsdn has no operator process yet (#446). Filed #572 (Service sync, EndpointSlice export sync, kvstore node GC; flowsdn names per ADR-0023), after #446. #522 is parked after #572 and #446. Its scripts' `cilium/` keys and CiliumNode inputs will be recorded divergences (ADR-0023, ADR-0017).
 
