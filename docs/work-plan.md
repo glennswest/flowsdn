@@ -7,7 +7,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 ### Egress gateway — #564 (P3), 2026-11-25
 
 - [x] ABI (`egress.rs`), socket-lb (redirect to the gateway, gateway SNAT on the masquerade path), loader map, agent planning (`egress_gateway.rs`) in the services thread every 1 s, watch, settings, `GET /v1/egress-gateway`, docs.
-- [ ] sc-build compile and tests; object + lock rebuild; strict build with kernel-check (`socket-lb-live` `egress_gateway`); stage.
+- [x] Object + lock rebuilt from 8db53fc (socket-lb sha256 e9154ca9…); kernel-check on 7.3.4-200.fc44: 24 pass, 0 fail, 2 skip, `socket-lb-live` egress gateway PASS.
+- [ ] Strict build at the commit carrying the object; stage.
 - IPv6 (`flowsdn_egress_gw_policy_v6`) not built; follow-up if wanted.
 
 ### ADR: Rust L7 proxy in the agent — #563 (P3), 2026-11-25
