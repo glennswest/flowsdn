@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Milestone 2 acceptance — #292 (P1), status 2026-11-25
+
+Datapath in source and kernel-checked (strict sc-build e983c71: 1044/0, kernel-check 24/0/2; stage d90ff71b54b7).
+Remaining is hardware: perf (cross-node) + medium on pvetest1+pvetest2 with a release carrying d90ff71b54b7 or later,
+and harvested scripts through real adapters. Status comment posted; `wait-hardware` (pvetest1 pair).
+- [ ] Hardware run result from the master; then close or file what it finds.
+
 ### Flows since: dates and order — #552 (P3), 2026-11-25
 
 Findings 3c7298844c45 (day vs month/leap year in `flows::parse_time`) and 8fb1b606e6dc (`Events::newest` filters
