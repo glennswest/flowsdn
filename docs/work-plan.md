@@ -11,7 +11,9 @@ lookup4/6 return `Lookup::Other(id, rev)` for NAT46X64 masters; forward6 resolve
 `::ffff:` peers; forward4 refuses Other. services.rs translates the scope-0 copy too. Kernel: TCP + connected UDP
 (unconnected UDP across families is refused by the kernel itself), EPERM for AF_INET.
 - [x] Code, kernel step, docs, changelog (branch socket-nat46-542).
-- [ ] Object + lock, strict sc-build + kernel-check, merge, stage, close.
+- [x] Branch build at 6abc803 (kernel-check 24/0/2, every socket NAT46/64 line). Merged; object + lock e6b8d85
+      (socket-lb sha256 5a9f6d50…). Strict sc-build at e6b8d85: fmt --check, `cargo xtask check` 1046/0, lock matches,
+      kernel-check 24/0/2. Not seen on a node. Stage requested; closed.
 
 ### Controller test hang — #555 (P2), 2026-11-25
 
