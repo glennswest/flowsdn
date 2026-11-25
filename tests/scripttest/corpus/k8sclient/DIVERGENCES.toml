@@ -1,0 +1,14 @@
+# flowsdn's expected divergences for this area (spec 17 §3.7, ADR-0005).
+# Not harvested; excluded from a re-harvest.
+
+[[divergence]]
+id = "k8sclient-go-clientset-trackers"
+script = "k8sclient/fake.txtar"
+adr = "ADR-0004"
+kind = "expected-fail"
+reason = """
+Asserts the reference's client-go internals: one object tracker per Go clientset (typed `k8s` and
+slim `*`, each told apart by which Go types it registers), Go type names (`*v1.Service`) in its
+`k8s-object-tracker` table, and which kinds lack a slim counterpart. flowsdn's fake client is one
+JSON store keyed by resource (spec 17 §3.6.1) with no Go clientsets to mirror.
+"""

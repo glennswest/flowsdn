@@ -546,6 +546,15 @@ impl State {
     pub(crate) fn write_table_output(&self, name: &str, bytes: &[u8]) -> Result<()> {
         self.context()?.write(name, bytes, false)
     }
+    /// A workspace file as UTF-8 text, for a fixture's command adapters
+    /// (spec 17 §3.5): the same confined lookup the generic commands use.
+    pub fn read_text(&self, name: &str) -> Result<String> {
+        text(self.context()?.read(name)?)
+    }
+    /// Write `contents` to a workspace file, replacing it (see [`Self::read_text`]).
+    pub fn write_text(&self, name: &str, contents: &str) -> Result<()> {
+        self.context()?.write(name, contents.as_bytes(), false)
+    }
     fn context(&self) -> Result<&Context> {
         self.files
             .as_ref()

@@ -9,6 +9,7 @@ mod engine;
 mod expansion;
 mod files;
 mod process;
+pub mod report;
 mod script;
 mod table;
 mod txtar;

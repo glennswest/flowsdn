@@ -1,0 +1,16 @@
+[package]
+name = "flowsdn-scripttest-fixtures"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+flowsdn-scripttest = { path = "../flowsdn-scripttest", version = "=0.14.0" }
+flowsdn-k8s = { path = "../flowsdn-k8s", version = "=0.14.0" }
+serde_json.workspace = true
+
+[lints]
+workspace = true
