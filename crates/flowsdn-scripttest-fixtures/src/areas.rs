@@ -9,8 +9,9 @@ use serde_json::json;
 use std::sync::{Arc, Mutex};
 
 /// The areas with a builder: the harvested scripts the runner executes.
-pub const AREAS: [&str; 10] = [
+pub const AREAS: [&str; 11] = [
     "dynamicconfig",
+    "egressgateway",
     "envoyconfig",
     "hive-health",
     "ipam-migration",
@@ -31,6 +32,7 @@ pub fn build(area: &str, flags: &[String]) -> Result<Engine, String> {
             kubernetes_only(FakeClient::default(), flags)
         }
         "ipam-migration" | "ipam-multipool" | "podippool" => ipam(flags),
+        "egressgateway" => egress(flags),
         "hive-health" => hive_health(),
         "k8sclient" => k8sclient(flags),
         "metrics" => metrics(flags),
@@ -183,5 +185,18 @@ fn ipam(flags: &[String]) -> Result<Engine, String> {
     fixture::register_hive(&mut engine, &shared)?;
     k8s::register(&mut engine, &k8s)?;
     crate::ipam::register(&mut engine, &k8s)?;
+    Ok(engine)
+}
+
+/// The egress gateway area (#523): the fake API, `hive/*`, `k8s/*`, `db/*`
+/// and `egress/policy-maps-dump` over flowsdn's planner.
+pub fn egress(flags: &[String]) -> Result<Engine, String> {
+    let fixture = Fixture::new(FakeClient::default(), flags, Box::new(|_| Ok(Vec::new())))?;
+    let shared = Arc::new(Mutex::new(fixture));
+    let k8s = Arc::clone(&lock(&shared).k8s);
+    let mut engine = Engine::new();
+    fixture::register_hive(&mut engine, &shared)?;
+    k8s::register(&mut engine, &k8s)?;
+    crate::egress::register(&mut engine, &k8s)?;
     Ok(engine)
 }

@@ -1,0 +1,15 @@
+# flowsdn's expected divergences for this area (spec 17 §3.7, ADR-0005).
+# Not harvested; excluded from a re-harvest.
+
+[[divergence]]
+id = "egressgateway-cilium-kinds"
+script = "egressgateway/*.txtar"
+adr = "ADR-0020"
+kind = "expected-fail"
+reason = """
+The scripts give the policy, the source endpoint and the node as `cilium.io/v2`
+CiliumEgressGatewayPolicy, CiliumEndpoint and CiliumNode, and seed the reference's `devices`,
+`node-addresses` and `sysctl` tables. flowsdn reads FlowsdnEgressGatewayPolicy and Pods (ADR-0017,
+ADR-0020), so its planner never sees this policy; the node-model tables are spec 10's (#576).
+`egress/policy-maps-dump` itself runs flowsdn's planner (tests/egress.rs shows it with flowsdn's kinds).
+"""

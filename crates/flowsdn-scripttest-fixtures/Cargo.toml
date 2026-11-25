@@ -13,6 +13,7 @@ flowsdn-k8s = { path = "../flowsdn-k8s", version = "=0.14.0" }
 flowsdn-health = { path = "../flowsdn-health", version = "=0.14.0" }
 flowsdn-agent = { path = "../flowsdn-agent", version = "=0.14.0" }
 flowsdn-identity = { path = "../flowsdn-identity", version = "=0.14.0" }
+flowsdn-bpf-abi = { path = "../flowsdn-bpf-abi", version = "=0.14.0" }
 flowsdn-table = { path = "../flowsdn-table", version = "=0.14.0" }
 regex.workspace = true
 serde_json.workspace = true

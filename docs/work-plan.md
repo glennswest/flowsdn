@@ -78,7 +78,8 @@ Needs step A (#516) first, per the issue and spec 17 §3.9; #516 is open. Parked
 ### scripttest egress gateway adapters — #523 (P3), 2026-11-25
 
 Needs step A (#516) and FlowsdnEgressGatewayPolicy (#336) first; both open. Parked --after both.
-- [ ] After #516 and #336: `egress/policy-maps-dump` (§3.3.14), the `egressgateway` DIVERGENCES.toml.
+- [x] After #516 and #336: `egress/policy-maps-dump` (§3.3.14), the `egressgateway` DIVERGENCES.toml.
+- [x] 2026-11-25: `egress/policy-maps-dump` over flowsdn's planner (tests/egress.rs); egressgateway recorded as expected-fail (Cilium kinds, ADR-0020; spec 10 tables, #576).
 
 ### scripttest BGP adapters — #524 (P3), 2026-11-25
 

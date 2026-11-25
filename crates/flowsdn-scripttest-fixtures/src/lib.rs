@@ -5,6 +5,7 @@
 //! they enter.
 pub mod areas;
 pub mod doc;
+pub mod egress;
 pub mod fixture;
 pub mod health;
 pub mod ipam;

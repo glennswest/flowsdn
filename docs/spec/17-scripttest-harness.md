@@ -1675,3 +1675,12 @@ asserts a StateDB reflector table (ADR-0004). The other `ipam/*` commands and
 `allocator/allocated-pools` are not reached and not built. The corpus gate
 gives each script 20 s.
 
+## Egress gateway area amendment — #523, 2026-11-25
+
+`egress/policy-maps-dump` runs flowsdn's egress gateway planner over the fake
+API's FlowsdnEgressGatewayPolicies, Pods, Nodes and Namespaces, as node
+`kind-worker`, and prints the reference's line format. The destination is
+printed as its address only, as the reference prints it. The harvested scripts
+use CiliumEgressGatewayPolicy, CiliumEndpoint and CiliumNode and seed spec 10's
+tables, so they are an expected divergence (ADR-0020).
+

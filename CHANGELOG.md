@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#523)
+- **feat:** scripttest `egress/policy-maps-dump`, which runs flowsdn's egress gateway planner (#564) over the fake API's FlowsdnEgressGatewayPolicies, Pods, Nodes and Namespaces and prints the reference's line format. `tests/egress.rs` checks it with flowsdn's kinds. The `egressgateway` area (2 scripts) runs in the corpus gate as an expected divergence: its inputs are CiliumEgressGatewayPolicy, CiliumEndpoint and CiliumNode (ADR-0020), and it seeds spec 10's tables (#576). Gate: 8 PASS, 29 XFAIL, 0 FAIL.
+
 ### 2026-11-25 (#564)
 - **feat:** Egress gateway, IPv4 (spec 14 §3.4, with a native-routing amendment), with `kubernetes.egress-gateway` (default off). It needs `bpf-masquerade` and `service-lb`; the agent refuses to start otherwise.
   - **Planning:** the agent watches FlowsdnEgressGatewayPolicy and selects the source Pods (namespace, Pod and flattened node selectors) and the gateway (first matching node by name; with `egressGateways`, FNV-1a of the Pod UID). It derives the egress address (interface, `egressIP`, or the primary uplink's IPv4) and plans `flowsdn_egress_gw_policy_v4` every second.

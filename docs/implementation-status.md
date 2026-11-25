@@ -213,8 +213,8 @@ pinning or subsystem libraries are absent are **not current status**.
   suite, `perf` and two-node acceptance (pvetest1 + pvetest2) have not run.
 - scripttest (#516, #518, #517): the harvested scripts of `hive-health`, `metrics`,
   `k8sclient`, `k8s-tables`, `dynamicconfig`, `policy`, `ipam-migration`,
-  `ipam-multipool`, `podippool` and `envoyconfig` run in the corpus gate
-  (`flowsdn-scripttest-fixtures` `tests/corpus.rs`): 8 pass, 27 fail as their
+  `ipam-multipool`, `podippool`, `envoyconfig` and `egressgateway` run in the corpus gate
+  (`flowsdn-scripttest-fixtures` `tests/corpus.rs`): 8 pass, 29 fail as their
   `DIVERGENCES.toml` records. The other areas still only parse (#517-#526).
 - Configuration keys/defaults, listeners and boundaries are in
   [the runtime guide](runtime.md); the served routes in [the API contract](agent-api.md).
