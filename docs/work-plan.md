@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Boot-time comparison against the cilium flavor — #586, 2026-11-25
+
+- [x] Stage comparison from stormcentral's install records and metric samples (12.86 → 14.03, each flavor's paired gate installs). flowsdn reaches node Ready, all pods and reboot node Ready sooner in every pair. 14.03: 29.2 / 42.5 / 16.0 s against cilium's 43.7 / 71.0 / 20.1 s. The network phase is 12–18 s against 25–39 s, and the first CNI ADD after a reboot is 0.5–0.8 s against 3.4–4.6 s.
+- [x] The one slower flowsdn run (12.97, same-time pair) lost its time before the network (initramfs, handover, console lag: shared host). Its network phase was 18.2 s against 39.1 s.
+- [x] The slowdown since 12.96 is in phases both flavors share (bootloader/kernel/initramfs, kubelet start → apiserver), not in the agent, BPF load or CNI. Caveat: since 13.00 the cilium flavor runs on a machine that lays 4 drives with parity.
+- [ ] Waiting on the owner (posted on #586): close #586 as not a flowsdn regression, or name the numbers it was read from. Optionally file the shared boot-phase slowdown on stormcos.
+
 ### DNS proxy, toFQDNs, DNS rules — #536 (P3), 2026-11-25
 
 - [x] Datapath: UDP redirect, proxy-egress mark read as the source identity; `flowsdn-l7::dns` (messages, patterns, cache, proxy); agent (rules, compiler, settings, policy thread hold, netlink routing); `dns-live`; docs.

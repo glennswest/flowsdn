@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#586)
+- **docs:** Boot-time comparison against the cilium flavor, from the gate's install records (work-plan.md). It finds no flowsdn regression: flowsdn is faster to node Ready, all pods and reboot in every paired install through 14.03. The slowdown since 12.96 is in boot phases both flavors share.
+
 ### 2026-11-25 (#536)
 - **feat:** The DNS proxy, `toFQDNs` and DNS rules (ADR-0024 step 2, spec 16 §3.6).
   - **Policy:** Pod egress rules of the flowsdn policy kinds take `toPorts[].rules.dns` (`matchName`, `matchPattern`, regexes as spec 16 §5.5 builds them) and `toFQDNs` peers. An allow entry with DNS rules carries the DNS proxy's port. `toFQDNs` selects the addresses answered for its names, each with a local identity in the ipcache. Without the proxy those allows are absent and reported. Other L7 rules and DNS rules on ingress stay refused.
