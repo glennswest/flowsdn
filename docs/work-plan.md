@@ -8,8 +8,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] local-delivery egress redirect (mark, sk_assign, proxy port in the flow entry), `flowsdn-l7` (listener, ports, route, record), `proxy-live`, docs.
 - [x] local-delivery object + lock rebuilt; kernel-check on 7.3.4-200.fc44: 25 pass, 0 fail, 2 skip, `proxy-live` PASS (original destination, source, identity, data both ways, fail closed).
-- [ ] Strict build at the commit carrying the object; stage.
-- Not in this step: ingress-direction and Service (`l7_lb_proxy_port`) redirects; follow-up issue.
+- [x] Strict sc-build at f56ea87: fmt --check, `cargo xtask check`, test/build.sh, kernel-check 25 pass 0 fail 2 skip (`proxy-live` PASS). Staged.
+- Not in this step: ingress-direction and Service (`l7_lb_proxy_port`) redirects and the upstream leg: #582 (proposed); #578 waits on it.
 
 ### Egress gateway — #564 (P3), 2026-11-25
 

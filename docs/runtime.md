@@ -1083,8 +1083,8 @@ active on a node.
     older than 15 minutes is ignored);
   - the rule and route above;
   - the L7 record that becomes an L7 flow.
-- **Not yet:** the ingress-direction redirect (traffic into an endpoint) and
-  Service `l7_lb_proxy_port` redirects. `proxy-live` (medium suite) checks the
+- **Not yet:** the ingress-direction redirect (traffic into an endpoint),
+  Service `l7_lb_proxy_port` redirects and the upstream leg's marks (#582). `proxy-live` (medium suite) checks the
   egress path on a kernel.
 
 ### Egress gateway (#564)
