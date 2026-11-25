@@ -1651,6 +1651,6 @@ Its `tests/corpus.rs` is the corpus gate, run by `cargo test`. As built:
   `hive-health`; and the `test_A`/`test_B`/`test_C_seconds` series for `metrics`.
 - `hive` with no argument lists the components in start order: flowsdn has no
   object graph to print (ADR-0004).
-- Results: 7 PASS and 6 XFAIL. The XFAILs are `k8sclient/fake`
+- Results: 8 PASS and 6 XFAIL. The XFAILs are `k8sclient/fake`
   (ADR-0004), `dynamicconfig/*` (ADR-0017, spec 00 #480) and `k8s-tables/*`
   (ADR-0004); the reasons are in each area's `DIVERGENCES.toml`.

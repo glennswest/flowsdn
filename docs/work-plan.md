@@ -6,7 +6,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### scripttest step A: table store, lifecycle, fake Kubernetes — #516 (P3), 2026-11-25
 
-Done on branch `scripttest-fixtures-516`, merged to main. The five areas run in the corpus gate: 7 PASS, 6 XFAIL (recorded), 0 FAIL. #517-#526 are unblocked.
+Done on branch `scripttest-fixtures-516`, merged to main. The five areas run in the corpus gate: 8 PASS, 6 XFAIL (recorded), 0 FAIL. #517-#526 are unblocked.
 - [x] Corpus gate with DIVERGENCES.toml (ADR-0005), `db/*`, Fixture + `hive/*`, fake Kubernetes client + `k8s/*`, health and metrics commands.
 - [x] hive-health, metrics, k8sclient pass (k8sclient/fake XFAIL); dynamicconfig and k8s-tables XFAIL with their ADRs.
 

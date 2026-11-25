@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### 2026-11-25 (#516)
-- **feat:** scripttest step A (spec 17 steps 1b + k8s). The harvested scripts of five areas now run against flowsdn (`cargo test -p flowsdn-scripttest-fixtures --test corpus`): 7 PASS, 6 XFAIL with a recorded divergence, 0 FAIL.
+- **feat:** scripttest step A (spec 17 steps 1b + k8s). The harvested scripts of five areas now run against flowsdn (`cargo test -p flowsdn-scripttest-fixtures --test corpus`): 8 PASS, 6 XFAIL with a recorded divergence, 0 FAIL.
   - **Corpus gate** (`flowsdn-scripttest::report`): an area's `DIVERGENCES.toml` (ADR-0005: `expected-fail`, `skip`, `partial` with lines; every entry names an ADR, ids unique) and PASS / FAIL / XFAIL / XPASS / SKIP. An expected failure that passes (XPASS) fails the gate.
   - **`db/*`** over `flowsdn-table` (§3.3.3, §4.2): `db/cmp` (character-offset or tab columns, a subset in any order, case-insensitive names, `--grep`; retries until equal or `--timeout`, default 5 s, waking on the table's new `revisions()` watch), `db/insert`, `db/delete`, `db/get` (`--delete`), `db/list`, `db/prefix`, `db/lowerbound`, `db/initialized`, and `db/show -f json|yaml`. A fixture supplies a table's export, import and key mapping with `Engine::register_table_with`. Rendered tables leave the last column unpadded, as the reference does and the corpus compares byte for byte (spec 00 amendment).
   - **New crate `flowsdn-scripttest-fixtures`** (§11.1):
