@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Egress, redirect and plugin kinds — #336 (P2), 2026-11-25
+
+Types for the three kinds + T-CRD-3/4/5/7 (generator: pattern/CEL-aware string candidates, oneOf branches). Agent
+features split: #564 egress gateway (spec 14 §3.4), #565 LRP + skip-LB (spec 05 §3.9), #566 datapath plugins
+(spec 01 defers; specify first). #523 re-pointed to #564.
+- [x] Types, tests, docs, changelog (branch kinds-336).
+- [ ] sc-build (`cargo xtask check`, the kinds tests); merge; close with the split.
+
 ### scripttest operator adapters — #522 (P3), 2026-11-25
 
 Needs step A (#516) first, per the issue and spec 17 §3.9; #516 is open. Parked --after #516.

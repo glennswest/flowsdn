@@ -1579,3 +1579,14 @@ Gateway API type ownership (#21) follows spec21§12.11: flowsdn-k8s owns
 hand-declared schema-backed types pinned to Gateway API1.6.1. The current
 Gateway validation library consumes JSON resources; this decision does not
 claim that the complete generated/schema corpus or typed client exists.
+
+## Egress, redirect and plugin kinds amendment — #336, 2026-11-25
+
+`flowsdn_k8s::kinds` also holds FlowsdnEgressGatewayPolicy (cluster), FlowsdnLocalRedirectPolicy (namespaced) and
+FlowsdnDatapathPlugin (cluster), as #332's kinds are: plain serde structs, enumerated fields as strings (an unknown
+value still deserializes, T-CRD-5), optional schema properties as `Option`, one shared `LabelSelector`. Their T-CRD-3/4/5/7
+run in `tests/kinds.rs`. FlowsdnDatapathPlugin's spec is required and `attachmentPolicy` an enum, so its `Default` is
+`Always`. The schema-driven generator now takes, for a string, the first of a fixed candidate list its schema admits
+(pattern, CEL `isIP`), and for a `oneOf` over required properties writes one branch's; the kinds of #332 get the same
+documents as before. The agent-side features are split: egress gateway #564 (spec 14 §3.4), local redirect policy and
+skip-LB #565 (spec 05 §3.9), datapath plugins #566 (deferred by spec 01 until specified).

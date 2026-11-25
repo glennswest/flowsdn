@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#336)
+- **feat:** Rust types for FlowsdnEgressGatewayPolicy, FlowsdnLocalRedirectPolicy and FlowsdnDatapathPlugin in `flowsdn_k8s::kinds` (with a shared `LabelSelector`), following #332's conventions. Enumerated fields are strings, optional schema properties are `Option`s, and FlowsdnDatapathPlugin's spec defaults to `attachmentPolicy: Always`. The agent-side features are split out: egress gateway (#564), local redirect policy and skip-LB (#565), and datapath plugins (#566, which spec 01 defers until the feature is specified).
+- **test:** T-CRD-3/4/5/7 for the three kinds in `tests/kinds.rs`. The schema-driven document generator now picks, for a string, the first of a fixed candidate list its schema admits (pattern, CEL `isIP`): a name, port, CIDR or address. For a `oneOf` over required properties, it writes one branch. The earlier kinds get the same documents as before.
+- **docs:** crds.md, and a spec 13 amendment.
+
 ### 2026-11-25 (#534)
 - **feat:** ICMP and ICMPv6 errors about NodePort/LB flows source-NATed to another node's backend are translated on the frontend's node, as #449 did for DSR and node-local flows. These are destination unreachable (including fragmentation needed / packet too big), time exceeded and parameter problem, quoting TCP or UDP.
   - **The backend's side:** an error about a forwarded packet (to the NAT address, quoting `nat:natport -> backend`) reaches the client quoting `client -> frontend`, from the frontend when the backend sent it.

@@ -36,8 +36,11 @@ What ships:
   these 22 CRDs. A test checks both roles against the CRD set.
 
 Rust types exist for FlowsdnEndpoint, FlowsdnEndpointSlice, FlowsdnIdentity,
-FlowsdnNode and FlowsdnNodeConfig (`flowsdn_k8s::kinds`, #332, checked against
-their schemas by `tests/kinds.rs`), and the agent writes FlowsdnEndpoint and
+FlowsdnNode and FlowsdnNodeConfig (`flowsdn_k8s::kinds`, #332), and for
+FlowsdnEgressGatewayPolicy, FlowsdnLocalRedirectPolicy and FlowsdnDatapathPlugin
+(#336), all checked against their schemas by `tests/kinds.rs`. Nothing reads the
+#336 kinds yet: egress gateway is #564, local redirect policy #565, datapath
+plugins #566 (to be specified first). The agent writes FlowsdnEndpoint and
 FlowsdnNode ([runtime](runtime.md#flowsdnendpoint-and-flowsdnnode-332)).
 The operator (`flowsdn-agent operator`, #337) registers the 22 CRDs from these
 files (spec 13 §3.2), and the agent waits for the ones its configuration uses
