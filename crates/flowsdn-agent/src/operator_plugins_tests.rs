@@ -10,7 +10,10 @@ fn plugin(name: &str, uid: &str) -> Value {
 #[test]
 fn each_plugin_gets_one_not_applied_event() {
     let now = "2026-11-26T15:00:00Z";
-    let plugins = vec![plugin("tracer", "0123456789abcdef"), plugin("other", "fedcba9876543210")];
+    let plugins = vec![
+        plugin("tracer", "0123456789abcdef"),
+        plugin("other", "fedcba9876543210"),
+    ];
     let events = plan(&plugins, &BTreeSet::new(), now);
     assert_eq!(events.len(), 2);
     let (uid, event) = &events[0];
@@ -18,7 +21,10 @@ fn each_plugin_gets_one_not_applied_event() {
     assert_eq!(event["metadata"]["name"], "tracer.01234567");
     assert_eq!(event["involvedObject"]["kind"], "FlowsdnDatapathPlugin");
     assert_eq!(event["involvedObject"]["uid"], "0123456789abcdef");
-    assert_eq!((event["type"].as_str(), event["reason"].as_str()), (Some("Warning"), Some(REASON)));
+    assert_eq!(
+        (event["type"].as_str(), event["reason"].as_str()),
+        (Some("Warning"), Some(REASON))
+    );
     assert!(event["message"].as_str().unwrap().contains("not applied"));
     // An object already reported is not reported again.
     let seen = BTreeSet::from(["0123456789abcdef".to_owned()]);
@@ -42,7 +48,10 @@ fn a_pass_posts_once_tolerates_409_and_forgets_deleted_objects() {
                 "GET" => Ok((200, json!({"items": items.clone()}))),
                 "POST" => {
                     assert_eq!(path, "/api/v1/namespaces/default/events");
-                    let name = body.unwrap()["involvedObject"]["name"].as_str().unwrap().to_owned();
+                    let name = body.unwrap()["involvedObject"]["name"]
+                        .as_str()
+                        .unwrap()
+                        .to_owned();
                     posted.push(name.clone());
                     // The second was posted by an earlier term already.
                     Ok((if name == "again" { 409 } else { 201 }, json!({})))
@@ -52,7 +61,11 @@ fn a_pass_posts_once_tolerates_409_and_forgets_deleted_objects() {
         };
         let names = report(&mut reported, "2026-11-26T15:00:00Z", &mut send).unwrap();
         assert_eq!(names, ["tracer", "again"]);
-        assert!(report(&mut reported, "2026-11-26T15:01:00Z", &mut send).unwrap().is_empty());
+        assert!(
+            report(&mut reported, "2026-11-26T15:01:00Z", &mut send)
+                .unwrap()
+                .is_empty()
+        );
     }
     assert_eq!(posted, ["tracer", "again"], "each posted once");
     // A deleted object is forgotten; a new one with the same name is reported.
@@ -63,13 +76,21 @@ fn a_pass_posts_once_tolerates_409_and_forgets_deleted_objects() {
             _ => Ok((201, json!({}))),
         }
     };
-    assert_eq!(report(&mut reported, "2026-11-26T15:02:00Z", &mut send).unwrap(), ["tracer"]);
+    assert_eq!(
+        report(&mut reported, "2026-11-26T15:02:00Z", &mut send).unwrap(),
+        ["tracer"]
+    );
     assert_eq!(reported, BTreeSet::from(["u3".to_owned()]));
     // No CRD yet: nothing, no error. Another failure is an error.
-    let mut absent = |_: http::Method, _: &str, _: Option<&Value>| -> Reply { Ok((404, json!({}))) };
+    let mut absent =
+        |_: http::Method, _: &str, _: Option<&Value>| -> Reply { Ok((404, json!({}))) };
     assert!(report(&mut reported, "x", &mut absent).unwrap().is_empty());
     let mut denied = |_: http::Method, _: &str, _: Option<&Value>| -> Reply {
         Ok((403, json!({"message": "forbidden"})))
     };
-    assert!(report(&mut reported, "x", &mut denied).unwrap_err().contains("403 forbidden"));
+    assert!(
+        report(&mut reported, "x", &mut denied)
+            .unwrap_err()
+            .contains("403 forbidden")
+    );
 }

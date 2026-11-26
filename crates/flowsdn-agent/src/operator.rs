@@ -474,7 +474,11 @@ impl Collectors {
         }
         if now >= self.next_plugins {
             let wall = crate::events::rfc3339(SystemTime::now());
-            let delay = match crate::operator_plugins::report(&mut self.plugins_reported, &wall, send) {
+            let delay = match crate::operator_plugins::report(
+                &mut self.plugins_reported,
+                &wall,
+                send,
+            ) {
                 Ok(names) => {
                     for name in names {
                         crate::log::logln!(
@@ -484,7 +488,9 @@ impl Collectors {
                     Duration::from_secs(60)
                 }
                 Err(error) => {
-                    crate::log::logln!("operator: FlowsdnDatapathPlugin report: {error}; retrying in 30s");
+                    crate::log::logln!(
+                        "operator: FlowsdnDatapathPlugin report: {error}; retrying in 30s"
+                    );
                     RETRY
                 }
             };
