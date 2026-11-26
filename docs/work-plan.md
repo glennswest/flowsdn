@@ -22,6 +22,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] #490 (policy findings, fixed 2026-11-20 at 6a8b207) re-shipped on the health proof, `--commit 936dedb`.
 - [x] #496 (host-policy finding, fixed 2026-11-21 at 50dcc66) re-shipped the same way.
 - [x] #497 (uplink monitor findings, fixed 2026-11-21 at fdee984) re-shipped the same way.
+- [x] #498 (direct-route findings, fixed 2026-11-21 at 000ffb2) re-shipped the same way.
 
 ### No stubs: proof on a node — #418 (reopened), 2026-11-26
 
