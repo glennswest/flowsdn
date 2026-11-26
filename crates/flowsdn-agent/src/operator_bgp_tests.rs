@@ -1,3 +1,4 @@
+#![allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
 use super::*;
 use serde_json::json;
 

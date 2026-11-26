@@ -1,3 +1,4 @@
+#![allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
 use super::*;
 use flowsdn_k8s::kinds::{FlowsdnBGPNodeConfig, Kind};
 
@@ -172,8 +173,10 @@ fn the_flusher_writes_on_change_at_the_tick_and_backs_off() {
     let start = Instant::now();
     let mut flusher = Flusher::new(start, 7);
     let one = FlowsdnBGPNodeConfigStatus::default();
-    let mut two = FlowsdnBGPNodeConfigStatus::default();
-    two.bgp_instances = Some(vec![]);
+    let two = FlowsdnBGPNodeConfigStatus {
+        bgp_instances: Some(vec![]),
+        ..FlowsdnBGPNodeConfigStatus::default()
+    };
     assert!(flusher.due(start, &one), "the first write is due at once");
     assert!(!flusher.record(start, &one, Outcome::Written));
     let next = flusher.next().duration_since(start);
