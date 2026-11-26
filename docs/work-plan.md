@@ -21,6 +21,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] Strict sc-build at 936dedb (xtask check + test/build.sh) passed; staged golden-flowsdn-896f02036e02
       (stormcos#1502). #484, #487 and #418 re-shipped with the same proof and `--commit 936dedb`; they close when a
       pvetest install of a release carrying it shows the line. Also fixed #593 (agent tokio dev-dep lacked test-util).
+- [x] 2026-11-26: 14.07-flowsdn (936dedb) on pvetest1 still failed: stormpump tags every /dev/kmsg record `kernel`
+      and its collector (what stormcentral stores) drops kernel lines below warning, so the info-level agent lines
+      never arrive. Filed stormpump#329 (forward records with a non-kernel facility, tagged by their prefix). Did not
+      raise the lines to warning. #484 and #487 parked after stormpump#329. The other issues shipped on this proof will
+      fail the same way until it lands; park each likewise when it comes back.
 - [x] #488 (socket-lb findings, fixed 2026-11-20 at ff03ffd) reopened on the same proof: re-shipped the same way
       (`--commit 936dedb`). The other issues reopened on that proof go back the same way when each is handed out.
 - [x] #489 (quarantine, fixed 2026-11-20) and #420 have their own `log:` proofs (startup lines). c10c88b sends both
