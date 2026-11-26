@@ -95,7 +95,7 @@ impl<O: NeighborOps> Target<DesiredNeighbor> for NeighborTarget<O> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
     use flowsdn_reconcile::{Options, Reconciler};
     use flowsdn_table::Table;

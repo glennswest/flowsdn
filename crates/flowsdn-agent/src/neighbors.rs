@@ -186,7 +186,8 @@ pub fn reconcile(connector: &Connector, inputs: &Inputs) -> Outcome {
         connector,
         devices: &inputs.devices,
     };
-    let mut reconciler = match Reconciler::new(&table, NeighborTarget::new(ops), Options::default()) {
+    let mut reconciler = match Reconciler::new(&table, NeighborTarget::new(ops), Options::default())
+    {
         Ok(reconciler) => reconciler,
         Err(error) => {
             outcome.errors.push(format!("neighbor reconciler: {error}"));

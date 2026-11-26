@@ -16,7 +16,10 @@ pub trait RuleOps: Send {
 }
 
 /// Make `table` hold exactly `rules`.
-pub async fn set_rules(table: &Table<DesiredRule>, rules: &BTreeSet<DesiredRule>) -> Result<(), TableError> {
+pub async fn set_rules(
+    table: &Table<DesiredRule>,
+    rules: &BTreeSet<DesiredRule>,
+) -> Result<(), TableError> {
     crate::set_all(table, rules.iter().cloned()).await
 }
 

@@ -262,7 +262,10 @@ With the `kubernetes` feature and section the agent:
   that left while the agent was down are deleted on the next reconcile. A
   stale route is deleted by destination (flowsdn's protocol-kernel route with
   a gateway or paths, whatever gateway it uses), never a route of another
-  protocol (#498). It
+  protocol (#498). The routes are the `direct-routes` owner of spec 10's
+  `desired-routes` table (`flowsdn-node`, #576), reconciled through
+  `flowsdn-reconcile`; the uplinks' table routes are its `uplinks` owner and
+  their rules `desired-rules`. It
   reconciles on every change of the desired set and every 30 s;
 - with `service-lb` (default on), lists and watches Services and
   EndpointSlices and load balances ClusterIPs at the socket (below);
@@ -402,7 +405,9 @@ the first packets while the kernel resolves it.
   the route's gateway, every gateway of a multipath route on that uplink, or
   the address itself on-link. No route on that uplink: no entry there
   (`unreachable` counts them).
-- **Reconcile**: every next hop gets `ip neigh replace … extern_learn
+- **Reconcile**: the addresses are spec 10's `forwardable-ips` and the next
+  hops `desired-neighbors` (`flowsdn-node`, #576), reconciled through
+  `flowsdn-reconcile`: every next hop gets `ip neigh replace … extern_learn
   managed`; the kernel resolves it and keeps it fresh. Entries with
   `extern_learn` on those uplinks that are not next hops are deleted;
   entries without it (an administrator's) are never touched. It runs at

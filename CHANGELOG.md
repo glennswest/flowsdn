@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (#576)
+- **feat:** Spec 10's node tables (`flowsdn-node`): realized `devices`/`routes`/`neighbors`/`node-addresses` rows with
+  §3.1.6's address derivation, and the desired `desired-routes` (owners, admin distance, selection), `desired-rules`,
+  `forwardable-ips` and `desired-neighbors`, each reconciled through `flowsdn-reconcile`.
+  - Direct node routes are the `direct-routes` owner; the persisted routes file is the owned set prune reads.
+  - The uplinks' table routes are the `uplinks` owner and their rules are `desired-rules`.
+  - L2 neighbors go through `forwardable-ips` → `desired-neighbors`; prune deletes stale learned entries.
+  - Behaviour on the node is unchanged; kernel-checked by `uplinks-live`, `neighbors-live` and the routes fixtures.
+
 ### 2026-11-26 (#580)
 - **feat:** The egress gateway covers IPv6 (spec 14 §3.4.5).
   - `flowsdn_egress_gw_policy_v6` holds a 36-byte key and a 40-byte value; the gateway is still named by its IPv4.

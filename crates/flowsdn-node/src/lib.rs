@@ -31,7 +31,6 @@ pub async fn set_all<T>(
 where
     T: flowsdn_table::Keyed + Clone + PartialEq + Send + Sync + 'static,
 {
-    use flowsdn_table::Keyed;
     let snapshot = table.snapshot();
     let wanted: std::collections::BTreeMap<Vec<u8>, T> =
         rows.into_iter().map(|r| (r.primary_key(), r)).collect();

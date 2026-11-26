@@ -2076,3 +2076,20 @@ entries on selected devices that are not desired), so a change and a resync diff
 runs at agent start in a throwaway network namespace and is fatal when the setting is on. The
 `flowsdn_neighbor_nexthop_lookup_total` counter is not exported; the `unreachable` count is in `/v1/healthz`
 `kubernetes.neighbors`. Kernel-checked by `neighbors-live`.
+
+## Amendment — node tables implemented (#576, 2026-11-26)
+
+§4.1's tables are `flowsdn-node` (on `flowsdn-table` and `flowsdn-reconcile`): the realized `devices`, `routes`,
+`neighbors` and `node-addresses` rows (with §3.1.6's address derivation, `flowsdn_node::addresses::derive`), and the
+desired `desired-routes`, `desired-rules`, `forwardable-ips` and `desired-neighbors`, each reconciled into the kernel by
+a target over a netlink trait (`RouteOps`, `RuleOps`, `NeighborOps`; fakes in the unit tests, `flowsdn-connector` in the
+agent). `desired-routes` rows are keyed `(table, prefix, priority, owner)`; the `RouteManager` is their only writer and
+marks, per `(table, prefix, priority)`, the row with the lowest admin distance (then owner name) `selected`; only a
+selected row reaches the kernel, and deleting one removes the kernel route only when no other row of its group is
+selected. Owners now: `direct-routes` (§3.2.3, the agent's route thread; admin distance 100; its persisted
+`direct-routes.json` is the owned set prune reads, so routes of nodes that left while the agent was down still go) and
+`uplinks` (#408's per-uplink tables; their rules are `desired-rules`). Prune runs once an owner's first complete input
+is written (the table's initializer); the direct routes refresh every 30 s as the repair loop did. L2 neighbors (#469)
+are `forwardable-ips` (owner `node`) → `desired-neighbors`; prune deletes learned entries on selected devices no row
+wants. The realized tables are not yet filled from netlink by a running agent and nothing renders them in `/v1` yet;
+`flowsdn-scripttest` node adapters are #520.
