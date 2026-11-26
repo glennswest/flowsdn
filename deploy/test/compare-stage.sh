@@ -35,5 +35,6 @@ diff <(sums "$w/stage") <(sums "$w/recipe") > "$w/sums.diff" && same_sums=yes ||
 echo "   stage: $(listing "$w/stage" | wc -l) paths; recipe: $(listing "$w/recipe" | wc -l) paths"
 echo "   paths, types, modes, links identical: $same_list"; [ "$same_list" = yes ] || head -n 40 "$w/listing.diff"
 echo "   contents identical: $same_sums"; [ "$same_sums" = yes ] || head -n 40 "$w/sums.diff"
-rm -rf "$w"
+# The stage's copy is owned by the namespace's subuids: removed from inside one.
+unshare --map-root-user --map-auto rm -rf "$w" 2>/dev/null || rm -rf "$w" 2>/dev/null || true
 [ "$same_list" = yes ] && [ "$same_sums" = yes ] && echo "PASS: the recipe's tree is the stage's, byte for byte"
