@@ -2229,8 +2229,9 @@ fn route_loop(
                 })
                 .collect()
         };
-        *held.lock().unwrap_or_else(std::sync::PoisonError::into_inner) =
-            direct_routes::held(&planned);
+        *held
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = direct_routes::held(&planned);
         let rows: Vec<flowsdn_node::rows::DesiredRoute> = planned
             .iter()
             .filter_map(|(_, p)| match p {

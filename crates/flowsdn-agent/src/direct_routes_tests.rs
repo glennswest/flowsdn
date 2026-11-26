@@ -130,7 +130,13 @@ async fn stale_routes_go_and_held_ones_stay() {
             Ok(())
         }
         fn owned(&mut self) -> Result<Vec<RouteId>, String> {
-            Ok(self.0.lock().unwrap().keys().map(|p| (MAIN, *p, 0)).collect())
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .keys()
+                .map(|p| (MAIN, *p, 0))
+                .collect())
         }
     }
     let route = |dst: &str, gw: &str| DesiredRoute {
@@ -157,8 +163,12 @@ async fn stale_routes_go_and_held_ones_stay() {
         inner: Fake(Arc::clone(&kernel)),
         held: Arc::clone(&held_set),
     };
-    let mut reconciler =
-        Reconciler::new(&table, RouteTarget::new(ops, Arc::clone(&table)), Options::default()).unwrap();
+    let mut reconciler = Reconciler::new(
+        &table,
+        RouteTarget::new(ops, Arc::clone(&table)),
+        Options::default(),
+    )
+    .unwrap();
     let round = |planned: Vec<(DesiredRoute, Planned)>| {
         *held_set.lock().unwrap() = held(&planned);
         planned
