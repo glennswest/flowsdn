@@ -38,13 +38,16 @@ What ships:
 Rust types exist for FlowsdnEndpoint, FlowsdnEndpointSlice, FlowsdnIdentity,
 FlowsdnNode and FlowsdnNodeConfig (`flowsdn_k8s::kinds`, #332), and for
 FlowsdnEgressGatewayPolicy, FlowsdnLocalRedirectPolicy and FlowsdnDatapathPlugin
-(#336), all checked against their schemas by `tests/kinds.rs`. With
+(#336), and for the five BGP kinds (#334), all checked against their schemas by `tests/kinds.rs`. With
 `kubernetes.local-redirect-policy` the agent reads FlowsdnLocalRedirectPolicy
 and writes its `status.ok` (#565,
 [runtime](runtime.md#local-redirect-policy-565)). With
 `kubernetes.egress-gateway` the agent reads FlowsdnEgressGatewayPolicy (#564,
 [runtime](runtime.md#egress-gateway-564)). Nothing reads FlowsdnDatapathPlugin yet (#566, to be specified
-first). The agent writes FlowsdnEndpoint and
+first). With `--enable-bgp-control-plane` the operator renders a FlowsdnBGPNodeConfig
+per node a FlowsdnBGPClusterConfig selects and writes the cluster and peer config
+conditions (#334, [runtime](runtime.md#crds-and-the-operator-337)); the agent's BGP
+control plane, which reads the node configs and writes their status, is #570/#571. The agent writes FlowsdnEndpoint and
 FlowsdnNode ([runtime](runtime.md#flowsdnendpoint-and-flowsdnnode-332)).
 The operator (`flowsdn-agent operator`, #337) registers the 22 CRDs from these
 files (spec 13 §3.2), and the agent waits for the ones its configuration uses
@@ -73,10 +76,10 @@ enforces it. Each of these is tracked per group in the issues linked from #325.
 | FlowsdnLoadBalancerIPPool | `fslbippool` | Cluster | yes | address pools for LoadBalancer Services | users; the agent holding the LB-IPAM Lease writes status (#475) |
 | FlowsdnL2AnnouncementPolicy | `fsl2announcement` | Cluster | yes | which nodes answer ARP/NDP for which Service IPs | users; the agent reads it (no status written) |
 | FlowsdnPodIPPool | `fspip` | Cluster | — | pod CIDR pools for multi-pool IPAM | users, operator (default pool) |
-| FlowsdnBGPClusterConfig | `fsbgpcluster` | Cluster | yes | BGP instances and peers for a set of nodes | users |
-| FlowsdnBGPPeerConfig | `fsbgppeer` | Cluster | yes | peer session settings: timers, auth, families | users |
+| FlowsdnBGPClusterConfig | `fsbgpcluster` | Cluster | yes | BGP instances and peers for a set of nodes | users; operator writes conditions (#334) |
+| FlowsdnBGPPeerConfig | `fsbgppeer` | Cluster | yes | peer session settings: timers, auth, families | users; operator writes `MissingAuthSecret` (#334) |
 | FlowsdnBGPAdvertisement | `fsbgpadvert` | Cluster | — | what is advertised: pod CIDRs, Service IPs, interfaces | users |
-| FlowsdnBGPNodeConfig | `fsbgpnode` | Cluster | yes | the per-node BGP configuration derived from the above | operator; agent writes status |
+| FlowsdnBGPNodeConfig | `fsbgpnode` | Cluster | yes | the per-node BGP configuration derived from the above | operator (#334); agent writes status (#570) |
 | FlowsdnBGPNodeConfigOverride | `fsbgpnodeoverride` | Cluster | — | per-node router ID, ASN and port overrides | users |
 | FlowsdnGatewayClassConfig | `fsgcc` | Namespaced | yes | parameters of a Gateway API GatewayClass | users; operator writes status |
 | FlowsdnDatapathPlugin | `fsdp` | Cluster | — | registration of an external datapath plugin | users |

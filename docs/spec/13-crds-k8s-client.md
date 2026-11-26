@@ -91,6 +91,18 @@ is the flowsdn.io kinds the agent's configuration uses (the table above names
 reference kinds flowsdn's agent does not read, such as pod IP pools). The
 timeout is `kubernetes.crd-wait-timeout` in seconds.
 
+## BGP kinds amendment — #334, 2026-11-25
+
+`flowsdn_k8s::kinds` also holds FlowsdnBGPClusterConfig, FlowsdnBGPPeerConfig, FlowsdnBGPAdvertisement,
+FlowsdnBGPNodeConfig and FlowsdnBGPNodeConfigOverride (all cluster-scoped), as #336's kinds are, plus a shared
+`Condition` (`metav1.Condition` with string times). Integers keep the schema's width (`int64` i64, `int32` i32).
+Defaults stay with the API server; `FlowsdnBGPPeerConfigSpec::defaulted` gives the populated copy of spec 15 §4.2 and
+a test checks it equals the schema's defaults. `BgpAdvertisement::check` evaluates the five CEL rules in the
+controller. T-CRD-3/4/5/7 run in `tests/kinds.rs`; the generator now writes `minItems` entries, a large community
+among its string candidates, and satisfies an object's CEL rules by adding or removing optional properties. An empty
+`Kind::named` object may lack the one required list entry its writer fills (BGP instances). The operator's compiler
+and conditions are spec 15's #334 amendment.
+
 ## 1. Scope
 
 In scope:

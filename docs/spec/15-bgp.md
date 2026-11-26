@@ -27,6 +27,22 @@ reconciler helper, config registry, fences), `05-service-loadbalancing.md`
 tables), `12-operator.md` (leader election, resource stores, per-node config
 fan-out, condition writing).
 
+## Operator and status amendment — #334, 2026-11-25
+
+§3.2, §3.2.1, §3.2.2 and §3.14's `ip-pool` mode are implemented by `flowsdn_agent::operator_bgp`, run by the
+operator mode (`flowsdn-agent operator --enable-bgp-control-plane`, flags named after §6's keys:
+`--bgp-secrets-namespace`, `--enable-bgp-control-plane-status-report`, `--bgp-router-id-allocation-mode`,
+`--bgp-router-id-allocation-ip-pool`). The reference kinds are flowsdn's (ADR-0017): FlowsdnBGP*, nodes selected by
+FlowsdnNode labels, condition types `flowsdn.io/NoMatchingNode`, `flowsdn.io/MissingPeerConfigs`,
+`flowsdn.io/ConflictingClusterConfig`, `flowsdn.io/MissingAuthSecret`, `flowsdn.io/BGPReconcileError`.
+**DEVIATIONS:** the operator runs a full, idempotent pass every `--bgp-interval` (10 s) instead of on watch events
+(the same outcome; everything is re-read each pass); cluster configs are compiled in name order, which decides who
+claims a node when two new ones select it in the same pass; a peer config whose `authSecretRef` was removed loses
+its `MissingAuthSecret` condition; status reporting off also removes `MissingAuthSecret`; router-ID allocations no
+node config holds are freed only after a pass with no errors. §3.8's projection, error table, 32 KiB message and
+flush cadence are `flowsdn_agent::bgp_status` (the ticker's ±500 ms jitter is uniform); its caller, the agent's
+control plane and speaker, is #570/#571.
+
 ---
 
 ## 1. Scope

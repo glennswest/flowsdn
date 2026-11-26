@@ -203,7 +203,11 @@ pinning or subsystem libraries are absent are **not current status**.
   and lowering to the simulator, with tests that the simulator's decisions
   agree with the compiled map state. The agent uses the importer, port
   blocks and CIDR types for NetworkPolicy enforcement (#292).
-- Operator, Hubble (beyond the endpoint model the agent uses), BGP, Gateway,
+- BGP: the five FlowsdnBGP* types (#334); the operator renders FlowsdnBGPNodeConfigs and writes the cluster and
+  peer config conditions (`--enable-bgp-control-plane`, unit-tested against recorded API calls, not yet run on a
+  cluster); the node config status projection exists for the agent's control plane, which is not built (#570,
+  speaker #571). `flowsdn-bgp-proto` holds the wire codec and session core.
+- Operator, Hubble (beyond the endpoint model the agent uses), BGP speaker, Gateway,
   ClusterMesh, encryption, proxy and the remaining IPAM modes provide
   primitives and focused tests. `flowsdn-cli` is an offline
   ClusterMesh bundle importer only. None of this establishes an operational

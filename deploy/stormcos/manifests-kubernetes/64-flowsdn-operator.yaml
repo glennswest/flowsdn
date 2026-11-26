@@ -9,7 +9,10 @@
 # registers before their flowsdn.io watchers start
 # (`kubernetes.crd-wait-timeout`), so it must run before the pod network
 # does, on a node that is not Ready yet. Add --skip-crd-creation to the
-# command when an administrator applies crds/ instead.
+# command when an administrator applies crds/ instead. Add
+# --enable-bgp-control-plane to compile FlowsdnBGPClusterConfigs into
+# per-node FlowsdnBGPNodeConfigs (#334); --bgp-secrets-namespace NS also needs
+# a Role granting the operator `list` on Secrets in NS.
 ---
 apiVersion: apps/v1
 kind: Deployment

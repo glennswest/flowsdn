@@ -1,5 +1,5 @@
 use super::*;
-use flowsdn_k8s::kinds::FlowsdnBGPNodeConfig;
+use flowsdn_k8s::kinds::{FlowsdnBGPNodeConfig, Kind};
 
 fn at(seconds: u64) -> SystemTime {
     SystemTime::UNIX_EPOCH + Duration::from_secs(seconds)

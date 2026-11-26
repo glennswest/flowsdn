@@ -860,6 +860,39 @@ not check it.
   objects written without an owner.
 - Both collectors log only when they change something, and keep their
   memory for one leader term.
+- **BGP node configs** (#334, spec 15 §3.2), with
+  `--enable-bgp-control-plane` (off by default: then no node config is
+  created or deleted), every `--bgp-interval` seconds (10) while leading.
+  A pass lists the BGP cluster, peer and override configs, the node
+  configs, the FlowsdnNodes and, with `--bgp-secrets-namespace`, that
+  namespace's Secret names. For each FlowsdnBGPClusterConfig, by name, every
+  FlowsdnNode its `nodeSelector` matches (absent: all) gets a
+  FlowsdnBGPNodeConfig of the node's name: the cluster config's instances,
+  with the node's FlowsdnBGPNodeConfigOverride merged by instance and peer
+  name (router ID, local port and ASN; a peer's local address; unmatched
+  entries ignored), owned by the cluster config (`controller: true`). A node
+  config another cluster config owns is left alone (first owner wins). One
+  is updated (`PUT`) only when its spec differs, and deleted (precondition
+  uid) when its cluster config no longer selects the node; 404/409 are
+  skipped and retried next pass. With `--bgp-router-id-allocation-mode
+  ip-pool` and `--bgp-router-id-allocation-ip-pool` (an IPv4 CIDR or
+  `first-last`), each (node, instance) gets a router ID: restored from the
+  node configs at a term's first pass, else first tried at a hash of the
+  key. An override's router ID outside the pool is used as written; inside,
+  it must be free or that node's, otherwise that node errors naming the
+  holder. Unused addresses are freed after a pass without errors, and all of
+  them when no cluster config is left. Conditions, unless
+  `--enable-bgp-control-plane-status-report false` removes them, are written
+  (`PUT /status`) only on a change, sorted by type, keeping a condition's
+  time while its status holds: `flowsdn.io/NoMatchingNode`,
+  `flowsdn.io/MissingPeerConfigs` (names sorted) and
+  `flowsdn.io/ConflictingClusterConfig` (owners sorted) on cluster configs;
+  `flowsdn.io/MissingAuthSecret` on peer configs with `authSecretRef` when a
+  secrets namespace is set (the operator then needs `list` on Secrets there,
+  not granted by the shipped RBAC). Errors are logged when they change.
+  The agent side (sessions, status) is not running yet: the node config
+  status is built by `flowsdn_agent::bgp_status` for the BGP control plane
+  of #570.
 - **The agent's gate.** Before any flowsdn.io watcher starts (identities,
   LB pools, L2 policies, the policy kinds), the agent lists the CRDs as
   metadata only (`PartialObjectMetadataList`) every second until every CRD

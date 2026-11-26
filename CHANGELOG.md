@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#334)
+- **feat:** Rust types of the five BGP kinds (`flowsdn_k8s::kinds`): FlowsdnBGPClusterConfig, FlowsdnBGPPeerConfig, FlowsdnBGPAdvertisement, FlowsdnBGPNodeConfig, FlowsdnBGPNodeConfigOverride, and a shared `Condition`. `FlowsdnBGPPeerConfigSpec::defaulted` fills spec 15 §4.2's defaults on a copy. `BgpAdvertisement::check` applies the five advertisement CEL rules in the controller.
+- **feat:** The operator compiles BGP cluster configs into node configs (`flowsdn-agent operator --enable-bgp-control-plane`, spec 15 §3.2), off by default.
+  - Each FlowsdnNode a cluster config selects gets a FlowsdnBGPNodeConfig owned by that cluster config, with the node's override merged in.
+  - First owner wins. A node config is updated only when its spec changes, and deleted when its node is no longer selected.
+  - `ip-pool` router IDs: restored from existing node configs, overrides checked against the pool, freed when unused.
+  - Conditions: NoMatchingNode, MissingPeerConfigs and ConflictingClusterConfig on cluster configs; MissingAuthSecret on peer configs (needs `--bgp-secrets-namespace`). They are written only on a change, and removed when status reporting is off.
+- **feat:** `flowsdn_agent::bgp_status` builds the FlowsdnBGPNodeConfig status from peer state (spec 15 §3.8): peer omission, established time, the 5-error table and its 32 KiB `BGPReconcileError` condition, and the write cadence and backoff. Nothing calls it yet; the agent's BGP control plane is #570.
+- **test:** T-CRD-3/4/5/7 for the five kinds. The kinds generator now honours `minItems` and object CEL rules. Operator tests cover selection, merge, conflicts, updates, deletes, router-ID pools, conditions and a recorded API pass. Status tests cover projection, schema admission, errors, truncation and the flusher.
+- **docs:** crds.md, runtime.md (operator), spec 13 and spec 15 amendments, implementation-status.md.
+
 ### 2026-11-25 (#586)
 - **docs:** Boot-time comparison against the cilium flavor, from the gate's install records (work-plan.md). It finds no flowsdn regression: flowsdn is faster to node Ready, all pods and reboot in every paired install through 14.03. The slowdown since 12.96 is in boot phases both flavors share.
 
