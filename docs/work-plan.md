@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Metrics: the operator half — #420, 2026-11-26
+
+- [x] Agent proof line to `/dev/kmsg` (c10c88b, under #489).
+- [x] Operator `GET /metrics` on `--metrics-listen` (127.0.0.1:9967 in the edition; not cilium's mTLS :9963), its own
+      thread, `flowsdn_operator_*` (leader, CRDs, identity/node GC, BGP). b86e270, fmt 05a112f; strict sc-build passed.
+- [x] Filed stormcos#1650 (ironprom job + check row). Staged golden-flowsdn-6f6aa3364852; re-shipped `--commit 05a112f`.
+
 ### Host firewall short-circuit finding — #484 / #487 (P0, reopened), 2026-11-26
 
 - [x] Fix verified 2026-11-20 (kernel suite, negative control). Reopened only because the node proof
