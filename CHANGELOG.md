@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#315)
+- **feat:** `tools/aya-kfunc-watch.sh` takes `pr:<number>` for an early look at an open aya pull request (informational: never exit 3, never files the issue).
+- **docs:** watch result at 63731a9: still `missing` for pinned 0.14.0, release 0.16.0, main `2756d04` and aya-rs/aya#1495's head. A Rust object still has no `.ksyms` entry for `bpf_sock_destroy`. The weekly watch now runs on stormcentral (stormcentral#1163). Socket termination stays on netlink `SOCK_DESTROY`.
+
 ### 2026-11-25 (#567)
 - **feat:** New crate `flowsdn-kvstore` (spec 20 §3.1–3.5, §5).
   - The kvstore trait, plus `txn` and `lease_for` for the cluster-config claim.

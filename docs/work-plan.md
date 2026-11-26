@@ -23,6 +23,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
       new crates (h2, prost, tokio-openssl, anyhow, itertools) checked by hand against deny.toml.
 - Not built (spec 20 #567 amendment): endpoint-slice export, prefix front, kvstoremesh, metrics, dialer aliases,
   h2 keepalive pings, remote-client status mode, local-lock GC, image/manifests. Importing remote clusters is #568.
+- [x] Staged after verification: stormcentral reported "nothing new to record: golden-flowsdn-29b49b86b5e8 already
+      holds this content" (its build 12c83da038d5), so the clustermesh-apiserver mode is in that golden.
 
 ### flowsdn.io BGP kinds — #334, 2026-11-25
 
@@ -1780,6 +1782,12 @@ weekly for kfunc relocation and switch to bpf_sock_destroy when it lands. GitHub
       only with section + debug info rustc doesn't emit. An LLVM IR shim (as bpf-linker's test does) is the only way
       today; not tried (auto-mode denied the ad-hoc run of an unpinned linker) and it is not Rust (project rule).
       Filed stormcentral#1163 (schedule never set); #315 proposed after it. Tool fmt + Clippy at 4f22330.
+- [x] 2026-11-25: stormcentral#1163 done: `flowsdn-aya-kfunc-watch` runs `pinned release main` every 168 h (exit 3
+      files the P1 switch issue); its first run (job 205a34271f) exited 0. No aya, aya-ebpf or bpf-linker release since
+      11-03. Added a `pr:<number>` source (informational, never exit 3). Watch at 63731a9 with `pr:1495` (aya-rs/aya#1495,
+      open: extern-symbol kfunc resolution against vmlinux BTF, for struct_ops): missing everywhere; 0.14.0
+      `UnknownFunction`, 0.16.0 / main 2756d04 / #1495 head 885c7fc `ExternNotFound` with bpf-linker 0.11.1 and 0.13.0.
+      #315 stays open for the switch (owner decision #3 covers the wait).
 - [ ] When the watch exits 3: bump aya, declare bpf_sock_destroy into `.ksyms`, eBPF termination with SOCK_DESTROY fallback, a test per path.
 
 ### Services for the flowsdn edition — #292 (P0 via stormcos#265), 2026-10-05

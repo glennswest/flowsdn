@@ -23,6 +23,7 @@ needs two things upstream:
 ```sh
 sc-build 'tools/aya-kfunc-watch.sh'                    # release + main
 sc-build 'tools/aya-kfunc-watch.sh pinned release main'
+sc-build 'tools/aya-kfunc-watch.sh pinned release main pr:1495'   # also an open aya PR
 tools/aya-kfunc-watch.sh --load --file-issue           # privileged runner with gh
 ```
 
@@ -58,6 +59,16 @@ On 2026-11-03 (sc-build at a6c6c1a, `pinned release main`) it was `missing`
 everywhere: pinned aya 0.14.0 failed with `UnknownFunction`; aya 0.16.0 and
 main at `f7f0f05` failed with `ExternNotFound` with both bpf-linker 0.11.1
 and 0.13.0.
+
+On 2026-11-25 (sc-build at 63731a9, `pinned release main pr:1495`) it was still
+`missing` everywhere. Pinned 0.14.0 failed with `UnknownFunction`. With both bpf-linker 0.11.1 and 0.13.0, these all
+failed with `ExternNotFound`: aya 0.16.0, main at `2756d04`, and the head `885c7fc` of the open
+[aya-rs/aya#1495](https://github.com/aya-rs/aya/pull/1495) (kfunc calls on extern symbols resolved against vmlinux
+BTF, for struct_ops). There was no new aya or bpf-linker release. The weekly run (`pinned release main`, every
+168 h) has been scheduled on stormcentral since 2026-11-25 (stormcentral#1163).
+
+`pr:<number>` builds the probe against an open aya pull request's head. Its lines are printed for information only:
+it never sets exit 3 or files the issue, and a pull request that does not build is not reported as `broken`.
 
 ## The switch (#315)
 
