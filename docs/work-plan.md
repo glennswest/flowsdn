@@ -26,6 +26,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
       never arrive. Filed stormpump#329 (forward records with a non-kernel facility, tagged by their prefix). Did not
       raise the lines to warning. #484 and #487 parked after stormpump#329. The other issues shipped on this proof will
       fail the same way until it lands; park each likewise when it comes back.
+- [x] #488 came back (14.07): parked after stormpump#329.
 - [x] #488 (socket-lb findings, fixed 2026-11-20 at ff03ffd) reopened on the same proof: re-shipped the same way
       (`--commit 936dedb`). The other issues reopened on that proof go back the same way when each is handed out.
 - [x] #489 (quarantine, fixed 2026-11-20) and #420 have their own `log:` proofs (startup lines). c10c88b sends both
