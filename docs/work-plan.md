@@ -13,8 +13,9 @@ Staged; each stage committed and verified (kernel tests keep passing).
 - [x] Stage 2 (e3f7fb2: xtask check, test/build.sh, kernel-check 26/0/2): direct node routes (`route_loop`) become an owner of
       `desired-routes`, reconciled through `RouteTarget` (connector ops); the persisted routes file stays as the owned set prune reads.
 - [x] Stage 3 (a9f6a26): uplink table routes are the `uplinks` owner; rules are `desired-rules` (`flowsdn_node::rules`).
-- [ ] Stage 4: `neighbors.rs` (#469) through `forwardable-ips` → `desired-neighbors` and a neighbor reconciler.
-- [ ] Docs (spec 10 amendment, runtime), kernel-check, close. Then #520 (scripttest node adapters).
+- [x] Stage 4 (aff3a36): `neighbors.rs` (#469) through `forwardable-ips` → `desired-neighbors` (`flowsdn_node::neighbors`).
+- [x] Docs (spec 10 amendment, runtime, changelog) at 4caf950; sc-build: xtask check, test/build.sh, kernel-check 26/0/2
+      (uplinks-live, neighbors-live pass). Staged and shipped. Then #520 (scripttest node adapters).
 
 ### IPv6 egress gateway — #580 (P3), 2026-11-26
 
@@ -59,7 +60,8 @@ Staged; each stage committed and verified (kernel tests keep passing).
 - [x] #489 (its own quarantine-line proof) parked the same way.
 - [x] 2026-11-26: #484 handed back. Release 14.08-flowsdn (composed, not yet installed) carries golden-flowsdn-cf08afe18670
       and stormpump@d3d2858 (contains 65b74d3). Re-shipped with the same proof and `--commit 936dedb`; it closes on
-      14.08-flowsdn's first passing install. Re-ship the other parked issues the same way when they come back.
+      14.08-flowsdn's first passing install. #487 re-shipped the same way. Re-ship the other parked issues the same
+      way when they come back.
 - [x] 2026-11-26: parked all 27 remaining issues reopened on the health proof (#392, #418, #448-#499 range, #513) the
       same way in one pass (`--after-release stormpump>=65b74d3`; `--after stormpump#329` is refused once it shipped).
 - [x] #488 (socket-lb findings, fixed 2026-11-20 at ff03ffd) reopened on the same proof: re-shipped the same way
