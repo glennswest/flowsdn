@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (#580)
+- **feat:** The egress gateway covers IPv6 (spec 14 §3.4.5).
+  - `flowsdn_egress_gw_policy_v6` holds a 36-byte key and a 40-byte value; the gateway is still named by its IPv4.
+  - `flowsdn_egress_gw_nexthop6` maps each gateway's IPv4 to its IPv6 InternalIP. That is the next hop the source node redirects an IPv6 packet to, as a deviation for native routing.
+  - On the gateway the flow leaves on the IPv6 masquerade path from the IPv6 egress address, derived like the IPv4 one but from IPv6 addresses.
+  - `GET /v1/egress-gateway` reports `entries6`, each gateway's `ip6` and the IPv6 egress. `ipv6-skipped` is gone.
+- **test:** `socket-lb-live` `egress_gateway6`:
+  - a redirect to the IPv6 next hop with the packet unchanged;
+  - a drop when there is no next hop or no gateway;
+  - excluded destinations pass;
+  - gateway TCP and UDP SNAT and reply with valid checksums;
+  - cleared maps leave traffic alone.
+
+  Also planner tests: entries, next hops (global, not link-local), egress derivation, mixed families, the JSON; and an ABI layout test.
+
 ### 2026-11-26 (#566)
 - **feat:** Datapath plugins are decided: flowsdn loads none (spec 01 decision). The FlowsdnDatapathPlugin kind stays registered, but the operator reports each object instead of ignoring it in silence. While leading, it posts one `Warning` `NotApplied` Event per object per term, with the message `flowsdn loads no datapath plugins: this object is registered but not applied`. The operator's RBAC gains `events` create. No plugin pins, sockets or hook points exist.
 

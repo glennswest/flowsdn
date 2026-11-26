@@ -49,11 +49,13 @@ fn interfaces() -> Vec<Interface> {
             name: "eth0".into(),
             index: 2,
             addresses: vec!["192.0.2.2".parse().unwrap()],
+            addresses6: vec!["2001:db8:2::2".parse().unwrap()],
         },
         Interface {
             name: "eth1".into(),
             index: 3,
             addresses: vec!["198.51.100.7".parse().unwrap()],
+            addresses6: vec!["2001:db8:64::7".parse().unwrap()],
         },
     ]
 }
@@ -89,7 +91,7 @@ fn single_gateway_entries_on_the_gateway_and_elsewhere() {
         interfaces: &ifs,
         primary: Some("eth0"),
     };
-    let (entries, report) = plan(&objects, &pods, &namespaces(), &nodes(), &gateway);
+    let (Maps { v4: entries, .. }, report) = plan(&objects, &pods, &namespaces(), &nodes(), &gateway);
     assert_eq!(report.problems.get("web-out"), Some(&None));
     assert_eq!(
         report.gateways["web-out"],
@@ -113,7 +115,7 @@ fn single_gateway_entries_on_the_gateway_and_elsewhere() {
         interfaces: &ifs,
         primary: Some("eth0"),
     };
-    let (entries, _) = plan(&objects, &pods, &namespaces(), &nodes(), &other);
+    let (Maps { v4: entries, .. }, _) = plan(&objects, &pods, &namespaces(), &nodes(), &other);
     let entry = value(&entries, [10, 1, 1, 5], [203, 0, 113, 0], 24);
     assert_eq!(
         (entry.gateway_ip, entry.egress_ip, entry.egress_ifindex),
@@ -146,7 +148,7 @@ fn egress_address_from_interface_or_egress_ip() {
             ([0, 0, 0, 0], 0),
         ),
     ] {
-        let (entries, report) = plan(&[policy(gateway)], &pods, &namespaces(), &nodes(), &here);
+        let (Maps { v4: entries, .. }, report) = plan(&[policy(gateway)], &pods, &namespaces(), &nodes(), &here);
         let entry = value(&entries, [10, 1, 1, 5], [203, 0, 113, 0], 24);
         assert_eq!((entry.egress_ip, entry.egress_ifindex), want);
         assert_eq!(report.local.len(), 1);
@@ -167,7 +169,7 @@ fn no_gateway_is_the_drop_sentinel() {
     let objects = [policy(
         json!({"nodeSelector": {"matchLabels": {"egress": "nowhere"}}}),
     )];
-    let (entries, report) = plan(&objects, &pods, &namespaces(), &nodes(), &local);
+    let (Maps { v4: entries, .. }, report) = plan(&objects, &pods, &namespaces(), &nodes(), &local);
     assert!(report.gateways["web-out"].is_empty());
     assert_eq!(
         value(&entries, [10, 1, 1, 5], [203, 0, 113, 0], 24).gateway_ip,
@@ -205,7 +207,7 @@ fn multiple_gateways_split_by_uid() {
         interfaces: &ifs,
         primary: Some("eth0"),
     };
-    let (entries, _) = plan(&[object], &pods, &namespaces(), &all, &local);
+    let (Maps { v4: entries, .. }, _) = plan(&[object], &pods, &namespaces(), &all, &local);
     let mut seen = std::collections::BTreeSet::new();
     for (i, pod) in pods.iter().enumerate() {
         let gateway = value(
@@ -245,7 +247,7 @@ fn selection_and_validation() {
     let mut object = policy(json!({"nodeSelector": {"matchLabels": {"egress": "yes"}}}));
     object["spec"]["selectors"] = json!([{"namespaceSelector": {"matchLabels": {"team": "a"}},
                                           "nodeSelector": {"matchLabels": {"egress": "yes"}}}]);
-    let (entries, report) = plan(&[object], &pods, &namespaces(), &nodes(), &local);
+    let (Maps { v4: entries, .. }, report) = plan(&[object], &pods, &namespaces(), &nodes(), &local);
     assert_eq!(
         report.sources["web-out"], 1,
         "only the Pod on a selected node"
@@ -273,7 +275,7 @@ fn selection_and_validation() {
             "egress IP",
         ),
     ] {
-        let (entries, report) = plan(
+        let (Maps { v4: entries, .. }, report) = plan(
             &[json!({"metadata": {"name": "bad"}, "spec": spec})],
             &pods,
             &namespaces(),
@@ -284,4 +286,93 @@ fn selection_and_validation() {
         assert!(problem.contains(want), "{want}: {problem}");
         assert!(entries.is_empty());
     }
+}
+
+fn value6(entries: &Entries6, src: &str, dst: &str, len: u32) -> EgressGw6Value {
+    let src: Ipv6Addr = src.parse().unwrap();
+    let dst: Ipv6Addr = dst.parse().unwrap();
+    let mut data = [0u8; 32];
+    data[..16].copy_from_slice(&src.octets());
+    data[16..].copy_from_slice(&dst.octets());
+    EgressGw6Value::from_bytes(*entries.get(&(128 + len, data)).unwrap())
+}
+
+/// #580: an IPv6 Pod and an IPv6 destination get an IPv6 entry with the same
+/// gateway IPv4; the gateway's IPv6 InternalIP is its next hop; on the gateway
+/// the entry carries the uplink's IPv6; mixed families match nothing; a
+/// gateway with no IPv6 InternalIP has no next hop.
+#[test]
+fn ipv6_entries_and_next_hops() {
+    let mut dual = pod("web", "n1", "10.1.1.5", &[("app", "web")]);
+    dual.ips.push("fd00:1:1::5".parse().unwrap());
+    let pods = vec![dual];
+    let mut all = nodes();
+    for node in &mut all {
+        if node.name == "n2" {
+            node.internal_ips.push("2001:db8:2::2".parse().unwrap());
+            node.internal_ips.push("fe80::2".parse().unwrap());
+        }
+    }
+    let object = json!({"metadata": {"name": "web-out"},
+        "spec": {"selectors": [{"podSelector": {"matchLabels": {"app": "web"}}}],
+                 "destinationCIDRs": ["203.0.113.0/24", "2001:db8:64::/48"],
+                 "excludedCIDRs": ["2001:db8:64:1::/64"],
+                 "egressGateway": {"nodeSelector": {"matchLabels": {"egress": "yes"}}}}});
+    let ifs = interfaces();
+    let gateway = Local {
+        node: "n2",
+        interfaces: &ifs,
+        primary: Some("eth0"),
+    };
+    let (maps, report) = plan(&[object.clone()], &pods, &namespaces(), &all, &gateway);
+    assert_eq!(maps.v4.len(), 1, "the IPv4 source and IPv4 destination only");
+    assert_eq!(maps.v6.len(), 2, "an IPv6 destination and an IPv6 exclusion");
+    let entry = value6(&maps.v6, "fd00:1:1::5", "2001:db8:64::", 48);
+    assert_eq!(entry.gateway_ip, [192, 0, 2, 2]);
+    assert_eq!(entry.egress_ip, "2001:db8:2::2".parse::<Ipv6Addr>().unwrap().octets());
+    assert_eq!(entry.egress_ifindex, 2);
+    assert_eq!(
+        value6(&maps.v6, "fd00:1:1::5", "2001:db8:64:1::", 64).gateway_ip,
+        GATEWAY_EXCLUDED
+    );
+    assert_eq!(
+        maps.nexthop6,
+        Nexthops6::from([(
+            [192, 0, 2, 2],
+            "2001:db8:2::2".parse::<Ipv6Addr>().unwrap().octets()
+        )]),
+        "the global InternalIP, not the link-local one"
+    );
+    let json = report.json(true, maps.v4.len(), maps.v6.len());
+    assert_eq!(json["entries6"], 2);
+    assert_eq!(json["policies"][0]["gateways"][0]["ip6"], "2001:db8:2::2");
+    assert_eq!(json["policies"][0]["this-node"][1]["egress-ip"], "2001:db8:2::2");
+    // Elsewhere: no egress address, the same gateway.
+    let other = Local {
+        node: "n1",
+        interfaces: &ifs,
+        primary: Some("eth0"),
+    };
+    let (maps, _) = plan(&[object.clone()], &pods, &namespaces(), &all, &other);
+    let entry = value6(&maps.v6, "fd00:1:1::5", "2001:db8:64::", 48);
+    assert_eq!((entry.gateway_ip, entry.egress_ip), ([192, 0, 2, 2], [0; 16]));
+    // An egressIP that is IPv4: the IPv6 address of the interface holding it,
+    // index 0; an IPv6 egressIP this node does not hold is an error.
+    let mut by_ip = object.clone();
+    by_ip["spec"]["egressGateway"]["egressIP"] = json!("198.51.100.7");
+    let (maps, _) = plan(&[by_ip], &pods, &namespaces(), &all, &gateway);
+    let entry = value6(&maps.v6, "fd00:1:1::5", "2001:db8:64::", 48);
+    assert_eq!(
+        (entry.egress_ip, entry.egress_ifindex),
+        ("2001:db8:64::7".parse::<Ipv6Addr>().unwrap().octets(), 0)
+    );
+    let mut missing = object.clone();
+    missing["spec"]["egressGateway"]["egressIP"] = json!("2001:db8:99::1");
+    let (maps, report) = plan(&[missing], &pods, &namespaces(), &all, &gateway);
+    assert_eq!(value6(&maps.v6, "fd00:1:1::5", "2001:db8:64::", 48).egress_ip, [0; 16]);
+    assert!(report.local6[0].1.as_ref().unwrap_err().contains("no interface holds"));
+    // No IPv6 InternalIP on the gateway: no next hop.
+    let (maps, _) = plan(&[object], &pods, &namespaces(), &nodes(), &other);
+    assert!(maps.nexthop6.is_empty());
+    assert_eq!(maps.v6.len(), 2);
 }

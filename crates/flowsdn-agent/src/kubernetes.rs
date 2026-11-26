@@ -1292,7 +1292,7 @@ impl View {
     /// `GET /v1/egress-gateway`.
     pub fn egress_json(&self) -> Value {
         if self.egress_status.is_null() {
-            json!({"enabled": self.egress_gateway, "entries": 0, "policies": []})
+            json!({"enabled": self.egress_gateway, "entries": 0, "entries6": 0, "policies": []})
         } else {
             let mut status = self.egress_status.clone();
             if let Some(object) = status.as_object_mut() {

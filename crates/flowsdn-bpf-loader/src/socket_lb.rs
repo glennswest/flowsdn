@@ -22,6 +22,12 @@ pub use flowsdn_bpf_abi::lb::DsrDispatch;
 /// `flowsdn_egress_gw_policy_v4`'s contents (#564): (LPM prefix length, source
 /// ++ destination) -> `EgressGw4Value` bytes.
 pub type EgressGateway4 = std::collections::BTreeMap<(u32, [u8; 8]), [u8; 28]>;
+/// `flowsdn_egress_gw_policy_v6`'s contents (#580): (LPM prefix length,
+/// source ++ destination) -> `EgressGw6Value` bytes.
+pub type EgressGateway6 = std::collections::BTreeMap<(u32, [u8; 32]), [u8; 40]>;
+/// `flowsdn_egress_gw_nexthop6` (#580): a gateway's IPv4 -> its IPv6
+/// InternalIP, an IPv6 packet's next hop.
+pub type EgressNexthop6 = std::collections::BTreeMap<[u8; 4], [u8; 16]>;
 use flowsdn_bpf_abi::maglev::TABLE_LEN;
 use flowsdn_lb::socket::{Maps, Op};
 use std::{
@@ -45,7 +51,7 @@ pub const PROGRAMS: [&str; 8] = [
 /// names and §4.3 layouts; flowsdn sizes the reverse and affinity maps at
 /// 64Ki. The affinity maps are the programs' own; the agent writes the
 /// match map.
-const MAPS: [(&str, MapType, u32, u32, u32, u32); 25] = [
+const MAPS: [(&str, MapType, u32, u32, u32, u32); 27] = [
     ("flowsdn_lb4_services", MapType::Hash, 12, 12, 65536, 1),
     ("flowsdn_lb4_backends", MapType::Hash, 4, 12, 65536, 1),
     ("flowsdn_lb4_reverse_sk", MapType::LruHash, 16, 8, 65536, 0),
@@ -74,6 +80,15 @@ const MAPS: [(&str, MapType, u32, u32, u32, u32); 25] = [
         16384,
         1,
     ),
+    (
+        "flowsdn_egress_gw_policy_v6",
+        MapType::LpmTrie,
+        36,
+        40,
+        16384,
+        1,
+    ),
+    ("flowsdn_egress_gw_nexthop6", MapType::Hash, 4, 16, 1024, 1),
     ("flowsdn_gw64_sources", MapType::LpmTrie, 20, 1, 256, 1),
     (
         "flowsdn_nodeport4_xlate",
@@ -115,6 +130,9 @@ pub struct SocketLb {
     /// Egress gateway policies (#564): (source, destination prefix) ->
     /// `EgressGw4Value` bytes.
     egress_gw4: LpmTrie<MapData, [u8; 8], [u8; 28]>,
+    /// IPv6 (#580): the policies and the gateways' IPv6 next hops.
+    egress_gw6: LpmTrie<MapData, [u8; 32], [u8; 40]>,
+    egress_nexthop6: HashMap<MapData, [u8; 4], [u8; 16]>,
     pin_root: Option<PathBuf>,
     /// Owned links; unpinned ones detach when this owner drops.
     links: Vec<FdLink>,
@@ -297,6 +315,20 @@ impl SocketLb {
                 }
             }
         };
+        let egress_gw6 = {
+            let map = bpf
+                .take_map("flowsdn_egress_gw_policy_v6")
+                .ok_or("socket-lb object has no map flowsdn_egress_gw_policy_v6")?;
+            match map {
+                Map::LpmTrie(_) => LpmTrie::try_from(map)?,
+                _ => {
+                    return Err(
+                        "socket-lb map flowsdn_egress_gw_policy_v6 is not an LPM trie".into(),
+                    );
+                }
+            }
+        };
+        let egress_nexthop6 = take(&mut bpf, "flowsdn_egress_gw_nexthop6")?;
         let gw64_sources = {
             let map = bpf
                 .take_map("flowsdn_gw64_sources")
@@ -332,6 +364,8 @@ impl SocketLb {
             skip4,
             skip6,
             egress_gw4,
+            egress_gw6,
+            egress_nexthop6,
             pin_root: pin_root.map(Path::to_owned),
             links: Vec::new(),
             uplinks: std::collections::BTreeMap::new(),
@@ -598,6 +632,56 @@ impl SocketLb {
         for (prefix, data) in current.keys() {
             if !desired.contains_key(&(*prefix, *data)) {
                 absent(self.egress_gw4.remove(&Key::new(*prefix, *data)))?;
+            }
+        }
+        Ok(())
+    }
+    /// `flowsdn_egress_gw_policy_v6`'s entries (#580).
+    pub fn egress_gateway6(&self) -> KernelResult<EgressGateway6> {
+        let mut out = std::collections::BTreeMap::new();
+        for item in self.egress_gw6.iter() {
+            let (key, value) = item?;
+            out.insert((key.prefix_len(), key.data()), value);
+        }
+        Ok(out)
+    }
+    /// Make `flowsdn_egress_gw_policy_v6` hold exactly `desired`, as
+    /// [`Self::set_egress_gateway4`] does.
+    pub fn set_egress_gateway6(&mut self, desired: &EgressGateway6) -> KernelResult<()> {
+        let current = self.egress_gateway6()?;
+        for ((prefix, data), value) in desired {
+            if current.get(&(*prefix, *data)) != Some(value) {
+                self.egress_gw6
+                    .insert(&Key::new(*prefix, *data), value, 0)?;
+            }
+        }
+        for (prefix, data) in current.keys() {
+            if !desired.contains_key(&(*prefix, *data)) {
+                absent(self.egress_gw6.remove(&Key::new(*prefix, *data)))?;
+            }
+        }
+        Ok(())
+    }
+    /// `flowsdn_egress_gw_nexthop6`'s entries (#580).
+    pub fn egress_nexthop6(&self) -> KernelResult<EgressNexthop6> {
+        let mut out = std::collections::BTreeMap::new();
+        for item in self.egress_nexthop6.iter() {
+            let (key, value) = item?;
+            out.insert(key, value);
+        }
+        Ok(out)
+    }
+    /// Make `flowsdn_egress_gw_nexthop6` hold exactly `desired`.
+    pub fn set_egress_nexthop6(&mut self, desired: &EgressNexthop6) -> KernelResult<()> {
+        let current = self.egress_nexthop6()?;
+        for (key, value) in desired {
+            if current.get(key) != Some(value) {
+                self.egress_nexthop6.insert(key, value, 0)?;
+            }
+        }
+        for key in current.keys() {
+            if !desired.contains_key(key) {
+                absent(self.egress_nexthop6.remove(key))?;
             }
         }
         Ok(())

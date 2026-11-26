@@ -1268,11 +1268,22 @@ and keeps `flowsdn_egress_gw_policy_v4` planned, re-planning every second:
   translated there and routed back to the Pod's node. `excludedCIDRs` are
   passed on as if no policy matched.
 
-IPv4 only. IPv6 sources and destinations are counted in
-`GET /v1/egress-gateway` (`ipv6-skipped`) but not programmed. There is no
-policy status and no gateway health check (spec 14 §3.4.10). Kernel checks
-cover both nodes' halves (`socket-lb-live` `egress_gateway`). There is no
-two-node cluster run yet.
+- **IPv6** (#580). An IPv6 Pod address and IPv6 destination get an entry in
+  `flowsdn_egress_gw_policy_v6`. Like IPv4 it names the gateway by its IPv4,
+  so the source node redirects to the gateway's first global IPv6 InternalIP,
+  from `flowsdn_egress_gw_nexthop6`. A gateway Node with no IPv6 InternalIP has
+  no next hop, and that IPv6 traffic is dropped.
+  - On the gateway the packet leaves on the IPv6 masquerade path (#513) from
+    the IPv6 egress address. That address is derived only when a destination
+    is IPv6: the interface's first global IPv6; with `egressIP` the address
+    itself if IPv6 (else the first IPv6 of the interface holding it); else the
+    uplink's.
+  - An IPv4 source with an IPv6 destination, or the reverse, matches nothing.
+
+There is no policy status and no gateway health check (spec 14 §3.4.10).
+Kernel checks cover both nodes' halves for each family (`socket-lb-live`
+`egress_gateway` and `egress_gateway6`). There is no two-node cluster run
+yet.
 
 ### NetworkPolicy enforcement (#292)
 

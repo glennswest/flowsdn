@@ -618,6 +618,7 @@ fn nodeport(lb: &mut SocketLb, services: &mut Vec<Service>) -> Result<()> {
     masquerade(lb)?;
     masquerade6(lb)?;
     egress_gateway(lb)?;
+    egress_gateway6(lb)?;
     maglev(lb, services)?;
     dsr(lb, services)?;
     dsr_encap(lb)?;
@@ -1193,6 +1194,111 @@ fn masquerade(lb: &mut SocketLb) -> Result<()> {
     }
     println!(
         "PASS BPF masquerade: Pod TCP, UDP and echo to 198.51.100.9 leave from 192.0.2.20 and a NAT port, replies and an ICMP error come back to the Pod, checksums valid; cluster and node traffic untouched; off when cleared"
+    );
+    Ok(())
+}
+
+/// IPv6 egress gateway (#580), on the uplink's egress program, as
+/// [`egress_gateway`]: a source node redirects a selected Pod's IPv6 packet
+/// unchanged to the gateway's IPv6 next hop (from `flowsdn_egress_gw_nexthop6`
+/// by the entry's gateway IPv4); no next hop known drops; an excluded
+/// destination passes; no gateway drops. On the gateway node another node's
+/// Pod's TCP and UDP leave from the IPv6 egress address and a NAT port, and
+/// the reply comes back to that Pod.
+fn egress_gateway6(lb: &mut SocketLb) -> Result<()> {
+    use flowsdn_bpf_abi::{
+        MapBytes,
+        egress::{EgressGw6Value, GATEWAY_EXCLUDED, GATEWAY_NONE},
+    };
+    let up0 = ifindex("up0")?;
+    let (server, egress) = (ip6("2001:db8:64::5")?, ip6("2001:db8:77::7")?);
+    let entry = |src: [u8; 16], dst: [u8; 16], len: u32, egress_ip: [u8; 16], gateway_ip: [u8; 4]| {
+        let mut data = [0u8; 32];
+        for (slot, byte) in data.iter_mut().zip(src.iter().chain(dst.iter())) {
+            *slot = *byte;
+        }
+        (
+            (128u32.saturating_add(len), data),
+            EgressGw6Value {
+                egress_ip,
+                gateway_ip,
+                ..EgressGw6Value::default()
+            }
+            .to_bytes(),
+        )
+    };
+    let (local_pod, lost_pod, unresolved_pod, remote_pod) = (
+        ip6("fd00:9::8")?,
+        ip6("fd00:9::b")?,
+        ip6("fd00:9::9")?,
+        ip6("fd00:9:1::5")?,
+    );
+    let net = ip6("2001:db8:64::")?;
+    let desired: std::collections::BTreeMap<_, _> = [
+        // A local Pod; the gateway (192.0.2.30) is on up0's subnet, with an
+        // IPv6 next hop.
+        entry(local_pod, net, 48, [0; 16], [192, 0, 2, 30]),
+        entry(local_pod, ip6("2001:db8:64:1::")?, 64, [0; 16], GATEWAY_EXCLUDED),
+        // A gateway with no IPv6 next hop.
+        entry(lost_pod, net, 48, [0; 16], [192, 0, 2, 31]),
+        // No gateway resolved.
+        entry(unresolved_pod, net, 48, [0; 16], GATEWAY_NONE),
+        // This node is the gateway for another node's Pod.
+        entry(remote_pod, net, 48, egress, [192, 0, 2, 20]),
+    ]
+    .into_iter()
+    .collect();
+    let hops = std::collections::BTreeMap::from([([192, 0, 2, 30], ip6("2001:db8:2::30")?)]);
+    lb.set_egress_nexthop6(&hops)?;
+    lb.set_egress_gateway6(&desired)?;
+    if lb.egress_gateway6()? != desired || lb.egress_nexthop6()? != hops {
+        return Err("IPv6 egress gateway maps do not read back as written".into());
+    }
+    let sent = frame6(6, local_pod, server, 41000, 443, false);
+    let out = run_on(lb, "nodeport_egress", &sent, up0, TC_ACT_REDIRECT)?;
+    if out.get(14..) != sent.get(14..) {
+        return Err("IPv6 egress gateway: the redirected packet was changed".into());
+    }
+    let excluded = frame6(6, local_pod, ip6("2001:db8:64:1::9")?, 41001, 443, false);
+    if run_on(lb, "nodeport_egress", &excluded, up0, TCX_NEXT)? != excluded {
+        return Err("IPv6 egress gateway: an excluded destination was changed".into());
+    }
+    for pod in [lost_pod, unresolved_pod] {
+        run_on(
+            lb,
+            "nodeport_egress",
+            &frame6(6, pod, server, 41002, 443, false),
+            up0,
+            TC_ACT_SHOT,
+        )?;
+    }
+    for (proto, sport) in [(6u8, 41004u16), (17, 41005)] {
+        let request = frame6(proto, remote_pod, server, sport, 443, false);
+        let (src, dst, s, d, _, l4_ok) =
+            parse6(&run_on(lb, "nodeport_egress", &request, up0, TCX_NEXT)?)?;
+        if (src, dst, d) != (egress, server, 443) || !(61000..=65535).contains(&s) || !l4_ok {
+            return Err(format!(
+                "IPv6 egress gateway SNAT proto {proto}: {src:?}:{s} -> {dst:?}:{d}, checksum {l4_ok}"
+            )
+            .into());
+        }
+        let reply = frame6(proto, server, egress, 443, s, false);
+        let (src, dst, s2, d2, _, l4_ok) =
+            parse6(&run_on(lb, "nodeport_ingress", &reply, up0, TCX_NEXT)?)?;
+        if (src, dst, s2, d2) != (server, remote_pod, 443, sport) || !l4_ok {
+            return Err(format!(
+                "IPv6 egress gateway reply proto {proto}: {src:?}:{s2} -> {dst:?}:{d2}, checksum {l4_ok}"
+            )
+            .into());
+        }
+    }
+    lb.set_egress_gateway6(&std::collections::BTreeMap::new())?;
+    lb.set_egress_nexthop6(&std::collections::BTreeMap::new())?;
+    if run_on(lb, "nodeport_egress", &sent, up0, TCX_NEXT)? != sent {
+        return Err("IPv6 egress gateway cleared, yet a packet was redirected".into());
+    }
+    println!(
+        "PASS IPv6 egress gateway: a selected Pod's packet is redirected unchanged to the gateway's IPv6 next hop, no next hop or no gateway drops, an excluded destination passes; on the gateway TCP and UDP leave from 2001:db8:77::7 and a NAT port and the replies come back to the other node's Pod, checksums valid; cleared maps: untouched"
     );
     Ok(())
 }

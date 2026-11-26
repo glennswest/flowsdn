@@ -46,7 +46,7 @@ use flowsdn_bpf_abi::{
         Ipv4RevnatEntry, Ipv4RevnatTuple, Ipv6RevnatEntry, Ipv6RevnatTuple, Lb4Backend, Lb4Key,
         DsrDispatch, Lb6Backend, Lb6Key, LbService, service_flags,
     },
-    egress::{EgressGw4Value, GATEWAY_EXCLUDED, GATEWAY_NONE},
+    egress::{EgressGw4Value, EgressGw6Value, GATEWAY_EXCLUDED, GATEWAY_NONE},
     maglev::{self, ALGORITHM_MAGLEV, TABLE_LEN},
 };
 
@@ -2249,6 +2249,104 @@ fn egress_gateway4(ctx: &TcContext) -> Option<i32> {
     } as i32)
 }
 
+// IPv6 egress gateway (#580): as [`egress_gateway4`], with the policy in
+// [`EGRESS_GW6`]. Its `gateway_ip` is the gateway's IPv4 (spec 14 §3.4.5),
+// which cannot be an IPv6 packet's next hop, so a source node redirects to
+// the gateway's IPv6 InternalIP from [`EGRESS_GW_NEXTHOP6`] (none known:
+// dropped). On the gateway the flow takes BPF masquerade's IPv6 path (#513)
+// from the policy's egress address, so its reply comes back the same way.
+
+#[map(name = "flowsdn_egress_gw_policy_v6")]
+static EGRESS_GW6: LpmTrie<[u8; 32], EgressGw6Value> =
+    LpmTrie::with_max_entries(16384, BPF_F_NO_PREALLOC);
+#[map(name = "flowsdn_egress_gw_nexthop6")]
+static EGRESS_GW_NEXTHOP6: HashMap<[u8; 4], [u8; 16]> =
+    HashMap::with_max_entries(1024, BPF_F_NO_PREALLOC);
+/// `bpf_redir_neigh.nh_family` for an IPv6 next hop.
+const AF_INET6: u32 = 10;
+/// [`egress_gw6`]: the gateway's SNAT, a known flow or a new one. Outside
+/// the TC verdicts and [`NOT_NODEPORT`].
+const EGW_FORWARD: i32 = 100;
+const EGW_NEW: i32 = 101;
+
+/// None: no egress gateway policy for this packet (the masquerade is next).
+#[inline(always)]
+fn egress_gateway6(ctx: &TcContext) -> Option<i32> {
+    let tuple = tuple6(ctx)?;
+    let (proto, src, dst, sport, dport) = tuple;
+    let key: [u8; 32] = core::array::from_fn(|i| {
+        if i < 16 {
+            src.get(i).copied().unwrap_or(0)
+        } else {
+            dst.get(i.wrapping_sub(16)).copied().unwrap_or(0)
+        }
+    });
+    let policy = EGRESS_GW6.get(Key::new(256, key)).copied()?;
+    if policy.gateway_ip == GATEWAY_EXCLUDED {
+        return None;
+    }
+    if policy.gateway_ip == GATEWAY_NONE {
+        return Some(TC_ACT_SHOT);
+    }
+    if policy.egress_ip != [0; 16] {
+        let state = INGRESS6.get_ptr_mut(0)?;
+        let key = Nodeport6Key {
+            a: src,
+            b: dst,
+            ap: sport,
+            bp: dport,
+            proto,
+            direction: FORWARD,
+            pad: [0; 2],
+        };
+        // SAFETY: LRU value copied at once, never written through.
+        let known = unsafe { NODEPORT6.get(&key).copied() }
+            .filter(|f| f.flags & FLOW_MASQ != 0 && live6(ctx, &tuple, f));
+        let step = if known.is_some() { EGW_FORWARD } else { EGW_NEW };
+        let flow = known.unwrap_or(Nodeport6Value {
+            address: [0; 16],
+            port: [0; 2],
+            flags: 0,
+            pad: 0,
+            // masq_new6_in claims the NAT port on this address.
+            other: policy.egress_ip,
+            other_port: [0; 2],
+            pad2: [0; 2],
+        });
+        // SAFETY: this CPU's slot, valid for the whole invocation and used by
+        // nothing else meanwhile (see fib6).
+        unsafe { state.write(Ingress6 { tuple, flow }) };
+        return Some(step);
+    }
+    // SAFETY: a map value copied at once.
+    let Some(next) = (unsafe { EGRESS_GW_NEXTHOP6.get(&policy.gateway_ip).copied() }) else {
+        return Some(TC_ACT_SHOT);
+    };
+    let (result, fib) = fib6(ctx, proto, [0; 16], next, 0)?;
+    // SAFETY: the per-CPU slot fib6 just filled; a plain field read.
+    let ifindex = unsafe { (*fib).ifindex };
+    // The gateway is this node but it has no egress address, or the FIB
+    // cannot reach the gateway: dropped.
+    if result == FIB_LOCAL || !forwarded(result) {
+        return Some(TC_ACT_SHOT);
+    }
+    // SAFETY: the generated C struct holds only integers and a union of
+    // integers; all-zero is valid and the used member is written below.
+    let mut hop: bpf_redir_neigh = unsafe { core::mem::zeroed() };
+    hop.nh_family = AF_INET6;
+    hop.__bindgen_anon_1.ipv6_nh = ip6_words(next);
+    // SAFETY: `hop` is a live stack value of the helper's ABI type and its
+    // real size; the helper does not keep the pointer.
+    Some(unsafe {
+        bpf_redirect_neigh(
+            ifindex,
+            core::ptr::from_mut(&mut hop),
+            core::mem::size_of::<bpf_redir_neigh>() as i32,
+            0,
+        )
+    } as i32)
+}
+
 /// The reply of a masqueraded TCP/UDP flow: to the Pod, through the stack.
 #[inline(always)]
 fn masq_reply4(
@@ -3836,16 +3934,24 @@ fn masq_classify6(ctx: &TcContext) -> Option<i32> {
 /// NAT address and port, into the slot's flow.
 #[inline(always)]
 fn masq_new6_in(ctx: &TcContext, state: *mut Ingress6) -> Option<()> {
-    // SAFETY: the slot masq_classify6 filled; read here, written below.
+    // SAFETY: the slot masq_classify6 (or egress_gateway6) filled; read
+    // here, written below.
     let (proto, src, dst, sport, dport) = unsafe { (*state).tuple };
-    let (result, fib) = fib6(ctx, proto, [0; 16], dst, BPF_FIB_LOOKUP_SRC)?;
-    // SAFETY: the per-CPU slot fib6 just filled; plain field reads.
-    let (ifindex, source) = unsafe { ((*fib).ifindex, (*fib).__bindgen_anon_3.ipv6_src) };
-    // Only out of the uplink it leaves by, from that uplink's address.
-    if !forwarded(result) || ifindex != uplink(ctx) {
-        return None;
-    }
-    let nat = ip6_bytes(source);
+    // An egress gateway's new flow (#580) comes with its egress address.
+    // SAFETY: as above.
+    let preset = unsafe { (*state).flow.other };
+    let nat = if preset != [0; 16] {
+        preset
+    } else {
+        let (result, fib) = fib6(ctx, proto, [0; 16], dst, BPF_FIB_LOOKUP_SRC)?;
+        // SAFETY: the per-CPU slot fib6 just filled; plain field reads.
+        let (ifindex, source) = unsafe { ((*fib).ifindex, (*fib).__bindgen_anon_3.ipv6_src) };
+        // Only out of the uplink it leaves by, from that uplink's address.
+        if !forwarded(result) || ifindex != uplink(ctx) {
+            return None;
+        }
+        ip6_bytes(source)
+    };
     let fin = closes(ctx, IP6_SPORT, proto);
     let reply = Nodeport6Value {
         address: dst,
@@ -4598,6 +4704,13 @@ fn icmp_in6(skb: *mut __sk_buff) -> i32 {
 fn snat_icmp_in6(skb: *mut __sk_buff) -> i32 {
     snat_error6_back(&TcContext::new(skb)).unwrap_or(NOT_NODEPORT)
 }
+/// [`egress_gateway6`] on its own frame: [`NOT_NODEPORT`] when no policy
+/// applies, [`STEP_FORWARD`]/[`STEP_NEW`] for the gateway's SNAT on the
+/// masquerade path (the [`INGRESS6`] slot filled), else a verdict.
+#[inline(never)]
+fn egress_gw6(skb: *mut __sk_buff) -> i32 {
+    egress_gateway6(&TcContext::new(skb)).unwrap_or(NOT_NODEPORT)
+}
 /// [`masq_classify6`] on its own frame.
 #[inline(never)]
 fn masq6(skb: *mut __sk_buff) -> i32 {
@@ -5064,10 +5177,17 @@ pub fn nodeport_egress(ctx: TcContext) -> i32 {
                     STEP_XLATE_FORWARD => TC_ACT_OK,
                     STEP_NEW if gateway64_new(ctx.skb.skb) != 0 => to_v4(ctx.skb.skb, false),
                     STEP_NEW => TC_ACT_OK,
-                    _ => match masq6(ctx.skb.skb) {
-                        STEP_FORWARD => masq_out6(ctx.skb.skb),
-                        STEP_NEW if masq_new6(ctx.skb.skb) != 0 => masq_out6(ctx.skb.skb),
-                        _ => TC_ACT_OK,
+                    _ => match egress_gw6(ctx.skb.skb) {
+                        NOT_NODEPORT => match masq6(ctx.skb.skb) {
+                            STEP_FORWARD => masq_out6(ctx.skb.skb),
+                            STEP_NEW if masq_new6(ctx.skb.skb) != 0 => masq_out6(ctx.skb.skb),
+                            _ => TC_ACT_OK,
+                        },
+                        EGW_FORWARD => masq_out6(ctx.skb.skb),
+                        EGW_NEW if masq_new6(ctx.skb.skb) != 0 => masq_out6(ctx.skb.skb),
+                        // No NAT port: never out of this node's address.
+                        EGW_NEW => TC_ACT_SHOT,
+                        verdict => verdict,
                     },
                 },
                 verdict => verdict,

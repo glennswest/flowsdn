@@ -1447,7 +1447,8 @@ struct UplinkSettings {
 /// `egress-gateway-reconciliation-trigger-interval`).
 const EGRESS_INTERVAL: Duration = Duration::from_secs(1);
 
-/// This node's interfaces with their IPv4 addresses, from sysfs and netlink.
+/// This node's interfaces with their IPv4 and global IPv6 addresses, from
+/// sysfs and netlink.
 fn egress_interfaces() -> Vec<crate::egress_gateway::Interface> {
     let Ok(connector) = Connector::open() else {
         return Vec::new();
@@ -1464,30 +1465,38 @@ fn egress_interfaces() -> Vec<crate::egress_gateway::Interface> {
         else {
             continue;
         };
-        let addresses = connector
-            .addresses(index)
-            .unwrap_or_default()
-            .into_iter()
+        let all = connector.addresses(index).unwrap_or_default();
+        let addresses = all
+            .iter()
             .filter_map(|ip| match ip {
-                IpAddr::V4(v4) => Some(v4),
+                IpAddr::V4(v4) => Some(*v4),
                 IpAddr::V6(_) => None,
+            })
+            .collect();
+        let addresses6 = all
+            .iter()
+            .filter_map(|ip| match ip {
+                IpAddr::V6(v6) if !v6.is_unicast_link_local() && !v6.is_loopback() => Some(*v6),
+                _ => None,
             })
             .collect();
         out.push(crate::egress_gateway::Interface {
             name,
             index,
             addresses,
+            addresses6,
         });
     }
     out
 }
 
-/// Plan the egress gateway map from the view and write it when it changed
-/// (#564). Interfaces this node is the gateway on get loose `rp_filter`.
+/// Plan the egress gateway maps from the view and write them when they
+/// changed (#564, IPv6 #580). Interfaces this node is the IPv4 gateway on get
+/// loose `rp_filter`.
 fn program_egress(
     lb: &mut SocketLb,
     view: &Shared,
-    written: &mut Option<crate::egress_gateway::Entries>,
+    written: &mut Option<crate::egress_gateway::Maps>,
 ) {
     let interfaces = egress_interfaces();
     let (entries, report) = {
@@ -1530,10 +1539,15 @@ fn program_egress(
     let result = if written.as_ref() == Some(&entries) {
         Ok(())
     } else {
-        lb.set_egress_gateway4(&entries).map_err(|e| e.to_string())
+        // The next hops first, so an IPv6 entry never names a gateway whose
+        // next hop is not there yet.
+        lb.set_egress_nexthop6(&entries.nexthop6)
+            .and_then(|()| lb.set_egress_gateway4(&entries.v4))
+            .and_then(|()| lb.set_egress_gateway6(&entries.v6))
+            .map_err(|e| e.to_string())
     };
     let mut view = lock(view);
-    view.egress_status = report.json(true, entries.len());
+    view.egress_status = report.json(true, entries.v4.len(), entries.v6.len());
     match result {
         Ok(()) => {
             *written = Some(entries);
@@ -1572,7 +1586,7 @@ fn service_loop(
     // Egress gateway (#564): what was last written, and when the Services
     // were last programmed (they keep their 30 s cadence while egress
     // gateway wakes this thread every second).
-    let mut egress_written: Option<crate::egress_gateway::Entries> = None;
+    let mut egress_written: Option<crate::egress_gateway::Maps> = None;
     let mut serviced = Instant::now();
     let mut fresh = false;
     loop {

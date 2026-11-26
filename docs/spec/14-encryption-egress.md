@@ -2286,3 +2286,18 @@ BPF host-routing/build-plan decisions; actual object instrumentation remains ope
   policy events.
 - §3.4.10 (status, health check) is not built.
 
+## Amendment — IPv6 egress gateway (#580, 2026-11-26)
+
+§3.4.5's `cilium_egress_gw_policy_v6` is `flowsdn_egress_gw_policy_v6`, with the 36-byte key and the 40-byte value
+whose `gateway_ip` is the gateway's IPv4, as specified.
+- **DEVIATION (native routing, #564's amendment):** an IPv6 packet cannot have that IPv4 as its next hop. A second map,
+  `flowsdn_egress_gw_nexthop6` (hash, gateway IPv4 → IPv6, 1024 entries), gives the gateway's first global IPv6
+  InternalIP, and the source node `bpf_redirect_neigh`s to it. A gateway without an IPv6 InternalIP has no entry,
+  and its IPv6 traffic is dropped, as with no gateway. The agent writes the next hops before the policies.
+- On the gateway the flow takes BPF masquerade's IPv6 path (#513) from the IPv6 egress address, and its reply comes
+  back the same way.
+- §3.4.4's IPv6 address is derived only when a destination is IPv6. The interface case and the default case use the
+  device's first global IPv6. The `egressIP` case uses the address itself when it is IPv6, else the first IPv6 of the
+  device holding it, with index 0.
+- Echo requests are not steered, as with IPv4 (TCP and UDP only).
+
