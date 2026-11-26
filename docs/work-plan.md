@@ -10,7 +10,7 @@ Staged; each stage committed and verified (kernel tests keep passing).
 - [x] Stage 1 (2a80d18, strict sc-build passed): `flowsdn-node` crate: rows (`devices`, `routes`, `neighbors`, `node-addresses`, `desired-routes`,
       `forwardable-ips`, `desired-neighbors`) with Keyed/TableRender (harvested columns), `node-addresses` derivation
       (§3.1.6), `RouteManager` (owners, AD selection), `RouteTarget` over `RouteOps` (flowsdn-reconcile). Unit tests.
-- [ ] Stage 2: agent fills the realized tables from netlink; direct node routes (`route_loop`) become an owner of
+- [x] Stage 2 (e3f7fb2: xtask check, test/build.sh, kernel-check 26/0/2): direct node routes (`route_loop`) become an owner of
       `desired-routes`, reconciled through `RouteTarget` (connector ops); persistence file replaced by prune of owned routes.
 - [ ] Stage 3: uplink routes and rules (#408) as owners (`desired-rules` too).
 - [ ] Stage 4: `neighbors.rs` (#469) through `forwardable-ips` → `desired-neighbors` and a neighbor reconciler.
