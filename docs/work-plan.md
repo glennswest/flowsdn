@@ -11,8 +11,9 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] Asked on #484 how agent health becomes visible on a node. `stormcentral wait-owner` refused: findings are
       session work, never the owner's ("fix it"). So the recommended option was built: the agent mirrors health
       transitions to `/dev/kmsg` (stormpump's log service follows it into syslog); both edition DaemonSets mount it.
-- [ ] sc-build; stage; the next pvetest install shows `health agent.(api|kubernetes) OK` (covers #418, #484, #487
-      and the other issues reopened on that proof).
+- [x] Strict sc-build at 936dedb (xtask check + test/build.sh) passed; staged golden-flowsdn-896f02036e02
+      (stormcos#1502). #484, #487 and #418 re-shipped with the same proof and `--commit 936dedb`; they close when a
+      pvetest install of a release carrying it shows the line. Also fixed #593 (agent tokio dev-dep lacked test-util).
 
 ### No stubs: proof on a node — #418 (reopened), 2026-11-26
 
@@ -20,7 +21,7 @@ Reopened by stormcentral: 14.06-flowsdn on pvetest1 (install pvetest1-1795671725
 - [x] Cause 1: the agent is a DaemonSet pod and pod stderr is not forwarded to syslog (only stormpump host processes are), so a `log:` proof cannot see agent lines on any node.
 - [x] Cause 2: stormfw (host process) probes `/v1/healthz` with HTTP/1.0 and got 505 on every boot ("boot program stays why=flowsdn /v1/healthz answers 505"). Fixed at 27d30cf (HTTP/1.0 served; responses close). Its strict sc-build was still running when the P0 #484 preempted this.
 - [x] Repo-wide stub-wording grep empty (CHANGELOG/work-plan quotes reworded; clustermesh README said "not implemented", now says not built / runs in #567).
-- [ ] On return: read 27d30cf's build result; ask the owner how the proof sees agent health (pod log forwarding on stormcos, the agent sending syslog itself, or a proof on stormfw's healthz line); stage; wait for a pvetest install.
+- [x] 27d30cf passed the strict build. The proof route is settled under #484 (the agent writes `/dev/kmsg`); re-shipped with it.
 
 ### MCS-API CoreDNS configuration — #569, 2026-11-25
 
