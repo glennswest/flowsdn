@@ -125,12 +125,21 @@ pub struct Outcome {
     pub errors: Vec<String>,
 }
 
-/// Compute the desired entries for `inputs` and make the kernel hold them.
+/// Compute the desired entries for `inputs` and make the kernel hold them
+/// (#576 stage 4): the forwardable IPs (`forwardable-ips`, owner `node`) give,
+/// per selected device, the next hops in `desired-neighbors`, which are
+/// reconciled into managed entries through `flowsdn-reconcile`; prune
+/// deletes learned entries on selected devices that no row wants.
 pub fn reconcile(connector: &Connector, inputs: &Inputs) -> Outcome {
+    use flowsdn_node::neighbors::{NeighborTarget, forwardable};
+    use flowsdn_node::rows::DesiredNeighbor;
+    use flowsdn_reconcile::{Kind, Options, Reconciler};
+    use futures::executor::block_on;
     let mut outcome = Outcome::default();
-    for ip in &inputs.forwardable {
+    let ips = forwardable(inputs.forwardable.iter().map(|ip| (*ip, "node".to_owned())));
+    for row in &ips {
         for (index, name) in &inputs.devices {
-            match connector.next_hops(*ip, *index) {
+            match connector.next_hops(row.addr, *index) {
                 Ok(Lookup::Hops(hops)) => {
                     outcome
                         .desired
@@ -141,31 +150,107 @@ pub fn reconcile(connector: &Connector, inputs: &Inputs) -> Outcome {
                 }
                 Err(error) => outcome
                     .errors
-                    .push(format!("route to {ip} on {name}: {error}")),
+                    .push(format!("route to {} on {name}: {error}", row.addr)),
             }
         }
     }
-    for (index, hop) in &outcome.desired {
-        if let Err(error) = connector.add_managed(*index, *hop) {
-            outcome
-                .errors
-                .push(format!("neighbor {hop} on {index}: {error}"));
+    let table = match flowsdn_table::Table::new(Vec::new()) {
+        Ok(table) => table,
+        Err(error) => {
+            outcome.errors.push(format!("desired-neighbors: {error}"));
+            return outcome;
+        }
+    };
+    let init = match table.register_initializer("neighbors") {
+        Ok(init) => init,
+        Err(error) => {
+            outcome.errors.push(format!("desired-neighbors: {error}"));
+            return outcome;
+        }
+    };
+    table.seal_initializers();
+    let rows: Vec<DesiredNeighbor> = outcome
+        .desired
+        .iter()
+        .map(|(link_index, addr)| DesiredNeighbor {
+            addr: *addr,
+            link_index: *link_index,
+        })
+        .collect();
+    if let Err(error) = block_on(flowsdn_node::set_all(&table, rows)) {
+        outcome.errors.push(format!("desired-neighbors: {error}"));
+        return outcome;
+    }
+    init.complete();
+    let ops = Ops {
+        connector,
+        devices: &inputs.devices,
+    };
+    let mut reconciler = match Reconciler::new(&table, NeighborTarget::new(ops), Options::default()) {
+        Ok(reconciler) => reconciler,
+        Err(error) => {
+            outcome.errors.push(format!("neighbor reconciler: {error}"));
+            return outcome;
+        }
+    };
+    reconciler.prune_now();
+    // The connector runs its own runtime, so this is driven without one.
+    for _ in 0..16 {
+        let _ = block_on(reconciler.run_round(Instant::now()));
+        if !reconciler.has_pending_work() {
+            break;
         }
     }
-    match connector.learned() {
-        Ok(learned) => {
-            for (index, ip) in stale(&outcome.desired, &learned, &inputs.devices) {
-                match connector.delete_neighbor(index, ip) {
-                    Ok(()) => outcome.removed.push((index, ip)),
-                    Err(error) => outcome
-                        .errors
-                        .push(format!("delete neighbor {ip} on {index}: {error}")),
-                }
-            }
+    for (row, _) in table.snapshot().all() {
+        if let Some(status) = reconciler.status(&flowsdn_table::Keyed::primary_key(&*row))
+            && status.kind == Kind::Error
+        {
+            outcome.errors.push(format!(
+                "neighbor {} on {}: {}",
+                row.addr,
+                row.link_index,
+                status.error.unwrap_or_default()
+            ));
         }
-        Err(error) => outcome.errors.push(format!("list neighbors: {error}")),
     }
+    if let Some(error) = reconciler.prune_status().and_then(|p| p.error.clone()) {
+        outcome.errors.push(error);
+    }
+    outcome.removed = reconciler
+        .target()
+        .removed
+        .iter()
+        .map(|n| (n.link_index, n.addr))
+        .collect();
     outcome
+}
+
+/// `desired-neighbors` over netlink: learned entries on selected devices.
+struct Ops<'a> {
+    connector: &'a Connector,
+    devices: &'a BTreeMap<u32, String>,
+}
+impl flowsdn_node::neighbors::NeighborOps for Ops<'_> {
+    fn add(&mut self, n: &flowsdn_node::rows::DesiredNeighbor) -> Result<(), String> {
+        self.connector
+            .add_managed(n.link_index, n.addr)
+            .map_err(|e| e.to_string())
+    }
+    fn delete(&mut self, n: &flowsdn_node::rows::DesiredNeighbor) -> Result<(), String> {
+        self.connector
+            .delete_neighbor(n.link_index, n.addr)
+            .map_err(|e| format!("delete neighbor {} on {}: {e}", n.addr, n.link_index))
+    }
+    fn learned(&mut self) -> Result<Vec<flowsdn_node::rows::DesiredNeighbor>, String> {
+        let learned = self
+            .connector
+            .learned()
+            .map_err(|e| format!("list neighbors: {e}"))?;
+        Ok(stale(&BTreeSet::new(), &learned, self.devices)
+            .into_iter()
+            .map(|(link_index, addr)| flowsdn_node::rows::DesiredNeighbor { addr, link_index })
+            .collect())
+    }
 }
 
 /// The `neighbors` part of `/v1/healthz`.

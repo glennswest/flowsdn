@@ -16,27 +16,8 @@ pub trait RuleOps: Send {
 }
 
 /// Make `table` hold exactly `rules`.
-pub async fn set_rules(
-    table: &Table<DesiredRule>,
-    rules: &BTreeSet<DesiredRule>,
-) -> Result<(), TableError> {
-    let snapshot = table.snapshot();
-    let wanted: BTreeMap<Key, &DesiredRule> = rules.iter().map(|r| (r.primary_key(), r)).collect();
-    table
-        .batch(|write| -> Result<(), TableError> {
-            for (row, _) in snapshot.all() {
-                if !wanted.contains_key(&row.primary_key()) {
-                    write.delete(&row.primary_key())?;
-                }
-            }
-            for (key, rule) in &wanted {
-                if snapshot.get("primary", key).ok().flatten().is_none() {
-                    write.insert((*rule).clone())?;
-                }
-            }
-            Ok(())
-        })
-        .await
+pub async fn set_rules(table: &Table<DesiredRule>, rules: &BTreeSet<DesiredRule>) -> Result<(), TableError> {
+    crate::set_all(table, rules.iter().cloned()).await
 }
 
 /// The `flowsdn-reconcile` target of `desired-rules`: a row is added when

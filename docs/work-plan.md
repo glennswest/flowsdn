@@ -11,8 +11,8 @@ Staged; each stage committed and verified (kernel tests keep passing).
       `forwardable-ips`, `desired-neighbors`) with Keyed/TableRender (harvested columns), `node-addresses` derivation
       (§3.1.6), `RouteManager` (owners, AD selection), `RouteTarget` over `RouteOps` (flowsdn-reconcile). Unit tests.
 - [x] Stage 2 (e3f7fb2: xtask check, test/build.sh, kernel-check 26/0/2): direct node routes (`route_loop`) become an owner of
-      `desired-routes`, reconciled through `RouteTarget` (connector ops); persistence file replaced by prune of owned routes.
-- [ ] Stage 3: uplink routes and rules (#408) as owners (`desired-rules` too).
+      `desired-routes`, reconciled through `RouteTarget` (connector ops); the persisted routes file stays as the owned set prune reads.
+- [x] Stage 3 (a9f6a26): uplink table routes are the `uplinks` owner; rules are `desired-rules` (`flowsdn_node::rules`).
 - [ ] Stage 4: `neighbors.rs` (#469) through `forwardable-ips` → `desired-neighbors` and a neighbor reconciler.
 - [ ] Docs (spec 10 amendment, runtime), kernel-check, close. Then #520 (scripttest node adapters).
 
