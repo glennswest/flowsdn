@@ -29,6 +29,15 @@ Every suite starts with a read-only **node probe**. `node-cni` checks for
 `/v1/config` and `/v1/endpoint` on the node agent's socket: the first socket one directory below the host's `/var/run` or `/run` (`flowsdn/` first; both declared read-only) that answers `GET /v1/healthz`, since a node's release may predate the current socket path. A node without the
 flowsdn CNI is not the flowsdn flavor, and both checks report skip.
 
+With the agent healthy, `node-host-firewall` (#478) reads the host firewall
+the same way, GETs only: `kubernetes.policy.host-firewall` of `/v1/healthz`
+(`null`, the setting off, is a skip) and the `host` rows of
+`/v1/policy/verdicts`. It waits up to 120 s for every interface to leave its
+60 s learning window, and passes when the firewall is on at least one
+interface and judging there. The detail names the mode, interfaces, local
+Pods' path, the node's addresses, the selecting policies and the host's
+verdict counts.
+
 On a flowsdn node, `node-operator` (#446) checks the flowsdn operator through
 the apiserver: `flowsdn-perf operator` (the image's GNU binary, which has the
 API client) reads the Lease `kube-system/flowsdn-operator` and passes when it

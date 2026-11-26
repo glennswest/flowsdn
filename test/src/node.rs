@@ -132,8 +132,114 @@ pub fn probe(report: &mut Report, env: &Env) {
     });
     operator(report, env);
     if healthy.is_some() {
+        host_firewall(report, &socket);
         crate::services::probe(report, &socket);
     }
+}
+
+/// The host firewall on the node's uplinks (#478): `kubernetes.policy.host-firewall`
+/// of `/v1/healthz` and the host's rows of `/v1/policy/verdicts`, GETs only.
+/// Off on this node (`null`) is a skip. On, it passes once every interface it
+/// is on has left its 60 s learning window and it judges on at least one; the
+/// detail says the mode, the interfaces, the local Pods' path, the node's
+/// addresses and what the host's verdict rows counted.
+fn host_firewall(report: &mut Report, socket: &std::path::Path) {
+    const LIMIT: Duration = Duration::from_secs(120);
+    let client = Client::new(socket, Duration::from_secs(2));
+    let get = |path: &str| -> Result<serde_json::Value, String> {
+        let reply = client
+            .request(flowsdn_api_client::Method::Get, path, None)
+            .map_err(|e| format!("GET {path}: {e}"))?;
+        if reply.status != 200 {
+            return Err(format!("GET {path} returned {}", reply.status));
+        }
+        reply.json.ok_or_else(|| format!("GET {path}: not JSON"))
+    };
+    let start = Instant::now();
+    let firewall = loop {
+        let health = match get("/v1/healthz") {
+            Ok(health) => health,
+            Err(error) => return report.fail("node-host-firewall", start.elapsed(), &error),
+        };
+        let Some(policy) = health.pointer("/kubernetes/policy").filter(|p| !p.is_null()) else {
+            if start.elapsed() > LIMIT {
+                return report.fail(
+                    "node-host-firewall",
+                    start.elapsed(),
+                    "kubernetes.policy is still null (no policy pass)",
+                );
+            }
+            std::thread::sleep(Duration::from_secs(2));
+            continue;
+        };
+        let firewall = policy.get("host-firewall").cloned().unwrap_or_default();
+        if firewall.is_null() {
+            return report.skip("node-host-firewall", "kubernetes.host-firewall is off on this node");
+        }
+        let learning = firewall.get("learning").and_then(|l| l.as_array()).map_or(0, Vec::len);
+        if learning == 0 || start.elapsed() > LIMIT {
+            break firewall;
+        }
+        std::thread::sleep(Duration::from_secs(2));
+    };
+    report.check("node-host-firewall", || {
+        let list = |key: &str| -> Vec<String> {
+            firewall
+                .get(key)
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .map(|x| x.as_str().map_or_else(|| x.to_string(), str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let mode = firewall.get("mode").and_then(|m| m.as_str()).unwrap_or("?").to_owned();
+        let interfaces = list("interfaces");
+        let learning = list("learning");
+        let judging = list("enforcing-on");
+        let addresses = list("addresses");
+        let pods = firewall
+            .get("pods")
+            .map_or_else(String::new, |p| p.as_str().map_or_else(|| p.to_string(), str::to_owned));
+        let policies = list("policies");
+        let verdicts = get("/v1/policy/verdicts")?;
+        let rows = verdicts
+            .as_array()
+            .or_else(|| verdicts.get("verdicts").and_then(|v| v.as_array()))
+            .cloned()
+            .unwrap_or_default();
+        let mut counted = std::collections::BTreeMap::<String, u64>::new();
+        for row in rows.iter().filter(|r| r.get("endpoint").and_then(|e| e.as_str()) == Some("host")) {
+            let verdict = row.get("verdict").and_then(|v| v.as_str()).unwrap_or("?").to_owned();
+            let packets = row.get("packets").and_then(serde_json::Value::as_u64).unwrap_or(0);
+            *counted.entry(verdict).or_default() += packets;
+        }
+        let counted = counted
+            .iter()
+            .map(|(verdict, packets)| format!("{verdict} {packets}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let detail = format!(
+            "mode {mode}; on [{}]; learning [{}]; judging [{}]; local Pods {pods}; addresses [{}]; policies [{}]; host verdicts: {}",
+            interfaces.join(" "),
+            learning.join(" "),
+            judging.join(" "),
+            addresses.join(" "),
+            policies.join(" "),
+            if counted.is_empty() { "none".to_owned() } else { counted },
+        );
+        if interfaces.is_empty() {
+            return Err(format!("on no interface: {detail}"));
+        }
+        if !learning.is_empty() {
+            return Err(format!("still learning after {}s: {detail}", LIMIT.as_secs()));
+        }
+        if judging.is_empty() {
+            return Err(format!("judging on no interface: {detail}"));
+        }
+        Ok(((), detail))
+    });
 }
 
 /// The flowsdn operator (#446) on a flowsdn-flavor node: `flowsdn-perf
