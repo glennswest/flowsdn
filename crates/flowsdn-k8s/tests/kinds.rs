@@ -1,5 +1,5 @@
 //! The flowsdn.io endpoint, identity and node kinds' Rust types against
-//! their CRD schemas (#332, spec 13 §9):
+//! their CRD schemas (#332; #336's and #334's kinds too; spec 13 §9):
 //!
 //! - T-CRD-3 (type ↔ schema): an instance holding every schema property
 //!   round-trips through the type unchanged (no field dropped or retyped),
@@ -18,6 +18,10 @@ use flowsdn_k8s::kinds::{
     API_VERSION, FlowsdnDatapathPlugin, FlowsdnEgressGatewayPolicy, FlowsdnEndpoint,
     FlowsdnEndpointSlice, FlowsdnIdentity, FlowsdnLocalRedirectPolicy, FlowsdnNode,
     FlowsdnNodeConfig, Kind,
+};
+use flowsdn_k8s::kinds::{
+    BgpAdvertisement, FlowsdnBGPAdvertisement, FlowsdnBGPClusterConfig, FlowsdnBGPNodeConfig,
+    FlowsdnBGPNodeConfigOverride, FlowsdnBGPPeerConfig, FlowsdnBGPPeerConfigSpec,
 };
 use flowsdn_k8s::schema::{apply_defaults, validate};
 use serde_json::{Map, Value, json};
@@ -129,6 +133,8 @@ impl Generator<'_> {
                         format!("10.0.0.{octet}"),
                         format!("fd00::{octet:x}"),
                         format!("fd00:{octet:x}::/64"),
+                        // A large BGP community (#334).
+                        format!("65000:{n}:{octet}"),
                     ]
                     .into_iter()
                     .map(|candidate| json!(candidate))
@@ -155,7 +161,9 @@ impl Generator<'_> {
             Some("boolean") => json!(self.unique() & 1 == 0),
             Some("array") => {
                 let item = schema.get("items").cloned().unwrap_or(Value::Null);
-                let n = if depth > 6 { 0 } else { self.count() };
+                // At least `minItems` (#334: one BGP instance at least).
+                let min = schema.get("minItems").and_then(Value::as_u64).unwrap_or(0);
+                let n = if depth > 6 { 0 } else { self.count() }.max(min);
                 Value::Array(
                     (0..n)
                         .map(|_| self.value(&item, depth.saturating_add(1)))
@@ -218,7 +226,69 @@ impl Generator<'_> {
                 out.insert(key, value);
             }
         }
+        if schema.get("x-kubernetes-validations").is_some() {
+            self.satisfy(schema, &mut out, &required, &excluded, depth);
+        }
         Value::Object(out)
+    }
+
+    /// Satisfy an object's CEL rules (#334: an advertisement's type decides
+    /// which of `service`, `interface` and `selector` it has; keepalive at
+    /// most hold) by adding or removing optional properties, one at a time,
+    /// while that lowers the number of problems.
+    fn satisfy(
+        &mut self,
+        schema: &Value,
+        out: &mut Map<String, Value>,
+        required: &[&str],
+        excluded: &[String],
+        depth: usize,
+    ) {
+        let Some(properties) = schema.get("properties").and_then(Value::as_object) else {
+            return;
+        };
+        let optional: Vec<(&String, &Value)> = properties
+            .iter()
+            .filter(|(name, _)| {
+                !required.contains(&name.as_str())
+                    && !excluded.contains(name)
+                    && !["apiVersion", "kind", "metadata"].contains(&name.as_str())
+            })
+            .collect();
+        let problems = |out: &Map<String, Value>| validate(schema, &Value::Object(out.clone())).len();
+        let mut count = problems(out);
+        while count > 0 {
+            let mut improved = false;
+            for (name, child) in &optional {
+                let before = out.get(*name).cloned();
+                match &before {
+                    Some(_) => {
+                        out.remove(*name);
+                    }
+                    None => {
+                        let value = self.value(child, depth.saturating_add(1));
+                        out.insert((*name).clone(), value);
+                    }
+                }
+                let now = problems(out);
+                if now < count {
+                    count = now;
+                    improved = true;
+                } else {
+                    match before {
+                        Some(value) => {
+                            out.insert((*name).clone(), value);
+                        }
+                        None => {
+                            out.remove(*name);
+                        }
+                    }
+                }
+            }
+            if !improved {
+                break;
+            }
+        }
     }
 }
 
@@ -414,6 +484,96 @@ fn flowsdn_local_redirect_policy() {
 #[test]
 fn flowsdn_datapath_plugin() {
     all::<FlowsdnDatapathPlugin>(0x336_0003);
+}
+
+#[test]
+fn flowsdn_bgp_cluster_config() {
+    all::<FlowsdnBGPClusterConfig>(0x334_0001);
+}
+#[test]
+fn flowsdn_bgp_peer_config() {
+    all::<FlowsdnBGPPeerConfig>(0x334_0002);
+}
+#[test]
+fn flowsdn_bgp_advertisement() {
+    all::<FlowsdnBGPAdvertisement>(0x334_0003);
+}
+#[test]
+fn flowsdn_bgp_node_config() {
+    all::<FlowsdnBGPNodeConfig>(0x334_0004);
+}
+#[test]
+fn flowsdn_bgp_node_config_override() {
+    all::<FlowsdnBGPNodeConfigOverride>(0x334_0005);
+}
+
+/// Spec 15 §4.2: every absent block and value takes its default, on a copy.
+#[test]
+fn bgp_peer_config_defaults() {
+    let empty = FlowsdnBGPPeerConfigSpec::default();
+    let spec = serde_json::to_value(empty.defaulted()).expect("serialize");
+    assert_eq!(
+        spec,
+        json!({
+            "ebgpMultihop": 1,
+            "families": [{"afi": "ipv6", "safi": "unicast"}, {"afi": "ipv4", "safi": "unicast"}],
+            "gracefulRestart": {"enabled": false, "restartTimeSeconds": 120},
+            "timers": {"connectRetryTimeSeconds": 120, "holdTimeSeconds": 90, "keepAliveTimeSeconds": 30},
+            "transport": {"peerPort": 179}
+        })
+    );
+    assert_eq!(empty, FlowsdnBGPPeerConfigSpec::default(), "the original is unchanged");
+    // The defaults are the schema's.
+    let schema = schema("flowsdnbgppeerconfigs");
+    let mut object = json!({"spec": {"timers": {}, "transport": {}, "gracefulRestart": {"enabled": false}}});
+    apply_defaults(&schema, &mut object);
+    let set: FlowsdnBGPPeerConfigSpec =
+        serde_json::from_value(object.get("spec").cloned().expect("spec")).expect("spec");
+    let mut expected = set.defaulted();
+    expected.families = None;
+    let mut got = set.clone();
+    got.families = None;
+    assert_eq!(got, expected, "schema defaults equal defaulted()");
+    // A configured value is kept.
+    let custom: FlowsdnBGPPeerConfigSpec =
+        serde_json::from_value(json!({"timers": {"holdTimeSeconds": 9}, "families": [{"afi": "ipv4", "safi": "unicast"}]}))
+            .expect("spec");
+    let custom = custom.defaulted();
+    let timers = custom.timers.expect("timers");
+    assert_eq!(timers.hold_time_seconds, Some(9));
+    assert_eq!(timers.keep_alive_time_seconds, Some(30));
+    assert_eq!(custom.families.map(|f| f.len()), Some(1));
+}
+
+/// Spec 15 §4.3: the advertisement CEL rules hold in the controller too, and every reject
+/// case of the CRD breaks one of them or the schema.
+#[test]
+fn bgp_advertisement_rules_in_the_controller() {
+    let parse = |v: Value| -> BgpAdvertisement { serde_json::from_value(v).expect("advertisement") };
+    for good in [
+        json!({"advertisementType": "PodCIDR"}),
+        json!({"advertisementType": "Service", "service": {"addresses": ["ClusterIP"]}, "selector": {}}),
+        json!({"advertisementType": "Interface", "interface": {"name": "lo"}}),
+        json!({"advertisementType": "FlowsdnPodIPPool", "selector": {"matchLabels": {"a": "b"}}}),
+    ] {
+        assert_eq!(parse(good.clone()).check(), Ok(()), "{good}");
+    }
+    for (bad, rule) in [
+        (json!({"advertisementType": "Service"}), "has(self.service)"),
+        (
+            json!({"advertisementType": "PodCIDR", "service": {"addresses": ["ClusterIP"]}}),
+            "!has(self.service)",
+        ),
+        (json!({"advertisementType": "Interface"}), "has(self.interface)"),
+        (
+            json!({"advertisementType": "Service", "service": {"addresses": ["ClusterIP"]}, "interface": {"name": "lo"}}),
+            "!has(self.interface)",
+        ),
+        (json!({"advertisementType": "PodCIDR", "selector": {}}), "!has(self.selector)"),
+    ] {
+        let error = parse(bad.clone()).check().expect_err("rejected");
+        assert!(error.ends_with(rule), "{bad}: {error}");
+    }
 }
 
 #[test]

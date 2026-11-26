@@ -1,6 +1,7 @@
 //! Rust types of the flowsdn.io endpoint, identity and node kinds (#332):
 //! FlowsdnEndpoint, FlowsdnEndpointSlice, FlowsdnIdentity, FlowsdnNode and
-//! FlowsdnNodeConfig, `flowsdn.io/v1alpha1`.
+//! FlowsdnNodeConfig, `flowsdn.io/v1alpha1`; the egress, redirect and
+//! plugin kinds (#336); and the five BGP kinds (#334).
 //!
 //! One field per schema property, named as the schema names it (serde
 //! renames), optional unless the schema requires it, so a document
@@ -1642,4 +1643,582 @@ impl Default for FlowsdnDatapathPluginSpec {
             version: String::new(),
         }
     }
+}
+
+// The BGP kinds (#334, spec 15 §4): FlowsdnBGPClusterConfig, FlowsdnBGPPeerConfig,
+// FlowsdnBGPAdvertisement, FlowsdnBGPNodeConfig (operator-written spec, agent-written status)
+// and FlowsdnBGPNodeConfigOverride, all cluster-scoped. Integers keep the schema's width
+// (`int64` → i64, `int32` → i32) so any admitted value round-trips; enumerated fields are
+// strings. Schema defaults are not applied by the types (the API server applies them);
+// [`FlowsdnBGPPeerConfigSpec::defaulted`] gives a consumer the fully populated copy of §4.2.
+
+/// A `metav1.Condition`, as the status of the BGP kinds (and others) list them.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct Condition {
+    /// RFC 3339 time the status last changed.
+    #[serde(rename = "lastTransitionTime")]
+    pub last_transition_time: String,
+    pub message: String,
+    #[serde(
+        rename = "observedGeneration",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub observed_generation: Option<i64>,
+    pub reason: String,
+    /// True, False or Unknown.
+    pub status: String,
+    #[serde(rename = "type")]
+    pub type_: String,
+}
+
+/// The status of the BGP kinds the operator writes conditions on.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct ConditionsStatus {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conditions: Option<Vec<Condition>>,
+}
+
+macro_rules! object {
+    ($(#[$doc:meta])* $type:ident, $spec:ty $(, $status:ty)?) => {
+        $(#[$doc])*
+        #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+        pub struct $type {
+            /// `apiVersion`: flowsdn.io/v1alpha1 (empty: not written).
+            #[serde(
+                rename = "apiVersion",
+                default,
+                skip_serializing_if = "String::is_empty"
+            )]
+            pub api_version: String,
+            /// `kind`: the kind name (empty: not written).
+            #[serde(default, skip_serializing_if = "String::is_empty")]
+            pub kind: String,
+            /// Standard object metadata.
+            #[serde(default)]
+            pub metadata: ObjectMeta,
+            pub spec: $spec,
+            $(
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            pub status: Option<$status>,
+            )?
+        }
+    };
+}
+
+object!(
+    /// FlowsdnBGPClusterConfig: BGP instances and their peers for the nodes it selects (spec 15
+    /// §4.1). The operator renders one FlowsdnBGPNodeConfig per selected node from it.
+    FlowsdnBGPClusterConfig,
+    FlowsdnBGPClusterConfigSpec,
+    ConditionsStatus
+);
+object!(
+    /// FlowsdnBGPPeerConfig: session parameters a peer refers to (spec 15 §4.2).
+    FlowsdnBGPPeerConfig,
+    FlowsdnBGPPeerConfigSpec,
+    ConditionsStatus
+);
+object!(
+    /// FlowsdnBGPAdvertisement: what a peer family that selects it advertises (spec 15 §4.3).
+    FlowsdnBGPAdvertisement,
+    FlowsdnBGPAdvertisementSpec
+);
+object!(
+    /// FlowsdnBGPNodeConfig: one node's BGP configuration, named after the node (spec 15
+    /// §4.4). The operator writes the spec; the node's agent writes the status.
+    FlowsdnBGPNodeConfig,
+    FlowsdnBGPNodeConfigSpec,
+    FlowsdnBGPNodeConfigStatus
+);
+object!(
+    /// FlowsdnBGPNodeConfigOverride: per-node router ID, ASN, port and peer source address,
+    /// named after the node (spec 15 §4.5).
+    FlowsdnBGPNodeConfigOverride,
+    FlowsdnBGPNodeConfigOverrideSpec
+);
+kind!(FlowsdnBGPClusterConfig, "flowsdnbgpclusterconfigs", false);
+kind!(FlowsdnBGPPeerConfig, "flowsdnbgppeerconfigs", false);
+kind!(FlowsdnBGPAdvertisement, "flowsdnbgpadvertisements", false);
+kind!(FlowsdnBGPNodeConfig, "flowsdnbgpnodeconfigs", false);
+kind!(
+    FlowsdnBGPNodeConfigOverride,
+    "flowsdnbgpnodeconfigoverrides",
+    false
+);
+
+/// The cluster config's spec.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnBGPClusterConfigSpec {
+    /// One to sixteen instances, keyed by name.
+    #[serde(rename = "bgpInstances")]
+    pub bgp_instances: Vec<BgpClusterInstance>,
+    /// The FlowsdnNodes (by label) that get a node config; absent selects every node.
+    #[serde(
+        rename = "nodeSelector",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub node_selector: Option<LabelSelector>,
+}
+
+/// One BGP instance of a cluster config.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpClusterInstance {
+    #[serde(rename = "localASN", default, skip_serializing_if = "Option::is_none")]
+    pub local_asn: Option<i64>,
+    #[serde(rename = "localPort", default, skip_serializing_if = "Option::is_none")]
+    pub local_port: Option<i32>,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peers: Option<Vec<BgpClusterPeer>>,
+}
+
+/// One peer of a cluster config instance.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpClusterPeer {
+    #[serde(
+        rename = "autoDiscovery",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub auto_discovery: Option<BgpAutoDiscovery>,
+    pub name: String,
+    /// 0 (the schema default): accept the ASN the peer's OPEN carries.
+    #[serde(rename = "peerASN", default, skip_serializing_if = "Option::is_none")]
+    pub peer_asn: Option<i64>,
+    #[serde(
+        rename = "peerAddress",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub peer_address: Option<String>,
+    #[serde(
+        rename = "peerConfigRef",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub peer_config_ref: Option<PeerConfigReference>,
+}
+
+/// How a peer's address is discovered (mode `DefaultGateway`).
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpAutoDiscovery {
+    #[serde(
+        rename = "defaultGateway",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub default_gateway: Option<BgpDefaultGateway>,
+    pub mode: String,
+}
+
+/// The address family (ipv4 or ipv6) whose default route names the peer.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpDefaultGateway {
+    #[serde(rename = "addressFamily")]
+    pub address_family: String,
+}
+
+/// A FlowsdnBGPPeerConfig, by name.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct PeerConfigReference {
+    pub name: String,
+}
+
+/// The peer config's spec (spec 15 §4.2).
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnBGPPeerConfigSpec {
+    /// A Secret in the BGP secrets namespace whose `password` keys TCP MD5.
+    #[serde(
+        rename = "authSecretRef",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub auth_secret_ref: Option<String>,
+    #[serde(
+        rename = "ebgpMultihop",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ebgp_multihop: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub families: Option<Vec<BgpFamily>>,
+    #[serde(
+        rename = "gracefulRestart",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub graceful_restart: Option<BgpGracefulRestart>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timers: Option<BgpTimers>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport: Option<BgpTransport>,
+}
+
+/// An address family and the advertisements (by label) it carries; an absent selector selects
+/// none.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpFamily {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advertisements: Option<LabelSelector>,
+    pub afi: String,
+    pub safi: String,
+}
+
+/// Graceful restart (RFC 4724).
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpGracefulRestart {
+    pub enabled: bool,
+    #[serde(
+        rename = "restartTimeSeconds",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub restart_time_seconds: Option<i32>,
+}
+
+/// Session timers.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpTimers {
+    #[serde(
+        rename = "connectRetryTimeSeconds",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub connect_retry_time_seconds: Option<i32>,
+    #[serde(
+        rename = "holdTimeSeconds",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub hold_time_seconds: Option<i32>,
+    #[serde(
+        rename = "keepAliveTimeSeconds",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub keep_alive_time_seconds: Option<i32>,
+}
+
+/// Session transport.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpTransport {
+    #[serde(rename = "peerPort", default, skip_serializing_if = "Option::is_none")]
+    pub peer_port: Option<i32>,
+    #[serde(
+        rename = "sourceInterface",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub source_interface: Option<String>,
+}
+
+impl FlowsdnBGPPeerConfigSpec {
+    /// A copy with every default of spec 15 §4.2 filled in: transport (port 179), timers
+    /// (120/90/30 s), graceful restart (off, 120 s), eBGP multihop 1, and the families
+    /// ipv6 and ipv4 unicast (selecting no advertisements) when none are listed.
+    pub fn defaulted(&self) -> Self {
+        let mut spec = self.clone();
+        let transport = spec.transport.get_or_insert_with(BgpTransport::default);
+        transport.peer_port.get_or_insert(179);
+        let timers = spec.timers.get_or_insert_with(BgpTimers::default);
+        timers.connect_retry_time_seconds.get_or_insert(120);
+        timers.hold_time_seconds.get_or_insert(90);
+        timers.keep_alive_time_seconds.get_or_insert(30);
+        let restart = spec
+            .graceful_restart
+            .get_or_insert_with(BgpGracefulRestart::default);
+        restart.restart_time_seconds.get_or_insert(120);
+        spec.ebgp_multihop.get_or_insert(1);
+        if spec.families.as_ref().is_none_or(Vec::is_empty) {
+            spec.families = Some(
+                ["ipv6", "ipv4"]
+                    .into_iter()
+                    .map(|afi| BgpFamily {
+                        advertisements: None,
+                        afi: afi.into(),
+                        safi: "unicast".into(),
+                    })
+                    .collect(),
+            );
+        }
+        spec
+    }
+}
+
+/// The advertisement's spec.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnBGPAdvertisementSpec {
+    pub advertisements: Vec<BgpAdvertisement>,
+}
+
+/// One advertisement: its type (PodCIDR, FlowsdnPodIPPool, Service, Interface), what it
+/// selects and the path attributes it sets.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpAdvertisement {
+    #[serde(rename = "advertisementType")]
+    pub advertisement_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<BgpAttributes>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interface: Option<BgpInterface>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selector: Option<LabelSelector>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<BgpServiceAdvertisement>,
+}
+
+impl BgpAdvertisement {
+    /// The schema's five CEL rules (spec 15 §4.3), checked again by a controller since a
+    /// self-managed CRD may be replaced: the first rule broken, as an error naming it.
+    pub fn check(&self) -> Result<(), String> {
+        let kind = self.advertisement_type.as_str();
+        let rules = [
+            (
+                kind != "Service" || self.service.is_some(),
+                "advertisementType != 'Service' || has(self.service)",
+            ),
+            (
+                kind == "Service" || self.service.is_none(),
+                "advertisementType == 'Service' || !has(self.service)",
+            ),
+            (
+                kind != "Interface" || self.interface.is_some(),
+                "advertisementType != 'Interface' || has(self.interface)",
+            ),
+            (
+                kind == "Interface" || self.interface.is_none(),
+                "advertisementType == 'Interface' || !has(self.interface)",
+            ),
+            (
+                kind != "PodCIDR" || self.selector.is_none(),
+                "advertisementType != 'PodCIDR' || !has(self.selector)",
+            ),
+        ];
+        match rules.iter().find(|(holds, _)| !holds) {
+            Some((_, rule)) => Err(format!("{kind} advertisement breaks the rule {rule}")),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Path attributes of an advertisement.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpAttributes {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub communities: Option<BgpCommunities>,
+    #[serde(
+        rename = "localPreference",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub local_preference: Option<i64>,
+}
+
+/// Standard (RFC 1997), well-known and large (RFC 8092) communities.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpCommunities {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub large: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub standard: Option<Vec<String>>,
+    #[serde(rename = "wellKnown", default, skip_serializing_if = "Option::is_none")]
+    pub well_known: Option<Vec<String>>,
+}
+
+/// The local device an Interface advertisement takes its addresses from.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpInterface {
+    pub name: String,
+}
+
+/// Which Service addresses a Service advertisement carries, and their aggregation.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpServiceAdvertisement {
+    /// LoadBalancerIP, ClusterIP, ExternalIP.
+    pub addresses: Vec<String>,
+    #[serde(
+        rename = "aggregationLengthIPv4",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub aggregation_length_ipv4: Option<i64>,
+    #[serde(
+        rename = "aggregationLengthIPv6",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub aggregation_length_ipv6: Option<i64>,
+}
+
+/// The node config's spec: the cluster config's instances merged with the node's override.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnBGPNodeConfigSpec {
+    #[serde(rename = "bgpInstances")]
+    pub bgp_instances: Vec<BgpNodeInstance>,
+}
+
+/// One instance of a node config.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpNodeInstance {
+    #[serde(rename = "localASN", default, skip_serializing_if = "Option::is_none")]
+    pub local_asn: Option<i64>,
+    #[serde(rename = "localPort", default, skip_serializing_if = "Option::is_none")]
+    pub local_port: Option<i32>,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peers: Option<Vec<BgpNodePeer>>,
+    /// IPv4 form; absent: the agent derives it (spec 15 §3.14).
+    #[serde(rename = "routerID", default, skip_serializing_if = "Option::is_none")]
+    pub router_id: Option<String>,
+}
+
+/// One peer of a node config instance.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpNodePeer {
+    #[serde(
+        rename = "autoDiscovery",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub auto_discovery: Option<BgpAutoDiscovery>,
+    /// The session's source address (from the override).
+    #[serde(
+        rename = "localAddress",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub local_address: Option<String>,
+    pub name: String,
+    #[serde(rename = "peerASN", default, skip_serializing_if = "Option::is_none")]
+    pub peer_asn: Option<i64>,
+    #[serde(
+        rename = "peerAddress",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub peer_address: Option<String>,
+    #[serde(
+        rename = "peerConfigRef",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub peer_config_ref: Option<PeerConfigReference>,
+}
+
+/// The node config's status, written by the node's agent (spec 15 §3.8).
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnBGPNodeConfigStatus {
+    #[serde(
+        rename = "bgpInstances",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub bgp_instances: Option<Vec<BgpInstanceStatus>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conditions: Option<Vec<Condition>>,
+}
+
+/// One instance's reported state.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpInstanceStatus {
+    #[serde(rename = "localASN", default, skip_serializing_if = "Option::is_none")]
+    pub local_asn: Option<i64>,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peers: Option<Vec<BgpPeerStatus>>,
+}
+
+/// One peer's reported state.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpPeerStatus {
+    /// RFC 3339 UTC, from the session's uptime.
+    #[serde(
+        rename = "establishedTime",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub established_time: Option<String>,
+    pub name: String,
+    /// Learned from the session when configured as 0.
+    #[serde(rename = "peerASN", default, skip_serializing_if = "Option::is_none")]
+    pub peer_asn: Option<i64>,
+    #[serde(rename = "peerAddress")]
+    pub peer_address: String,
+    /// unknown, idle, connect, active, open_sent, open_confirm or established.
+    #[serde(
+        rename = "peeringState",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub peering_state: Option<String>,
+    #[serde(rename = "routeCount", default, skip_serializing_if = "Option::is_none")]
+    pub route_count: Option<Vec<BgpRouteCount>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timers: Option<BgpAppliedTimers>,
+}
+
+/// Routes received and advertised in one family.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpRouteCount {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advertised: Option<i32>,
+    pub afi: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub received: Option<i32>,
+    pub safi: String,
+}
+
+/// The negotiated hold and keepalive times.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpAppliedTimers {
+    #[serde(
+        rename = "appliedHoldTimeSeconds",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub applied_hold_time_seconds: Option<i32>,
+    #[serde(
+        rename = "appliedKeepaliveSeconds",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub applied_keepalive_seconds: Option<i32>,
+}
+
+/// The override's spec.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FlowsdnBGPNodeConfigOverrideSpec {
+    #[serde(rename = "bgpInstances")]
+    pub bgp_instances: Vec<BgpOverrideInstance>,
+}
+
+/// One instance override, matched to a cluster instance by name.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpOverrideInstance {
+    #[serde(rename = "localASN", default, skip_serializing_if = "Option::is_none")]
+    pub local_asn: Option<i64>,
+    #[serde(rename = "localPort", default, skip_serializing_if = "Option::is_none")]
+    pub local_port: Option<i32>,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peers: Option<Vec<BgpOverridePeer>>,
+    #[serde(rename = "routerID", default, skip_serializing_if = "Option::is_none")]
+    pub router_id: Option<String>,
+}
+
+/// One peer override, matched to a cluster peer by name. `localPort` is accepted and
+/// ignored (spec 15 §2).
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct BgpOverridePeer {
+    #[serde(
+        rename = "localAddress",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub local_address: Option<String>,
+    #[serde(rename = "localPort", default, skip_serializing_if = "Option::is_none")]
+    pub local_port: Option<i32>,
+    pub name: String,
 }

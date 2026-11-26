@@ -4,6 +4,18 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### flowsdn.io BGP kinds — #334, 2026-11-25
+
+Types, the operator's node config generation and conditions, and the agent's status projection. The agent's
+reconcilers/speaker are #570/#571; they feed the projection built here.
+- [ ] Rust types of the five FlowsdnBGP* kinds with T-CRD-3/4/5/7 (`tests/kinds.rs`), peer config defaults, the
+      advertisement CEL rules in the controller.
+- [ ] Operator: compile cluster configs into FlowsdnBGPNodeConfig (spec 15 §3.2: selection, override merge,
+      first-owner-wins, update only on change, stale delete, `ip-pool` router IDs) and the cluster/peer conditions.
+- [ ] Agent: FlowsdnBGPNodeConfig status from peer state (§3.8: omission, established time, 5-error cap, 32 KiB
+      condition, flush cadence and backoff) for #570 to drive.
+- [ ] Docs (crds.md, runtime, spec 13/15 amendments, status), changelog; sc-build; close.
+
 ### Boot-time comparison against the cilium flavor — #586, 2026-11-25
 
 - [x] Stage comparison from stormcentral's install records and metric samples (12.86 → 14.03, each flavor's paired gate installs). flowsdn reaches node Ready, all pods and reboot node Ready sooner in every pair. 14.03: 29.2 / 42.5 / 16.0 s against cilium's 43.7 / 71.0 / 20.1 s. The network phase is 12–18 s against 25–39 s, and the first CNI ADD after a reboot is 0.5–0.8 s against 3.4–4.6 s.
