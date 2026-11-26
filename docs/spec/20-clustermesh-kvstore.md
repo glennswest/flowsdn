@@ -134,12 +134,12 @@ files.
 
 ```yaml
 endpoints:
-- https://cluster2.mesh.cilium.io:2379
-trusted-ca-file: /var/lib/cilium/clustermesh/common-etcd-client-ca.crt
-key-file:        /var/lib/cilium/clustermesh/common-etcd-client.key
-cert-file:       /var/lib/cilium/clustermesh/common-etcd-client.crt
-cilium-host-aliases:            # optional extension, ignored by etcd itself
-- hostname: cluster2.mesh.cilium.io
+- https://cluster2.mesh.flowsdn.io:2379
+trusted-ca-file: /var/lib/flowsdn/clustermesh/common-etcd-client-ca.crt
+key-file:        /var/lib/flowsdn/clustermesh/common-etcd-client.key
+cert-file:       /var/lib/flowsdn/clustermesh/common-etcd-client.crt
+flowsdn-host-aliases:           # optional extension, ignored by etcd itself
+- hostname: cluster2.mesh.flowsdn.io
   ips: [192.0.2.10, 192.0.2.11]
 ```
 
@@ -1058,12 +1058,13 @@ fastetcd and keep the reference model) and why it is not the first cut.
 
 #### 3.8.6 TLS layout
 
-Four certificates, one CA (`Cilium CA`), all with the reference's common names
-because a Cilium peer's certificate must be accepted and vice versa.
+Four certificates, one CA (`flowsdn CA`). The common names keep the reference's
+shape (`admin-<cluster>`, `remote`, `local-<cluster>`); the CA and the mesh
+domain are flowsdn's (#567, ADR-0023: no Cilium peer is accepted or served).
 
 | Certificate | CN | SANs | Where used |
 |---|---|---|---|
-| server | `clustermesh-apiserver.<namespace>.svc` | that name, `*.mesh.cilium.io`, `127.0.0.1`, `::1`, plus configured extras | the store's listener |
+| server | `clustermesh-apiserver.<namespace>.svc` | that name, `*.mesh.flowsdn.io`, `127.0.0.1`, `::1`, plus configured extras | the store's listener |
 | admin | `admin-<cluster>` | — | apiserver and kvstoremesh → local store |
 | remote | `remote`, or `remote-<cluster>` in `cluster` auth mode | — | this cluster's agents and kvstoremesh → **peer** stores |
 | local | `local-<cluster>` | — | this cluster's agents → **local** store, when kvstoremesh is on |
@@ -2102,3 +2103,41 @@ flowsdn clusters. Every key in §4.1 starts with `flowsdn/` instead of
 `service.flowsdn.io/*` and `clustermesh.flowsdn.io/global`, with no aliases.
 Inputs are flowsdn's kinds (ADR-0017). The value encodings of §4.2–4.8 are kept
 as flowsdn's own. The etcd wire surface (§2.6, §2.7) is unchanged.
+
+## ClusterMesh apiserver sync amendment — #567, 2026-11-25
+
+Owner decision (master, 2026-11-25): §11.1's `etcd-client`/tonic/rustls stack is replaced, because ADR-0016 and
+deny.toml allow only Fedora OpenSSL and ban rustls's crypto providers and git sources.
+
+- **`flowsdn-kvstore`.** The §3.1 trait (`Kvstore`, `impl Future + Send` methods, no async-trait), plus two
+  operations recorded here as the §3.1 "no growth without §12" entry: `txn` (exact compares and leased writes in one
+  transaction, for §12 decision 9's claim) and `lease_for` (the key lease a key gets now, so a stored config's lease
+  can be compared). Backends:
+  - `MemoryBackend`: in-process, etcd's revision and lease model, several clients on one store. Unit tests and the
+    scripttest harness (#526) use it.
+  - `EtcdBackend`: flowsdn's own etcd v3 client for §2.6's RPCs only. It uses hand-written `prost` messages with
+    etcd's field numbers (no protoc, no generated code) and gRPC framing over `h2`. TLS goes through Fedora OpenSSL
+    (`tokio-openssl`), with the connector rebuilt and the files re-read on every dial (§3.2.2).
+  - Implemented: the limiter with bootstrap rate (§3.2.4), key and lock leases with keepalive, binding and loss
+    observers (§3.3.1, §5.5), the paginated list (§5.3), watch with relist, synthetic deletes and periodic resync
+    (§5.4), the client-side lock (§3.3.2), and the local-store status checker (§3.2.5).
+  - `SyncStore` (§3.4.2).
+- **Apiserver.** **DEVIATION (#337 precedent):** `flowsdn-agent clustermesh-apiserver` is a mode of the agent
+  binary.
+  - It watches FlowsdnNode, FlowsdnIdentity, FlowsdnEndpoint, Service, EndpointSlice and Namespace, and syncs the
+    nodes, identities, ip and services stores of §3.8.2 with `flowsdn/` keys and canaries. Converters are in
+    `flowsdn_clustermesh::export`.
+  - It publishes the cluster config by the guarded claim (`--cluster-instance-uuid`; §3.8.3, §12 decision 9), writes
+    the heartbeat (§3.5.1), and serves `/readyz` (§3.8.7).
+  - TLS names (§3.8.6) are flowsdn's: `flowsdn CA`, `*.mesh.flowsdn.io`, `flowsdn-host-aliases`, `/var/lib/flowsdn/`.
+- **Not built.**
+  - Endpoint-slice export (§4.7, zstd protobuf) and service exports (§4.8).
+  - The prefix-scoping front (§3.8.5, decision 10).
+  - kvstoremesh (§3.9) and metrics (§3.8.7).
+  - Host aliases and Service resolution in the dialer (§3.2.3 layers 1–2).
+  - HTTP/2 keepalive pings. **DEVIATION:** a 10 s per-endpoint dial timeout, so a blackholed endpoint does not stall
+    every call.
+  - Remote-client status mode, interval scaling and the 15-minute connect bound (§3.2.5–3.2.6).
+  - The 30 s process-local lock GC (§3.3.2).
+  - An image or manifests for the apiserver.
+

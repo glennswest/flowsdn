@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### 2026-11-25 (#567)
+- **feat:** New crate `flowsdn-kvstore` (spec 20 §3.1–3.5, §5).
+  - The kvstore trait, plus `txn` and `lease_for` for the cluster-config claim.
+  - `MemoryBackend`: in-process, with etcd's revision and lease model.
+  - `EtcdBackend`: flowsdn's own etcd v3 client over `h2` with hand-written `prost` messages and Fedora OpenSSL TLS (no tonic, no rustls; owner decision). It has the limiter, key and lock leases, paginated list, watch with relist and resync, a client-side lock and the status checker.
+  - `SyncStore`: one-way export with synced canaries.
+- **feat:** `flowsdn-agent clustermesh-apiserver` (Kubernetes builds, spec 20 §3.8).
+  - It publishes FlowsdnNodes, FlowsdnIdentities, FlowsdnEndpoints and global Services into `flowsdn/state/{nodes,identities,ip,services}/v1`, with `flowsdn/synced/<cluster>/...` canaries.
+  - Global namespaces and IP owner arbitration.
+  - The cluster config, by the guarded ownership claim (`--cluster-instance-uuid`).
+  - The heartbeat and `/readyz`.
+- **feat:** `flowsdn-clustermesh` keys and grants move to `flowsdn/` (ADR-0023, the clustermesh part of #339). New `export` converters for spec 20 §4.2–4.6.
+- **feat:** `flowsdn-k8s` gains `Scope::Whole`, which watches FlowsdnNodes, FlowsdnEndpoints, Services, EndpointSlices and Namespaces as whole objects.
+- **test:**
+  - Memory backend, `SyncStore` (canary gating, lease loss, retry) and the exporter (four stores, namespace flip, IP owners, config claim and repair).
+  - The etcd backend against a live fastetcd in plain and mTLS mode, and the apiserver sync against fastetcd (`SC_TOOLS=fastetcd`).
+- **docs:** spec 20 amendment (stack, deviations, flowsdn TLS names, what is not built), runtime.md, implementation-status.md.
+
 ### 2026-11-25 (#334)
 - **feat:** Rust types of the five BGP kinds (`flowsdn_k8s::kinds`): FlowsdnBGPClusterConfig, FlowsdnBGPPeerConfig, FlowsdnBGPAdvertisement, FlowsdnBGPNodeConfig, FlowsdnBGPNodeConfigOverride, and a shared `Condition`. `FlowsdnBGPPeerConfigSpec::defaulted` fills spec 15 §4.2's defaults on a copy. `BgpAdvertisement::check` applies the five advertisement CEL rules in the controller.
 - **feat:** The operator compiles BGP cluster configs into node configs (`flowsdn-agent operator --enable-bgp-control-plane`, spec 15 §3.2), off by default.

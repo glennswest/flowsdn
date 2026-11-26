@@ -203,6 +203,11 @@ pinning or subsystem libraries are absent are **not current status**.
   and lowering to the simulator, with tests that the simulator's decisions
   agree with the compiled map state. The agent uses the importer, port
   blocks and CIDR types for NetworkPolicy enforcement (#292).
+- ClusterMesh (#567): `flowsdn-kvstore` (memory and etcd v3 backends, SyncStore) and `flowsdn-agent
+  clustermesh-apiserver`, which publishes nodes, identities, IPs and global Services with canaries and the cluster
+  config into a fastetcd. Tested against a live fastetcd (plain and mTLS); not deployed (no image or manifests). The
+  agent side that imports remote clusters is #568; endpoint-slice export, the prefix front and kvstoremesh are not
+  built.
 - BGP: the five FlowsdnBGP* types (#334); the operator renders FlowsdnBGPNodeConfigs and writes the cluster and
   peer config conditions (`--enable-bgp-control-plane`, unit-tested against recorded API calls, not yet run on a
   cluster); the node config status projection exists for the agent's control plane, which is not built (#570,

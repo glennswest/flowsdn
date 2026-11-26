@@ -4,7 +4,11 @@
 //! Runs only when `FASTETCD_BIN` names a fastetcd binary (`SC_TOOLS=fastetcd`);
 //! otherwise it prints `skipped: FASTETCD_BIN unset` and passes.
 #![cfg(feature = "kubernetes")]
-#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 
 use flowsdn_agent::clustermesh_apiserver::{Cluster, Exporter, Source, publish_config};
 use flowsdn_clustermesh::export;
@@ -64,7 +68,10 @@ async fn connect(port: u16, ttl: Duration) -> EtcdBackend {
     panic!("fastetcd on {port} did not accept a client within 30 s");
 }
 
-fn objects() -> (Vec<Value>, Vec<Value>, Vec<Value>, Vec<Value>, Vec<Value>) {
+/// Nodes, endpoints, services, slices, namespaces.
+type Objects = (Vec<Value>, Vec<Value>, Vec<Value>, Vec<Value>, Vec<Value>);
+
+fn objects() -> Objects {
     let node = json!({"apiVersion": "flowsdn.io/v1alpha1", "kind": "FlowsdnNode",
         "metadata": {"name": "w1", "uid": "n", "resourceVersion": "1"},
         "spec": {"addresses": [{"type": "InternalIP", "ip": "192.168.1.10"}],
@@ -86,7 +93,13 @@ fn objects() -> (Vec<Value>, Vec<Value>, Vec<Value>, Vec<Value>, Vec<Value>) {
         "ports": [{"name": "http", "protocol": "TCP", "port": 8080}]});
     let namespace = json!({"apiVersion": "v1", "kind": "Namespace",
         "metadata": {"name": "default", "uid": "d", "resourceVersion": "1"}});
-    (vec![node], vec![endpoint], vec![service], vec![slice], vec![namespace])
+    (
+        vec![node],
+        vec![endpoint],
+        vec![service],
+        vec![slice],
+        vec![namespace],
+    )
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -127,7 +140,10 @@ async fn the_sync_publishes_into_fastetcd_and_goes_with_its_leases() {
             id: 65538,
             security_labels: BTreeMap::from([
                 ("k8s:app".to_owned(), "web".to_owned()),
-                ("k8s:io.kubernetes.pod.namespace".to_owned(), "default".to_owned()),
+                (
+                    "k8s:io.kubernetes.pod.namespace".to_owned(),
+                    "default".to_owned(),
+                ),
             ]),
             created: "2026-11-25T00:00:00Z".into(),
             heartbeat: false,
@@ -142,8 +158,17 @@ async fn the_sync_publishes_into_fastetcd_and_goes_with_its_leases() {
     }
     assert!(exporter.ready(), "every canary within 30 s");
     let instance = InstanceUuid::parse("1b4e28ba-2fa1-41d2-883f-0016d3cca427").unwrap();
-    assert!(publish_config(&*kv, "c1", &instance, &export::cluster_config(7, 255)).await.unwrap());
-    assert!(!publish_config(&*kv, "c1", &instance, &export::cluster_config(7, 255)).await.unwrap(), "unchanged");
+    assert!(
+        publish_config(&*kv, "c1", &instance, &export::cluster_config(7, 255))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !publish_config(&*kv, "c1", &instance, &export::cluster_config(7, 255))
+            .await
+            .unwrap(),
+        "unchanged"
+    );
 
     // What a peer reads.
     let seen = peer.list_prefix("flowsdn/", None).await.unwrap();
@@ -163,8 +188,12 @@ async fn the_sync_publishes_into_fastetcd_and_goes_with_its_leases() {
             "flowsdn/synced/c1/flowsdn/state/services/v1",
         ]
     );
-    let pair: Value = serde_json::from_slice(&seen["flowsdn/state/ip/v1/default/10.21.0.5"].data).unwrap();
-    assert_eq!((pair["ID"].clone(), pair["HostIP"].clone()), (json!(65538), json!("192.168.1.10")));
+    let pair: Value =
+        serde_json::from_slice(&seen["flowsdn/state/ip/v1/default/10.21.0.5"].data).unwrap();
+    assert_eq!(
+        (pair["ID"].clone(), pair["HostIP"].clone()),
+        (json!(65538), json!("192.168.1.10"))
+    );
     let config: Value = serde_json::from_slice(&seen["flowsdn/cluster-config/c1"].data).unwrap();
     assert_eq!(config["capabilities"]["syncedCanaries"], json!(true));
     assert_eq!(seen["flowsdn/state/identities/v1/id/65538"].lease_id, 0);
@@ -172,7 +201,9 @@ async fn the_sync_publishes_into_fastetcd_and_goes_with_its_leases() {
 
     // The peer's watch saw the node arrive; a node removal reaches it as a delete.
     let mut created = false;
-    while let Ok(Some(event)) = tokio::time::timeout(Duration::from_secs(5), nodes_watch.recv()).await {
+    while let Ok(Some(event)) =
+        tokio::time::timeout(Duration::from_secs(5), nodes_watch.recv()).await
+    {
         if event.kind == EventKind::Create && event.key.ends_with("/w1") {
             created = true;
             break;
@@ -181,7 +212,9 @@ async fn the_sync_publishes_into_fastetcd_and_goes_with_its_leases() {
     assert!(created, "the peer watch saw the node");
     exporter.update(Source::Nodes, vec![], true);
     let mut deleted = false;
-    while let Ok(Some(event)) = tokio::time::timeout(Duration::from_secs(10), nodes_watch.recv()).await {
+    while let Ok(Some(event)) =
+        tokio::time::timeout(Duration::from_secs(10), nodes_watch.recv()).await
+    {
         if event.kind == EventKind::Delete && event.key.ends_with("/w1") {
             deleted = true;
             break;
@@ -193,8 +226,19 @@ async fn the_sync_publishes_into_fastetcd_and_goes_with_its_leases() {
     // disappear for peers; unleased identities and the owner record stay.
     kv.close().await;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    let left: Vec<String> = peer.list_prefix("flowsdn/", None).await.unwrap().into_keys().collect();
-    assert_eq!(left, ["flowsdn/cluster-owners/c1", "flowsdn/state/identities/v1/id/65538"]);
+    let left: Vec<String> = peer
+        .list_prefix("flowsdn/", None)
+        .await
+        .unwrap()
+        .into_keys()
+        .collect();
+    assert_eq!(
+        left,
+        [
+            "flowsdn/cluster-owners/c1",
+            "flowsdn/state/identities/v1/id/65538"
+        ]
+    );
     peer.close().await;
     let _ = std::fs::remove_dir_all(dir);
 }

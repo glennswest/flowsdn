@@ -906,6 +906,37 @@ not check it.
   error naming the missing ones; after `kubernetes.crd-wait-timeout`
   (300 s) the agent exits with that list (the kubelet restarts it).
 
+### ClusterMesh apiserver (#567)
+
+`flowsdn-agent clustermesh-apiserver` (Kubernetes builds; no image or manifests ship yet) publishes this cluster into
+its ClusterMesh store, a fastetcd, for peers to read (spec 20 §3.8):
+
+- **Required options:** `--cluster-name`, `--cluster-id` (1–511) and `--cluster-instance-uuid`. The UUID is the
+  cluster's durable identity: provision it once and reuse it across restarts and replicas. Also one of
+  `--kvstore-config` (an etcd client YAML: `endpoints`, `trusted-ca-file`, `cert-file`, `key-file`) or
+  `--kvstore-address`.
+- **Inputs:** it lists and watches FlowsdnNodes, FlowsdnIdentities, FlowsdnEndpoints, Services, EndpointSlices and
+  Namespaces.
+- **Writes:**
+  - `flowsdn/state/nodes/v1/<cluster>/<node>`.
+  - `flowsdn/state/identities/v1/id/<id>`: unleased, the canonical label string. An identity without security labels
+    is skipped.
+  - `flowsdn/state/ip/v1/default/<ip>`: one primary endpoint per IP.
+  - `flowsdn/state/services/v1/<cluster>/<ns>/<name>`: Services annotated `service.flowsdn.io/global: "true"` that
+    are not `shared: false`.
+  - Each store also gets `flowsdn/synced/<cluster>/flowsdn/state/<store>/v1`, once its sources have listed and their
+    contents are written.
+  - Objects in a namespace annotated `clustermesh.flowsdn.io/global: "false"` (or with
+    `--clustermesh-default-global-namespace false` and no annotation) are deleted, not published.
+- **Rate and leases:** writes go at 10/s per store with a burst of 100, and the client runs at 50 qps (10000 until
+  every canary is written). Data is on the key lease (`--kvstore-lease-ttl`, 900 s), so it disappears from peers when
+  the apiserver goes.
+- **Cluster config:** `flowsdn/cluster-config/<cluster>` is claimed with the unleased owner record
+  `flowsdn/cluster-owners/<cluster>`. A name owned by another UUID, or an unstamped config, is refused. A changed
+  config is repaired, and it is re-checked every 5 minutes. If the first write fails three times, the process exits.
+- **Also:** `flowsdn/.heartbeat` every 60 s (`--enable-heartbeat`), and `GET /readyz` on `--health-port` (9880),
+  which returns `200 Ready` once every canary is written.
+
 ### FlowsdnEndpoint and FlowsdnNode (#332)
 
 The Kubernetes-mode agent publishes its endpoints and its node as
