@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### IPv6 egress gateway — #580 (P3), 2026-11-26
+
+- [x] `flowsdn_egress_gw_policy_v6` + `flowsdn_egress_gw_nexthop6` (the gateway's IPv6 InternalIP as next hop: native
+      routing deviation), source redirect, gateway SNAT on the IPv6 masquerade path (preset NAT address in the slot);
+      loader; planner (`Maps`), controller; scripttest dump reads `maps.v4`; docs.
+- [x] Object + lock rebuilt; kernel-check 26/0/2 (`PASS IPv6 egress gateway`); strict sc-build at 95200cb; staged
+      golden-flowsdn-cf08afe18670; closed. #595 was this work's own intermediate failure.
+
 ### Datapath plugins — #566 (P3), 2026-11-26
 
 - [x] Asked (no plugins vs flowsdn's own vs Cilium-compatible); `wait-owner` refused: gaps are session work. Built the
