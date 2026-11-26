@@ -1212,21 +1212,22 @@ fn egress_gateway6(lb: &mut SocketLb) -> Result<()> {
     };
     let up0 = ifindex("up0")?;
     let (server, egress) = (ip6("2001:db8:64::5")?, ip6("2001:db8:77::7")?);
-    let entry = |src: [u8; 16], dst: [u8; 16], len: u32, egress_ip: [u8; 16], gateway_ip: [u8; 4]| {
-        let mut data = [0u8; 32];
-        for (slot, byte) in data.iter_mut().zip(src.iter().chain(dst.iter())) {
-            *slot = *byte;
-        }
-        (
-            (128u32.saturating_add(len), data),
-            EgressGw6Value {
-                egress_ip,
-                gateway_ip,
-                ..EgressGw6Value::default()
+    let entry =
+        |src: [u8; 16], dst: [u8; 16], len: u32, egress_ip: [u8; 16], gateway_ip: [u8; 4]| {
+            let mut data = [0u8; 32];
+            for (slot, byte) in data.iter_mut().zip(src.iter().chain(dst.iter())) {
+                *slot = *byte;
             }
-            .to_bytes(),
-        )
-    };
+            (
+                (128u32.saturating_add(len), data),
+                EgressGw6Value {
+                    egress_ip,
+                    gateway_ip,
+                    ..EgressGw6Value::default()
+                }
+                .to_bytes(),
+            )
+        };
     let (local_pod, lost_pod, unresolved_pod, remote_pod) = (
         ip6("fd00:9::8")?,
         ip6("fd00:9::b")?,
@@ -1238,7 +1239,13 @@ fn egress_gateway6(lb: &mut SocketLb) -> Result<()> {
         // A local Pod; the gateway (192.0.2.30) is on up0's subnet, with an
         // IPv6 next hop.
         entry(local_pod, net, 48, [0; 16], [192, 0, 2, 30]),
-        entry(local_pod, ip6("2001:db8:64:1::")?, 64, [0; 16], GATEWAY_EXCLUDED),
+        entry(
+            local_pod,
+            ip6("2001:db8:64:1::")?,
+            64,
+            [0; 16],
+            GATEWAY_EXCLUDED,
+        ),
         // A gateway with no IPv6 next hop.
         entry(lost_pod, net, 48, [0; 16], [192, 0, 2, 31]),
         // No gateway resolved.

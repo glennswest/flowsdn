@@ -39,8 +39,8 @@ use crate::kubernetes::{NodeInfo, PodInfo};
 use flowsdn_bpf_abi::{
     MapBytes,
     egress::{
-        EgressGw4Key, EgressGw4Value, EgressGw6Key, EgressGw6Value, GATEWAY_EXCLUDED,
-        GATEWAY_NONE, SOURCE_BITS, SOURCE_BITS6,
+        EgressGw4Key, EgressGw4Value, EgressGw6Key, EgressGw6Value, GATEWAY_EXCLUDED, GATEWAY_NONE,
+        SOURCE_BITS, SOURCE_BITS6,
     },
 };
 use flowsdn_policy::k8s::LabelSelector;
@@ -310,6 +310,8 @@ pub struct Maps {
 
 /// An egress address and interface index, or why there is none.
 pub type Derived = Result<(Ipv4Addr, u32), String>;
+/// The same for the IPv6 egress address (#580).
+pub type Derived6 = Result<(Ipv6Addr, u32), String>;
 /// A resolved gateway: its address, its node, this node's egress when it is
 /// that node, and the same for IPv6.
 type Resolved = (
@@ -332,7 +334,7 @@ pub struct Report {
     /// the derivation error).
     pub local: Vec<(String, Derived)>,
     /// The same for the IPv6 egress address (#580), when a destination is IPv6.
-    pub local6: Vec<(String, Result<(Ipv6Addr, u32), String>)>,
+    pub local6: Vec<(String, Derived6)>,
     /// A gateway's IPv4 -> its IPv6 next hop.
     pub nexthop6: BTreeMap<Ipv4Addr, Ipv6Addr>,
 }
@@ -441,7 +443,9 @@ pub fn plan(
                     IpAddr::V6(_) => None,
                 })
             });
-            let Some((ip, node, ip6)) = found else { continue };
+            let Some((ip, node, ip6)) = found else {
+                continue;
+            };
             if let Some(ip6) = ip6 {
                 nexthop6.insert(ip.octets(), ip6.octets());
                 report.nexthop6.insert(ip, ip6);
@@ -523,7 +527,9 @@ pub fn plan(
                 .unwrap_or((Ipv6Addr::UNSPECIFIED, 0));
             for source in &pod.ips {
                 let IpAddr::V4(source) = source else {
-                    let IpAddr::V6(source6) = source else { continue };
+                    let IpAddr::V6(source6) = source else {
+                        continue;
+                    };
                     for (list, gateway) in [
                         (&policy.destinations, gateway_ip.octets()),
                         (&policy.excluded, GATEWAY_EXCLUDED),
