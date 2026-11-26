@@ -57,7 +57,11 @@ impl Kmsg {
             match std::fs::OpenOptions::new().write(true).open(self.path) {
                 Ok(file) => Some(file),
                 Err(error) => {
-                    eprintln!("{} {}: {error}; health lines not sent to the kernel log", now(), self.path);
+                    eprintln!(
+                        "{} {}: {error}; health lines not sent to the kernel log",
+                        now(),
+                        self.path
+                    );
                     None
                 }
             }
@@ -153,7 +157,12 @@ mod tests {
     fn the_sink_writes_records_and_tolerates_a_missing_device() {
         let dir = std::env::temp_dir().join(format!("flowsdn-kmsg-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("dir");
-        let path: &'static str = Box::leak(dir.join("kmsg").to_string_lossy().into_owned().into_boxed_str());
+        let path: &'static str = Box::leak(
+            dir.join("kmsg")
+                .to_string_lossy()
+                .into_owned()
+                .into_boxed_str(),
+        );
         std::fs::write(path, b"").expect("file");
         let sink = Kmsg::new(path);
         sink.write("health agent.api OK: up");
