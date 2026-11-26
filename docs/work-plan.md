@@ -9,15 +9,20 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] Owner decision (master, in chat 2026-11-25): option 1, flowsdn's own etcd v3 client (hand-written prost
       messages, h2, Fedora OpenSSL per ADR-0016, no rustls); kvstore trait, memory backend and SyncStore built here;
       tests on the memory backend and fastetcd (SC_TOOLS); Cilium certificate names renamed to flowsdn's.
-- [ ] `flowsdn-kvstore`: trait (+ `txn`, `lease_for` for §12 decision 9), memory backend, SyncStore, etcd backend
+- [x] `flowsdn-kvstore`: trait (+ `txn`, `lease_for` for §12 decision 9), memory backend, SyncStore, etcd backend
       (gRPC over h2, TLS, limiter, leases, paginated list, watch/relist, client-side lock, status checker).
-- [ ] `flowsdn-clustermesh`: `flowsdn/` prefixes and grants (#339 part); export converters (§4.2-4.6), IP owner
+- [x] `flowsdn-clustermesh`: `flowsdn/` prefixes and grants (#339 part); export converters (§4.2-4.6), IP owner
       arbitration, global namespaces.
-- [ ] `flowsdn-agent clustermesh-apiserver` (a mode, as the operator is): watches (FlowsdnNode, FlowsdnIdentity,
+- [x] `flowsdn-agent clustermesh-apiserver` (a mode, as the operator is): watches (FlowsdnNode, FlowsdnIdentity,
       FlowsdnEndpoint, Service, EndpointSlice, Namespace), four SyncStores with canaries, cluster config claim and
       enforcement, heartbeat, `/readyz`.
-- [ ] Tests: memory backend everywhere; fastetcd (plain and mTLS) via `SC_TOOLS=fastetcd`.
-- [ ] Docs (spec 20 amendment incl. certificate names, runtime, status, changelog); sc-build; close.
+- [x] Tests: memory backend everywhere; fastetcd (plain and mTLS) via `SC_TOOLS=fastetcd`.
+- [x] Docs (spec 20 amendment incl. certificate names, runtime, status, changelog).
+- [x] Strict sc-build at 4bc9748 with `SC_TOOLS=fastetcd`: `cargo xtask check` and test/build.sh, exit 0
+      (fastetcd tests ran: 6 backend tests incl. mTLS, the apiserver sync test). cargo-deny is not on the build VMs;
+      new crates (h2, prost, tokio-openssl, anyhow, itertools) checked by hand against deny.toml.
+- Not built (spec 20 #567 amendment): endpoint-slice export, prefix front, kvstoremesh, metrics, dialer aliases,
+  h2 keepalive pings, remote-client status mode, local-lock GC, image/manifests. Importing remote clusters is #568.
 
 ### flowsdn.io BGP kinds — #334, 2026-11-25
 
