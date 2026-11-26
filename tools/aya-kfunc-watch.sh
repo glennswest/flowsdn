@@ -4,7 +4,10 @@
 #   tools/aya-kfunc-watch.sh [--load] [--file-issue] [SOURCE...]
 #
 # SOURCE is `release` (the latest aya on crates.io), `main` (aya's main
-# branch) or `pinned` (the aya the workspace uses); default: release main.
+# branch), `pinned` (the aya the workspace uses) or `pr:<number>` (an open
+# aya pull request's head, for an early look: informational, it never makes
+# the exit 3 or files the issue, since an unmerged PR is nothing to switch
+# to); default: release main.
 # The loader-kfunc object (iter/tcp calling bpf_sock_destroy) is built by
 # tools/build-bpf.sh with the pinned bpf-linker and, if newer, with the latest
 # bpf-linker release: a Rust object needs the linker to emit the extern in a
@@ -29,7 +32,8 @@ for arg in "$@"; do
         --load) load=(--load) ;;
         --file-issue) file_issue=1 ;;
         release | main | pinned) sources+=("$arg") ;;
-        *) echo "usage: $0 [--load] [--file-issue] [release|main|pinned]..." >&2; exit 1 ;;
+        pr:[0-9]*) [[ $arg =~ ^pr:[0-9]+$ ]] || { echo "bad source $arg" >&2; exit 1; }; sources+=("$arg") ;;
+        *) echo "usage: $0 [--load] [--file-issue] [release|main|pinned|pr:<number>]..." >&2; exit 1 ;;
     esac
 done
 [ ${#sources[@]} -gt 0 ] || sources=(release main)
@@ -78,12 +82,14 @@ dependency() {
         release) echo 'aya = "*"' ;;
         main) echo 'aya = { git = "https://github.com/aya-rs/aya", branch = "main" }' ;;
         pinned) sed -n 's/^aya = \(".*"\)$/aya = \1/p' "$root/crates/flowsdn-bpftest/Cargo.toml" ;;
+        pr:*) echo "aya = { git = \"https://github.com/aya-rs/aya\", rev = \"refs/pull/${1#pr:}/head\" }" ;;
     esac
 }
 
 overall=0 summary=""
 for src in "${sources[@]}"; do
-    dir="$work/$src"
+    name=${src/:/-}
+    dir="$work/$name"
     cp -r "$root/tools/aya-kfunc-watch" "$dir"
     rm -f "$dir/Cargo.lock"
     dep=$(dependency "$src")
@@ -98,20 +104,24 @@ for src in "${sources[@]}"; do
             rustup toolchain install stable --profile minimal >&2
     fi
     if ! cargo "+$toolchain" build --release --quiet --manifest-path "$dir/Cargo.toml" \
-        --target-dir "$work/target-$src" >"$work/$src.build" 2>&1; then
-        entry="$src aya (did not build): broken: the probe does not build against this aya: $(tail -n 20 "$work/$src.build")"
+        --target-dir "$work/target-$name" >"$work/$name.build" 2>&1; then
+        entry="$src aya (did not build): broken: the probe does not build against this aya: $(tail -n 20 "$work/$name.build")"
         echo "aya-kfunc-watch: $entry"
-        summary+="- $entry"$'\n'
-        [ "$overall" = 3 ] || overall=1
+        # A pull request is an early look: its build failing is not ours.
+        if [[ $src != pr:* ]]; then
+            summary+="- $entry"$'\n'
+            [ "$overall" = 3 ] || overall=1
+        fi
         continue
     fi
     version=$(awk '/^name = "aya"$/{getline; v=$3; getline; s=$3; print v, s; exit}' \
         "$dir/Cargo.lock" | tr -d '"')
     for i in "${!objects[@]}"; do
-        line=$("$work/target-$src/release/flowsdn-aya-kfunc-watch" "${objects[$i]}" "${load[@]}")
+        line=$("$work/target-$name/release/flowsdn-aya-kfunc-watch" "${objects[$i]}" "${load[@]}")
         rc=$?
         entry="$src aya ${version:-?}, ${linkers[$i]}: $line"
         echo "aya-kfunc-watch: $entry"
+        [[ $src == pr:* ]] && continue
         summary+="- $entry"$'\n'
         if [ "$rc" = 3 ]; then
             overall=3
