@@ -1229,6 +1229,10 @@ Owner decision posted (comment 6868495074, recommended B); `wait-owner` set. No 
       live ports; uplink programs on every port; failover /32 + gratuitous ARP on a live port while a port is down, removed on return;
       `uplinks` setting (policy active-active|active-backup, weights); per-port link/speed/FEC/bytes in network status.
 
+- [x] 2026-11-26: reopened by stormcentral because the proof (`UplinkJoined` … `2 of 2 carrying`) was checked on
+      pvetest1, which has one port (eth0 in stormbr0), so it can't match there. Re-shipped with
+      `on C2NR0Q2 api:/api/v1/namespaces/default/events ~ …; 2 of 2 carrying`, `--commit 8480160`, per #417 (the Dell's two
+      25G ports). No code change. The cable pulls follow C2NR0Q2's flowsdn install (stormblock#603).
 ### Agent EAGAIN on a just-joined worker — #404 (P1), 2026-11-10
 
 Paired test 1439e5f1ee (12.74.7-flowsdn): storm-003102 joined as worker; its agent printed the pod CIDRs, then `Error: EAGAIN`,
