@@ -14,6 +14,8 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] Strict sc-build at 936dedb (xtask check + test/build.sh) passed; staged golden-flowsdn-896f02036e02
       (stormcos#1502). #484, #487 and #418 re-shipped with the same proof and `--commit 936dedb`; they close when a
       pvetest install of a release carrying it shows the line. Also fixed #593 (agent tokio dev-dep lacked test-util).
+- [x] #488 (socket-lb findings, fixed 2026-11-20 at ff03ffd) reopened on the same proof: re-shipped the same way
+      (`--commit 936dedb`). The other issues reopened on that proof go back the same way when each is handed out.
 
 ### No stubs: proof on a node — #418 (reopened), 2026-11-26
 
