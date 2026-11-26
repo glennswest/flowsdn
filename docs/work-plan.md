@@ -7,7 +7,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 ### Node model in spec 10's tables — #576 (P3), 2026-11-26
 
 Staged; each stage committed and verified (kernel tests keep passing).
-- [ ] Stage 1: `flowsdn-node` crate: rows (`devices`, `routes`, `neighbors`, `node-addresses`, `desired-routes`,
+- [x] Stage 1 (2a80d18, strict sc-build passed): `flowsdn-node` crate: rows (`devices`, `routes`, `neighbors`, `node-addresses`, `desired-routes`,
       `forwardable-ips`, `desired-neighbors`) with Keyed/TableRender (harvested columns), `node-addresses` derivation
       (§3.1.6), `RouteManager` (owners, AD selection), `RouteTarget` over `RouteOps` (flowsdn-reconcile). Unit tests.
 - [ ] Stage 2: agent fills the realized tables from netlink; direct node routes (`route_loop`) become an owner of
