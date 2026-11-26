@@ -388,3 +388,48 @@ impl TableRender for DesiredNeighbor {
         vec![self.addr.to_string(), self.link_index.to_string()]
     }
 }
+
+/// `desired-rules` (§4.1): an `ip rule` flowsdn wants.
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub struct DesiredRule {
+    pub v6: bool,
+    pub priority: u32,
+    pub table: u32,
+    pub from: Option<Prefix>,
+    pub to: Option<Prefix>,
+    /// `suppress_prefixlength`.
+    pub suppress_prefix: Option<u32>,
+}
+impl Keyed for DesiredRule {
+    fn primary_key(&self) -> Vec<u8> {
+        let mut out = vec![u8::from(self.v6)];
+        out.extend(key::u32be(self.priority));
+        out.extend(key::u32be(self.table));
+        for side in [&self.from, &self.to] {
+            match side {
+                Some(prefix) => {
+                    out.push(1);
+                    out.extend(prefix_key(prefix));
+                }
+                None => out.push(0),
+            }
+        }
+        out.extend(key::u32be(self.suppress_prefix.map_or(u32::MAX, |s| s)));
+        out
+    }
+}
+impl TableRender for DesiredRule {
+    fn headers() -> &'static [&'static str] {
+        &["Family", "Priority", "From", "To", "Table", "SuppressPrefix"]
+    }
+    fn cells(&self) -> Vec<String> {
+        vec![
+            if self.v6 { "ipv6" } else { "ipv4" }.to_owned(),
+            self.priority.to_string(),
+            self.from.as_ref().map_or_else(|| "all".to_owned(), prefix_text),
+            self.to.as_ref().map_or_else(|| "all".to_owned(), prefix_text),
+            self.table.to_string(),
+            opt(self.suppress_prefix),
+        ]
+    }
+}

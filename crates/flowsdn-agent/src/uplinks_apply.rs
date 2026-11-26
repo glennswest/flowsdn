@@ -162,94 +162,234 @@ pub fn default_gateways(connector: &Connector) -> Vec<IpAddr> {
     out
 }
 
-/// Make flowsdn's rules and tables what `desired` says: rules in its priority
-/// span and routes in its tables that are not wanted go; every wanted one is
-/// (re)written. Nothing outside the span and the tables is touched.
+/// Make flowsdn's rules and tables what `desired` says (#576 stage 3): the
+/// table routes are the `uplinks` owner of spec 10's `desired-routes` and the
+/// rules are `desired-rules`, each reconciled into the kernel through
+/// `flowsdn-reconcile`. Rules in flowsdn's priority span and routes in its
+/// tables that are not wanted are pruned; every wanted one is (re)written.
+/// Nothing outside the span and the tables is touched.
 pub fn reconcile_kernel(
     connector: &Connector,
     settings: &Settings,
     desired: &Desired,
 ) -> std::result::Result<(), String> {
+    use flowsdn_node::routes::{RouteManager, RouteTarget};
+    use flowsdn_node::rules::{RuleTarget, set_rules};
+    use flowsdn_reconcile::{Kind, Options, Reconciler};
+    use futures::executor::block_on;
     let mut failures = Vec::new();
-    for v6 in [false, true] {
-        let present: Vec<Rule> = match connector.rules(v6) {
-            Ok(rules) => rules
-                .into_iter()
-                .filter(|r| settings.owns_priority(r.priority))
-                .collect(),
-            Err(error) => {
-                failures.push(format!("list rules: {error}"));
-                continue;
-            }
-        };
-        for rule in present.iter().filter(|r| !desired.rules.contains(*r)) {
-            if let Err(error) = connector.delete_rule(rule) {
-                failures.push(format!("delete rule {}: {error}", rule.priority));
-            }
-        }
-        for rule in desired
-            .rules
-            .iter()
-            .filter(|r| r.v6 == v6 && !present.contains(*r))
+    // Rules.
+    let rules = flowsdn_table::Table::new(Vec::new()).map_err(|e| e.to_string())?;
+    let init = rules
+        .register_initializer(OWNER)
+        .map_err(|e| e.to_string())?;
+    rules.seal_initializers();
+    let wanted: BTreeSet<flowsdn_node::rows::DesiredRule> = desired.rules.iter().map(to_row).collect();
+    block_on(set_rules(&rules, &wanted)).map_err(|e| e.to_string())?;
+    init.complete();
+    let mut reconciler = Reconciler::new(
+        &rules,
+        RuleTarget::new(RuleOps { connector, settings }),
+        Options::default(),
+    )
+    .map_err(|e| e.to_string())?;
+    reconciler.prune_now();
+    drive(&mut reconciler, &mut failures, "rule");
+    for (row, _) in rules.snapshot().all() {
+        if let Some(status) = reconciler.status(&flowsdn_table::Keyed::primary_key(&*row))
+            && status.kind == Kind::Error
         {
-            if let Err(error) = connector.add_rule(rule) {
-                failures.push(format!("add rule {}: {error}", rule.priority));
-            }
+            failures.push(format!(
+                "rule {}: {}",
+                row.priority,
+                status.error.unwrap_or_default()
+            ));
         }
-        for table in settings.tables() {
-            let wanted: Vec<&TableEntry> = desired
-                .tables
-                .get(&table)
-                .map(|entries| {
-                    entries
-                        .iter()
-                        .filter(|e| e.destination.0.is_ipv6() == v6)
-                        .collect()
-                })
-                .unwrap_or_default();
-            let routes = match connector.table_routes(table, v6) {
-                Ok(routes) => routes,
-                Err(error) => {
-                    failures.push(format!("list table {table}: {error}"));
-                    continue;
-                }
-            };
-            for route in routes.iter().filter(|r| {
-                !wanted
-                    .iter()
-                    .any(|e| e.destination == (r.destination, r.prefix))
-            }) {
-                if let Err(error) =
-                    connector.delete_owned_route(route.destination, route.prefix, table, None)
-                {
-                    failures.push(format!(
-                        "delete {} from table {table}: {error}",
-                        cidr_text(route.destination, route.prefix)
-                    ));
-                }
-            }
-            for entry in wanted {
-                let (destination, prefix) = entry.destination;
-                if let Err(error) = connector.replace_multipath_route(
-                    destination,
-                    prefix,
-                    &entry.hops,
-                    table,
-                    None,
-                    entry.source,
-                ) {
-                    failures.push(format!(
-                        "table {table} {}: {error}",
-                        cidr_text(destination, prefix)
-                    ));
-                }
-            }
+    }
+    // Table routes.
+    let manager = RouteManager::new().map_err(|e| e.to_string())?;
+    let table = manager.table();
+    let init = table
+        .register_initializer(OWNER)
+        .map_err(|e| e.to_string())?;
+    table.seal_initializers();
+    let rows: Vec<flowsdn_node::rows::DesiredRoute> = desired
+        .tables
+        .iter()
+        .flat_map(|(table, entries)| entries.iter().map(move |e| route_row(*table, e)))
+        .collect();
+    block_on(manager.set_owner(OWNER, rows)).map_err(|e| e.to_string())?;
+    init.complete();
+    let mut reconciler = Reconciler::new(
+        &table,
+        RouteTarget::new(TableOps { connector, settings }, std::sync::Arc::clone(&table)),
+        Options::default(),
+    )
+    .map_err(|e| e.to_string())?;
+    reconciler.prune_now();
+    drive(&mut reconciler, &mut failures, "route");
+    for (row, _) in table.snapshot().all() {
+        if let Some(status) = reconciler.status(&flowsdn_table::Keyed::primary_key(&*row))
+            && status.kind == Kind::Error
+        {
+            failures.push(format!(
+                "table {} {}: {}",
+                row.table,
+                cidr_text(row.prefix.0, row.prefix.1),
+                status.error.unwrap_or_default()
+            ));
         }
     }
     if failures.is_empty() {
         Ok(())
     } else {
         Err(failures.join("; "))
+    }
+}
+
+/// The owner of the uplink table routes in `desired-routes`.
+pub const OWNER: &str = "uplinks";
+
+/// Run rounds until nothing is pending (bounded); a prune error is a failure.
+fn drive<T: flowsdn_table::Keyed, U: flowsdn_reconcile::Target<T>>(
+    reconciler: &mut flowsdn_reconcile::Reconciler<'_, T, U>,
+    failures: &mut Vec<String>,
+    what: &str,
+) {
+    // The connector runs its own runtime, so this is driven without one.
+    for _ in 0..16 {
+        let _ = futures::executor::block_on(reconciler.run_round(std::time::Instant::now()));
+        if !reconciler.has_pending_work() {
+            break;
+        }
+    }
+    if let Some(error) = reconciler.prune_status().and_then(|p| p.error.clone()) {
+        failures.push(format!("{what} prune: {error}"));
+    }
+}
+
+fn to_row(rule: &Rule) -> flowsdn_node::rows::DesiredRule {
+    flowsdn_node::rows::DesiredRule {
+        v6: rule.v6,
+        priority: rule.priority,
+        table: rule.table,
+        from: rule.source,
+        to: rule.destination,
+        suppress_prefix: rule.suppress_prefix,
+    }
+}
+fn from_row(row: &flowsdn_node::rows::DesiredRule) -> Rule {
+    Rule {
+        v6: row.v6,
+        priority: row.priority,
+        table: row.table,
+        source: row.from,
+        destination: row.to,
+        suppress_prefix: row.suppress_prefix,
+    }
+}
+fn route_row(table: u32, entry: &TableEntry) -> flowsdn_node::rows::DesiredRoute {
+    flowsdn_node::rows::DesiredRoute {
+        owner: OWNER.into(),
+        table,
+        prefix: entry.destination,
+        priority: None,
+        nexthop: None,
+        src: entry.source,
+        device: None,
+        multipath: entry
+            .hops
+            .iter()
+            .map(|h| flowsdn_node::rows::NextHop {
+                gateway: h.gateway,
+                device_index: h.index,
+                weight: h.weight,
+            })
+            .collect(),
+        mtu: None,
+        scope: "universe".into(),
+        kind: "unicast".into(),
+        admin_distance: 100,
+        selected: false,
+    }
+}
+
+/// `desired-rules` over netlink: flowsdn's priority span only.
+struct RuleOps<'a> {
+    connector: &'a Connector,
+    settings: &'a Settings,
+}
+impl flowsdn_node::rules::RuleOps for RuleOps<'_> {
+    fn add(&mut self, rule: &flowsdn_node::rows::DesiredRule) -> std::result::Result<(), String> {
+        self.connector
+            .add_rule(&from_row(rule))
+            .map_err(|e| e.to_string())
+    }
+    fn delete(&mut self, rule: &flowsdn_node::rows::DesiredRule) -> std::result::Result<(), String> {
+        self.connector
+            .delete_rule(&from_row(rule))
+            .map_err(|e| e.to_string())
+    }
+    fn owned(&mut self) -> std::result::Result<Vec<flowsdn_node::rows::DesiredRule>, String> {
+        let mut out = Vec::new();
+        for v6 in [false, true] {
+            for rule in self.connector.rules(v6).map_err(|e| format!("list rules: {e}"))? {
+                if self.settings.owns_priority(rule.priority) {
+                    out.push(to_row(&rule));
+                }
+            }
+        }
+        Ok(out)
+    }
+}
+
+/// `desired-routes` in flowsdn's uplink tables over netlink.
+struct TableOps<'a> {
+    connector: &'a Connector,
+    settings: &'a Settings,
+}
+impl flowsdn_node::routes::RouteOps for TableOps<'_> {
+    fn replace(&mut self, route: &flowsdn_node::rows::DesiredRoute) -> std::result::Result<(), String> {
+        let hops: Vec<multihome::NextHop> = route
+            .multipath
+            .iter()
+            .map(|h| multihome::NextHop {
+                gateway: h.gateway,
+                index: h.device_index,
+                weight: h.weight,
+            })
+            .collect();
+        self.connector
+            .replace_multipath_route(route.prefix.0, route.prefix.1, &hops, route.table, None, route.src)
+            .map_err(|e| e.to_string())
+    }
+    fn delete(
+        &mut self,
+        table: u32,
+        (destination, prefix): (IpAddr, u8),
+        _: u32,
+    ) -> std::result::Result<(), String> {
+        if !self.settings.tables().contains(&table) {
+            return Ok(());
+        }
+        self.connector
+            .delete_owned_route(destination, prefix, table, None)
+            .map_err(|e| e.to_string())
+    }
+    fn owned(&mut self) -> std::result::Result<Vec<flowsdn_node::routes::RouteId>, String> {
+        let mut out = Vec::new();
+        for table in self.settings.tables() {
+            for v6 in [false, true] {
+                for route in self
+                    .connector
+                    .table_routes(table, v6)
+                    .map_err(|e| format!("list table {table}: {e}"))?
+                {
+                    out.push((table, (route.destination, route.prefix), 0));
+                }
+            }
+        }
+        Ok(out)
     }
 }
 

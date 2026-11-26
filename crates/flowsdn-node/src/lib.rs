@@ -19,3 +19,4 @@
 pub mod addresses;
 pub mod routes;
 pub mod rows;
+pub mod rules;
