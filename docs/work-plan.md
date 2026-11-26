@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### MCS-API CoreDNS configuration — #569, 2026-11-25
+
+- [ ] Waiting on the owner (asked on #569): the issue conflicts with spec 20 §12 decision 11 (#279), which stages MCS
+      incl. `clusterset.local` DNS after the legacy mesh import (#568) and conformance gates; the MCS keys are accepted,
+      ignored and warned today, and no ServiceExport/ServiceImport controller exists or is filed. Recommended: park
+      #569 after #568 and newly filed MCS controllers. Nothing built.
+
 ### ClusterMesh apiserver sync — #567, 2026-11-25
 
 - [x] Owner decision (master, in chat 2026-11-25): option 1, flowsdn's own etcd v3 client (hand-written prost
