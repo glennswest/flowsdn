@@ -23,8 +23,8 @@
 //! registers before their flowsdn.io watchers start.
 use crate::lease::{Elector, Step, micro_time};
 use crate::operator_bgp::{self, BgpSettings, Pool, RouterIdMode, RouterIds};
-use crate::operator_metrics::{self, Shared};
 use crate::operator_gc::{self, IdentityGc, NodeGc, Settings};
+use crate::operator_metrics::{self, Shared};
 use flowsdn_k8s::client::{JsonClient, TransportLimits};
 use flowsdn_k8s::register::{Registered, register, shipped_crds};
 use serde_json::Value;
@@ -408,7 +408,8 @@ impl Collectors {
                         let mut s = stats.lock();
                         s.identity_gc_runs = s.identity_gc_runs.saturating_add(1);
                         s.identities_alive = Some(done.alive);
-                        s.identities_marked = s.identities_marked.saturating_add(as_u64(done.marked));
+                        s.identities_marked =
+                            s.identities_marked.saturating_add(as_u64(done.marked));
                         s.identities_deleted =
                             s.identities_deleted.saturating_add(as_u64(done.deleted));
                         s.identities_skipped =

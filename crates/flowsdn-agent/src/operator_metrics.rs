@@ -44,7 +44,9 @@ pub struct Stats {
 pub struct Shared(Arc<Mutex<Stats>>);
 impl Shared {
     pub fn lock(&self) -> MutexGuard<'_, Stats> {
-        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
@@ -228,7 +230,10 @@ fn serve_one(mut stream: TcpStream, shared: &Shared) {
             Ok(0) | Err(_) => break,
             Ok(n) => used = used.saturating_add(n),
         }
-        if buffer.get(..used).is_some_and(|b| b.windows(4).any(|w| w == b"\r\n\r\n")) {
+        if buffer
+            .get(..used)
+            .is_some_and(|b| b.windows(4).any(|w| w == b"\r\n\r\n"))
+        {
             break;
         }
     }
