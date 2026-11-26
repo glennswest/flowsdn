@@ -273,7 +273,12 @@ impl RouteOps for ConnectorOps {
                 .map_err(|e| e.to_string())
         }
     }
-    fn delete(&mut self, table: u32, (destination, prefix): (IpAddr, u8), _: u32) -> Result<(), String> {
+    fn delete(
+        &mut self,
+        table: u32,
+        (destination, prefix): (IpAddr, u8),
+        _: u32,
+    ) -> Result<(), String> {
         if table != MAIN {
             return Ok(());
         }

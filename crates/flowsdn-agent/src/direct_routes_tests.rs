@@ -26,7 +26,11 @@ fn desired() -> DesiredRoute {
 #[test]
 fn only_reachable_hops_are_installed() {
     let routed = ip("10.0.0.5");
-    let hops = [hop(Some("10.0.0.5"), 3), hop(Some("192.0.2.21"), 4), hop(None, 5)];
+    let hops = [
+        hop(Some("10.0.0.5"), 3),
+        hop(Some("192.0.2.21"), 4),
+        hop(None, 5),
+    ];
     let mut asked = Vec::new();
     let usable = reachable_hops(&hops, |g| {
         asked.push(g);
@@ -35,7 +39,11 @@ fn only_reachable_hops_are_installed() {
     .unwrap();
     assert_eq!(usable, [hops[1], hops[2]]);
     assert_eq!(asked.len(), 2, "a hop without a gateway is on-link");
-    assert!(reachable_hops(&hops[..1], |_| Ok(false)).unwrap().is_empty());
+    assert!(
+        reachable_hops(&hops[..1], |_| Ok(false))
+            .unwrap()
+            .is_empty()
+    );
     assert!(reachable_hops(&hops, |_| Err("netlink".into())).is_err());
 }
 
@@ -50,7 +58,12 @@ fn routes_are_planned_into_rows() {
         panic!("a row");
     };
     assert_eq!(
-        (row.owner.as_str(), row.table, row.prefix, row.admin_distance),
+        (
+            row.owner.as_str(),
+            row.table,
+            row.prefix,
+            row.admin_distance
+        ),
         (OWNER, MAIN, (ip("10.9.0.0"), 16), ADMIN_DISTANCE)
     );
     assert_eq!(row.nexthop, None);
@@ -60,7 +73,10 @@ fn routes_are_planned_into_rows() {
     let Planned::Row(row) = plan(&route, Some(&hops), |_| Ok(false), |_| Ok(None), false) else {
         panic!("a row");
     };
-    assert_eq!((row.nexthop, row.multipath.len()), (Some(ip("192.0.2.20")), 0));
+    assert_eq!(
+        (row.nexthop, row.multipath.len()),
+        (Some(ip("192.0.2.20")), 0)
+    );
     assert_eq!(installed_text(&row), "installed");
     // The first InternalIP behind a router: an error, or skipped.
     let router = |_: IpAddr| Ok(Some(ip("192.0.2.1")));
@@ -74,7 +90,13 @@ fn routes_are_planned_into_rows() {
     }
     // A gateway equal to the address, or unspecified, is directly reachable.
     assert!(matches!(
-        plan(&route, None, |_| Ok(true), |_| Ok(Some(ip("192.0.2.20"))), false),
+        plan(
+            &route,
+            None,
+            |_| Ok(true),
+            |_| Ok(Some(ip("192.0.2.20"))),
+            false
+        ),
         Planned::Row(_)
     ));
     // A netlink failure is an error, not a route.

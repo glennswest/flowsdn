@@ -23,7 +23,6 @@ use flowsdn_lb::socket;
 use futures::FutureExt;
 use std::{
     fs,
-    io::Write,
     path::Path,
     sync::{Arc, Mutex, mpsc},
     time::{Duration, Instant},
@@ -33,7 +32,6 @@ use std::{
 mod lb;
 #[path = "uplinks_monitor.rs"]
 mod uplinks_monitor;
-
 
 const LIST_PAGE: u32 = 500;
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
@@ -2352,5 +2350,4 @@ mod tests {
         assert!(load(&file).is_err());
         let _ = fs::remove_dir_all(&dir);
     }
-
 }
