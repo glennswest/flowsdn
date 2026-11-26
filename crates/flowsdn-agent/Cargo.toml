@@ -44,4 +44,4 @@ regex.workspace = true
 [dev-dependencies]
 sha2 = "=0.10.9"
 openssl = "=0.10.81"
-tokio = { workspace = true, features = ["rt", "time", "macros", "process", "net"] }
+tokio = { workspace = true, features = ["rt", "time", "macros", "process", "net", "test-util"] }
