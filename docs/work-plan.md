@@ -29,6 +29,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] #488 came back (14.07): parked after stormpump#329.
 - [x] stormpump#329 fixed at 65b74d3 (shipped, not yet released). #484, #487, #488 parked `--after-release
       stormpump>=65b74d3`; re-ship each with its proof when handed back. Park the other health-proof issues the same way.
+- [x] #489 (its own quarantine-line proof) parked the same way.
 - [x] #488 (socket-lb findings, fixed 2026-11-20 at ff03ffd) reopened on the same proof: re-shipped the same way
       (`--commit 936dedb`). The other issues reopened on that proof go back the same way when each is handed out.
 - [x] #489 (quarantine, fixed 2026-11-20) and #420 have their own `log:` proofs (startup lines). c10c88b sends both
