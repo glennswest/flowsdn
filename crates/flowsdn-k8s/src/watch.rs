@@ -209,6 +209,48 @@ pub enum Resource {
     RedirectPolicy(NetworkPolicy),
     /// A `flowsdn.io/v1alpha1` FlowsdnEgressGatewayPolicy, kept whole (#564).
     EgressPolicy(NetworkPolicy),
+    /// An object of a [`Scope::Whole`] kind, kept whole (#567).
+    Whole(NetworkPolicy),
+}
+/// The kinds the ClusterMesh apiserver exports, watched whole (#567).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WholeKind {
+    /// `flowsdn.io/v1alpha1` FlowsdnNode.
+    FlowsdnNodes,
+    /// `flowsdn.io/v1alpha1` FlowsdnEndpoint, every namespace.
+    FlowsdnEndpoints,
+    /// `v1` Service, every namespace.
+    Services,
+    /// `discovery.k8s.io/v1` EndpointSlice, every namespace.
+    EndpointSlices,
+    /// `v1` Namespace.
+    Namespaces,
+}
+impl WholeKind {
+    pub fn kind(self) -> &'static str {
+        match self {
+            Self::FlowsdnNodes => "FlowsdnNode",
+            Self::FlowsdnEndpoints => "FlowsdnEndpoint",
+            Self::Services => "Service",
+            Self::EndpointSlices => "EndpointSlice",
+            Self::Namespaces => "Namespace",
+        }
+    }
+    pub fn path(self) -> &'static str {
+        match self {
+            Self::FlowsdnNodes => "/apis/flowsdn.io/v1alpha1/flowsdnnodes",
+            Self::FlowsdnEndpoints => "/apis/flowsdn.io/v1alpha1/flowsdnendpoints",
+            Self::Services => "/api/v1/services",
+            Self::EndpointSlices => "/apis/discovery.k8s.io/v1/endpointslices",
+            Self::Namespaces => "/api/v1/namespaces",
+        }
+    }
+    pub fn namespaced(self) -> bool {
+        matches!(
+            self,
+            Self::FlowsdnEndpoints | Self::Services | Self::EndpointSlices
+        )
+    }
 }
 impl Resource {
     pub fn metadata(&self) -> &Metadata {
@@ -225,7 +267,8 @@ impl Resource {
             | Self::LbIpPool(p)
             | Self::L2Policy(p)
             | Self::RedirectPolicy(p)
-            | Self::EgressPolicy(p) => &p.metadata,
+            | Self::EgressPolicy(p)
+            | Self::Whole(p) => &p.metadata,
         }
     }
 }
@@ -266,6 +309,8 @@ pub enum Scope {
     RedirectPolicies,
     /// Every `flowsdn.io/v1alpha1` FlowsdnEgressGatewayPolicy (#564).
     EgressPolicies,
+    /// Every object of one kind, kept whole (the ClusterMesh apiserver, #567).
+    Whole(WholeKind),
 }
 impl Scope {
     pub fn field_selector(&self) -> Option<String> {
@@ -275,6 +320,9 @@ impl Scope {
         }
     }
     pub fn namespaced(&self) -> bool {
+        if let Self::Whole(kind) = self {
+            return kind.namespaced();
+        }
         !matches!(
             self,
             Self::Nodes
@@ -303,6 +351,7 @@ impl Scope {
                 Self::L2Policies => "FlowsdnL2AnnouncementPolicy",
                 Self::RedirectPolicies => "FlowsdnLocalRedirectPolicy",
                 Self::EgressPolicies => "FlowsdnEgressGatewayPolicy",
+                Self::Whole(kind) => kind.kind(),
             };
             if text(kind)? != expected {
                 return Err(error("unexpected resource kind"));
@@ -423,6 +472,10 @@ impl Scope {
                 object: value.clone(),
             })),
             Self::EgressPolicies => Ok(Resource::EgressPolicy(NetworkPolicy {
+                metadata,
+                object: value.clone(),
+            })),
+            Self::Whole(_) => Ok(Resource::Whole(NetworkPolicy {
                 metadata,
                 object: value.clone(),
             })),

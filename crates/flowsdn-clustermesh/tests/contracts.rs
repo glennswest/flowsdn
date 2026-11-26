@@ -109,16 +109,16 @@ fn cidr_replacement_is_atomic_and_family_aware() {
 #[test]
 fn remote_ranges_reject_escape_boundaries_and_mutations() {
     let front = FrontPolicy::for_role(Role::Remote, "east").expect("front");
-    assert!(front.permits(Rpc::Range, b"cilium/cluster-config/east", None));
-    assert!(!front.permits(Rpc::Range, b"cilium/cluster-config/east-evil", None));
-    assert!(!front.permits(Rpc::Range, b"cilium/cluster-config/west", None));
-    assert!(front.permits(Rpc::Watch, b"cilium/state/", Some(b"cilium/state0")));
-    assert!(!front.permits(Rpc::Watch, b"cilium/state/", Some(b"cilium/state1")));
-    assert!(!front.permits(Rpc::Watch, b"cilium/state/", Some(&[0])));
+    assert!(front.permits(Rpc::Range, b"flowsdn/cluster-config/east", None));
+    assert!(!front.permits(Rpc::Range, b"flowsdn/cluster-config/east-evil", None));
+    assert!(!front.permits(Rpc::Range, b"flowsdn/cluster-config/west", None));
+    assert!(front.permits(Rpc::Watch, b"flowsdn/state/", Some(b"flowsdn/state0")));
+    assert!(!front.permits(Rpc::Watch, b"flowsdn/state/", Some(b"flowsdn/state1")));
+    assert!(!front.permits(Rpc::Watch, b"flowsdn/state/", Some(&[0])));
     assert!(!front.permits(Rpc::Range, b"", None));
-    assert!(!front.permits(Rpc::Range, b"cilium/synced/east-evil/x", None));
-    assert!(front.permits(Rpc::Range, b"cilium/synced/east/x", None));
-    assert!(front.permits(Rpc::Range, b"cilium/.heartbeat-suffix", None)); // reference grants prefix
+    assert!(!front.permits(Rpc::Range, b"flowsdn/synced/east-evil/x", None));
+    assert!(front.permits(Rpc::Range, b"flowsdn/synced/east/x", None));
+    assert!(front.permits(Rpc::Range, b"flowsdn/.heartbeat-suffix", None)); // reference grants prefix
     assert!(!front.permits(Rpc::Range, b"flowsdn/cluster-owners/east", None));
     for rpc in [
         Rpc::Put,
@@ -128,7 +128,7 @@ fn remote_ranges_reject_escape_boundaries_and_mutations() {
         Rpc::Auth,
         Rpc::Other,
     ] {
-        assert!(!front.permits(rpc, b"cilium/state/x", None));
+        assert!(!front.permits(rpc, b"flowsdn/state/x", None));
     }
     assert!(FrontPolicy::for_role(Role::Remote, "east/../../west").is_err());
     assert!(ReadRange::prefix(&[255, 255]).is_err());
@@ -136,10 +136,10 @@ fn remote_ranges_reject_escape_boundaries_and_mutations() {
 #[test]
 fn local_ranges_are_read_only_and_distinct() {
     let front = FrontPolicy::for_role(Role::Local, "east").expect("front");
-    assert!(front.permits(Rpc::Range, b"cilium/cache/", Some(b"cilium/cache0")));
-    assert!(front.permits(Rpc::Range, b"cilium/cluster-config/west", None));
-    assert!(!front.permits(Rpc::Range, b"cilium/state/x", None));
-    assert!(!front.permits(Rpc::Range, b"cilium/cache/", Some(b"cilium/synced0")));
+    assert!(front.permits(Rpc::Range, b"flowsdn/cache/", Some(b"flowsdn/cache0")));
+    assert!(front.permits(Rpc::Range, b"flowsdn/cluster-config/west", None));
+    assert!(!front.permits(Rpc::Range, b"flowsdn/state/x", None));
+    assert!(!front.permits(Rpc::Range, b"flowsdn/cache/", Some(b"flowsdn/synced0")));
 }
 fn instance() -> InstanceUuid {
     InstanceUuid::parse("7beea67f-6435-4f2a-9d80-c6c9c18e0f01").expect("uuid")
@@ -178,7 +178,7 @@ fn ownership_claim_is_atomic_and_restart_stable() {
     let mut store = BTreeMap::new();
     assert!(apply(&mut store, &first, 1));
     let owner = store.get("flowsdn/cluster-owners/east");
-    let config = store.get("cilium/cluster-config/east");
+    let config = store.get("flowsdn/cluster-config/east");
     let replay = plan_claim(
         "east",
         &InstanceUuid::parse(uuid.as_str()).expect("restart"),
@@ -204,7 +204,7 @@ fn ownership_claim_is_atomic_and_restart_stable() {
     assert!(apply(&mut rebound_store, &rebound, 2));
     assert_eq!(
         rebound_store
-            .get("cilium/cluster-config/east")
+            .get("flowsdn/cluster-config/east")
             .and_then(|record| record.lease_id),
         Some(2)
     );
@@ -221,7 +221,7 @@ fn ownership_claim_is_atomic_and_restart_stable() {
     );
     let other = InstanceUuid::parse("11111111-2222-4333-8444-555555555555").expect("other");
     assert!(plan_claim("east", &other, owner, config, &desired, 1).is_err());
-    store.remove("cilium/cluster-config/east"); // leased config expires, durable owner does not
+    store.remove("flowsdn/cluster-config/east"); // leased config expires, durable owner does not
     assert!(
         plan_claim(
             "east",
@@ -260,13 +260,13 @@ fn competing_claims_and_stale_revisions_cannot_overwrite() {
         "east",
         &instance(),
         store.get("flowsdn/cluster-owners/east"),
-        store.get("cilium/cluster-config/east"),
+        store.get("flowsdn/cluster-config/east"),
         &json!({"id":4}),
         1,
     )
     .expect("updated");
     store
-        .get_mut("cilium/cluster-config/east")
+        .get_mut("flowsdn/cluster-config/east")
         .expect("config")
         .mod_revision = 3;
     let before = store.clone();

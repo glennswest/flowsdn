@@ -84,6 +84,7 @@ pub fn request_uri(scope: &Scope, query: &Query<'_>) -> Result<String, Error> {
         Scope::L2Policies => L2_POLICIES_PATH,
         Scope::RedirectPolicies => REDIRECT_POLICIES_PATH,
         Scope::EgressPolicies => EGRESS_POLICIES_PATH,
+        Scope::Whole(kind) => kind.path(),
     };
     let mut params = Vec::new();
     if let Some(selector) = scope.field_selector() {

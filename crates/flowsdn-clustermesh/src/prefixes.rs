@@ -79,20 +79,20 @@ impl FrontPolicy {
     /// caller-supplied role string. own_cluster is this server's cluster.
     pub fn for_role(role: Role, own_cluster: &str) -> Result<Self, Error> {
         validate_cluster(own_cluster)?;
-        let mut grants = vec![ReadRange::prefix(b"cilium/.heartbeat")?];
+        let mut grants = vec![ReadRange::prefix(b"flowsdn/.heartbeat")?];
         match role {
             Role::Local => {
-                for prefix in ["cilium/cache/", "cilium/cluster-config/", "cilium/synced/"] {
+                for prefix in ["flowsdn/cache/", "flowsdn/cluster-config/", "flowsdn/synced/"] {
                     grants.push(ReadRange::prefix(prefix.as_bytes())?);
                 }
             }
             Role::Remote => {
-                grants.push(ReadRange::prefix(b"cilium/state/")?);
+                grants.push(ReadRange::prefix(b"flowsdn/state/")?);
                 grants.push(ReadRange::exact(
-                    format!("cilium/cluster-config/{own_cluster}").into_bytes(),
+                    format!("flowsdn/cluster-config/{own_cluster}").into_bytes(),
                 ));
                 grants.push(ReadRange::prefix(
-                    format!("cilium/synced/{own_cluster}/").as_bytes(),
+                    format!("flowsdn/synced/{own_cluster}/").as_bytes(),
                 )?);
             }
         }

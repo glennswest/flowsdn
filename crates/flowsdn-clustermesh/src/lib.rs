@@ -3,6 +3,7 @@
 #[cfg(unix)]
 pub mod bootstrap;
 pub mod config;
+pub mod export;
 pub mod ownership;
 pub mod prefixes;
 pub mod principal;

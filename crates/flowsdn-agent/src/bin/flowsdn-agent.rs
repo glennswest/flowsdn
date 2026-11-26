@@ -22,7 +22,7 @@ not provided by this daemon.
 ";
 /// Only an agent built with the `kubernetes` feature has the operator (#337).
 #[cfg(feature = "kubernetes")]
-const OPERATOR_USAGE: &str = "\nOperator (Kubernetes builds): flowsdn-agent operator --help\n";
+const OPERATOR_USAGE: &str = "\nOperator (Kubernetes builds): flowsdn-agent operator --help\nClusterMesh apiserver (Kubernetes builds): flowsdn-agent clustermesh-apiserver --help\n";
 #[cfg(not(feature = "kubernetes"))]
 const OPERATOR_USAGE: &str = "";
 
@@ -41,6 +41,15 @@ fn main() -> flowsdn_agent::state::Result<()> {
             }
             let options = flowsdn_agent::operator::parse(rest)?;
             Ok(flowsdn_agent::operator::run(&options)?)
+        }
+        #[cfg(feature = "kubernetes")]
+        [mode, rest @ ..] if mode == "clustermesh-apiserver" => {
+            if rest.iter().any(|a| a == "--help" || a == "-h") {
+                print!("{}", flowsdn_agent::clustermesh_apiserver::HELP);
+                return Ok(());
+            }
+            let options = flowsdn_agent::clustermesh_apiserver::parse(rest)?;
+            Ok(flowsdn_agent::clustermesh_apiserver::run(&options)?)
         }
         [flag] if flag == "--version" || flag == "-V" => {
             println!("flowsdn-agent {}", env!("CARGO_PKG_VERSION"));

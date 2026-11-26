@@ -80,7 +80,7 @@ pub fn plan_claim(
     validate_record(owner)?;
     validate_record(config)?;
     let owner_key = format!("flowsdn/cluster-owners/{cluster}");
-    let config_key = format!("cilium/cluster-config/{cluster}");
+    let config_key = crate::export::cluster_config_key(cluster);
     if let Some(owner) = owner
         && (owner.lease_id.is_some() || owner.value != instance.as_str().as_bytes())
     {

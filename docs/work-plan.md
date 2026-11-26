@@ -6,13 +6,18 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ### ClusterMesh apiserver sync — #567, 2026-11-25
 
-- [ ] Waiting on the owner (asked on #567): the kvstore client's gRPC/TLS stack. Spec 20 §11.1 says etcd-client
-      (tonic) + rustls, but ADR-0016/deny.toml ban rustls's crypto providers (ring, aws-lc-sys) and git sources
-      (fastetcd's proto crate). Recommended: flowsdn's own etcd v3 client over hyper HTTP/2, hand-written prost
-      messages, Fedora OpenSSL TLS. Nothing built yet.
-- Then: kvstore trait + memory backend + SyncStore (§3.1, §3.4.2), the four synchronizers with canaries and the
-  cluster config (§3.8.2-3.8.3), `flowsdn/` prefixes and grants (#339 part); tests against the memory backend and
-  fastetcd.
+- [x] Owner decision (master, in chat 2026-11-25): option 1, flowsdn's own etcd v3 client (hand-written prost
+      messages, h2, Fedora OpenSSL per ADR-0016, no rustls); kvstore trait, memory backend and SyncStore built here;
+      tests on the memory backend and fastetcd (SC_TOOLS); Cilium certificate names renamed to flowsdn's.
+- [ ] `flowsdn-kvstore`: trait (+ `txn`, `lease_for` for §12 decision 9), memory backend, SyncStore, etcd backend
+      (gRPC over h2, TLS, limiter, leases, paginated list, watch/relist, client-side lock, status checker).
+- [ ] `flowsdn-clustermesh`: `flowsdn/` prefixes and grants (#339 part); export converters (§4.2-4.6), IP owner
+      arbitration, global namespaces.
+- [ ] `flowsdn-agent clustermesh-apiserver` (a mode, as the operator is): watches (FlowsdnNode, FlowsdnIdentity,
+      FlowsdnEndpoint, Service, EndpointSlice, Namespace), four SyncStores with canaries, cluster config claim and
+      enforcement, heartbeat, `/readyz`.
+- [ ] Tests: memory backend everywhere; fastetcd (plain and mTLS) via `SC_TOOLS=fastetcd`.
+- [ ] Docs (spec 20 amendment incl. certificate names, runtime, status, changelog); sc-build; close.
 
 ### flowsdn.io BGP kinds — #334, 2026-11-25
 

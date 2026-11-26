@@ -4,6 +4,8 @@ pub mod api;
 #[cfg(feature = "kubernetes")]
 pub mod bgp_status;
 pub mod cni_timing;
+#[cfg(feature = "kubernetes")]
+pub mod clustermesh_apiserver;
 pub mod dns_proxy;
 pub mod egress_gateway;
 #[cfg(feature = "kubernetes")]

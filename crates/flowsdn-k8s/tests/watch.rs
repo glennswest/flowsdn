@@ -730,3 +730,32 @@ fn pod_ports_readiness_and_local_redirect_policies() {
         "kind is checked"
     );
 }
+
+/// #567: the ClusterMesh apiserver's kinds are kept whole, with their
+/// scope's namespacing, path and kind check.
+#[test]
+fn whole_scopes_keep_objects_whole() {
+    use flowsdn_k8s::client::{Query, request_uri};
+    use flowsdn_k8s::watch::WholeKind;
+    let endpoint = json!({"apiVersion":"flowsdn.io/v1alpha1","kind":"FlowsdnEndpoint",
+        "metadata":{"name":"web-1","namespace":"prod","uid":"e","resourceVersion":"3"},
+        "status":{"identity":{"id":65538}}});
+    let scope = Scope::Whole(WholeKind::FlowsdnEndpoints);
+    let Resource::Whole(parsed) = scope.parse(&endpoint).expect("endpoint") else {
+        panic!("whole row expected");
+    };
+    assert_eq!(parsed.object, endpoint);
+    assert_eq!(parsed.metadata.namespace, "prod");
+    assert!(scope.namespaced());
+    assert!(Scope::Whole(WholeKind::FlowsdnNodes).parse(&endpoint).is_err(), "kind is checked");
+    assert!(!Scope::Whole(WholeKind::Namespaces).namespaced());
+    for (kind, path) in [
+        (WholeKind::FlowsdnNodes, "/apis/flowsdn.io/v1alpha1/flowsdnnodes"),
+        (WholeKind::FlowsdnEndpoints, "/apis/flowsdn.io/v1alpha1/flowsdnendpoints"),
+        (WholeKind::Services, "/api/v1/services"),
+        (WholeKind::EndpointSlices, "/apis/discovery.k8s.io/v1/endpointslices"),
+        (WholeKind::Namespaces, "/api/v1/namespaces"),
+    ] {
+        assert_eq!(request_uri(&Scope::Whole(kind), &Query::default()).expect("URI"), path);
+    }
+}
