@@ -34,7 +34,6 @@ mod lb;
 #[path = "uplinks_monitor.rs"]
 mod uplinks_monitor;
 
-type Key = (IpAddr, u8, IpAddr);
 
 const LIST_PAGE: u32 = 500;
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
@@ -2141,30 +2140,49 @@ async fn cycle(
     }
 }
 
-/// Own the direct routes: persist each route before installing it so a route
-/// left by a crash is still pruned, delete routes no longer desired, repair the
-/// desired set every 30 s, and never replace a route of another protocol.
+/// Own the direct routes (#576 stage 2, [`crate::direct_routes`]): plan the
+/// desired routes into the `direct-routes` owner of spec 10's
+/// `desired-routes`, and reconcile the selected rows into the kernel. Prune
+/// waits for the first complete Node list; every row is refreshed every 30 s;
+/// a route of another protocol is never replaced.
 fn route_loop(
     receiver: &mpsc::Receiver<Vec<DesiredRoute>>,
     view: &Shared,
     file: &Path,
     skip_unreachable: bool,
 ) {
+    use crate::direct_routes::{self, ConnectorOps, Planned};
+    use flowsdn_node::routes::{RouteManager, RouteTarget};
+    use flowsdn_reconcile::{Kind, Options, Reconciler};
+    let fail = |message: String| {
+        lock(view).errors.insert("routes".into(), message);
+    };
     let connector = match Connector::open() {
         Ok(connector) => connector,
-        Err(error) => {
-            lock(view)
-                .errors
-                .insert("routes".into(), format!("netlink: {error}"));
-            return;
-        }
+        Err(error) => return fail(format!("netlink: {error}")),
     };
-    let mut installed = match load_routes(file) {
-        Ok(routes) => routes,
-        Err(error) => {
-            crate::log::logln!("ignoring unreadable {}: {error}", file.display());
-            BTreeSet::new()
-        }
+    let manager = match RouteManager::new() {
+        Ok(manager) => manager,
+        Err(error) => return fail(format!("desired-routes: {error}")),
+    };
+    let table = manager.table();
+    let initializer = match table.register_initializer(direct_routes::OWNER) {
+        Ok(initializer) => initializer,
+        Err(error) => return fail(format!("desired-routes: {error}")),
+    };
+    table.seal_initializers();
+    let target = RouteTarget::new(
+        ConnectorOps::new(connector, file.to_path_buf()),
+        Arc::clone(&table),
+    );
+    let options = Options {
+        refresh_interval: RECONCILE_INTERVAL,
+        prune_interval: RECONCILE_INTERVAL,
+        ..Options::default()
+    };
+    let mut reconciler = match Reconciler::new(&table, target, options) {
+        Ok(reconciler) => reconciler,
+        Err(error) => return fail(format!("route reconciler: {error}")),
     };
     let mut desired: Option<Vec<DesiredRoute>> = None;
     // The uplinks a reconcile last saw (#408): a port leaving or joining
@@ -2190,250 +2208,87 @@ fn route_loop(
         }
         generation = lock(view).uplinks.generation;
         last = Instant::now();
-        // Nothing is pruned before the first complete Node list.
-        if let Some(desired) = &desired {
-            let (states, error) = reconcile(
-                &connector,
-                view,
-                desired,
-                &mut installed,
-                file,
-                skip_unreachable,
-            );
-            let mut view = lock(view);
-            view.routes = states;
-            if let Some(error) = &error {
-                crate::events::node(Warning, "DirectRouteFailed", error.clone());
-            }
-            match error {
-                Some(error) => view.errors.insert("routes".into(), error),
-                None => view.errors.remove("routes"),
-            };
-        }
-    }
-}
-
-fn key(route: &DesiredRoute) -> Key {
-    (route.destination, route.prefix, route.gateway)
-}
-
-fn reconcile(
-    connector: &Connector,
-    view: &Shared,
-    desired: &[DesiredRoute],
-    installed: &mut BTreeSet<Key>,
-    file: &Path,
-    skip_unreachable: bool,
-) -> (BTreeMap<String, (DesiredRoute, String)>, Option<String>) {
-    let mut failures = Vec::new();
-    let want: BTreeSet<Key> = desired.iter().map(key).collect();
-    let (stale, forget) = stale_routes(installed, &want);
-    // Still desired under another key: the install below replaces it.
-    for key in forget {
-        installed.remove(&key);
-    }
-    for (destination, prefix, gateway) in stale {
-        match delete_direct_route(connector, destination, prefix) {
-            Ok(()) => {
-                installed.remove(&(destination, prefix, gateway));
-            }
-            Err(error) => failures.push(format!(
-                "delete {} via {gateway}: {error}",
-                cidr_text(destination, prefix)
-            )),
-        }
-    }
-    let mut states = BTreeMap::new();
-    for route in desired {
-        let cidr = cidr_text(route.destination, route.prefix);
-        let hops = uplinks_monitor::route_hops(view, route);
-        let state = match install(
-            connector,
-            route,
-            hops.as_deref(),
-            installed,
-            file,
-            skip_unreachable,
-        ) {
-            Ok(state) => state,
-            Err(error) => {
-                failures.push(format!("{cidr} via {}: {error}", route.gateway));
-                format!("error: {error}")
-            }
+        // Nothing is planned, nor pruned, before the first complete Node list.
+        let Some(desired) = &desired else { continue };
+        let planned: Vec<(DesiredRoute, Planned)> = {
+            let ops = &reconciler.target().ops;
+            desired
+                .iter()
+                .map(|route| {
+                    let hops = uplinks_monitor::route_hops(view, route);
+                    let planned = direct_routes::plan(
+                        route,
+                        hops.as_deref(),
+                        |a| ops.direct(a),
+                        |a| ops.router(a),
+                        skip_unreachable,
+                    );
+                    (route.clone(), planned)
+                })
+                .collect()
         };
-        states.insert(cidr, (route.clone(), state));
-    }
-    if let Err(error) = save_routes(file, installed) {
-        failures.push(format!("persist {}: {error}", file.display()));
-    }
-    let error = (!failures.is_empty()).then(|| failures.join("; "));
-    (states, error)
-}
-
-/// The persisted routes no longer desired (#498): `stale` ones, whose
-/// destination is wanted by no key, are deleted; the others (`forget`) are
-/// still wanted with another gateway, so only their key goes.
-fn stale_routes(installed: &BTreeSet<Key>, want: &BTreeSet<Key>) -> (Vec<Key>, Vec<Key>) {
-    installed
-        .difference(want)
-        .copied()
-        .partition(|(destination, prefix, _)| {
-            !want.iter().any(|(d, p, _)| d == destination && p == prefix)
-        })
-}
-
-/// Delete a direct route, plain, one hop or ECMP (#498): the route flowsdn
-/// installed for the destination (protocol kernel, with a gateway or paths),
-/// whatever gateway it uses, so a one-hop route through a later InternalIP
-/// goes too. A route of another protocol, or a connected one, is never
-/// touched; no such route is success.
-fn delete_direct_route(connector: &Connector, destination: IpAddr, prefix: u8) -> Result<()> {
-    let owned = connector
-        .table_routes(254, destination.is_ipv6())?
-        .into_iter()
-        .any(|r| {
-            r.destination == destination
-                && r.prefix == prefix
-                && flowsdn_connector::multihome::owned(&r)
-        });
-    if owned {
-        connector.delete_owned_route(destination, prefix, 254, None)
-    } else {
-        Ok(())
-    }
-}
-
-/// The hops whose gateway is directly reachable (#498; spec 10 §3.2.3 step
-/// 1 per path): `direct` says whether the main table reaches an address
-/// without a router. A hop without a gateway is on-link.
-fn reachable_hops(
-    hops: &[flowsdn_connector::multihome::NextHop],
-    mut direct: impl FnMut(IpAddr) -> Result<bool>,
-) -> Result<Vec<flowsdn_connector::multihome::NextHop>> {
-    let mut out = Vec::new();
-    for hop in hops {
-        let ok = match hop.gateway {
-            Some(gateway) => direct(gateway)?,
-            None => true,
-        };
-        if ok {
-            out.push(*hop);
-        }
-    }
-    Ok(out)
-}
-
-/// Whether the main table reaches `address` without a router.
-fn directly_reachable(connector: &Connector, address: IpAddr) -> Result<bool> {
-    let (gateway, _) = connector.lookup(address)?;
-    Ok(gateway.is_none_or(|g| g.is_unspecified() || g == address))
-}
-
-/// Install one direct route: with `hops` (several uplinks, #408) an ECMP
-/// route over those whose gateway is directly reachable (#498), else the
-/// plain route via the node's first address, which must be.
-fn install(
-    connector: &Connector,
-    route: &DesiredRoute,
-    hops: Option<&[flowsdn_connector::multihome::NextHop]>,
-    installed: &mut BTreeSet<Key>,
-    file: &Path,
-    skip_unreachable: bool,
-) -> Result<String> {
-    // Spec 10 §3.2.3 step 1: the node must be directly reachable; with
-    // several paths each is checked, and the first InternalIP only for the
-    // plain route.
-    let hops = match hops {
-        Some(hops) => Some(reachable_hops(hops, |g| directly_reachable(connector, g))?)
-            .filter(|usable| !usable.is_empty()),
-        None => None,
-    };
-    let (gateway, _) = if hops.is_some() {
-        (None, None)
-    } else {
-        connector.lookup(route.gateway)?
-    };
-    if let Some(gateway) = gateway.filter(|g| !g.is_unspecified() && *g != route.gateway) {
-        if skip_unreachable {
-            return Ok(format!(
-                "skipped: route to {} uses gateway {gateway}",
-                route.gateway
-            ));
-        }
-        return Err(format!(
-            "route to destination {} contains gateway {gateway}, must be directly reachable. \
-             Add direct-routing-skip-unreachable to skip unreachable routes",
-            route.gateway
-        )
-        .into());
-    }
-    // Spec 10 §5.2: never clobber a static/boot/dhcp/ra route to the prefix.
-    let existing = connector.main_routes_to(route.destination, route.prefix)?;
-    if let Some(other) = existing.iter().find(|r| r.protocol != RTPROT_KERNEL) {
-        return Err(format!("route conflict with proto {}", other.protocol).into());
-    }
-    if installed.insert(key(route)) {
-        save_routes(file, installed)?;
-    }
-    match hops.as_deref() {
-        Some(hops) => {
-            connector.replace_multipath_route(
-                route.destination,
-                route.prefix,
-                hops,
-                254,
-                None,
-                None,
-            )?;
-            Ok(if hops.len() > 1 {
-                format!("installed: {} paths", hops.len())
-            } else {
-                "installed".into()
+        let rows: Vec<flowsdn_node::rows::DesiredRoute> = planned
+            .iter()
+            .filter_map(|(_, p)| match p {
+                Planned::Row(row) => Some((**row).clone()),
+                _ => None,
             })
+            .collect();
+        let mut failures = Vec::new();
+        if let Err(error) =
+            futures::executor::block_on(manager.set_owner(direct_routes::OWNER, rows))
+        {
+            failures.push(format!("desired-routes: {error}"));
         }
-        None => {
-            connector.replace_gateway_route(route.destination, route.prefix, route.gateway)?;
-            Ok("installed".into())
+        if initializer.complete() {
+            reconciler.prune_now();
         }
-    }
-}
-
-const RTPROT_KERNEL: u8 = 2;
-
-fn load_routes(file: &Path) -> Result<BTreeSet<Key>> {
-    let bytes = match fs::read(file) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeSet::new()),
-        Err(error) => return Err(error.into()),
-    };
-    let value: Value = serde_json::from_slice(&bytes)?;
-    let mut routes = BTreeSet::new();
-    for row in value.as_array().ok_or("routes file must be an array")? {
-        let text = |key: &str| -> Result<&str> {
-            row.get(key)
-                .and_then(Value::as_str)
-                .ok_or_else(|| format!("route without {key}").into())
+        // The connector runs its own runtime, so the reconciler is driven
+        // without one.
+        for _ in 0..16 {
+            let _ = futures::executor::block_on(reconciler.run_round(std::time::Instant::now()));
+            if !reconciler.has_pending_work() {
+                break;
+            }
+        }
+        let mut states = BTreeMap::new();
+        for (route, planned) in planned {
+            let cidr = direct_routes::cidr_text(route.destination, route.prefix);
+            let state = match &planned {
+                Planned::Row(row) => {
+                    let status = reconciler.status(&flowsdn_table::Keyed::primary_key(&**row));
+                    match status {
+                        Some(status) if status.kind == Kind::Error => {
+                            let error = status.error.unwrap_or_default();
+                            failures.push(format!("{cidr} via {}: {error}", route.gateway));
+                            format!("error: {error}")
+                        }
+                        Some(status) if status.kind == Kind::Pending => "pending".to_owned(),
+                        _ => direct_routes::installed_text(row),
+                    }
+                }
+                Planned::Skipped(why) => why.clone(),
+                Planned::Failed(error) => {
+                    failures.push(format!("{cidr} via {}: {error}", route.gateway));
+                    format!("error: {error}")
+                }
+            };
+            states.insert(cidr, (route, state));
+        }
+        if let Some(error) = reconciler.prune_status().and_then(|p| p.error.clone()) {
+            failures.push(format!("prune: {error}"));
+        }
+        let error = (!failures.is_empty()).then(|| failures.join("; "));
+        let mut view = lock(view);
+        view.routes = states;
+        if let Some(error) = &error {
+            crate::events::node(Warning, "DirectRouteFailed", error.clone());
+        }
+        match error {
+            Some(error) => view.errors.insert("routes".into(), error),
+            None => view.errors.remove("routes"),
         };
-        let (ip, prefix) = text("destination")?
-            .split_once('/')
-            .ok_or("route destination must be a CIDR")?;
-        routes.insert((ip.parse()?, prefix.parse()?, text("gateway")?.parse()?));
     }
-    Ok(routes)
-}
-fn save_routes(file: &Path, routes: &BTreeSet<Key>) -> Result<()> {
-    let rows: Vec<_> = routes
-        .iter()
-        .map(|(ip, prefix, gateway)| {
-            json!({"destination":cidr_text(*ip, *prefix),"gateway":gateway.to_string()})
-        })
-        .collect();
-    let temporary = file.with_extension("json.tmp");
-    let mut output = fs::File::create(&temporary)?;
-    output.write_all(&serde_json::to_vec(&rows)?)?;
-    output.sync_all()?;
-    fs::rename(&temporary, file)?;
-    Ok(())
 }
 
 #[cfg(test)]
@@ -2475,7 +2330,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("flowsdn-routes-{}", std::process::id()));
         fs::create_dir_all(&dir).expect("dir");
         let file = dir.join(ROUTES_FILE);
-        assert!(load_routes(&file).expect("absent").is_empty());
+        use crate::direct_routes::{Key, load, save};
+        assert!(load(&file).expect("absent").is_empty());
         let routes: BTreeSet<Key> = [
             (
                 "10.173.0.0".parse().expect("ip"),
@@ -2490,67 +2346,11 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        save_routes(&file, &routes).expect("save");
-        assert_eq!(load_routes(&file).expect("load"), routes);
+        save(&file, &routes).expect("save");
+        assert_eq!(load(&file).expect("load"), routes);
         fs::write(&file, b"{}").expect("corrupt");
-        assert!(load_routes(&file).is_err());
+        assert!(load(&file).is_err());
         let _ = fs::remove_dir_all(&dir);
     }
 
-    fn hop(gateway: Option<&str>, index: u32) -> flowsdn_connector::multihome::NextHop {
-        flowsdn_connector::multihome::NextHop {
-            gateway: gateway.map(|g| g.parse().expect("ip")),
-            index,
-            weight: 1,
-        }
-    }
-
-    /// #498 (finding 4bc7cb209712): each selected path's gateway is checked;
-    /// a routed first InternalIP does not reject a later direct one.
-    #[test]
-    fn only_reachable_hops_are_installed() {
-        let routed: IpAddr = "10.0.0.5".parse().expect("ip");
-        let hops = [
-            hop(Some("10.0.0.5"), 3),
-            hop(Some("192.0.2.21"), 4),
-            hop(None, 5),
-        ];
-        let mut asked = Vec::new();
-        let usable = reachable_hops(&hops, |g| {
-            asked.push(g);
-            Ok(g != routed)
-        })
-        .expect("hops");
-        assert_eq!(usable, [hops[1], hops[2]]);
-        assert_eq!(asked.len(), 2, "a hop without a gateway is on-link");
-        assert!(
-            reachable_hops(&hops[..1], |_| Ok(false))
-                .expect("hops")
-                .is_empty(),
-            "none reachable: the plain route's check decides"
-        );
-        assert!(reachable_hops(&hops, |_| Err("netlink".into())).is_err());
-    }
-
-    /// #498 (finding 8299a1f6238f): a persisted route no longer wanted is
-    /// deleted by destination (whatever gateway it was installed with), and
-    /// one still wanted under another gateway only loses its key.
-    #[test]
-    fn stale_routes_are_deleted_by_destination() {
-        let ip = |s: &str| -> IpAddr { s.parse().expect("ip") };
-        let installed: BTreeSet<Key> = [
-            (ip("10.9.0.0"), 16, ip("192.0.2.20")),
-            (ip("10.8.0.0"), 16, ip("192.0.2.30")),
-            (ip("10.7.0.0"), 16, ip("192.0.2.40")),
-        ]
-        .into();
-        let want: BTreeSet<Key> = [
-            (ip("10.8.0.0"), 16, ip("192.0.2.31")),
-            (ip("10.7.0.0"), 16, ip("192.0.2.40")),
-        ]
-        .into();
-        let (stale, forget) = stale_routes(&installed, &want);
-        assert_eq!(stale, [(ip("10.9.0.0"), 16, ip("192.0.2.20"))]);
-        assert_eq!(forget, [(ip("10.8.0.0"), 16, ip("192.0.2.30"))]);
-    }
 }

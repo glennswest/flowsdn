@@ -6,6 +6,8 @@ pub mod bgp_status;
 #[cfg(feature = "kubernetes")]
 pub mod clustermesh_apiserver;
 pub mod cni_timing;
+#[cfg(feature = "kubernetes")]
+pub mod direct_routes;
 pub mod dns_proxy;
 pub mod egress_gateway;
 #[cfg(feature = "kubernetes")]

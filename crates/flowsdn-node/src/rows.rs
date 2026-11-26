@@ -225,7 +225,8 @@ impl TableRender for NodeAddress {
 /// One path of a multipath route.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NextHop {
-    pub gateway: IpAddr,
+    /// None: on-link.
+    pub gateway: Option<IpAddr>,
     pub device_index: u32,
     /// The kernel's weight minus one (`rtnh_hops`).
     pub weight: u8,
@@ -324,7 +325,7 @@ impl TableRender for DesiredRoute {
             } else {
                 self.multipath
                     .iter()
-                    .map(|h| format!("{} ({}, {})", h.gateway, h.device_index, h.weight))
+                    .map(|h| format!("{} ({}, {})", opt(h.gateway), h.device_index, h.weight))
                     .collect::<Vec<_>>()
                     .join(", ")
             },
