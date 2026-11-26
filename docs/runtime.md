@@ -868,6 +868,10 @@ not check it.
   objects written without an owner.
 - Both collectors log only when they change something, and keep their
   memory for one leader term.
+- **Datapath plugins** (#566): flowsdn loads none. While leading, the operator
+  lists FlowsdnDatapathPlugins every minute and posts one `Warning` Event,
+  reason `NotApplied`, on each object it has not reported in this term (Event
+  name `<object>.<uid prefix>`, so a new term's 409 counts as reported).
 - **Metrics** (#420): `--metrics-listen IP:PORT` (loopback only; the edition
   manifest uses `127.0.0.1:9967`, the node's loopback since the operator runs on
   the host network) serves `GET /metrics` from a thread of its own, with names

@@ -43,8 +43,8 @@ FlowsdnEgressGatewayPolicy, FlowsdnLocalRedirectPolicy and FlowsdnDatapathPlugin
 and writes its `status.ok` (#565,
 [runtime](runtime.md#local-redirect-policy-565)). With
 `kubernetes.egress-gateway` the agent reads FlowsdnEgressGatewayPolicy (#564,
-[runtime](runtime.md#egress-gateway-564)). Nothing reads FlowsdnDatapathPlugin yet (#566, to be specified
-first). With `--enable-bgp-control-plane` the operator renders a FlowsdnBGPNodeConfig
+[runtime](runtime.md#egress-gateway-564)). flowsdn loads no datapath plugins (spec 01's #566 decision): the operator
+posts a `Warning` `NotApplied` Event on each FlowsdnDatapathPlugin. With `--enable-bgp-control-plane` the operator renders a FlowsdnBGPNodeConfig
 per node a FlowsdnBGPClusterConfig selects and writes the cluster and peer config
 conditions (#334, [runtime](runtime.md#crds-and-the-operator-337)); the agent's BGP
 control plane, which reads the node configs and writes their status, is #570/#571. The agent writes FlowsdnEndpoint and
@@ -82,7 +82,7 @@ enforces it. Each of these is tracked per group in the issues linked from #325.
 | FlowsdnBGPNodeConfig | `fsbgpnode` | Cluster | yes | the per-node BGP configuration derived from the above | operator (#334); agent writes status (#570) |
 | FlowsdnBGPNodeConfigOverride | `fsbgpnodeoverride` | Cluster | — | per-node router ID, ASN and port overrides | users |
 | FlowsdnGatewayClassConfig | `fsgcc` | Namespaced | yes | parameters of a Gateway API GatewayClass | users; operator writes status |
-| FlowsdnDatapathPlugin | `fsdp` | Cluster | — | registration of an external datapath plugin | users |
+| FlowsdnDatapathPlugin | `fsdp` | Cluster | — | registration of an external datapath plugin; flowsdn loads none (#566) | users; operator posts `NotApplied` Events |
 
 Printer columns are the reference's: for example, `kubectl get fsep` shows security
 identity, enforcement, state and addresses, and `kubectl get fslbippool` shows disabled,

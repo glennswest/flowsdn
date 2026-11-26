@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (#566)
+- **feat:** Datapath plugins are decided: flowsdn loads none (spec 01 decision). The FlowsdnDatapathPlugin kind stays registered, but the operator reports each object instead of ignoring it in silence. While leading, it posts one `Warning` `NotApplied` Event per object per term, with the message `flowsdn loads no datapath plugins: this object is registered but not applied`. The operator's RBAC gains `events` create. No plugin pins, sockets or hook points exist.
+
 ### 2026-11-26 (#420)
 - **feat:** The operator serves `GET /metrics` with `--metrics-listen` (loopback only). The edition manifest uses `127.0.0.1:9967`, on the node's loopback.
   - Series, under `flowsdn_operator_`: leader, CRDs established, identity GC (alive, runs, failures, marked, deleted, skipped, deferred), FlowsdnNode GC (runs, failures, deleted), BGP (passes, failures, last pass's errors, node configs created/updated/deleted, statuses written) and build info.

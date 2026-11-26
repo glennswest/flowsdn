@@ -1437,3 +1437,14 @@ aya-rs/bpf-linker#317) still gave `ExternNotFound`. bpf-linker now keeps an
 extern declaration in `.ksyms` only when the declaration carries
 `section ".ksyms"` and debug info, and rustc emits neither for an
 `extern "C"` function. The remaining gap is on the Rust side.
+
+## Datapath plugin decision — #566, 2026-11-26
+
+§1's deferral of datapath plugins (`freplace`) is now a decision: **flowsdn loads no datapath plugins.** It accepts no
+third-party BPF into its datapath, defines no `freplace` hook points, opens no plugin sockets, and never creates the
+reserved plugin pins of §2 (`devices/<dev>/plugins/…`, `endpoints/<id>/plugin_pins`, `socketlb/plugin_links`,
+`plugins/…`). `enable-datapath-plugins` stays unset. The FlowsdnDatapathPlugin kind stays registered, so the CRD set
+is complete, and an object of it is reported, not silently ignored: the operator posts one `Warning` `NotApplied`
+Event on each such object per leader term (`flowsdn_agent::operator_plugins`). A future plugin interface would be
+flowsdn's own (names and ABI, as ADR-0023 decided for ClusterMesh), and specified before anything is built.
+

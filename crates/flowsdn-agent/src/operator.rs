@@ -17,6 +17,10 @@
 //! cluster and peer config conditions every `--bgp-interval` (#334,
 //! [`crate::operator_bgp`], spec 15 §3.2).
 //!
+//! It reports every FlowsdnDatapathPlugin as not applied, with one Warning
+//! Event per object a term ([`crate::operator_plugins`], #566): flowsdn loads
+//! no datapath plugins.
+//!
 //! It runs in the same binary as the agent so the flowsdn golden carries it
 //! with the agent's runtime; the edition manifests run it as a host-network
 //! Deployment (`64-flowsdn-operator.yaml`), since agents wait for the CRDs it
@@ -377,6 +381,9 @@ struct Collectors {
     next_bgp: Instant,
     /// The last BGP pass's errors, logged when they change.
     bgp_errors: Vec<String>,
+    /// FlowsdnDatapathPlugins told this term that they are not applied (#566).
+    plugins_reported: std::collections::BTreeSet<String>,
+    next_plugins: Instant,
 }
 impl Collectors {
     fn new(settings: &Settings, now: Instant) -> Self {
@@ -388,6 +395,8 @@ impl Collectors {
             router_ids: RouterIds::default(),
             next_bgp: now,
             bgp_errors: Vec::new(),
+            plugins_reported: std::collections::BTreeSet::new(),
+            next_plugins: now,
         }
     }
     /// Run whichever collector is due; a failed run is logged and retried
@@ -462,6 +471,24 @@ impl Collectors {
                 }
             };
             self.next_nodes = now.checked_add(delay).unwrap_or(now);
+        }
+        if now >= self.next_plugins {
+            let wall = crate::events::rfc3339(SystemTime::now());
+            let delay = match crate::operator_plugins::report(&mut self.plugins_reported, &wall, send) {
+                Ok(names) => {
+                    for name in names {
+                        crate::log::logln!(
+                            "operator: FlowsdnDatapathPlugin {name} is not applied: flowsdn loads no datapath plugins (#566)"
+                        );
+                    }
+                    Duration::from_secs(60)
+                }
+                Err(error) => {
+                    crate::log::logln!("operator: FlowsdnDatapathPlugin report: {error}; retrying in 30s");
+                    RETRY
+                }
+            };
+            self.next_plugins = now.checked_add(delay).unwrap_or(now);
         }
         if bgp.enabled && now >= self.next_bgp {
             let condition_time = crate::events::rfc3339(SystemTime::now());

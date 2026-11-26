@@ -30,6 +30,10 @@ rules:
   - apiGroups: [""]
     resources: [nodes/status]
     verbs: [patch]
+  # Events on FlowsdnDatapathPlugins: flowsdn loads no datapath plugins (#566).
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create]
   - apiGroups: [coordination.k8s.io]
     resources: [leases]
     verbs: [create, get, update]
