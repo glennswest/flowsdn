@@ -420,14 +420,25 @@ impl Keyed for DesiredRule {
 }
 impl TableRender for DesiredRule {
     fn headers() -> &'static [&'static str] {
-        &["Family", "Priority", "From", "To", "Table", "SuppressPrefix"]
+        &[
+            "Family",
+            "Priority",
+            "From",
+            "To",
+            "Table",
+            "SuppressPrefix",
+        ]
     }
     fn cells(&self) -> Vec<String> {
         vec![
             if self.v6 { "ipv6" } else { "ipv4" }.to_owned(),
             self.priority.to_string(),
-            self.from.as_ref().map_or_else(|| "all".to_owned(), prefix_text),
-            self.to.as_ref().map_or_else(|| "all".to_owned(), prefix_text),
+            self.from
+                .as_ref()
+                .map_or_else(|| "all".to_owned(), prefix_text),
+            self.to
+                .as_ref()
+                .map_or_else(|| "all".to_owned(), prefix_text),
             self.table.to_string(),
             opt(self.suppress_prefix),
         ]

@@ -184,12 +184,16 @@ pub fn reconcile_kernel(
         .register_initializer(OWNER)
         .map_err(|e| e.to_string())?;
     rules.seal_initializers();
-    let wanted: BTreeSet<flowsdn_node::rows::DesiredRule> = desired.rules.iter().map(to_row).collect();
+    let wanted: BTreeSet<flowsdn_node::rows::DesiredRule> =
+        desired.rules.iter().map(to_row).collect();
     block_on(set_rules(&rules, &wanted)).map_err(|e| e.to_string())?;
     init.complete();
     let mut reconciler = Reconciler::new(
         &rules,
-        RuleTarget::new(RuleOps { connector, settings }),
+        RuleTarget::new(RuleOps {
+            connector,
+            settings,
+        }),
         Options::default(),
     )
     .map_err(|e| e.to_string())?;
@@ -222,7 +226,13 @@ pub fn reconcile_kernel(
     init.complete();
     let mut reconciler = Reconciler::new(
         &table,
-        RouteTarget::new(TableOps { connector, settings }, std::sync::Arc::clone(&table)),
+        RouteTarget::new(
+            TableOps {
+                connector,
+                settings,
+            },
+            std::sync::Arc::clone(&table),
+        ),
         Options::default(),
     )
     .map_err(|e| e.to_string())?;
@@ -325,7 +335,10 @@ impl flowsdn_node::rules::RuleOps for RuleOps<'_> {
             .add_rule(&from_row(rule))
             .map_err(|e| e.to_string())
     }
-    fn delete(&mut self, rule: &flowsdn_node::rows::DesiredRule) -> std::result::Result<(), String> {
+    fn delete(
+        &mut self,
+        rule: &flowsdn_node::rows::DesiredRule,
+    ) -> std::result::Result<(), String> {
         self.connector
             .delete_rule(&from_row(rule))
             .map_err(|e| e.to_string())
@@ -333,7 +346,11 @@ impl flowsdn_node::rules::RuleOps for RuleOps<'_> {
     fn owned(&mut self) -> std::result::Result<Vec<flowsdn_node::rows::DesiredRule>, String> {
         let mut out = Vec::new();
         for v6 in [false, true] {
-            for rule in self.connector.rules(v6).map_err(|e| format!("list rules: {e}"))? {
+            for rule in self
+                .connector
+                .rules(v6)
+                .map_err(|e| format!("list rules: {e}"))?
+            {
                 if self.settings.owns_priority(rule.priority) {
                     out.push(to_row(&rule));
                 }
@@ -349,7 +366,10 @@ struct TableOps<'a> {
     settings: &'a Settings,
 }
 impl flowsdn_node::routes::RouteOps for TableOps<'_> {
-    fn replace(&mut self, route: &flowsdn_node::rows::DesiredRoute) -> std::result::Result<(), String> {
+    fn replace(
+        &mut self,
+        route: &flowsdn_node::rows::DesiredRoute,
+    ) -> std::result::Result<(), String> {
         let hops: Vec<multihome::NextHop> = route
             .multipath
             .iter()
@@ -360,7 +380,14 @@ impl flowsdn_node::routes::RouteOps for TableOps<'_> {
             })
             .collect();
         self.connector
-            .replace_multipath_route(route.prefix.0, route.prefix.1, &hops, route.table, None, route.src)
+            .replace_multipath_route(
+                route.prefix.0,
+                route.prefix.1,
+                &hops,
+                route.table,
+                None,
+                route.src,
+            )
             .map_err(|e| e.to_string())
     }
     fn delete(

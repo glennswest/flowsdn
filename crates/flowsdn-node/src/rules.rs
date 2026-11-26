@@ -16,7 +16,10 @@ pub trait RuleOps: Send {
 }
 
 /// Make `table` hold exactly `rules`.
-pub async fn set_rules(table: &Table<DesiredRule>, rules: &BTreeSet<DesiredRule>) -> Result<(), TableError> {
+pub async fn set_rules(
+    table: &Table<DesiredRule>,
+    rules: &BTreeSet<DesiredRule>,
+) -> Result<(), TableError> {
     let snapshot = table.snapshot();
     let wanted: BTreeMap<Key, &DesiredRule> = rules.iter().map(|r| (r.primary_key(), r)).collect();
     table
@@ -125,11 +128,18 @@ mod tests {
         let init = table.register_initializer("test").unwrap();
         table.seal_initializers();
         let kernel = Arc::new(Mutex::new(BTreeSet::from([rule(2099, 9)])));
-        let mut reconciler =
-            Reconciler::new(&table, RuleTarget::new(Fake(Arc::clone(&kernel))), Options::default()).unwrap();
-        set_rules(&table, &BTreeSet::from([rule(2080, 2081), rule(2081, 2082)]))
-            .await
-            .unwrap();
+        let mut reconciler = Reconciler::new(
+            &table,
+            RuleTarget::new(Fake(Arc::clone(&kernel))),
+            Options::default(),
+        )
+        .unwrap();
+        set_rules(
+            &table,
+            &BTreeSet::from([rule(2080, 2081), rule(2081, 2082)]),
+        )
+        .await
+        .unwrap();
         init.complete();
         reconciler.prune_now();
         for _ in 0..5 {
@@ -142,12 +152,17 @@ mod tests {
         );
         // A rule already there is not added again (no EEXIST); one removed
         // from the set is deleted.
-        set_rules(&table, &BTreeSet::from([rule(2080, 2081)])).await.unwrap();
+        set_rules(&table, &BTreeSet::from([rule(2080, 2081)]))
+            .await
+            .unwrap();
         for _ in 0..5 {
             reconciler.run_round(std::time::Instant::now()).await.ok();
         }
         assert_eq!(*kernel.lock().unwrap(), BTreeSet::from([rule(2080, 2081)]));
         let cells = flowsdn_table::TableRender::cells(&rule(2080, 2081));
-        assert_eq!(cells, ["ipv4", "2080", "192.0.2.20/32", "all", "2081", "none"]);
+        assert_eq!(
+            cells,
+            ["ipv4", "2080", "192.0.2.20/32", "all", "2081", "none"]
+        );
     }
 }
