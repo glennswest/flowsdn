@@ -16,9 +16,9 @@ from a FlowsdnNode, the identity label string from a FlowsdnIdentity, the
 `ClusterService` of a Service (`service.flowsdn.io/global`/`shared`) and its
 EndpointSlices, the published cluster config, the global-namespace decision
 (`clustermesh.flowsdn.io/global`), the synced canary keys and key joining.
-The converters are pure and byte-stable; no synchronizer, Kubernetes watch or
-kvstore client runs them yet. EndpointSlice export (§4.7), service exports
-(§4.8) and the PodCIDR stripping of cloud IPAM modes are not implemented.
+The converters are pure and byte-stable; `flowsdn-agent clustermesh-apiserver`
+runs them into the kvstore (#567). EndpointSlice export (§4.7), service exports
+(§4.8) and the PodCIDR stripping of cloud IPAM modes are not built (spec 20 #567 amendment; MCS is #592).
 
 Identity allocation defaults to CRD; explicit kvstore remains a supported design
 choice. Double-write modes and non-legacy service selection are rejected.

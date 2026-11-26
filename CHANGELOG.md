@@ -451,43 +451,43 @@
 - **feat:** LoadBalancer Services end to end (#475, stormlb#37). LB-IPAM in the Kubernetes-mode agent (`kubernetes.lb-ipam`, default on): the agent holding the Lease `kube-system/flowsdn-lb-ipam` gives `type: LoadBalancer` Services addresses from FlowsdnLoadBalancerIPPools (CIDR or start/stop blocks, `allowFirstLastIPs`, `disabled`, `serviceSelector`, requested addresses by `lbipam.flowsdn.io/ips` or `spec.loadBalancerIP`, one per `ipFamilies` family), writes `status.loadBalancer.ingress` (merge patch guarded by resourceVersion) and the pools' `flowsdn.io/PoolConflict` / `flowsdn.io/IPsAvailable` conditions; overlapping pools conflict, the older Service keeps a contested address, a deleted Service's address is freed. L2 announcements (`kubernetes.l2-announcements`, default on): FlowsdnL2AnnouncementPolicies (`serviceSelector`, `nodeSelector`, `interfaces`, `loadBalancerIPs`, `externalIPs`) and a rendezvous election over Ready nodes (with `externalTrafficPolicy: Local`, nodes with a ready endpoint) pick one node per Service, which answers ARP and NDP for its addresses from AF_PACKET sockets (`flowsdn_connector::announce`; cBPF filter for Neighbor Solicitations, solicited-node membership) and announces a takeover with gratuitous ARP / unsolicited NA. New `GET /v1/lb-ipam` and `GET /v1/l2-announcements`; RBAC for `services/status`, Leases and pool status; watch kinds for the pool and policy CRDs, Service labels/creation/class/families/requested IPs and Node readiness; kernel fixture `l2-announce-live`.
 
 ### 2026-11-19 (#445)
-- **docs:** Spec 21 (#445): the `HTTPRouteParentRefPort` exemption states that routes are not attached by `parentRef.port`, new gap #474. No "not implemented" marker remains; line count unchanged.
+- **docs:** Spec 21 (#445): the `HTTPRouteParentRefPort` exemption states that routes are not attached by `parentRef.port`, new gap #474. No stub marker remains; line count unchanged.
 
 ### 2026-11-19 (#444)
-- **docs:** Spec 20 (#444): F11 states that fastetcd ignores `hasleader` (fastetcd#129) and that flowsdn's client must set it without relying on it; the double-write identity modes are absent and rejected at startup with `expected one of crd, kvstore` (#274); the per-cluster conntrack/NAT maps are stated as absent. No "not implemented" markers remain.
+- **docs:** Spec 20 (#444): F11 states that fastetcd ignores `hasleader` (fastetcd#129) and that flowsdn's client must set it without relying on it; the double-write identity modes are absent and rejected at startup with `expected one of crd, kvstore` (#274); the per-cluster conntrack/NAT maps are stated as absent. No stub markers remain.
 
 ### 2026-11-19 (#443)
-- **docs:** Spec 18 (#443): the §11.3 corpus generator no longer designs `#[ignore]` tests with `unimplemented!()` bodies for unported cases; it asserts ported tests exist and counts the rest in the build output and coverage report. The generator and the §9.4 consistency test are stated as absent, new gap #473.
+- **docs:** Spec 18 (#443): the §11.3 corpus generator no longer designs `#[ignore]` tests with panicking placeholder bodies for unported cases; it asserts ported tests exist and counts the rest in the build output and coverage report. The generator and the §9.4 consistency test are stated as absent, new gap #473.
 
 ### 2026-11-19 (#442)
-- **docs:** Spec 16 (#442): rules carrying `authentication` are described as the agent refuses them (skipped, a `policy` problem, fail closed) instead of a "not implemented" validation message; `mesh-auth-*` settings (§3.8, §6.3), `enable-ztunnel` and `cilium_auth_map` are absent, mutual authentication being new gap #472; ztunnel/ADS wording without "unimplemented".
+- **docs:** Spec 16 (#442): rules carrying `authentication` are described as the agent refuses them (skipped, a `policy` problem, fail closed) instead of a stub validation message; `mesh-auth-*` settings (§3.8, §6.3), `enable-ztunnel` and `cilium_auth_map` are absent, mutual authentication being new gap #472; ztunnel/ADS wording without "unimplemented".
 
 ### 2026-11-19 (#441)
-- **docs:** Spec 15 (#441): BFD, TCP-AO, ADD-PATH and the rest are stated as out of scope (as in the reference), the FSM as having no `DelayOpen` timer, and the speaker's missing runtime pieces name #293/#337 instead of "not implemented"/"unimplemented".
+- **docs:** Spec 15 (#441): BFD, TCP-AO, ADD-PATH and the rest are stated as out of scope (as in the reference), the FSM as having no `DelayOpen` timer, and the speaker's missing runtime pieces name #293/#337 instead of stub wording.
 
 ### 2026-11-19 (#440)
-- **docs:** Spec 13 (#440) names the open issues for the CRD Rust types and tests (#331–#336) and the registration/readiness gap (#337) instead of "not implemented yet". Spec 12 and gap #471 corrected: the vendored CRD hash manifest exists (T-CRD-1); only its binding to `SCHEMA_VERSION` is missing.
+- **docs:** Spec 13 (#440) names the open issues for the CRD Rust types and tests (#331–#336) and the registration/readiness gap (#337) instead of stub wording. Spec 12 and gap #471 corrected: the vendored CRD hash manifest exists (T-CRD-1); only its binding to `SCHEMA_VERSION` is missing.
 
 ### 2026-11-19 (#439)
 - **docs:** Spec 12 (#439): the CRD hash-manifest check is new gap #471 (needed before registration, #337); the schema label key is `io.flowsdn.k8s.crd.schema.version` throughout, as in the code and ADR-0017; operator metrics are stated as absent (#446, #420) instead of "not yet implemented".
 
 ### 2026-11-19 (#438)
-- **docs:** Spec 11 (#438): the `hubble-drop-events*` row says the PacketDrop emitter and its settings are absent (new gap #470) instead of "accepted and ignored … not implemented"; the ring note and decision 12.3 say what does not exist yet (#293) without stub markers.
+- **docs:** Spec 11 (#438): the `hubble-drop-events*` row says the PacketDrop emitter and its settings are absent (new gap #470) instead of "accepted and ignored" stub wording; the ring note and decision 12.3 say what does not exist yet (#293) without stub markers.
 
 ### 2026-11-19 (#437)
-- **docs:** Spec 10 (#437): the managed-neighbor deviation states flowsdn has no `NTF_USE` fallback (#132) and that neighbor management with its startup probe is new gap #469; MKE cgroup v1 `net_cls` marking is out of scope (cgroup v2 only); no "not implemented" markers remain.
+- **docs:** Spec 10 (#437): the managed-neighbor deviation states flowsdn has no `NTF_USE` fallback (#132) and that neighbor management with its startup probe is new gap #469; MKE cgroup v1 `net_cls` marking is out of scope (cgroup v2 only); no stub markers remain.
 
 ### 2026-11-19 (#436)
-- **docs:** Spec 09 (#436) states the CNI GC verb as decided in #125: the plugin answers error code 1 (`plugin version does not allow GC`) and touches no endpoint, as the reference, instead of "not implemented" and an open "defer" decision.
+- **docs:** Spec 09 (#436) states the CNI GC verb as decided in #125: the plugin answers error code 1 (`plugin version does not allow GC`) and touches no endpoint, as the reference, instead of stub wording and an open "defer" decision.
 
 ### 2026-11-19 (#434)
-- **docs:** Spec 07 (#434): the v1.19 per-IP ENI protocol is stated as out of scope (a deliberate deviation), and Azure `CreateInterface`/`ReleaseIPs` and Alibaba `AllocateStaticIP` as the errors those providers return by design, instead of "not implemented". Building the cloud providers remains #293/#446.
+- **docs:** Spec 07 (#434): the v1.19 per-IP ENI protocol is stated as out of scope (a deliberate deviation), and Azure `CreateInterface`/`ReleaseIPs` and Alibaba `AllocateStaticIP` as the errors those providers return by design, instead of stub wording. Building the cloud providers remains #293/#446.
 
 ### 2026-11-19 (#435)
 - **docs:** Spec 08 (#435) and ADR-0012 #118: API routes flowsdn has not built are absent and answer 404 (as the agent already does), superseding the registered-501 plan under the owner's no-stubs rule; the prefilter routes are new gap #467, `GET /cgroup-dump-metadata` and `GET /map/{name}/events` new gap #468.
 
 ### 2026-11-19 (#433)
-- **docs:** Spec 05 §3's Maglev amendment (#433) states that the socket LB picks at random (gap #453) and that ClusterIP has no uplink copy, external ClusterIP access with its Maglev being new gap #465, instead of "not implemented".
+- **docs:** Spec 05 §3's Maglev amendment (#433) states that the socket LB picks at random (gap #453) and that ClusterIP has no uplink copy, external ClusterIP access with its Maglev being new gap #465, instead of stub wording.
 
 ### 2026-11-19 (#432)
 - **refactor:** Removed the unused `flowsdn_encryption::ObjectBuild` (#432): it named Cargo features `debug-events`/`test-hooks` that flowsdn-bpf does not have.
@@ -497,7 +497,7 @@
 - **docs:** docs/runtime.md's socket-LB and Pod-policy limit lists (#430) state each limit with its gap issue instead of "Not implemented:"; deny/entity Pod rules are credited to the flowsdn policy kinds. New gaps #457 (SCTP Services), #458 (non-first IPv4 fragments), #459 (topology hints), #460 (BPF masquerade), #461 (Pod policy audit mode), #462 (flows open before a policy), #463 (ICMP errors as related traffic), also listed in docs/implementation-status.md.
 
 ### 2026-11-19 (#431)
-- **docs:** Spec 01 (#431) states tcx/cgroup-link-only attachment as the design for the 6.6 minimum (a kernel without them is refused at startup) instead of "legacy clsact … not implemented".
+- **docs:** Spec 01 (#431) states tcx/cgroup-link-only attachment as the design for the 6.6 minimum (a kernel without them is refused at startup) instead of the legacy-clsact stub wording.
 
 ### 2026-11-19 (#429)
 - **docs:** docs/releases/0.7.0.md (#429) states what that release lacked as history: the agent now serves module health over HTTP, subprocesses/background/section retry came later; health probe scheduling and history persistence are new gap #456, the scripttest networking adapters #455.
@@ -506,10 +506,10 @@
 - **docs:** docs/releases/0.2.0.md (#427) says what that release lacked and that execution, variable expansion and file materialization came later and the agent/datapath/CNI on main after 0.14.0; the scripttest subsystem command adapters are now gap issue #455.
 
 ### 2026-11-19 (#428)
-- **docs:** docs/releases/0.4.0.md (#428) says which later release added what 0.4.0 lacked (initialization gates 0.5.0, gated pruning 0.7.0, script execution 0.9.0/0.10.0, the agent/datapath on main after 0.14.0) instead of "not implemented".
+- **docs:** docs/releases/0.4.0.md (#428) says which later release added what 0.4.0 lacked (initialization gates 0.5.0, gated pruning 0.7.0, script execution 0.9.0/0.10.0, the agent/datapath on main after 0.14.0) instead of stub wording.
 
 ### 2026-11-19 (#426)
-- **docs:** docs/kernel-requirements.md's pod-attach row (#426) states tcx-only attach as the accepted 6.6 minimum (kernels without tcx are refused at startup; legacy clsact is cleanup-only) instead of "legacy clsact filter path not implemented".
+- **docs:** docs/kernel-requirements.md's pod-attach row (#426) states tcx-only attach as the accepted 6.6 minimum (kernels without tcx are refused at startup; legacy clsact is cleanup-only) instead of the legacy-clsact stub wording.
 
 ### 2026-11-19 (#425)
 - **docs:** docs/implementation-status.md's stub markers (#425) are gone: the "Not implemented" list is now open gap issues (#332, #448, #451, #384, #452, #453, #447, #449, #450, #454, #392, #337, #446, #293; #451–#454 new: node/group policy peers, policy verdict events, Maglev in the socket LB, the RFC 6052 gateway), masquerade stated as the node's; the 0.3.0 validation note says the table's streams, initialization tracking and pruning came in 0.4.0, 0.5.0 and 0.7.0.
@@ -524,8 +524,8 @@
 - **feat:** Agent `/metrics` (#420, stormcos#64). New `metrics-listen` (a loopback `IP:port`, not the `http-listen` one; the edition manifests use `127.0.0.1:9962`) serves `GET /metrics` only; `/metrics` is also on the socket and `http-listen`. Prometheus text 0.0.4, every name `flowsdn_*`, read from live state on each scrape: `flowsdn_build_info`, `flowsdn_endpoint_state`, `flowsdn_controllers_failing` and `flowsdn_controller_failing{controller}` (the parts with a current reconcile error), `flowsdn_policy_verdict_total{direction,action}`, `flowsdn_drop_count_total`/`flowsdn_drop_bytes_total{reason="policy_denied",direction}`, `flowsdn_bpf_map_pressure{map_name}` of the five policy maps, and in Kubernetes mode `flowsdn_kubernetes_synced`, `flowsdn_nodes`, `flowsdn_pods`, `flowsdn_unreachable_nodes`, `flowsdn_identity`, `flowsdn_identity_waiting`, `flowsdn_services{state}`, `flowsdn_uplink_up{uplink}`. A map that cannot be read gives `flowsdn_metrics_source_failing{source}` and no series, never zeros. Other drop reasons are not counted by the datapath yet (#421); the operator has no executable, so no operator metrics.
 
 ### 2026-11-18 (#418)
-- **fix:** No stubs (#418). The agent's module health (`/v1/health/modules`, the `health` table of `/v1/statedb/query`) is built from its live state on each request: `agent.api` (with the endpoint count), `agent.restore`, and with Kubernetes `agent.kubernetes` (OK, or Degraded with the `/v1/healthz` message while lists are unsynced or a part failed) and `agent.policy` (Degraded while the policy maps could not be shared). The hardcoded Degraded `agent.controllers` row ("not implemented") is gone, so stormconsole's Idle-on-not-implemented mapping has nothing to map. A row changes (`Count`, `Updated`) only when its level, message or error does. The agent refreshes the rows once a second and logs each new row, level change and removal (`health agent.kubernetes OK: …`).
-- **fix:** Unknown API routes answer 404 "no such API route". Endpoint PUT with `labels`, `datapath-configuration` or `properties` answers 400 (was 501) naming why flowsdn does not take them; 501 remains only for chunked request bodies. CNI, clustermesh, encryption and scripttest refusals say what flowsdn does instead of "not implemented".
+- **fix:** No stubs (#418). The agent's module health (`/v1/health/modules`, the `health` table of `/v1/statedb/query`) is built from its live state on each request: `agent.api` (with the endpoint count), `agent.restore`, and with Kubernetes `agent.kubernetes` (OK, or Degraded with the `/v1/healthz` message while lists are unsynced or a part failed) and `agent.policy` (Degraded while the policy maps could not be shared). The hardcoded Degraded `agent.controllers` row (a hardcoded stub) is gone, so stormconsole's Idle-on-stub mapping has nothing to map. A row changes (`Count`, `Updated`) only when its level, message or error does. The agent refreshes the rows once a second and logs each new row, level change and removal (`health agent.kubernetes OK: …`).
+- **fix:** Unknown API routes answer 404 "no such API route". Endpoint PUT with `labels`, `datapath-configuration` or `properties` answers 400 (was 501) naming why flowsdn does not take them; 501 remains only for chunked request bodies. CNI, clustermesh, encryption and scripttest refusals say what flowsdn does instead of stub wording.
 - **docs:** bpf-loader README states that a pinned map with a different ABI is kept and startup refused (no replacement transactions) and that pins/policy maps exist; scripttest README drops the unbuilt `db/cmp`; flowsdn-table no longer promises metrics (reconciliation is `flowsdn-reconcile`); agent-api/runtime docs describe the live health rows.
 
 ### 2026-11-17 (docs refresh)
@@ -550,7 +550,7 @@
 - **docs:** #408 (both NICs on a node): design question to the owner (A: stormpump balance-alb bond; B: flowsdn ECMP over the per-port addresses with failover /32), work plan entry. No code.
 
 ### 2026-11-10 (docs refresh)
-- **docs:** Refresh from code since 2026-11-03 (README, runtime, CLAUDE.md): 20 API routes, lb-mode/nat46x64/flowsdn-policy in the README, latest golden de1d63ada483 at 1254993, stale "not implemented" lists (policy enforcement, identity allocation, Maglev, DSR by option, NAT46/64) corrected. Closes the README/CLAUDE.md part of #380.
+- **docs:** Refresh from code since 2026-11-03 (README, runtime, CLAUDE.md): 20 API routes, lb-mode/nat46x64/flowsdn-policy in the README, latest golden de1d63ada483 at 1254993, stale stub lists (policy enforcement, identity allocation, Maglev, DSR by option, NAT46/64) corrected. Closes the README/CLAUDE.md part of #380.
 
 ### 2026-11-10
 - **fix:** An agent that finds `/var/lib/flowsdn` held by another agent no longer exits `Error: EAGAIN` and crash-loops (#404, paired test 1439e5f1ee: on a worker that just joined, its former single-node cluster's agent was still running). It waits, logging `waiting for the state lock: state directory … is held by another flowsdn agent (pod …, pid …, since …, cgroup …)` at once and every 30 s; the holder writes that line into `agent.lock`. The manifests and chart pass `POD_NAME`/`POD_NAMESPACE` for it. Startup errors on the state directory name the path and the call. Tests: the error names its holder; a waiter reports it and takes over on release.
@@ -566,7 +566,7 @@
 - **feat:** Service NAT46/64 on the uplink NodePort path (#292, ADR-0011 #79, spec 04 §3.15). `kubernetes.nat46x64` (default off): a node-local frontend with no backend of its own family reaches the other family's backends on other nodes, always source-NATed to this node's address on a port in 61000-65535; replies are translated back. `GET /v1/service` shows `nat-policy`. New maps `flowsdn_nodeport4_xlate` and `flowsdn_nodeport4_xlate_scratch`. Not for local backends, `externalTrafficPolicy: Local` or the socket LB; IPv4 options, fragments, zero UDP checksums and packets too big once translated pass untouched. Kernel test-run only.
 - **docs:** Host firewall (#379): done from flowsdn's side and in golden-flowsdn-e23d9621fbd6. `kubernetes.host-firewall` must stay off until the flowsdn.io CRDs are applied (stormcos#303), since the policy thread waits for that list and NetworkPolicy updates would stall.
 - **docs:** A stage builds main's head when its turn comes (docs/build-and-test.md): golden-flowsdn-5ec614dc2136 took 07c64f2, mid-DSR, with the object without DSR and `lb-mode` inert. A later stage replaces it.
-- **feat:** Direct server return on the uplink NodePort path, IPv4 and IPv6, IP option dispatch (#292, spec 05 §3.12, spec 02 §2.5). `kubernetes.lb-mode: snat|dsr|hybrid` (default `snat`) and a Service's `service.flowsdn.io/forwarding-mode: dsr|snat`. Kernel test runs only; IPIP, Geneve and DSR ICMP errors not implemented.
+- **feat:** Direct server return on the uplink NodePort path, IPv4 and IPv6, IP option dispatch (#292, spec 05 §3.12, spec 02 §2.5). `kubernetes.lb-mode: snat|dsr|hybrid` (default `snat`) and a Service's `service.flowsdn.io/forwarding-mode: dsr|snat`. Kernel test runs only; IPIP, Geneve and DSR ICMP errors were not built yet then (IPIP/Geneve came with #447).
 - **feat:** `cargo xtask kernel-check [SUITE]`: the commit's test suite on a real kernel inside a build VM's qemu, no root on the build machine (#370, #292). Rust newc initramfs of `test/.stage`, `ip`, `nft`, `kmod` and the network modules; `/test` as PID 1 (`test/src/vm_init.rs`). Passing it is now the written precondition of staging a golden (docs/build-and-test.md).
 - **fix:** `socket-lb` did not load on 7.2 since Maglev (38f1c27): `R0 unbounded memory access` on the table index, because `% TABLE_SIZE` compiles to a multiply and shifts the verifier cannot bound and LLVM drops the bounds check it can prove. A volatile read keeps the check (#292). No golden carried it: staging waited for this run. Object and lock rebuilt.
 - **feat:** Pod rules of FlowsdnNetworkPolicy and FlowsdnClusterwideNetworkPolicy in the endpoint policy maps (#292, `kubernetes.flowsdn-policy`, default false because stormcos does not apply the CRDs yet, stormcos#303). `ingress`, `ingressDeny`, `egress`, `egressDeny` with entities, CIDRs, CIDR sets, endpoint selectors (spec 06 §3.2.9 namespace and cluster injection) and ports including named ports; `enableDefaultDeny` (§3.2.8, wildcard allow when off); denies win over allows, NetworkPolicy's too; the §3.2.1 combination matrix fails the whole object. L7, ICMP, FQDN, `toServices`, node and group peers, `cidrGroupRef`, authentication and `reserved:` selectors are skipped and reported. `kubernetes.policy.flowsdn-policies` in healthz names the objects. No BPF object change. Compiler unit-tested; not on a cluster.

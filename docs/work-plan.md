@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### No stubs: proof on a node — #418 (reopened), 2026-11-26
+
+Reopened by stormcentral: 14.06-flowsdn on pvetest1 (install pvetest1-1795671725) did not show `health agent.(api|kubernetes) OK`.
+- [x] Cause 1: the agent is a DaemonSet pod and pod stderr is not forwarded to syslog (only stormpump host processes are), so a `log:` proof cannot see agent lines on any node.
+- [x] Cause 2: stormfw (host process) probes `/v1/healthz` with HTTP/1.0 and got 505 on every boot ("boot program stays why=flowsdn /v1/healthz answers 505"). Fixed at 27d30cf (HTTP/1.0 served; responses close). Its strict sc-build was still running when the P0 #484 preempted this.
+- [x] Repo-wide stub-wording grep empty (CHANGELOG/work-plan quotes reworded; clustermesh README said "not implemented", now says not built / runs in #567).
+- [ ] On return: read 27d30cf's build result; ask the owner how the proof sees agent health (pod log forwarding on stormcos, the agent sending syslog itself, or a proof on stormfw's healthz line); stage; wait for a pvetest install.
+
 ### MCS-API CoreDNS configuration — #569, 2026-11-25
 
 - [x] Asked on #569: the issue conflicts with spec 20 §12 decision 11 (#279), which stages MCS incl.
@@ -1000,7 +1008,7 @@ Design (the operator executable is gap #446, so both run in the Kubernetes-mode 
 
 - [x] §11 config row (line 2548, a catalogue provenance line: keep it one
   line with the option names): PacketDrop emitter absent, new gap; §11
-  ring note and §12.3: no "unimplemented"/"not implemented" wording.
+  ring note and §12.3: no stub wording.
 - [x] Filed and proposed #470; sc-build at eb983a1 (exit 0); #438 closed.
 
 ### spec 10 stub markers — #437 (P0), 2026-11-19
@@ -1137,7 +1145,7 @@ Owner: "lets get rid of stubs please" … "stubs are lies".
 - [x] Health API: rows computed from the agent's live state (API/endpoint count, restore, Kubernetes controller sync and errors, policy maps), refreshed once a second and on each health request; transitions logged (`health agent.<scope> <Level>: …`). Hardcoded `controllers` row gone.
 - [x] Promises removed: bpf-loader README/kernel.rs (pinned ABI mismatch refuses startup, never replaced), scripttest README (`db/cmp`), flowsdn-table doc (metrics).
 - [x] Refusals reworded; endpoint PUT labels/datapath-configuration/properties 400 (was 501); 404 "no such API route".
-- [x] sc-build at 2ba23b6: `cargo xtask check` passed (fmt, Clippy -D warnings, all-features workspace tests incl. `rows_follow_the_live_state_and_change_only_when_it_does`). `grep -rn 'not implemented' crates` empty outside tests.
+- [x] sc-build at 2ba23b6: `cargo xtask check` passed (fmt, Clippy -D warnings, all-features workspace tests incl. `rows_follow_the_live_state_and_change_only_when_it_does`). the stub-wording grep over crates empty outside tests.
 - [x] Stage requested (build 9c1dd348152c); `shipped` with proof `log:health agent\.(api|kubernetes) OK`.
 
 ### Selector peers before the identity list — #401, 2026-11-13
