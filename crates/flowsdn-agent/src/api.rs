@@ -1256,8 +1256,10 @@ fn read_request(stream: &mut impl Connection) -> Result<Request> {
             if header_len > HEADER_LIMIT {
                 return fail(431, "request headers exceed 16 KiB");
             }
-            if request.version != Some(1) {
-                return fail(505, "HTTP/1.1 is required");
+            // HTTP/1.0 and 1.1 (#418): every response closes the connection,
+            // so a 1.0 client (stormfw's /v1/healthz probe) is served the same.
+            if !matches!(request.version, Some(0 | 1)) {
+                return fail(505, "HTTP/1.0 or HTTP/1.1 is required");
             }
             let mut length = None;
             let mut expiration = None;

@@ -56,7 +56,9 @@ fn framing_rejects_ambiguous_truncated_and_oversized_requests() {
         501
     );
     assert_eq!(status(b"GET /v1/config HTTP/1.1\r\n\r\nextra"), 400);
-    assert_eq!(status(b"GET /v1/config HTTP/1.0\r\n\r\n"), 505);
+    // HTTP/1.0 is served (#418: stormfw probes /v1/healthz with it).
+    let old = parse(b"GET /v1/healthz HTTP/1.0\r\n\r\n").expect("HTTP/1.0 request");
+    assert_eq!(old.method, "GET");
     let request = parse(
         b"POST /v1/ipam?owner=a%2Fb HTTP/1.1\r\nExpiration: true\r\nContent-Length: 0\r\n\r\n",
     )

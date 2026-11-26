@@ -151,7 +151,8 @@ Only CNI 1.0.0/1.1.0 are currently supported. The installers above publish the
 
 ## Ports and APIs
 
-HTTP/1.1 is served on `socket-path` and, with `http-listen`, read-only on a
+HTTP/1.1 and HTTP/1.0 (each response closes the connection; #418, stormfw's
+`/v1/healthz` probe speaks 1.0) are served on `socket-path` and, with `http-listen`, read-only on a
 loopback TCP port (the edition manifests: `127.0.0.1:9878`; the agent runs on the
 host network, so that is the node's loopback). Nothing listens on a non-loopback
 address. It does not serve Hubble gRPC on port 4244, a relay, a metrics listener, or a

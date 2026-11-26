@@ -1,6 +1,6 @@
 # Standalone agent API
 
-`flowsdn-agent --config PATH` exposes HTTP/1.1 on the configured `socket-path`
+`flowsdn-agent --config PATH` exposes HTTP/1.1 (and HTTP/1.0: every response closes the connection) on the configured `socket-path`
 Unix socket, with mode 0600. With `http-listen` (a loopback `IP:port`; others are
 refused) it also serves a **read-only** TCP listener: `GET` routes and the
 statedb query (`GET`/`POST`) answer as on the socket, every other method returns

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (#418)
+- **fix:** The agent API serves HTTP/1.0 requests as well as 1.1, and every response closes the connection. stormfw probes `/v1/healthz` with HTTP/1.0. On pvetest1 (14.06-flowsdn) it got `505 HTTP/1.1 is required` on every boot ("boot program stays why=flowsdn /v1/healthz answers 505"), so it never saw flowsdn's real health.
+
 ### 2026-11-25 (#315)
 - **feat:** `tools/aya-kfunc-watch.sh` takes `pr:<number>` for an early look at an open aya pull request (informational: never exit 3, never files the issue).
 - **docs:** watch result at 63731a9: still `missing` for pinned 0.14.0, release 0.16.0, main `2756d04` and aya-rs/aya#1495's head. A Rust object still has no `.ksyms` entry for `bpf_sock_destroy`. The weekly watch now runs on stormcentral (stormcentral#1163). Socket termination stays on netlink `SOCK_DESTROY`.
