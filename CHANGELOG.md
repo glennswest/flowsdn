@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (#489, #420)
+- **feat:** Two startup lines also go to the kernel log, so a node's syslog sees them: `new endpoints are isolated until their policy is installed` (the #489 quarantine) and `metrics listening on http://…/metrics` (#420). They are the node proofs of those issues, and like the health lines (#484) they never reached syslog from the agent pod's stderr.
+
 ### 2026-11-26 (#484, #487, #418)
 - **feat:** The agent writes its module health transitions (a new row, a level change, a removal) to the kernel log as well as stderr, as `<14>flowsdn-agent: health agent.<module> <level>: …`.
   - Why: the agent runs as a DaemonSet pod, and pod stderr never reaches a stormcos node's syslog, so the node proof `health agent.(api|kubernetes) OK` could not be seen on 14.06-flowsdn/pvetest1. The node's log service follows `/dev/kmsg` into syslog.

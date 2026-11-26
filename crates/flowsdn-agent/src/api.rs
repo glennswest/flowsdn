@@ -1680,7 +1680,8 @@ pub fn run(config_path: &Path) -> Result<()> {
     }
     api.manager.set_quarantine(quarantine);
     if quarantine {
-        crate::log::logln!("new endpoints are isolated until their policy is installed");
+        // Also to the kernel log, where a node's syslog sees it (#489, #484).
+        crate::log::noticeln!("new endpoints are isolated until their policy is installed");
     }
     if xdp_prefilter {
         // The list lives in this process: start empty at revision 1, even
@@ -1744,7 +1745,8 @@ pub fn run(config_path: &Path) -> Result<()> {
         Some(address) => {
             let listener = TcpListener::bind(address)?;
             listener.set_nonblocking(true)?;
-            crate::log::logln!("metrics listening on http://{address}/metrics");
+            // Also to the kernel log, where a node's syslog sees it (#420, #484).
+            crate::log::noticeln!("metrics listening on http://{address}/metrics");
             Some(listener)
         }
         None => None,
