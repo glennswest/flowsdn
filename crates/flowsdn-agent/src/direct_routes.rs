@@ -17,6 +17,9 @@
 //!   initializer), and removes persisted routes nobody wants.
 //! - **Repair**: every row is refreshed every 30 s (the reconciler's refresh),
 //!   as the 30 s repair did.
+//! - **Held**: a desired route that plans no row this round (an error, or
+//!   skipped) keeps whatever is installed for it ([`Holding`]): only a route
+//!   no longer desired is deleted (#498).
 use crate::kubernetes::DesiredRoute;
 use flowsdn_connector::Connector;
 use flowsdn_connector::multihome::NextHop;
@@ -27,6 +30,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 pub const OWNER: &str = "direct-routes";
 /// The reference's default admin distance.
@@ -315,6 +319,51 @@ impl RouteOps for ConnectorOps {
             .map(|(d, p, _)| (MAIN, (*d, *p), 0))
             .collect();
         Ok(routes.into_iter().collect())
+    }
+}
+
+/// The prefixes of desired routes that planned no row this round (an
+/// error, or skipped as unreachable), whose installed route stays as it is:
+/// a route is deleted only when it is no longer desired (#498, as before
+/// #576), never because one lookup failed.
+pub fn held(planned: &[(DesiredRoute, Planned)]) -> BTreeSet<(IpAddr, u8)> {
+    planned
+        .iter()
+        .filter(|(_, p)| !matches!(p, Planned::Row(_)))
+        .map(|(route, _)| (route.destination, route.prefix))
+        .collect()
+}
+
+/// [`RouteOps`] that neither deletes nor prunes a held prefix (see
+/// [`held`]); the loop sets the shared set before each round.
+pub struct Holding<O: RouteOps> {
+    pub inner: O,
+    pub held: Arc<Mutex<BTreeSet<(IpAddr, u8)>>>,
+}
+impl<O: RouteOps> Holding<O> {
+    fn holds(&self, prefix: (IpAddr, u8)) -> bool {
+        self.held
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains(&prefix)
+    }
+}
+impl<O: RouteOps> RouteOps for Holding<O> {
+    fn replace(&mut self, route: &rows::DesiredRoute) -> Result<(), String> {
+        self.inner.replace(route)
+    }
+    fn delete(&mut self, table: u32, prefix: (IpAddr, u8), priority: u32) -> Result<(), String> {
+        if self.holds(prefix) {
+            return Ok(());
+        }
+        self.inner.delete(table, prefix, priority)
+    }
+    fn owned(&mut self) -> Result<Vec<RouteId>, String> {
+        let owned = self.inner.owned()?;
+        Ok(owned
+            .into_iter()
+            .filter(|(_, prefix, _)| !self.holds(*prefix))
+            .collect())
     }
 }
 

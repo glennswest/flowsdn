@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (#498)
+- **fix:** A desired direct route whose check failed in a round (a netlink error, or skipped as unreachable) kept its
+  installed route before #576 but would have been deleted after it. It is held again: neither its row's delete nor
+  prune touches it (`direct_routes::Holding`). Only a route no longer desired is deleted, by destination
+  (finding 8299a1f6238f).
+
 ### 2026-11-26 (#576)
 - **feat:** Spec 10's node tables (`flowsdn-node`): realized `devices`/`routes`/`neighbors`/`node-addresses` rows with
   §3.1.6's address derivation, and the desired `desired-routes` (owners, admin distance, selection), `desired-rules`,

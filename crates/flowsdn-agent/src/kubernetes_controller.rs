@@ -2169,8 +2169,12 @@ fn route_loop(
         Err(error) => return fail(format!("desired-routes: {error}")),
     };
     table.seal_initializers();
+    let held = Arc::new(Mutex::new(std::collections::BTreeSet::new()));
     let target = RouteTarget::new(
-        ConnectorOps::new(connector, file.to_path_buf()),
+        direct_routes::Holding {
+            inner: ConnectorOps::new(connector, file.to_path_buf()),
+            held: Arc::clone(&held),
+        },
         Arc::clone(&table),
     );
     let options = Options {
@@ -2209,7 +2213,7 @@ fn route_loop(
         // Nothing is planned, nor pruned, before the first complete Node list.
         let Some(desired) = &desired else { continue };
         let planned: Vec<(DesiredRoute, Planned)> = {
-            let ops = &reconciler.target().ops;
+            let ops = &reconciler.target().ops.inner;
             desired
                 .iter()
                 .map(|route| {
@@ -2225,6 +2229,8 @@ fn route_loop(
                 })
                 .collect()
         };
+        *held.lock().unwrap_or_else(std::sync::PoisonError::into_inner) =
+            direct_routes::held(&planned);
         let rows: Vec<flowsdn_node::rows::DesiredRoute> = planned
             .iter()
             .filter_map(|(_, p)| match p {
