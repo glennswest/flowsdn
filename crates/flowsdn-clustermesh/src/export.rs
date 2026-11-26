@@ -287,9 +287,7 @@ pub fn identity_value(
     let labels: Labels = security_labels
         .iter()
         .filter_map(|(key, value)| {
-            let (source, key) = key
-                .split_once(':')
-                .unwrap_or(("unspec", key.as_str()));
+            let (source, key) = key.split_once(':').unwrap_or(("unspec", key.as_str()));
             Label::new(source, key, value).ok()
         })
         .collect();
@@ -681,10 +679,7 @@ pub fn cluster_config(id: u32, max_connected_clusters: u32) -> Value {
     let mut capabilities = Map::new();
     capabilities.insert("syncedCanaries".into(), json!(true));
     if max_connected_clusters != 0 {
-        capabilities.insert(
-            "maxConnectedClusters".into(),
-            json!(max_connected_clusters),
-        );
+        capabilities.insert("maxConnectedClusters".into(), json!(max_connected_clusters));
     }
     let mut config = Map::new();
     if id != 0 {

@@ -168,7 +168,9 @@ impl MemoryStore {
         Arc::new(Self::default())
     }
     fn lock(&self) -> MutexGuard<'_, Server> {
-        self.server.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.server
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
     /// A new client of this store.
     pub fn client(self: &Arc<Self>) -> MemoryBackend {
@@ -241,7 +243,9 @@ impl MemoryBackend {
         Arc::clone(&self.store)
     }
     fn client(&self) -> MutexGuard<'_, Client> {
-        self.client.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.client
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
     fn open(&self) -> Result<()> {
         if self.client().closed {
@@ -342,7 +346,13 @@ impl Kvstore for MemoryBackend {
         Ok(server.kv.get(key).map(Entry::value))
     }
 
-    async fn put(&self, key: &str, data: Vec<u8>, lease: Lease, guard: Option<&Guard>) -> Result<()> {
+    async fn put(
+        &self,
+        key: &str,
+        data: Vec<u8>,
+        lease: Lease,
+        guard: Option<&Guard>,
+    ) -> Result<()> {
         self.open()?;
         check_size(key, &data)?;
         let lease = self.lease_of(key, lease);

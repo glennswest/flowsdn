@@ -110,7 +110,9 @@ impl<K: Kvstore> Clone for SyncStore<K> {
 }
 
 fn lock(inner: &Mutex<Inner>) -> MutexGuard<'_, Inner> {
-    inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    inner
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl<K: Kvstore> SyncStore<K> {
@@ -150,24 +152,27 @@ impl<K: Kvstore> SyncStore<K> {
             );
         }
         if let Some(canary) = &store.config.canary {
-                let (inner, wake, canary) =
-                    (Arc::clone(&store.inner), Arc::clone(&store.wake), canary.clone());
-                store.kv.lease_expired(
-                    &canary.clone(),
-                    Some(Arc::new(move |key: &str| {
-                        if key == canary {
-                            let mut state = lock(&inner);
-                            if state.canary_written {
-                                state.canary_written = false;
-                                state.canary_due = true;
-                                state.canary_ready_at = None;
-                            }
-                            drop(state);
-                            wake.notify_one();
+            let (inner, wake, canary) = (
+                Arc::clone(&store.inner),
+                Arc::clone(&store.wake),
+                canary.clone(),
+            );
+            store.kv.lease_expired(
+                &canary.clone(),
+                Some(Arc::new(move |key: &str| {
+                    if key == canary {
+                        let mut state = lock(&inner);
+                        if state.canary_written {
+                            state.canary_written = false;
+                            state.canary_due = true;
+                            state.canary_ready_at = None;
                         }
-                    })),
-                );
-            }
+                        drop(state);
+                        wake.notify_one();
+                    }
+                })),
+            );
+        }
         store
     }
 
@@ -286,7 +291,9 @@ impl<K: Kvstore> SyncStore<K> {
             state.tokens -= 1.0;
             None
         } else if self.config.qps > 0.0 {
-            Some(Duration::from_secs_f64((1.0 - state.tokens) / self.config.qps))
+            Some(Duration::from_secs_f64(
+                (1.0 - state.tokens) / self.config.qps,
+            ))
         } else {
             Some(Duration::from_secs(1))
         }
@@ -366,7 +373,9 @@ impl<K: Kvstore> SyncStore<K> {
                         {
                             pending.failures = pending.failures.saturating_add(1);
                             let wait = self.backoff(pending.failures);
-                            pending.ready_at = Instant::now().checked_add(wait).unwrap_or_else(Instant::now);
+                            pending.ready_at = Instant::now()
+                                .checked_add(wait)
+                                .unwrap_or_else(Instant::now);
                         }
                         eprintln!("kvstore sync {}: {key}: {error}", self.config.prefix);
                     }
@@ -401,7 +410,10 @@ impl<K: Kvstore> SyncStore<K> {
                             state.canary_failures = state.canary_failures.saturating_add(1);
                             let wait = self.backoff(state.canary_failures);
                             state.canary_ready_at = Instant::now().checked_add(wait);
-                            eprintln!("kvstore sync {}: canary {canary}: {error}", self.config.prefix);
+                            eprintln!(
+                                "kvstore sync {}: canary {canary}: {error}",
+                                self.config.prefix
+                            );
                             Vec::new()
                         }
                     }

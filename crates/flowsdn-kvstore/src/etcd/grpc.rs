@@ -129,9 +129,13 @@ fn ssl_for(host: &str, files: &TlsFiles) -> Result<Ssl> {
         builder
             .set_private_key_file(key, SslFiletype::PEM)
             .map_err(|e| tls_error(&key.display().to_string(), e))?;
-        builder.check_private_key().map_err(|e| tls_error("client key", e))?;
+        builder
+            .check_private_key()
+            .map_err(|e| tls_error("client key", e))?;
     }
-    builder.set_alpn_protos(b"\x02h2").map_err(|e| tls_error("alpn", e))?;
+    builder
+        .set_alpn_protos(b"\x02h2")
+        .map_err(|e| tls_error("alpn", e))?;
     let connector = builder.build();
     connector
         .configure()
@@ -469,7 +473,11 @@ fn percent_decode(text: &str) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::unwrap_used)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
     use crate::etcd::proto::{PutRequest, RangeResponse};

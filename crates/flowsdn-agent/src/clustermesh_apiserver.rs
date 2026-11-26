@@ -209,7 +209,8 @@ pub struct Exporter<K: Kvstore> {
 impl<K: Kvstore> Exporter<K> {
     pub fn new(kv: &Arc<K>, cluster: Cluster) -> Self {
         let store = |prefix: &str, canary_of: &str, leased: bool| {
-            let mut config = SyncConfig::new(prefix, Some(export::canary(&cluster.name, canary_of)));
+            let mut config =
+                SyncConfig::new(prefix, Some(export::canary(&cluster.name, canary_of)));
             config.leased = leased;
             SyncStore::new(Arc::clone(kv), config)
         };
@@ -328,7 +329,9 @@ impl<K: Kvstore> Exporter<K> {
     fn export_identities(&self) {
         let mut desired = BTreeMap::new();
         for identity in &self.identities {
-            if export::identity_namespace(&identity.security_labels).is_some_and(|ns| !self.global(ns)) {
+            if export::identity_namespace(&identity.security_labels)
+                .is_some_and(|ns| !self.global(ns))
+            {
                 continue;
             }
             match export::identity_value(&identity.metadata.name, &identity.security_labels) {
@@ -406,7 +409,9 @@ impl<K: Kvstore> Exporter<K> {
             }
             let mine: Vec<&Value> = slices
                 .iter()
-                .filter(|s| s.pointer("/metadata/namespace").and_then(Value::as_str) == Some(namespace))
+                .filter(|s| {
+                    s.pointer("/metadata/namespace").and_then(Value::as_str) == Some(namespace)
+                })
                 .collect();
             if let Some((name, data)) =
                 export::cluster_service(service, &mine, &self.cluster.name, self.cluster.id)
@@ -441,8 +446,15 @@ pub async fn publish_config<K: Kvstore>(
         let owner = record(kv.get(&owner_key, None).await.map_err(|e| e.to_string())?);
         let config = record(kv.get(&config_key, None).await.map_err(|e| e.to_string())?);
         let lease = kv.lease_for(&config_key).await.map_err(|e| e.to_string())?;
-        let plan = ownership::plan_claim(cluster, instance, owner.as_ref(), config.as_ref(), desired, lease)
-            .map_err(|e| e.to_string())?;
+        let plan = ownership::plan_claim(
+            cluster,
+            instance,
+            owner.as_ref(),
+            config.as_ref(),
+            desired,
+            lease,
+        )
+        .map_err(|e| e.to_string())?;
         if plan.puts.is_empty() {
             return Ok(false);
         }
@@ -554,7 +566,11 @@ enum Update {
 
 const LIST_PAGE: u32 = 500;
 
-async fn relist(client: &JsonClient, scope: &Scope, state: &mut WatchState) -> Result<(), flowsdn_k8s::Error> {
+async fn relist(
+    client: &JsonClient,
+    scope: &Scope,
+    state: &mut WatchState,
+) -> Result<(), flowsdn_k8s::Error> {
     state.begin_list();
     let mut token: Option<String> = None;
     loop {
@@ -563,7 +579,10 @@ async fn relist(client: &JsonClient, scope: &Scope, state: &mut WatchState) -> R
             continue_token: token.as_deref(),
             ..Query::default()
         };
-        let page = client.list(scope, &query).await.inspect_err(|_| state.failed())?;
+        let page = client
+            .list(scope, &query)
+            .await
+            .inspect_err(|_| state.failed())?;
         match state.list_page(&page).await? {
             PageResult::Continue(next) => token = Some(next),
             PageResult::Complete => return Ok(()),
@@ -600,7 +619,12 @@ fn rows(source: Option<Source>, state: &WatchState) -> Update {
 }
 
 /// List and watch one scope for ever, sending its rows on every change.
-async fn watch(client: Arc<JsonClient>, scope: Scope, source: Option<Source>, tx: mpsc::Sender<Update>) {
+async fn watch(
+    client: Arc<JsonClient>,
+    scope: Scope,
+    source: Option<Source>,
+    tx: mpsc::Sender<Update>,
+) {
     let Ok(mut state) = WatchState::new(scope.clone(), Limits::default()) else {
         return;
     };
@@ -684,7 +708,8 @@ async fn health(port: u16, ready: Arc<std::sync::atomic::AtomicBool>) {
 pub fn etcd_config(options: &Options) -> Result<flowsdn_kvstore::etcd::EtcdConfig, String> {
     let mut config = match (&options.kvstore_config, &options.kvstore_address) {
         (Some(path), _) => {
-            let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let text =
+                std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
             flowsdn_kvstore::etcd::parse_client_yaml(&text).map_err(|e| e.to_string())?
         }
         (None, Some(address)) => flowsdn_kvstore::etcd::EtcdConfig {
@@ -758,10 +783,19 @@ async fn serve(options: &Options) -> Result<(), String> {
     for (scope, source) in [
         (Scope::Whole(WholeKind::FlowsdnNodes), Some(Source::Nodes)),
         (Scope::Identities, None),
-        (Scope::Whole(WholeKind::FlowsdnEndpoints), Some(Source::Endpoints)),
+        (
+            Scope::Whole(WholeKind::FlowsdnEndpoints),
+            Some(Source::Endpoints),
+        ),
         (Scope::Whole(WholeKind::Services), Some(Source::Services)),
-        (Scope::Whole(WholeKind::EndpointSlices), Some(Source::Slices)),
-        (Scope::Whole(WholeKind::Namespaces), Some(Source::Namespaces)),
+        (
+            Scope::Whole(WholeKind::EndpointSlices),
+            Some(Source::Slices),
+        ),
+        (
+            Scope::Whole(WholeKind::Namespaces),
+            Some(Source::Namespaces),
+        ),
     ] {
         tokio::spawn(watch(Arc::clone(&client), scope, source, tx.clone()));
     }

@@ -83,7 +83,13 @@ impl Leases {
     /// A freshly granted lease becomes the current one.
     pub(crate) fn insert(&self, id: i64) {
         let mut state = self.state();
-        state.leases.insert(id, Entry { keys: 0, task: None });
+        state.leases.insert(
+            id,
+            Entry {
+                keys: 0,
+                task: None,
+            },
+        );
         state.current = Some(id);
     }
 
@@ -181,7 +187,10 @@ pub(crate) async fn keepalive(inner: Arc<Inner>, kind: LeaseKind, id: i64, ttl: 
     if inner.is_closed() {
         return;
     }
-    eprintln!("warning: kvstore: {} lease {id:x} lost: {reason}", kind.name());
+    eprintln!(
+        "warning: kvstore: {} lease {id:x} lost: {reason}",
+        kind.name()
+    );
     inner.lose_lease(kind, id);
 }
 
@@ -227,7 +236,11 @@ async fn run(inner: &Inner, id: i64, ttl: Duration) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::unwrap_used)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 

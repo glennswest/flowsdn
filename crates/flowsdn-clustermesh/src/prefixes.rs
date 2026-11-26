@@ -82,7 +82,11 @@ impl FrontPolicy {
         let mut grants = vec![ReadRange::prefix(b"flowsdn/.heartbeat")?];
         match role {
             Role::Local => {
-                for prefix in ["flowsdn/cache/", "flowsdn/cluster-config/", "flowsdn/synced/"] {
+                for prefix in [
+                    "flowsdn/cache/",
+                    "flowsdn/cluster-config/",
+                    "flowsdn/synced/",
+                ] {
                     grants.push(ReadRange::prefix(prefix.as_bytes())?);
                 }
             }

@@ -6,7 +6,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 fn store(kv: &Arc<MemoryBackend>) -> SyncStore<MemoryBackend> {
     SyncStore::new(
         Arc::clone(kv),
-        SyncConfig::new("flowsdn/state/nodes/v1", Some("flowsdn/synced/c1/flowsdn/state/nodes/v1".into())),
+        SyncConfig::new(
+            "flowsdn/state/nodes/v1",
+            Some("flowsdn/synced/c1/flowsdn/state/nodes/v1".into()),
+        ),
     )
 }
 
@@ -69,13 +72,21 @@ async fn the_canary_waits_for_the_initial_list_and_runs_callbacks_once() {
     });
     // 300 writes at burst 100 and 10 qps: the canary only after all of them.
     tokio::time::sleep(Duration::from_secs(5)).await;
-    assert!(!kv.store().dump().contains_key("flowsdn/synced/c1/flowsdn/state/nodes/v1"));
+    assert!(
+        !kv.store()
+            .dump()
+            .contains_key("flowsdn/synced/c1/flowsdn/state/nodes/v1")
+    );
     assert_eq!(done.load(Ordering::SeqCst), 0);
     tokio::time::sleep(Duration::from_secs(30)).await;
     let dump = kv.store().dump();
     assert_eq!(dump.len(), 301);
     let canary = &dump["flowsdn/synced/c1/flowsdn/state/nodes/v1"];
-    assert!(String::from_utf8(canary.data.clone()).unwrap().ends_with('Z'));
+    assert!(
+        String::from_utf8(canary.data.clone())
+            .unwrap()
+            .ends_with('Z')
+    );
     assert_eq!(done.load(Ordering::SeqCst), 1);
     assert!(sync.stats().synced);
     // A synced() after the canary runs its callback at once.
@@ -111,7 +122,11 @@ async fn a_lost_lease_rewrites_the_keys_and_the_canary_without_callbacks() {
     let dump = backend.store().dump();
     assert_eq!(dump.len(), 2, "both rewritten: {dump:?}");
     assert_ne!(dump["flowsdn/state/nodes/v1/c1/n1"].lease_id, lease);
-    assert_eq!(done.load(Ordering::SeqCst), 1, "callbacks are not run again");
+    assert_eq!(
+        done.load(Ordering::SeqCst),
+        1,
+        "callbacks are not run again"
+    );
     sync.close();
     worker.await.unwrap();
 }

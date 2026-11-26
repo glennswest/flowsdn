@@ -747,15 +747,32 @@ fn whole_scopes_keep_objects_whole() {
     assert_eq!(parsed.object, endpoint);
     assert_eq!(parsed.metadata.namespace, "prod");
     assert!(scope.namespaced());
-    assert!(Scope::Whole(WholeKind::FlowsdnNodes).parse(&endpoint).is_err(), "kind is checked");
+    assert!(
+        Scope::Whole(WholeKind::FlowsdnNodes)
+            .parse(&endpoint)
+            .is_err(),
+        "kind is checked"
+    );
     assert!(!Scope::Whole(WholeKind::Namespaces).namespaced());
     for (kind, path) in [
-        (WholeKind::FlowsdnNodes, "/apis/flowsdn.io/v1alpha1/flowsdnnodes"),
-        (WholeKind::FlowsdnEndpoints, "/apis/flowsdn.io/v1alpha1/flowsdnendpoints"),
+        (
+            WholeKind::FlowsdnNodes,
+            "/apis/flowsdn.io/v1alpha1/flowsdnnodes",
+        ),
+        (
+            WholeKind::FlowsdnEndpoints,
+            "/apis/flowsdn.io/v1alpha1/flowsdnendpoints",
+        ),
         (WholeKind::Services, "/api/v1/services"),
-        (WholeKind::EndpointSlices, "/apis/discovery.k8s.io/v1/endpointslices"),
+        (
+            WholeKind::EndpointSlices,
+            "/apis/discovery.k8s.io/v1/endpointslices",
+        ),
         (WholeKind::Namespaces, "/api/v1/namespaces"),
     ] {
-        assert_eq!(request_uri(&Scope::Whole(kind), &Query::default()).expect("URI"), path);
+        assert_eq!(
+            request_uri(&Scope::Whole(kind), &Query::default()).expect("URI"),
+            path
+        );
     }
 }

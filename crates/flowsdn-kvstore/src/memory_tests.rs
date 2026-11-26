@@ -14,24 +14,50 @@ async fn reads_writes_and_revisions() {
     let second = kv.get("a", None).await.unwrap().unwrap();
     assert_eq!(second.create_revision, first.create_revision);
     assert!(second.mod_revision > first.mod_revision);
-    assert!(!kv.put_if_absent("a", b"x".to_vec(), Lease::None, None).await.unwrap());
-    assert!(kv.put_if_absent("b", b"x".to_vec(), Lease::None, None).await.unwrap());
+    assert!(
+        !kv.put_if_absent("a", b"x".to_vec(), Lease::None, None)
+            .await
+            .unwrap()
+    );
+    assert!(
+        kv.put_if_absent("b", b"x".to_vec(), Lease::None, None)
+            .await
+            .unwrap()
+    );
     // Same bytes, same (no) lease: not rewritten; a lease change is.
     let writes = kv.store().writes();
-    assert!(!kv.put_if_different("a", b"2".to_vec(), Lease::None, None).await.unwrap());
+    assert!(
+        !kv.put_if_different("a", b"2".to_vec(), Lease::None, None)
+            .await
+            .unwrap()
+    );
     assert_eq!(kv.store().writes(), writes);
-    assert!(kv.put_if_different("a", b"2".to_vec(), Lease::Attached, None).await.unwrap());
-    assert!(!kv.put_if_different("a", b"2".to_vec(), Lease::Attached, None).await.unwrap());
+    assert!(
+        kv.put_if_different("a", b"2".to_vec(), Lease::Attached, None)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !kv.put_if_different("a", b"2".to_vec(), Lease::Attached, None)
+            .await
+            .unwrap()
+    );
     kv.put("p/1", vec![], Lease::None, None).await.unwrap();
     kv.put("p/2", vec![], Lease::None, None).await.unwrap();
     kv.put("q", vec![], Lease::None, None).await.unwrap();
-    let listed: Vec<String> = kv.list_prefix("p/", None).await.unwrap().into_keys().collect();
+    let listed: Vec<String> = kv
+        .list_prefix("p/", None)
+        .await
+        .unwrap()
+        .into_keys()
+        .collect();
     assert_eq!(listed, ["p/1", "p/2"]);
     kv.delete_prefix("p/").await.unwrap();
     assert!(kv.list_prefix("p/", None).await.unwrap().is_empty());
     kv.delete("missing", None).await.unwrap();
     assert!(matches!(
-        kv.put("big", vec![0; crate::MAX_VALUE + 1], Lease::None, None).await,
+        kv.put("big", vec![0; crate::MAX_VALUE + 1], Lease::None, None)
+            .await,
         Err(Error::TooLarge { .. })
     ));
 }
@@ -39,15 +65,25 @@ async fn reads_writes_and_revisions() {
 #[tokio::test]
 async fn watches_list_then_follow() {
     let kv = MemoryBackend::new();
-    kv.put("w/a", b"1".to_vec(), Lease::None, None).await.unwrap();
-    kv.put("wx", b"no".to_vec(), Lease::None, None).await.unwrap();
+    kv.put("w/a", b"1".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
+    kv.put("wx", b"no".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
     let mut events = kv.watch("w/").await.unwrap();
     let first = events.recv().await.unwrap();
     assert_eq!((first.kind, first.key.as_str()), (EventKind::Create, "w/a"));
     assert_eq!(events.recv().await.unwrap().kind, EventKind::ListDone);
-    kv.put("w/a", b"2".to_vec(), Lease::None, None).await.unwrap();
-    kv.put("w/b", b"3".to_vec(), Lease::None, None).await.unwrap();
-    kv.put("wx", b"still no".to_vec(), Lease::None, None).await.unwrap();
+    kv.put("w/a", b"2".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
+    kv.put("w/b", b"3".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
+    kv.put("wx", b"still no".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
     kv.delete("w/a", None).await.unwrap();
     let kinds: Vec<(EventKind, String)> = (0..3)
         .map(|_| events.try_recv().unwrap())
@@ -74,24 +110,45 @@ async fn leases_bind_keys_and_loss_calls_observers() {
     let sink = Arc::clone(&seen);
     kv.lease_expired(
         "data/",
-        Some(Arc::new(move |key: &str| sink.lock().unwrap().push(key.to_owned()))),
+        Some(Arc::new(move |key: &str| {
+            sink.lock().unwrap().push(key.to_owned())
+        })),
     );
-    kv.put("data/a", b"1".to_vec(), Lease::Attached, None).await.unwrap();
-    kv.put("data/b", b"1".to_vec(), Lease::Attached, None).await.unwrap();
-    kv.put("other", b"1".to_vec(), Lease::Attached, None).await.unwrap();
-    kv.put("plain", b"1".to_vec(), Lease::None, None).await.unwrap();
+    kv.put("data/a", b"1".to_vec(), Lease::Attached, None)
+        .await
+        .unwrap();
+    kv.put("data/b", b"1".to_vec(), Lease::Attached, None)
+        .await
+        .unwrap();
+    kv.put("other", b"1".to_vec(), Lease::Attached, None)
+        .await
+        .unwrap();
+    kv.put("plain", b"1".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
     let lease = kv.lease_for("data/a").await.unwrap();
-    assert_eq!(kv.key_leases(), [lease], "one lease until it holds 1000 keys");
-    assert_eq!(kv.get("data/a", None).await.unwrap().unwrap().lease_id, lease);
+    assert_eq!(
+        kv.key_leases(),
+        [lease],
+        "one lease until it holds 1000 keys"
+    );
+    assert_eq!(
+        kv.get("data/a", None).await.unwrap().unwrap().lease_id,
+        lease
+    );
     kv.lose_lease(lease);
     assert_eq!(*seen.lock().unwrap(), ["data/a", "data/b"]);
     assert_eq!(store.dump().keys().collect::<Vec<_>>(), ["plain"]);
     // The next leased write gets a new lease.
-    kv.put("data/a", b"1".to_vec(), Lease::Attached, None).await.unwrap();
+    kv.put("data/a", b"1".to_vec(), Lease::Attached, None)
+        .await
+        .unwrap();
     assert_ne!(kv.lease_for("data/a").await.unwrap(), lease);
     // A thousand keys fill a lease; the next one takes another.
     for i in 0..crate::KEYS_PER_LEASE {
-        kv.put(&format!("many/{i}"), vec![], Lease::Attached, None).await.unwrap();
+        kv.put(&format!("many/{i}"), vec![], Lease::Attached, None)
+            .await
+            .unwrap();
     }
     assert_eq!(kv.key_leases().len(), 2);
     // Closing revokes this client's leases: its leased keys go.
@@ -108,9 +165,21 @@ async fn transactions_compare_then_write() {
         data: b"v".to_vec(),
         lease: Lease::None,
     };
-    assert!(kv.txn(vec![Compare::Absent("o".into())], vec![put("o"), put("c")]).await.unwrap());
-    assert!(!kv.txn(vec![Compare::Absent("o".into())], vec![put("x")]).await.unwrap());
-    assert_eq!(kv.get("x", None).await, Ok(None), "a failed compare writes nothing");
+    assert!(
+        kv.txn(vec![Compare::Absent("o".into())], vec![put("o"), put("c")])
+            .await
+            .unwrap()
+    );
+    assert!(
+        !kv.txn(vec![Compare::Absent("o".into())], vec![put("x")])
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        kv.get("x", None).await,
+        Ok(None),
+        "a failed compare writes nothing"
+    );
     let stored = kv.get("o", None).await.unwrap().unwrap();
     let exact = |rev| Compare::Exact {
         key: "o".into(),
@@ -118,8 +187,16 @@ async fn transactions_compare_then_write() {
         mod_revision: rev,
         lease_id: 0,
     };
-    assert!(!kv.txn(vec![exact(stored.mod_revision + 1)], vec![put("x")]).await.unwrap());
-    assert!(kv.txn(vec![exact(stored.mod_revision)], vec![put("x")]).await.unwrap());
+    assert!(
+        !kv.txn(vec![exact(stored.mod_revision + 1)], vec![put("x")])
+            .await
+            .unwrap()
+    );
+    assert!(
+        kv.txn(vec![exact(stored.mod_revision)], vec![put("x")])
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -128,7 +205,9 @@ async fn locks_exclude_and_guard() {
     let (a, b) = (Arc::new(store.client()), Arc::new(store.client()));
     let guard = a.lock("locks/x").await.unwrap();
     assert!(guard.key.starts_with("locks/x/"));
-    a.put("g", b"1".to_vec(), Lease::None, Some(&guard)).await.unwrap();
+    a.put("g", b"1".to_vec(), Lease::None, Some(&guard))
+        .await
+        .unwrap();
     let held = Arc::new(AtomicUsize::new(0));
     let waiter = {
         let (b, held) = (Arc::clone(&b), Arc::clone(&held));

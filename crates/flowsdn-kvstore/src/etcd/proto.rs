@@ -465,12 +465,16 @@ pub struct StatusResponse {
 }
 
 #[cfg(test)]
-#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::unwrap_used)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
     use prost::Message;
 
-    fn round_trip<M: Message + Default + PartialEq>(message: &M) {
+    fn round_trip<M: Message + Default + PartialEq + std::fmt::Debug>(message: &M) {
         let bytes = message.encode_to_vec();
         let back = M::decode(bytes.as_slice()).unwrap();
         assert!(back == *message, "{message:?} != {back:?}");
@@ -537,7 +541,9 @@ mod tests {
             ..Default::default()
         }));
         round_trip(&WatchRequest {
-            request_union: Some(RequestUnion::CancelRequest(WatchCancelRequest { watch_id: 3 })),
+            request_union: Some(RequestUnion::CancelRequest(WatchCancelRequest {
+                watch_id: 3,
+            })),
         });
         round_trip(&LeaseGrantRequest { ttl: 25, id: 0 });
         round_trip(&LeaseRevokeRequest { id: 42 });

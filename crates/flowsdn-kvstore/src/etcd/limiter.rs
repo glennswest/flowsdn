@@ -85,7 +85,10 @@ impl Limiter {
             return None;
         }
         let burst = self.qps.max(1.0);
-        let mut bucket = self.bucket.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut bucket = self
+            .bucket
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let now = Instant::now();
         let elapsed = now.saturating_duration_since(bucket.last).as_secs_f64();
         bucket.last = now;
@@ -100,7 +103,11 @@ impl Limiter {
 }
 
 #[cfg(test)]
-#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::unwrap_used)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 
@@ -127,11 +134,19 @@ mod tests {
             limiter.token().await;
         }
         // One burst token, then ten at 100/s.
-        assert!(start.elapsed() <= Duration::from_millis(110), "{:?}", start.elapsed());
+        assert!(
+            start.elapsed() <= Duration::from_millis(110),
+            "{:?}",
+            start.elapsed()
+        );
         limiter.bootstrap_done();
         let start = Instant::now();
         limiter.token().await;
-        assert!(start.elapsed() >= Duration::from_millis(900), "{:?}", start.elapsed());
+        assert!(
+            start.elapsed() >= Duration::from_millis(900),
+            "{:?}",
+            start.elapsed()
+        );
     }
 
     #[tokio::test(start_paused = true)]
@@ -139,8 +154,7 @@ mod tests {
         let limiter = Limiter::new(100, 0, 1);
         let held = limiter.acquire().await;
         assert!(held.is_some());
-        let blocked =
-            tokio::time::timeout(Duration::from_millis(50), limiter.acquire()).await;
+        let blocked = tokio::time::timeout(Duration::from_millis(50), limiter.acquire()).await;
         assert!(blocked.is_err());
         drop(held);
         let next = tokio::time::timeout(Duration::from_millis(50), limiter.acquire()).await;

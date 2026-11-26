@@ -288,7 +288,10 @@ fn identity_value_is_the_canonical_label_string() {
     .into();
     let (key, value) = identity_value("7", &labels).unwrap();
     assert_eq!(key, "id/7");
-    assert_eq!(value, b"k8s:app=foo;k8s:io.kubernetes.pod.namespace=default;");
+    assert_eq!(
+        value,
+        b"k8s:app=foo;k8s:io.kubernetes.pod.namespace=default;"
+    );
     assert_eq!(identity_namespace(&labels), Some("default"));
     // Sorted by key, not by `source:key`.
     let mixed: BTreeMap<String, String> = [("k8s:zeta", "1"), ("reserved:alpha", "")]
@@ -380,10 +383,7 @@ fn ip_owner_arbitration() {
     assert_eq!(owners.remove(ip, "ns/third"), None);
     assert_eq!(owners.primary(ip), Some(("ns/new", &b"b2"[..])));
     // The last owner leaves: delete.
-    assert_eq!(
-        owners.remove(ip, "ns/new"),
-        Some(Write::Delete(ip.into()))
-    );
+    assert_eq!(owners.remove(ip, "ns/new"), Some(Write::Delete(ip.into())));
     assert!(owners.is_empty());
     assert_eq!(owners.remove(ip, "ns/new"), None);
 }
@@ -449,7 +449,8 @@ fn cluster_service_from_service_and_slices() {
     );
     let (key, bytes) = cluster_service(&svc, &[&main, &other, &fqdn], "east", 3).unwrap();
     assert_eq!(key, "east/ns/svc");
-    let ports = json!({"http": {"Protocol": "TCP", "Port": 80}, "dns": {"Protocol": "UDP", "Port": 53}});
+    let ports =
+        json!({"http": {"Protocol": "TCP", "Port": 80}, "dns": {"Protocol": "UDP", "Port": 53}});
     let target = json!({"http": {"Protocol": "TCP", "Port": 8080}});
     assert_eq!(
         parse(&bytes),
@@ -496,7 +497,9 @@ fn cluster_service_headless_and_unexported() {
     }
     assert!(
         cluster_service(
-            &service(json!({"service.flowsdn.io/global": "true", "service.flowsdn.io/shared": "TRUE"})),
+            &service(
+                json!({"service.flowsdn.io/global": "true", "service.flowsdn.io/shared": "TRUE"})
+            ),
             &[],
             "east",
             3
@@ -510,9 +513,7 @@ fn cluster_service_headless_and_unexported() {
 
 #[test]
 fn namespace_global_default_and_override() {
-    let namespace = |value: &str| {
-        json!({"metadata": {"name": "ns", "annotations": {"clustermesh.flowsdn.io/global": value}}})
-    };
+    let namespace = |value: &str| json!({"metadata": {"name": "ns", "annotations": {"clustermesh.flowsdn.io/global": value}}});
     assert!(namespace_global(None, DEFAULT_GLOBAL_NAMESPACE));
     assert!(!namespace_global(None, false));
     let plain = json!({"metadata": {"name": "ns"}});

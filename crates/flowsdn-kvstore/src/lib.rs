@@ -302,7 +302,10 @@ mod tests {
 
     #[test]
     fn keys_join_and_ranges() {
-        assert_eq!(join(&["flowsdn/state", "nodes/v1", "c1", ""]), "flowsdn/state/nodes/v1/c1");
+        assert_eq!(
+            join(&["flowsdn/state", "nodes/v1", "c1", ""]),
+            "flowsdn/state/nodes/v1/c1"
+        );
         assert_eq!(join(&["a//b/", "/c/"]), "a/b/c");
         assert_eq!(join(&["a", "..", "."]), "a/../.");
         assert_eq!(prefix_end(b"flowsdn/state/"), b"flowsdn/state0".to_vec());

@@ -29,8 +29,8 @@ use limiter::Limiter;
 use proto::{
     DeleteRangeRequest, DeleteRangeResponse, EVENT_DELETE, KeyValue, LeaseGrantRequest,
     LeaseGrantResponse, LeaseRevokeRequest, LeaseRevokeResponse, PutRequest, PutResponse,
-    RangeRequest, RangeResponse, RequestOp, StatusRequest, StatusResponse, TxnRequest,
-    TxnResponse, WatchCreateRequest, WatchRequest, WatchResponse,
+    RangeRequest, RangeResponse, RequestOp, StatusRequest, StatusResponse, TxnRequest, TxnResponse,
+    WatchCreateRequest, WatchRequest, WatchResponse,
 };
 
 const RANGE: &str = "/etcdserverpb.KV/Range";
@@ -412,7 +412,9 @@ impl Inner {
             return Ok(id);
         }
         self.ensure_open()?;
-        let ttl = i64::try_from(leases.ttl.as_secs()).unwrap_or(i64::MAX).max(1);
+        let ttl = i64::try_from(leases.ttl.as_secs())
+            .unwrap_or(i64::MAX)
+            .max(1);
         let response: LeaseGrantResponse = self
             .call(LEASE_GRANT, &LeaseGrantRequest { ttl, id: 0 })
             .await?;
@@ -539,7 +541,10 @@ impl Inner {
         };
         let result = match guard {
             None => self.call::<_, PutResponse>(PUT, &put).await.map(|_| ()),
-            Some(guard) => self.guarded(guard, vec![RequestOp::put(put)]).await.map(|_| ()),
+            Some(guard) => self
+                .guarded(guard, vec![RequestOp::put(put)])
+                .await
+                .map(|_| ()),
         };
         match result {
             Ok(()) => {
@@ -717,7 +722,11 @@ impl Inner {
     // ---- locks (§3.3.2) ----
 
     fn local_mutex(&self, path: &str) -> Arc<tokio::sync::Mutex<()>> {
-        Arc::clone(locked(&self.local_locks).entry(path.to_owned()).or_default())
+        Arc::clone(
+            locked(&self.local_locks)
+                .entry(path.to_owned())
+                .or_default(),
+        )
     }
 
     /// Drop a local lock entry nobody holds or waits for.
@@ -1179,11 +1188,7 @@ impl Kvstore for EtcdBackend {
     async fn watch(&self, prefix: &str) -> Result<mpsc::Receiver<Event>> {
         self.inner.ensure_open()?;
         let (tx, rx) = mpsc::channel(WATCH_BUFFER);
-        let task = tokio::spawn(watch::run(
-            Arc::clone(&self.inner),
-            prefix.to_owned(),
-            tx,
-        ));
+        let task = tokio::spawn(watch::run(Arc::clone(&self.inner), prefix.to_owned(), tx));
         self.inner.spawn_task(task.abort_handle());
         Ok(rx)
     }
@@ -1227,7 +1232,11 @@ impl Kvstore for EtcdBackend {
 }
 
 #[cfg(test)]
-#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::unwrap_used)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 
@@ -1261,17 +1270,24 @@ cilium-host-aliases:            # optional extension, ignored by etcd itself
         );
         assert_eq!(
             config.key_file,
-            Some(PathBuf::from("/var/lib/cilium/clustermesh/common-etcd-client.key"))
+            Some(PathBuf::from(
+                "/var/lib/cilium/clustermesh/common-etcd-client.key"
+            ))
         );
         assert_eq!(
             config.cert_file,
-            Some(PathBuf::from("/var/lib/cilium/clustermesh/common-etcd-client.crt"))
+            Some(PathBuf::from(
+                "/var/lib/cilium/clustermesh/common-etcd-client.crt"
+            ))
         );
         assert_eq!(config.qps, 20);
         assert_eq!(config.list_limit, 256);
 
         let flow = parse_client_yaml("endpoints: [http://a:1, 'http://b:2']\n").unwrap();
-        assert_eq!(flow.endpoints, vec!["http://a:1".to_owned(), "http://b:2".to_owned()]);
+        assert_eq!(
+            flow.endpoints,
+            vec!["http://a:1".to_owned(), "http://b:2".to_owned()]
+        );
         assert_eq!(flow.trusted_ca_file, None);
         let single = parse_client_yaml("endpoints: http://a:1\n").unwrap();
         assert_eq!(single.endpoints, vec!["http://a:1".to_owned()]);

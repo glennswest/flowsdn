@@ -1,7 +1,11 @@
 //! The etcd backend against a live fastetcd (spec 20 §3.1-3.3, §5.3-5.5).
 //! Runs only when `FASTETCD_BIN` names a fastetcd binary; otherwise each
 //! test prints `skipped: FASTETCD_BIN unset` and passes.
-#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -9,9 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use flowsdn_kvstore::etcd::{EtcdBackend, EtcdConfig};
-use flowsdn_kvstore::{
-    Compare, Error, Event, EventKind, Kvstore, Lease, MAX_VALUE, State, TxnPut,
-};
+use flowsdn_kvstore::{Compare, Error, Event, EventKind, Kvstore, Lease, MAX_VALUE, State, TxnPut};
 use openssl::asn1::Asn1Time;
 use openssl::bn::BigNum;
 use openssl::ec::{EcGroup, EcKey};
@@ -49,10 +51,8 @@ fn temp_dir(name: &str) -> PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "fastetcd-{name}-{}-{nanos}",
-        std::process::id()
-    ));
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("fastetcd-{name}-{}-{nanos}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -113,7 +113,10 @@ impl Server {
             .unwrap();
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
         loop {
-            if tokio::net::TcpStream::connect(("127.0.0.1", port)).await.is_ok() {
+            if tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .is_ok()
+            {
                 break;
             }
             assert!(
@@ -170,7 +173,10 @@ async fn kv_operations() {
     })
     .await;
 
-    client.put("t/a", b"1".to_vec(), Lease::None, None).await.unwrap();
+    client
+        .put("t/a", b"1".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
     let a = client.get("t/a", None).await.unwrap().unwrap();
     assert_eq!(a.data, b"1");
     assert_eq!(a.lease_id, 0);
@@ -178,38 +184,53 @@ async fn kv_operations() {
     assert_eq!(client.get("t/missing", None).await.unwrap(), None);
 
     // put_if_absent: one Txn on Version == 0.
-    assert!(!client
-        .put_if_absent("t/a", b"x".to_vec(), Lease::None, None)
-        .await
-        .unwrap());
+    assert!(
+        !client
+            .put_if_absent("t/a", b"x".to_vec(), Lease::None, None)
+            .await
+            .unwrap()
+    );
     assert_eq!(client.get("t/a", None).await.unwrap().unwrap().data, b"1");
-    assert!(client
-        .put_if_absent("t/b", b"2".to_vec(), Lease::Attached, None)
-        .await
-        .unwrap());
+    assert!(
+        client
+            .put_if_absent("t/b", b"2".to_vec(), Lease::Attached, None)
+            .await
+            .unwrap()
+    );
     let lease = client.lease_for("t/b").await.unwrap();
     assert_ne!(lease, 0);
-    assert_eq!(client.get("t/b", None).await.unwrap().unwrap().lease_id, lease);
+    assert_eq!(
+        client.get("t/b", None).await.unwrap().unwrap().lease_id,
+        lease
+    );
 
     // put_if_different: bytes, then the lease (§3.1 row 4).
-    assert!(!client
-        .put_if_different("t/a", b"1".to_vec(), Lease::None, None)
-        .await
-        .unwrap());
-    assert!(client
-        .put_if_different("t/a", b"2".to_vec(), Lease::None, None)
-        .await
-        .unwrap());
-    assert!(client
-        .put_if_different("t/a", b"2".to_vec(), Lease::Attached, None)
-        .await
-        .unwrap());
+    assert!(
+        !client
+            .put_if_different("t/a", b"1".to_vec(), Lease::None, None)
+            .await
+            .unwrap()
+    );
+    assert!(
+        client
+            .put_if_different("t/a", b"2".to_vec(), Lease::None, None)
+            .await
+            .unwrap()
+    );
+    assert!(
+        client
+            .put_if_different("t/a", b"2".to_vec(), Lease::Attached, None)
+            .await
+            .unwrap()
+    );
     let a = client.get("t/a", None).await.unwrap().unwrap();
     assert_eq!(a.lease_id, client.lease_for("t/a").await.unwrap());
-    assert!(!client
-        .put_if_different("t/a", b"2".to_vec(), Lease::Attached, None)
-        .await
-        .unwrap());
+    assert!(
+        !client
+            .put_if_different("t/a", b"2".to_vec(), Lease::Attached, None)
+            .await
+            .unwrap()
+    );
 
     // delete is idempotent.
     client.delete("t/a", None).await.unwrap();
@@ -223,8 +244,14 @@ async fn kv_operations() {
             .await
             .unwrap();
     }
-    client.put("p0", b"outside".to_vec(), Lease::None, None).await.unwrap();
-    client.put("q/x", b"outside".to_vec(), Lease::None, None).await.unwrap();
+    client
+        .put("p0", b"outside".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
+    client
+        .put("q/x", b"outside".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
     let listed = client.list_prefix("p/", None).await.unwrap();
     let keys: Vec<&str> = listed.keys().map(String::as_str).collect();
     assert_eq!(keys, ["p/0", "p/1", "p/2", "p/3", "p/4", "p/5", "p/6"]);
@@ -247,10 +274,12 @@ async fn kv_operations() {
         data: b"3".to_vec(),
         lease: Lease::Attached,
     };
-    assert!(client
-        .txn(vec![exact, Compare::Absent("t/c".into())], vec![put_c])
-        .await
-        .unwrap());
+    assert!(
+        client
+            .txn(vec![exact, Compare::Absent("t/c".into())], vec![put_c])
+            .await
+            .unwrap()
+    );
     let c = client.get("t/c", None).await.unwrap().unwrap();
     assert_eq!(c.lease_id, client.lease_for("t/c").await.unwrap());
     let put_d = TxnPut {
@@ -258,10 +287,12 @@ async fn kv_operations() {
         data: b"4".to_vec(),
         lease: Lease::None,
     };
-    assert!(!client
-        .txn(vec![Compare::Absent("t/c".into())], vec![put_d.clone()])
-        .await
-        .unwrap());
+    assert!(
+        !client
+            .txn(vec![Compare::Absent("t/c".into())], vec![put_d.clone()])
+            .await
+            .unwrap()
+    );
     let stale = Compare::Exact {
         key: "t/b".into(),
         data: b.data,
@@ -302,10 +333,11 @@ async fn locks_exclude_and_guard() {
         b"1"
     );
     assert_eq!(a.list_prefix("g/", Some(&guard)).await.unwrap().len(), 1);
-    assert!(!a
-        .put_if_absent("g/k", b"2".to_vec(), Lease::None, Some(&guard))
-        .await
-        .unwrap());
+    assert!(
+        !a.put_if_absent("g/k", b"2".to_vec(), Lease::None, Some(&guard))
+            .await
+            .unwrap()
+    );
 
     // b waits while a holds the lock.
     let contender = Arc::clone(&b);
@@ -326,14 +358,23 @@ async fn locks_exclude_and_guard() {
         a.put("g/k", b"2".to_vec(), Lease::None, Some(&guard)).await,
         Err(Error::LockLeaseExpired)
     );
-    assert_eq!(a.get("g/k", Some(&guard)).await, Err(Error::LockLeaseExpired));
-    assert_eq!(a.delete("g/k", Some(&guard)).await, Err(Error::LockLeaseExpired));
+    assert_eq!(
+        a.get("g/k", Some(&guard)).await,
+        Err(Error::LockLeaseExpired)
+    );
+    assert_eq!(
+        a.delete("g/k", Some(&guard)).await,
+        Err(Error::LockLeaseExpired)
+    );
     assert_eq!(
         a.put_if_absent("g/new", b"1".to_vec(), Lease::None, Some(&guard))
             .await,
         Err(Error::LockLeaseExpired)
     );
-    assert_eq!(b.get("g/k", Some(&guard_b)).await.unwrap().unwrap().data, b"1");
+    assert_eq!(
+        b.get("g/k", Some(&guard_b)).await.unwrap().unwrap().data,
+        b"1"
+    );
     b.unlock(&guard_b).await.unwrap();
 
     // Process-local exclusion: a second lock in one client waits too.
@@ -343,7 +384,11 @@ async fn locks_exclude_and_guard() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert!(!second.is_finished());
     a.unlock(&first).await.unwrap();
-    let second = tokio::time::timeout(WAIT, second).await.unwrap().unwrap().unwrap();
+    let second = tokio::time::timeout(WAIT, second)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
     a.unlock(&second).await.unwrap();
 
     a.close().await;
@@ -361,39 +406,69 @@ async fn watch_lists_then_streams() {
         ..server.config()
     })
     .await;
-    client.put("w/a", b"1".to_vec(), Lease::None, None).await.unwrap();
-    client.put("w/b", b"1".to_vec(), Lease::None, None).await.unwrap();
-    client.put("wx", b"outside".to_vec(), Lease::None, None).await.unwrap();
+    client
+        .put("w/a", b"1".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
+    client
+        .put("w/b", b"1".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
+    client
+        .put("wx", b"outside".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
 
     let mut rx = client.watch("w/").await.unwrap();
     let first = next(&mut rx).await;
     assert_eq!((first.kind, first.key.as_str()), (EventKind::Create, "w/a"));
     assert_eq!(first.value.unwrap().data, b"1");
     let second = next(&mut rx).await;
-    assert_eq!((second.kind, second.key.as_str()), (EventKind::Create, "w/b"));
+    assert_eq!(
+        (second.kind, second.key.as_str()),
+        (EventKind::Create, "w/b")
+    );
     assert_eq!(next(&mut rx).await.kind, EventKind::ListDone);
 
-    client.put("w/c", b"1".to_vec(), Lease::None, None).await.unwrap();
+    client
+        .put("w/c", b"1".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
     let created = next(&mut rx).await;
-    assert_eq!((created.kind, created.key.as_str()), (EventKind::Create, "w/c"));
-    client.put("w/c", b"2".to_vec(), Lease::None, None).await.unwrap();
+    assert_eq!(
+        (created.kind, created.key.as_str()),
+        (EventKind::Create, "w/c")
+    );
+    client
+        .put("w/c", b"2".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
     let modified = next(&mut rx).await;
-    assert_eq!((modified.kind, modified.key.as_str()), (EventKind::Modify, "w/c"));
+    assert_eq!(
+        (modified.kind, modified.key.as_str()),
+        (EventKind::Modify, "w/c")
+    );
     assert_eq!(modified.value.unwrap().data, b"2");
     client.delete("w/a", None).await.unwrap();
     let deleted = next(&mut rx).await;
-    assert_eq!((deleted.kind, deleted.key.as_str()), (EventKind::Delete, "w/a"));
+    assert_eq!(
+        (deleted.kind, deleted.key.as_str()),
+        (EventKind::Delete, "w/a")
+    );
     assert_eq!(deleted.value, None);
-    client.put("wx", b"again".to_vec(), Lease::None, None).await.unwrap();
-    client.put("w/d", b"1".to_vec(), Lease::None, None).await.unwrap();
+    client
+        .put("wx", b"again".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
+    client
+        .put("w/d", b"1".to_vec(), Lease::None, None)
+        .await
+        .unwrap();
     let after = next(&mut rx).await;
     assert_eq!(after.key, "w/d", "a key outside the prefix leaked");
 
     client.close().await;
-    let closed = tokio::time::timeout(WAIT, async {
-        while rx.recv().await.is_some() {}
-    })
-    .await;
+    let closed = tokio::time::timeout(WAIT, async { while rx.recv().await.is_some() {} }).await;
     assert!(closed.is_ok(), "the watch receiver closes with the client");
 }
 
@@ -428,7 +503,10 @@ async fn close_revokes_leased_keys() {
 
     writer.close().await;
     let deleted = next(&mut rx).await;
-    assert_eq!((deleted.kind, deleted.key.as_str()), (EventKind::Delete, "l/k"));
+    assert_eq!(
+        (deleted.kind, deleted.key.as_str()),
+        (EventKind::Delete, "l/k")
+    );
     assert_eq!(reader.get("l/k", None).await.unwrap(), None);
     assert!(reader.get("l/plain", None).await.unwrap().is_some());
     reader.close().await;
@@ -447,15 +525,20 @@ async fn status_reports_connected() {
         if status.message.starts_with("etcd: 1/1 connected") {
             break status;
         }
-        assert!(
-            tokio::time::Instant::now() < deadline,
-            "status: {status:?}"
-        );
+        assert!(tokio::time::Instant::now() < deadline, "status: {status:?}");
         tokio::time::sleep(Duration::from_millis(100)).await;
     };
     assert_eq!(status.state, State::Ok);
-    assert!(status.message.contains("lock leases=1"), "{}", status.message);
-    assert!(status.message.contains("has-quorum=true"), "{}", status.message);
+    assert!(
+        status.message.contains("lock leases=1"),
+        "{}",
+        status.message
+    );
+    assert!(
+        status.message.contains("has-quorum=true"),
+        "{}",
+        status.message
+    );
     assert!(
         status
             .message
