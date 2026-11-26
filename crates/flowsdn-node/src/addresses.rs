@@ -17,9 +17,7 @@ pub const WILDCARD: &str = "*";
 pub fn private(addr: IpAddr) -> bool {
     match addr {
         IpAddr::V4(v4) => v4.is_private() || v4.is_link_local() || v4.is_loopback(),
-        IpAddr::V6(v6) => {
-            v6.is_unique_local() || v6.is_unicast_link_local() || v6.is_loopback()
-        }
+        IpAddr::V6(v6) => v6.is_unique_local() || v6.is_unicast_link_local() || v6.is_loopback(),
     }
 }
 fn within(addr: IpAddr, (net, len): &Prefix) -> bool {
@@ -135,7 +133,10 @@ pub fn derive(devices: &[Device], local_routes: &[Route], settings: &Settings) -
         else {
             continue;
         };
-        if out.iter().any(|a| a.addr == addr && a.device == device.name) {
+        if out
+            .iter()
+            .any(|a| a.addr == addr && a.device == device.name)
+        {
             continue;
         }
         let has_primary = out

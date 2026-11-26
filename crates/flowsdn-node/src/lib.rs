@@ -17,5 +17,5 @@
 #![forbid(unsafe_code)]
 
 pub mod addresses;
-pub mod rows;
 pub mod routes;
+pub mod rows;

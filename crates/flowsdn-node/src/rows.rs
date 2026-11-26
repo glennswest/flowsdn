@@ -73,7 +73,10 @@ impl TableRender for Device {
             self.kind.clone(),
             self.mtu.to_string(),
             self.hw_addr.map_or_else(String::new, |m| {
-                m.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(":")
+                m.iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<Vec<_>>()
+                    .join(":")
             }),
             if self.up { "up" } else { "" }.to_owned(),
             self.addresses
@@ -89,7 +92,9 @@ impl TableRender for Device {
 pub fn device_indexes() -> Vec<Index<Device>> {
     vec![
         Index::new("name", true, |d: &Device| vec![d.name.clone().into_bytes()]),
-        Index::new("selected", false, |d: &Device| vec![vec![u8::from(d.selected)]]),
+        Index::new("selected", false, |d: &Device| {
+            vec![vec![u8::from(d.selected)]]
+        }),
     ]
 }
 
@@ -131,7 +136,9 @@ impl TableRender for Route {
 }
 /// The `routes` index: `link_index`.
 pub fn route_indexes() -> Vec<Index<Route>> {
-    vec![Index::new("link", false, |r: &Route| vec![key::u32be(r.link_index)])]
+    vec![Index::new("link", false, |r: &Route| {
+        vec![key::u32be(r.link_index)]
+    })]
 }
 
 /// `neighbors`: a neighbor entry (§3.1.1).
@@ -173,7 +180,10 @@ impl TableRender for Neighbor {
             self.link_index.to_string(),
             self.addr.to_string(),
             self.hw_addr.map_or_else(String::new, |m| {
-                m.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(":")
+                m.iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<Vec<_>>()
+                    .join(":")
             }),
             self.kind.clone(),
             self.state.clone(),
@@ -305,9 +315,10 @@ impl TableRender for DesiredRoute {
             self.selected.to_string(),
             opt(self.nexthop),
             opt(self.src),
-            self.device
-                .as_ref()
-                .map_or_else(|| "none".to_owned(), |(name, index)| format!("{name} ({index})")),
+            self.device.as_ref().map_or_else(
+                || "none".to_owned(),
+                |(name, index)| format!("{name} ({index})"),
+            ),
             if self.multipath.is_empty() {
                 "none".to_owned()
             } else {
@@ -328,7 +339,9 @@ impl TableRender for DesiredRoute {
 pub fn desired_route_indexes() -> Vec<Index<DesiredRoute>> {
     vec![
         Index::new("group", false, |r: &DesiredRoute| vec![r.group_key()]),
-        Index::new("owner", false, |r: &DesiredRoute| vec![r.owner.clone().into_bytes()]),
+        Index::new("owner", false, |r: &DesiredRoute| {
+            vec![r.owner.clone().into_bytes()]
+        }),
     ]
 }
 

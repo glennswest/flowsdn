@@ -637,6 +637,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "flowsdn-node"
+version = "0.14.0"
+dependencies = [
+ "flowsdn-reconcile",
+ "flowsdn-table",
+ "tokio",
+]
+
+[[package]]
 name = "flowsdn-operator"
 version = "0.14.0"
 dependencies = [

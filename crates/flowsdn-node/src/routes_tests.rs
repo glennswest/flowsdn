@@ -29,7 +29,11 @@ impl RouteOps for Fake {
     fn replace(&mut self, route: &DesiredRoute) -> Result<(), String> {
         self.0.lock().unwrap().insert(
             (route.table, route.prefix, route.priority.unwrap_or(0)),
-            format!("{}:{}", route.owner, route.device.as_ref().map_or(0, |d| d.1)),
+            format!(
+                "{}:{}",
+                route.owner,
+                route.device.as_ref().map_or(0, |d| d.1)
+            ),
         );
         Ok(())
     }
@@ -37,7 +41,7 @@ impl RouteOps for Fake {
         self.0.lock().unwrap().remove(&(table, prefix, priority));
         Ok(())
     }
-    fn owned(&mut self) -> Result<Vec<(u32, (IpAddr, u8), u32)>, String> {
+    fn owned(&mut self) -> Result<Vec<RouteId>, String> {
         Ok(self.0.lock().unwrap().keys().copied().collect())
     }
 }
@@ -51,7 +55,10 @@ fn the_lowest_admin_distance_is_selected() {
         route("a", "10.9.0.0", 16, 200, ("eth1", 3)),
     ];
     select(&mut rows);
-    let selected: Vec<(&str, bool)> = rows.iter().map(|r| (r.owner.as_str(), r.selected)).collect();
+    let selected: Vec<(&str, bool)> = rows
+        .iter()
+        .map(|r| (r.owner.as_str(), r.selected))
+        .collect();
     assert_eq!(
         selected,
         [("b", true), ("a", false), ("c", false), ("a", true)],
@@ -92,25 +99,37 @@ async fn owners_reconcile_into_the_kernel_by_selection() {
         .await
         .unwrap();
     settle(&mut reconciler).await;
-    assert_eq!(kernel.lock().unwrap().get(&key).map(String::as_str), Some("owner2:2"));
+    assert_eq!(
+        kernel.lock().unwrap().get(&key).map(String::as_str),
+        Some("owner2:2")
+    );
     // owner1 (AD 100) comes: it wins, owner2's row stays unselected.
     manager
         .set_owner("owner1", vec![route("", "10.2.3.4", 32, 100, ("eth1", 3))])
         .await
         .unwrap();
     settle(&mut reconciler).await;
-    assert_eq!(kernel.lock().unwrap().get(&key).map(String::as_str), Some("owner1:3"));
+    assert_eq!(
+        kernel.lock().unwrap().get(&key).map(String::as_str),
+        Some("owner1:3")
+    );
     let snapshot = table.snapshot();
     let selected: Vec<(String, bool)> = snapshot
         .all()
         .map(|(r, _)| (r.owner.clone(), r.selected))
         .collect();
-    assert_eq!(selected, [("owner1".into(), true), ("owner2".into(), false)]);
+    assert_eq!(
+        selected,
+        [("owner1".into(), true), ("owner2".into(), false)]
+    );
     // owner1 goes: owner2's route is selected and installed again, never
     // deleted in between.
     manager.set_owner("owner1", vec![]).await.unwrap();
     settle(&mut reconciler).await;
-    assert_eq!(kernel.lock().unwrap().get(&key).map(String::as_str), Some("owner2:2"));
+    assert_eq!(
+        kernel.lock().unwrap().get(&key).map(String::as_str),
+        Some("owner2:2")
+    );
     // owner2 goes: the route is deleted.
     manager.set_owner("owner2", vec![]).await.unwrap();
     settle(&mut reconciler).await;

@@ -25,7 +25,14 @@ fn device(index: u32, name: &str, selected: bool, addresses: Vec<DeviceAddress>)
 }
 fn rows(out: &[NodeAddress]) -> Vec<(String, &str, bool, bool)> {
     out.iter()
-        .map(|a| (a.addr.to_string(), a.device.as_str(), a.primary, a.node_port))
+        .map(|a| {
+            (
+                a.addr.to_string(),
+                a.device.as_str(),
+                a.primary,
+                a.node_port,
+            )
+        })
         .collect()
 }
 
@@ -93,7 +100,10 @@ fn the_host_device_and_local_table_aliases() {
             9,
             HOST_DEVICE,
             false,
-            vec![addr("10.9.0.1", 32, 253, false), addr("fe80::9", 64, 253, false)],
+            vec![
+                addr("10.9.0.1", 32, 253, false),
+                addr("fe80::9", 64, 253, false),
+            ],
         ),
     ];
     let alias = Route {
@@ -108,7 +118,10 @@ fn the_host_device_and_local_table_aliases() {
         kind: 2,
     };
     let out = derive(&devices, &[alias], &Settings::default());
-    let host: Vec<_> = rows(&out).into_iter().filter(|r| r.1 == HOST_DEVICE).collect();
+    let host: Vec<_> = rows(&out)
+        .into_iter()
+        .filter(|r| r.1 == HOST_DEVICE)
+        .collect();
     assert_eq!(
         host,
         vec![
@@ -117,6 +130,9 @@ fn the_host_device_and_local_table_aliases() {
         ],
         "the host device's link-scope addresses count, never as NodePort; its link-local is never primary"
     );
-    let aliased = out.iter().find(|a| a.addr.to_string() == "203.0.113.7").unwrap();
+    let aliased = out
+        .iter()
+        .find(|a| a.addr.to_string() == "203.0.113.7")
+        .unwrap();
     assert_eq!((aliased.device.as_str(), aliased.primary), ("eth0", false));
 }

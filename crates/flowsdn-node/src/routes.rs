@@ -97,6 +97,9 @@ impl RouteManager {
     }
 }
 
+/// A kernel route's identity: `(table, prefix, priority)`.
+pub type RouteId = (u32, (std::net::IpAddr, u8), u32);
+
 /// The kernel side of the routes: replace one route, delete one, and list the
 /// routes flowsdn owns in the tables it manages (for prune).
 pub trait RouteOps: Send {
@@ -104,9 +107,14 @@ pub trait RouteOps: Send {
     fn replace(&mut self, route: &DesiredRoute) -> Result<(), String>;
     /// Delete the route `(table, prefix, priority)`, if flowsdn's; absent is
     /// success.
-    fn delete(&mut self, table: u32, prefix: (std::net::IpAddr, u8), priority: u32) -> Result<(), String>;
+    fn delete(
+        &mut self,
+        table: u32,
+        prefix: (std::net::IpAddr, u8),
+        priority: u32,
+    ) -> Result<(), String>;
     /// The `(table, prefix, priority)` of every route flowsdn owns.
-    fn owned(&mut self) -> Result<Vec<(u32, (std::net::IpAddr, u8), u32)>, String>;
+    fn owned(&mut self) -> Result<Vec<RouteId>, String>;
 }
 
 /// The `flowsdn-reconcile` target of `desired-routes`: a selected row is
@@ -145,7 +153,10 @@ impl<O: RouteOps> Target<DesiredRoute> for RouteTarget<O> {
         }
         self.ops.delete(table, prefix, priority)
     }
-    async fn prune(&mut self, desired: flowsdn_table::Snapshot<DesiredRoute>) -> Result<(), String> {
+    async fn prune(
+        &mut self,
+        desired: flowsdn_table::Snapshot<DesiredRoute>,
+    ) -> Result<(), String> {
         let wanted: BTreeSet<Vec<u8>> = desired
             .all()
             .filter(|(r, _)| r.selected)
