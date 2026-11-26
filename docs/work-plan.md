@@ -27,6 +27,7 @@ reconcilers/speaker are #570/#571; they feed the projection built here.
 - [x] Docs (crds.md, runtime, spec 13/15 amendments, status), changelog.
 - [x] Strict sc-build at 501137a: `cargo xtask check` (fmt --check, workspace clippy -D warnings, workspace tests
       with all features, musl checks) and test/build.sh, exit 0. Self-inflicted build issues #587-#590 closed. #334 closed.
+- [x] Staged from main at 5e4c2c2: golden-flowsdn-a96bddd213fa, release request stormcos#1502.
 - Not run on a cluster: the operator BGP pass is unit-tested against recorded API calls only; status writing waits
   for the agent control plane (#570) and speaker (#571).
 

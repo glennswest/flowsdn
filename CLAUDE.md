@@ -45,7 +45,7 @@ were last refreshed from code on 2026-10-09 (`git log --since=2026-10-02`).
 The stormcos flowsdn edition carries the agent (static musl and GNU Kubernetes
 mode) and CNI in the `flowsdn` golden; `deploy/stormcos/manifests-kubernetes/` runs it
 as `image: flowsdn` with a CNI-install init container (stormcos#261 applies
-them). Latest golden: golden-flowsdn-de1d63ada483 at 1254993 (DSR, Maglev, host firewall, flowsdn policy kinds, NAT46/64; features off by default, kernel test runs only). Earlier: golden-flowsdn-760c3a2e89d6 at 9732b71 (NetworkPolicy enforcement, #292; stormcos#528). Before it: golden-flowsdn-a690ebee2ba7 at 4447eeb (IPv6 NodePort, identity allocation, network-status; stormcos#494). Goldens before golden-flowsdn-4b40a980ad16 carry a socket LB that cannot attach on 7.2 (cda5799). Source pushes do not update nodes until a new golden is composed into
+them). Staged 2026-11-25 (stormcos#1502, not yet in a release): golden-flowsdn-a96bddd213fa at 5e4c2c2 (BGP kinds/operator, #334, off by default). Latest released golden: golden-flowsdn-de1d63ada483 at 1254993 (DSR, Maglev, host firewall, flowsdn policy kinds, NAT46/64; features off by default, kernel test runs only). Earlier: golden-flowsdn-760c3a2e89d6 at 9732b71 (NetworkPolicy enforcement, #292; stormcos#528). Before it: golden-flowsdn-a690ebee2ba7 at 4447eeb (IPv6 NodePort, identity allocation, network-status; stormcos#494). Goldens before golden-flowsdn-4b40a980ad16 carry a socket LB that cannot attach on 7.2 (cda5799). Source pushes do not update nodes until a new golden is composed into
 a release. Authority:
 [stormcos/docs/goldens.md](https://github.com/glennswest/stormcos/blob/main/docs/goldens.md).
 After validated implementation work, flowsdn uses the special-component
