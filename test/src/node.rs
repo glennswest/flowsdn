@@ -161,7 +161,10 @@ fn host_firewall(report: &mut Report, socket: &std::path::Path) {
             Ok(health) => health,
             Err(error) => return report.fail("node-host-firewall", start.elapsed(), &error),
         };
-        let Some(policy) = health.pointer("/kubernetes/policy").filter(|p| !p.is_null()) else {
+        let Some(policy) = health
+            .pointer("/kubernetes/policy")
+            .filter(|p| !p.is_null())
+        else {
             if start.elapsed() > LIMIT {
                 return report.fail(
                     "node-host-firewall",
@@ -174,9 +177,15 @@ fn host_firewall(report: &mut Report, socket: &std::path::Path) {
         };
         let firewall = policy.get("host-firewall").cloned().unwrap_or_default();
         if firewall.is_null() {
-            return report.skip("node-host-firewall", "kubernetes.host-firewall is off on this node");
+            return report.skip(
+                "node-host-firewall",
+                "kubernetes.host-firewall is off on this node",
+            );
         }
-        let learning = firewall.get("learning").and_then(|l| l.as_array()).map_or(0, Vec::len);
+        let learning = firewall
+            .get("learning")
+            .and_then(|l| l.as_array())
+            .map_or(0, Vec::len);
         if learning == 0 || start.elapsed() > LIMIT {
             break firewall;
         }
@@ -213,7 +222,8 @@ fn host_firewall(report: &mut Report, socket: &std::path::Path) {
         for row in rows.iter().filter(|r| r.get("endpoint").and_then(|e| e.as_str()) == Some("host")) {
             let verdict = row.get("verdict").and_then(|v| v.as_str()).unwrap_or("?").to_owned();
             let packets = row.get("packets").and_then(serde_json::Value::as_u64).unwrap_or(0);
-            *counted.entry(verdict).or_default() += packets;
+            let total = counted.entry(verdict).or_default();
+            *total = total.saturating_add(packets);
         }
         let counted = counted
             .iter()
