@@ -75,7 +75,7 @@ Staged; each stage committed and verified (kernel tests keep passing).
 - [x] #489 (its own quarantine-line proof) parked the same way.
 - [x] 2026-11-26: #484 handed back. Release 14.08-flowsdn (composed, not yet installed) carries golden-flowsdn-cf08afe18670
       and stormpump@d3d2858 (contains 65b74d3). Re-shipped with the same proof and `--commit 936dedb`; it closes on
-      14.08-flowsdn's first passing install. #487, #488, #489 (its own proof, `--commit c10c88b`) #490, #496, #497 and #499 re-shipped the same way. Re-ship the other parked issues the same
+      14.08-flowsdn's first passing install. #487, #488, #489 (its own proof, `--commit c10c88b`) #490, #496, #497, #499 and #420 (its own proof, `--commit 05a112f`) re-shipped the same way. Re-ship the other parked issues the same
       way when they come back.
 - [x] 2026-11-26: parked all 27 remaining issues reopened on the health proof (#392, #418, #448-#499 range, #513) the
       same way in one pass (`--after-release stormpump>=65b74d3`; `--after stormpump#329` is refused once it shipped).
