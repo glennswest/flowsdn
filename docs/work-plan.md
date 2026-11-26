@@ -21,9 +21,9 @@ Staged; each stage committed and verified (kernel tests keep passing).
 - [x] `deploy/build-image.sh flowsdn OUT` (entered as `deploy/build-golden.sh`, the `tree` contract): stormcos
       `build-goldens.sh`'s flowsdn stage (8932-9070 at f7f7ccb) moved unchanged; `deploy/check-image.sh` carries
       `stage-build.sh`'s flowsdn checks; `deploy/test/compare-stage.sh` builds both ways and diffs the trees.
-- [ ] Verified on a build VM (compare against the stage at f7f7ccb).
-- [ ] Hand-off on stormcentral#1836: flip `component edit flowsdn --set kind=tree`; then stormcos follow-up PR deletes
-      the stage (FLOWSDN_SRC, COMPONENTS row, the §flowsdn block, stage-build.sh's flowsdn case).
+- [x] Verified on a build VM (e1af60e, `compare-stage.sh f7f7ccb`): check-image PASS, the stage's checks PASS, the
+      trees byte-identical (81 paths).
+- [x] Hand-off on stormcentral#1836 (step 3: flip `kind=tree`); stormcos#1669 lists what to delete after the flip.
 
 ### Direct-route findings after the #576 move — #498 (P1, reopened), 2026-11-26
 - [x] Both findings hold in the #576 code: `direct_routes::plan` checks each selected hop and the first InternalIP only

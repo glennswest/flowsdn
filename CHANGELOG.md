@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (#598)
+- **build:** The `flowsdn` golden is built in this repo: `deploy/build-image.sh flowsdn OUT`, entered as
+  `deploy/build-golden.sh` (stormcentral's `tree` contract; stormcentral#1836 retires stage mode).
+  - It is stormcos's stage recipe (build-goldens.sh at f7f7ccb) moved here unchanged.
+  - `deploy/check-image.sh` carries the stage's checks. `deploy/test/compare-stage.sh` builds the golden both ways
+    at one commit: at e1af60e the two trees are byte-identical (81 paths).
+  - Until stormcentral's registry row moves to `tree`, goldens are still staged. stormcos#1669 deletes the stage
+    recipe after that.
+
 ### 2026-11-26 (#498)
 - **fix:** A desired direct route whose check failed in a round (a netlink error, or skipped as unreachable) kept its
   installed route before #576 but would have been deleted after it. It is held again: neither its row's delete nor

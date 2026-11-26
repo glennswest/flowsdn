@@ -224,8 +224,15 @@ the golden; a different last component (for example `flowsdn-runtime`) is a
 registry pull instead. The init container puts the plugin on the host, so the
 golden's internal CNI path does not have to be exposed separately.
 
-Goldens are staged with `stormcentral component stage flowsdn` and reach nodes
-only in a stormcos release. The latest is `golden-flowsdn-de1d63ada483`
+The golden's recipe is this repo's own `deploy/build-image.sh flowsdn OUT`
+(entered as `deploy/build-golden.sh`, stormcentral's `tree` contract; #598,
+stormcentral#1836). It is stormcos's former stage recipe, moved here unchanged.
+`deploy/check-image.sh OUT` checks the tree, and `deploy/test/compare-stage.sh`
+builds it both ways and compares the trees. Until stormcentral's registry row
+moves from `special` to `tree`, goldens are still staged with `stormcentral
+component stage flowsdn`; after that, a push here builds the golden with
+`stormcentral component build flowsdn`. Either way they reach nodes only in a
+stormcos release. The latest is `golden-flowsdn-de1d63ada483`
 (flowsdn@1254993: DSR, Maglev, host firewall, flowsdn policy kinds, NAT46/64,
 all off by default; earlier a690ebee2ba7 at 4447eeb, release request stormcos#494). Goldens built from 0fad164 up to
 #369 were never staged: their socket LB failed the 7.2 verifier. Goldens before
