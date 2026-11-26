@@ -4,6 +4,18 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Node model in spec 10's tables — #576 (P3), 2026-11-26
+
+Staged; each stage committed and verified (kernel tests keep passing).
+- [ ] Stage 1: `flowsdn-node` crate: rows (`devices`, `routes`, `neighbors`, `node-addresses`, `desired-routes`,
+      `forwardable-ips`, `desired-neighbors`) with Keyed/TableRender (harvested columns), `node-addresses` derivation
+      (§3.1.6), `RouteManager` (owners, AD selection), `RouteTarget` over `RouteOps` (flowsdn-reconcile). Unit tests.
+- [ ] Stage 2: agent fills the realized tables from netlink; direct node routes (`route_loop`) become an owner of
+      `desired-routes`, reconciled through `RouteTarget` (connector ops); persistence file replaced by prune of owned routes.
+- [ ] Stage 3: uplink routes and rules (#408) as owners (`desired-rules` too).
+- [ ] Stage 4: `neighbors.rs` (#469) through `forwardable-ips` → `desired-neighbors` and a neighbor reconciler.
+- [ ] Docs (spec 10 amendment, runtime), kernel-check, close. Then #520 (scripttest node adapters).
+
 ### IPv6 egress gateway — #580 (P3), 2026-11-26
 
 - [x] `flowsdn_egress_gw_policy_v6` + `flowsdn_egress_gw_nexthop6` (the gateway's IPv6 InternalIP as next hop: native

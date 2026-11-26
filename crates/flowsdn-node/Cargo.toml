@@ -1,0 +1,20 @@
+[package]
+name = "flowsdn-node"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "The agent's node model in spec 10's tables (devices, routes, neighbors, node addresses, desired routes and neighbors) and their reconcilers (#576)"
+
+[dependencies]
+flowsdn-table = { path = "../flowsdn-table", version = "=0.14.0" }
+flowsdn-reconcile = { path = "../flowsdn-reconcile", version = "=0.14.0" }
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "time", "test-util"] }
+
+[lints]
+workspace = true
