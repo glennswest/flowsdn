@@ -4,6 +4,14 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Host firewall short-circuit finding — #484 / #487 (P0, reopened), 2026-11-26
+
+- [x] Fix verified 2026-11-20 (kernel suite, negative control). Reopened only because the node proof
+      `log:health agent.(api|kubernetes) OK` cannot be seen: agent pod stderr never reaches syslog (see #418 below).
+- [ ] Waiting on the owner (asked on #484, covers #418, #487 and ~20 reopened issues): how agent health becomes
+      visible on a node. Recommended: the agent writes health transitions to `/dev/kmsg`, which stormpump's log service
+      already follows into syslog. Alternatives: stormcos forwards pod logs; or the proofs change.
+
 ### No stubs: proof on a node — #418 (reopened), 2026-11-26
 
 Reopened by stormcentral: 14.06-flowsdn on pvetest1 (install pvetest1-1795671725) did not show `health agent.(api|kubernetes) OK`.
