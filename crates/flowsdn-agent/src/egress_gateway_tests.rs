@@ -327,7 +327,7 @@ fn ipv6_entries_and_next_hops() {
         interfaces: &ifs,
         primary: Some("eth0"),
     };
-    let (maps, report) = plan(&[object.clone()], &pods, &namespaces(), &all, &gateway);
+    let (maps, report) = plan(std::slice::from_ref(&object), &pods, &namespaces(), &all, &gateway);
     assert_eq!(
         maps.v4.len(),
         1,
@@ -370,7 +370,7 @@ fn ipv6_entries_and_next_hops() {
         interfaces: &ifs,
         primary: Some("eth0"),
     };
-    let (maps, _) = plan(&[object.clone()], &pods, &namespaces(), &all, &other);
+    let (maps, _) = plan(std::slice::from_ref(&object), &pods, &namespaces(), &all, &other);
     let entry = value6(&maps.v6, "fd00:1:1::5", "2001:db8:64::", 48);
     assert_eq!(
         (entry.gateway_ip, entry.egress_ip),
