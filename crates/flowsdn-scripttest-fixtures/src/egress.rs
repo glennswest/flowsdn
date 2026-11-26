@@ -77,7 +77,7 @@ pub fn dump(client: &FakeClient) -> String {
     };
     let (entries, _) = plan(&policies, &pods, &namespaces, &nodes, &local);
     let mut out = String::new();
-    for ((_, data), value) in entries {
+    for ((_, data), value) in entries.v4 {
         let value = EgressGw4Value::from_bytes(value);
         let [a, b, c, d, e, f, g, h] = data;
         out.push_str(&format!(
