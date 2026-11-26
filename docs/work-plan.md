@@ -15,7 +15,7 @@ Staged; each stage committed and verified (kernel tests keep passing).
 - [x] Stage 3 (a9f6a26): uplink table routes are the `uplinks` owner; rules are `desired-rules` (`flowsdn_node::rules`).
 - [x] Stage 4 (aff3a36): `neighbors.rs` (#469) through `forwardable-ips` → `desired-neighbors` (`flowsdn_node::neighbors`).
 - [x] Docs (spec 10 amendment, runtime, changelog) at 4caf950; sc-build: xtask check, test/build.sh, kernel-check 26/0/2
-      (uplinks-live, neighbors-live pass). Staged and shipped. Then #520 (scripttest node adapters).
+      (uplinks-live, neighbors-live pass). Staged golden-flowsdn-0e22d7d5c9e0; shipped. Then #520 (scripttest node adapters).
 
 ### IPv6 egress gateway — #580 (P3), 2026-11-26
 
