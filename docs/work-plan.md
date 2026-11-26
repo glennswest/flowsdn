@@ -4,6 +4,13 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 ## Work plan
 
+### Datapath plugins — #566 (P3), 2026-11-26
+
+- [x] Asked (no plugins vs flowsdn's own vs Cilium-compatible); `wait-owner` refused: gaps are session work. Built the
+      recommended option: no datapath plugins (spec 01 decision); the operator posts a `NotApplied` Warning Event per
+      FlowsdnDatapathPlugin per term; `events` create in its RBAC. 14f79f1, fmt 467e580; strict sc-build passed; staged
+      golden-flowsdn-f0ed2dfbe418; closed (no plugin objects on any node to show it on).
+
 ### Metrics: the operator half — #420, 2026-11-26
 
 - [x] Agent proof line to `/dev/kmsg` (c10c88b, under #489).
