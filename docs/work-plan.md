@@ -90,6 +90,11 @@ Staged; each stage committed and verified (kernel tests keep passing).
 - [x] #498 (direct-route findings, fixed 2026-11-21 at 000ffb2) re-shipped the same way.
 - [x] #499 (ECMP pairing finding, fixed 2026-11-21 at 4a12712) re-shipped the same way.
 
+- [x] 2026-11-26: 14.09-flowsdn on pvetest2 (`pvetest2-1795734793`) failed every flowsdn `log:` proof, although
+      stormcentral's syslog store had each line from that node before the check (23:24-23:26Z vs check 23:30Z). Cause:
+      stormcentral's `log:` matches the install runner's transcript (`src/proof.rs:209`), never the node's syslog.
+      Filed stormcentral#1854; parked #484 #487 #488 #489 #490 #496 #497 #498 #499 #420 #480 #576 after it. #482's
+      `api:` proof held on the same install (closed). Re-ship each with the syslog-backed form when it lands.
 ### No stubs: proof on a node — #418 (reopened), 2026-11-26
 
 Reopened by stormcentral: 14.06-flowsdn on pvetest1 (install pvetest1-1795671725) did not show `health agent.(api|kubernetes) OK`.
