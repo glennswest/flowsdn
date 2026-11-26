@@ -17,6 +17,14 @@ Staged; each stage committed and verified (kernel tests keep passing).
 - [x] Docs (spec 10 amendment, runtime, changelog) at 4caf950; sc-build: xtask check, test/build.sh, kernel-check 26/0/2
       (uplinks-live, neighbors-live pass). Staged golden-flowsdn-0e22d7d5c9e0; shipped. Then #520 (scripttest node adapters).
 
+### The flowsdn golden builds here — #598 (P1, stormcentral#1836), 2026-11-26
+- [x] `deploy/build-image.sh flowsdn OUT` (entered as `deploy/build-golden.sh`, the `tree` contract): stormcos
+      `build-goldens.sh`'s flowsdn stage (8932-9070 at f7f7ccb) moved unchanged; `deploy/check-image.sh` carries
+      `stage-build.sh`'s flowsdn checks; `deploy/test/compare-stage.sh` builds both ways and diffs the trees.
+- [ ] Verified on a build VM (compare against the stage at f7f7ccb).
+- [ ] Hand-off on stormcentral#1836: flip `component edit flowsdn --set kind=tree`; then stormcos follow-up PR deletes
+      the stage (FLOWSDN_SRC, COMPONENTS row, the §flowsdn block, stage-build.sh's flowsdn case).
+
 ### Direct-route findings after the #576 move — #498 (P1, reopened), 2026-11-26
 - [x] Both findings hold in the #576 code: `direct_routes::plan` checks each selected hop and the first InternalIP only
       for the plain route (4bc7cb209712); `ConnectorOps::delete` deletes flowsdn's route by destination (8299a1f6238f).
