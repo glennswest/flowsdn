@@ -12,11 +12,17 @@
 //! `--identity-gc-interval` and FlowsdnNode GC (spec 12 §3.9) every
 //! `--nodes-gc-interval`; their state lasts one leader term.
 //!
+//! With `--enable-bgp-control-plane` the leader also compiles the BGP
+//! cluster configs into per-node FlowsdnBGPNodeConfigs and writes the
+//! cluster and peer config conditions every `--bgp-interval` (#334,
+//! [`crate::operator_bgp`], spec 15 §3.2).
+//!
 //! It runs in the same binary as the agent so the flowsdn golden carries it
 //! with the agent's runtime; the edition manifests run it as a host-network
 //! Deployment (`64-flowsdn-operator.yaml`), since agents wait for the CRDs it
 //! registers before their flowsdn.io watchers start.
 use crate::lease::{Elector, Step, micro_time};
+use crate::operator_bgp::{self, BgpSettings, Pool, RouterIdMode, RouterIds};
 use crate::operator_gc::{self, IdentityGc, NodeGc, Settings};
 use flowsdn_k8s::client::{JsonClient, TransportLimits};
 use flowsdn_k8s::register::{Registered, register, shipped_crds};
@@ -45,6 +51,16 @@ Options:
   --identity-gc-rate-interval SECONDS
                                      The rate limit's window (default 60)
   --nodes-gc-interval SECONDS        FlowsdnNode GC period (default 300; 0: off)
+  --enable-bgp-control-plane         Compile FlowsdnBGPClusterConfigs into FlowsdnBGPNodeConfigs
+  --bgp-secrets-namespace NAMESPACE  Where peer configs' auth Secrets are (default: unset, not checked)
+  --enable-bgp-control-plane-status-report true|false
+                                     Write the BGP cluster and peer config conditions (default true;
+                                     false removes them)
+  --bgp-router-id-allocation-mode default|ip-pool
+                                     ip-pool: the operator gives router IDs (default: the agent derives them)
+  --bgp-router-id-allocation-ip-pool CIDR|FIRST-LAST
+                                     The IPv4 pool of ip-pool mode
+  --bgp-interval SECONDS             Time between BGP passes (default 10)
 
 The Lease kube-system/flowsdn-operator elects one operator; its holder is
 POD_NAME (else the host name and process ID). The leader registers the 22
@@ -52,6 +68,8 @@ flowsdn.io CRDs at once and every five minutes, deletes FlowsdnIdentities no
 FlowsdnEndpoint has used for two heartbeat timeouts (marked
 io.flowsdn.heartbeat after the first), and deletes FlowsdnNodes with no owner
 and no Node of their name once they have been so for one GC interval.
+With the BGP control plane on, it renders one FlowsdnBGPNodeConfig per node a
+FlowsdnBGPClusterConfig selects.
 ";
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -59,6 +77,7 @@ pub struct Options {
     pub skip_crd_creation: bool,
     pub kubeconfig: Option<PathBuf>,
     pub gc: Settings,
+    pub bgp: BgpSettings,
 }
 
 /// The whole number after a flag, at most `max`.
@@ -78,6 +97,7 @@ fn number(
 pub fn parse(args: &[std::ffi::OsString]) -> Result<Options, String> {
     let mut options = Options::default();
     let mut rest = args.iter();
+    let (mut mode, mut pool) = (None, None);
     while let Some(arg) = rest.next() {
         let seconds = Duration::from_secs;
         match arg.to_str() {
@@ -106,8 +126,51 @@ pub fn parse(args: &[std::ffi::OsString]) -> Result<Options, String> {
             Some(name @ "--nodes-gc-interval") => {
                 options.gc.nodes_interval = seconds(number(&mut rest, name, 604_800)?);
             }
+            Some("--enable-bgp-control-plane") => options.bgp.enabled = true,
+            Some(name @ "--bgp-secrets-namespace") => {
+                let value = rest
+                    .next()
+                    .and_then(|v| v.to_str())
+                    .filter(|v| !v.is_empty())
+                    .ok_or(format!("{name} needs a namespace"))?;
+                options.bgp.secrets_namespace = Some(value.to_owned());
+            }
+            Some(name @ "--enable-bgp-control-plane-status-report") => {
+                options.bgp.status_report = match rest.next().and_then(|v| v.to_str()) {
+                    Some("true") => true,
+                    Some("false") => false,
+                    _ => return Err(format!("{name} needs true or false")),
+                };
+            }
+            Some(name @ "--bgp-router-id-allocation-mode") => {
+                mode = match rest.next().and_then(|v| v.to_str()) {
+                    Some("default") => Some(false),
+                    Some("ip-pool") => Some(true),
+                    _ => return Err(format!("{name} needs default or ip-pool")),
+                };
+            }
+            Some(name @ "--bgp-router-id-allocation-ip-pool") => {
+                let value = rest
+                    .next()
+                    .and_then(|v| v.to_str())
+                    .ok_or(format!("{name} needs a CIDR or range"))?;
+                pool = Some(Pool::parse(value)?);
+            }
+            Some(name @ "--bgp-interval") => {
+                let value = number(&mut rest, name, 3600)?;
+                if value == 0 {
+                    return Err(format!("{name} must be at least 1"));
+                }
+                options.bgp.interval = seconds(value);
+            }
             _ => return Err(format!("unknown operator argument {arg:?}")),
         }
+    }
+    if mode == Some(true) {
+        let pool = pool.ok_or(
+            "--bgp-router-id-allocation-mode ip-pool needs --bgp-router-id-allocation-ip-pool",
+        )?;
+        options.bgp.router_ids = RouterIdMode::Pool(pool);
     }
     Ok(options)
 }
@@ -153,6 +216,17 @@ pub fn run(options: &Options) -> Result<(), String> {
         &hostname,
         std::process::id(),
     );
+    if options.bgp.enabled {
+        crate::log::logln!(
+            "operator: BGP control plane on (status report {}, router IDs {}, secrets {})",
+            options.bgp.status_report,
+            match options.bgp.router_ids {
+                RouterIdMode::Default => "from the agents",
+                RouterIdMode::Pool(_) => "from the ip-pool",
+            },
+            options.bgp.secrets_namespace.as_deref().unwrap_or("not checked")
+        );
+    }
     crate::log::logln!(
         "operator {me}: lease {LEASE_NAMESPACE}/{LEASE_NAME}{}",
         if options.skip_crd_creation {
@@ -253,6 +327,7 @@ pub fn run(options: &Options) -> Result<(), String> {
             };
             collectors.tick(
                 &options.gc,
+                &options.bgp,
                 Instant::now(),
                 &micro_time(SystemTime::now()),
                 &mut send,
@@ -268,6 +343,11 @@ struct Collectors {
     nodes: NodeGc,
     next_identity: Instant,
     next_nodes: Instant,
+    /// The BGP pass's router-ID allocator, restored at its first pass.
+    router_ids: RouterIds,
+    next_bgp: Instant,
+    /// The last BGP pass's errors, logged when they change.
+    bgp_errors: Vec<String>,
 }
 impl Collectors {
     fn new(settings: &Settings, now: Instant) -> Self {
@@ -276,6 +356,9 @@ impl Collectors {
             nodes: NodeGc::new(settings),
             next_identity: now,
             next_nodes: now,
+            router_ids: RouterIds::default(),
+            next_bgp: now,
+            bgp_errors: Vec::new(),
         }
     }
     /// Run whichever collector is due; a failed run is logged and retried
@@ -283,6 +366,7 @@ impl Collectors {
     fn tick(
         &mut self,
         settings: &Settings,
+        bgp: &BgpSettings,
         now: Instant,
         wall: &str,
         send: &mut operator_gc::Send<'_>,
@@ -327,6 +411,35 @@ impl Collectors {
             };
             self.next_nodes = now.checked_add(delay).unwrap_or(now);
         }
+        if bgp.enabled && now >= self.next_bgp {
+            let condition_time = crate::events::rfc3339(SystemTime::now());
+            let delay = match operator_bgp::run(bgp, &mut self.router_ids, &condition_time, send) {
+                Ok((done, errors)) => {
+                    if done != operator_bgp::Summary::default() {
+                        crate::log::logln!(
+                            "operator: BGP: {} node configs created, {} updated, {} deleted, {} statuses written, {} skipped (changed meanwhile)",
+                            done.created,
+                            done.updated,
+                            done.deleted,
+                            done.statuses,
+                            done.skipped
+                        );
+                    }
+                    if errors != self.bgp_errors {
+                        for error in &errors {
+                            crate::log::logln!("operator: BGP: {error}");
+                        }
+                        self.bgp_errors = errors;
+                    }
+                    bgp.interval
+                }
+                Err(error) => {
+                    crate::log::logln!("operator: BGP: {error}; retrying in 30s");
+                    RETRY
+                }
+            };
+            self.next_bgp = now.checked_add(delay).unwrap_or(now);
+        }
     }
 }
 
@@ -347,8 +460,38 @@ mod tests {
                 skip_crd_creation: true,
                 kubeconfig: Some(PathBuf::from("/k")),
                 gc: Settings::default(),
+                bgp: BgpSettings::default(),
             })
         );
+        let bgp = parse(&args(&[
+            "--enable-bgp-control-plane",
+            "--bgp-secrets-namespace",
+            "bgp-secrets",
+            "--enable-bgp-control-plane-status-report",
+            "false",
+            "--bgp-router-id-allocation-mode",
+            "ip-pool",
+            "--bgp-router-id-allocation-ip-pool",
+            "10.255.0.0/24",
+            "--bgp-interval",
+            "3",
+        ]))
+        .map(|o| o.bgp);
+        assert_eq!(
+            bgp,
+            Ok(BgpSettings {
+                enabled: true,
+                secrets_namespace: Some("bgp-secrets".into()),
+                status_report: false,
+                router_ids: RouterIdMode::Pool(Pool::parse("10.255.0.0/24").expect("pool")),
+                interval: Duration::from_secs(3),
+            })
+        );
+        assert!(!BgpSettings::default().enabled && BgpSettings::default().status_report);
+        assert!(parse(&args(&["--bgp-router-id-allocation-mode", "ip-pool"])).is_err());
+        assert!(parse(&args(&["--bgp-router-id-allocation-ip-pool", "fd00::/64"])).is_err());
+        assert!(parse(&args(&["--enable-bgp-control-plane-status-report", "yes"])).is_err());
+        assert!(parse(&args(&["--bgp-interval", "0"])).is_err());
         assert_eq!(
             parse(&args(&[
                 "--identity-gc-interval",

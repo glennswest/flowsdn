@@ -1,6 +1,8 @@
 //! Agent endpoint state ownership from specification 08 §3.6–3.9.
 //! Unix API serving; with the `kubernetes` feature, the Kubernetes controllers.
 pub mod api;
+#[cfg(feature = "kubernetes")]
+pub mod bgp_status;
 pub mod cni_timing;
 pub mod dns_proxy;
 pub mod egress_gateway;
@@ -23,6 +25,8 @@ pub mod node_config;
 pub mod node_crd;
 #[cfg(feature = "kubernetes")]
 pub mod operator;
+#[cfg(feature = "kubernetes")]
+pub mod operator_bgp;
 #[cfg(feature = "kubernetes")]
 pub mod operator_gc;
 pub mod policy;

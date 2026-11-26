@@ -315,7 +315,13 @@ fn type_matches_schema<K: Kind>(schema: &Value) {
     let named = serde_json::to_value(K::named("n")).expect("serialize");
     assert_eq!(named.get("apiVersion"), Some(&json!(API_VERSION)));
     assert_eq!(named.get("kind"), Some(&json!(K::KIND)));
-    admitted(K::KIND, schema, &named);
+    // A list the schema needs one entry in (#334: BGP instances) is the
+    // writer's to fill; nothing else may be wrong with the empty object.
+    let problems: Vec<String> = validate(schema, &named)
+        .into_iter()
+        .filter(|p| !p.ends_with("fewer than 1 items"))
+        .collect();
+    assert!(problems.is_empty(), "{}: {problems:?}\n{named:#}", K::KIND);
 }
 
 /// T-CRD-4: the golden CRs.
