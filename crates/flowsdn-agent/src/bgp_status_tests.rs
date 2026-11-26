@@ -78,7 +78,15 @@ fn peers_report_state_timers_counts_and_established_time() {
     .collect();
     assert_eq!(
         states,
-        ["unknown", "idle", "connect", "active", "open_sent", "open_confirm", "established"]
+        [
+            "unknown",
+            "idle",
+            "connect",
+            "active",
+            "open_sent",
+            "open_confirm",
+            "established"
+        ]
     );
 }
 
@@ -110,7 +118,11 @@ fn the_written_status_is_admitted_by_the_schema() {
         .expect("CRDs")
         .into_iter()
         .find(|c| c.document.pointer("/spec/names/plural") == Some(&json!("flowsdnbgpnodeconfigs")))
-        .and_then(|c| c.document.pointer("/spec/versions/0/schema/openAPIV3Schema").cloned())
+        .and_then(|c| {
+            c.document
+                .pointer("/spec/versions/0/schema/openAPIV3Schema")
+                .cloned()
+        })
         .expect("schema");
     let value = serde_json::to_value(&object).expect("serialize");
     let problems = flowsdn_k8s::schema::validate(&schema, &value);
@@ -123,7 +135,11 @@ fn reconcile_errors_are_capped_sorted_and_truncated() {
     let none = desired_status(&[], &errors, None, None, at(0));
     let condition = &none.conditions.as_ref().expect("conditions")[0];
     assert_eq!(
-        (condition.status.as_str(), condition.reason.as_str(), condition.message.as_str()),
+        (
+            condition.status.as_str(),
+            condition.reason.as_str(),
+            condition.message.as_str()
+        ),
         ("False", "ReconcileSucceeded", "")
     );
     assert_eq!(none.bgp_instances, None);
@@ -135,7 +151,10 @@ fn reconcile_errors_are_capped_sorted_and_truncated() {
     let condition = &failed.conditions.as_ref().expect("conditions")[0];
     assert_eq!(condition.status, "True");
     assert_eq!(condition.reason, "ReconcileFailed");
-    assert_eq!(condition.message, "a: first\nb: e0\nb: e1\nb: e2\nb: e3\nb: e4\n");
+    assert_eq!(
+        condition.message,
+        "a: first\nb: e0\nb: e1\nb: e2\nb: e3\nb: e4\n"
+    );
     assert_eq!(condition.last_transition_time, "1970-01-01T00:01:40Z");
     assert_eq!(condition.observed_generation, Some(3));
 
@@ -180,9 +199,18 @@ fn the_flusher_writes_on_change_at_the_tick_and_backs_off() {
     assert!(flusher.due(start, &one), "the first write is due at once");
     assert!(!flusher.record(start, &one, Outcome::Written));
     let next = flusher.next().duration_since(start);
-    assert!(next >= TICK - TICK_JITTER && next <= TICK + TICK_JITTER, "{next:?}");
-    assert!(!flusher.due(start + Duration::from_secs(60), &one), "unchanged: no write");
-    assert!(!flusher.due(start + Duration::from_secs(1), &two), "changed, before the tick");
+    assert!(
+        next >= TICK - TICK_JITTER && next <= TICK + TICK_JITTER,
+        "{next:?}"
+    );
+    assert!(
+        !flusher.due(start + Duration::from_secs(60), &one),
+        "unchanged: no write"
+    );
+    assert!(
+        !flusher.due(start + Duration::from_secs(1), &two),
+        "changed, before the tick"
+    );
     let t = start + Duration::from_secs(6);
     assert!(flusher.due(t, &two));
     // Failures back off from 5 s by 1.2, with up to half again of jitter.
@@ -191,7 +219,10 @@ fn the_flusher_writes_on_change_at_the_tick_and_backs_off() {
         assert!(!flusher.record(now, &two, Outcome::Failed));
         let delay = flusher.next().duration_since(now).as_secs_f64();
         let base = 5.0 * 1.2f64.powi(i32::try_from(step).expect("step"));
-        assert!(delay >= base && delay <= base * 1.5 + 1e-9, "step {step}: {delay}");
+        assert!(
+            delay >= base && delay <= base * 1.5 + 1e-9,
+            "step {step}: {delay}"
+        );
         now = flusher.next();
         assert!(flusher.due(now, &two));
     }
@@ -199,7 +230,10 @@ fn the_flusher_writes_on_change_at_the_tick_and_backs_off() {
     assert!(flusher.record(now, &two, Outcome::Failed));
     let delay = flusher.next().duration_since(now);
     assert!(delay <= TICK + TICK_JITTER, "{delay:?}");
-    assert!(!flusher.record(flusher.next(), &two, Outcome::Failed), "a new round");
+    assert!(
+        !flusher.record(flusher.next(), &two, Outcome::Failed),
+        "a new round"
+    );
     // NotFound forgets the last write: the same status is due again.
     let mut flusher = Flusher::new(start, 9);
     flusher.record(start, &one, Outcome::Written);

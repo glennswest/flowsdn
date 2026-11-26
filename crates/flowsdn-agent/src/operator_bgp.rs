@@ -21,9 +21,9 @@
 //! selected. An error on one cluster config or node does not stop the rest.
 use crate::operator_gc::Send;
 use flowsdn_k8s::kinds::{
-    BgpNodeInstance, BgpNodePeer, Condition, ConditionsStatus, FlowsdnBGPClusterConfig,
-    FlowsdnBGPNodeConfig, FlowsdnBGPNodeConfigOverride, FlowsdnBGPNodeConfigSpec,
-    FlowsdnBGPPeerConfig, Kind, OwnerReference, API_VERSION,
+    API_VERSION, BgpNodeInstance, BgpNodePeer, Condition, ConditionsStatus,
+    FlowsdnBGPClusterConfig, FlowsdnBGPNodeConfig, FlowsdnBGPNodeConfigOverride,
+    FlowsdnBGPNodeConfigSpec, FlowsdnBGPPeerConfig, Kind, OwnerReference,
 };
 use flowsdn_policy::k8s::LabelSelector;
 use serde_json::{Value, json};
@@ -88,13 +88,20 @@ pub struct Pool {
 impl Pool {
     pub fn parse(text: &str) -> Result<Self, String> {
         let bad = || format!("bgp router-ID pool {text:?}: want an IPv4 CIDR or first-last range");
-        let address = |s: &str| s.trim().parse::<Ipv4Addr>().map(u32::from).map_err(|_| bad());
+        let address = |s: &str| {
+            s.trim()
+                .parse::<Ipv4Addr>()
+                .map(u32::from)
+                .map_err(|_| bad())
+        };
         let (first, last) = if let Some((base, length)) = text.split_once('/') {
             let length: u32 = length.trim().parse().map_err(|_| bad())?;
             if length > 32 {
                 return Err(bad());
             }
-            let mask = u32::MAX.checked_shl(32u32.saturating_sub(length)).unwrap_or(0);
+            let mask = u32::MAX
+                .checked_shl(32u32.saturating_sub(length))
+                .unwrap_or(0);
             let base = address(base)? & mask;
             (base, base | !mask)
         } else if let Some((first, last)) = text.split_once('-') {
@@ -171,7 +178,10 @@ impl RouterIds {
             .unwrap_or(0);
         for step in 0..size {
             let offset = start.saturating_add(step).checked_rem(size).unwrap_or(0);
-            let ip = Ipv4Addr::from(pool.first.saturating_add(u32::try_from(offset).unwrap_or(0)));
+            let ip = Ipv4Addr::from(
+                pool.first
+                    .saturating_add(u32::try_from(offset).unwrap_or(0)),
+            );
             if !self.holders.contains_key(&ip) {
                 self.hold(key.clone(), ip);
                 return Ok(ip);
@@ -228,7 +238,10 @@ pub enum Write {
     /// The stored object (its resourceVersion) with the new spec.
     Update(FlowsdnBGPNodeConfig),
     /// Delete if still the object seen.
-    Delete { name: String, uid: String },
+    Delete {
+        name: String,
+        uid: String,
+    },
     /// The object (its resourceVersion) with the new status.
     ClusterStatus(FlowsdnBGPClusterConfig),
     PeerStatus(FlowsdnBGPPeerConfig),
@@ -593,7 +606,11 @@ pub fn plan(inputs: &Inputs, settings: &BgpSettings, ids: &mut RouterIds, now: &
     }
     // Peer config conditions (§3.2.2).
     for peer in &inputs.peers {
-        let wanted = match (&inputs.secrets, &peer.spec.auth_secret_ref, settings.status_report) {
+        let wanted = match (
+            &inputs.secrets,
+            &peer.spec.auth_secret_ref,
+            settings.status_report,
+        ) {
             (_, _, false) | (Some(_), None, true) => Some(Vec::new()),
             (Some(secrets), Some(secret), true) => Some(vec![if secrets.contains(secret) {
                 (

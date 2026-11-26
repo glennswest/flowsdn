@@ -255,7 +255,8 @@ impl Generator<'_> {
                     && !["apiVersion", "kind", "metadata"].contains(&name.as_str())
             })
             .collect();
-        let problems = |out: &Map<String, Value>| validate(schema, &Value::Object(out.clone())).len();
+        let problems =
+            |out: &Map<String, Value>| validate(schema, &Value::Object(out.clone())).len();
         let mut count = problems(out);
         while count > 0 {
             let mut improved = false;
@@ -528,10 +529,15 @@ fn bgp_peer_config_defaults() {
             "transport": {"peerPort": 179}
         })
     );
-    assert_eq!(empty, FlowsdnBGPPeerConfigSpec::default(), "the original is unchanged");
+    assert_eq!(
+        empty,
+        FlowsdnBGPPeerConfigSpec::default(),
+        "the original is unchanged"
+    );
     // The defaults are the schema's.
     let schema = schema("flowsdnbgppeerconfigs");
-    let mut object = json!({"spec": {"timers": {}, "transport": {}, "gracefulRestart": {"enabled": false}}});
+    let mut object =
+        json!({"spec": {"timers": {}, "transport": {}, "gracefulRestart": {"enabled": false}}});
     apply_defaults(&schema, &mut object);
     let set: FlowsdnBGPPeerConfigSpec =
         serde_json::from_value(object.get("spec").cloned().expect("spec")).expect("spec");
@@ -541,9 +547,10 @@ fn bgp_peer_config_defaults() {
     got.families = None;
     assert_eq!(got, expected, "schema defaults equal defaulted()");
     // A configured value is kept.
-    let custom: FlowsdnBGPPeerConfigSpec =
-        serde_json::from_value(json!({"timers": {"holdTimeSeconds": 9}, "families": [{"afi": "ipv4", "safi": "unicast"}]}))
-            .expect("spec");
+    let custom: FlowsdnBGPPeerConfigSpec = serde_json::from_value(
+        json!({"timers": {"holdTimeSeconds": 9}, "families": [{"afi": "ipv4", "safi": "unicast"}]}),
+    )
+    .expect("spec");
     let custom = custom.defaulted();
     let timers = custom.timers.expect("timers");
     assert_eq!(timers.hold_time_seconds, Some(9));
@@ -555,7 +562,8 @@ fn bgp_peer_config_defaults() {
 /// case of the CRD breaks one of them or the schema.
 #[test]
 fn bgp_advertisement_rules_in_the_controller() {
-    let parse = |v: Value| -> BgpAdvertisement { serde_json::from_value(v).expect("advertisement") };
+    let parse =
+        |v: Value| -> BgpAdvertisement { serde_json::from_value(v).expect("advertisement") };
     for good in [
         json!({"advertisementType": "PodCIDR"}),
         json!({"advertisementType": "Service", "service": {"addresses": ["ClusterIP"]}, "selector": {}}),
@@ -570,12 +578,18 @@ fn bgp_advertisement_rules_in_the_controller() {
             json!({"advertisementType": "PodCIDR", "service": {"addresses": ["ClusterIP"]}}),
             "!has(self.service)",
         ),
-        (json!({"advertisementType": "Interface"}), "has(self.interface)"),
+        (
+            json!({"advertisementType": "Interface"}),
+            "has(self.interface)",
+        ),
         (
             json!({"advertisementType": "Service", "service": {"addresses": ["ClusterIP"]}, "interface": {"name": "lo"}}),
             "!has(self.interface)",
         ),
-        (json!({"advertisementType": "PodCIDR", "selector": {}}), "!has(self.selector)"),
+        (
+            json!({"advertisementType": "PodCIDR", "selector": {}}),
+            "!has(self.selector)",
+        ),
     ] {
         let error = parse(bad.clone()).check().expect_err("rejected");
         assert!(error.ends_with(rule), "{bad}: {error}");

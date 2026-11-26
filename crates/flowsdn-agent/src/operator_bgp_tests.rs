@@ -106,7 +106,12 @@ fn disabled_writes_nothing() {
         nodes: nodes(&[("w1", &[])]),
         ..Inputs::default()
     };
-    let plan = plan(&inputs, &BgpSettings::default(), &mut RouterIds::default(), NOW);
+    let plan = plan(
+        &inputs,
+        &BgpSettings::default(),
+        &mut RouterIds::default(),
+        NOW,
+    );
     assert_eq!(plan, Plan::default());
 }
 
@@ -172,7 +177,11 @@ fn the_override_is_merged_by_name() {
     };
     let plan = plan(&inputs, &enabled(), &mut RouterIds::default(), NOW);
     let spec = &creates(&plan)[0].spec;
-    assert_eq!(spec.bgp_instances.len(), 1, "unmatched instances are ignored");
+    assert_eq!(
+        spec.bgp_instances.len(),
+        1,
+        "unmatched instances are ignored"
+    );
     let instance = &spec.bgp_instances[0];
     assert_eq!(instance.router_id.as_deref(), Some("192.0.2.11"));
     assert_eq!(instance.local_asn, Some(65011));
@@ -266,7 +275,12 @@ fn the_first_owner_wins_and_the_loser_reports_the_conflict() {
     let created = creates(&plan);
     assert_eq!(created.len(), 1);
     assert_eq!(created[0].metadata.name.as_deref(), Some("w2"));
-    assert!(!plan.writes.iter().any(|w| matches!(w, Write::Update(_) | Write::Delete { .. })));
+    assert!(
+        !plan
+            .writes
+            .iter()
+            .any(|w| matches!(w, Write::Update(_) | Write::Delete { .. }))
+    );
     let conflict = |name: &str| {
         cluster_conditions(&plan, name)
             .into_iter()
@@ -286,7 +300,11 @@ fn the_first_owner_wins_and_the_loser_reports_the_conflict() {
 
 #[test]
 fn cluster_conditions_are_sorted_kept_and_written_only_on_change() {
-    let mut config = cluster("rack-a", "u1", rack(json!({"matchLabels": {"rack": "none"}})));
+    let mut config = cluster(
+        "rack-a",
+        "u1",
+        rack(json!({"matchLabels": {"rack": "none"}})),
+    );
     let inputs = Inputs {
         clusters: vec![config.clone()],
         peers: vec![],
@@ -323,15 +341,28 @@ fn cluster_conditions_are_sorted_kept_and_written_only_on_change() {
             _ => None,
         })
         .expect("status");
-    let first = written.status.clone().and_then(|s| s.conditions).expect("conditions");
-    assert!(first.iter().all(|c| c.observed_generation == Some(2) && c.last_transition_time == NOW));
+    let first = written
+        .status
+        .clone()
+        .and_then(|s| s.conditions)
+        .expect("conditions");
+    assert!(
+        first
+            .iter()
+            .all(|c| c.observed_generation == Some(2) && c.last_transition_time == NOW)
+    );
     // Stored as written: the next pass writes nothing.
     config.status = written.status.clone();
     let again = Inputs {
         clusters: vec![config.clone()],
         ..inputs.clone()
     };
-    let plan2 = plan(&again, &enabled(), &mut RouterIds::default(), "2026-11-25T12:00:10Z");
+    let plan2 = plan(
+        &again,
+        &enabled(),
+        &mut RouterIds::default(),
+        "2026-11-25T12:00:10Z",
+    );
     assert!(plan2.writes.is_empty(), "{:?}", plan2.writes);
     // A foreign condition is kept; a status that holds keeps its time.
     let mut status = written.status.clone().expect("status");
@@ -364,11 +395,18 @@ fn cluster_conditions_are_sorted_kept_and_written_only_on_change() {
         })
         .and_then(|s| s.conditions)
         .expect("conditions");
-    let by_type: BTreeMap<&str, &Condition> = status.iter().map(|c| (c.type_.as_str(), c)).collect();
+    let by_type: BTreeMap<&str, &Condition> =
+        status.iter().map(|c| (c.type_.as_str(), c)).collect();
     assert_eq!(by_type["example.com/Other"].reason, "Other");
     assert_eq!(by_type[CONDITION_MISSING_PEER_CONFIGS].status, "False");
-    assert_eq!(by_type[CONDITION_MISSING_PEER_CONFIGS].last_transition_time, NOW);
-    assert_eq!(by_type[CONDITION_NO_MATCHING_NODE].last_transition_time, EARLIER);
+    assert_eq!(
+        by_type[CONDITION_MISSING_PEER_CONFIGS].last_transition_time,
+        NOW
+    );
+    assert_eq!(
+        by_type[CONDITION_NO_MATCHING_NODE].last_transition_time,
+        EARLIER
+    );
     // Status reporting off: flowsdn's conditions go, the foreign one stays.
     let off = BgpSettings {
         status_report: false,
@@ -388,7 +426,11 @@ fn peer_config_auth_secret_condition() {
         ..enabled()
     };
     let inputs = Inputs {
-        peers: vec![peer("has", Some("present")), peer("lacks", Some("absent")), peer("none", None)],
+        peers: vec![
+            peer("has", Some("present")),
+            peer("lacks", Some("absent")),
+            peer("none", None),
+        ],
         secrets: Some(["present".to_owned()].into()),
         ..Inputs::default()
     };
@@ -399,12 +441,19 @@ fn peer_config_auth_secret_condition() {
         .filter_map(|w| match w {
             Write::PeerStatus(p) => Some((
                 p.metadata.name.clone().unwrap_or_default(),
-                p.status.clone().and_then(|s| s.conditions).unwrap_or_default(),
+                p.status
+                    .clone()
+                    .and_then(|s| s.conditions)
+                    .unwrap_or_default(),
             )),
             _ => None,
         })
         .collect();
-    assert_eq!(statuses.len(), 2, "no write for the one without a ref: {statuses:?}");
+    assert_eq!(
+        statuses.len(),
+        2,
+        "no write for the one without a ref: {statuses:?}"
+    );
     assert_eq!(statuses["has"][0].status, "False");
     assert_eq!(statuses["lacks"][0].status, "True");
     assert_eq!(statuses["lacks"][0].type_, CONDITION_MISSING_AUTH_SECRET);
@@ -414,7 +463,11 @@ fn peer_config_auth_secret_condition() {
         secrets: None,
         ..inputs.clone()
     };
-    assert!(plan(&unset, &enabled(), &mut RouterIds::default(), NOW).writes.is_empty());
+    assert!(
+        plan(&unset, &enabled(), &mut RouterIds::default(), NOW)
+            .writes
+            .is_empty()
+    );
     // Status reporting off: an existing condition is removed.
     let mut reported = peer("lacks", Some("absent"));
     reported.status = Some(ConditionsStatus {
@@ -430,7 +483,9 @@ fn peer_config_auth_secret_condition() {
     };
     let plan2 = plan(&cleared, &off, &mut RouterIds::default(), NOW);
     match plan2.writes.as_slice() {
-        [Write::PeerStatus(p)] => assert_eq!(p.status.as_ref().and_then(|s| s.conditions.clone()), None),
+        [Write::PeerStatus(p)] => {
+            assert_eq!(p.status.as_ref().and_then(|s| s.conditions.clone()), None)
+        }
         other => panic!("{other:?}"),
     }
 }
@@ -448,7 +503,10 @@ fn router_ids(plan: &Plan) -> BTreeMap<String, String> {
         .filter_map(|w| match w {
             Write::Create(c) | Write::Update(c) => Some((
                 c.metadata.name.clone().unwrap_or_default(),
-                c.spec.bgp_instances[0].router_id.clone().unwrap_or_default(),
+                c.spec.bgp_instances[0]
+                    .router_id
+                    .clone()
+                    .unwrap_or_default(),
             )),
             _ => None,
         })
@@ -509,7 +567,13 @@ fn ip_pool_router_ids_allocate_restore_and_free() {
     );
     // A fourth node takes the one address left, a fifth finds none.
     let more = Inputs {
-        nodes: nodes(&[("w1", &[]), ("w2", &[]), ("w3", &[]), ("w4", &[]), ("w5", &[])]),
+        nodes: nodes(&[
+            ("w1", &[]),
+            ("w2", &[]),
+            ("w3", &[]),
+            ("w4", &[]),
+            ("w5", &[]),
+        ]),
         ..restored.clone()
     };
     let plan3 = plan(&more, &settings, &mut term, NOW);
@@ -574,7 +638,11 @@ fn override_router_ids_inside_and_outside_the_pool() {
     ids.restored = true;
     let plan2 = plan(&inside, &settings, &mut ids, NOW);
     assert_eq!(plan2.errors.len(), 1);
-    assert!(plan2.errors[0].contains("held by node w2"), "{}", plan2.errors[0]);
+    assert!(
+        plan2.errors[0].contains("held by node w2"),
+        "{}",
+        plan2.errors[0]
+    );
     assert_eq!(router_ids(&plan2).keys().collect::<Vec<_>>(), vec!["w2"]);
     // Not IPv4 at all.
     let mut ids = RouterIds::default();
@@ -597,9 +665,14 @@ fn a_pass_reads_writes_and_tolerates_conflicts() {
         calls.push((method.to_string(), path.to_owned()));
         let list = |items: Value| -> Reply { Ok((200, json!({"items": items}))) };
         match (method.as_str(), path) {
-            ("GET", "/apis/flowsdn.io/v1alpha1/flowsdnbgpclusterconfigs") => list(json!([
-                serde_json::to_value(cluster("rack-a", "u1", rack(Value::Null))).expect("c")
-            ])),
+            ("GET", "/apis/flowsdn.io/v1alpha1/flowsdnbgpclusterconfigs") => {
+                list(json!([serde_json::to_value(cluster(
+                    "rack-a",
+                    "u1",
+                    rack(Value::Null)
+                ))
+                .expect("c")]))
+            }
             ("GET", "/apis/flowsdn.io/v1alpha1/flowsdnbgppeerconfigs") => list(json!([
                 {"metadata": {"name": "tor"}, "spec": {"authSecretRef": "tor-md5"}}
             ])),
@@ -621,7 +694,10 @@ fn a_pass_reads_writes_and_tolerates_conflicts() {
                 Ok((if name == "w2" { 409 } else { 201 }, json!({})))
             }
             ("PUT", _) if path.ends_with("/status") => Ok((200, json!({}))),
-            _ => Ok((500, json!({"message": format!("unexpected {method} {path}")}))),
+            _ => Ok((
+                500,
+                json!({"message": format!("unexpected {method} {path}")}),
+            )),
         }
     };
     let (summary, errors) =
@@ -648,7 +724,14 @@ fn a_pass_reads_writes_and_tolerates_conflicts() {
     // A list failure aborts the pass before any write.
     let mut failing = |method: http::Method, path: &str, _: Option<&Value>| -> Reply {
         assert_eq!(method, http::Method::GET, "no write after a failed list");
-        Ok((if path.ends_with("flowsdnbgppeerconfigs") { 403 } else { 200 }, json!({"items": []})))
+        Ok((
+            if path.ends_with("flowsdnbgppeerconfigs") {
+                403
+            } else {
+                200
+            },
+            json!({"items": []}),
+        ))
     };
     assert!(run(&settings, &mut RouterIds::default(), NOW, &mut failing).is_err());
 }

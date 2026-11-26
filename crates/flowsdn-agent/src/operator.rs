@@ -224,7 +224,11 @@ pub fn run(options: &Options) -> Result<(), String> {
                 RouterIdMode::Default => "from the agents",
                 RouterIdMode::Pool(_) => "from the ip-pool",
             },
-            options.bgp.secrets_namespace.as_deref().unwrap_or("not checked")
+            options
+                .bgp
+                .secrets_namespace
+                .as_deref()
+                .unwrap_or("not checked")
         );
     }
     crate::log::logln!(

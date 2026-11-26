@@ -2153,7 +2153,11 @@ pub struct BgpPeerStatus {
         skip_serializing_if = "Option::is_none"
     )]
     pub peering_state: Option<String>,
-    #[serde(rename = "routeCount", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "routeCount",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub route_count: Option<Vec<BgpRouteCount>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timers: Option<BgpAppliedTimers>,
