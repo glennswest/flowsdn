@@ -20,6 +20,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
       lines to `/dev/kmsg` as well; strict sc-build passed; staged golden-flowsdn-4f5bfc1d2c2f. #489 re-shipped with
       `--commit c10c88b`; #420 goes back the same way when it is handed out.
 - [x] #490 (policy findings, fixed 2026-11-20 at 6a8b207) re-shipped on the health proof, `--commit 936dedb`.
+- [x] #496 (host-policy finding, fixed 2026-11-21 at 50dcc66) re-shipped the same way.
 
 ### No stubs: proof on a node — #418 (reopened), 2026-11-26
 
