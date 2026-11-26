@@ -28,7 +28,7 @@ nodes' backends), writes Events and the `flowsdn.io/pod-networks` annotation.
 node address's subnet with carrier carries per-flow ECMP routes, with source rules per address, a failover /32 + GARP
 while a port is down, `GET /v1/uplinks` and `kubernetes.uplinks`; kernel-checked by `uplinks-live`, not yet on a two-port node. Also implemented: identity allocation (#291), NetworkPolicy enforcement in the
 datapath (ADR-0021), flowsdn policy kinds (`kubernetes.flowsdn-policy`), host
-firewall (`audit` in the stormcos config), socket termination (UDP; TCP opt-in, #392), Maglev, DSR by
+firewall (`audit` in the stormcos config), BGP kinds and operator node config compilation (#334, off by default; the agent's BGP control plane is #570/#571), socket termination (UDP; TCP opt-in, #392), Maglev, DSR by
 IP option, IPIP or Geneve (#447), NAT46/64 (the last three off by default, kernel test runs only), CNI
 ADD timing (`/v1/cni/timing`), `cargo xtask kernel-check`. Open gaps, each an
 issue (the operator registers CRDs, #337, and runs identity/node GC, #479): Hubble observer/relay

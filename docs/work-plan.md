@@ -8,13 +8,17 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 Types, the operator's node config generation and conditions, and the agent's status projection. The agent's
 reconcilers/speaker are #570/#571; they feed the projection built here.
-- [ ] Rust types of the five FlowsdnBGP* kinds with T-CRD-3/4/5/7 (`tests/kinds.rs`), peer config defaults, the
+- [x] Rust types of the five FlowsdnBGP* kinds with T-CRD-3/4/5/7 (`tests/kinds.rs`), peer config defaults, the
       advertisement CEL rules in the controller.
-- [ ] Operator: compile cluster configs into FlowsdnBGPNodeConfig (spec 15 §3.2: selection, override merge,
+- [x] Operator: compile cluster configs into FlowsdnBGPNodeConfig (spec 15 §3.2: selection, override merge,
       first-owner-wins, update only on change, stale delete, `ip-pool` router IDs) and the cluster/peer conditions.
-- [ ] Agent: FlowsdnBGPNodeConfig status from peer state (§3.8: omission, established time, 5-error cap, 32 KiB
+- [x] Agent: FlowsdnBGPNodeConfig status from peer state (§3.8: omission, established time, 5-error cap, 32 KiB
       condition, flush cadence and backoff) for #570 to drive.
-- [ ] Docs (crds.md, runtime, spec 13/15 amendments, status), changelog; sc-build; close.
+- [x] Docs (crds.md, runtime, spec 13/15 amendments, status), changelog.
+- [x] Strict sc-build at 501137a: `cargo xtask check` (fmt --check, workspace clippy -D warnings, workspace tests
+      with all features, musl checks) and test/build.sh, exit 0. Self-inflicted build issues #587-#590 closed. #334 closed.
+- Not run on a cluster: the operator BGP pass is unit-tested against recorded API calls only; status writing waits
+  for the agent control plane (#570) and speaker (#571).
 
 ### Boot-time comparison against the cilium flavor — #586, 2026-11-25
 
