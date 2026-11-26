@@ -178,7 +178,8 @@ impl ModuleHealth {
                     continue;
                 }
                 if current.is_none_or(|(row, _)| row.level != *level) {
-                    crate::log::logln!(
+                    // Also to the kernel log, where a node's syslog sees it (#484).
+                    crate::log::noticeln!(
                         "health {} {}: {message}{}",
                         reporter.id(),
                         level_text(*level),
@@ -198,7 +199,7 @@ impl ModuleHealth {
             for (row, _) in snapshot.all() {
                 let scope = row.id.strip_prefix("agent.").unwrap_or_default();
                 if !rows.iter().any(|(name, ..)| *name == scope) {
-                    crate::log::logln!("health {} removed", row.id);
+                    crate::log::noticeln!("health {} removed", row.id);
                     root.new_scope(scope)?.close().await?;
                     self.record("close", &row.id, row.level, &row.message, &row.error);
                 }

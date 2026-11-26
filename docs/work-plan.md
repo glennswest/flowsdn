@@ -8,9 +8,11 @@ Kept here whole, newest notes as they were. Write new intentions here.
 
 - [x] Fix verified 2026-11-20 (kernel suite, negative control). Reopened only because the node proof
       `log:health agent.(api|kubernetes) OK` cannot be seen: agent pod stderr never reaches syslog (see #418 below).
-- [ ] Waiting on the owner (asked on #484, covers #418, #487 and ~20 reopened issues): how agent health becomes
-      visible on a node. Recommended: the agent writes health transitions to `/dev/kmsg`, which stormpump's log service
-      already follows into syslog. Alternatives: stormcos forwards pod logs; or the proofs change.
+- [x] Asked on #484 how agent health becomes visible on a node. `stormcentral wait-owner` refused: findings are
+      session work, never the owner's ("fix it"). So the recommended option was built: the agent mirrors health
+      transitions to `/dev/kmsg` (stormpump's log service follows it into syslog); both edition DaemonSets mount it.
+- [ ] sc-build; stage; the next pvetest install shows `health agent.(api|kubernetes) OK` (covers #418, #484, #487
+      and the other issues reopened on that proof).
 
 ### No stubs: proof on a node — #418 (reopened), 2026-11-26
 

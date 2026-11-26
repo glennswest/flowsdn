@@ -80,7 +80,13 @@ spec:
             # Pod network namespaces (/run/netns/<sandbox>), entered to end UDP
             # sockets of a removed Service backend (#292); new ones must appear.
             - { name: netns, mountPath: /run/netns, mountPropagation: HostToContainer }
+            # The node's kernel log: the agent writes its health transitions
+            # there, which the node's log service sends on as syslog (#484);
+            # a pod's stderr reaches no node log reader.
+            - { name: kmsg, mountPath: /dev/kmsg }
       volumes:
+        - name: kmsg
+          hostPath: { path: /dev/kmsg }
         - name: config
           configMap: { name: flowsdn-config }
         - name: run

@@ -13,6 +13,81 @@ macro_rules! logln {
 }
 pub(crate) use logln;
 
+/// A line on stderr that is also written to the node's kernel log (#484):
+/// the health transitions. A pod's stderr reaches no node log reader; on a
+/// stormcos node the log service follows `/dev/kmsg` into syslog. Only rare
+/// lines use it, so the kernel's `/dev/kmsg` rate limit is not reached.
+macro_rules! noticeln {
+    ($($arg:tt)*) => {{
+        let line = format!($($arg)*);
+        eprintln!("{} {line}", $crate::log::now());
+        $crate::log::KERNEL_LOG.write(&line);
+    }};
+}
+pub(crate) use noticeln;
+
+/// The kernel log device.
+pub const KMSG: &str = "/dev/kmsg";
+/// The longest message written to it (the kernel's record limit is ~1 KiB).
+pub const KMSG_MAX: usize = 900;
+
+/// A writer of kernel log records, opened on first use. When the device
+/// cannot be opened (not mounted, not privileged) that is said once on stderr
+/// and nothing more is tried.
+pub struct Kmsg {
+    path: &'static str,
+    sink: std::sync::Mutex<Option<Option<std::fs::File>>>,
+}
+impl Kmsg {
+    pub const fn new(path: &'static str) -> Self {
+        Self {
+            path,
+            sink: std::sync::Mutex::new(None),
+        }
+    }
+    /// Write `line` as one record, at user.info (`<14>`), tagged
+    /// `flowsdn-agent:`. Errors are not the caller's problem.
+    pub fn write(&self, line: &str) {
+        use std::io::Write as _;
+        let mut sink = self
+            .sink
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let file = sink.get_or_insert_with(|| {
+            match std::fs::OpenOptions::new().write(true).open(self.path) {
+                Ok(file) => Some(file),
+                Err(error) => {
+                    eprintln!("{} {}: {error}; health lines not sent to the kernel log", now(), self.path);
+                    None
+                }
+            }
+        });
+        let failed = file
+            .as_mut()
+            .is_some_and(|writer| writer.write_all(&record(line)).is_err());
+        if failed {
+            *file = None;
+        }
+    }
+}
+
+/// The node's kernel log.
+pub static KERNEL_LOG: Kmsg = Kmsg::new(KMSG);
+
+/// One `/dev/kmsg` record: `<14>flowsdn-agent: <line>\n`, on one line and
+/// at most [`KMSG_MAX`] bytes of message (cut on a character boundary).
+pub fn record(line: &str) -> Vec<u8> {
+    let flat: String = line
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    let mut cut = flat.len().min(KMSG_MAX);
+    while !flat.is_char_boundary(cut) {
+        cut = cut.saturating_sub(1);
+    }
+    format!("<14>flowsdn-agent: {}\n", flat.get(..cut).unwrap_or("")).into_bytes()
+}
+
 /// `YYYY-MM-DDTHH:MM:SS` of `seconds` after the epoch, at most [`LAST_SECOND`]
 /// (civil-from-days, Howard Hinnant's algorithm).
 #[allow(clippy::arithmetic_side_effects)] // Bounded by the clamp to LAST_SECOND.
@@ -47,6 +122,7 @@ pub fn now() -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::arithmetic_side_effects)]
 mod tests {
     use super::*;
 
@@ -58,5 +134,38 @@ mod tests {
         assert_eq!(civil(u64::MAX), "9999-12-31T23:59:59");
         let at = UNIX_EPOCH + Duration::from_millis(1_791_302_693_007);
         assert_eq!(stamp(at), "2026-10-06T16:04:53.007Z");
+    }
+
+    #[test]
+    fn kernel_log_records_are_one_tagged_bounded_line() {
+        assert_eq!(
+            record("health agent.api OK: 3 endpoints"),
+            b"<14>flowsdn-agent: health agent.api OK: 3 endpoints\n".to_vec()
+        );
+        assert_eq!(record("a\nb\tc"), b"<14>flowsdn-agent: a b c\n".to_vec());
+        let long = "é".repeat(KMSG_MAX);
+        let text = String::from_utf8(record(&long)).expect("UTF-8");
+        assert!(text.len() <= KMSG_MAX + "<14>flowsdn-agent: \n".len());
+        assert!(text.ends_with("é\n"));
+    }
+
+    #[test]
+    fn the_sink_writes_records_and_tolerates_a_missing_device() {
+        let dir = std::env::temp_dir().join(format!("flowsdn-kmsg-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let path: &'static str = Box::leak(dir.join("kmsg").to_string_lossy().into_owned().into_boxed_str());
+        std::fs::write(path, b"").expect("file");
+        let sink = Kmsg::new(path);
+        sink.write("health agent.api OK: up");
+        sink.write("health agent.kubernetes OK: listed");
+        assert_eq!(
+            std::fs::read_to_string(path).expect("read"),
+            "<14>flowsdn-agent: health agent.api OK: up\n<14>flowsdn-agent: health agent.kubernetes OK: listed\n"
+        );
+        // A device that is not there: said once, then nothing tried.
+        let missing = Kmsg::new("/nonexistent/flowsdn/kmsg");
+        missing.write("x");
+        missing.write("y");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

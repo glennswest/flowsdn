@@ -180,7 +180,12 @@ so a stuck controller fails the check instead of hanging it. `/healthz` and
 from the live state on each request: API and restore rows, and with Kubernetes
 the controller and policy-map rows; every row change is kept in
 `<state-dir>/flowsdn-agent-health-history.log` (10 MB, three files), read back
-by `GET /v1/health/history` (see `docs/agent-api.md`). The config response's `ipam-mode: kubernetes` is a compatibility
+by `GET /v1/health/history` (see `docs/agent-api.md`). A new row, a level change
+and a removal are also written to the kernel log (`/dev/kmsg`, a hostPath in the
+edition manifests) as `flowsdn-agent: health agent.<module> <level>: …` (#484):
+a pod's stderr reaches no node log reader, and a stormcos node's log service
+sends `/dev/kmsg` on as syslog. If the device can't be opened, the agent says so
+once on stderr. The config response's `ipam-mode: kubernetes` is a compatibility
 value: allocation uses the configured pools, or with `auto` the pool resolved
 from the Node at startup.
 

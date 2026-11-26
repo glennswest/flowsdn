@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (#484, #487, #418)
+- **feat:** The agent writes its module health transitions (a new row, a level change, a removal) to the kernel log as well as stderr, as `<14>flowsdn-agent: health agent.<module> <level>: …`.
+  - Why: the agent runs as a DaemonSet pod, and pod stderr never reaches a stormcos node's syslog, so the node proof `health agent.(api|kubernetes) OK` could not be seen on 14.06-flowsdn/pvetest1. The node's log service follows `/dev/kmsg` into syslog.
+  - Only transitions are written, so the kernel's `/dev/kmsg` rate limit is not reached. Lines are flattened to one line and capped at 900 bytes. A device that cannot be opened is reported once.
+  - Both edition DaemonSets mount `/dev/kmsg` (hostPath).
+
 ### 2026-11-26 (#418)
 - **fix:** The agent API serves HTTP/1.0 requests as well as 1.1, and every response closes the connection. stormfw probes `/v1/healthz` with HTTP/1.0. On pvetest1 (14.06-flowsdn) it got `505 HTTP/1.1 is required` on every boot ("boot program stays why=flowsdn /v1/healthz answers 505"), so it never saw flowsdn's real health.
 
