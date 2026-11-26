@@ -22,7 +22,7 @@ Staged; each stage committed and verified (kernel tests keep passing).
       for the plain route (4bc7cb209712); `ConnectorOps::delete` deletes flowsdn's route by destination (8299a1f6238f).
 - [x] Regression from #576 fixed (ed881c2): a desired route whose check failed or was skipped lost its installed route
       (no row → delete/prune). `Holding` keeps it, as before #576. Test `stale_routes_go_and_held_ones_stay`.
-- [ ] Strict sc-build + kernel-check; stage; re-ship with the health proof (release carrying stormpump>=65b74d3).
+- [x] 9845e1e: xtask check, test/build.sh, kernel-check 26/0/2. Staged golden-flowsdn-dfcab0ddb2c6; re-shipped (`--commit ed881c2`).
 
 ### IPv6 egress gateway — #580 (P3), 2026-11-26
 
