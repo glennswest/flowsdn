@@ -91,16 +91,16 @@ impl Facts {
 }
 
 /// One metric family in the text format.
-struct Family<'a> {
+pub(crate) struct Family<'a> {
     out: &'a mut String,
 }
-fn family<'a>(out: &'a mut String, name: &str, kind: &str, help: &str) -> Family<'a> {
+pub(crate) fn family<'a>(out: &'a mut String, name: &str, kind: &str, help: &str) -> Family<'a> {
     let _ = writeln!(out, "# HELP {name} {help}");
     let _ = writeln!(out, "# TYPE {name} {kind}");
     Family { out }
 }
 impl Family<'_> {
-    fn sample(&mut self, name: &str, labels: &[(&str, &str)], value: impl fmt::Display) {
+    pub(crate) fn sample(&mut self, name: &str, labels: &[(&str, &str)], value: impl fmt::Display) {
         self.out.push_str(name);
         if !labels.is_empty() {
             self.out.push('{');

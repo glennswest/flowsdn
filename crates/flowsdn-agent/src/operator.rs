@@ -23,6 +23,7 @@
 //! registers before their flowsdn.io watchers start.
 use crate::lease::{Elector, Step, micro_time};
 use crate::operator_bgp::{self, BgpSettings, Pool, RouterIdMode, RouterIds};
+use crate::operator_metrics::{self, Shared};
 use crate::operator_gc::{self, IdentityGc, NodeGc, Settings};
 use flowsdn_k8s::client::{JsonClient, TransportLimits};
 use flowsdn_k8s::register::{Registered, register, shipped_crds};
@@ -61,6 +62,7 @@ Options:
   --bgp-router-id-allocation-ip-pool CIDR|FIRST-LAST
                                      The IPv4 pool of ip-pool mode
   --bgp-interval SECONDS             Time between BGP passes (default 10)
+  --metrics-listen IP:PORT           Serve GET /metrics on this loopback address (default: off)
 
 The Lease kube-system/flowsdn-operator elects one operator; its holder is
 POD_NAME (else the host name and process ID). The leader registers the 22
@@ -78,6 +80,8 @@ pub struct Options {
     pub kubeconfig: Option<PathBuf>,
     pub gc: Settings,
     pub bgp: BgpSettings,
+    /// `--metrics-listen`: the loopback address of `GET /metrics` (#420).
+    pub metrics: Option<std::net::SocketAddr>,
 }
 
 /// The whole number after a flag, at most `max`.
@@ -155,6 +159,13 @@ pub fn parse(args: &[std::ffi::OsString]) -> Result<Options, String> {
                     .and_then(|v| v.to_str())
                     .ok_or(format!("{name} needs a CIDR or range"))?;
                 pool = Some(Pool::parse(value)?);
+            }
+            Some("--metrics-listen") => {
+                let value = rest
+                    .next()
+                    .and_then(|v| v.to_str())
+                    .ok_or("--metrics-listen needs IP:port")?;
+                options.metrics = Some(operator_metrics::parse_listen(value)?);
             }
             Some(name @ "--bgp-interval") => {
                 let value = number(&mut rest, name, 3600)?;
@@ -239,6 +250,11 @@ pub fn run(options: &Options) -> Result<(), String> {
             ""
         }
     );
+    let stats = Shared::default();
+    stats.lock().bgp_enabled = options.bgp.enabled;
+    if let Some(address) = options.metrics {
+        operator_metrics::spawn(address, stats.clone())?;
+    }
     let mut elector = Elector::new(LEASE_NAMESPACE, LEASE_NAME, &me, LEASE_DURATION);
     let mut was_leading = false;
     let mut next_registration: Option<Instant> = None;
@@ -279,6 +295,7 @@ pub fn run(options: &Options) -> Result<(), String> {
             }
         }
         let leading = elector.leading(Instant::now());
+        stats.lock().leading = leading;
         if leading != was_leading {
             crate::log::logln!(
                 "operator {me}: {}",
@@ -313,6 +330,7 @@ pub fn run(options: &Options) -> Result<(), String> {
                             format!(" ({})", changed.join(", ").to_lowercase())
                         }
                     );
+                    stats.lock().crds_established = Some(done.len());
                     REREGISTER
                 }
                 Err(error) if error.0.contains("names not accepted") => {
@@ -320,6 +338,8 @@ pub fn run(options: &Options) -> Result<(), String> {
                 }
                 Err(error) => {
                     crate::log::logln!("operator: CRD registration: {error}; retrying in 30s");
+                    let mut s = stats.lock();
+                    s.crd_registration_failures = s.crd_registration_failures.saturating_add(1);
                     RETRY
                 }
             };
@@ -332,6 +352,7 @@ pub fn run(options: &Options) -> Result<(), String> {
             collectors.tick(
                 &options.gc,
                 &options.bgp,
+                &stats,
                 Instant::now(),
                 &micro_time(SystemTime::now()),
                 &mut send,
@@ -339,6 +360,10 @@ pub fn run(options: &Options) -> Result<(), String> {
         }
         std::thread::sleep(TICK);
     }
+}
+
+fn as_u64(n: usize) -> u64 {
+    u64::try_from(n).unwrap_or(u64::MAX)
 }
 
 /// The garbage collectors of one leader term and when each runs next.
@@ -371,6 +396,7 @@ impl Collectors {
         &mut self,
         settings: &Settings,
         bgp: &BgpSettings,
+        stats: &Shared,
         now: Instant,
         wall: &str,
         send: &mut operator_gc::Send<'_>,
@@ -378,6 +404,18 @@ impl Collectors {
         if !settings.identity_interval.is_zero() && now >= self.next_identity {
             let delay = match operator_gc::identity_gc(&mut self.identity, now, wall, send) {
                 Ok(done) => {
+                    {
+                        let mut s = stats.lock();
+                        s.identity_gc_runs = s.identity_gc_runs.saturating_add(1);
+                        s.identities_alive = Some(done.alive);
+                        s.identities_marked = s.identities_marked.saturating_add(as_u64(done.marked));
+                        s.identities_deleted =
+                            s.identities_deleted.saturating_add(as_u64(done.deleted));
+                        s.identities_skipped =
+                            s.identities_skipped.saturating_add(as_u64(done.skipped));
+                        s.identities_deferred =
+                            s.identities_deferred.saturating_add(as_u64(done.deferred));
+                    }
                     if done.marked != 0 || done.deleted != 0 || done.deferred != 0 {
                         crate::log::logln!(
                             "operator: identity GC: {} alive, {} marked, {} deleted, {} skipped, {} left for the next run (rate limit)",
@@ -392,6 +430,8 @@ impl Collectors {
                 }
                 Err(error) => {
                     crate::log::logln!("operator: identity GC: {error}; retrying in 30s");
+                    let mut s = stats.lock();
+                    s.identity_gc_failures = s.identity_gc_failures.saturating_add(1);
                     RETRY
                 }
             };
@@ -400,6 +440,11 @@ impl Collectors {
         if !settings.nodes_interval.is_zero() && now >= self.next_nodes {
             let delay = match operator_gc::node_gc(&mut self.nodes, now, send) {
                 Ok(deleted) => {
+                    {
+                        let mut s = stats.lock();
+                        s.node_gc_runs = s.node_gc_runs.saturating_add(1);
+                        s.nodes_deleted = s.nodes_deleted.saturating_add(as_u64(deleted.len()));
+                    }
                     if !deleted.is_empty() {
                         crate::log::logln!(
                             "operator: FlowsdnNode GC: deleted {} (no Node)",
@@ -410,6 +455,8 @@ impl Collectors {
                 }
                 Err(error) => {
                     crate::log::logln!("operator: FlowsdnNode GC: {error}; retrying in 30s");
+                    let mut s = stats.lock();
+                    s.node_gc_failures = s.node_gc_failures.saturating_add(1);
                     RETRY
                 }
             };
@@ -419,6 +466,15 @@ impl Collectors {
             let condition_time = crate::events::rfc3339(SystemTime::now());
             let delay = match operator_bgp::run(bgp, &mut self.router_ids, &condition_time, send) {
                 Ok((done, errors)) => {
+                    {
+                        let mut s = stats.lock();
+                        s.bgp_passes = s.bgp_passes.saturating_add(1);
+                        s.bgp_errors = errors.len();
+                        s.bgp_created = s.bgp_created.saturating_add(as_u64(done.created));
+                        s.bgp_updated = s.bgp_updated.saturating_add(as_u64(done.updated));
+                        s.bgp_deleted = s.bgp_deleted.saturating_add(as_u64(done.deleted));
+                        s.bgp_statuses = s.bgp_statuses.saturating_add(as_u64(done.statuses));
+                    }
                     if done != operator_bgp::Summary::default() {
                         crate::log::logln!(
                             "operator: BGP: {} node configs created, {} updated, {} deleted, {} statuses written, {} skipped (changed meanwhile)",
@@ -439,6 +495,8 @@ impl Collectors {
                 }
                 Err(error) => {
                     crate::log::logln!("operator: BGP: {error}; retrying in 30s");
+                    let mut s = stats.lock();
+                    s.bgp_pass_failures = s.bgp_pass_failures.saturating_add(1);
                     RETRY
                 }
             };
@@ -465,8 +523,15 @@ mod tests {
                 kubeconfig: Some(PathBuf::from("/k")),
                 gc: Settings::default(),
                 bgp: BgpSettings::default(),
+                metrics: None,
             })
         );
+        assert_eq!(
+            parse(&args(&["--metrics-listen", "127.0.0.1:9967"])).map(|o| o.metrics),
+            Ok(Some("127.0.0.1:9967".parse().expect("address")))
+        );
+        assert!(parse(&args(&["--metrics-listen", "0.0.0.0:9967"])).is_err());
+        assert!(parse(&args(&["--metrics-listen", "127.0.0.1:0"])).is_err());
         let bgp = parse(&args(&[
             "--enable-bgp-control-plane",
             "--bgp-secrets-namespace",

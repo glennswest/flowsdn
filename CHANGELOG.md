@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### 2026-11-26 (#420)
+- **feat:** The operator serves `GET /metrics` with `--metrics-listen` (loopback only). The edition manifest uses `127.0.0.1:9967`, on the node's loopback.
+  - Series, under `flowsdn_operator_`: leader, CRDs established, identity GC (alive, runs, failures, marked, deleted, skipped, deferred), FlowsdnNode GC (runs, failures, deleted), BGP (passes, failures, last pass's errors, node configs created/updated/deleted, statuses written) and build info.
+  - It is not on cilium's `:9963`, because stormcos's `cilium-operator` job there scrapes mutual TLS. The ironprom job is stormcos's half (filed there).
+
 ### 2026-11-26 (#489, #420)
 - **feat:** Two startup lines also go to the kernel log, so a node's syslog sees them: `new endpoints are isolated until their policy is installed` (the #489 quarantine) and `metrics listening on http://…/metrics` (#420). They are the node proofs of those issues, and like the health lines (#484) they never reached syslog from the agent pod's stderr.
 

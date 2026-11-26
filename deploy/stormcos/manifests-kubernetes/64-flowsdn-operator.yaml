@@ -42,7 +42,8 @@ spec:
       containers:
         - name: flowsdn-operator
           image: flowsdn
-          command: ["/flowsdn-agent", "operator"]
+          # GET /metrics on the node's loopback (hostNetwork) for ironprom (#420).
+          command: ["/flowsdn-agent", "operator", "--metrics-listen", "127.0.0.1:9967"]
           env:
             # The Lease holder identity.
             - name: POD_NAME

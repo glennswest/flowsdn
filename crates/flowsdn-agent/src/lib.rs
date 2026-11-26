@@ -31,6 +31,8 @@ pub mod operator;
 pub mod operator_bgp;
 #[cfg(feature = "kubernetes")]
 pub mod operator_gc;
+#[cfg(feature = "kubernetes")]
+pub mod operator_metrics;
 pub mod policy;
 pub mod prefilter;
 pub mod services;

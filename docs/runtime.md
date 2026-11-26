@@ -868,6 +868,16 @@ not check it.
   objects written without an owner.
 - Both collectors log only when they change something, and keep their
   memory for one leader term.
+- **Metrics** (#420): `--metrics-listen IP:PORT` (loopback only; the edition
+  manifest uses `127.0.0.1:9967`, the node's loopback since the operator runs on
+  the host network) serves `GET /metrics` from a thread of its own, with names
+  under `flowsdn_operator_`: `build_info`, `leader`, `crds_established`,
+  `identities_alive`, `bgp_errors` (with BGP on), and counters for
+  CRD-registration failures, identity GC runs, failures, marks, deletes, skips
+  and deferrals, FlowsdnNode GC runs, failures and deletes, BGP passes, failures,
+  node configs created, updated and deleted, and statuses written. Counters count
+  from process start; a gauge not yet observed is left out. Other paths answer
+  404, other methods 405.
 - **BGP node configs** (#334, spec 15 §3.2), with
   `--enable-bgp-control-plane` (off by default: then no node config is
   created or deleted), every `--bgp-interval` seconds (10) while leading.

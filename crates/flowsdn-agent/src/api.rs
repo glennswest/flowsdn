@@ -36,7 +36,7 @@ mod flows;
 #[path = "health_api.rs"]
 mod health_api;
 #[path = "metrics.rs"]
-mod metrics;
+pub(crate) mod metrics;
 #[path = "policy_events.rs"]
 mod policy_events;
 

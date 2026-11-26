@@ -197,7 +197,9 @@ is read when scraped; nothing is cached or estimated.
 | `flowsdn_uplink_up{uplink}` | gauge | Kubernetes mode: 1 while an uplink has carrier (#408). |
 | `flowsdn_metrics_source_failing{source}` | gauge | 1 for `policy-verdicts` or `bpf-map-pressure` when that map could not be read this scrape; its series are then absent, not zero. |
 
-The operator (`flowsdn-agent operator`, #337) serves no HTTP and has no metrics.
+The operator (`flowsdn-agent operator`, #337) serves only `GET /metrics`, on
+`--metrics-listen` (the edition manifest: `127.0.0.1:9967`), with names under
+`flowsdn_operator_` (see [runtime](runtime.md#crds-and-the-operator-337)).
 
 ## Flow record shape
 
