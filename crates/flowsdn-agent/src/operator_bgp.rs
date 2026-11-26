@@ -765,8 +765,8 @@ pub fn read(
     })
 }
 
-fn body<T: serde::Serialize>(object: &T) -> Result<Value, String> {
-    serde_json::to_value(object).map_err(|e| e.to_string())
+fn body(object: Result<Value, serde_json::Error>) -> Result<Value, String> {
+    object.map_err(|e| e.to_string())
 }
 
 /// One pass: read, plan, write. The errors of the pass (plan errors and
@@ -789,13 +789,13 @@ pub fn run(
                 Write::Create(object) => (
                     http::Method::POST,
                     FlowsdnBGPNodeConfig::collection(""),
-                    Some(body(object)?),
+                    Some(body(serde_json::to_value(object))?),
                     |s| s.created = s.created.saturating_add(1),
                 ),
                 Write::Update(object) => (
                     http::Method::PUT,
                     FlowsdnBGPNodeConfig::path("", &name(&object.metadata)),
-                    Some(body(object)?),
+                    Some(body(serde_json::to_value(object))?),
                     |s| s.updated = s.updated.saturating_add(1),
                 ),
                 Write::Delete { name, uid } => (
@@ -810,7 +810,7 @@ pub fn run(
                         "{}/status",
                         FlowsdnBGPClusterConfig::path("", &name(&object.metadata))
                     ),
-                    Some(body(object)?),
+                    Some(body(serde_json::to_value(object))?),
                     |s| s.statuses = s.statuses.saturating_add(1),
                 ),
                 Write::PeerStatus(object) => (
@@ -819,7 +819,7 @@ pub fn run(
                         "{}/status",
                         FlowsdnBGPPeerConfig::path("", &name(&object.metadata))
                     ),
-                    Some(body(object)?),
+                    Some(body(serde_json::to_value(object))?),
                     |s| s.statuses = s.statuses.saturating_add(1),
                 ),
             };
