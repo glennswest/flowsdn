@@ -19,6 +19,7 @@ Kept here whole, newest notes as they were. Write new intentions here.
 - [x] #489 (quarantine, fixed 2026-11-20) and #420 have their own `log:` proofs (startup lines). c10c88b sends both
       lines to `/dev/kmsg` as well; strict sc-build passed; staged golden-flowsdn-4f5bfc1d2c2f. #489 re-shipped with
       `--commit c10c88b`; #420 goes back the same way when it is handed out.
+- [x] #490 (policy findings, fixed 2026-11-20 at 6a8b207) re-shipped on the health proof, `--commit 936dedb`.
 
 ### No stubs: proof on a node — #418 (reopened), 2026-11-26
 
