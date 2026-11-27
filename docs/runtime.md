@@ -646,7 +646,10 @@ pinned: they detach when the agent exits, and the per-CPU
 `flowsdn_nodeport4_xlate_scratch` scratch maps are not
 pinned either. The socket LB picks backends at random: Maglev is for traffic
 entering on the uplink only, as in the reference (#453); an existing TCP connection stays on its backend when it leaves unless
-`kubernetes.lb-sock-terminate-all-protos` is on (#392, below); SCTP ports get no translation (#457); IPv6
+`kubernetes.lb-sock-terminate-all-protos` is on (#392, below). SCTP ports (#457) are translated at
+`connect` (one-to-one and one-to-many sockets that connect; not reverse translated, as TCP), IPv4 and IPv6, with
+never DSR; an SCTP packet entering on the uplink (external NodePort, LoadBalancer, externalIP) is not translated yet, and
+`sctp_connectx` and the implicit association of an unconnected `sendmsg` are not; IPv6
 fragments pass untouched. Local redirect policy and its skip-LB are
 [below](#local-redirect-policy-565). `socket-lb-live` (medium test suite) checks the
 programs on a kernel, including the NodePort local and SNAT paths through

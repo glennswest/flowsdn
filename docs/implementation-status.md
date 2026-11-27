@@ -177,7 +177,7 @@ pinning or subsystem libraries are absent are **not current status**.
 - Open gaps, each an issue with the `gap` label: operator identity GC (#332);
   L7 HTTP policy rules (#537, after the ingress redirect #582; Kafka is
   refused, ADR-0024);
-  SCTP Services (#457); the
+  SCTP Services on the uplink path (#457: at the socket since 2026-11-27); the
   Hubble observer/relay (#293). Not built by decision, refused and reported so
   they fail closed: mutual authentication (#472) and `toGroups`/`fromGroups`
   peers (#530).

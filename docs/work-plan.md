@@ -17,6 +17,15 @@ Staged; each stage committed and verified (kernel tests keep passing).
 - [x] Docs (spec 10 amendment, runtime, changelog) at 4caf950; sc-build: xtask check, test/build.sh, kernel-check 26/0/2
       (uplinks-live, neighbors-live pass). Staged golden-flowsdn-0e22d7d5c9e0; shipped. Then #520 (scripttest node adapters).
 
+### SCTP Services — #457 (P2, gap), 2026-11-27
+- [x] Nodes load SCTP since 14.09 (stormcos#1512). Build VMs still lack `sctp.ko` (stormcentral#1631), so the kernel
+      check is the node `medium` suite's `fixture-socket-lb-live` on pvetest2/pvetest3 (kernel 7.3.4-300.fc45).
+- [x] Stage 1 (f94c2ba, 30e3837, 297f782): `PROTO_SCTP` through planner, services, local redirect; `IPPROTO_SCTP` in
+      socket-lb connect hooks; `socket-lb-live` SCTP cases (one-to-one client, one-to-many backend; skip without SCTP).
+- [ ] Verify: xtask check, test/build.sh, kernel-check (SCTP skips there); `medium` on a node (SCTP runs).
+- [ ] Stage 2: the uplink path (NodePort/LB/externalIP): SCTP parse, address rewrite, port rewrite with a CRC32c
+      update in BPF; `socket-lb-live` frames.
+
 ### Host firewall first live run — #478 (P2), 2026-11-26
 - [x] pvetest2 runs 14.09-flowsdn (51f036c: has 66daa9b and 6925607). stormfw there says "flowsdn's host firewall does
       not enforce on eth0 yet".

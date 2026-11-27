@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 2026-11-27 (#457)
+- **feat:** SCTP Services at the socket.
+  - An SCTP port of a ClusterIP, externalIP, LoadBalancer or NodePort Service is a frontend: `PROTO_SCTP` in the
+    planner, the Services thread and local redirect policy.
+  - socket-lb's `connect4`/`connect6` translate it to a backend, IPv4 and IPv6. It is not reverse translated, as TCP
+    is not, and never DSR.
+  - Not yet: SCTP entering on the uplink, `sctp_connectx`, and unconnected `sendmsg`.
+  - `socket-lb-live` has SCTP cases, which skip where the kernel has no `sctp.ko` (build VMs, stormcentral#1631).
+
 ### 2026-11-26 (#598)
 - **build:** The `flowsdn` golden is built in this repo: `deploy/build-image.sh flowsdn OUT`, entered as
   `deploy/build-golden.sh` (stormcentral's `tree` contract; stormcentral#1836 retires stage mode).
