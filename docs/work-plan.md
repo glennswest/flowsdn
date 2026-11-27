@@ -22,8 +22,9 @@ Staged; each stage committed and verified (kernel tests keep passing).
       check is the node `medium` suite's `fixture-socket-lb-live` on pvetest2/pvetest3 (kernel 7.3.4-300.fc45).
 - [x] Stage 1 (f94c2ba, 30e3837, 297f782): `PROTO_SCTP` through planner, services, local redirect; `IPPROTO_SCTP` in
       socket-lb connect hooks; `socket-lb-live` SCTP cases (one-to-one client, one-to-many backend; skip without SCTP).
-- [ ] Verify: xtask check, test/build.sh, kernel-check (SCTP skips there); `medium` on a node (SCTP runs).
-- [ ] Stage 2: the uplink path (NodePort/LB/externalIP), per the specs rather than the issue's CRC32c plan: spec 04
+- [x] 297f782: xtask check, test/build.sh, kernel-check 26/0/2 (`socket-lb-live` 58 PASS; SCTP skipped, no sctp.ko).
+- [ ] Node `medium` run 6f6fb5113b on pvetest2 (SCTP runs there); #457 parked `--after-run`, closes on its pass.
+- [ ] Stage 2, split to #600: the uplink path (NodePort/LB/externalIP), per the specs rather than the issue's CRC32c plan: spec 04
       §3 step 5 (an SCTP port change is `DROP_CSUM_L4`, SCTP is NATed address-only) and spec 02 (SCTP checksum not
       recomputed, as in the reference). So: parse SCTP, rewrite addresses only (CRC32c has no pseudo-header), drop a
       frame whose translation changes a port, keep the source port in SNAT; `socket-lb-live` frames for each.
