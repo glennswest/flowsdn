@@ -168,8 +168,10 @@ and fixture logs go under `/results`.
 
 `cargo xtask kernel-check [suite]` runs the stage on the build VM's own kernel
 under qemu, with `/test` as PID 1 (`src/vm_init.rs`, chosen because the process
-is PID 1; the suite comes from `flowsdn.suite=` on the kernel command line). The
-node probes skip there. See [docs/build-and-test.md](../docs/build-and-test.md).
+is PID 1 with no arguments; the suite comes from `flowsdn.suite=` on the kernel
+command line). A pod's runtime also starts `/test` as PID 1, but as `/test
+<suite>`, which runs the suite with the pod's own mounts: vm-init's tmpfs on `/run`
+had hidden the service-account token (#446). The node probes skip in the guest. See [docs/build-and-test.md](../docs/build-and-test.md).
 
 `test/build.sh` runs on the build box (stormcentral calls it before `podman
 build`). It builds the BPF objects with `tools/build-bpf.sh`: the nightly pinned

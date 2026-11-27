@@ -889,8 +889,13 @@ Binary and manifests done by #337 (`flowsdn-agent operator`, 64-flowsdn-operator
       requires.toml cluster_read leases + customresourcedefinitions; skip without STORM_API. Unit tests for the verdict.
 - [x] 8cd444d, fmt ce58192. sc-build at ce58192: fmt --check, `cargo xtask check` (978 tests, 0 failed, incl. 3 verdict
       tests), test/build.sh.
-- [ ] Proposed `--after-install flowsdn>=66daa9b@pvetest2` (pvetest2's 12.97-flowsdn has flowsdn 2b801ce, no
-      operator). Then a short run on pvetest2 (node-operator pass), ship with the Lease proof, close.
+- [x] Proposed `--after-install flowsdn>=66daa9b@pvetest2` (pvetest2's 12.97-flowsdn has flowsdn 2b801ce, no
+      operator). pvetest1 got 14.07-flowsdn first: short run 910793ede6 there.
+- [x] 910793ede6: 31 pass, node-operator fail "cannot load in-cluster configuration", no token under /run/secrets.
+      Cause ours: `/test` is PID 1 in the pod too, so it ran vm_init, whose tmpfs on /run hid the token. Fix: guest =
+      PID 1 with no arguments (kernel-check's rdinit gets none; a pod always runs `/test <suite>`).
+- [ ] sc-build, then a short run on pvetest1: node-operator pass and the other checks still pass with the pod's own
+      mounts (cgroup2, bpffs, /tmp no longer vm_init's). Ship with the Lease proof, close.
 
 ### Operator GC and FlowsdnEndpointSlice batching — #479 (P2), 2026-11-20
 

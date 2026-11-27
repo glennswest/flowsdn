@@ -26,6 +26,15 @@ pub fn suite_of(cmdline: &str) -> &str {
         .unwrap_or("medium")
 }
 
+/// Whether this process is `cargo xtask kernel-check`'s guest init: PID 1
+/// with no arguments (`rdinit=/test`; `flowsdn.suite=` has a dot, so the
+/// kernel keeps it from init). A pod also starts `/test` as PID 1, but always
+/// as `/test <suite>`, and must keep the runtime's mounts: the guest's tmpfs
+/// on `/run` hid the service-account token at `/run/secrets` (#446).
+pub fn is_guest_init(pid: u32, args: &[String]) -> bool {
+    pid == 1 && args.is_empty()
+}
+
 fn mount_fs(kind: &str, target: &str) {
     let _ = fs::create_dir_all(target);
     let flags = MsFlags::MS_NOSUID;
@@ -150,12 +159,20 @@ pub fn run() -> ! {
 
 #[cfg(test)]
 mod tests {
-    use super::suite_of;
+    use super::{is_guest_init, suite_of};
 
     #[test]
     fn the_suite_comes_from_the_command_line() {
         assert_eq!(suite_of("console=ttyS0 flowsdn.suite=short quiet"), "short");
         assert_eq!(suite_of("console=ttyS0 quiet"), "medium");
         assert_eq!(suite_of(""), "medium");
+    }
+
+    #[test]
+    fn only_an_argumentless_pid_1_is_the_guest() {
+        assert!(is_guest_init(1, &[]));
+        // A pod's runtime starts `/test short` as PID 1 (#446).
+        assert!(!is_guest_init(1, &["short".to_owned()]));
+        assert!(!is_guest_init(7, &[]));
     }
 }

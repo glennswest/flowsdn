@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 2026-11-27 (#446)
+- **fix(test):** In a pod, the test container no longer runs kernel-check's guest init. The runtime starts `/test
+  <suite>` as PID 1, and `/test` took that for the qemu guest: it mounted a tmpfs on `/run`, which hid the
+  service-account token at `/run/secrets`. `node-operator` then failed with "cannot load in-cluster configuration"
+  (run 910793ede6 on pvetest1). Now the guest is PID 1 with no arguments only (`vm_init::is_guest_init`).
+
 ### 2026-11-27 (#457)
 - **feat:** SCTP Services at the socket.
   - An SCTP port of a ClusterIP, externalIP, LoadBalancer or NodePort Service is a frontend: `PROTO_SCTP` in the

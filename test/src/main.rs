@@ -24,11 +24,10 @@ use report::Report;
 use std::{process::ExitCode, time::Duration};
 
 fn main() -> ExitCode {
-    // `cargo xtask kernel-check` boots this binary as the guest's init.
-    if std::process::id() == 1 {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if vm_init::is_guest_init(std::process::id(), &args) {
         vm_init::run();
     }
-    let args: Vec<String> = std::env::args().skip(1).collect();
     match args.as_slice() {
         [mode] if mode == "--endpoint" => lab::endpoint_worker(),
         [suite] if ["short", "medium", "long"].contains(&suite.as_str()) => run(suite),
