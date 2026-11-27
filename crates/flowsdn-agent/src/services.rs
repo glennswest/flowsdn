@@ -20,7 +20,9 @@
 //! cluster IP). Those copies use Maglev when the Service asks for it (spec
 //! 05 §3.13).
 //! Pure data; the `kubernetes` controller feeds and applies it.
-use flowsdn_lb::socket::{Address, PROTO_TCP, PROTO_UDP, SCOPE_CLUSTER, SCOPE_NODE_LOCAL, Service};
+use flowsdn_lb::socket::{
+    Address, PROTO_SCTP, PROTO_TCP, PROTO_UDP, SCOPE_CLUSTER, SCOPE_NODE_LOCAL, Service,
+};
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -127,7 +129,9 @@ fn protocol(name: &str) -> Option<u8> {
     match name {
         "TCP" => Some(PROTO_TCP),
         "UDP" => Some(PROTO_UDP),
-        // SCTP and anything else: socket LB translates TCP and UDP only.
+        // At the socket only (#457): connect is translated; the uplink path
+        // (external NodePort/LoadBalancer) does not parse SCTP yet.
+        "SCTP" => Some(PROTO_SCTP),
         _ => None,
     }
 }
@@ -327,8 +331,10 @@ pub fn frontends(
                             affinity: service.affinity,
                             scope,
                             maglev: service.maglev && scope == SCOPE_NODE_LOCAL,
+                            // DSR is the uplink path's, which has no SCTP (#457).
                             dsr: scope == SCOPE_NODE_LOCAL
                                 && !nat46x64
+                                && proto != PROTO_SCTP
                                 && if proto == PROTO_TCP {
                                     service.dsr_tcp
                                 } else {
@@ -350,6 +356,7 @@ fn protocol_name(proto: u8) -> &'static str {
     match proto {
         PROTO_TCP => "TCP",
         PROTO_UDP => "UDP",
+        PROTO_SCTP => "SCTP",
         _ => "ANY",
     }
 }

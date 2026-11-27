@@ -21,7 +21,7 @@
 //! nodes' halves on the uplink programs.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
-use flowsdn_lb::socket::{self, Address, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
+use flowsdn_lb::socket::{self, Address, PROTO_SCTP, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
 use nix::sched::{CloneFlags, unshare};
 use std::{
     collections::BTreeSet,
@@ -107,6 +107,62 @@ fn tcp(listener: &TcpListener, frontend: SocketAddr, backend: SocketAddr) -> Res
     }
     println!("PASS TCP {frontend} -> {backend}, payload both ways");
     Ok(())
+}
+
+/// SCTP at the socket (#457): a one-to-one SCTP socket connecting to an SCTP
+/// frontend reaches the backend, which is a one-to-many socket bound to
+/// `backend` (no accept needed); its peer is the backend (not reverse
+/// translated, as TCP) and a payload goes both ways. `Ok(false)`: this kernel
+/// has no SCTP (a socket cannot be made: no `sctp.ko`), a skip.
+fn sctp(frontend: SocketAddr, backend: SocketAddr) -> Result<bool> {
+    use nix::errno::Errno;
+    use nix::sys::socket::{
+        AddressFamily, Backlog, MsgFlags, SockFlag, SockProtocol, SockType, SockaddrStorage,
+        bind, connect, getpeername, listen, recvfrom, sendto, setsockopt, socket, sockopt,
+    };
+    use std::os::fd::AsRawFd;
+    let family = if frontend.is_ipv4() {
+        AddressFamily::Inet
+    } else {
+        AddressFamily::Inet6
+    };
+    let server = match socket(family, SockType::SeqPacket, SockFlag::empty(), SockProtocol::Sctp) {
+        Ok(fd) => fd,
+        Err(Errno::EPROTONOSUPPORT | Errno::ESOCKTNOSUPPORT | Errno::EAFNOSUPPORT) => return Ok(false),
+        Err(error) => return Err(format!("SCTP server socket: {error}").into()),
+    };
+    bind(server.as_raw_fd(), &SockaddrStorage::from(backend))?;
+    listen(&server, Backlog::new(4)?)?;
+    let timeout = nix::sys::time::TimeVal::new(3, 0);
+    setsockopt(&server, sockopt::ReceiveTimeout, &timeout)?;
+    let client = socket(family, SockType::Stream, SockFlag::empty(), SockProtocol::Sctp)?;
+    setsockopt(&client, sockopt::ReceiveTimeout, &timeout)?;
+    connect(client.as_raw_fd(), &SockaddrStorage::from(frontend))
+        .map_err(|e| format!("SCTP connect {frontend}: {e}"))?;
+    let peer: SockaddrStorage = getpeername(client.as_raw_fd())?;
+    let peer = peer
+        .as_sockaddr_in()
+        .map(|a| SocketAddr::from(std::net::SocketAddrV4::from(*a)))
+        .or_else(|| peer.as_sockaddr_in6().map(|a| SocketAddr::from(std::net::SocketAddrV6::from(*a))))
+        .ok_or("SCTP getpeername: not an IP address")?;
+    if peer != backend {
+        return Err(format!("SCTP {frontend}: peer {peer} instead of backend {backend}").into());
+    }
+    nix::sys::socket::send(client.as_raw_fd(), b"flowsdn-socket-lb", MsgFlags::empty())?;
+    let mut request = [0; 64];
+    let (n, from) = recvfrom::<SockaddrStorage>(server.as_raw_fd(), &mut request)?;
+    let from = from.ok_or("SCTP recvfrom: no source")?;
+    if request.get(..n) != Some(b"flowsdn-socket-lb".as_slice()) {
+        return Err(format!("SCTP {frontend}: the backend got {:?}", request.get(..n)).into());
+    }
+    sendto(server.as_raw_fd(), b"ok", &from, MsgFlags::empty())?;
+    let mut answer = [0; 8];
+    let n = nix::sys::socket::recv(client.as_raw_fd(), &mut answer, MsgFlags::empty())?;
+    if answer.get(..n) != Some(b"ok".as_slice()) {
+        return Err(format!("SCTP {frontend}: reply {:?}", answer.get(..n)).into());
+    }
+    println!("PASS SCTP {frontend} -> {backend}, payload both ways");
+    Ok(true)
 }
 
 /// Service NAT46/64 in the socket LB (#542), IPv6 sockets only, as in the
@@ -3296,6 +3352,15 @@ fn main() -> Result<()> {
     )?;
     udp(&udp4, sa("192.0.2.10:53")?, "127.0.0.1:0")?;
     udp(&udp6, sa("[2001:db8::10]:53")?, "[::1]:0")?;
+    // SCTP (#457), at the socket: skipped where the kernel has no SCTP.
+    services.push(service("192.0.2.10:132", PROTO_SCTP, &["127.0.0.1:18132"])?);
+    services.push(service("[2001:db8::10]:132", PROTO_SCTP, &["[::1]:18132"])?);
+    program(&mut lb, &services)?;
+    if sctp(sa("192.0.2.10:132")?, sa("127.0.0.1:18132")?)? {
+        sctp(sa("[2001:db8::10]:132")?, sa("[::1]:18132")?)?;
+    } else {
+        println!("SKIP SCTP: this kernel cannot make an SCTP socket (no sctp.ko)");
+    }
     socket_nat46x64(&mut lb, &mut services, (&tcp4, &tcp6), (&udp4, &udp6))?;
 
     match TcpStream::connect_timeout(&sa("192.0.2.11:80")?, TIMEOUT) {

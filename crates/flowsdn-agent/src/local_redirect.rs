@@ -27,7 +27,7 @@
 use crate::kubernetes::{LocalEndpoint, PodInfo};
 use crate::services::Frontend;
 use flowsdn_lb::socket::{
-    Address, PROTO_TCP, PROTO_UDP, SCOPE_CLUSTER, SCOPE_REDIRECT_SKIPPED, Service,
+    Address, PROTO_SCTP, PROTO_TCP, PROTO_UDP, SCOPE_CLUSTER, SCOPE_REDIRECT_SKIPPED, Service,
 };
 use flowsdn_policy::k8s::LabelSelector;
 use serde_json::{Value, json};
@@ -77,7 +77,8 @@ fn port(value: &Value) -> Result<Port, String> {
     let proto = match value.get("protocol").and_then(Value::as_str) {
         Some("TCP") => PROTO_TCP,
         Some("UDP") => PROTO_UDP,
-        other => return Err(format!("protocol {other:?} is not TCP or UDP")),
+        Some("SCTP") => PROTO_SCTP,
+        other => return Err(format!("protocol {other:?} is not TCP, UDP or SCTP")),
     };
     Ok(Port {
         name: value

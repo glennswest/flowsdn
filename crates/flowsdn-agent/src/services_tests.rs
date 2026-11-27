@@ -307,8 +307,10 @@ fn families_ports_and_protocols_must_match() {
         "n1",
         &[],
     );
-    // 2 IPs x 3 TCP/UDP ports; SCTP is skipped.
-    assert_eq!(out.len(), 6);
+    // 2 IPs x 4 ports: SCTP is a frontend too (#457), with no backends here
+    // (the slices carry no SCTP port).
+    assert_eq!(out.len(), 8);
+    assert!(backends(&out, 9, PROTO_SCTP).is_empty());
     let v6_dns = out
         .iter()
         .find(|f| {
@@ -788,4 +790,19 @@ fn topology_hints_choose_ready_backends_for_cluster_policy() {
         endpoint("10.1.0.7", false, true, true),
     ];
     assert_eq!(run(&service, terminating, "z1").len(), 2);
+}
+
+/// #457: an SCTP port with an SCTP slice port is a frontend with its
+/// backends, translated at the socket; never DSR (the uplink path has no SCTP).
+#[test]
+fn sctp_ports_are_frontends() {
+    let mut service = kube_dns();
+    service.ports = vec![port("sctp", "SCTP", 9)];
+    let mut slice = dns_slice(vec![endpoint("10.172.0.5", true, true, false)]);
+    slice.ports = vec![slice_port("sctp", "SCTP", 9999)];
+    let out = frontends(&[service], &[slice], "n1", &[]);
+    assert_eq!(backends(&out, 9, PROTO_SCTP), vec!["10.172.0.5:9999"]);
+    assert!(out.iter().all(|f| !f.service.dsr));
+    let frontend = out.first().expect("frontend");
+    assert_eq!(frontend.service.frontend.to_string(), "10.96.0.10:9/SCTP");
 }

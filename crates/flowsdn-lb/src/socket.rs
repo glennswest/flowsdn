@@ -33,6 +33,8 @@ pub const SCOPE_NODE_LOCAL: u8 = 1;
 pub const SCOPE_REDIRECT_SKIPPED: u8 = 2;
 pub const PROTO_TCP: u8 = 6;
 pub const PROTO_UDP: u8 = 17;
+/// SCTP (#457): translated at the socket (connect) only; the uplink path does not parse it.
+pub const PROTO_SCTP: u8 = 132;
 
 /// A service address: `address:port/proto`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -46,6 +48,7 @@ impl std::fmt::Display for Address {
         let proto = match self.proto {
             PROTO_TCP => "TCP",
             PROTO_UDP => "UDP",
+            PROTO_SCTP => "SCTP",
             _ => "ANY",
         };
         match self.ip {
@@ -736,6 +739,7 @@ fn protocol_name(proto: u8) -> Option<&'static str> {
     match proto {
         PROTO_TCP => Some("TCP"),
         PROTO_UDP => Some("UDP"),
+        PROTO_SCTP => Some("SCTP"),
         _ => None,
     }
 }

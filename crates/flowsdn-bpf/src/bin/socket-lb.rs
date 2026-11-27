@@ -52,6 +52,7 @@ use flowsdn_bpf_abi::{
 
 const IPPROTO_TCP: u32 = 6;
 const IPPROTO_UDP: u32 = 17;
+const IPPROTO_SCTP: u32 = 132;
 /// cgroup sock_addr verdicts: 1 continues the syscall, 0 fails it with EPERM.
 const ALLOW: i32 = 1;
 const REJECT: i32 = 0;
@@ -429,12 +430,14 @@ fn lookup6(
     }
 }
 
-/// TCP and UDP only; the kernel resolves protocol 0 to the socket's real one.
+/// TCP, UDP and SCTP (#457: connect only; SCTP is not reverse translated, as
+/// TCP is not); the kernel resolves protocol 0 to the socket's real one.
 #[inline(always)]
 fn protocol(raw: &bpf_sock_addr) -> Option<u8> {
     match raw.protocol {
         IPPROTO_TCP => Some(6),
         IPPROTO_UDP => Some(17),
+        IPPROTO_SCTP => Some(132),
         _ => None,
     }
 }
