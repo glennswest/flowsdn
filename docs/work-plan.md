@@ -17,6 +17,15 @@ Staged; each stage committed and verified (kernel tests keep passing).
 - [x] Docs (spec 10 amendment, runtime, changelog) at 4caf950; sc-build: xtask check, test/build.sh, kernel-check 26/0/2
       (uplinks-live, neighbors-live pass). Staged golden-flowsdn-0e22d7d5c9e0; shipped. Then #520 (scripttest node adapters).
 
+### Host firewall first live run — #478 (P2), 2026-11-26
+- [x] pvetest2 runs 14.09-flowsdn (51f036c: has 66daa9b and 6925607). stormfw there says "flowsdn's host firewall does
+      not enforce on eth0 yet".
+- [x] `node-host-firewall` in the test suite's node probe (d103c9e; fmt, Clippy, test/build.sh pass): mode,
+      interfaces past learning, judging, local Pods, addresses, policies, host verdict counts; GETs only.
+- [ ] Run 3cc677574d on pvetest2 (parked `--after-run`). Then the enforce step: a run-labelled FlowsdnNodeConfig
+      (`cluster_write`, removed by cleanup) selecting the node with `host-firewall: enforce`, checking the node
+      stays reachable.
+
 ### The flowsdn golden builds here — #598 (P1, stormcentral#1836), 2026-11-26
 - [x] `deploy/build-image.sh flowsdn OUT` (entered as `deploy/build-golden.sh`, the `tree` contract): stormcos
       `build-goldens.sh`'s flowsdn stage (8932-9070 at f7f7ccb) moved unchanged; `deploy/check-image.sh` carries
