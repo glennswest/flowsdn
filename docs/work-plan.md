@@ -104,6 +104,8 @@ Staged; each stage committed and verified (kernel tests keep passing).
       stormcentral's `log:` matches the install runner's transcript (`src/proof.rs:209`), never the node's syslog.
       Filed stormcentral#1854; parked #484 #487 #488 #489 #490 #496 #497 #498 #499 #420 #480 #576 after it. #482's
       `api:` proof held on the same install (closed). Re-ship each with the syslog-backed form when it lands.
+- [x] 2026-11-27: stormcentral#1854 fixed (0fff273): `log:` falls back to the node's stored syslog. #484 and #487
+      re-shipped unchanged; the others re-ship the same way as each is handed back.
 ### No stubs: proof on a node — #418 (reopened), 2026-11-26
 
 Reopened by stormcentral: 14.06-flowsdn on pvetest1 (install pvetest1-1795671725) did not show `health agent.(api|kubernetes) OK`.
