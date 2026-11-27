@@ -22,7 +22,7 @@ Staged; each stage committed and verified (kernel tests keep passing).
       not enforce on eth0 yet".
 - [x] `node-host-firewall` in the test suite's node probe (d103c9e; fmt, Clippy, test/build.sh pass): mode,
       interfaces past learning, judging, local Pods, addresses, policies, host verdict counts; GETs only.
-- [ ] Run 3cc677574d on pvetest2 (parked `--after-run`). Then the enforce step: a run-labelled FlowsdnNodeConfig
+- [ ] Run 7bbd021a10 on pvetest2 (parked `--after-run`; 3cc677574d hit an infrastructure error: sbregistry timeout). Then the enforce step: a run-labelled FlowsdnNodeConfig
       (`cluster_write`, removed by cleanup) selecting the node with `host-firewall: enforce`, checking the node
       stays reachable.
 
