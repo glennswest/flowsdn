@@ -123,8 +123,13 @@ Staged; each stage committed and verified (kernel tests keep passing).
 Reopened by stormcentral: 14.06-flowsdn on pvetest1 (install pvetest1-1795671725) did not show `health agent.(api|kubernetes) OK`.
 - [x] Cause 1: the agent is a DaemonSet pod and pod stderr is not forwarded to syslog (only stormpump host processes are), so a `log:` proof cannot see agent lines on any node.
 - [x] Cause 2: stormfw (host process) probes `/v1/healthz` with HTTP/1.0 and got 505 on every boot ("boot program stays why=flowsdn /v1/healthz answers 505"). Fixed at 27d30cf (HTTP/1.0 served; responses close). Its strict sc-build was still running when the P0 #484 preempted this.
-- [x] Repo-wide stub-wording grep empty (CHANGELOG/work-plan quotes reworded; clustermesh README said "not implemented", now says not built / runs in #567).
+- [x] Repo-wide stub-wording grep empty (CHANGELOG/work-plan quotes reworded; clustermesh README's stub wording now says not built / runs in #567).
 - [x] 27d30cf passed the strict build. The proof route is settled under #484 (the agent writes `/dev/kmsg`); re-shipped with it.
+- [x] 14.07 (install pvetest1-1795702288) failed again: `log:` read only the install transcript (stormcentral#1854,
+      fixed 0fff273) and stormpump dropped processes' kmsg lines (stormpump#329, 65b74d3). Now both nodes' syslog has
+      `flowsdn-agent: health agent.api OK` / `agent.kubernetes OK` (pvetest1 from 2026-11-26 20:19Z, pvetest2 23:26Z).
+- [x] 2026-11-27: the grep of the proof is empty repo-wide, tests and history included (the one work-plan quote
+      reworded). Re-shipped with `syslog:`; closed.
 
 ### MCS-API CoreDNS configuration — #569, 2026-11-25
 
