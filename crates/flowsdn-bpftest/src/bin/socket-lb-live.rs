@@ -21,7 +21,9 @@
 //! nodes' halves on the uplink programs.
 use aya::programs::{TestRun, TestRunOptions};
 use flowsdn_bpf_loader::kernel::{Object, socket_lb::SocketLb};
-use flowsdn_lb::socket::{self, Address, PROTO_SCTP, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service};
+use flowsdn_lb::socket::{
+    self, Address, PROTO_SCTP, PROTO_TCP, PROTO_UDP, SCOPE_NODE_LOCAL, Service,
+};
 use nix::sched::{CloneFlags, unshare};
 use std::{
     collections::BTreeSet,
@@ -117,8 +119,8 @@ fn tcp(listener: &TcpListener, frontend: SocketAddr, backend: SocketAddr) -> Res
 fn sctp(frontend: SocketAddr, backend: SocketAddr) -> Result<bool> {
     use nix::errno::Errno;
     use nix::sys::socket::{
-        AddressFamily, Backlog, MsgFlags, SockFlag, SockProtocol, SockType, SockaddrStorage,
-        bind, connect, getpeername, listen, recvfrom, sendto, setsockopt, socket, sockopt,
+        AddressFamily, Backlog, MsgFlags, SockFlag, SockProtocol, SockType, SockaddrStorage, bind,
+        connect, getpeername, listen, recvfrom, sendto, setsockopt, socket, sockopt,
     };
     use std::os::fd::AsRawFd;
     let family = if frontend.is_ipv4() {
@@ -126,16 +128,28 @@ fn sctp(frontend: SocketAddr, backend: SocketAddr) -> Result<bool> {
     } else {
         AddressFamily::Inet6
     };
-    let server = match socket(family, SockType::SeqPacket, SockFlag::empty(), SockProtocol::Sctp) {
+    let server = match socket(
+        family,
+        SockType::SeqPacket,
+        SockFlag::empty(),
+        SockProtocol::Sctp,
+    ) {
         Ok(fd) => fd,
-        Err(Errno::EPROTONOSUPPORT | Errno::ESOCKTNOSUPPORT | Errno::EAFNOSUPPORT) => return Ok(false),
+        Err(Errno::EPROTONOSUPPORT | Errno::ESOCKTNOSUPPORT | Errno::EAFNOSUPPORT) => {
+            return Ok(false);
+        }
         Err(error) => return Err(format!("SCTP server socket: {error}").into()),
     };
     bind(server.as_raw_fd(), &SockaddrStorage::from(backend))?;
     listen(&server, Backlog::new(4)?)?;
     let timeout = nix::sys::time::TimeVal::new(3, 0);
     setsockopt(&server, sockopt::ReceiveTimeout, &timeout)?;
-    let client = socket(family, SockType::Stream, SockFlag::empty(), SockProtocol::Sctp)?;
+    let client = socket(
+        family,
+        SockType::Stream,
+        SockFlag::empty(),
+        SockProtocol::Sctp,
+    )?;
     setsockopt(&client, sockopt::ReceiveTimeout, &timeout)?;
     connect(client.as_raw_fd(), &SockaddrStorage::from(frontend))
         .map_err(|e| format!("SCTP connect {frontend}: {e}"))?;
@@ -143,7 +157,10 @@ fn sctp(frontend: SocketAddr, backend: SocketAddr) -> Result<bool> {
     let peer = peer
         .as_sockaddr_in()
         .map(|a| SocketAddr::from(std::net::SocketAddrV4::from(*a)))
-        .or_else(|| peer.as_sockaddr_in6().map(|a| SocketAddr::from(std::net::SocketAddrV6::from(*a))))
+        .or_else(|| {
+            peer.as_sockaddr_in6()
+                .map(|a| SocketAddr::from(std::net::SocketAddrV6::from(*a)))
+        })
         .ok_or("SCTP getpeername: not an IP address")?;
     if peer != backend {
         return Err(format!("SCTP {frontend}: peer {peer} instead of backend {backend}").into());
