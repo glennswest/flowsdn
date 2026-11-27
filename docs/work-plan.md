@@ -23,8 +23,10 @@ Staged; each stage committed and verified (kernel tests keep passing).
 - [x] Stage 1 (f94c2ba, 30e3837, 297f782): `PROTO_SCTP` through planner, services, local redirect; `IPPROTO_SCTP` in
       socket-lb connect hooks; `socket-lb-live` SCTP cases (one-to-one client, one-to-many backend; skip without SCTP).
 - [ ] Verify: xtask check, test/build.sh, kernel-check (SCTP skips there); `medium` on a node (SCTP runs).
-- [ ] Stage 2: the uplink path (NodePort/LB/externalIP): SCTP parse, address rewrite, port rewrite with a CRC32c
-      update in BPF; `socket-lb-live` frames.
+- [ ] Stage 2: the uplink path (NodePort/LB/externalIP), per the specs rather than the issue's CRC32c plan: spec 04
+      §3 step 5 (an SCTP port change is `DROP_CSUM_L4`, SCTP is NATed address-only) and spec 02 (SCTP checksum not
+      recomputed, as in the reference). So: parse SCTP, rewrite addresses only (CRC32c has no pseudo-header), drop a
+      frame whose translation changes a port, keep the source port in SNAT; `socket-lb-live` frames for each.
 
 ### Host firewall first live run — #478 (P2), 2026-11-26
 - [x] pvetest2 runs 14.09-flowsdn (51f036c: has 66daa9b and 6925607). stormfw there says "flowsdn's host firewall does
